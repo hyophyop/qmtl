@@ -4,6 +4,8 @@ import hashlib
 import inspect
 import json
 
+from qmtl.dagmanager import compute_node_id
+
 
 class Node:
     """Represents a processing node in a strategy DAG."""
@@ -84,17 +86,12 @@ class Node:
 
     @property
     def node_id(self) -> str:
-        payload = "|".join(
-            [self.node_type, self.code_hash, self.config_hash, self.schema_hash]
-        ).encode()
-        try:
-            h = hashlib.sha256()
-            h.update(payload)
-            return h.hexdigest()
-        except Exception:  # pragma: no cover - unlikely
-            h = hashlib.sha3_256()
-            h.update(payload)
-            return h.hexdigest()
+        return compute_node_id(
+            self.node_type,
+            self.code_hash,
+            self.config_hash,
+            self.schema_hash,
+        )
 
     def to_dict(self) -> dict:
         return {
