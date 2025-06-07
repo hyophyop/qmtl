@@ -34,6 +34,8 @@ def compute_node_id(
 from .topic import TopicConfig, topic_name, get_config
 from .kafka_admin import KafkaAdmin
 from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
+from .alerts import PagerDutyClient, SlackClient, AlertManager
+from .monitor import Monitor
 
 __all__ = [
     "compute_node_id",
@@ -44,4 +46,8 @@ __all__ = [
     "GarbageCollector",
     "DEFAULT_POLICY",
     "S3ArchiveClient",
+    "PagerDutyClient",
+    "SlackClient",
+    "AlertManager",
+    "Monitor",
 ]
