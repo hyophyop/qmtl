@@ -71,6 +71,7 @@ class Runner:
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         queue_map = {}
+        offline = offline or not gateway_url
         if gateway_url and not offline:
             try:
                 queue_map = Runner._post_gateway(
@@ -96,6 +97,7 @@ class Runner:
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         queue_map = {}
+        offline = offline or not gateway_url
         if gateway_url and not offline:
             try:
                 queue_map = Runner._post_gateway(
@@ -120,6 +122,7 @@ class Runner:
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         queue_map = {}
+        offline = offline or not gateway_url
         if gateway_url and not offline:
             try:
                 queue_map = Runner._post_gateway(
