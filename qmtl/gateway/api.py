@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+import base64
 from dataclasses import dataclass
 from typing import Optional
 
@@ -90,8 +91,24 @@ class StrategyManager:
 
     async def submit(self, payload: StrategySubmit) -> str:
         strategy_id = str(uuid.uuid4())
+
+        try:
+            dag_bytes = base64.b64decode(payload.dag_json)
+            dag_dict = json.loads(dag_bytes.decode())
+        except Exception:
+            dag_dict = json.loads(payload.dag_json)
+        sentinel = {
+            "node_type": "VersionSentinel",
+            "node_id": f"{strategy_id}-sentinel",
+        }
+        dag_dict.setdefault("nodes", []).append(sentinel)
+        encoded_dag = base64.b64encode(json.dumps(dag_dict).encode()).decode()
+
         await self.redis.rpush("strategy_queue", strategy_id)
-        await self.redis.hset(f"strategy:{strategy_id}", mapping={"status": _INITIAL_STATUS})
+        await self.redis.hset(
+            f"strategy:{strategy_id}",
+            mapping={"status": _INITIAL_STATUS, "dag": encoded_dag},
+        )
         await self.database.insert_strategy(strategy_id, payload.meta)
         return strategy_id
 
