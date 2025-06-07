@@ -10,20 +10,8 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
 import asyncpg
-from xstate import machine
-
-# Strategy state machine configuration using xstate
-_MACHINE_CONFIG = {
-    "id": "strategy",
-    "initial": "queued",
-    "states": {
-        "queued": {"on": {"START": {"target": "processing"}}},
-        "processing": {"on": {"FINISH": {"target": "completed"}}},
-        "completed": {},
-    },
-}
-_STRATEGY_MACHINE = machine.Machine(_MACHINE_CONFIG)
-_INITIAL_STATUS = _STRATEGY_MACHINE.initial_state.value
+# Simplified strategy state machine
+_INITIAL_STATUS = "queued"
 
 
 class StrategySubmit(BaseModel):
@@ -152,5 +140,10 @@ def create_app(
         if status_value is None:
             raise HTTPException(status_code=404, detail="strategy not found")
         return StatusResponse(status=status_value)
+
+    @app.post("/callbacks/dag-event", status_code=status.HTTP_202_ACCEPTED)
+    async def dag_event(event: dict) -> dict:
+        """Handle DAG manager callbacks."""
+        return {"ok": True}
 
     return app
