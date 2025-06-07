@@ -1,686 +1,361 @@
-# QMTL 차세대 구조 설계 제안 및 논의
+# QMTL 고급 아키텍처 및 시스템 구현 계획서
 
-## 프로젝트 디렉토리 및 개발 환경 표준
-
-- src/qmtl/ 하위에 모든 서비스/공통 모듈/모델/도메인 계층을 구성한다.
-- pyproject.toml로 의존성 및 빌드/테스트/포맷팅 도구를 관리한다(uv 사용 권장).
-- Makefile로 lint, test, build, run, docker 등 개발 명령을 표준화한다.
-- .gitignore, .editorconfig로 코드 스타일과 불필요 파일을 관리한다.
-- tests/ 하위에 unit, integration, e2e 계층별 테스트 디렉토리를 분리한다.
-
-## 테스트 프레임워크 및 컨테이너 관리 전략
-- tests/unit, tests/integration, tests/e2e 계층별 디렉토리 분리
-- tests/conftest.py에서 pytest fixture로 docker-compose 컨테이너를 자동 기동/정리(포트 충돌 방지)
-- E2E 테스트는 서비스 기동 대기(health check, 최대 30초 재시도) 후 워크플로우 검증
-- 모든 API 엔드포인트 및 주요 비즈니스 로직에 대한 테스트 필수, 커버리지 80% 이상 목표
-- Makefile test, integration-test, e2e-test, coverage 명령으로 테스트 일관성 보장
-
-## 0. 요약
-
-QMTL 시스템을 3개의 독립적인 서비스로 분리하여 관심사 분리(SoC), 확장성, 운영 효율성을 극대화합니다:
-
-1. **QMTL DAG Manager**: 글로벌 DAG와 메시지 브로커 스트림 통합 관리
-2. **QMTL Gateway**: DAG Manager와 SDK 사이의 조율 및 작업 큐 관리
-3. **QMTL SDK**: 사용자 전략 작성/실행 및 DAG 추출
-
-이 문서는 개발/리팩토링에 직접 활용 가능한 상세 설계와 구현 가이드를 제공합니다.
-
-## 1. API 설계 원칙: protobuf contract 기반 조회 전용
-- **protobuf contract(스키마) 기반 모델은 외부 API에서 조회(read)만 허용, 직접 조작(mutate)은 불가**
-  - 모든 서비스(API)는 protobuf 기반 데이터 구조를 조회(검색, 상세, 목록 등)하는 엔드포인트만 제공
-  - 데이터 생성/수정/삭제 등 조작은 내부 서비스 로직(비즈니스 계층, 서비스 간 RPC 등)에서만 수행, 외부 API 명세에는 아예 노출하지 않음
-  - contract의 무결성, 관심사 분리, 데이터 일관성 보장
-  - 예시: `/v1/dag-manager/nodes` GET(조회)만 외부에 공개, POST/PUT/DELETE 등은 내부 서비스에서만 사용
-
-## 2. 컴포넌트별 역할 및 책임
-
-### QMTL DAG Manager
-- **글로벌 DAG(Directed Acyclic Graph) 관리의 단일 책임 서비스**
-- **주요 구성요소**:
-  - `NodeManager`: 노드 CRUD, 참조 카운트, 메타데이터 관리 (`Neo4jNodeManagementService`)
-  - `StreamManager`: Kafka/Redpanda 토픽 생성/삭제/관리 (`KafkaTopicService`)
-  - `DependencyManager`: 노드 간 의존성 관계 관리 (`Neo4jDependencyService`)
-  - `MetadataService`: 노드/DAG 메타데이터 통합 관리 (파사드 패턴)
-  - `EventPublisher`: 상태 변경 이벤트 발행 (`RedisEventPublisher`)
-
-- **핵심 API 및 엔드포인트**:
-  - `/v1/dag-manager/nodes`: 노드 조회 (GET만 외부에 공개)
-  - `/v1/dag-manager/nodes/{node_id}/dependencies`: 의존성 조회 (GET)
-  - `/v1/dag-manager/nodes/by-tags`: TAG 기반 노드 메타데이터 조회 (GET)
-  - `/v1/dag-manager/streams`: 스트림(토픽) 조회 (GET)
-  - `/v1/dag-manager/events`: 이벤트 구독/발행 (GET)
-  - `/v1/dag-manager/nodes/{node_id}/callbacks`: 콜백 조회 (GET)
-  - **노드 생성/수정/삭제 등 조작은 Gateway 등 내부 서비스에서만 호출 가능 (외부 API 명세에는 미노출)**
-
-- **주요 구현 클래스/모듈**:
-  - `src/qmtl/dag_manager/services/node_service.py`: 노드 관리 서비스
-  - `src/qmtl/dag_manager/services/stream_service.py`: 스트림 관리 서비스 
-  - `src/qmtl/dag_manager/repositories/neo4j_node_repository.py`: Neo4j 노드 저장소
-  - `src/qmtl/dag_manager/repositories/kafka_topic_repository.py`: Kafka 토픽 저장소
-
-- **주요 모델 및 인터페이스**:
-  - `models/node.py`: 노드 정의 및 상태 모델 (protobuf 기반)
-  - `models/dag.py`: DAG 구조 모델 (protobuf 기반)
-  - `models/stream.py`: 스트림 메타데이터 모델 (protobuf 기반)
-  - `models/event.py`: 이벤트 및 콜백 모델 (protobuf 기반)
-
-### QMTL Gateway
-- **SDK와 DAG Manager 사이의 중계 및 조율 서비스**
-- **주요 구성요소**:
-  - `WorkQueueManager`: 작업 큐 관리 및 처리 (`RedisWorkQueueService`)
-  - `DagSyncService`: DAG Manager와 SDK 간 동기화 처리
-  - `CallbackManager`: SDK에 대한 콜백/이벤트 처리
-  - `StateTrackingService`: 전략 및 노드 상태 추적/제공
-  - `QueryNodeResolver`: TAG 기반 QueryNode 메타데이터 해석/제공
-
-- **핵심 API 및 엔드포인트**:
-  - `/v1/gateway/strategies`: 전략 조회 (GET만 외부에 공개)
-  - `/v1/gateway/strategies/{strategy_id}/status`: 전략 상태 조회 (GET)
-  - `/v1/gateway/callbacks`: 콜백 조회 (GET)
-  - `/v1/gateway/nodes`: 실행 가능한 노드 목록 조회 (GET)
-  - `/v1/gateway/events`: 이벤트 구독/발행 (GET)
-  - **전략 생성/수정/삭제 등 조작은 SDK→Gateway 내부 호출 및 Gateway→DAG Manager 내부 호출로만 동작 (외부 API 명세에는 미노출)**
-
-- **주요 구현 클래스/모듈**:
-  - `src/qmtl/gateway/services/work_queue_service.py`: 작업 큐 관리
-  - `src/qmtl/gateway/services/callback_service.py`: 콜백 처리
-  - `src/qmtl/gateway/services/dag_sync_service.py`: DAG 동기화
-  - `src/qmtl/gateway/repositories/redis_queue_repository.py`: Redis 기반 큐 저장소
-  - `src/qmtl/gateway/clients/dag_manager_client.py`: DAG Manager API 클라이언트
-
-- **작업 큐 처리 절차**:
-  1. `enqueue_work`: 전략 실행/종료 등 작업 큐에 등록 (내부 서비스 간 조작)
-  2. `process_work`: 작업 처리(DAG Manager 메타데이터 조회, 큐 생성 요청 등)
-  3. `handle_result`: 처리 결과 상태 업데이트 및 SDK 콜백
-  4. `retry_failed_work`: 실패한 작업 재시도 처리
-
-- **주요 모델 및 인터페이스**:
-  - `models/work.py`: 작업 정의 및 상태 모델 (protobuf 기반)
-  - `models/callback.py`: 콜백 및 이벤트 모델 (protobuf 기반)
-  - `models/strategy.py`: 전략 및 요청 모델 (protobuf 기반)
-
-### QMTL SDK
-- **사용자 전략(DAG) 작성 및 실행의 표준 인터페이스**
-- **주요 구성요소**:
-  - `DagExtractor`: PyTorch 스타일 코드에서 DAG 구조 추출
-  - `GatewayClient`: Gateway 서비스와의 통신 처리
-  - `NodeExecutor`: 실행 가능한 노드만 선택적 실행
-  - `CallbackHandler`: Gateway로부터 콜백/이벤트 수신 처리
-  - `StateManager`: 노드/전략 상태 관리 및 저장
-
-- **핵심 API 및 클래스**:
-  - `Node`: 기본 노드 클래스(데코레이터 기반, protobuf 기반 모델 활용)
-  - `SourceNode`: 데이터 소스 노드 (protobuf 기반)
-  - `DataNode`: 데이터 처리 노드 (protobuf 기반)
-  - `QueryNode`: 태그 기반 동적 참조 노드 (protobuf 기반)
-  - `run_strategy()`: 전략 실행 및 DAG 추출
-  - `get_node_status()`: 노드 상태 조회
-  - `StreamSettings`: 스트림 설정 관리 (protobuf 기반)
-
-- **주요 구현 클래스/모듈**:
-  - `src/qmtl/sdk/core/dag_extractor.py`: DAG 추출 및 분석
-  - `src/qmtl/sdk/core/node_executor.py`: 노드 실행 엔진
-  - `src/qmtl/sdk/core/callback_handler.py`: 콜백 처리
-  - `src/qmtl/sdk/clients/gateway_client.py`: Gateway API 클라이언트
-  - `src/qmtl/sdk/utils/node_id_generator.py`: Node ID 생성
-
-- **노드 정의 및 실행 예시**:
-  ```python
-  from qmtl.models.node import DataNode
-  from qmtl.sdk import run_strategy
-
-  @DataNode(stream_settings={"interval": "1m"})
-  def process_data(data):
-      return data * 2
-
-  @DataNode(upstream=[process_data])
-  def analyze_result(data):
-      return data.mean()
-
-  # 전략 실행 - DAG 추출 및 Gateway 제출
-  if __name__ == "__main__":
-      result = run_strategy()
-      print(f"Strategy status: {result.status}")
-  ```
-
-- **주요 모델 및 인터페이스**:
-  - `models/node.py`: 노드 정의 및 실행 모델 (protobuf 기반)
-  - `models/stream_settings.py`: 스트림 설정 모델 (protobuf 기반)
-  - `models/strategy_result.py`: 전략 실행 결과 모델 (protobuf 기반)
-
-
-## 2. 전체 워크플로우 예시
-
-### 2.1 기본 전략 실행 흐름
-
-1. **전략 파일 실행 및 DAG 추출** (SDK):
-   ```python
-   # 사용자 전략 파일 (strategy.py)
-   from qmtl.sdk import DataNode, run_strategy
-   
-   @DataNode(stream_settings={"interval": "1m"})
-   def source():
-       return {"data": [1, 2, 3]}
-   
-   @DataNode(upstream=[source])
-   def process(data):
-       return {"result": sum(data["data"])}
-   
-   if __name__ == "__main__":
-       result = run_strategy()
-   ```
-
-2. **DAG 제출** (SDK → Gateway):
-   ```python
-   # sdk/clients/gateway_client.py
-   def submit_dag(dag):
-       response = requests.post(
-           f"{GATEWAY_URL}/v1/gateway/strategies", 
-           data=dag.SerializeToString(),
-           headers={"Content-Type": "application/x-protobuf"}
-       )
-       return StrategyResponse.FromString(response.content)
-   ```
-
-3. **작업 큐 등록 및 처리** (Gateway):
-   ```python
-   # gateway/services/work_queue_service.py
-   def enqueue_strategy_execution(strategy_request):
-       work_id = str(uuid.uuid4())
-       work_item = WorkItem(
-           id=work_id,
-           type=WorkType.STRATEGY_EXECUTION,
-           payload=strategy_request.SerializeToString(),
-           status=WorkStatus.PENDING
-       )
-       self.queue_repository.push(work_item)
-       return work_id
-   ```
-
-4. **메타데이터 조회** (Gateway → DAG Manager):
-   ```python
-   # gateway/clients/dag_manager_client.py
-   def get_node_metadata(node_ids):
-       response = requests.post(
-           f"{DAG_MANAGER_URL}/v1/dag-manager/nodes/metadata",
-           data=NodeIdList(node_ids=node_ids).SerializeToString(),
-           headers={"Content-Type": "application/x-protobuf"}
-       )
-       return NodeMetadataList.FromString(response.content).items
-   ```
-
-5. **QueryNode TAG 처리** (Gateway):
-   ```python
-   # gateway/services/query_node_resolver.py
-   def resolve_query_nodes(nodes):
-       query_nodes = [n for n in nodes if n.type == NodeType.QUERY]
-       for qnode in query_nodes:
-           tags = qnode.tags or []
-           # DAG Manager에서 태그 기반 노드 조회
-           matching_nodes = self.dag_manager_client.get_nodes_by_tags(tags)
-           qnode.resolved_upstream = [n.id for n in matching_nodes]
-       return nodes
-   ```
-
-6. **글로벌 DAG 노드 생성** (Gateway → DAG Manager):
-   ```python
-   # gateway/services/dag_sync_service.py
-   def create_missing_nodes(nodes):
-       existing_nodes = self.dag_manager_client.get_nodes_by_ids(
-           [n.id for n in nodes]
-       )
-       existing_ids = set(n.id for n in existing_nodes)
-       
-       # 신규 노드만 생성 요청
-       new_nodes = [n for n in nodes if n.id not in existing_ids]
-       if new_nodes:
-           self.dag_manager_client.create_nodes(new_nodes)
-   ```
-
-7. **실행 노드 콜백** (Gateway → SDK):
-   ```python
-   # gateway/services/callback_service.py
-   def notify_executable_nodes(strategy_id, node_ids):
-       callback_url = self.get_callback_url(strategy_id)
-       if callback_url:
-           requests.post(
-               callback_url,
-               json={
-                   "type": "EXECUTABLE_NODES",
-                   "strategy_id": strategy_id,
-                   "node_ids": node_ids
-               }
-           )
-   ```
-
-8. **노드 실행** (SDK):
-   ```python
-   # sdk/core/node_executor.py
-   def execute_nodes(node_ids):
-       for node_id in node_ids:
-           # 노드 정보는 반드시 Registry(또는 DAG Manager) API를 통해 조회해야 하며,
-           # Gateway는 registry 또는 NODE_REGISTRY를 직접 소유/관리하지 않음
-           node = get_node_from_registry(node_id)  # 예시 함수명
-           if node:
-               # 업스트림 데이터 수집
-               upstream_data = get_upstream_data(node)
-               # 노드 함수 실행
-               result = node.func(**upstream_data)
-               # 결과 저장
-               save_node_result(node_id, result)
-   ```
-
-### 2.2 글로벌 DAG 변경 이벤트 처리
-
-1. **DAG 변경 이벤트 발행** (DAG Manager):
-   ```python
-   # dag_manager/services/event_publisher.py
-   def publish_node_status_change(node_id, status):
-       event = NodeStatusChangeEvent(
-           node_id=node_id,
-           status=status,
-           timestamp=datetime.now()
-       )
-       self.event_repository.publish(
-           "node.status.change", event.model_dump()
-       )
-   ```
-
-2. **이벤트 구독 및 처리** (Gateway):
-   ```python
-   # gateway/services/event_subscriber.py
-   def handle_node_status_change(event_data):
-       event = NodeStatusChangeEvent.model_validate(event_data)
-       # 관련 QueryNode 검색
-       affected_query_nodes = self.query_node_service.find_by_tag_node(
-           event.node_id
-       )
-       # 영향 받는 전략 파일 찾기
-       affected_strategies = self.strategy_service.find_by_query_nodes(
-           affected_query_nodes
-       )
-       # 각 전략에 상태 변경 통지
-       for strategy in affected_strategies:
-           self.callback_service.notify_dag_change(
-               strategy.id, affected_query_nodes
-           )
-   ```
-
-3. **SDK 콜백 및 업데이트** (Gateway → SDK):
-   ```python
-   # gateway/services/callback_service.py
-   def notify_dag_change(strategy_id, affected_nodes):
-       callback_url = self.get_callback_url(strategy_id)
-       if callback_url:
-           requests.post(
-               callback_url,
-               json={
-                   "type": "DAG_CHANGE",
-                   "strategy_id": strategy_id,
-                   "affected_nodes": [n.id for n in affected_nodes]
-               }
-           )
-   ```
-
-4. **SDK 측 처리** (SDK):
-   ```python
-   # sdk/core/callback_handler.py
-   def handle_dag_change(event_data):
-       strategy_id = event_data["strategy_id"]
-       affected_nodes = event_data["affected_nodes"]
-       
-       # QueryNode의 경우, 반드시 Registry(또는 DAG Manager) API를 통해 업스트림 재조회
-       for node_id in affected_nodes:
-           node = get_node_from_registry(node_id)  # 예시 함수명
-           if node and node.type == NodeType.QUERY:
-               # Gateway에 재조회 요청
-               updated_upstream = gateway_client.get_query_node_upstream(node_id)
-               # 노드 업스트림 갱신
-               node.update_upstream(updated_upstream)
-               
-       # 실행 가능한 노드가 있으면 실행
-       executable = gateway_client.get_executable_nodes(strategy_id)
-       if executable:
-           node_executor.execute_nodes(executable)
-   ```
-
-
-## 3. 설계의 장점 및 구현 세부사항
-
-### 3.1 관심사 분리(SoC) 극대화
-- **명확한 책임 경계**:
-  - DAG Manager: 글로벌 DAG/스트림 관리 (Neo4j + Kafka)
-  - Gateway: 조율/중계/작업 큐 관리 (Redis)
-  - SDK: 전략 작성/실행/DAG 추출 (Python API)
-
-- **독립적 확장/유지보수**:
-  ```python
-  # 각 서비스별 독립 도커파일 예시
-  # dag_manager.Dockerfile
-  FROM python:3.9-slim
-  WORKDIR /app
-  COPY pyproject.toml .
-  RUN pip install ".[dag-manager]"
-  CMD ["uvicorn", "qmtl.dag_manager.api:app", "--host", "0.0.0.0"]
-  
-  # gateway.Dockerfile
-  FROM python:3.9-slim
-  WORKDIR /app
-  COPY pyproject.toml .
-  RUN pip install ".[gateway]"
-  CMD ["uvicorn", "qmtl.gateway.api:app", "--host", "0.0.0.0"]
-  ```
-
-### 3.2 운영/장애 처리 일관성
-- **DAG과 스트림 함께 관리**:
-  ```python
-  # dag_manager/services/node_creation_service.py
-  def create_node_with_stream(node):
-      # 트랜잭션 시작
-      tx = self.transaction_manager.begin()
-      try:
-          # 1. 노드 메타데이터 저장
-          node_id = self.node_repository.create(node)
-          
-          # 2. 필요시 스트림(토픽) 생성
-          if node.requires_stream:
-              stream_id = self.stream_service.create_stream(
-                  node_id=node_id,
-                  settings=node.stream_settings
-              )
-              # 노드-스트림 연결 업데이트
-              self.node_repository.update_stream(node_id, stream_id)
-              
-          # 3. 의존성 관계 등록
-          if node.upstream:
-              self.dependency_service.create_dependencies(
-                  node_id, node.upstream
-              )
-              
-          tx.commit()
-          return node_id
-      except Exception as e:
-          tx.rollback()
-          raise NodeCreationError(f"Failed to create node: {str(e)}")
-  ```
-
-### 3.3 Gateway 작업 큐 구조
-- **Redis 기반 견고한 작업 큐**:
-  ```python
-  # gateway/repositories/redis_queue_repository.py
-  class RedisQueueRepository:
-      def __init__(self, redis_client):
-          self.redis = redis_client
-          self.queue_key = "qmtl:gateway:work_queue"
-          self.processing_key = "qmtl:gateway:processing"
-          self.results_key = "qmtl:gateway:results"
-      
-      def push(self, work_item):
-          """작업 큐에 항목 추가 (protobuf 바이너리)"""
-          serialized = work_item.SerializeToString()
-          self.redis.lpush(self.queue_key, serialized)
-          
-      def pop(self, timeout=0):
-          raw = self.redis.brpoplpush(
-              self.queue_key, self.processing_key, timeout
-          )
-          if raw:
-              return WorkItem.FromString(raw)
-          return None
-      
-      def complete(self, work_id, result=None):
-          """작업 완료 처리 및 결과 저장"""
-          # 처리 중 목록에서 찾기
-          pattern = f'*"id":"{work_id}"*'
-          for key in self.redis.scan_iter(match=pattern, count=100):
-              work_raw = self.redis.get(key)
-              work = WorkItem.model_validate(json.loads(work_raw))
-              
-              # 결과 저장
-              work.status = WorkStatus.COMPLETED
-              work.result = result
-              work.completed_at = datetime.now()
-              
-              # 결과 목록에 저장
-              self.redis.hset(
-                  self.results_key, 
-                  work_id,
-                  json.dumps(work.model_dump())
-              )
-              # TTL 설정 (예: 1시간)
-              self.redis.expire(f"{self.results_key}:{work_id}", 3600)
-              
-              # 처리 중 목록에서 제거
-              self.redis.lrem(self.processing_key, 1, work_raw)
-              return True
-          return False
-  ```
-
-### 3.4 상태/콜백 전달 방식
-- **초기: REST 기반 폴링 (protobuf 직렬화/역직렬화 적용)**
-  ```python
-  # sdk/clients/gateway_client.py
-  def poll_strategy_status(strategy_id, interval=5):
-      """전략 상태 폴링 (protobuf 바이너리 응답 기준)"""
-      while True:
-          response = requests.get(
-              f"{GATEWAY_URL}/v1/gateway/strategies/{strategy_id}/status",
-              headers={"Accept": "application/x-protobuf"}
-          )
-          # protobuf 바이너리 응답을 decode
-          status = StrategyStatus.FromString(response.content)
-          # 종료 조건 체크
-          if status.state in [State.COMPLETED, State.FAILED, State.CANCELED]:
-              return status
-          # 실행 가능한 노드가 있으면 실행
-          if status.executable_nodes:
-              execute_nodes(status.executable_nodes)
-          time.sleep(interval)
-  ```
-
-- **콜백/이벤트 전달도 protobuf 바이너리로 통일**
-  ```python
-  # gateway/services/callback_service.py
-  def notify_executable_nodes(strategy_id, node_ids):
-      callback_url = get_callback_url(strategy_id)
-      if callback_url:
-          # 콜백 페이로드를 protobuf 메시지로 생성 후 SerializeToString
-          payload = ExecutableNodesEvent(
-              strategy_id=strategy_id,
-              node_ids=node_ids
-          ).SerializeToString()
-          requests.post(
-              callback_url,
-              data=payload,  # 바이너리 전송
-              headers={"Content-Type": "application/x-protobuf"}
-          )
-  ```
-
-- **내부 서비스 간 데이터 교환, 큐, 브로커, 테스트 등도 모두 protobuf SerializeToString/FromString 사용**
-  ```python
-  # gateway/repositories/redis_queue_repository.py
-  class RedisQueueRepository:
-      ...
-      def push(self, work_item):
-          """작업 큐에 항목 추가 (protobuf 바이너리)"""
-          serialized = work_item.SerializeToString()
-          self.redis.lpush(self.queue_key, serialized)
-      def pop(self, timeout=0):
-          raw = self.redis.brpoplpush(
-              self.queue_key, self.processing_key, timeout
-          )
-          if raw:
-              return WorkItem.FromString(raw)
-          return None
-  ```
-
-- **테스트, golden test, round-trip test 등도 protobuf SerializeToString/FromString 기준**
-  ```python
-  def test_protobuf_round_trip():
-      node = Node(id="n1", ...)
-      payload = node.SerializeToString()
-      node2 = Node.FromString(payload)
-      assert node == node2
-  ```
-
-
-## 결론: protobuf 기반 contract-first 아키텍처의 일관성
-- QMTL의 모든 데이터 계약, API, 이벤트, 테스트, 문서화, 자동화는 protobuf 스키마를 단일 진실 소스로 삼아 관리
-- 서비스/SDK/테스트/문서화/자동화 등 모든 계층에서 protobuf 타입만 사용함으로써, 언어/플랫폼 독립적이고, 일관성/신뢰성/생산성이 극대화된 구조를 실현
-- 기존 Python 모델 패키지 방식은 완전히 대체되며, protobuf 스키마 관리가 표준임을 명확히 함
-
-## 결론(추가):
-- protobuf contract 기반 데이터 구조는 외부 API에서 조회(read)만 허용, 조작은 내부 서비스 계층에서만 수행
-- 이를 통해 데이터 무결성, 관심사 분리, 서비스 간 결합도 최소화, 유지보수성 극대화
-
-### [protobuf vs json 직렬화/역직렬화 표준]
-- **API, 이벤트, 서비스 간 데이터 교환, 테스트 등 모든 실제 데이터 페이로드는 protobuf 직렬화/역직렬화가 표준**
-  - 예: `payload = node.SerializeToString()` (protobuf 직렬화), `node2 = Node.FromString(payload)` (protobuf 역직렬화)
-  - API, 메시지 브로커, 내부 큐, 테스트 golden data 등에서 json 대신 protobuf 바이너리 포맷 사용
-- **JSON은 human-friendly 문서, 디버깅, 외부 문서화 용도로만 사용**
-  - 필요시 protobuf 타입에서 json 변환 유틸리티 제공 (예: `MessageToJson(node)`, `Parse(node_json, Node())` 등)
-  - OpenAPI/문서화/예제 등은 protobuf 스키마 → json schema 변환을 통해 자동 생성
-- **테스트/검증/golden test 등도 protobuf 직렬화 기반**
-  - round-trip test, schema validation, golden test 등은 모두 protobuf SerializeToString/FromString 기준으로 작성
-- **기존 model_dump, model_validate, model_json_schema 등 Pydantic/json 기반 메서드는 사용하지 않음**
-  - 모든 데이터 구조/계약/테스트/문서화의 단일 진실 소스는 protobuf 스키마와 그로부터 생성된 타입/직렬화 코드임을 반복 강조
+> *최종 수정일: 2025년 6월 4일*
 
 ---
 
-### [Neo4j TAG 인덱싱 설계 원칙]
-- **QueryNode의 TAG 기반 조회 성능을 위해, Neo4j에서 Node의 `tags` 속성은 반드시 인덱싱해야 함**
-- 인덱스 생성 예시(Cypher):
-  ```cypher
-  CREATE INDEX node_tags_index IF NOT EXISTS FOR (n:Node) ON (n.tags)
-  ```
-- 인덱스가 있으면 TAG 기반 노드 조회가 대규모 데이터셋에서도 빠르게 동작하며, QueryNode의 실시간성/확장성 보장
-- 인덱스 생성은 마이그레이션 스크립트, 초기화 코드, 또는 운영 Neo4j 관리 정책에 반드시 포함
-- Neo4j 4.x 이상에서는 리스트 타입 속성(`tags: [string]`)도 인덱싱 지원
-- **설계/운영 가이드**: TAG 기반 쿼리, QueryNode 해석, DAG 동적 해석 등 모든 TAG 관련 로직은 인덱스 활용을 전제로 구현
+## 0. 개요: 이론적 동기와 시스템화의 목적
 
-## 4. DAG Manager 재기동 및 장애 복구 설계
+QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 DAG(Directed Acyclic Graph)를 효율적으로 실행하고, 반복적 계산을 피하면서 재사용 가능한 컴퓨팅 자원을 최대한 활용하는 것을 주요 목표로 한다. 특히 DAG의 구성요소를 연산 단위로 분해하고 이를 전역적으로 식별·재활용할 수 있도록 함으로써, 유사하거나 동일한 전략 간에 불필요한 계산 자원 낭비를 최소화할 수 있다. 예를 들어 A 전략과 B 전략이 공통적으로 사용하는 가격 신호 처리 노드가 있다면, 해당 노드는 한 번만 실행되고 그 결과는 두 전략에서 모두 참조할 수 있게 된다. 이는 고빈도 실행 환경 또는 다중 전략 포트폴리오 환경에서 시간 복잡도와 메모리 사용량을 획기적으로 줄이는 데 기여한다.
 
-### 4.1 Stateless 설계
-- **DAG Manager는 완전한 stateless 서비스로 설계**
-  - 모든 상태(노드, DAG, 의존성, 메타데이터 등)는 Neo4j(그래프 DB) 또는 외부 메시지 브로커(Kafka/Redis 등)에만 저장
-  - 서비스 인스턴스는 언제든지 재기동/스케일아웃/롤링업데이트 가능하며, 자체적으로 상태를 보존하지 않음
-  - 장애 발생 시에도 서비스 재기동만으로 정상 동작 복구 가능
+본 문서는 이러한 구조적 재사용성을 달성하기 위한 QMTL 아키텍처의 설계 철학, 계층 구조 정의, 컴포넌트 간의 통신 프로토콜, 상태 복원 메커니즘, 큐 오케스트레이션에 필요한 결정론적 조건들을 이론적·실무적 관점에서 조망하며, 전체 시스템 구현을 위한 종합적 로드맵을 제시한다.
 
-### 4.2 내구성 있는 큐/브로커 사용
-- **모든 작업 큐/이벤트 브로커는 durability(내구성) 옵션을 활성화하여 운영**
-  - Kafka/Redpanda: acks=all, min.insync.replicas, log.durability 등 내구성 옵션 필수 적용
-  - Redis: AOF(append-only file) 또는 RDB 스냅샷 활성화, 장애 시 데이터 유실 최소화
-  - 미처리 메시지/작업은 서비스 재기동 후에도 반드시 재처리됨을 보장
+---
 
-### 4.3 멱등성 보장
-- **모든 작업/이벤트 처리 로직은 멱등성(idempotency)을 보장**
-  - 동일 작업/이벤트가 중복 전달되어도 결과가 변하지 않도록 설계
-  - 예: 노드 생성/업데이트/이벤트 발행 시 unique key, idempotency key, 상태 체크 등 적용
-  - 장애/재기동/네트워크 이슈 등으로 인한 중복 처리에도 데이터 일관성 유지
+## 1. 시스템 구성: 계층 간 상호작용과 처리 흐름
 
-### 4.4 초기화/복구 루틴
-- **서비스 기동 시 상태 점검 및 복구 루틴을 반드시 수행**
-  - Neo4j, 브로커, 큐 등 외부 시스템 연결 및 상태 점검
-  - 미완료 작업/이벤트/트랜잭션 조회 및 재처리
-  - 인덱스, 스키마, 필수 데이터 구조 자동 점검 및 생성
-  - 예: Neo4j TAG 인덱스, Kafka 토픽, Redis 큐 등
-
-#### 예시: 서비스 기동 시 복구 루틴
-```python
-# dag_manager/boot.py
-
-def initialize_and_recover():
-    # 1. Neo4j 연결 및 인덱스 점검
-    neo4j.ensure_index('node_tags_index', 'Node', 'tags')
-    # 2. Kafka 토픽/파티션 점검
-    kafka.ensure_topics(['dag-events', 'node-status'])
-    # 3. Redis 큐/브로커 점검
-    redis.ensure_queue('qmtl:dag:work_queue')
-    # 4. 미완료 작업/이벤트 재처리
-    for work in redis.get_pending_works():
-        process_work(work)
-    for event in kafka.get_uncommitted_events():
-        handle_event(event)
-    # 5. 기타 상태 점검 및 복구
-    ...
 ```
-- 위 루틴은 서비스가 언제든지 재기동/스케일아웃/장애 복구되어도 데이터 일관성과 내구성을 보장함
-
----
-
-## 5. CHANGELOG (Architecture NextGen)
-
-### [YYYY-MM-DD] QMTL NextGen Architecture Major Update
-- Split QMTL into three independent components: DAG Manager, Gateway, SDK
-- All data contracts, APIs, and events migrated to bebop-based schema management
-- All API endpoints are read-only for bebop contract models; mutations handled internally
-- Neo4j TAG 인덱싱 설계 및 Cypher 예시 추가
-- DAG Manager stateless 설계, durability, idempotency, robust recovery/initialization routines 문서화
-- 모든 워크플로우, 콜백, 테스트 코드 예시를 bebop encode/decode 기반으로 변경
-- 장애 복구, 캐시 손실, 이벤트/큐 동기화, 트랜잭션 일관성, 복구 방안 등 리스크 및 대응책 추가
-- Gateway 장애/재기동 시 데이터 일관성 및 복구 설계(권장안, 예시, 한계 등) 섹션 추가
-
-### [Gateway 장애/재기동 시 데이터 일관성 및 복구 설계]
-
-#### 1. 단순 캐시 삭제 + 실패 신호의 한계
-- Gateway 장애/종료 시 Redis 캐시를 삭제하고, 전략 SDK에 실패 신호를 보내는 방식은
-  - 재기동 후 깨끗한 상태에서 시작할 수 있다는 장점이 있으나,
-  - 진행 중이던 작업(큐에 있던 미처리 작업 등)이 모두 소실되고, 불필요하게 많은 작업이 실패 처리될 수 있음
-  - 장애가 일시적일 때도 모든 작업이 실패로 처리되어, 복구 후 수동 재시작/재처리가 필요
-  - 장애 원인에 따라 SDK가 중복 실행, 데이터 불일치 등 부작용이 발생할 수 있음
-
-#### 2. 권장 대안: 내구성, 멱등성, 자동 복구, 상태 기반 알림 결합
-- **Redis 내구성 옵션 활성화**: AOF(Append Only File) 또는 RDB 스냅샷을 활성화하여, Gateway 재기동 시에도 큐/상태 데이터가 최대한 보존되도록 설계
-- **작업 큐의 멱등성 보장**: 각 작업(WorkItem)에 고유 ID를 부여하고, Gateway가 재기동 후에도 중복 작업이 실행되지 않도록 처리(예: processed set, 상태 체크 등)
-- **미처리 작업 자동 복구**: Gateway 재기동 시 Redis 큐에 남아있는 미처리 작업을 자동으로 재처리 (예: brpoplpush, pending queue, 상태 플래그 활용)
-- **SDK에 실패 신호 대신 '진행 중/재시도' 신호 제공**: 장애가 일시적일 수 있으므로, SDK에는 '작업이 지연/재시도 중'임을 알리고, 일정 시간/횟수 초과 시에만 '실패' 신호를 보내는 것이 더 안전
-- **모니터링/알림 연동**: Gateway 장애/재기동/작업 실패 등 주요 이벤트를 운영자/사용자에게 실시간 알림(예: Slack, Email, 대시보드 등)으로 제공
-
-#### 3. 설계 예시 (Gateway 작업 큐/복구)
-```python
-# gateway/services/boot.py
-
-def initialize_and_recover():
-    # 1. Redis durability 옵션 점검 (AOF/RDB)
-    redis.ensure_durability()
-    # 2. 미처리 작업 복구
-    for work in redis.get_pending_works():
-        if not redis.is_processed(work.id):
-            process_work(work)
-    # 3. 상태 기반 알림
-    for work in redis.get_failed_works():
-        if work.retry_count < MAX_RETRY:
-            retry_work(work)
-        else:
-            notify_sdk_failure(work.strategy_id, work.id)
-    # 4. 운영자 알림
-    if redis.detected_crash():
-        send_ops_alert('Gateway 재기동 및 복구 루틴 실행됨')
+Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
+     │                │                    │                │
+     │                │                    └──▶ Kafka Queue 생성
+     │                └── 결과 큐 상태 회신 ◀───┘
+     └─▶ 로컬 DAG 실행 (필요 노드만 병렬 처리)
 ```
 
-#### 4. 요약
-- 단순 캐시 삭제 + 실패 신호는 데이터 유실/불필요한 실패 증가 위험이 있음
-- 내구성, 멱등성, 자동 복구, 상태 기반 알림을 결합하면 Gateway 재기동 시에도 데이터 유실/중복 실행/불필요한 실패 없이 안정적으로 운영 가능
-- Redis durability, 작업 큐 멱등성, 미처리 작업 복구, 상태 기반 알림, 운영자 모니터링을 반드시 설계에 포함할 것
+1. **SDK**는 전략 코드를 DAG로 직렬화하며, 각 노드는 메타데이터, 연산 함수, 입력 태그를 포함한다.
+2. **Gateway**는 DAG를 DAG-Manager로 전송하며, Neo4j 기반 전역 DAG와 비교하여 중복 연산을 제거하는 Diff 연산을 수행한다. 이 Diff 연산은 DAG 내 각 노드의 연산 정의를 구성하는 요소들 — 예를 들어 `node_type`, `code_hash`, `config_hash`, `schema_hash` — 을 기반으로 결정적 NodeID를 생성하고, 이 NodeID가 전역 DAG에 이미 존재하는지를 판별하는 방식으로 이루어진다. 일치하는 노드가 있을 경우, 해당 노드는 재실행되지 않고, DAG-Manager가 관리 중인 기존 Kafka/Redpanda 큐의 토픽에서 이미 생산되고 있는 스트림 데이터를 구독하는 방식으로 참조하여 계산 자원의 낭비를 방지한다. 이때 SDK는 해당 노드에 대한 처리 함수는 실행하지 않으며, 해당 큐의 오프셋 정보만을 추적하여 후속 노드로 데이터를 전달한다.
+3. **DAG-Manager**는 DAG 내 신규 노드에 대해 큐가 필요한지를 판별하며, Kafka 또는 Redpanda를 사용해 idempotent 큐 생성을 수행한다.
+4. **Gateway**는 각 노드의 실행 여부(이미 큐가 생산 중인지 여부 포함)와 큐 매핑 정보를 SDK에 반환하며, SDK는 그에 따라 로컬에서 병렬 처리 가능한 노드만 실행한다.
+
+이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
 
 ---
 
-# [중요 아키텍처 원칙: Gateway와 Registry 책임 분리]
+## 2. 전략 상태 전이 시나리오와 원인-결과 연쇄
 
-> **NG-1,2 단계에서 gateway가 registry(레지스트리)를 직접 가지도록 설계/코드가 분리된 부분은 잘못된 구조입니다.**
-> - Gateway는 registry(노드/전략/의존성/메타데이터 관리) 책임을 절대 가지지 않습니다.
-> - Gateway가 registry를 직접 참조하거나 관리하는 설계/코드/예시/표현은 모두 제거해야 합니다.
-> - Gateway가 노드/전략/의존성/메타데이터 정보가 필요할 때는 반드시 Registry(또는 DAG Manager) API를 통해 조회/조율만 수행해야 합니다.
-> - 모든 데이터/메타데이터 관리는 Registry(또는 DAG Manager)에서만 담당합니다.
-> - 서비스별 책임 분류표, 워크플로우 예시, 설명 등에서 gateway와 registry의 경계를 명확히 구분해야 합니다.
+| 시나리오 유형 | 1차 원인                | 2차 시스템 반응                | 3차 결과 및 해석                                    |
+| ------- | -------------------- | ------------------------ | --------------------------------------------- |
+| **낙관적** | 동일 연산 해시 재사용 가능      | DAG Diff 결과 일부 노드 실행 불필요 | 리소스 최적화, 전략 처리 시간 단축                          |
+| **중립적** | 동시 큐 생성 요청           | Kafka의 Idempotent API 동작 | 중복 큐 생성 회피, 트랜잭션 정합성 유지                       |
+| **비관적** | Gateway의 Redis 상태 유실 | 복구 불가능한 상태 손실 위험         | AOF 및 PostgreSQL Write-Ahead Logging 활용 복구 수행 |
 
 ---
 
-## QMTL NextGen 서비스별 책임 분류표 (NG-1-1)
+## 3. 구조적 기술 설계 및 메타 모델링 개선 제안
 
-| 서비스         | 주요 책임/역할                                                         | 코드/디렉토리 예시                                 |
-|----------------|---------------------------------------------------------------------|---------------------------------------------------|
-| **DAG Manager**| 글로벌 DAG, 노드, 의존성, 메타데이터, 이벤트, 토픽 관리                | orchestrator/, models/datanode.py, models/strategy.py, models/event.py 등 |
-| **Gateway**    | 작업 큐, DAG 동기화, 콜백, 상태 추적, QueryNode 해석, 중계             | gateway/services/, gateway/api.py, gateway/api_callback.py 등 |
-| **SDK**        | 사용자 전략 작성/실행, DAG 추출, Gateway 통신, 노드 실행, 콜백 처리     | sdk/, models/analyzer.py, models/template.py 등    |
-| **공통**       | 설정, DB/Redis/HTTP, 유틸리티, 공통 모델                              | common/, models/(공통모델)                         |
+1. **결정적 노드 식별자(NodeID)** :
+
+   * 구성: `(node_type, code_hash, config_hash, schema_hash)`
+   * 해시 알고리즘: SHA-256 → 충돌 감지 시 SHA-3 fallback
+2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
+3. **CloudEvents 기반 이벤트 스펙 도입** : 표준 이벤트 정의를 통해 시스템 확장성과 언어 독립성을 확보
+4. **상태 머신 기반 실행 제어(xState)** : 전략 상태 흐름을 Finite-State-Machine으로 모델링하여 이론 검증 가능성과 시각화 용이성 확보
+5. **Ray 기반 병렬 처리** : 병렬 실행 시 Python multiprocessing을 Ray로 대체하여 메모리 격리성과 클러스터 확장성을 보장
+6. **관측성(Observability) 강화** : Prometheus, Grafana, Kafka Exporter, Neo4j APOC 프로파일러 기반의 지표 수집 및 병목 분석
+
+---
+
+### 3.1 다중 업스트림을 갖는 노드의 시간 기반 데이터 처리 모델
+
+#### 이론적 배경
+
+노드가 수신하는 다수의 업스트림 큐는 각기 다른 시간 해상도(interval)를 갖는다. 이로 인해 노드는 일정 기간(period) 동안의 데이터 윈도우를 유지하며 연산을 수행해야 한다.
+
+#### 구조 정의 (4‑D Tensor Model)
+
+| 축 (axis)                | 의미                                 | 예시                                       |
+| ----------------------- | ---------------------------------- | ---------------------------------------- |
+| **u – upstream\_id**    | 태그 또는 큐 ID (인터벌 포함)                | `btc_price_binance`, `eth_price_binance` |
+| **i – interval**        | 데이터 수신 간격 (초·분·시) **– 노드 필수**      | `60s`, `5m`, `1h`                        |
+| **p – period slot**     | 롤링 윈도우 인덱스 $0 … P<sub>i</sub>−1$   | `0‑29` (30 bars)                         |
+| **t – timestamp index** | `floor(epoch / i)` 로 정규화된 캔들 타임스탬프 | `10:01 … 10:10`                          |
+
+* **데이터 구조**: 4‑D xarray 또는 PyArrow Tensor `C[u,i,p,t]` 로 구현.
+* **다중 인터벌·다중 업스트림 지원**: `u` 축 (업스트림)과 `i` 축 (인터벌)을 분리함으로써 1m·5m·1h 등 다양한 간격과 여러 태그 큐를 동시에 저장·검색 가능.
+* **캐시 채우기 규칙**: 노드는 `∀(u,i) : |C[u,i]| ≥ Pᵢ` 조건을 만족할 때에만 프로세싱 함수가 호출된다.
+* **타임스탬프 정렬 예시**: interval = 1 m, period = 10, 시스템 UTC = 10:10:30 ⇒ 필요한 `t` 슬롯은 10:01 … 10:10 (10개 캔들).
+* **결측 처리**: 캔들 누락 시 `missing_flag` ↦ 재동기화 요청 또는 `on_missing` 정책(`skip`/`fail`) 적용.
+
+#### 설계 요구사항 요약
+
+1. **필수 `interval` 필드** — 모든 `Node` 메타 정의에 `interval`을 **필수 (primary key)** 로 포함한다. 예) `interval: 1m`, `5m`, `1h`.
+2. **업스트림 데이터 캐시** — 3‑D 맵 대신 4‑D Tensor `C[u,i,p,t]` 구조를 사용한다. 축 정의는 위 표를 참조하며, 큐 인서트는 벡터 단위·만료는 FIFO pop으로 수행된다.
+3. **프로세싱 함수(Compute‑Fn) 격리** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. I/O (큐 publish, DB write) 금지. 예시 시그니처:
+
+   ```python
+   def fn(cache_slice: pd.DataFrame) -> pd.DataFrame:
+       ...
+   ```
+4. **Period 충족 조건** — 노드 트리거 공식: `∀ u ∈ upstreams : len(cache[u][interval]) ≥ period`.
+5. **시간축 정의** — 타임스탬프 인덱스 `t = floor(epoch / interval)` 로 정규화한다. 예) interval = 1 m, period = 10, 시스템 시각 10:10:30 → 요구 인덱스 10:01 … 10:10.
+6. **데이터 유효성 체크** — 삽입 시 Δt ≠ interval 이면 `missing_flag` 설정 후 재동기화 요청(`on_missing`).
+7. **설정 DSL 스케치** — YAML 예시:
+
+   ```yaml
+   nodes:
+     - id: rsi_1m
+       interval: 1m
+       period: 14
+       compute: ta.rsi
+     - id: corr_1h
+       interval: 1h
+       period: 10
+       upstream_query:
+         tags: ["ta-indicator"]
+       compute: stats.corr
+   ```
+
+#### 런타임 처리 절차
+
+```mermaid
+flowchart LR
+    subgraph UpstreamData
+        U1["Upstream Queue u₁<br/>(interval 1 m)"]
+        U2["Upstream Queue u₂<br/>(interval 5 m)"]
+    end
+    U1 -->|append| C["4‑D Cache C[u,i,p,t]"]
+    U2 -->|append| C
+    C -->|period Pᵢ satisfied?| FN[/"Processing&nbsp;Function<br/>fn(cache_slice)"/]
+    FN --> OUT["Node Output<br/>(→ downstream or queue)"]
+    classDef dim fill:#f8f8f8,stroke:#333,stroke-width:1px;
+    class C dim;
+```
+
+1. Gateway는 DAG 제출 시 각 노드에 대해 interval/period 세팅을 판단
+2. SDK는 지정된 upstream별로 CircularBuffer를 생성
+3. 큐로부터 FIFO 방식으로 데이터를 수신하며, period 범위 내에서 평균(mean), 표준편차(std), 이동 최소값(min), 상관계수 계산(corr), 사용자 정의 지표 연산 등 다양한 시계열 통계 처리를 수행
+
+#### 전략 설정 예시 (YAML)
+
+```yaml
+upstream_settings:
+  - interval: 60
+    period: 30
+  - interval: 300
+    period: 12
+```
+
+#### 설계 영감
+
+TimeScaleDB의 Continuous Aggregates 원리를 연산 캐시 계층에 적용하여, 정해진 시간 해상도에서 미리 정의된 집계 쿼리를 지속적으로 갱신하는 방식과 유사하게, QMTL에서도 interval 및 period에 따라 각 노드가 사용하는 데이터를 미리 캐시하고 업데이트하여 연산 효율성을 높이는 구조를 구현하였다. 특히 TimeScaleDB가 materialized view에 기반해 결과를 지속적으로 갱신하는 것처럼, QMTL은 각 전략 노드가 필요로 하는 데이터 범위를 미리 지정된 기간 동안 유지·갱신함으로써 연산 지연을 줄이고 처리 속도를 극대화한다. 이때 '지정된 기간'은 각 노드의 업스트림별로 설정된 `period × interval` 계산에 기반하여 결정되며, 사용자는 전략 구성 시 노드 단위로 별도의 period 값을 지정하거나, 시스템이 interval별로 제공하는 기본값 테이블에 따라 자동 보간된다. 또한 QMTL은 런타임 중 전략의 상태나 데이터 도달률에 따라 해당 기간의 설정을 제한 범위 내에서 동적으로 조정할 수 있는 기능도 제공하여, 네트워크나 데이터 품질 변화에 적응할 수 있는 유연성을 확보한다. 다만 QMTL은 데이터베이스 기반이 아닌 실시간 메시지 큐 기반으로 동작하며, View 대신 메모리 기반 캐시 구조와 사용자 정의 연산 엔진을 통해 처리된다는 점에서 구현 계층이 다르다. 이러한 차이에도 불구하고, 시간 기반 데이터 집계 성능을 소프트웨어 레벨에서 유사하게 재현하고자 하는 점에서 설계 철학은 구조적으로 유사하다고 볼 수 있다.
+
+#### Tag‑based Multi‑Upstream 큐 자동 매핑
+
+* **Tags 필드**: 각 노드는 하나 이상의 `tags` 배열을 가질 수 있으며, 이는 데이터 성격(예: `price`, `orderbook`, `flow`)이나 자산(`BTC`, `ETH`) 등을 표현한다.
+* **전략 작성 시 사용 방식**:
+
+  ```python
+  price_stream = StreamInput(
+            tags=["BTC", "price"],  # 다중 태그로 큐 자동 매핑
+            interval=60,    # 1분 간격 데이터
+            period=30       # 최소 30개 필요
+        )
+      tags=["BTC", "price"],  # 여러 태그 지정
+      interval=60,
+      period=30
+  )
+  ```
+* **큐 해석 규칙**
+
+  1. Gateway는 `(tags, interval)` 조합으로 DAG‑Manager에 질의하여 **전역 DAG에 존재하는 모든 토픽** 중 조건을 만족하는 큐 ID 집합을 가져온다.
+  2. SDK는 반환된 큐 리스트를 업스트림으로 등록하며, 필요 시 각 큐별로 독립된 CircularBuffer를 초기화한다.
+  3. 노드 실행 시 여러 큐를 **concatenate / align** 처리하여 하나의 시계열 데이터프레임으로 전달하거나, 사용자 정의 집계 함수를 통해 병합한다.
+* **장점**: 전략 코드는 자산(sym) 추가 시 태그만 확장하면 되므로 **동형 전략의 대량 배치**에 용이하며, 큐 이름 변경·증가에 대한 민감도가 낮다.
+
+---
+
+## 4. 실행 모드 및 구성요소 역할
+
+### 4.1 전략 실행 모드
+
+QMTL의 모든 실행 모드는 각 노드가 종속된 업스트림 큐로부터 정해진 `interval` 및 `period`에 해당하는 데이터를 확보한 이후에만 연산 결과를 생성할 수 있다. 즉, 백테스트이든 실시간 실행이든, **모든 노드는 초기 period가 충족되지 않으면 데이터를 생성할 수 없으며**, 해당 상태는 'pre-warmup' 상태로 간주된다. 이는 연산 일관성을 보장하고, 누락된 데이터로 인한 왜곡을 방지하기 위함이다.
+
+* 각 노드는 실행 시점에 다음 조건을 충족해야 함:
+
+  * 설정된 모든 업스트림에 대해 period × interval 만큼의 데이터가 수신되었는가?
+  * interval마다 데이터가 정확히 정렬되었고, 이상치 또는 결측이 보정되었는가?
+
+이 제약 조건은 초기 전략 실행 지연을 감수하더라도 연산의 정확도를 우선시하며, 특히 실시간 환경에서도 노이즈나 불완전한 초기 큐 상태로 인한 오동작을 방지하는 데 핵심적인 역할을 한다. 예를 들어, interval=60s, period=30으로 설정된 노드는 최소 30분간의 데이터가 수집되기 전까지는 출력을 생성하지 않으며, 평균적으로 실시간 환경에서 30분 내외의 warmup 시간이 소요된다. 특히 MFI, RSI와 같은 지표 기반 전략은 이전 캔들 히스토리에 강하게 의존하기 때문에, warmup이 되지 않은 상태에서의 실행은 잘못된 매매 신호를 유발할 수 있다. 시스템 수준에서는 해당 노드가 'pre-warmup' 상태임을 로그 레벨에서 명시적으로 기록하며, 사용자는 UI 상에서도 각 노드별 warmup 상태를 직관적으로 확인할 수 있도록 하여 운영자가 초기 상태를 추적하고 안정적으로 전략 실행을 통제할 수 있도록 한다.
+QMTL은 다음 두 가지 전략 실행 모드를 기본적으로 제공해야 한다:
+
+1. **백테스트 모드 (Backtest Mode)**
+
+   * 사용자는 전략 실행 시 명시적인 `시작 시간(start_time)`과 `종료 시간(end_time)`을 지정해야 한다.
+   * SDK는 해당 구간의 데이터를 리플레이 방식으로 처리하며, 각 노드의 interval 및 period 설정에 따라 입력 데이터를 정렬 후 연산을 수행한다.
+   * 데이터 수급 실패나 결측이 발생할 경우, 해당 노드 또는 전략은 지정된 정책에 따라
+
+     1. 해당 시간 블록을 건너뛰고 다음 블록으로 이동하거나,
+     2. 에러 상태로 전환되어 중단될 수 있으며,
+     3. 로그 수준에서 누락 정보를 기록한 후 사용자에게 알림을 보낸다.
+   * 이러한 예외 처리 정책은 전략별 설정 파일에서 명시 가능하며, 시스템의 기본 정책은 "skip-on-missing"이다.
+   * 사용 목적: 전략 성능 검증, 파라미터 튜닝, 회귀 테스트 등.
+   * 사용자는 전략 실행 시 명시적인 `시작 시간(start_time)`과 `종료 시간(end_time)`을 지정해야 한다.
+   * SDK는 해당 구간의 데이터를 리플레이 방식으로 처리하며, 각 노드의 interval 및 period 설정에 따라 입력 데이터를 정렬 후 연산을 수행한다.
+   * 사용 목적: 전략 성능 검증, 파라미터 튜닝, 회귀 테스트 등.
+
+2. **실시간 모드 (Realtime Mode)**
+
+   **✅ 두 가지 하위 모드 제공**
+
+   | 하위 모드                    | 목적            | 특징                                                                |
+   | ------------------------ | ------------- | ----------------------------------------------------------------- |
+   | **`live`**\*\* (기본값)\*\* | 실제 주문 및 알림 전송 | 매매 실행 노드 활성화, 거래소/브로커 API 호출, PnL 실시간 반영                          |
+   | **`dry-run`**            | 전략 검증·시뮬레이션   | 매매 실행 노드가 PaperTrading 노드로 자동 대체, 주문은 기록되나 미발주, 실시간 성과(PnL) 로그 저장 |
+
+   * 전략 실행 요청 시 `mode="realtime", run_type="dry-run"` 또는 `run_type="live"` 플래그를 전달한다.
+   * 지표 계산(DAG 예: RSI, MFI)만 포함된 전략은 일반적으로 `live` 모드로 바로 실행 가능하지만, **매매 판단 및 주문 트리거를 포함하는 전략**은 먼저 `dry-run` 모드로 운영 환경에서 성과를 측정하고, 목표 KPI(PnL, 매수·매도 빈도 등)를 충족할 때 `live` 로 전환하는 것을 권장한다.
+   * `dry-run` 모드에서 수집된 주문 로그와 PnL은 SDK가 제공하는 분석 유틸리티를 통해 백테스트 결과와 동일한 포맷으로 저장되어, 비교·검증이 용이하다.
+
+이와 같은 모드 구분은 전략 실행 API 설계 시 필수적인 파라미터 구성 기준이 되며, 각 모드별 리소스 예약, 큐 구독 범위, 캐시 초기화 방식이 달라진다. 전략 실행 API 설계 시 필수적인 파라미터 구성 기준이 되며, 각 모드별 리소스 예약, 큐 구독 범위, 캐시 초기화 방식이 달라진다.
+
+---
+
+## 부록: 일반 전략 예시 코드 (Runner API 적용)
+
+다음은 QMTL 아키텍처의 핵심 요구사항을 모두 충족하는 일반 전략 예시이다. 이 전략은 사용자 정의 연산 함수를 사용하고, 노드 간 직접 참조를 기반으로 DAG을 구성하며, interval/period 기반 캐싱, 실행 모드 구분, pre-warmup 제약 조건 등을 모두 반영한다.
+
+```python
+from qmtl.sdk import Strategy, Node, StreamInput, Runner
+import pandas as pd
+
+# 사용자 정의 시그널 생성 함수
+def generate_signal(price: pd.DataFrame) -> pd.DataFrame:
+    momentum = price["close"].pct_change().rolling(5).mean()
+    signal = (momentum > 0).astype(int)
+    return pd.DataFrame({"signal": signal})
+
+# 전략 정의
+class GeneralStrategy(Strategy):
+    def setup(self):
+        price_stream = StreamInput(
+            interval=60,    # 1분 간격 데이터
+            period=30       # 최소 30개 필요
+        )
+
+        signal_node = Node(
+            input=price_stream,
+            compute_fn=generate_signal,
+            name="momentum_signal"
+        )
+
+        self.add_nodes([price_stream, signal_node])
+
+    def define_execution(self):
+        self.set_target("momentum_signal")
+
+# 백테스트 실행 예시
+if __name__ == "__main__":
+    Runner.backtest(
+        GeneralStrategy,
+        start_time="2024-01-01T00:00:00Z",
+        end_time="2024-02-01T00:00:00Z",
+        on_missing="skip"
+    )
+```
+
+---
+
+### 부록: Tag Query Strategy 예시 (다중 Upstream 자동 선택)
+
+아래 예시는 글로벌 DAG에 이미 존재하는 1시간 단위 RSI, MFI 지표 노드들이 `tags=["ta-indicator"]` 로 태깅되어 있을 때, 이를 **TagQueryNode** 를 통해 한 번에 업스트림으로 끌어와 상관계수를 계산(correlation)하는 전략이다.
+
+```python
+from qmtl.sdk import Strategy, Node, TagQueryNode, run_strategy
+import pandas as pd
+
+# 사용자 정의 상관계수 계산 함수
+def calc_corr(indicator_df: pd.DataFrame) -> pd.DataFrame:
+    # 컬럼 간 피어슨 상관계수 행렬 반환
+    corr = indicator_df.corr(method="pearson")
+    return corr
+
+class CorrelationStrategy(Strategy):
+    def setup(self):
+        # TagQueryNode: 지정 태그+interval에 매칭되는 모든 업스트림 자동 수집
+        indicators = TagQueryNode(
+            query_tags=["ta-indicator"],  # RSI, MFI 등 사전 계산 지표 노드들과 매칭
+            interval="1h",               # 1시간 바 기준
+            period=24,                    # 24시간 캐시(24개)
+            compute_fn=calc_corr          # 병합 후 바로 상관계수 계산
+        )
+
+        corr_node = Node(
+            input=indicators,
+            compute_fn=calc_corr,
+            name="indicator_corr"
+        )
+
+        self.add_nodes([indicators, corr_node])
+
+    def define_execution(self):
+        self.set_target("indicator_corr")
+
+# 실시간 실행 예시
+if __name__ == "__main__":
+    Runner.live(CorrelationStrategy)
+```
+
+
+**TagQueryNode 동작 요약**
+
+1. Gateway는 (query\_tags, interval) 조건으로 글로벌 DAG를 탐색한다.
+2. 해당 조건에 부합하는 모든 큐들을 업스트림으로 설정한다.
+3. SDK는 각 큐의 데이터를 수집하여 compute\_fn에 직접 전달하며, 병합 방식은 사용자 정의 함수 내부에서 수행된다.
+4. 각 큐가 설정된 period를 만족하지 않으면 노드는 ‘pre-warmup’ 상태에 머물며, 충족 시점부터 연산을 시작한다. Gateway는 `(query_tags, interval)` 조건에 부합하는 신규 큐가 전역 DAG에 추가될 때마다 콜백 이벤트를 통해 TagQueryNode에 알리고, 해당 노드는 런타임 중에도 업스트림 큐 목록을 동적으로 확장할 수 있다.
+
+이 구조로 전략 작성자는 **큐 이름이나 위치를 몰라도 태그 기반으로 지표 집합을 참조**할 수 있으며, 지표가 추가될 때마다 전략 수정 없이 자동 반영된다.
+
+---
+
+## 부록: 교차 시장 전략 예시 (Cross‑Market Lag Strategy)
+
+비트코인 가격(Binance) 상승이 일정 시차(예: 90분) 후 마이크로스트레티지(MSTR, Nasdaq) 주가 상승으로 이어진다는 가설을 검증·운용하는 전략 예시이다. 입력·출력 시장이 서로 다르므로, **데이터 수집(암호화폐)** 과 **매매 판단(주식)** 노드를 분리하고, 실시간에서는 먼저 `dry-run`으로 성과를 확인한 뒤 `live`로 전환한다.
+
+```python
+from qmtl.sdk import Strategy, Node, StreamInput, Runner
+import pandas as pd
+
+def lagged_corr(btc: pd.DataFrame, mstr: pd.DataFrame) -> pd.DataFrame:
+    # 90개(≈90분) 시차 상관계수 계산
+    btc_shift = btc["close"].shift(90)
+    corr = btc_shift.corr(mstr["close"])
+    return pd.DataFrame({"lag_corr": [corr]})
+
+class CrossMarketLagStrategy(Strategy):
+    def setup(self):
+        btc_price = StreamInput(tags=["BTC", "price", "binance"], interval=60, period=120)
+        mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval=60, period=120)
+
+        corr_node = Node(
+            input={"btc": btc_price, "mstr": mstr_price},
+            compute_fn=lagged_corr,
+            name="btc_mstr_corr"
+        )
+
+        self.add_nodes([btc_price, mstr_price, corr_node])
+
+    def define_execution(self):
+        self.set_target("btc_mstr_corr")
+
+# 실시간 dry‑run: 거래 여부 검증
+Runner.dryrun(CrossMarketLagStrategy)
+```
+
+> **동작 요약**
+>
+> 1. Binance 1분 BTC 가격과 Nasdaq 1분 MSTR 가격 큐를 각각 태그로 매핑.
+> 2. 90분(90샘플) 시차 상관계수를 지속 계산하여 `lag_corr` ≥ 임계값이면 별도 매매 DAG(주식 매수)로 신호 전달 가능.
+> 3. `Runner.dryrun()` 으로 실시간 시뮬레이션 후, 충분한 PnL·승률이 검증되면 동일 코드로 `Runner.live()` 전환.
+
+---
+
+## 5. 구성요소 역할 및 기술 스택
+
+| 컴포넌트        | 기능                                   | 주 기술 스택                               |
+| ----------- | ------------------------------------ | ------------------------------------- |
+| SDK         | DAG 생성, 전략 코드 실행, 로컬 연산 병렬 처리        | Python 3.11, Ray, Pydantic            |
+| Gateway     | 상태 FSM, 전략 전이 로직, DAG diff 수행, 콜백 전송 | FastAPI, Redis, PostgreSQL, xstate-py |
+| DAG-Manager | Neo4j 기반 전역 DAG 저장 및 증분 쿼리, 큐 생성 판단  | Neo4j 5.x, APOC, Kafka Admin Client   |
+| Infra       | 메시지 중개 및 운영 관측 지표 수집                 | Redpanda, Prometheus, Grafana, MinIO  |
+
+---
