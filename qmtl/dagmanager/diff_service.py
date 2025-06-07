@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Iterable, List, Dict
+import time
+
+from .metrics import observe_diff_duration, queue_create_error_total
 
 
 @dataclass
@@ -95,7 +98,11 @@ class DiffService:
             if rec and rec.code_hash == n.code_hash and rec.schema_hash == n.schema_hash:
                 queue_map[n.node_id] = rec.topic
             else:
-                topic = self.queue_manager.upsert(n.node_id)
+                try:
+                    topic = self.queue_manager.upsert(n.node_id)
+                except Exception:
+                    queue_create_error_total.inc()
+                    raise
                 queue_map[n.node_id] = topic
                 new_nodes.append(n)
         return queue_map, new_nodes
@@ -111,10 +118,15 @@ class DiffService:
         self.stream_sender.send(DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id))
 
     def diff(self, request: DiffRequest) -> DiffChunk:
-        nodes = self._pre_scan(request.dag_json)
-        existing = self._db_fetch([n.node_id for n in nodes])
-        queue_map, new_nodes = self._hash_compare(nodes, existing)
-        sentinel_id = f"{request.strategy_id}-sentinel"
-        self._insert_sentinel(sentinel_id, new_nodes)
-        self._stream_send(queue_map, sentinel_id)
-        return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
+        start = time.perf_counter()
+        try:
+            nodes = self._pre_scan(request.dag_json)
+            existing = self._db_fetch([n.node_id for n in nodes])
+            queue_map, new_nodes = self._hash_compare(nodes, existing)
+            sentinel_id = f"{request.strategy_id}-sentinel"
+            self._insert_sentinel(sentinel_id, new_nodes)
+            self._stream_send(queue_map, sentinel_id)
+            return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
+        finally:
+            duration_ms = (time.perf_counter() - start) * 1000
+            observe_diff_duration(duration_ms)
