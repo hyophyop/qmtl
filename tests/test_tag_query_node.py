@@ -59,3 +59,30 @@ async def test_subscribe_updates(monkeypatch):
 
     await node.subscribe_updates("http://gw")
     assert node.upstreams == ["q4"]
+
+
+def test_resolve_offline(monkeypatch):
+    node = TagQueryNode(["t1"], interval=60, period=2)
+
+    def mock_get(url, params=None):
+        raise httpx.RequestError("fail", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", mock_get)
+
+    queues = node.resolve("http://gw")
+    assert queues == []
+    assert node.upstreams == []
+
+
+@pytest.mark.asyncio
+async def test_subscribe_updates_offline(monkeypatch):
+    node = TagQueryNode(["t1"], interval=60, period=2)
+
+    class DummyClient:
+        def __init__(self, *a, **kw):
+            raise httpx.RequestError("fail", request=httpx.Request("GET", "u"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    await node.subscribe_updates("http://gw")
+    assert node.upstreams == []
