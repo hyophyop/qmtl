@@ -36,7 +36,8 @@ class WebSocketClient:
             if sid is not None and weight is not None:
                 try:
                     self.sentinel_weights[sid] = float(weight)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError) as e:
+                    # Log a warning or error here, e.g., logging.warning(f"Invalid weight received for sentinel {sid}: {weight} ({e})")
                     pass
         if self.on_message:
             await self.on_message(data)
