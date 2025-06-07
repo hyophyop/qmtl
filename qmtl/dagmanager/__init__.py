@@ -31,4 +31,13 @@ def compute_node_id(
     return sha
 
 
-__all__ = ["compute_node_id"]
+from .topic import TopicConfig, topic_name, get_config
+from .kafka_admin import KafkaAdmin
+
+__all__ = [
+    "compute_node_id",
+    "TopicConfig",
+    "topic_name",
+    "get_config",
+    "KafkaAdmin",
+]
