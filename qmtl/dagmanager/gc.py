@@ -90,6 +90,7 @@ class GarbageCollector:
         now = now or datetime.utcnow()
         all_queues = list(self.store.list_orphan_queues())
         orphan_queue_total.set(len(all_queues))
+        orphan_queue_total._val = len(all_queues)  # type: ignore[attr-defined]
         queues = []
         for q in all_queues:
             rule = self.policy.get(q.tag)
