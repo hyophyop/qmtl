@@ -58,12 +58,12 @@ def test_diff_duration_and_error_metrics():
     metrics.reset_metrics()
     service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
     service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.diff_duration_ms_p95._val > 0  # type: ignore[attr-defined]
+    assert metrics.diff_duration_ms_p95._value.get() > 0  # type: ignore[attr-defined]
 
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())
     with pytest.raises(RuntimeError):
         service_err.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.queue_create_error_total._value == 1  # type: ignore[attr-defined]
+    assert metrics.queue_create_error_total._value.get() == 1  # type: ignore[attr-defined]
 
 
 def test_gc_sets_orphan_gauge():
@@ -80,4 +80,4 @@ def test_gc_sets_orphan_gauge():
 
     gc = GarbageCollector(Store(), DummyMetrics())
     gc.collect(now)
-    assert metrics.orphan_queue_total._val == 1  # type: ignore[attr-defined]
+    assert metrics.orphan_queue_total._value.get() == 1  # type: ignore[attr-defined]

@@ -8,6 +8,10 @@ from typing import Protocol, Mapping
 from .topic import TopicConfig
 
 
+class TopicExistsError(Exception):
+    """Raised when attempting to create a topic that already exists."""
+
+
 class AdminClient(Protocol):
     """Protocol describing minimal Kafka admin client methods."""
 
@@ -30,16 +34,17 @@ class KafkaAdmin:
     client: AdminClient
 
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:
-        """Create topic if it does not exist."""
-        topics = self.client.list_topics()
-        if name in topics:
-            return
-        self.client.create_topic(
-            name,
-            num_partitions=config.partitions,
-            replication_factor=config.replication_factor,
-            config={"retention.ms": str(config.retention_ms)},
-        )
+        """Create topic idempotently."""
+        try:
+            self.client.create_topic(
+                name,
+                num_partitions=config.partitions,
+                replication_factor=config.replication_factor,
+                config={"retention.ms": str(config.retention_ms)},
+            )
+        except TopicExistsError:
+            # another admin may have created the topic concurrently
+            pass
 
 
-__all__ = ["KafkaAdmin", "AdminClient"]
+__all__ = ["KafkaAdmin", "AdminClient", "TopicExistsError"]
