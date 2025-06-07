@@ -47,7 +47,12 @@ class WebSocketClient:
                 try:
                     msg = await ws.recv()
                 except websockets.ConnectionClosed:
+                    # Expected closure, break the loop
                     break
+                except Exception as e:
+                    # Log unexpected errors and decide how to handle (e.g., log and break, log and continue, attempt reconnect)
+                    # logging.error(f"Unexpected error during WebSocket receive: {e}")
+                    break # Or continue, or implement retry logic
                 try:
                     data = json.loads(msg)
                 except json.JSONDecodeError:
