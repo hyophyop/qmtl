@@ -80,6 +80,7 @@ class Runner:
                     run_type="backtest",
                 )
             except httpx.RequestError:
+                print(f"Warning: Gateway connection failed during backtest. Operating in offline mode.") # Consider using a proper logger
                 offline = True
         Runner._apply_queue_map(strategy, queue_map if not offline else {})
         # Placeholder for backtest logic
