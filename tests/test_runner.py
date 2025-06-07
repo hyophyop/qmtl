@@ -67,3 +67,37 @@ def test_gateway_error(monkeypatch):
 
     with pytest.raises(RuntimeError):
         Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+
+
+def test_offline_flag():
+    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw", offline=True)
+    assert all(n.execute for n in strategy.nodes)
+    assert all(n.queue_topic is None for n in strategy.nodes)
+
+
+def test_connection_failure(monkeypatch):
+    def mock_post(url, json):
+        raise httpx.RequestError("fail", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+    assert all(n.execute for n in strategy.nodes)
+    assert all(n.queue_topic is None for n in strategy.nodes)
+
+
+def test_offline_same_ids(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+    offline = Runner.dryrun(SampleStrategy, offline=True)
+    assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]

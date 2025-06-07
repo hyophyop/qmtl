@@ -63,59 +63,72 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        offline: bool = False,
     ) -> Strategy:
         """Run strategy in backtest mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        if gateway_url:
-            queue_map = Runner._post_gateway(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="backtest",
-            )
-            Runner._apply_queue_map(strategy, queue_map)
+        queue_map = {}
+        if gateway_url and not offline:
+            try:
+                queue_map = Runner._post_gateway(
+                    gateway_url=gateway_url,
+                    dag=dag,
+                    meta=meta,
+                    run_type="backtest",
+                )
+            except httpx.RequestError:
+                offline = True
+        Runner._apply_queue_map(strategy, queue_map if not offline else {})
         # Placeholder for backtest logic
         return strategy
 
     @staticmethod
     def dryrun(
-        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
+        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None, offline: bool = False
     ) -> Strategy:
         """Run strategy in dry-run (paper trading) mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[DRYRUN] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        if gateway_url:
-            queue_map = Runner._post_gateway(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="dry-run",
-            )
-            Runner._apply_queue_map(strategy, queue_map)
+        queue_map = {}
+        if gateway_url and not offline:
+            try:
+                queue_map = Runner._post_gateway(
+                    gateway_url=gateway_url,
+                    dag=dag,
+                    meta=meta,
+                    run_type="dry-run",
+                )
+            except httpx.RequestError:
+                offline = True
+        Runner._apply_queue_map(strategy, queue_map if not offline else {})
         # Placeholder for dry-run logic
         return strategy
 
     @staticmethod
     def live(
-        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
+        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None, offline: bool = False
     ) -> Strategy:
         """Run strategy in live trading mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[LIVE] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        if gateway_url:
-            queue_map = Runner._post_gateway(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="live",
-            )
-            Runner._apply_queue_map(strategy, queue_map)
+        queue_map = {}
+        if gateway_url and not offline:
+            try:
+                queue_map = Runner._post_gateway(
+                    gateway_url=gateway_url,
+                    dag=dag,
+                    meta=meta,
+                    run_type="live",
+                )
+            except httpx.RequestError:
+                offline = True
+        Runner._apply_queue_map(strategy, queue_map if not offline else {})
         # Placeholder for live trading logic
         return strategy
