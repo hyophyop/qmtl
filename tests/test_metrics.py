@@ -63,7 +63,7 @@ def test_diff_duration_and_error_metrics():
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())
     with pytest.raises(RuntimeError):
         service_err.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.queue_create_error_total._value.get() == 1  # type: ignore[attr-defined]
+    assert metrics.queue_create_error_total._value == 1  # type: ignore[attr-defined]
 
 
 def test_gc_sets_orphan_gauge():
