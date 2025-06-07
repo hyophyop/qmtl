@@ -89,3 +89,22 @@ async def test_grpc_cleanup_triggers_gc():
         await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id="s"))
     await server.stop(None)
     assert store.dropped == ["q"]
+
+
+@pytest.mark.asyncio
+async def test_grpc_cleanup_archives():
+    now = datetime.utcnow()
+    store = DummyStore([QueueInfo("s", "sentinel", now - timedelta(days=400))])
+    archive = DummyArchive()
+    gc = GarbageCollector(store, DummyMetrics(), archive=archive, batch_size=1)
+
+    service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
+    server, port = serve(service, host="127.0.0.1", port=0, gc=gc)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id="s"))
+    await server.stop(None)
+
+    assert store.dropped == ["s"]
+    assert archive.archived == ["s"]
