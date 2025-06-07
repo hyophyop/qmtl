@@ -232,6 +232,6 @@ qmtl-dagm gc --sentinel v1.2.3
 
 > **TODO**
 >
-> * S3 archive module spec
+> * S3 archive integration (interface available via `S3ArchiveClient`)
 > * Neo4j schema DDL export script
 > * Canary rollout automation guide

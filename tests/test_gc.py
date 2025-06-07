@@ -61,3 +61,32 @@ def test_gc_batch_halved_on_high_load():
     gc.collect(now)
 
     assert len(store.dropped) == 2
+
+
+def test_gc_respects_grace_period():
+    now = datetime.utcnow()
+    # Queue age is exactly TTL but within grace period
+    queues = [QueueInfo("q", "raw", now - timedelta(days=7))]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    gc = GarbageCollector(store, metrics, batch_size=1)
+
+    processed = gc.collect(now)
+
+    assert processed == []
+    assert store.dropped == []
+
+
+def test_gc_archives_with_client():
+    now = datetime.utcnow()
+    queues = [QueueInfo("s", "sentinel", now - timedelta(days=400))]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    archive = FakeArchive()
+    gc = GarbageCollector(store, metrics, archive=archive, batch_size=1)
+
+    processed = gc.collect(now)
+
+    assert processed == ["s"]
+    assert store.dropped == ["s"]
+    assert archive.archived == ["s"]
