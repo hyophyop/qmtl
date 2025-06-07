@@ -103,6 +103,8 @@ class Node:
             "period": self.period,
             "tags": list(self.tags),
             "inputs": [self.input.node_id] if self.input else [],
+            "code_hash": self.code_hash,
+            "schema_hash": self.schema_hash,
         }
 
 
