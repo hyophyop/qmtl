@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable, Protocol, Optional
 
+from .metrics import orphan_queue_total
+
 
 @dataclass(frozen=True)
 class GcRule:
@@ -86,8 +88,10 @@ class GarbageCollector:
     def collect(self, now: Optional[datetime] = None) -> list[str]:
         """Run one GC batch and return processed queue names."""
         now = now or datetime.utcnow()
+        all_queues = list(self.store.list_orphan_queues())
+        orphan_queue_total.set(len(all_queues))
         queues = []
-        for q in self.store.list_orphan_queues():
+        for q in all_queues:
             rule = self.policy.get(q.tag)
             if not rule:
                 continue

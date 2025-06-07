@@ -1,0 +1,49 @@
+# Example Alertmanager configuration for QMTL metrics
+---
+route:
+  group_by: ['job']
+  receiver: 'slack'
+  routes:
+    - match:
+        severity: 'critical'
+      receiver: 'pagerduty'
+
+receivers:
+  - name: 'pagerduty'
+    pagerduty_configs:
+      - routing_key: 'dummy'
+  - name: 'slack'
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+
+---
+ groups:
+   - name: qmtl
+     rules:
+       - alert: DiffDurationHigh
+         expr: diff_duration_ms_p95 > 200
+         for: 5m
+         labels:
+           severity: warning
+         annotations:
+           summary: Diff processing slow
+       - alert: QueueCreateErrors
+         expr: queue_create_error_total > 0
+         for: 15m
+         labels:
+           severity: critical
+         annotations:
+           summary: Queue creation failures detected
+       - alert: SentinelGap
+         expr: sentinel_gap_count >= 1
+         labels:
+           severity: warning
+         annotations:
+           summary: Missing diff sentinel detected
+       - alert: OrphanQueuesGrowing
+         expr: increase(orphan_queue_total[3h]) > 0
+         labels:
+           severity: warning
+         annotations:
+           summary: Orphan queue count rising
