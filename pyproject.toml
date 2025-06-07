@@ -4,7 +4,16 @@ version = "0.1.0"
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "httpx", "fastapi", "fakeredis", "asyncpg", "xstate"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "fastapi",
+    "fakeredis",
+    "asyncpg",
+    "xstate",
+    "websockets",
+]
 
 [build-system]
 requires = ["setuptools"]
