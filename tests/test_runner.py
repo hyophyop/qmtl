@@ -86,6 +86,8 @@ def test_connection_failure(monkeypatch):
     strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     assert all(n.execute for n in strategy.nodes)
     assert all(n.queue_topic is None for n in strategy.nodes)
+    offline = Runner.dryrun(SampleStrategy, offline=True)
+    assert [n.node_id for n in offline.nodes] == [n.node_id for n in strategy.nodes]
 
 
 def test_offline_same_ids(monkeypatch):
@@ -103,3 +105,20 @@ def test_offline_same_ids(monkeypatch):
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     offline = Runner.dryrun(SampleStrategy, offline=True)
     assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]
+
+
+def test_no_gateway_same_ids(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+    no_gateway = Runner.dryrun(SampleStrategy)
+    assert [n.node_id for n in online.nodes] == [n.node_id for n in no_gateway.nodes]
