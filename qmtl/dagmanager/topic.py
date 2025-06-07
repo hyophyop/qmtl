@@ -20,9 +20,9 @@ _QUEUE_CONFIG = {
 
 
 def topic_name(asset: str, node_type: str, code_hash: str, version: str, *, dryrun: bool = False) -> str:
-    """Return topic name following `{asset}_{node_type}_{short_hash}_{version}`."""
+    """Return topic name following `{asset}_{node_type}_{short_hash}_{version}{_dryrun?}`."""
     short_hash = code_hash[:6]
-    suffix = "_sim" if dryrun else ""
+    suffix = "_dryrun" if dryrun else ""
     return f"{asset}_{node_type}_{short_hash}_{version}{suffix}"
 
 
