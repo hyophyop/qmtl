@@ -24,6 +24,8 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         )
         pb = dagmanager_pb2.DiffChunk(queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id)
         if self._callback_url:
+            # Consider submitting this to a background task
+            # if the callback should not block the stream or terminate it on failure.
             await post_with_backoff(
                 self._callback_url,
                 {"event": "diff", "strategy_id": request.strategy_id},
