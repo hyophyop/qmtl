@@ -33,6 +33,7 @@ def compute_node_id(
 
 from .topic import TopicConfig, topic_name, get_config
 from .kafka_admin import KafkaAdmin
+from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 
 __all__ = [
     "compute_node_id",
@@ -40,4 +41,7 @@ __all__ = [
     "topic_name",
     "get_config",
     "KafkaAdmin",
+    "GarbageCollector",
+    "DEFAULT_POLICY",
+    "S3ArchiveClient",
 ]
