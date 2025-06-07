@@ -96,3 +96,31 @@ def test_sentinel_insert_and_stream():
     assert repo.sentinels == [("strategy-sentinel", ["A"])]
     assert stream.chunks[0] == chunk
     assert chunk.sentinel_id == "strategy-sentinel"
+
+
+def test_diff_with_sdk_nodes():
+    """End-to-end check with nodes serialized by the SDK."""
+    from qmtl.sdk import StreamInput, Node, Strategy
+
+    class _S(Strategy):
+        def setup(self):
+            src = StreamInput(interval=1, period=1)
+            node = Node(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
+            self.add_nodes([src, node])
+
+        def define_execution(self):
+            self.set_target("out")
+
+    s = _S()
+    s.setup()
+    s.define_execution()
+    dag_json = json.dumps(s.serialize())
+
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    chunk = service.diff(DiffRequest(strategy_id="sid", dag_json=dag_json))
+    # ensure no KeyError and queue map populated
+    assert chunk.queue_map

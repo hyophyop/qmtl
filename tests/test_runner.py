@@ -33,7 +33,9 @@ def test_gateway_queue_mapping(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content.decode())
         dag = json.loads(base64.b64decode(payload["dag_json"]).decode())
-        first_id = dag["nodes"][0]["node_id"]
+        first_node = dag["nodes"][0]
+        assert "code_hash" in first_node and "schema_hash" in first_node
+        first_id = first_node["node_id"]
         return httpx.Response(
             202,
             json={"strategy_id": "s1", "queue_map": {first_id: "topic1"}},
