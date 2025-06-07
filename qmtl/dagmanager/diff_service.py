@@ -102,6 +102,7 @@ class DiffService:
                     topic = self.queue_manager.upsert(n.node_id)
                 except Exception:
                     queue_create_error_total.inc()
+                    queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
                     raise
                 queue_map[n.node_id] = topic
                 new_nodes.append(n)

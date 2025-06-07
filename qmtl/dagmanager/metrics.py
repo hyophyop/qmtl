@@ -24,6 +24,31 @@ queue_create_error_total = Counter(
     "Total number of queue creation failures",
     registry=registry,
 )
+# expose value proxy for tests
+class _ValueProxy:
+    def __init__(self, mv) -> None:
+        self._mv = mv
+
+    def set(self, val: float) -> None:
+        self._mv.set(val)
+
+    def inc(self, amount: float = 1) -> None:  # pragma: no cover - passthrough
+        self._mv.inc(amount)
+
+    def get_exemplar(self):  # pragma: no cover - passthrough
+        return self._mv.get_exemplar()
+
+    def get(self) -> float:
+        return self._mv.get()
+
+    def __eq__(self, other: object) -> bool:  # pragma: no cover - simple
+        try:
+            return self._mv.get() == other
+        except Exception:
+            return False
+
+queue_create_error_total._raw_value = queue_create_error_total._value  # type: ignore[attr-defined]
+queue_create_error_total._value = _ValueProxy(queue_create_error_total._raw_value)  # type: ignore[attr-defined]
 
 sentinel_gap_count = Gauge(
     "sentinel_gap_count",
@@ -46,6 +71,8 @@ def observe_diff_duration(duration_ms: float) -> None:
     ordered = sorted(_diff_samples)
     idx = max(0, int(len(ordered) * 0.95) - 1)
     diff_duration_ms_p95.set(ordered[idx])
+    # expose raw value for tests
+    diff_duration_ms_p95._val = diff_duration_ms_p95._value.get()  # type: ignore[attr-defined]
 
 
 def start_metrics_server(port: int = 8000) -> None:
@@ -62,6 +89,9 @@ def reset_metrics() -> None:
     """Helper for tests to clear recorded samples and metric values."""
     _diff_samples.clear()
     diff_duration_ms_p95.set(0)
+    diff_duration_ms_p95._val = 0  # type: ignore[attr-defined]
     queue_create_error_total._value.set(0)  # type: ignore[attr-defined]
+    queue_create_error_total._val = 0  # type: ignore[attr-defined]
     sentinel_gap_count.set(0)
     orphan_queue_total.set(0)
+    orphan_queue_total._val = 0  # type: ignore[attr-defined]
