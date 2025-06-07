@@ -7,11 +7,15 @@ requires-python = ">=3.11"
 
 dev = [
     "pytest",
-    "fastapi",
+    "pytest-asyncio",
     "httpx",
-    "redis",
+    "fastapi",
     "fakeredis",
     "asyncpg",
+    "xstate",
+    "websockets",
+    "redis",
+    "fakeredis",
     "grpcio",
     "grpcio-tools",
     "pytest-asyncio",
