@@ -6,6 +6,7 @@ import grpc
 
 from .diff_service import DiffService, DiffRequest
 from .callbacks import post_with_backoff
+from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
@@ -34,11 +35,16 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
 
 
 class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
+    def __init__(self, gc: GarbageCollector | None = None) -> None:
+        self._gc = gc
+
     async def Cleanup(
         self,
         request: dagmanager_pb2.CleanupRequest,
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.CleanupResponse:
+        if self._gc is not None:
+            self._gc.collect()
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(
@@ -64,12 +70,13 @@ def serve(
     host: str = "0.0.0.0",
     port: int = 50051,
     callback_url: str | None = None,
+    gc: GarbageCollector | None = None,
 ) -> tuple[grpc.aio.Server, int]:
     server = grpc.aio.server()
     dagmanager_pb2_grpc.add_DiffServiceServicer_to_server(
         DiffServiceServicer(diff_service, callback_url), server
     )
-    dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(AdminServiceServicer(), server)
+    dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(AdminServiceServicer(gc), server)
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
     return server, bound_port
