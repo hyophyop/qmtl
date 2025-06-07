@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import httpx
 
 from qmtl.dagmanager import compute_node_id
 
@@ -110,4 +111,55 @@ class StreamInput(Node):
 
     def __init__(self, tags: list[str] | None = None, interval: int | None = None, period: int | None = None) -> None:
         super().__init__(input=None, compute_fn=None, name="stream_input", interval=interval, period=period, tags=tags or [])
+
+
+class TagQueryNode(Node):
+    """Node that selects upstream queues by tag and interval."""
+
+    def __init__(
+        self,
+        query_tags: list[str],
+        *,
+        interval: int,
+        period: int,
+        compute_fn=None,
+        name: str | None = None,
+    ) -> None:
+        super().__init__(
+            input=None,
+            compute_fn=compute_fn,
+            name=name or "tag_query",
+            interval=interval,
+            period=period,
+            tags=list(query_tags),
+        )
+        self.query_tags = list(query_tags)
+        self.upstreams: list[str] = []
+
+    def resolve(self, gateway_url: str) -> list[str]:
+        """Fetch matching queues from ``gateway_url``."""
+        url = gateway_url.rstrip("/") + "/queues/by_tag"
+        params = {"tags": ",".join(self.query_tags), "interval": self.interval}
+        resp = httpx.get(url, params=params)
+        resp.raise_for_status()
+        queues = resp.json().get("queues", [])
+        self.upstreams = queues
+        return queues
+
+    async def subscribe_updates(self, gateway_url: str) -> None:
+        """Subscribe to queue updates via streaming endpoint."""
+        url = gateway_url.rstrip("/") + "/queues/watch"
+        params = {"tags": ",".join(self.query_tags), "interval": self.interval}
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("GET", url, params=params) as resp:
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    queues = data.get("queues")
+                    if queues is not None:
+                        self.upstreams = queues
 
