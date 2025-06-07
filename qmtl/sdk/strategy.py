@@ -16,3 +16,11 @@ class Strategy:
 
     def define_execution(self):
         raise NotImplementedError
+
+    # DAG serialization ---------------------------------------------------
+    def serialize(self) -> dict:
+        """Serialize strategy DAG using node IDs."""
+        return {
+            "nodes": [node.to_dict() for node in self.nodes],
+            "target": self.target,
+        }
