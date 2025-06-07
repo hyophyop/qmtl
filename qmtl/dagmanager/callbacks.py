@@ -18,7 +18,7 @@ async def post_with_backoff(
 ) -> httpx.Response:
     """Send HTTP POST with exponential backoff."""
     delay = base
-    async with (client or httpx.AsyncClient()) as c:
+    async with (client if client is not None else httpx.AsyncClient()) as c:
         for attempt in range(retries):
             resp = await c.post(url, json=payload)
             if resp.status_code == 202:
