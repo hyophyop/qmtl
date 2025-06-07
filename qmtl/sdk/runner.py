@@ -16,6 +16,8 @@ class Runner:
         """Run strategy in backtest mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
+        dag = strategy.serialize()
+        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         # Placeholder for backtest logic
         return strategy
 
@@ -24,6 +26,8 @@ class Runner:
         """Run strategy in dry-run (paper trading) mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[DRYRUN] {strategy_cls.__name__} starting")
+        dag = strategy.serialize()
+        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         # Placeholder for dry-run logic
         return strategy
 
@@ -32,5 +36,7 @@ class Runner:
         """Run strategy in live trading mode."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[LIVE] {strategy_cls.__name__} starting")
+        dag = strategy.serialize()
+        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
         # Placeholder for live trading logic
         return strategy
