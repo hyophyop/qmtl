@@ -80,4 +80,4 @@ def test_gc_sets_orphan_gauge():
 
     gc = GarbageCollector(Store(), DummyMetrics())
     gc.collect(now)
-    assert metrics.orphan_queue_total._value.get() == 1  # type: ignore[attr-defined]
+    assert metrics.orphan_queue_total._val == 1  # type: ignore[attr-defined]
