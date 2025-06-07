@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+"""Garbage collection utilities for orphan Kafka queues."""
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Iterable, Protocol, Optional
+
+
+@dataclass(frozen=True)
+class GcRule:
+    ttl: timedelta
+    grace: timedelta
+    action: str  # "drop" or "archive"
+
+
+@dataclass
+class QueueInfo:
+    name: str
+    tag: str
+    created_at: datetime
+
+
+class QueueStore(Protocol):
+    """Abstraction over the queue metadata store."""
+
+    def list_orphan_queues(self) -> Iterable[QueueInfo]:
+        """Return orphan queues pending GC."""
+        raise NotImplementedError
+
+    def drop_queue(self, name: str) -> None:
+        """Remove the queue from the broker."""
+        raise NotImplementedError
+
+
+class MetricsProvider(Protocol):
+    """Expose Kafka broker metrics."""
+
+    def messages_in_per_sec(self) -> float:
+        """Return broker ingestion percentage (0-100)."""
+        raise NotImplementedError
+
+
+class ArchiveClient(Protocol):
+    """Optional S3 archive interface."""
+
+    def archive(self, queue: str) -> None:
+        raise NotImplementedError
+
+
+class S3ArchiveClient:
+    """Placeholder for future S3 archive implementation."""
+
+    def __init__(self, bucket: str) -> None:
+        self.bucket = bucket
+
+    def archive(self, queue: str) -> None:  # pragma: no cover - placeholder
+        pass  # TODO: implement uploading queue contents to S3
+
+
+DEFAULT_POLICY = {
+    "raw": GcRule(ttl=timedelta(days=7), grace=timedelta(days=1), action="drop"),
+    "indicator": GcRule(ttl=timedelta(days=30), grace=timedelta(days=3), action="drop"),
+    "sentinel": GcRule(ttl=timedelta(days=180), grace=timedelta(days=30), action="archive"),
+}
+
+
+class GarbageCollector:
+    """Apply GC policy to orphan queues."""
+
+    def __init__(
+        self,
+        store: QueueStore,
+        metrics: MetricsProvider,
+        *,
+        policy: dict[str, GcRule] | None = None,
+        batch_size: int = 50,
+        archive: Optional[ArchiveClient] = None,
+    ) -> None:
+        self.store = store
+        self.metrics = metrics
+        self.policy = policy or DEFAULT_POLICY
+        self.batch_size = batch_size
+        self.archive = archive
+
+    def collect(self, now: Optional[datetime] = None) -> list[str]:
+        """Run one GC batch and return processed queue names."""
+        now = now or datetime.utcnow()
+        queues = []
+        for q in self.store.list_orphan_queues():
+            rule = self.policy.get(q.tag)
+            if not rule:
+                continue
+            if now - q.created_at >= rule.ttl + rule.grace:
+                queues.append((q, rule))
+        # adjust batch size based on broker load
+        batch = self.batch_size
+        if self.metrics.messages_in_per_sec() >= 80:
+            batch = max(1, batch // 2)
+        queues = queues[:batch]
+        processed = []
+        for q, rule in queues:
+            if rule.action == "drop":
+                self.store.drop_queue(q.name)
+            elif rule.action == "archive":
+                if self.archive is not None:
+                    self.archive.archive(q.name)
+                self.store.drop_queue(q.name)
+            processed.append(q.name)
+        return processed
+
+
+__all__ = [
+    "GcRule",
+    "QueueInfo",
+    "QueueStore",
+    "MetricsProvider",
+    "ArchiveClient",
+    "S3ArchiveClient",
+    "GarbageCollector",
+    "DEFAULT_POLICY",
+]
