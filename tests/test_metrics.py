@@ -58,7 +58,7 @@ def test_diff_duration_and_error_metrics():
     metrics.reset_metrics()
     service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
     service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.diff_duration_ms_p95._value.get() > 0  # type: ignore[attr-defined]
+    assert metrics.diff_duration_ms_p95._val > 0  # type: ignore[attr-defined]
 
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())
     with pytest.raises(RuntimeError):
