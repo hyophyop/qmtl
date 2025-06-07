@@ -27,6 +27,8 @@ class Node:
         self.tags = tags or []
         self.config = config or {}
         self.schema = schema or {}
+        self.execute = True
+        self.queue_topic: str | None = None
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
