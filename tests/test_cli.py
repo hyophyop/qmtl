@@ -15,3 +15,17 @@ def test_cli_dryrun():
     result = subprocess.run([sys.executable, "-m", "qmtl.sdk", STRATEGY_PATH, "--mode", "dryrun"], capture_output=True, text=True)
     assert result.returncode == 0
     assert "[DRYRUN] SampleStrategy" in result.stdout
+
+
+def test_cli_offline():
+    result = subprocess.run([
+        sys.executable,
+        "-m",
+        "qmtl.sdk",
+        STRATEGY_PATH,
+        "--mode",
+        "dryrun",
+        "--offline",
+    ], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert "[DRYRUN] SampleStrategy" in result.stdout

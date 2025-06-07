@@ -11,6 +11,7 @@ def main() -> None:
     parser.add_argument("--start-time")
     parser.add_argument("--end-time")
     parser.add_argument("--on-missing", default="skip")
+    parser.add_argument("--offline", action="store_true", help="Run without contacting the Gateway")
     args = parser.parse_args()
 
     module_name, class_name = args.strategy.split(":")
@@ -18,8 +19,14 @@ def main() -> None:
     strategy_cls = getattr(module, class_name)
 
     if args.mode == "backtest":
-        Runner.backtest(strategy_cls, start_time=args.start_time, end_time=args.end_time, on_missing=args.on_missing)
+        Runner.backtest(
+            strategy_cls,
+            start_time=args.start_time,
+            end_time=args.end_time,
+            on_missing=args.on_missing,
+            offline=args.offline,
+        )
     elif args.mode == "dryrun":
-        Runner.dryrun(strategy_cls)
+        Runner.dryrun(strategy_cls, offline=args.offline)
     elif args.mode == "live":
-        Runner.live(strategy_cls)
+        Runner.live(strategy_cls, offline=args.offline)
