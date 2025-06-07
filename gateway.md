@@ -97,4 +97,14 @@ Content‑Type: application/json
 ## S3 · Deterministic FIFO & Idempotency
 
 **Invariant R‑3.1** At most one Worker may pop a given StrategyID. Implemented by:
-\`SETNX("lock:{id}
+`SETNX("lock:{id}", worker_id, "NX", "PX", 60000)`
+
+### S4 · Architecture Alignment
+
+The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG-Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.
+
+Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. Operators may disable this step for small deployments.
+
+Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
+
+When resolving `TagQueryNode` dependencies, Gateway queries DAG-Manager for all queues matching `(tags, interval)` and returns the resulting mapping to the SDK so that only nodes lacking upstream queues execute locally.

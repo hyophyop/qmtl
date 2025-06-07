@@ -44,6 +44,10 @@ CREATE CONSTRAINT compute_pk IF NOT EXISTS
 ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
 CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ```
+### 1.3 NodeID Generation
+- NodeID = SHA-256 hash of `(node_type, code_hash, config_hash, schema_hash)`.
+- On collision detection the hash upgrades to SHA-3.
+- Uniqueness enforced via `compute_pk` constraint.
 
 ---
 
@@ -70,6 +74,7 @@ CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 4. **Sentinel 삽입** `CREATE (:VersionSentinel{...})‑[:HAS]->(new_nodes)` (옵션)
 5. **Queue Upsert**
 
+   * Kafka Admin API must run with idempotent topic creation enabled as noted in the architecture (section 2).
    * gRPC Bulk `CreateTopicsRequest` idempotent
    * 실패 시 `409 CONFLICT` → skip + log.
 6. **Stream 전송** 100 items/≤1 MiB chunk + ACK window(10).
