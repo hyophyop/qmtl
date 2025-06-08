@@ -1,0 +1,21 @@
+version: '3'
+services:
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+  kafka:
+    image: bitnami/kafka:latest
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+  gateway:
+    image: python:3
+    command: ["python", "-m", "http.server", "8000"]
+    ports:
+      - "8000:8000"
