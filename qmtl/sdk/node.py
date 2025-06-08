@@ -101,7 +101,13 @@ class NodeCache:
 
 
 class Node:
-    """Represents a processing node in a strategy DAG."""
+    """Represents a processing node in a strategy DAG.
+
+    ``compute_fn`` must accept exactly **one argument** – a snapshot of this
+    node's 4‑D cache returned by :pymeth:`NodeCache.snapshot`.  The snapshot is a
+    ``dict`` keyed by upstream node ID and interval.  Positional arguments other
+    than the cache snapshot are **not** supported.
+    """
 
     # ------------------------------------------------------------------
     @staticmethod
