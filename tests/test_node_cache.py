@@ -1,4 +1,4 @@
-from qmtl.sdk import Node, StreamInput, Runner
+from qmtl.sdk import Node, StreamInput, Runner, NodeCache
 
 
 def test_cache_warmup_and_compute():
@@ -12,16 +12,22 @@ def test_cache_warmup_and_compute():
 
     Runner.feed_queue_data(node, "q1", 60, 1, {"v": 1})
     assert node.pre_warmup
-    assert len(node.cache["q1"][60]) == 1
+    assert node.cache.snapshot()["q1"][60] == [(1, {"v": 1})]
     assert not calls
 
     Runner.feed_queue_data(node, "q1", 60, 2, {"v": 2})
     assert not node.pre_warmup
-    assert len(node.cache["q1"][60]) == 2
+    assert node.cache.snapshot()["q1"][60] == [
+        (1, {"v": 1}),
+        (2, {"v": 2}),
+    ]
     assert len(calls) == 1
 
     Runner.feed_queue_data(node, "q1", 60, 3, {"v": 3})
-    assert len(node.cache["q1"][60]) == 2
+    assert node.cache.snapshot()["q1"][60] == [
+        (2, {"v": 2}),
+        (3, {"v": 3}),
+    ]
     assert len(calls) == 2
 
 
@@ -42,4 +48,14 @@ def test_multiple_upstreams():
     Runner.feed_queue_data(node, "u2", 60, 2, {"v": 2})
     assert not node.pre_warmup
     assert len(calls) == 1
+    snap = node.cache.snapshot()
+    assert snap["u1"][60][-1][0] == 2
+    assert snap["u2"][60][-1][0] == 2
+
+
+def test_tensor_memory():
+    cache = NodeCache(period=4)
+    cache.append("u1", 60, 1, {"v": 1})
+    expected = 1 * 1 * 4 * 2 * 8
+    assert cache._tensor.nbytes == expected
 

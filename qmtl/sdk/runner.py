@@ -75,7 +75,7 @@ class Runner:
     @staticmethod
     def feed_queue_data(node, queue_id: str, interval: int, timestamp: int, payload) -> None:
         """Insert queue data into ``node`` and trigger its ``compute_fn``."""
-        node.cache.append(queue_id, interval, (timestamp, payload))
+        node.cache.append(queue_id, interval, timestamp, payload)
         if node.pre_warmup and node.cache.ready():
             node.pre_warmup = False
         if not node.pre_warmup and node.compute_fn:
