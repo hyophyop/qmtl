@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, status, Response
+from fastapi.responses import StreamingResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
@@ -15,6 +16,7 @@ import asyncpg
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
 from . import metrics as gw_metrics
+from .watch import QueueWatchHub
 _INITIAL_STATUS = "queued"
 
 
@@ -153,6 +155,7 @@ def create_app(
     redis_client: Optional[redis.Redis] = None,
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
+    watch_hub: Optional[QueueWatchHub] = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -161,6 +164,7 @@ def create_app(
     fsm = StrategyFSM(redis=r, database=db)
     manager = StrategyManager(redis=r, database=db, fsm=fsm)
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
+    watch = watch_hub or QueueWatchHub()
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
@@ -198,6 +202,19 @@ def create_app(
     @app.post("/callbacks/dag-event", status_code=status.HTTP_202_ACCEPTED)
     async def dag_event(event: dict) -> dict:
         """Handle DAG manager callbacks."""
+        if event.get("event") == "queue_update":
+            tags = event.get("tags") or []
+            interval = event.get("interval")
+            queues = event.get("queues", [])
+            if isinstance(tags, str):
+                tags = [t for t in tags.split(",") if t]
+            if interval is not None:
+                try:
+                    interval = int(interval)
+                except (TypeError, ValueError):
+                    interval = None
+            if tags and interval is not None:
+                await watch.broadcast(tags, interval, list(queues))
         return {"ok": True}
 
     @app.get("/queues/by_tag")
@@ -205,6 +222,24 @@ def create_app(
         tag_list = [t for t in tags.split(",") if t]
         queues = await dagm.get_queues_by_tag(tag_list, interval)
         return {"queues": queues}
+
+    @app.get("/queues/watch")
+    async def queues_watch(tags: str, interval: int):
+        tag_list = [t for t in tags.split(",") if t]
+
+        async def streamer():
+            try:
+                initial = await dagm.get_queues_by_tag(tag_list, interval)
+            except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
+                # It's good practice to log this error for observability
+                # import logging
+                # logging.warning(f"Failed to get initial queues for tags='{tag_list}' interval={interval}: {e}")
+                initial = []
+            yield json.dumps({"queues": initial}) + "\n"
+            async for queues in watch.subscribe(tag_list, interval):
+                yield json.dumps({"queues": queues}) + "\n"
+
+        return StreamingResponse(streamer(), media_type="text/plain")
 
     @app.get("/metrics")
     async def metrics_endpoint() -> Response:

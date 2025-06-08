@@ -215,6 +215,8 @@ class TagQueryNode(Node):
                     async for line in resp.aiter_lines():
                         if not line:
                             continue
+                        if line.startswith("data:"):
+                            line = line[5:].strip()
                         try:
                             data = json.loads(line)
                         except json.JSONDecodeError:

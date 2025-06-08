@@ -4,6 +4,7 @@ from .worker import StrategyWorker
 from .api import create_app, Database, StrategySubmit, StrategyAck, StatusResponse
 from .fsm import StrategyFSM
 from .ws import WebSocketHub
+from .watch import QueueWatchHub
 
 __all__ = [
     "DagManagerClient",
@@ -16,4 +17,5 @@ __all__ = [
     "StrategyAck",
     "StatusResponse",
     "WebSocketHub",
+    "QueueWatchHub",
 ]
