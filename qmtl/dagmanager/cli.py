@@ -82,6 +82,16 @@ async def _cmd_gc(args: argparse.Namespace) -> None:
     print(f"GC triggered for sentinel: {args.sentinel}")
 
 
+async def _cmd_redo_diff(args: argparse.Namespace) -> None:
+    data = Path(args.file).read_text()
+    channel = grpc.aio.insecure_channel(args.target)
+    stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+    req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
+    resp = await stub.RedoDiff(req)
+    await channel.close()
+    print(json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id}))
+
+
 def _cmd_export_schema(args: argparse.Namespace) -> None:
     driver = connect(args.uri, args.user, args.password)
     try:
@@ -111,6 +121,10 @@ def main(argv: list[str] | None = None) -> None:
     p_gc = sub.add_parser("gc", help="Trigger GC for sentinel")
     p_gc.add_argument("--sentinel", required=True)
 
+    p_rdiff = sub.add_parser("redo-diff", help="Redo diff for sentinel")
+    p_rdiff.add_argument("--sentinel", required=True)
+    p_rdiff.add_argument("--file", required=True)
+
     p_exp = sub.add_parser("export-schema", help="Export Neo4j schema")
     p_exp.add_argument("--uri", default="bolt://localhost:7687")
     p_exp.add_argument("--user", default="neo4j")
@@ -125,6 +139,8 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_cmd_queue_stats(args))
     elif args.cmd == "gc":
         asyncio.run(_cmd_gc(args))
+    elif args.cmd == "redo-diff":
+        asyncio.run(_cmd_redo_diff(args))
     elif args.cmd == "export-schema":
         _cmd_export_schema(args)
 
