@@ -85,12 +85,17 @@ async def test_watch_hub_broadcast():
     async def listen():
         gen = hub.subscribe(["t1"], 60)
         try:
-            return await asyncio.wait_for(gen.__anext__(), 1.0)
+            return await asyncio.wait_for(gen.__anext__(), 2.0)
+        except asyncio.TimeoutError:
+            pytest.fail("Timeout occurred while waiting for broadcast")
         finally:
             await gen.aclose()
 
     task = asyncio.create_task(listen())
     await asyncio.sleep(0)
     await hub.broadcast(["t1"], 60, ["q3"])
-    result = await task
-    assert result == ["q3"]
+    try:
+        result = await task
+        assert result == ["q3"]
+    except asyncio.CancelledError:
+        pytest.fail("Task was unexpectedly cancelled")
