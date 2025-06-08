@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10\x64\x61gmanager.proto\x12\x0fqmtl.dagmanager\"4\n\x0b\x44iffRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08\x64\x61g_json\x18\x02 \x01(\t\"\x8e\x01\n\tDiffChunk\x12;\n\tqueue_map\x18\x01 \x03(\x0b\x32(.qmtl.dagmanager.DiffChunk.QueueMapEntry\x12\x13\n\x0bsentinel_id\x18\x02 \x01(\t\x1a/\n\rQueueMapEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"%\n\x0e\x43leanupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\x11\n\x0f\x43leanupResponse\"#\n\x11QueueStatsRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\"q\n\nQueueStats\x12\x35\n\x05sizes\x18\x01 \x03(\x0b\x32&.qmtl.dagmanager.QueueStats.SizesEntry\x1a,\n\nSizesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\r\n\x0bPingRequest\"\x0b\n\tPingReply2Q\n\x0b\x44iffService\x12\x42\n\x04\x44iff\x12\x1c.qmtl.dagmanager.DiffRequest\x1a\x1a.qmtl.dagmanager.DiffChunk0\x01\x32\xae\x01\n\x0c\x41\x64minService\x12L\n\x07\x43leanup\x12\x1f.qmtl.dagmanager.CleanupRequest\x1a .qmtl.dagmanager.CleanupResponse\x12P\n\rGetQueueStats\x12\".qmtl.dagmanager.QueueStatsRequest\x1a\x1b.qmtl.dagmanager.QueueStats2O\n\x0bHealthCheck\x12@\n\x04Ping\x12\x1c.qmtl.dagmanager.PingRequest\x1a\x1a.qmtl.dagmanager.PingReplyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10\x64\x61gmanager.proto\x12\x0fqmtl.dagmanager\"4\n\x0b\x44iffRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08\x64\x61g_json\x18\x02 \x01(\t\"\x8e\x01\n\tDiffChunk\x12;\n\tqueue_map\x18\x01 \x03(\x0b\x32(.qmtl.dagmanager.DiffChunk.QueueMapEntry\x12\x13\n\x0bsentinel_id\x18\x02 \x01(\t\x1a/\n\rQueueMapEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"1\n\x0fTagQueryRequest\x12\x0c\n\x04tags\x18\x01 \x03(\t\x12\x10\n\x08interval\x18\x02 \x01(\x03\"\x1f\n\rTagQueryReply\x12\x0e\n\x06queues\x18\x01 \x03(\t\"%\n\x0e\x43leanupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\x11\n\x0f\x43leanupResponse\"#\n\x11QueueStatsRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\"q\n\nQueueStats\x12\x35\n\x05sizes\x18\x01 \x03(\x0b\x32&.qmtl.dagmanager.QueueStats.SizesEntry\x1a,\n\nSizesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\r\n\x0bPingRequest\"\x0b\n\tPingReply2Q\n\x0b\x44iffService\x12\x42\n\x04\x44iff\x12\x1c.qmtl.dagmanager.DiffRequest\x1a\x1a.qmtl.dagmanager.DiffChunk0\x01\x32Y\n\x08TagQuery\x12M\n\tGetQueues\x12 .qmtl.dagmanager.TagQueryRequest\x1a\x1e.qmtl.dagmanager.TagQueryReply2\xae\x01\n\x0c\x41\x64minService\x12L\n\x07\x43leanup\x12\x1f.qmtl.dagmanager.CleanupRequest\x1a .qmtl.dagmanager.CleanupResponse\x12P\n\rGetQueueStats\x12\".qmtl.dagmanager.QueueStatsRequest\x1a\x1b.qmtl.dagmanager.QueueStats2O\n\x0bHealthCheck\x12@\n\x04Ping\x12\x1c.qmtl.dagmanager.PingRequest\x1a\x1a.qmtl.dagmanager.PingReplyb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,24 +41,30 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DIFFCHUNK']._serialized_end=234
   _globals['_DIFFCHUNK_QUEUEMAPENTRY']._serialized_start=187
   _globals['_DIFFCHUNK_QUEUEMAPENTRY']._serialized_end=234
-  _globals['_CLEANUPREQUEST']._serialized_start=236
-  _globals['_CLEANUPREQUEST']._serialized_end=273
-  _globals['_CLEANUPRESPONSE']._serialized_start=275
-  _globals['_CLEANUPRESPONSE']._serialized_end=292
-  _globals['_QUEUESTATSREQUEST']._serialized_start=294
-  _globals['_QUEUESTATSREQUEST']._serialized_end=329
-  _globals['_QUEUESTATS']._serialized_start=331
-  _globals['_QUEUESTATS']._serialized_end=444
-  _globals['_QUEUESTATS_SIZESENTRY']._serialized_start=400
-  _globals['_QUEUESTATS_SIZESENTRY']._serialized_end=444
-  _globals['_PINGREQUEST']._serialized_start=446
-  _globals['_PINGREQUEST']._serialized_end=459
-  _globals['_PINGREPLY']._serialized_start=461
-  _globals['_PINGREPLY']._serialized_end=472
-  _globals['_DIFFSERVICE']._serialized_start=474
-  _globals['_DIFFSERVICE']._serialized_end=555
-  _globals['_ADMINSERVICE']._serialized_start=558
-  _globals['_ADMINSERVICE']._serialized_end=732
-  _globals['_HEALTHCHECK']._serialized_start=734
-  _globals['_HEALTHCHECK']._serialized_end=813
+  _globals['_TAGQUERYREQUEST']._serialized_start=236
+  _globals['_TAGQUERYREQUEST']._serialized_end=285
+  _globals['_TAGQUERYREPLY']._serialized_start=287
+  _globals['_TAGQUERYREPLY']._serialized_end=318
+  _globals['_CLEANUPREQUEST']._serialized_start=320
+  _globals['_CLEANUPREQUEST']._serialized_end=357
+  _globals['_CLEANUPRESPONSE']._serialized_start=359
+  _globals['_CLEANUPRESPONSE']._serialized_end=376
+  _globals['_QUEUESTATSREQUEST']._serialized_start=378
+  _globals['_QUEUESTATSREQUEST']._serialized_end=413
+  _globals['_QUEUESTATS']._serialized_start=415
+  _globals['_QUEUESTATS']._serialized_end=528
+  _globals['_QUEUESTATS_SIZESENTRY']._serialized_start=484
+  _globals['_QUEUESTATS_SIZESENTRY']._serialized_end=528
+  _globals['_PINGREQUEST']._serialized_start=530
+  _globals['_PINGREQUEST']._serialized_end=543
+  _globals['_PINGREPLY']._serialized_start=545
+  _globals['_PINGREPLY']._serialized_end=556
+  _globals['_DIFFSERVICE']._serialized_start=558
+  _globals['_DIFFSERVICE']._serialized_end=639
+  _globals['_TAGQUERY']._serialized_start=641
+  _globals['_TAGQUERY']._serialized_end=730
+  _globals['_ADMINSERVICE']._serialized_start=733
+  _globals['_ADMINSERVICE']._serialized_end=907
+  _globals['_HEALTHCHECK']._serialized_start=909
+  _globals['_HEALTHCHECK']._serialized_end=988
 # @@protoc_insertion_point(module_scope)

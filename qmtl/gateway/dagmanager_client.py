@@ -9,7 +9,7 @@ from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
 class DagManagerClient:
-    """gRPC client for :class:`DiffService`."""
+    """gRPC client for DAG‑Manager services."""
 
     def __init__(self, target: str) -> None:
         self._target = target
@@ -36,6 +36,31 @@ class DagManagerClient:
                 backoff = min(backoff * 2, 4)
             finally:
                 await channel.close()
+
+    async def get_queues_by_tag(self, tags: list[str], interval: int) -> list[str]:
+        """Return queues matching ``tags`` and ``interval``.
+
+        This delegates to DAG‑Manager which is expected to expose a
+        ``TagQuery`` RPC. Retries with exponential backoff are applied
+        similar to :meth:`diff`.
+        """
+        request = dagmanager_pb2.TagQueryRequest(tags=tags, interval=interval)
+        backoff = 0.5
+        retries = 5
+        for attempt in range(retries):
+            channel = grpc.aio.insecure_channel(self._target)
+            stub = dagmanager_pb2_grpc.TagQueryStub(channel)
+            try:
+                response = await stub.GetQueues(request)
+                return list(response.queues)
+            except Exception:
+                if attempt == retries - 1:
+                    raise
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 4)
+            finally:
+                await channel.close()
+        return []
 
 
 __all__ = ["DagManagerClient"]
