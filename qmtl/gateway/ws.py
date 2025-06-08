@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Optional
 
+from ..common.cloudevents import format_event
+
 import websockets
 from websockets.server import WebSocketServerProtocol
 
@@ -81,10 +83,22 @@ class WebSocketHub:
         await self._queue.put(json.dumps(data))
 
     async def send_progress(self, strategy_id: str, status: str) -> None:
-        await self.broadcast({"event": "progress", "strategy_id": strategy_id, "status": status})
+        event = format_event(
+            "qmtl.gateway",
+            "progress",
+            {"strategy_id": strategy_id, "status": status},
+        )
+        await self.broadcast(event)
 
-    async def send_queue_map(self, strategy_id: str, queue_map: dict[str, list[str] | str]) -> None:
-        await self.broadcast({"event": "queue_map", "strategy_id": strategy_id, "queue_map": queue_map})
+    async def send_queue_map(
+        self, strategy_id: str, queue_map: dict[str, list[str] | str]
+    ) -> None:
+        event = format_event(
+            "qmtl.gateway",
+            "queue_map",
+            {"strategy_id": strategy_id, "queue_map": queue_map},
+        )
+        await self.broadcast(event)
 
 
 __all__ = ["WebSocketHub"]

@@ -220,10 +220,12 @@ def create_app(
     @app.post("/callbacks/dag-event", status_code=status.HTTP_202_ACCEPTED)
     async def dag_event(event: dict) -> dict:
         """Handle DAG manager callbacks."""
-        if event.get("event") == "queue_update":
-            tags = event.get("tags") or []
-            interval = event.get("interval")
-            queues = event.get("queues", [])
+        event_type = event.get("type")
+        data = event.get("data", {}) if isinstance(event.get("data"), dict) else {}
+        if event_type == "queue_update":
+            tags = data.get("tags") or []
+            interval = data.get("interval")
+            queues = data.get("queues", [])
             if isinstance(tags, str):
                 tags = [t for t in tags.split(",") if t]
             if interval is not None:

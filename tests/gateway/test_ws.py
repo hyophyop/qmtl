@@ -30,12 +30,16 @@ async def test_hub_broadcasts_progress_and_queue_map():
     await hub.stop()
     await task
 
-    assert {"event": "progress", "strategy_id": "s1", "status": "queued"} in received
-    assert {
-        "event": "queue_map",
-        "strategy_id": "s1",
-        "queue_map": {"n1": "t1"},
-    } in received
+    types = {evt["type"] for evt in received}
+    assert "progress" in types
+    assert "queue_map" in types
+    for evt in received:
+        assert evt["specversion"] == "1.0"
+        assert "id" in evt and evt["id"]
+        assert "source" in evt
+        assert "time" in evt
+        assert evt["datacontenttype"] == "application/json"
+        assert isinstance(evt.get("data"), dict)
 
 
 @pytest.mark.asyncio

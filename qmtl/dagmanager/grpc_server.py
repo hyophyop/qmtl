@@ -13,6 +13,7 @@ from .diff_service import (
 )
 from .kafka_admin import KafkaAdmin
 from .callbacks import post_with_backoff
+from ..common.cloudevents import format_event
 from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -34,10 +35,12 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         if self._callback_url:
             # Consider submitting this to a background task
             # if the callback should not block the stream or terminate it on failure.
-            await post_with_backoff(
-                self._callback_url,
-                {"event": "diff", "strategy_id": request.strategy_id},
+            event = format_event(
+                "qmtl.dagmanager",
+                "diff",
+                {"strategy_id": request.strategy_id},
             )
+            await post_with_backoff(self._callback_url, event)
         yield pb
 
 
