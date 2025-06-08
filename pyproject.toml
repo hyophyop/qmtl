@@ -15,6 +15,7 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "fastapi",
+    "uvicorn",
     "fakeredis",
     "asyncpg",
     "xstate",
@@ -31,6 +32,7 @@ ray = ["ray"]
 
 [project.scripts]
 qmtl-dagm = "qmtl.dagmanager.cli:main"
+qmtl-dagmgr-server = "qmtl.dagmanager.server:main"
 
 [build-system]
 requires = ["setuptools"]
