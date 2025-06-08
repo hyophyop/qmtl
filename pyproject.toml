@@ -25,6 +25,8 @@ dev = [
     "xstate",
 ]
 
+ray = ["ray"]
+
 [project.scripts]
 qmtl-dagm = "qmtl.dagmanager.cli:main"
 
