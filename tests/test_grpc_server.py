@@ -190,12 +190,14 @@ async def test_grpc_tag_query():
 @pytest.mark.asyncio
 async def test_grpc_queue_stats():
     driver = FakeDriver()
-    admin = FakeAdmin({"topic1": {"size": 3}})
+    driver.session_obj = FakeSession([{"topic": "topic1"}])
+    admin = FakeAdmin({"topic1": {"size": 3}, "topic2": {"size": 5}})
     stream = FakeStream()
     server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-        resp = await stub.GetQueueStats(dagmanager_pb2.QueueStatsRequest(filter=""))
+        req = dagmanager_pb2.QueueStatsRequest(filter="tag=t;interval=60")
+        resp = await stub.GetQueueStats(req)
     await server.stop(None)
-    assert resp.sizes["topic1"] == 3
+    assert dict(resp.sizes) == {"topic1": 3}

@@ -45,9 +45,15 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
 
 
 class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
-    def __init__(self, gc: GarbageCollector | None = None, admin: KafkaAdmin | None = None) -> None:
+    def __init__(
+        self,
+        gc: GarbageCollector | None = None,
+        admin: KafkaAdmin | None = None,
+        repo: Neo4jNodeRepository | None = None,
+    ) -> None:
         self._gc = gc
         self._admin = admin
+        self._repo = repo
 
     async def Cleanup(
         self,
@@ -66,6 +72,22 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         sizes = {}
         if self._admin is not None:
             sizes = self._admin.get_topic_sizes()
+        if request.filter and self._repo is not None and sizes:
+            tags: list[str] = []
+            interval = 0
+            try:
+                parts = [p for p in request.filter.split(";") if p]
+                kv = dict(p.split("=", 1) for p in parts if "=" in p)
+                tag_str = kv.get("tag")
+                if tag_str:
+                    tags = tag_str.split(",")
+                if "interval" in kv:
+                    interval = int(kv["interval"])
+            except Exception:
+                tags = []
+            if tags and interval:
+                queues = set(self._repo.get_queues_by_tag(tags, interval))
+                sizes = {k: v for k, v in sizes.items() if k in queues}
         return dagmanager_pb2.QueueStats(sizes=sizes)
 
 
@@ -114,7 +136,7 @@ def serve(
         TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
-        AdminServiceServicer(gc, admin), server
+        AdminServiceServicer(gc, admin, repo), server
     )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
