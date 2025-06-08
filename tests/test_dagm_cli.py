@@ -42,3 +42,29 @@ def test_cli_gc(monkeypatch, capsys):
     main(["gc", "--sentinel", "s1"])
     assert called["sentinel"] == "s1"
 
+
+def test_cli_export_schema(monkeypatch, tmp_path):
+    captured = {}
+
+    class DummyDriver:
+        def close(self):
+            captured["closed"] = True
+
+    def fake_connect(uri, user, password):
+        captured["uri"] = uri
+        return DummyDriver()
+
+    def fake_export(driver):
+        captured["driver"] = driver
+        return ["CREATE CONSTRAINT c"]
+
+    monkeypatch.setattr("qmtl.dagmanager.cli.connect", fake_connect)
+    monkeypatch.setattr("qmtl.dagmanager.cli.export_schema", fake_export)
+
+    out = tmp_path / "schema.cql"
+    main(["export-schema", "--uri", "bolt://db", "--out", str(out)])
+
+    assert out.read_text().strip() == "CREATE CONSTRAINT c"
+    assert captured["uri"] == "bolt://db"
+    assert captured["closed"]
+

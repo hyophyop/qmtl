@@ -226,6 +226,8 @@ qmtl-dagm diff --file dag.json --dry-run
 qmtl-dagm queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
 qmtl-dagm gc --sentinel v1.2.3
+# export schema DDL
+qmtl-dagm export-schema --out schema.cypher
 ```
 
 ---
@@ -233,5 +235,4 @@ qmtl-dagm gc --sentinel v1.2.3
 > **TODO**
 >
 > * S3 archive integration (interface available via `S3ArchiveClient`)
-> * Neo4j schema DDL export script
 > * Canary rollout automation guide

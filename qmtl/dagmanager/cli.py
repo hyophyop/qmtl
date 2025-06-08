@@ -12,9 +12,11 @@ from .diff_service import (
     DiffRequest,
     DiffService,
     NodeRepository,
-    QueueManager, NodeRecord,
+    QueueManager,
+    NodeRecord,
     StreamSender,
 )
+from .neo4j_export import export_schema, connect
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -77,6 +79,19 @@ async def _cmd_gc(args: argparse.Namespace) -> None:
     print(f"GC triggered for sentinel: {args.sentinel}")
 
 
+def _cmd_export_schema(args: argparse.Namespace) -> None:
+    driver = connect(args.uri, args.user, args.password)
+    try:
+        stmts = export_schema(driver)
+    finally:
+        driver.close()
+    text = "\n".join(stmts) + "\n"
+    if args.out:
+        Path(args.out).write_text(text)
+    else:
+        print(text, end="")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl-dagm")
     parser.add_argument("--target", default="localhost:50051", help="gRPC service target")
@@ -93,6 +108,12 @@ def main(argv: list[str] | None = None) -> None:
     p_gc = sub.add_parser("gc", help="Trigger GC for sentinel")
     p_gc.add_argument("--sentinel", required=True)
 
+    p_exp = sub.add_parser("export-schema", help="Export Neo4j schema")
+    p_exp.add_argument("--uri", default="bolt://localhost:7687")
+    p_exp.add_argument("--user", default="neo4j")
+    p_exp.add_argument("--password", default="neo4j")
+    p_exp.add_argument("--out")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "diff":
@@ -101,6 +122,8 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_cmd_queue_stats(args))
     elif args.cmd == "gc":
         asyncio.run(_cmd_gc(args))
+    elif args.cmd == "export-schema":
+        _cmd_export_schema(args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry
