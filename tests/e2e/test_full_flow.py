@@ -58,7 +58,10 @@ def test_full_flow(monkeypatch):
 
         Runner.dryrun(SampleStrategy, gateway_url="http://localhost:8000")
         resp = captured.get("resp")
-        assert resp is not None and resp.status_code == 202
+        assert resp is not None, "Gateway did not return a response"
+        if resp.status_code != 202:
+            print(f"Unexpected response: {resp.status_code}, Body: {resp.text}")
+        assert resp.status_code == 202
 
         metrics = httpx.get("http://localhost:8000/metrics")
         assert metrics.status_code == 200
