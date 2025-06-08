@@ -4,29 +4,46 @@ from datetime import datetime, timedelta
 import grpc
 import pytest
 
-from qmtl.dagmanager.diff_service import (
-    DiffService,
-    DiffRequest,
-    NodeRepository,
-    QueueManager,
-    StreamSender,
-)
+from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
-class FakeRepo(NodeRepository):
-    def get_nodes(self, node_ids):
-        return {}
 
-    def insert_sentinel(self, sentinel_id, node_ids):
+class FakeSession:
+    def __init__(self, result=None):
+        self.result = result or []
+        self.run_calls = []
+
+    def run(self, query, **params):
+        self.run_calls.append((query, params))
+        return self.result
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
         pass
 
 
-class FakeQueue(QueueManager):
-    def upsert(self, node_id):
-        return "topic"
+class FakeDriver:
+    def __init__(self):
+        self.session_obj = FakeSession()
+
+    def session(self):
+        return self.session_obj
+
+
+class FakeAdmin:
+    def __init__(self):
+        self.created = []
+
+    def list_topics(self):
+        return {}
+
+    def create_topic(self, name, *, num_partitions, replication_factor, config=None):
+        self.created.append((name, num_partitions, replication_factor, config))
 
 
 class FakeStream(StreamSender):
@@ -36,8 +53,10 @@ class FakeStream(StreamSender):
 
 @pytest.mark.asyncio
 async def test_grpc_diff():
-    service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
-    server, port = serve(service, host="127.0.0.1", port=0)
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
@@ -81,8 +100,10 @@ async def test_grpc_cleanup_triggers_gc():
     store = DummyStore([QueueInfo("q", "raw", now - timedelta(days=10))])
     gc = GarbageCollector(store, DummyMetrics(), batch_size=1)
 
-    service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
-    server, port = serve(service, host="127.0.0.1", port=0, gc=gc)
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0, gc=gc)
     await server.start()
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
@@ -98,8 +119,10 @@ async def test_grpc_cleanup_archives():
     archive = DummyArchive()
     gc = GarbageCollector(store, DummyMetrics(), archive=archive, batch_size=1)
 
-    service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
-    server, port = serve(service, host="127.0.0.1", port=0, gc=gc)
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0, gc=gc)
     await server.start()
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
