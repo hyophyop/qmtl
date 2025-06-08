@@ -10,6 +10,7 @@ from qmtl.dagmanager.diff_service import (
     KafkaQueueManager,
 )
 from qmtl.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.dagmanager import metrics
 
 
 class FakeRepo(NodeRepository):
@@ -191,3 +192,19 @@ def test_integration_with_backends():
     assert any("sid" in p for _, p in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == "topic_B"
     assert stream.chunks[0] == chunk
+
+
+def test_sentinel_gap_metric_increment():
+    metrics.reset_metrics()
+    repo = FakeRepo()
+    repo.records["A"] = NodeRecord("A", "c1", "s1", "topic_A")
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+    ])
+
+    service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+    assert metrics.sentinel_gap_count._value.get() == 1  # type: ignore[attr-defined]
