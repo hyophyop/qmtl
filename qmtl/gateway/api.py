@@ -77,6 +77,16 @@ class PostgresDatabase(Database):
             )
             """
         )
+        await self._pool.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_log (
+                id SERIAL PRIMARY KEY,
+                strategy_id TEXT,
+                event TEXT,
+                ts TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
 
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
         assert self._pool
@@ -98,11 +108,19 @@ class PostgresDatabase(Database):
 
     async def append_event(self, strategy_id: str, event: str) -> None:
         assert self._pool
-        await self._pool.execute(
-            "INSERT INTO strategy_events(strategy_id, event) VALUES($1, $2)",
-            strategy_id,
-            event,
-        )
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("SET LOCAL synchronous_commit = 'on'")
+                await conn.execute(
+                    "INSERT INTO strategy_events(strategy_id, event) VALUES($1, $2)",
+                    strategy_id,
+                    event,
+                )
+                await conn.execute(
+                    "INSERT INTO event_log(strategy_id, event) VALUES($1, $2)",
+                    strategy_id,
+                    event,
+                )
 
     async def get_status(self, strategy_id: str) -> Optional[str]:
         assert self._pool
