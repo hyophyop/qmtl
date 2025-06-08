@@ -54,6 +54,12 @@ class Runner:
                 node.execute = True
                 node.queue_topic = None
 
+    # ------------------------------------------------------------------
+    @staticmethod
+    def feed_queue_data(node, queue_id: str, interval: int, timestamp: int, payload) -> None:
+        """Insert queue data into a node's cache."""
+        node.feed(queue_id, interval, timestamp, payload)
+
     @staticmethod
     def backtest(
         strategy_cls: type[Strategy],

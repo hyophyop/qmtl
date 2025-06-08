@@ -3,9 +3,33 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+from collections import defaultdict, deque
 import httpx
 
 from qmtl.dagmanager import compute_node_id
+
+
+class NodeCache(defaultdict):
+    """Simple FIFO cache modeling C[u,i,p,t]."""
+
+    def __init__(self, period: int) -> None:
+        super().__init__(lambda: defaultdict(lambda: deque(maxlen=period)))
+        self.period = period
+
+    def append(self, u: str, interval: int, value) -> None:
+        self[u][interval].append(value)
+
+    def ready(self) -> bool:
+        if not self:
+            return False
+        for intervals in self.values():
+            for dq in intervals.values():
+                if len(dq) < self.period:
+                    return False
+        return True
+
+    def snapshot(self):
+        return {u: {i: list(dq) for i, dq in intervals.items()} for u, intervals in self.items()}
 
 
 class Node:
@@ -32,6 +56,8 @@ class Node:
         self.schema = schema or {}
         self.execute = True
         self.queue_topic: str | None = None
+        self.cache = NodeCache(period or 0)
+        self.pre_warmup = True
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -94,6 +120,15 @@ class Node:
             self.schema_hash,
         )
 
+    # --- runtime cache handling -----------------------------------------
+    def feed(self, upstream_id: str, interval: int, timestamp: int, payload) -> None:
+        """Insert new data into ``cache`` and trigger ``compute_fn`` when ready."""
+        self.cache.append(upstream_id, interval, (timestamp, payload))
+        if self.pre_warmup and self.cache.ready():
+            self.pre_warmup = False
+        if not self.pre_warmup and self.compute_fn:
+            self.compute_fn(self.cache.snapshot())
+
     def to_dict(self) -> dict:
         return {
             "node_id": self.node_id,
@@ -105,6 +140,7 @@ class Node:
             "inputs": [self.input.node_id] if self.input else [],
             "code_hash": self.code_hash,
             "schema_hash": self.schema_hash,
+            "pre_warmup": self.pre_warmup,
         }
 
 
