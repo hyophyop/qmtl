@@ -3,6 +3,9 @@ import base64
 import pytest
 from fastapi.testclient import TestClient
 from fakeredis.aioredis import FakeRedis
+import asyncio
+
+from qmtl.gateway.watch import QueueWatchHub
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.dagmanager_client import DagManagerClient
@@ -73,3 +76,18 @@ def test_submit_tag_query_node(client):
     assert resp.status_code == 202
     assert resp.json()["queue_map"] == {"N1": ["q1", "q2"]}
     assert dag.called_with == (["t1"], 60)
+
+
+@pytest.mark.asyncio
+async def test_watch_hub_broadcast():
+    hub = QueueWatchHub()
+
+    async def listen():
+        gen = hub.subscribe(["t1"], 60)
+        return await asyncio.wait_for(gen.__anext__(), 0.1)
+
+    task = asyncio.create_task(listen())
+    await asyncio.sleep(0)
+    await hub.broadcast(["t1"], 60, ["q3"])
+    result = await task
+    assert result == ["q3"]
