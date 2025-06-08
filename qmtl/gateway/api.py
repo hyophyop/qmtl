@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
 import asyncpg
+
+from .dagmanager_client import DagManagerClient
 # Simplified strategy state machine
 _INITIAL_STATUS = "queued"
 
@@ -122,12 +124,14 @@ class StrategyManager:
 def create_app(
     redis_client: Optional[redis.Redis] = None,
     database: Optional[Database] = None,
+    dag_client: Optional[DagManagerClient] = None,
 ) -> FastAPI:
     app = FastAPI()
 
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     db = database or PostgresDatabase("postgresql://localhost/qmtl")
     manager = StrategyManager(redis=r, database=db)
+    dagm = dag_client or DagManagerClient("127.0.0.1:50051")
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
@@ -145,5 +149,11 @@ def create_app(
     async def dag_event(event: dict) -> dict:
         """Handle DAG manager callbacks."""
         return {"ok": True}
+
+    @app.get("/queues/by_tag")
+    async def queues_by_tag(tags: str, interval: int) -> dict:
+        tag_list = [t for t in tags.split(",") if t]
+        queues = await dagm.get_queues_by_tag(tag_list, interval)
+        return {"queues": queues}
 
     return app

@@ -97,6 +97,78 @@ class DiffService(object):
             _registered_method=True)
 
 
+class TagQueryStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GetQueues = channel.unary_unary(
+                '/qmtl.dagmanager.TagQuery/GetQueues',
+                request_serializer=dagmanager__pb2.TagQueryRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.TagQueryReply.FromString,
+                _registered_method=True)
+
+
+class TagQueryServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def GetQueues(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_TagQueryServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GetQueues': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetQueues,
+                    request_deserializer=dagmanager__pb2.TagQueryRequest.FromString,
+                    response_serializer=dagmanager__pb2.TagQueryReply.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'qmtl.dagmanager.TagQuery', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('qmtl.dagmanager.TagQuery', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class TagQuery(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def GetQueues(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/qmtl.dagmanager.TagQuery/GetQueues',
+            dagmanager__pb2.TagQueryRequest.SerializeToString,
+            dagmanager__pb2.TagQueryReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
 class AdminServiceStub(object):
     """Missing associated documentation comment in .proto file."""
 
