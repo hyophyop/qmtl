@@ -37,11 +37,12 @@ class FakeDriver:
 
 
 class FakeAdmin:
-    def __init__(self):
+    def __init__(self, topics=None):
         self.created = []
+        self.topics = topics or {}
 
     def list_topics(self):
-        return {}
+        return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
         self.created.append((name, num_partitions, replication_factor, config))
@@ -184,3 +185,17 @@ async def test_grpc_tag_query():
         resp = await stub.GetQueues(req)
     await server.stop(None)
     assert list(resp.queues) == ["q1", "q2"]
+
+
+@pytest.mark.asyncio
+async def test_grpc_queue_stats():
+    driver = FakeDriver()
+    admin = FakeAdmin({"topic1": {"size": 3}})
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        resp = await stub.GetQueueStats(dagmanager_pb2.QueueStatsRequest(filter=""))
+    await server.stop(None)
+    assert resp.sizes["topic1"] == 3

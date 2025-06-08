@@ -27,7 +27,8 @@ def test_cli_queue_stats(monkeypatch, capsys):
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
     main(["queue-stats"])
     out = capsys.readouterr().out
-    assert '"q": 1' in out
+    data = json.loads(out)
+    assert data == {"q": 1}
 
 def test_cli_gc(monkeypatch, capsys):
     called = {}

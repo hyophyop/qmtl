@@ -37,8 +37,11 @@ class _FakeDriver:
 
 
 class _FakeAdmin:
+    def __init__(self, topics=None):
+        self.topics = topics or {}
+
     def list_topics(self):
-        return {}
+        return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
         pass

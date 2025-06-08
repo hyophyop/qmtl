@@ -45,8 +45,9 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
 
 
 class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
-    def __init__(self, gc: GarbageCollector | None = None) -> None:
+    def __init__(self, gc: GarbageCollector | None = None, admin: KafkaAdmin | None = None) -> None:
         self._gc = gc
+        self._admin = admin
 
     async def Cleanup(
         self,
@@ -62,7 +63,10 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         request: dagmanager_pb2.QueueStatsRequest,
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.QueueStats:
-        return dagmanager_pb2.QueueStats()
+        sizes = {}
+        if self._admin is not None:
+            sizes = self._admin.get_topic_sizes()
+        return dagmanager_pb2.QueueStats(sizes=sizes)
 
 
 class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
@@ -110,7 +114,7 @@ def serve(
         TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
-        AdminServiceServicer(gc), server
+        AdminServiceServicer(gc, admin), server
     )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
