@@ -73,11 +73,25 @@ class Runner:
 
     # ------------------------------------------------------------------
     @staticmethod
-    def feed_queue_data(node, queue_id: str, interval: int, timestamp: int, payload) -> None:
+    def feed_queue_data(
+        node,
+        queue_id: str,
+        interval: int,
+        timestamp: int,
+        payload,
+        *,
+        on_missing: str = "skip",
+    ) -> None:
         """Insert queue data into ``node`` and trigger its ``compute_fn``."""
         node.cache.append(queue_id, interval, timestamp, payload)
         if node.pre_warmup and node.cache.ready():
             node.pre_warmup = False
+        missing = node.cache.missing_flags().get(queue_id, {}).get(interval, False)
+        if missing:
+            if on_missing == "fail":
+                raise RuntimeError("gap detected")
+            if on_missing == "skip":
+                return
         if not node.pre_warmup and node.compute_fn:
             Runner._execute_compute_fn(node.compute_fn, node.cache.snapshot())
 
