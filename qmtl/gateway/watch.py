@@ -10,6 +10,7 @@ class QueueWatchHub:
 
     def __init__(self) -> None:
         self._subs: DefaultDict[str, List[asyncio.Queue[List[str]]]] = defaultdict(list)
+        self._latest: DefaultDict[str, List[str]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def _key(self, tags: List[str], interval: int) -> str:
@@ -20,6 +21,9 @@ class QueueWatchHub:
         key = self._key(tags, interval)
         async with self._lock:
             self._subs[key].append(q)
+            initial = list(self._latest.get(key, []))
+        if initial:
+            await q.put(initial)
         try:
             while True:
                 data = await q.get()
@@ -32,6 +36,7 @@ class QueueWatchHub:
         key = self._key(tags, interval)
         async with self._lock:
             targets = list(self._subs.get(key, []))
+            self._latest[key] = list(queues)
         for q in targets:
             await q.put(list(queues))
 
