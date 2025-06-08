@@ -43,38 +43,6 @@ class FakeAdmin:
         self.topics = topics or {}
 
     def list_topics(self):
-@pytest.mark.asyncio
-async def test_grpc_redo_diff(monkeypatch):
-    called = {}
-
-    from qmtl.dagmanager.diff_service import DiffChunk, DiffRequest
-
-    class DummyDiff:
-        def __init__(self, *a, **k):
-            pass
-
-        def diff(self, request: DiffRequest):
-            called["sid"] = request.strategy_id
-            return DiffChunk(queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel")
-
-    monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
-
-    driver = FakeDriver()
-    admin = FakeAdmin()
-    stream = FakeStream()
-    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
-    await server.start()
-    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
-        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-        req = dagmanager_pb2.RedoDiffRequest(sentinel_id="v2", dag_json="{}")
-        resp = await stub.RedoDiff(req)
-    await server.stop(None)
-
-    assert called["sid"] == "v2"
-    assert dict(resp.queue_map)["x"] == "t"
-    assert resp.sentinel_id == "v2-sentinel"
-
-
         return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):

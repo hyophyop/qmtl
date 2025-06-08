@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import dagmanager_pb2 as dagmanager__pb2
+import qmtl.proto.dagmanager_pb2 as dagmanager__pb2
 
 GRPC_GENERATED_VERSION = '1.72.1'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in qmtl/proto/dagmanager_pb2_grpc.py depends on'
+        + f' but the generated code in dagmanager_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -193,22 +193,6 @@ class AdminServiceStub(object):
                 request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
                 response_deserializer=dagmanager__pb2.DiffResult.FromString,
                 _registered_method=True)
-    def RedoDiff(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-            'RedoDiff': grpc.unary_unary_rpc_method_handler(
-                    servicer.RedoDiff,
-                    request_deserializer=dagmanager__pb2.RedoDiffRequest.FromString,
-                    response_serializer=dagmanager__pb2.DiffResult.SerializeToString,
-            ),
-        self.RedoDiff = channel.unary_unary(
-                '/qmtl.dagmanager.AdminService/RedoDiff',
-                request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
-                response_deserializer=dagmanager__pb2.DiffResult.FromString,
-                _registered_method=True)
 
 
 class AdminServiceServicer(object):
@@ -275,33 +259,6 @@ class AdminService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-    @staticmethod
-    def RedoDiff(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/qmtl.dagmanager.AdminService/RedoDiff',
-            dagmanager__pb2.RedoDiffRequest.SerializeToString,
-            dagmanager__pb2.DiffResult.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
             '/qmtl.dagmanager.AdminService/Cleanup',
             dagmanager__pb2.CleanupRequest.SerializeToString,
             dagmanager__pb2.CleanupResponse.FromString,
