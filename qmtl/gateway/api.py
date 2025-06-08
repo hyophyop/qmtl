@@ -6,13 +6,15 @@ import base64
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Response
+import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
 import asyncpg
 
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
+from . import metrics as gw_metrics
 _INITIAL_STATUS = "queued"
 
 
@@ -130,11 +132,16 @@ class StrategyManager:
         dag_dict.setdefault("nodes", []).append(sentinel)
         encoded_dag = base64.b64encode(json.dumps(dag_dict).encode()).decode()
 
-        await self.redis.rpush("strategy_queue", strategy_id)
-        await self.redis.hset(
-            f"strategy:{strategy_id}",
-            mapping={"dag": encoded_dag},
-        )
+        try:
+            await self.redis.rpush("strategy_queue", strategy_id)
+            await self.redis.hset(
+                f"strategy:{strategy_id}",
+                mapping={"dag": encoded_dag},
+            )
+        except Exception:
+            gw_metrics.lost_requests_total.inc()
+            gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
+            raise
         await self.fsm.create(strategy_id, payload.meta)
         return strategy_id
 
@@ -157,6 +164,7 @@ def create_app(
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
+        start = time.perf_counter()
         strategy_id = await manager.submit(payload)
         try:
             dag_bytes = base64.b64decode(payload.dag_json)
@@ -175,7 +183,10 @@ def create_app(
                     queues = []
                 queue_map[node["node_id"]] = queues
 
-        return StrategyAck(strategy_id=strategy_id, queue_map=queue_map)
+        resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map)
+        duration_ms = (time.perf_counter() - start) * 1000
+        gw_metrics.observe_gateway_latency(duration_ms)
+        return resp
 
     @app.get("/strategies/{strategy_id}/status", response_model=StatusResponse)
     async def get_status(strategy_id: str) -> StatusResponse:
@@ -194,5 +205,9 @@ def create_app(
         tag_list = [t for t in tags.split(",") if t]
         queues = await dagm.get_queues_by_tag(tag_list, interval)
         return {"queues": queues}
+
+    @app.get("/metrics")
+    async def metrics_endpoint() -> Response:
+        return Response(gw_metrics.collect_metrics(), media_type="text/plain")
 
     return app
