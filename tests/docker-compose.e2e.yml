@@ -36,11 +36,14 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
+      - "9093:9092"
 
   dag-manager:
     image: python:3
-    command: ["qmtl-dagm", "grpc-server"]
+    working_dir: /code
+    volumes:
+      - ../:/code
+    command: ["bash", "-c", "pip install -e . && qmtl-dagm grpc-server"]
     depends_on:
       - kafka
       - neo4j
@@ -49,7 +52,10 @@ services:
 
   gateway:
     image: python:3
-    command: ["qmtl-gateway", "serve"]
+    working_dir: /code
+    volumes:
+      - ../:/code
+    command: ["bash", "-c", "pip install -e . && qmtl-gateway serve"]
     depends_on:
       - dag-manager
       - redis

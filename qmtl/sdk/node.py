@@ -55,8 +55,8 @@ class NodeCache:
         else:
             self._missing[(u, interval)] = False
         self._last_ts[(u, interval)] = timestamp
-        u_idx = int(np.where(self._tensor.coords["u"] == u)[0])
-        i_idx = int(np.where(self._tensor.coords["i"] == interval)[0])
+        u_idx = int(np.where(self._tensor.coords["u"] == u)[0][0])
+        i_idx = int(np.where(self._tensor.coords["i"] == interval)[0][0])
         data = self._tensor.data.copy()
         arr = data[u_idx, i_idx]
         arr = np.roll(arr, -1, axis=0)
