@@ -122,3 +122,66 @@ def test_no_gateway_same_ids(monkeypatch):
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     no_gateway = Runner.dryrun(SampleStrategy)
     assert [n.node_id for n in online.nodes] == [n.node_id for n in no_gateway.nodes]
+
+
+def test_feed_queue_data_with_ray(monkeypatch):
+    from qmtl.sdk import Node, StreamInput
+
+    class DummyRay:
+        def __init__(self):
+            self.calls = []
+            self.inited = False
+
+        def is_initialized(self):
+            return self.inited
+
+        def init(self, ignore_reinit_error=True):
+            self.inited = True
+
+        def remote(self, fn):
+            dummy = self
+
+            class Wrapper:
+                def remote(self, *args, **kwargs):
+                    dummy.calls.append((fn, args, kwargs))
+
+            return Wrapper()
+
+    dummy_ray = DummyRay()
+    import qmtl.sdk.runner as rmod
+
+    monkeypatch.setattr(rmod, "ray", dummy_ray)
+    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
+
+    calls = []
+
+    def compute(cache):
+        calls.append(cache)
+
+    src = StreamInput(interval=60, period=2)
+    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+
+    Runner.feed_queue_data(node, "q", 60, 1, {"v": 1})
+    Runner.feed_queue_data(node, "q", 60, 2, {"v": 2})
+
+    assert len(dummy_ray.calls) == 1
+    assert not calls
+
+
+def test_feed_queue_data_without_ray(monkeypatch):
+    from qmtl.sdk import Node, StreamInput
+
+    monkeypatch.setattr(Runner, "_ray_available", False)
+
+    calls = []
+
+    def compute(cache):
+        calls.append(cache)
+
+    src = StreamInput(interval=60, period=2)
+    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+
+    Runner.feed_queue_data(node, "q", 60, 1, {"v": 1})
+    Runner.feed_queue_data(node, "q", 60, 2, {"v": 2})
+
+    assert len(calls) == 1

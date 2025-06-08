@@ -8,9 +8,26 @@ import httpx
 
 from .strategy import Strategy
 
+try:  # Optional Ray dependency
+    import ray  # type: ignore
+except Exception:  # pragma: no cover - Ray not installed
+    ray = None  # type: ignore
+
 
 class Runner:
     """Execute strategies in various modes."""
+
+    _ray_available = ray is not None
+
+    @staticmethod
+    def _execute_compute_fn(fn, cache_snapshot) -> None:
+        """Run ``fn`` using Ray when available."""
+        if Runner._ray_available:
+            if not ray.is_initialized():  # type: ignore[attr-defined]
+                ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
+            ray.remote(fn).remote(cache_snapshot)  # type: ignore[attr-defined]
+        else:
+            fn(cache_snapshot)
 
     @staticmethod
     def _post_gateway(
@@ -57,8 +74,12 @@ class Runner:
     # ------------------------------------------------------------------
     @staticmethod
     def feed_queue_data(node, queue_id: str, interval: int, timestamp: int, payload) -> None:
-        """Insert queue data into a node's cache."""
-        node.feed(queue_id, interval, timestamp, payload)
+        """Insert queue data into ``node`` and trigger its ``compute_fn``."""
+        node.cache.append(queue_id, interval, (timestamp, payload))
+        if node.pre_warmup and node.cache.ready():
+            node.pre_warmup = False
+        if not node.pre_warmup and node.compute_fn:
+            Runner._execute_compute_fn(node.compute_fn, node.cache.snapshot())
 
     @staticmethod
     def backtest(
