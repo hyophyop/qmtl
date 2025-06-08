@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
+from qmtl.dagmanager.gc import GarbageCollector, QueueInfo, S3ArchiveClient
 
 
 class FakeStore:
@@ -90,3 +90,35 @@ def test_gc_archives_with_client():
     assert processed == ["s"]
     assert store.dropped == ["s"]
     assert archive.archived == ["s"]
+
+
+class DummyS3:
+    def __init__(self):
+        self.calls = []
+
+    def put_object(self, Bucket, Key, Body):
+        self.calls.append((Bucket, Key, Body))
+
+
+def test_s3_archive_client_puts_object():
+    s3 = DummyS3()
+    client = S3ArchiveClient("bucket", client=s3)
+    client.archive("q")
+
+    assert s3.calls and s3.calls[0][0] == "bucket"
+    assert "q" in s3.calls[0][1]
+
+
+def test_gc_invokes_s3_archive():
+    now = datetime.utcnow()
+    queues = [QueueInfo("q", "sentinel", now - timedelta(days=400))]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    s3 = DummyS3()
+    archive = S3ArchiveClient("b", client=s3)
+    gc = GarbageCollector(store, metrics, archive=archive, batch_size=1)
+
+    gc.collect(now)
+
+    assert store.dropped == ["q"]
+    assert s3.calls
