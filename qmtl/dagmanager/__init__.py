@@ -37,7 +37,7 @@ from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 from .alerts import PagerDutyClient, SlackClient, AlertManager
 from .monitor import Monitor, MonitorLoop
 from .metrics import start_metrics_server
-from .http_server import create_app
+from .api import create_app
 
 __all__ = [
     "compute_node_id",
