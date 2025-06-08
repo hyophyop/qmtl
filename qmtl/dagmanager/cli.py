@@ -74,7 +74,7 @@ async def _cmd_gc(args: argparse.Namespace) -> None:
     stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
     await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id=args.sentinel))
     await channel.close()
-    print("GC triggered")
+    print(f"GC triggered for sentinel: {args.sentinel}")
 
 
 def main(argv: list[str] | None = None) -> None:
