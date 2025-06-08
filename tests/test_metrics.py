@@ -4,6 +4,8 @@ import pytest
 
 from qmtl.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, QueueManager, StreamSender
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
+import httpx
+import time
 from qmtl.dagmanager import metrics
 
 
@@ -81,3 +83,15 @@ def test_gc_sets_orphan_gauge():
     gc = GarbageCollector(Store(), DummyMetrics())
     gc.collect(now)
     assert metrics.orphan_queue_total._value.get() == 1  # type: ignore[attr-defined]
+
+
+def test_metrics_server_exposes_http():
+    metrics.reset_metrics()
+    metrics.diff_duration_ms_p95.set(42)
+    port = 9101
+    metrics.start_metrics_server(port)
+    # wait briefly for server thread
+    time.sleep(0.1)
+    resp = httpx.get(f"http://localhost:{port}/metrics")
+    assert resp.status_code == 200
+    assert "diff_duration_ms_p95" in resp.text
