@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Iterable, List, Dict
+from typing import Iterable, List, Dict, TYPE_CHECKING
 import time
 
 from .metrics import observe_diff_duration, queue_create_error_total
+from .kafka_admin import KafkaAdmin
+from .topic import TopicConfig
+
+if TYPE_CHECKING:  # pragma: no cover - optional import for typing
+    from neo4j import Driver
 
 
 @dataclass
@@ -131,3 +136,56 @@ class DiffService:
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)
+
+
+class Neo4jNodeRepository(NodeRepository):
+    """Neo4j-backed repository implementation."""
+
+    def __init__(self, driver: 'Driver') -> None:
+        self.driver = driver
+
+    def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
+        if not node_ids:
+            return {}
+        query = (
+            "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
+            "WHERE c.node_id IN $ids "
+            "RETURN c.node_id AS node_id, c.code_hash AS code_hash, "
+            "c.schema_hash AS schema_hash, q.topic AS topic"
+        )
+        with self.driver.session() as session:
+            result = session.run(query, ids=list(node_ids))
+            records: Dict[str, NodeRecord] = {}
+            for r in result:
+                records[r["node_id"]] = NodeRecord(
+                    node_id=r["node_id"],
+                    code_hash=r.get("code_hash"),
+                    schema_hash=r.get("schema_hash"),
+                    topic=r.get("topic"),
+                )
+            return records
+
+    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
+        if not node_ids:
+            return
+        query = (
+            "CREATE (s:VersionSentinel {version: $sid, created_at: timestamp()}) "
+            "WITH s UNWIND $ids AS nid MATCH (c:ComputeNode {node_id: nid}) "
+            "MERGE (s)-[:HAS]->(c)"
+        )
+        with self.driver.session() as session:
+            session.run(query, sid=sentinel_id, ids=list(node_ids))
+
+
+class KafkaQueueManager(QueueManager):
+    """Queue manager using :class:`KafkaAdmin`."""
+
+    def __init__(self, admin: KafkaAdmin, config: TopicConfig | None = None) -> None:
+        self.admin = admin
+        self.config = config or TopicConfig(1, 1, 24 * 60 * 60 * 1000)
+
+    def upsert(self, node_id: str) -> str:
+        topic = f"topic_{node_id}"
+        self.admin.create_topic_if_needed(topic, self.config)
+        return topic
+

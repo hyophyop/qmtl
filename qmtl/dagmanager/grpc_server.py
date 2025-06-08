@@ -4,7 +4,14 @@ from typing import AsyncIterable
 
 import grpc
 
-from .diff_service import DiffService, DiffRequest
+from .diff_service import (
+    DiffService,
+    DiffRequest,
+    Neo4jNodeRepository,
+    KafkaQueueManager,
+    StreamSender,
+)
+from .kafka_admin import KafkaAdmin
 from .callbacks import post_with_backoff
 from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
@@ -65,18 +72,27 @@ class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
 
 
 def serve(
-    diff_service: DiffService,
+    neo4j_driver,
+    kafka_admin_client,
+    stream_sender: StreamSender,
     *,
     host: str = "0.0.0.0",
     port: int = 50051,
     callback_url: str | None = None,
     gc: GarbageCollector | None = None,
 ) -> tuple[grpc.aio.Server, int]:
+    repo = Neo4jNodeRepository(neo4j_driver)
+    admin = KafkaAdmin(kafka_admin_client)
+    queue = KafkaQueueManager(admin)
+    diff_service = DiffService(repo, queue, stream_sender)
+
     server = grpc.aio.server()
     dagmanager_pb2_grpc.add_DiffServiceServicer_to_server(
         DiffServiceServicer(diff_service, callback_url), server
     )
-    dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(AdminServiceServicer(gc), server)
+    dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
+        AdminServiceServicer(gc), server
+    )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
     return server, bound_port

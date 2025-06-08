@@ -6,7 +6,10 @@ from qmtl.dagmanager.diff_service import (
     QueueManager,
     StreamSender,
     NodeRecord,
+    Neo4jNodeRepository,
+    KafkaQueueManager,
 )
+from qmtl.dagmanager.kafka_admin import KafkaAdmin
 
 
 class FakeRepo(NodeRepository):
@@ -124,3 +127,63 @@ def test_diff_with_sdk_nodes():
     chunk = service.diff(DiffRequest(strategy_id="sid", dag_json=dag_json))
     # ensure no KeyError and queue map populated
     assert chunk.queue_map
+
+
+class FakeSession:
+    def __init__(self, records=None):
+        self.records = records or []
+        self.run_calls = []
+
+    def run(self, query, **params):
+        self.run_calls.append((query, params))
+        return self.records
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        pass
+
+
+class FakeDriver:
+    def __init__(self, records=None):
+        self.session_obj = FakeSession(records)
+
+    def session(self):
+        return self.session_obj
+
+
+class FakeAdmin:
+    def __init__(self):
+        self.created = []
+
+    def list_topics(self):
+        return {}
+
+    def create_topic(self, name, *, num_partitions, replication_factor, config=None):
+        self.created.append((name, num_partitions, replication_factor, config))
+
+
+def test_integration_with_backends():
+    """DiffService using Neo4jNodeRepository and KafkaQueueManager."""
+    records = [
+        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1", "topic": "topic_A"}
+    ]
+    driver = FakeDriver(records)
+    admin = FakeAdmin()
+    stream = FakeStream()
+    repo = Neo4jNodeRepository(driver)
+    queue_manager = KafkaQueueManager(KafkaAdmin(admin))
+    service = DiffService(repo, queue_manager, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2"},
+    ])
+
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    assert chunk.queue_map == {"A": "topic_A", "B": "topic_B"}
+    assert any("sid" in p for _, p in driver.session_obj.run_calls)
+    assert admin.created and admin.created[0][0] == "topic_B"
+    assert stream.chunks[0] == chunk
