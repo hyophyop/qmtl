@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from typing import Deque
+import time
 
 from prometheus_client import Gauge, Counter, CollectorRegistry, generate_latest, start_http_server
 
@@ -78,6 +79,24 @@ def observe_diff_duration(duration_ms: float) -> None:
 def start_metrics_server(port: int = 8000) -> None:
     """Start a background HTTP server to expose metrics."""
     start_http_server(port, registry=registry)
+
+
+def _run_forever() -> None:
+    """Block the main thread so the HTTP server stays alive."""
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:  # pragma: no cover - manual stop
+        pass
+
+
+def main() -> None:  # pragma: no cover - thin wrapper
+    start_metrics_server()
+    _run_forever()
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry
+    main()
 
 
 def collect_metrics() -> str:
