@@ -99,6 +99,7 @@ CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
 | G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
 | D→G | HTTP  | `/callbacks/sentinel-traffic` | version, weight | 202                | 3×                 | 카나리아 비율 변경       |
+|     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](docs/canary_rollout.md) 참조 |
 
 ---
 
