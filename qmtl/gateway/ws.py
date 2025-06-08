@@ -60,7 +60,12 @@ class WebSocketHub:
             async with self._lock:
                 clients = list(self._clients)
             if clients:
-                await asyncio.gather(*(ws.send(msg) for ws in clients), return_exceptions=True)
+                results = await asyncio.gather(*(ws.send(msg) for ws in clients), return_exceptions=True)
+                for client_ws, res in zip(clients, results):
+                    if isinstance(res, Exception):
+                        # TODO: Implement proper logging here using the `logging` module.
+                        # Example: logger.warning(f"Failed to send message to client {client_ws.remote_address}: {res}")
+                        print(f"DEBUG: WebSocket send error to {client_ws.remote_address}: {res}") # Placeholder, replace with actual logging
             self._queue.task_done()
 
     async def broadcast(self, data: dict) -> None:
