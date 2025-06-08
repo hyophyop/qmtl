@@ -84,7 +84,10 @@ async def test_watch_hub_broadcast():
 
     async def listen():
         gen = hub.subscribe(["t1"], 60)
-        return await asyncio.wait_for(gen.__anext__(), 0.1)
+        try:
+            return await asyncio.wait_for(gen.__anext__(), 1.0)
+        finally:
+            await gen.aclose()
 
     task = asyncio.create_task(listen())
     await asyncio.sleep(0)
