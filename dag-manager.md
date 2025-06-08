@@ -156,6 +156,9 @@ sequenceDiagram
   | `indicator` | 30d  | 3d           | drop       |
   | `sentinel`  | 180d | 30d          | archive S3 |
 
+* **Archive Implementation:** sentinel queues are uploaded to S3 using
+  `S3ArchiveClient` before deletion.
+
 * **Dynamic Rate Limiter:** Prometheus `kafka_server_BrokerTopicMetrics_MessagesInPerSec` > 80% → GC batch size halve.
 
 ---
@@ -231,9 +234,5 @@ qmtl-dagm gc --sentinel v1.2.3
 qmtl-dagm export-schema --out schema.cypher
 ```
 
----
-
-> **TODO**
->
-> * S3 archive integration (interface available via `S3ArchiveClient`)
-> * Canary rollout automation guide
+For canary deployment steps see
+[`docs/canary_rollout.md`](docs/canary_rollout.md).
