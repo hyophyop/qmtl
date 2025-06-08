@@ -35,7 +35,7 @@ from .topic import TopicConfig, topic_name, get_config
 from .kafka_admin import KafkaAdmin
 from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 from .alerts import PagerDutyClient, SlackClient, AlertManager
-from .monitor import Monitor
+from .monitor import Monitor, MonitorLoop
 
 __all__ = [
     "compute_node_id",
@@ -50,4 +50,5 @@ __all__ = [
     "SlackClient",
     "AlertManager",
     "Monitor",
+    "MonitorLoop",
 ]
