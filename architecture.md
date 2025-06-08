@@ -81,10 +81,10 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
 
 1. **필수 `interval` 필드** — 모든 `Node` 메타 정의에 `interval`을 **필수 (primary key)** 로 포함한다. 예) `interval: 1m`, `5m`, `1h`.
 2. **업스트림 데이터 캐시** — 3‑D 맵 대신 4‑D Tensor `C[u,i,p,t]` 구조를 사용한다. 축 정의는 위 표를 참조하며, 큐 인서트는 벡터 단위·만료는 FIFO pop으로 수행된다.
-3. **프로세싱 함수(Compute‑Fn) 격리** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. I/O (큐 publish, DB write) 금지. 예시 시그니처:
+3. **프로세싱 함수(Compute-Fn) 규약** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. 모든 `compute_fn`은 `NodeCache.snapshot()`이 반환하는 **4‑D 캐시 스냅샷(dict)** 한 개만을 인자로 받으며, I/O(큐 publish, DB write) 역시 금지.
 
    ```python
-   def fn(cache_slice: pd.DataFrame) -> pd.DataFrame:
+   def fn(cache) -> pd.DataFrame:
        ...
    ```
 4. **Period 충족 조건** — 노드 트리거 공식: `∀ u ∈ upstreams : len(cache[u][interval]) ≥ period`.
@@ -220,7 +220,8 @@ from qmtl.sdk import Strategy, Node, StreamInput, Runner
 import pandas as pd
 
 # 사용자 정의 시그널 생성 함수
-def generate_signal(price: pd.DataFrame) -> pd.DataFrame:
+def generate_signal(cache) -> pd.DataFrame:
+    price = pd.DataFrame([v for _, v in cache[price_stream.node_id][60]])
     momentum = price["close"].pct_change().rolling(5).mean()
     signal = (momentum > 0).astype(int)
     return pd.DataFrame({"signal": signal})
@@ -265,7 +266,8 @@ from qmtl.sdk import Strategy, Node, TagQueryNode, run_strategy
 import pandas as pd
 
 # 사용자 정의 상관계수 계산 함수
-def calc_corr(indicator_df: pd.DataFrame) -> pd.DataFrame:
+def calc_corr(cache) -> pd.DataFrame:
+    indicator_df = pd.concat([pd.DataFrame([v for _, v in cache[u][3600]]) for u in cache], axis=1)
     # 컬럼 간 피어슨 상관계수 행렬 반환
     corr = indicator_df.corr(method="pearson")
     return corr
@@ -301,7 +303,7 @@ if __name__ == "__main__":
 
 1. Gateway는 (query\_tags, interval) 조건으로 글로벌 DAG를 탐색한다.
 2. 해당 조건에 부합하는 모든 큐들을 업스트림으로 설정한다.
-3. SDK는 각 큐의 데이터를 수집하여 compute\_fn에 직접 전달하며, 병합 방식은 사용자 정의 함수 내부에서 수행된다.
+3. SDK는 각 큐의 데이터를 수집해 **4‑D 캐시 스냅샷(dict)** 하나로 묶어 `compute_fn`에 전달한다. `compute_fn`은 반드시 이 스냅샷 **단일 인자**만을 받아야 하며, 병합 방식 역시 함수 내부에서 정의한다.
 4. 각 큐가 설정된 period를 만족하지 않으면 노드는 ‘pre-warmup’ 상태에 머물며, 충족 시점부터 연산을 시작한다. Gateway는 `(query_tags, interval)` 조건에 부합하는 신규 큐가 전역 DAG에 추가될 때마다 콜백 이벤트를 통해 TagQueryNode에 알리고, 해당 노드는 런타임 중에도 업스트림 큐 목록을 동적으로 확장할 수 있다.
 
 이 구조로 전략 작성자는 **큐 이름이나 위치를 몰라도 태그 기반으로 지표 집합을 참조**할 수 있으며, 지표가 추가될 때마다 전략 수정 없이 자동 반영된다.
@@ -316,8 +318,9 @@ if __name__ == "__main__":
 from qmtl.sdk import Strategy, Node, StreamInput, Runner
 import pandas as pd
 
-def lagged_corr(btc: pd.DataFrame, mstr: pd.DataFrame) -> pd.DataFrame:
-    # 90개(≈90분) 시차 상관계수 계산
+def lagged_corr(cache) -> pd.DataFrame:
+    btc = pd.DataFrame([v for _, v in cache[btc_price.node_id][60]])
+    mstr = pd.DataFrame([v for _, v in cache[mstr_price.node_id][60]])
     btc_shift = btc["close"].shift(90)
     corr = btc_shift.corr(mstr["close"])
     return pd.DataFrame({"lag_corr": [corr]})
