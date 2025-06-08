@@ -90,6 +90,20 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
                 sizes = {k: v for k, v in sizes.items() if k in queues}
         return dagmanager_pb2.QueueStats(sizes=sizes)
 
+    async def RedoDiff(
+        self,
+        request: dagmanager_pb2.RedoDiffRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> dagmanager_pb2.DiffResult:
+        if self._diff is None:
+            return dagmanager_pb2.DiffResult()
+        chunk = self._diff.diff(
+            DiffRequest(strategy_id=request.sentinel_id, dag_json=request.dag_json)
+        )
+        return dagmanager_pb2.DiffResult(
+            queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
+        )
+
 
 class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
     def __init__(self, repo: Neo4jNodeRepository) -> None:

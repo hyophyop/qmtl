@@ -7,6 +7,7 @@ import httpx
 
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
+from qmtl.dagmanager.http_server import create_app
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -66,6 +67,38 @@ async def test_grpc_diff():
         responses = [r async for r in stub.Diff(request)]
     await server.stop(None)
     assert responses[0].sentinel_id == "s-sentinel"
+
+
+@pytest.mark.asyncio
+async def test_grpc_redo_diff(monkeypatch):
+    called = {}
+
+    from qmtl.dagmanager.diff_service import DiffChunk, DiffRequest
+
+    class DummyDiff:
+        def __init__(self, *a, **k):
+            pass
+
+        def diff(self, request: DiffRequest):
+            called["sid"] = request.strategy_id
+            return DiffChunk(queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel")
+
+    monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.RedoDiffRequest(sentinel_id="v2", dag_json="{}")
+        resp = await stub.RedoDiff(req)
+    await server.stop(None)
+
+    assert called["sid"] == "v2"
+    assert dict(resp.queue_map)["x"] == "t"
+    assert resp.sentinel_id == "v2-sentinel"
 
 
 @pytest.mark.asyncio
@@ -186,7 +219,7 @@ async def test_grpc_tag_query():
     await server.stop(None)
     assert list(resp.queues) == ["q1", "q2"]
 
-
+    
 @pytest.mark.asyncio
 async def test_grpc_queue_stats():
     driver = FakeDriver()
@@ -201,3 +234,45 @@ async def test_grpc_queue_stats():
         resp = await stub.GetQueueStats(req)
     await server.stop(None)
     assert dict(resp.sizes) == {"topic1": 3}
+
+    
+@pytest.mark.asyncio
+async def test_http_sentinel_traffic(monkeypatch):
+    weights: dict[str, float] = {}
+    captured: dict = {}
+
+    async def mock_post(url, json, **_):
+        captured.update(json)
+        return httpx.Response(202)
+
+    monkeypatch.setattr(
+        "qmtl.dagmanager.http_server.post_with_backoff",
+        mock_post,
+    )
+
+    app = create_app(weights=weights, gateway_url="http://gw")
+    transport = httpx.ASGITransport(app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/callbacks/sentinel-traffic",
+            json={"version": "v1", "weight": 0.7},
+        )
+
+    assert resp.status_code == 202
+    assert weights["v1"] == 0.7
+    assert captured["type"] == "sentinel_weight"
+    assert captured["data"]["sentinel_id"] == "v1"
+    assert captured["data"]["weight"] == 0.7
+
+
+@pytest.mark.asyncio
+async def test_http_sentinel_traffic_overwrite():
+    weights = {"v1": 0.1}
+    app = create_app(weights=weights)
+    transport = httpx.ASGITransport(app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/callbacks/sentinel-traffic",
+            json={"version": "v1", "weight": 0.4},
+        )
+    assert weights["v1"] == 0.4

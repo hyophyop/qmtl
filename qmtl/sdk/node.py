@@ -3,33 +3,66 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-from collections import defaultdict, deque
+from collections import defaultdict
+from typing import Any
+
+import numpy as np
+import xarray as xr
 import httpx
 
 from qmtl.dagmanager import compute_node_id
 
 
-class NodeCache(defaultdict):
-    """Simple FIFO cache modeling C[u,i,p,t]."""
+class NodeCache:
+    """4-D tensor cache ``C[u,i,p,t]`` implemented with ``xarray``."""
 
     def __init__(self, period: int) -> None:
-        super().__init__(lambda: defaultdict(lambda: deque(maxlen=period)))
         self.period = period
+        self._tensor = xr.DataArray(
+            np.empty((0, 0, period, 2), dtype=object),
+            dims=("u", "i", "p", "f"),
+            coords={"u": [], "i": [], "p": list(range(period)), "f": ["t", "v"]},
+        )
 
-    def append(self, u: str, interval: int, value) -> None:
-        self[u][interval].append(value)
+    # ------------------------------------------------------------------
+    def _ensure_coords(self, u: str, interval: int) -> None:
+        if u not in self._tensor.coords["u"]:
+            self._tensor = self._tensor.reindex(
+                u=list(self._tensor.coords["u"].values) + [u], fill_value=None
+            )
+        if interval not in self._tensor.coords["i"]:
+            self._tensor = self._tensor.reindex(
+                i=list(self._tensor.coords["i"].values) + [interval], fill_value=None
+            )
 
+    def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
+        """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
+        self._ensure_coords(u, interval)
+        u_idx = int(np.where(self._tensor.coords["u"] == u)[0])
+        i_idx = int(np.where(self._tensor.coords["i"] == interval)[0])
+        data = self._tensor.data.copy()
+        arr = data[u_idx, i_idx]
+        arr = np.roll(arr, -1, axis=0)
+        arr[-1, 0] = timestamp
+        arr[-1, 1] = payload
+        data[u_idx, i_idx] = arr
+        self._tensor = xr.DataArray(data, dims=self._tensor.dims, coords=self._tensor.coords)
+
+    # ------------------------------------------------------------------
     def ready(self) -> bool:
-        if not self:
+        if not self._tensor.coords["u"].size or not self._tensor.coords["i"].size:
             return False
-        for intervals in self.values():
-            for dq in intervals.values():
-                if len(dq) < self.period:
-                    return False
-        return True
+        ts = self._tensor.isel(f=0).values
+        return not ((ts == None).any())  # noqa: E711
 
-    def snapshot(self):
-        return {u: {i: list(dq) for i, dq in intervals.items()} for u, intervals in self.items()}
+    def snapshot(self) -> dict[str, dict[int, list[tuple[int, Any]]]]:
+        result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
+        for u in self._tensor.coords["u"].values:
+            result[u] = {}
+            for i in self._tensor.coords["i"].values:
+                slice_ = self._tensor.loc[dict(u=u, i=i)].values
+                result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
+        return result
 
 
 class Node:
@@ -123,7 +156,7 @@ class Node:
     # --- runtime cache handling -----------------------------------------
     def feed(self, upstream_id: str, interval: int, timestamp: int, payload) -> None:
         """Insert new data into ``cache`` and trigger ``compute_fn`` when ready."""
-        self.cache.append(upstream_id, interval, (timestamp, payload))
+        self.cache.append(upstream_id, interval, timestamp, payload)
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
         if not self.pre_warmup and self.compute_fn:
