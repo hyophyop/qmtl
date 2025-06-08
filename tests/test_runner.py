@@ -161,8 +161,8 @@ def test_feed_queue_data_with_ray(monkeypatch):
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
-    Runner.feed_queue_data(node, "q", 60, 1, {"v": 1})
-    Runner.feed_queue_data(node, "q", 60, 2, {"v": 2})
+    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
 
     assert len(dummy_ray.calls) == 1
     assert not calls
@@ -181,7 +181,7 @@ def test_feed_queue_data_without_ray(monkeypatch):
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
-    Runner.feed_queue_data(node, "q", 60, 1, {"v": 1})
-    Runner.feed_queue_data(node, "q", 60, 2, {"v": 2})
+    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
 
     assert len(calls) == 1

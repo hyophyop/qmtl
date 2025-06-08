@@ -14,7 +14,12 @@ from qmtl.dagmanager import compute_node_id
 
 
 class NodeCache:
-    """4-D tensor cache ``C[u,i,p,t]`` implemented with ``xarray``."""
+    """4-D tensor cache ``C[u,i,p,t]`` implemented with ``xarray``.
+
+    Besides the tensor itself the cache tracks the last timestamp for every
+    ``(u, interval)`` pair and whether the most recently appended timestamp
+    introduced a gap (``last_timestamp + interval != timestamp``).
+    """
 
     def __init__(self, period: int) -> None:
         self.period = period
@@ -23,6 +28,8 @@ class NodeCache:
             dims=("u", "i", "p", "f"),
             coords={"u": [], "i": [], "p": list(range(period)), "f": ["t", "v"]},
         )
+        self._last_ts: dict[tuple[str, int], int | None] = {}
+        self._missing: dict[tuple[str, int], bool] = {}
 
     # ------------------------------------------------------------------
     def _ensure_coords(self, u: str, interval: int) -> None:
@@ -30,6 +37,9 @@ class NodeCache:
             self._tensor = self._tensor.reindex(
                 u=list(self._tensor.coords["u"].values) + [u], fill_value=None
             )
+        if (u, interval) not in self._last_ts:
+            self._last_ts[(u, interval)] = None  # type: ignore[assignment]
+            self._missing[(u, interval)] = False
         if interval not in self._tensor.coords["i"]:
             self._tensor = self._tensor.reindex(
                 i=list(self._tensor.coords["i"].values) + [interval], fill_value=None
@@ -38,6 +48,12 @@ class NodeCache:
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
         self._ensure_coords(u, interval)
+        prev = self._last_ts.get((u, interval))
+        if prev is not None and prev + interval != timestamp:
+            self._missing[(u, interval)] = True
+        else:
+            self._missing[(u, interval)] = False
+        self._last_ts[(u, interval)] = timestamp
         u_idx = int(np.where(self._tensor.coords["u"] == u)[0])
         i_idx = int(np.where(self._tensor.coords["i"] == interval)[0])
         data = self._tensor.data.copy()
@@ -62,6 +78,24 @@ class NodeCache:
             for i in self._tensor.coords["i"].values:
                 slice_ = self._tensor.loc[dict(u=u, i=i)].values
                 result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
+        return result
+
+    def missing_flags(self) -> dict[str, dict[int, bool]]:
+        """Return gap flags for all ``(u, interval)`` pairs."""
+        result: dict[str, dict[int, bool]] = {}
+        for u in self._tensor.coords["u"].values:
+            result[u] = {}
+            for i in self._tensor.coords["i"].values:
+                result[u][i] = self._missing.get((u, i), False)
+        return result
+
+    def last_timestamps(self) -> dict[str, dict[int, int | None]]:
+        """Return last timestamps for all ``(u, interval)`` pairs."""
+        result: dict[str, dict[int, int | None]] = {}
+        for u in self._tensor.coords["u"].values:
+            result[u] = {}
+            for i in self._tensor.coords["i"].values:
+                result[u][i] = self._last_ts.get((u, i))
         return result
 
 
@@ -154,11 +188,25 @@ class Node:
         )
 
     # --- runtime cache handling -----------------------------------------
-    def feed(self, upstream_id: str, interval: int, timestamp: int, payload) -> None:
+    def feed(
+        self,
+        upstream_id: str,
+        interval: int,
+        timestamp: int,
+        payload,
+        *,
+        on_missing: str = "skip",
+    ) -> None:
         """Insert new data into ``cache`` and trigger ``compute_fn`` when ready."""
         self.cache.append(upstream_id, interval, timestamp, payload)
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
+        missing = self.cache.missing_flags().get(upstream_id, {}).get(interval, False)
+        if missing:
+            if on_missing == "fail":
+                raise RuntimeError("gap detected")
+            if on_missing == "skip":
+                return
         if not self.pre_warmup and self.compute_fn:
             self.compute_fn(self.cache.snapshot())
 
