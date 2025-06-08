@@ -1,3 +1,5 @@
+import json
+import base64
 import pytest
 from fastapi.testclient import TestClient
 from fakeredis.aioredis import FakeRedis
@@ -41,3 +43,30 @@ def test_queues_by_tag_route(client):
     assert resp.status_code == 200
     assert resp.json()["queues"] == ["q1", "q2"]
     assert dag.called_with == (["t1", "t2"], 60)
+
+
+def test_submit_tag_query_node(client):
+    c, dag = client
+    dag_json = {
+        "nodes": [
+            {
+                "node_id": "N1",
+                "node_type": "TagQueryNode",
+                "interval": 60,
+                "period": 2,
+                "tags": ["t1"],
+                "code_hash": "ch",
+                "schema_hash": "sh",
+                "inputs": [],
+            }
+        ]
+    }
+    payload = {
+        "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+        "meta": None,
+        "run_type": "dry-run",
+    }
+    resp = c.post("/strategies", json=payload)
+    assert resp.status_code == 202
+    assert resp.json()["queue_map"] == {"N1": ["q1", "q2"]}
+    assert dag.called_with == (["t1"], 60)

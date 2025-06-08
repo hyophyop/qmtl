@@ -24,6 +24,7 @@ class StrategySubmit(BaseModel):
 
 class StrategyAck(BaseModel):
     strategy_id: str
+    queue_map: dict[str, list[str] | str] = Field(default_factory=dict)
 
 
 class StatusResponse(BaseModel):
@@ -136,7 +137,24 @@ def create_app(
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
         strategy_id = await manager.submit(payload)
-        return StrategyAck(strategy_id=strategy_id)
+        try:
+            dag_bytes = base64.b64decode(payload.dag_json)
+            dag = json.loads(dag_bytes.decode())
+        except Exception:
+            dag = json.loads(payload.dag_json)
+
+        queue_map: dict[str, list[str] | str] = {}
+        for node in dag.get("nodes", []):
+            if node.get("node_type") == "TagQueryNode":
+                tags = node.get("tags", [])
+                interval = int(node.get("interval", 0))
+                try:
+                    queues = await dagm.get_queues_by_tag(tags, interval)
+                except Exception:
+                    queues = []
+                queue_map[node["node_id"]] = queues
+
+        return StrategyAck(strategy_id=strategy_id, queue_map=queue_map)
 
     @app.get("/strategies/{strategy_id}/status", response_model=StatusResponse)
     async def get_status(strategy_id: str) -> StatusResponse:
