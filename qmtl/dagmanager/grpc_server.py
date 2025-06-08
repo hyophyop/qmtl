@@ -45,8 +45,9 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
 
 
 class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
-    def __init__(self, gc: GarbageCollector | None = None) -> None:
+    def __init__(self, gc: GarbageCollector | None = None, diff: DiffService | None = None) -> None:
         self._gc = gc
+        self._diff = diff
 
     async def Cleanup(
         self,
@@ -63,6 +64,20 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.QueueStats:
         return dagmanager_pb2.QueueStats()
+
+    async def RedoDiff(
+        self,
+        request: dagmanager_pb2.RedoDiffRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> dagmanager_pb2.DiffResult:
+        if self._diff is None:
+            return dagmanager_pb2.DiffResult()
+        chunk = self._diff.diff(
+            DiffRequest(strategy_id=request.sentinel_id, dag_json=request.dag_json)
+        )
+        return dagmanager_pb2.DiffResult(
+            queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
+        )
 
 
 class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
@@ -110,7 +125,7 @@ def serve(
         TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
-        AdminServiceServicer(gc), server
+        AdminServiceServicer(gc, diff_service), server
     )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
