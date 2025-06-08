@@ -41,9 +41,22 @@ receivers:
            severity: warning
          annotations:
            summary: Missing diff sentinel detected
-       - alert: OrphanQueuesGrowing
-         expr: increase(orphan_queue_total[3h]) > 0
-         labels:
-           severity: warning
-         annotations:
-           summary: Orphan queue count rising
+      - alert: OrphanQueuesGrowing
+        expr: increase(orphan_queue_total[3h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Orphan queue count rising
+      - alert: GatewayLatencyHigh
+        expr: gateway_e2e_latency_p95 > 150
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Gateway end-to-end latency high
+      - alert: LostRequests
+        expr: increase(lost_requests_total[1m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Diff submissions lost
