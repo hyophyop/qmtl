@@ -34,11 +34,15 @@ async def test_state_recovery_after_redis_failure():
     assert await fsm.get("s1") == "processing"
     assert db.events[-1] == ("s1", "PROCESS")
 
+    events_before = list(db.events)
+
     await redis.flushall()
 
     recovered = await fsm.get("s1")
     assert recovered == "processing"
     assert await redis.hget("strategy:s1", "state") == "processing"
+
+    assert db.events == events_before
 
     await fsm.transition("s1", "COMPLETE")
     assert db.events[-1] == ("s1", "COMPLETE")
