@@ -70,6 +70,27 @@ paths:
           schema: { type: string }
       responses:
         '200': { $ref: '#/components/responses/Status200' }
+  /queues/by_tag:
+    get:
+      summary: Fetch queues matching tags and interval
+      parameters:
+        - in: query
+          name: tags
+          schema: { type: string }
+        - in: query
+          name: interval
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Queue list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queues:
+                    type: array
+                    items: { type: string }
 ```
 
 **Example Request (compressed 32 KiB DAG JSON omitted)**

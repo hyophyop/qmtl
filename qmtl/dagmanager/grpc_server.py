@@ -62,6 +62,19 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         return dagmanager_pb2.QueueStats()
 
 
+class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
+    def __init__(self, repo: Neo4jNodeRepository) -> None:
+        self._repo = repo
+
+    async def GetQueues(
+        self,
+        request: dagmanager_pb2.TagQueryRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> dagmanager_pb2.TagQueryReply:
+        queues = self._repo.get_queues_by_tag(request.tags, request.interval)
+        return dagmanager_pb2.TagQueryReply(queues=queues)
+
+
 class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
     async def Ping(
         self,
@@ -89,6 +102,9 @@ def serve(
     server = grpc.aio.server()
     dagmanager_pb2_grpc.add_DiffServiceServicer_to_server(
         DiffServiceServicer(diff_service, callback_url), server
+    )
+    dagmanager_pb2_grpc.add_TagQueryServicer_to_server(
+        TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
         AdminServiceServicer(gc), server

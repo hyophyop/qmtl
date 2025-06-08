@@ -9,6 +9,44 @@ from qmtl.gateway.watch import QueueWatchHub
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.dagmanager_client import DagManagerClient
+from qmtl.dagmanager.grpc_server import serve
+from qmtl.dagmanager.diff_service import StreamSender
+import grpc
+
+
+class _FakeSession:
+    def __init__(self, result=None):
+        self.result = result or []
+
+    def run(self, query, **params):
+        return self.result
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        pass
+
+
+class _FakeDriver:
+    def __init__(self, result=None):
+        self.session_obj = _FakeSession(result)
+
+    def session(self):
+        return self.session_obj
+
+
+class _FakeAdmin:
+    def list_topics(self):
+        return {}
+
+    def create_topic(self, name, *, num_partitions, replication_factor, config=None):
+        pass
+
+
+class _FakeStream(StreamSender):
+    def send(self, chunk):
+        pass
 
 
 class FakeDB(Database):
@@ -99,3 +137,16 @@ async def test_watch_hub_broadcast():
         assert result == ["q3"]
     except asyncio.CancelledError:
         pytest.fail("Task was unexpectedly cancelled")
+
+
+@pytest.mark.asyncio
+async def test_dag_client_queries_grpc():
+    driver = _FakeDriver([{"topic": "q1"}, {"topic": "q2"}])
+    admin = _FakeAdmin()
+    stream = _FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    client = DagManagerClient(f"127.0.0.1:{port}")
+    queues = await client.get_queues_by_tag(["t"], 60)
+    await server.stop(None)
+    assert queues == ["q1", "q2"]

@@ -46,6 +46,10 @@ class NodeRepository:
     def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
         raise NotImplementedError
 
+    def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
+        """Return queue topics matching ``tags`` and ``interval``."""
+        raise NotImplementedError
+
 
 class QueueManager:
     """Interface to create or update queues."""
@@ -175,6 +179,18 @@ class Neo4jNodeRepository(NodeRepository):
         )
         with self.driver.session() as session:
             session.run(query, sid=sentinel_id, ids=list(node_ids))
+
+    def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
+        if not tags:
+            return []
+        query = (
+            "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
+            "WHERE any(t IN c.tags WHERE t IN $tags) AND q.interval = $interval "
+            "RETURN q.topic AS topic"
+        )
+        with self.driver.session() as session:
+            result = session.run(query, tags=list(tags), interval=interval)
+            return [r.get("topic") for r in result]
 
 
 class KafkaQueueManager(QueueManager):

@@ -30,6 +30,9 @@ class _MemRepo(NodeRepository):
     def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
         self.sentinels.append((sentinel_id, list(node_ids)))
 
+    def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
+        return []
+
 
 class _MemQueue(QueueManager):
     def __init__(self) -> None:
