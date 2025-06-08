@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 from typing import Awaitable, Callable, Optional
 
 import redis.asyncio as redis
 
 from .api import Database
+from .dagmanager_client import DagManagerClient
+from .ws import WebSocketHub
 from .fsm import StrategyFSM
 from .queue import RedisFIFOQueue
 
@@ -20,6 +21,8 @@ class StrategyWorker:
         database: Database,
         fsm: StrategyFSM,
         queue: RedisFIFOQueue,
+        dag_client: DagManagerClient,
+        ws_hub: Optional[WebSocketHub] = None,
         worker_id: Optional[str] = None,
         handler: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> None:
@@ -27,6 +30,8 @@ class StrategyWorker:
         self.database = database
         self.fsm = fsm
         self.queue = queue
+        self.dag_client = dag_client
+        self.ws_hub = ws_hub
         self.worker_id = worker_id or str(uuid.uuid4())
         self._handler = handler
 
@@ -36,10 +41,38 @@ class StrategyWorker:
         if not locked:
             return False
         try:
-            await self.fsm.transition(strategy_id, "PROCESS")
+            state = await self.fsm.transition(strategy_id, "PROCESS")
+            if self.ws_hub:
+                await self.ws_hub.send_progress(strategy_id, state)
+
+            dag_json = await self.redis.hget(f"strategy:{strategy_id}", "dag")
+            if isinstance(dag_json, bytes):
+                dag_json = dag_json.decode()
+            if dag_json is None:
+                raise RuntimeError("dag not found")
+
+            try:
+                diff_result = await self.dag_client.diff(strategy_id, dag_json)
+            except Exception:
+                state = await self.fsm.transition(strategy_id, "FAIL")
+                if self.ws_hub:
+                    await self.ws_hub.send_progress(strategy_id, state)
+                return True
+
+            if self.ws_hub:
+                await self.ws_hub.send_queue_map(strategy_id, dict(diff_result.queue_map))
+
             if self._handler:
                 await self._handler(strategy_id)
-            await self.fsm.transition(strategy_id, "COMPLETE")
+
+            state = await self.fsm.transition(strategy_id, "COMPLETE")
+            if self.ws_hub:
+                await self.ws_hub.send_progress(strategy_id, state)
+            return True
+        except Exception:
+            state = await self.fsm.transition(strategy_id, "FAIL")
+            if self.ws_hub:
+                await self.ws_hub.send_progress(strategy_id, state)
             return True
         finally:
             # The lock expires automatically; explicit deletion would allow
