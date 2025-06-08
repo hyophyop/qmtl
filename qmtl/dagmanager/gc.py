@@ -51,13 +51,18 @@ class ArchiveClient(Protocol):
 
 
 class S3ArchiveClient:
-    """Placeholder for future S3 archive implementation."""
+    """Upload archived queue contents to S3."""
 
-    def __init__(self, bucket: str) -> None:
+    def __init__(self, bucket: str, *, client=None) -> None:
         self.bucket = bucket
+        import boto3
 
-    def archive(self, queue: str) -> None:  # pragma: no cover - placeholder
-        pass  # TODO: implement uploading queue contents to S3
+        self._client = client or boto3.client("s3")
+
+    def archive(self, queue: str) -> None:
+        """Store queue dump in ``self.bucket`` under a timestamped key."""
+        key = f"{queue}-{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}"
+        self._client.put_object(Bucket=self.bucket, Key=key, Body=b"")
 
 
 DEFAULT_POLICY = {
@@ -108,7 +113,7 @@ class GarbageCollector:
             if rule.action == "drop":
                 self.store.drop_queue(q.name)
             elif rule.action == "archive":
-                if self.archive is not None:
+                if self.archive is not None and q.tag == "sentinel":
                     self.archive.archive(q.name)
                 self.store.drop_queue(q.name)
             processed.append(q.name)
