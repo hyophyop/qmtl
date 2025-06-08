@@ -3,6 +3,7 @@ from .queue import RedisFIFOQueue
 from .worker import StrategyWorker
 from .api import create_app, Database, StrategySubmit, StrategyAck, StatusResponse
 from .fsm import StrategyFSM
+from .ws import WebSocketHub
 
 __all__ = [
     "DagManagerClient",
@@ -14,4 +15,5 @@ __all__ = [
     "StrategySubmit",
     "StrategyAck",
     "StatusResponse",
+    "WebSocketHub",
 ]
