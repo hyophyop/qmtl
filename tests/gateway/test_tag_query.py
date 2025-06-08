@@ -18,6 +18,9 @@ class FakeDB(Database):
     async def get_status(self, strategy_id: str):
         return None
 
+    async def append_event(self, strategy_id: str, event: str) -> None:  # pragma: no cover - not used
+        pass
+
 
 class DummyDag(DagManagerClient):
     def __init__(self):

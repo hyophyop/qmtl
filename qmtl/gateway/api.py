@@ -12,7 +12,7 @@ import redis.asyncio as redis
 import asyncpg
 
 from .dagmanager_client import DagManagerClient
-# Simplified strategy state machine
+from .fsm import StrategyFSM
 _INITIAL_STATUS = "queued"
 
 
@@ -41,6 +41,9 @@ class Database:
     async def get_status(self, strategy_id: str) -> Optional[str]:
         raise NotImplementedError
 
+    async def append_event(self, strategy_id: str, event: str) -> None:
+        raise NotImplementedError
+
 
 class PostgresDatabase(Database):
     """PostgreSQL-backed implementation."""
@@ -60,6 +63,16 @@ class PostgresDatabase(Database):
             )
             """
         )
+        await self._pool.execute(
+            """
+            CREATE TABLE IF NOT EXISTS strategy_events (
+                id SERIAL PRIMARY KEY,
+                strategy_id TEXT,
+                event TEXT,
+                ts TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
 
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
         assert self._pool
@@ -69,6 +82,7 @@ class PostgresDatabase(Database):
             json.dumps(meta) if meta is not None else None,
             _INITIAL_STATUS,
         )
+        await self.append_event(strategy_id, f"INIT:{_INITIAL_STATUS}")
 
     async def set_status(self, strategy_id: str, status: str) -> None:
         assert self._pool
@@ -76,6 +90,14 @@ class PostgresDatabase(Database):
             "UPDATE strategies SET status=$1 WHERE id=$2",
             status,
             strategy_id,
+        )
+
+    async def append_event(self, strategy_id: str, event: str) -> None:
+        assert self._pool
+        await self._pool.execute(
+            "INSERT INTO strategy_events(strategy_id, event) VALUES($1, $2)",
+            strategy_id,
+            event,
         )
 
     async def get_status(self, strategy_id: str) -> Optional[str]:
@@ -91,6 +113,7 @@ class PostgresDatabase(Database):
 class StrategyManager:
     redis: redis.Redis
     database: Database
+    fsm: StrategyFSM
 
     async def submit(self, payload: StrategySubmit) -> str:
         strategy_id = str(uuid.uuid4())
@@ -110,16 +133,13 @@ class StrategyManager:
         await self.redis.rpush("strategy_queue", strategy_id)
         await self.redis.hset(
             f"strategy:{strategy_id}",
-            mapping={"status": _INITIAL_STATUS, "dag": encoded_dag},
+            mapping={"dag": encoded_dag},
         )
-        await self.database.insert_strategy(strategy_id, payload.meta)
+        await self.fsm.create(strategy_id, payload.meta)
         return strategy_id
 
     async def status(self, strategy_id: str) -> Optional[str]:
-        data = await self.redis.hget(f"strategy:{strategy_id}", "status")
-        if data is None:
-            return None
-        return data.decode() if isinstance(data, bytes) else data
+        return await self.fsm.get(strategy_id)
 
 
 def create_app(
@@ -131,7 +151,8 @@ def create_app(
 
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     db = database or PostgresDatabase("postgresql://localhost/qmtl")
-    manager = StrategyManager(redis=r, database=db)
+    fsm = StrategyFSM(redis=r, database=db)
+    manager = StrategyManager(redis=r, database=db, fsm=fsm)
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)

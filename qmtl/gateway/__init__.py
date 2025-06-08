@@ -2,11 +2,13 @@ from .dagmanager_client import DagManagerClient
 from .queue import RedisFIFOQueue
 from .worker import StrategyWorker
 from .api import create_app, Database, StrategySubmit, StrategyAck, StatusResponse
+from .fsm import StrategyFSM
 
 __all__ = [
     "DagManagerClient",
     "RedisFIFOQueue",
     "StrategyWorker",
+    "StrategyFSM",
     "create_app",
     "Database",
     "StrategySubmit",

@@ -12,6 +12,7 @@ from qmtl.gateway.api import create_app, Database, StrategySubmit
 class FakeDB(Database):
     def __init__(self) -> None:
         self.records = {}
+        self.events = []
 
     async def insert_strategy(self, strategy_id: str, meta=None) -> None:  # pragma: no cover - not used
         self.records[strategy_id] = {"status": "queued", "meta": meta}
@@ -22,6 +23,9 @@ class FakeDB(Database):
     async def get_status(self, strategy_id: str) -> str | None:  # pragma: no cover - not used
         rec = self.records.get(strategy_id)
         return rec.get("status") if rec else None
+
+    async def append_event(self, strategy_id: str, event: str) -> None:  # pragma: no cover - not used
+        self.events.append((strategy_id, event))
 
 
 @pytest.fixture
