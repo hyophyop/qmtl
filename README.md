@@ -1,3 +1,6 @@
 # qmtl
 
-See `docs/e2e_testing.md` for instructions on running the full stack locally.
+## End-to-End Testing
+
+For instructions on spinning up the entire stack and running the e2e suite, see [docs/e2e_testing.md](docs/e2e_testing.md).
+
