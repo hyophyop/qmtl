@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import grpc
 import pytest
+import httpx
 
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
@@ -64,6 +65,42 @@ async def test_grpc_diff():
         responses = [r async for r in stub.Diff(request)]
     await server.stop(None)
     assert responses[0].sentinel_id == "s-sentinel"
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    captured: dict = {}
+
+    async def mock_post(url, json, **_):
+        captured.update(json)
+        return httpx.Response(202)
+
+    monkeypatch.setattr(
+        "qmtl.dagmanager.grpc_server.post_with_backoff",
+        mock_post,
+    )
+
+    server, port = serve(
+        driver,
+        admin,
+        stream,
+        host="127.0.0.1",
+        port=0,
+        callback_url="http://gw/cb",
+    )
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json="{}")
+        [_ async for _ in stub.Diff(request)]
+    await server.stop(None)
+
+    assert captured["type"] == "diff"
+    assert captured["specversion"] == "1.0"
+    assert captured["data"]["strategy_id"] == "s"
 
 
 class DummyStore:
