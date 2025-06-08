@@ -25,6 +25,9 @@ dev = [
     "xstate",
 ]
 
+[project.scripts]
+qmtl-dagm = "qmtl.dagmanager.cli:main"
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
