@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Optional
 
 import websockets
 from websockets.server import WebSocketServerProtocol
+
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketHub:
@@ -60,12 +64,16 @@ class WebSocketHub:
             async with self._lock:
                 clients = list(self._clients)
             if clients:
-                results = await asyncio.gather(*(ws.send(msg) for ws in clients), return_exceptions=True)
+                results = await asyncio.gather(
+                    *(ws.send(msg) for ws in clients), return_exceptions=True
+                )
                 for client_ws, res in zip(clients, results):
                     if isinstance(res, Exception):
-                        # TODO: Implement proper logging here using the `logging` module.
-                        # Example: logger.warning(f"Failed to send message to client {client_ws.remote_address}: {res}")
-                        print(f"DEBUG: WebSocket send error to {client_ws.remote_address}: {res}") # Placeholder, replace with actual logging
+                        logger.warning(
+                            "Failed to send message to client %s: %s",
+                            client_ws.remote_address,
+                            res,
+                        )
             self._queue.task_done()
 
     async def broadcast(self, data: dict) -> None:
