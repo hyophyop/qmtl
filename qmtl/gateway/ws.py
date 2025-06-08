@@ -37,6 +37,7 @@ class WebSocketHub:
 
     async def stop(self) -> None:
         """Stop the server and cleanup resources."""
+        await self._queue.join()
         self._stop_event.set()
         if self._server:
             self._server.close()
