@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import pytest
@@ -63,3 +64,28 @@ async def test_hub_line_rate_500_msgs_per_sec():
 
     assert received == total
     assert received / duration >= 500
+
+
+@pytest.mark.asyncio
+async def test_hub_logs_send_errors(caplog):
+    hub = WebSocketHub()
+    await hub.start()
+
+    class DummyWS:
+        remote_address = ("dummy", 1234)
+
+        async def send(self, msg):
+            raise RuntimeError("boom")
+
+    async with hub._lock:
+        hub._clients.add(DummyWS())
+
+    with caplog.at_level(logging.WARNING):
+        await hub.send_progress("s1", "queued")
+        await asyncio.sleep(0.1)
+
+    await hub.stop()
+
+    assert any(
+        "Failed to send message to client" in record.message for record in caplog.records
+    )
