@@ -131,3 +131,19 @@ async def test_grpc_cleanup_archives():
 
     assert store.dropped == ["s"]
     assert archive.archived == ["s"]
+
+
+@pytest.mark.asyncio
+async def test_grpc_tag_query():
+    driver = FakeDriver()
+    driver.session_obj = FakeSession([{"topic": "q1"}, {"topic": "q2"}])
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.TagQueryStub(channel)
+        req = dagmanager_pb2.TagQueryRequest(tags=["t"], interval=60)
+        resp = await stub.GetQueues(req)
+    await server.stop(None)
+    assert list(resp.queues) == ["q1", "q2"]
