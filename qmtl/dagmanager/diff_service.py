@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from typing import Iterable, List, Dict, TYPE_CHECKING
 import time
 
-from .metrics import observe_diff_duration, queue_create_error_total
+from .metrics import (
+    observe_diff_duration,
+    queue_create_error_total,
+    sentinel_gap_count,
+)
 from .kafka_admin import KafkaAdmin
 from .topic import TopicConfig
 
@@ -135,6 +139,9 @@ class DiffService:
             queue_map, new_nodes = self._hash_compare(nodes, existing)
             sentinel_id = f"{request.strategy_id}-sentinel"
             self._insert_sentinel(sentinel_id, new_nodes)
+            if not new_nodes:
+                sentinel_gap_count.inc()
+                sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
             self._stream_send(queue_map, sentinel_id)
             return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
         finally:

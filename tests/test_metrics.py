@@ -52,11 +52,13 @@ def test_metrics_exposed():
     metrics.diff_duration_ms_p95.set(10)
     metrics.queue_create_error_total.inc()
     metrics.orphan_queue_total.set(2)
+    metrics.sentinel_gap_count.inc()
 
     data = metrics.collect_metrics()
     assert "diff_duration_ms_p95" in data
     assert "queue_create_error_total" in data
     assert "orphan_queue_total" in data
+    assert "sentinel_gap_count" in data
 
 
 def test_diff_duration_and_error_metrics():

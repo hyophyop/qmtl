@@ -56,6 +56,7 @@ sentinel_gap_count = Gauge(
     "Number of missing sentinel events detected",
     registry=registry,
 )
+sentinel_gap_count._val = 0  # type: ignore[attr-defined]
 
 orphan_queue_total = Gauge(
     "orphan_queue_total",
@@ -112,5 +113,6 @@ def reset_metrics() -> None:
     queue_create_error_total._value.set(0)  # type: ignore[attr-defined]
     queue_create_error_total._val = 0  # type: ignore[attr-defined]
     sentinel_gap_count.set(0)
+    sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
