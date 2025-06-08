@@ -1,7 +1,5 @@
 import asyncio
-
 import pytest
-
 import grpc
 
 from qmtl.gateway.dagmanager_client import DagManagerClient

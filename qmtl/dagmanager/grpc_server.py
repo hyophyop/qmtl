@@ -106,20 +106,6 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
             queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
         )
 
-        AdminServiceServicer(gc, admin, repo, diff_service), server
-        self,
-        request: dagmanager_pb2.RedoDiffRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> dagmanager_pb2.DiffResult:
-        if self._diff is None:
-            return dagmanager_pb2.DiffResult()
-        chunk = self._diff.diff(
-            DiffRequest(strategy_id=request.sentinel_id, dag_json=request.dag_json)
-        )
-        return dagmanager_pb2.DiffResult(
-            queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
-        )
-
 
 class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
     def __init__(self, repo: Neo4jNodeRepository) -> None:
@@ -166,7 +152,7 @@ def serve(
         TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
-        AdminServiceServicer(gc, admin, repo), server
+        AdminServiceServicer(gc, admin, repo, diff=diff_service), server
     )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")
