@@ -27,7 +27,7 @@ class _MemRepo(NodeRepository):
     def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
         return {nid: self.records[nid] for nid in node_ids if nid in self.records}
 
-    def insert_sentinel(self, sentinel_id: str, node_ids) -> None:
+    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
         self.sentinels.append((sentinel_id, list(node_ids)))
 
 
