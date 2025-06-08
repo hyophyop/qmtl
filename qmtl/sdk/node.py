@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import json
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import numpy as np
@@ -102,9 +103,22 @@ class NodeCache:
 class Node:
     """Represents a processing node in a strategy DAG."""
 
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_inputs(inp: Node | Iterable[Node] | Mapping[str, Node] | None) -> list[Node]:
+        if inp is None:
+            return []
+        if isinstance(inp, Node):
+            return [inp]
+        if isinstance(inp, Mapping):
+            return list(inp.values())
+        if isinstance(inp, Iterable):
+            return list(inp)
+        raise TypeError("invalid input type")
+
     def __init__(
         self,
-        input: Node | None = None,
+        input: Node | Iterable[Node] | Mapping[str, Node] | None = None,
         compute_fn=None,
         name: str | None = None,
         interval: int | None = None,
@@ -114,6 +128,7 @@ class Node:
         schema: dict | None = None,
     ) -> None:
         self.input = input
+        self.inputs = self._normalize_inputs(input)
         self.compute_fn = compute_fn
         self.name = name
         self.interval = interval
@@ -218,7 +233,7 @@ class Node:
             "interval": self.interval,
             "period": self.period,
             "tags": list(self.tags),
-            "inputs": [self.input.node_id] if self.input else [],
+            "inputs": [n.node_id for n in self.inputs],
             "code_hash": self.code_hash,
             "schema_hash": self.schema_hash,
             "pre_warmup": self.pre_warmup,

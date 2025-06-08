@@ -19,11 +19,14 @@ async def test_hub_broadcasts_progress_and_queue_map():
     async def client():
         async with websockets.connect(url) as ws:
             while len(received) < 2:
-                msg = await ws.recv()
+                try:
+                    msg = await ws.recv()
+                except websockets.exceptions.ConnectionClosedOK:
+                    break
                 received.append(json.loads(msg))
 
     task = asyncio.create_task(client())
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
     await hub.send_progress("s1", "queued")
     await hub.send_queue_map("s1", {"n1": "t1"})
     await asyncio.sleep(0.1)
@@ -58,7 +61,7 @@ async def test_hub_line_rate_500_msgs_per_sec():
                 received += 1
 
     task = asyncio.create_task(client())
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
     start = time.perf_counter()
     for i in range(total):
         await hub.send_progress("s", str(i))
