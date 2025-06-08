@@ -65,6 +65,27 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
     assert '"q": "t"' in out
 
 
+def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
+    called = {}
+
+    class Stub:
+        def __init__(self, channel):
+            pass
+
+        async def RedoDiff(self, request):
+            called["sentinel"] = request.sentinel_id
+            return dagmanager_pb2.DiffResult(queue_map={"q": "t"}, sentinel_id=request.sentinel_id)
+
+    monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
+    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+    path = tmp_path / "dag.json"
+    path.write_text("{}")
+    main(["redo-diff", "--sentinel", "v1", "--file", str(path)])
+    out = capsys.readouterr().out
+    assert called["sentinel"] == "v1"
+    assert '"q": "t"' in out
+
+
 def test_cli_export_schema(monkeypatch, tmp_path):
     captured = {}
 

@@ -50,10 +50,12 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         gc: GarbageCollector | None = None,
         admin: KafkaAdmin | None = None,
         repo: Neo4jNodeRepository | None = None,
+        diff: DiffService | None = None,
     ) -> None:
         self._gc = gc
         self._admin = admin
         self._repo = repo
+        self._diff = diff
 
     async def Cleanup(
         self,
@@ -91,6 +93,20 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         return dagmanager_pb2.QueueStats(sizes=sizes)
 
     async def RedoDiff(
+        self,
+        request: dagmanager_pb2.RedoDiffRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> dagmanager_pb2.DiffResult:
+        if self._diff is None:
+            return dagmanager_pb2.DiffResult()
+        chunk = self._diff.diff(
+            DiffRequest(strategy_id=request.sentinel_id, dag_json=request.dag_json)
+        )
+        return dagmanager_pb2.DiffResult(
+            queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
+        )
+
+        AdminServiceServicer(gc, admin, repo, diff_service), server
         self,
         request: dagmanager_pb2.RedoDiffRequest,
         context: grpc.aio.ServicerContext,
