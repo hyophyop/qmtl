@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in dagmanager_pb2_grpc.py depends on'
+        + f' but the generated code in qmtl/proto/dagmanager_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -188,6 +188,11 @@ class AdminServiceStub(object):
                 request_serializer=dagmanager__pb2.QueueStatsRequest.SerializeToString,
                 response_deserializer=dagmanager__pb2.QueueStats.FromString,
                 _registered_method=True)
+        self.RedoDiff = channel.unary_unary(
+                '/qmtl.dagmanager.AdminService/RedoDiff',
+                request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.DiffResult.FromString,
+                _registered_method=True)
 
 
 class AdminServiceServicer(object):
@@ -205,6 +210,12 @@ class AdminServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RedoDiff(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AdminServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -217,6 +228,11 @@ def add_AdminServiceServicer_to_server(servicer, server):
                     servicer.GetQueueStats,
                     request_deserializer=dagmanager__pb2.QueueStatsRequest.FromString,
                     response_serializer=dagmanager__pb2.QueueStats.SerializeToString,
+            ),
+            'RedoDiff': grpc.unary_unary_rpc_method_handler(
+                    servicer.RedoDiff,
+                    request_deserializer=dagmanager__pb2.RedoDiffRequest.FromString,
+                    response_serializer=dagmanager__pb2.DiffResult.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -273,6 +289,33 @@ class AdminService(object):
             '/qmtl.dagmanager.AdminService/GetQueueStats',
             dagmanager__pb2.QueueStatsRequest.SerializeToString,
             dagmanager__pb2.QueueStats.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RedoDiff(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/qmtl.dagmanager.AdminService/RedoDiff',
+            dagmanager__pb2.RedoDiffRequest.SerializeToString,
+            dagmanager__pb2.DiffResult.FromString,
             options,
             channel_credentials,
             insecure,
