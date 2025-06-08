@@ -38,11 +38,44 @@ class FakeDriver:
 
 
 class FakeAdmin:
-    def __init__(self):
+    def __init__(self, topics=None):
         self.created = []
+        self.topics = topics or {}
 
     def list_topics(self):
-        return {}
+@pytest.mark.asyncio
+async def test_grpc_redo_diff(monkeypatch):
+    called = {}
+
+    from qmtl.dagmanager.diff_service import DiffChunk, DiffRequest
+
+    class DummyDiff:
+        def __init__(self, *a, **k):
+            pass
+
+        def diff(self, request: DiffRequest):
+            called["sid"] = request.strategy_id
+            return DiffChunk(queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel")
+
+    monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.RedoDiffRequest(sentinel_id="v2", dag_json="{}")
+        resp = await stub.RedoDiff(req)
+    await server.stop(None)
+
+    assert called["sid"] == "v2"
+    assert dict(resp.queue_map)["x"] == "t"
+    assert resp.sentinel_id == "v2-sentinel"
+
+
+        return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
         self.created.append((name, num_partitions, replication_factor, config))
@@ -218,7 +251,23 @@ async def test_grpc_tag_query():
     await server.stop(None)
     assert list(resp.queues) == ["q1", "q2"]
 
+    
+@pytest.mark.asyncio
+async def test_grpc_queue_stats():
+    driver = FakeDriver()
+    driver.session_obj = FakeSession([{"topic": "topic1"}])
+    admin = FakeAdmin({"topic1": {"size": 3}, "topic2": {"size": 5}})
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.QueueStatsRequest(filter="tag=t;interval=60")
+        resp = await stub.GetQueueStats(req)
+    await server.stop(None)
+    assert dict(resp.sizes) == {"topic1": 3}
 
+    
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic(monkeypatch):
     weights: dict[str, float] = {}

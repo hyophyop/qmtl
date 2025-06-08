@@ -56,6 +56,17 @@ message RedoDiffRequest {
 message DiffResult {
   map<string,string> queue_map = 1;
   string sentinel_id = 2;
+  rpc RedoDiff(RedoDiffRequest) returns (DiffResult);
+}
+
+message RedoDiffRequest {
+  string sentinel_id = 1;
+  string dag_json = 2;
+}
+
+message DiffResult {
+  map<string,string> queue_map = 1;
+  string sentinel_id = 2;
 }
 
 message PingRequest {}

@@ -193,6 +193,22 @@ class AdminServiceStub(object):
                 request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
                 response_deserializer=dagmanager__pb2.DiffResult.FromString,
                 _registered_method=True)
+    def RedoDiff(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+            'RedoDiff': grpc.unary_unary_rpc_method_handler(
+                    servicer.RedoDiff,
+                    request_deserializer=dagmanager__pb2.RedoDiffRequest.FromString,
+                    response_serializer=dagmanager__pb2.DiffResult.SerializeToString,
+            ),
+        self.RedoDiff = channel.unary_unary(
+                '/qmtl.dagmanager.AdminService/RedoDiff',
+                request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.DiffResult.FromString,
+                _registered_method=True)
 
 
 class AdminServiceServicer(object):
@@ -259,6 +275,33 @@ class AdminService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
+    @staticmethod
+    def RedoDiff(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/qmtl.dagmanager.AdminService/RedoDiff',
+            dagmanager__pb2.RedoDiffRequest.SerializeToString,
+            dagmanager__pb2.DiffResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
             '/qmtl.dagmanager.AdminService/Cleanup',
             dagmanager__pb2.CleanupRequest.SerializeToString,
             dagmanager__pb2.CleanupResponse.FromString,

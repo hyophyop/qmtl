@@ -157,11 +157,12 @@ class FakeDriver:
 
 
 class FakeAdmin:
-    def __init__(self):
+    def __init__(self, topics=None):
         self.created = []
+        self.topics = topics or {}
 
     def list_topics(self):
-        return {}
+        return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
         self.created.append((name, num_partitions, replication_factor, config))

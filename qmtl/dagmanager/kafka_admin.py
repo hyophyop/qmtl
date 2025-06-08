@@ -3,7 +3,7 @@ from __future__ import annotations
 """Simple Kafka Admin wrapper for idempotent topic creation."""
 
 from dataclasses import dataclass
-from typing import Protocol, Mapping
+from typing import Protocol, Mapping, Dict
 
 from .topic import TopicConfig
 
@@ -45,6 +45,20 @@ class KafkaAdmin:
         except TopicExistsError:
             # another admin may have created the topic concurrently
             pass
+
+    def get_topic_sizes(self) -> Dict[str, int]:
+        """Return approximate message count per topic."""
+        stats: Dict[str, int] = {}
+        for name, meta in self.client.list_topics().items():
+            size = meta.get("size")
+            offsets = meta.get("offsets")
+            if size is None and isinstance(offsets, Mapping):
+                high = offsets.get("high", 0)
+                low = offsets.get("low", 0)
+                size = high - low
+            if size is not None:
+                stats[name] = int(size)
+        return stats
 
 
 __all__ = ["KafkaAdmin", "AdminClient", "TopicExistsError"]

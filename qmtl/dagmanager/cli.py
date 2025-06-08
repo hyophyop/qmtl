@@ -89,6 +89,24 @@ async def _cmd_redo_diff(args: argparse.Namespace) -> None:
     req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
     resp = await stub.RedoDiff(req)
     await channel.close()
+    print(
+        json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id})
+    )
+
+
+    p_rdiff = sub.add_parser("redo-diff", help="Redo diff for sentinel")
+    p_rdiff.add_argument("--sentinel", required=True)
+    p_rdiff.add_argument("--file", required=True)
+
+    elif args.cmd == "redo-diff":
+        asyncio.run(_cmd_redo_diff(args))
+async def _cmd_redo_diff(args: argparse.Namespace) -> None:
+    data = Path(args.file).read_text()
+    channel = grpc.aio.insecure_channel(args.target)
+    stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+    req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
+    resp = await stub.RedoDiff(req)
+    await channel.close()
     print(json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id}))
 
 
