@@ -230,7 +230,10 @@ def create_app(
         async def streamer():
             try:
                 initial = await dagm.get_queues_by_tag(tag_list, interval)
-            except Exception:
+            except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
+                # It's good practice to log this error for observability
+                # import logging
+                # logging.warning(f"Failed to get initial queues for tags='{tag_list}' interval={interval}: {e}")
                 initial = []
             yield json.dumps({"queues": initial}) + "\n"
             async for queues in watch.subscribe(tag_list, interval):
