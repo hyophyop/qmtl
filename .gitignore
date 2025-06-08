@@ -83,3 +83,4 @@ coverage.xml
 # Ignore compiled proto files
 *.pb2.py
 *.pb2_grpc.py
+uv.lock
