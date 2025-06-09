@@ -64,6 +64,20 @@ orphan_queue_total = Gauge(
     registry=registry,
 )
 
+active_version_weight = Gauge(
+    "dagmgr_active_version_weight",
+    "Traffic weight for active DAG version",
+    ["version"],
+    registry=registry,
+)
+active_version_weight._vals = {}  # type: ignore[attr-defined]
+
+
+def set_active_version_weight(version: str, weight: float) -> None:
+    """Record the live traffic weight for a version."""
+    active_version_weight.labels(version=version).set(weight)
+    active_version_weight._vals[version] = weight  # type: ignore[attr-defined]
+
 
 def observe_diff_duration(duration_ms: float) -> None:
     """Record a diff duration and update the p95 gauge."""
@@ -116,3 +130,5 @@ def reset_metrics() -> None:
     sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
+    active_version_weight._metrics.clear()  # type: ignore[attr-defined]
+    active_version_weight._vals = {}  # type: ignore[attr-defined]
