@@ -239,6 +239,7 @@ async def test_grpc_queue_stats():
     
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic(monkeypatch):
+    metrics.reset_metrics()
     weights: dict[str, float] = {}
     captured: dict = {}
 
@@ -267,10 +268,14 @@ async def test_http_sentinel_traffic(monkeypatch):
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
     assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.7
+    assert captured["type"] == "sentinel_weight"
+    assert captured["data"]["sentinel_id"] == "v1"
+    assert captured["data"]["weight"] == 0.7
 
 
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic_overwrite():
+    metrics.reset_metrics()
     weights = {"v1": 0.1}
     metrics.reset_metrics()
     app = create_app(weights=weights)
@@ -282,3 +287,4 @@ async def test_http_sentinel_traffic_overwrite():
         )
     assert weights["v1"] == 0.4
     assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.4
+    assert metrics.active_version_weight._vals["v1"] == 0.4

@@ -6,7 +6,13 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import Gauge, Counter, CollectorRegistry, generate_latest, start_http_server
+from prometheus_client import (
+    Gauge,
+    Counter,
+    CollectorRegistry,
+    generate_latest,
+    start_http_server,
+)
 
 registry = CollectorRegistry()
 
@@ -23,6 +29,7 @@ lost_requests_total = Counter(
     "Total number of diff submissions lost due to queue errors",
     registry=registry,
 )
+
 
 # Track the percentage of traffic routed to each sentinel version
 gateway_sentinel_traffic_ratio = Gauge(

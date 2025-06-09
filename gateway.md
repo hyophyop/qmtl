@@ -129,3 +129,5 @@ Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG 
 Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
 
 When resolving `TagQueryNode` dependencies, Gateway queries DAG-Manager for all queues matching `(tags, interval)` and returns the resulting mapping to the SDK so that only nodes lacking upstream queues execute locally.
+
+Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.

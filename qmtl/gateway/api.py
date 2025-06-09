@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 import base64
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -19,6 +20,8 @@ from . import metrics as gw_metrics
 from .watch import QueueWatchHub
 from .ws import WebSocketHub
 _INITIAL_STATUS = "queued"
+
+logger = logging.getLogger(__name__)
 
 
 class StrategySubmit(BaseModel):
@@ -249,6 +252,16 @@ def create_app(
                 if weight is not None:
                     await ws.send_sentinel_weight(sid, weight)
                     gw_metrics.set_sentinel_traffic_ratio(sid, weight)
+                    if 0.0 <= weight <= 1.0:
+                        await ws.send_sentinel_weight(sid, weight)
+                        gw_metrics.set_sentinel_traffic_ratio(sid, weight)
+                    else:
+                        logger.warning(
+                            "Ignoring out-of-range sentinel weight %s for %s",
+                            weight,
+                            sid,
+                        )
+
         return {"ok": True}
 
     @app.get("/queues/by_tag")

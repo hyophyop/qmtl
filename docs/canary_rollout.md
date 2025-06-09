@@ -1,6 +1,6 @@
 # Canary Rollout Guide
 
-This document explains how to gradually shift traffic between strategy versions using the `DAG‑Mgr` callback endpoint `/callbacks/sentinel-traffic`.
+This document explains how to gradually shift traffic between strategy versions using the `DAG‑Mgr` callback endpoint `/callbacks/sentinel-traffic`. See [../dag-manager.md](../dag-manager.md) for the full API specification and [../gateway.md](../gateway.md) for how Gateway processes `sentinel_weight` events.
 
 ## Adjusting Weights
 
