@@ -64,13 +64,19 @@ orphan_queue_total = Gauge(
     registry=registry,
 )
 
-
-# Expose the active traffic weight per version
-dagmgr_active_version_weight = Gauge(
-    "dagmgr_active_version_weight",
-    "Traffic weight applied to a strategy version",
-    ["version"],
-    registry=registry,
+# Expose the active traffic weight per version. Guard against duplicate
+# registration when this module is reloaded during tests.
+if "dagmgr_active_version_weight" in registry._names_to_collectors:
+    dagmgr_active_version_weight = registry._names_to_collectors[
+        "dagmgr_active_version_weight"
+    ]
+else:
+    dagmgr_active_version_weight = Gauge(
+        "dagmgr_active_version_weight",
+        "Traffic weight applied to a strategy version",
+        ["version"],
+        registry=registry,
+    )
 )
 dagmgr_active_version_weight._vals = {}  # type: ignore[attr-defined]
 

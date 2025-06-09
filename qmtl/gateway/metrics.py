@@ -6,13 +6,19 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import (
-    Gauge,
-    Counter,
-    CollectorRegistry,
-    generate_latest,
-    start_http_server,
-)
+# Track the percentage of traffic routed to each sentinel version. Avoid
+# duplicate registration if this module is reloaded.
+if "gateway_sentinel_traffic_ratio" in registry._names_to_collectors:
+    gateway_sentinel_traffic_ratio = registry._names_to_collectors[
+        "gateway_sentinel_traffic_ratio"
+    ]
+else:
+    gateway_sentinel_traffic_ratio = Gauge(
+        "gateway_sentinel_traffic_ratio",
+        "Observed traffic ratio for a sentinel version",
+        ["version"],
+        registry=registry,
+    )
 
 registry = CollectorRegistry()
 
