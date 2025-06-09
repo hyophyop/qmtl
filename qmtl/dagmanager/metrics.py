@@ -70,13 +70,18 @@ active_version_weight = Gauge(
     ["version"],
     registry=registry,
 )
-active_version_weight._vals = {}  # type: ignore[attr-defined]
+active_version_weight = Gauge(
+    "dagmgr_active_version_weight",
+    "Traffic weight for active DAG version",
+    ["version"],
+    registry=registry,
+)
 
 
 def set_active_version_weight(version: str, weight: float) -> None:
     """Record the live traffic weight for a version."""
     active_version_weight.labels(version=version).set(weight)
-    active_version_weight._vals[version] = weight  # type: ignore[attr-defined]
+
 
 
 def observe_diff_duration(duration_ms: float) -> None:
