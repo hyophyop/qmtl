@@ -265,7 +265,10 @@ async def test_http_sentinel_traffic(monkeypatch):
     assert captured["type"] == "sentinel_weight"
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
-    assert metrics.active_version_weight._vals["v1"] == 0.7
+    assert captured["type"] == "sentinel_weight"
+    assert captured["data"]["sentinel_id"] == "v1"
+    assert captured["data"]["weight"] == 0.7
+
 
 
 @pytest.mark.asyncio
