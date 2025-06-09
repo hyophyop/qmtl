@@ -102,6 +102,9 @@ CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | D→G | HTTP  | `/callbacks/sentinel-traffic` | version, weight | 202                | 3×                 | 카나리아 비율 변경       |
 |     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](docs/canary_rollout.md) 참조 |
 
+### 2-B. Sentinel Traffic API
+
+`/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmgr_active_version_weight{version="<id>"}`로 노출된다.
 ---
 
 ## 3. 큐 생성 & 명명 규칙 (확장)
