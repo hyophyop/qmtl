@@ -241,7 +241,7 @@ def create_app(
         elif event_type == "sentinel_weight" and ws is not None:
             sid = data.get("sentinel_id")
             weight = data.get("weight")
-            if sid is not None and weight is not None:
+            if isinstance(sid, str) and sid and weight is not None:
                 try:
                     weight = float(weight)
                 except (TypeError, ValueError):
