@@ -31,20 +31,34 @@ class NodeCache:
         )
         self._last_ts: dict[tuple[str, int], int | None] = {}
         self._missing: dict[tuple[str, int], bool] = {}
+        # Pre-computed index mappings and fill counters for readiness checks
+        self._u_idx: dict[str, int] = {}
+        self._i_idx: dict[int, int] = {}
+        self._filled: dict[tuple[str, int], int] = {}
 
     # ------------------------------------------------------------------
     def _ensure_coords(self, u: str, interval: int) -> None:
-        if u not in self._tensor.coords["u"]:
+        if u not in self._u_idx:
             self._tensor = self._tensor.reindex(
                 u=list(self._tensor.coords["u"].values) + [u], fill_value=None
             )
+            # reindex returns read-only memory -> copy to enable mutation
+            self._tensor = xr.DataArray(
+                self._tensor.data.copy(), dims=self._tensor.dims, coords=self._tensor.coords
+            )
+            self._u_idx[u] = len(self._tensor.coords["u"]) - 1
         if (u, interval) not in self._last_ts:
             self._last_ts[(u, interval)] = None  # type: ignore[assignment]
             self._missing[(u, interval)] = False
-        if interval not in self._tensor.coords["i"]:
+            self._filled[(u, interval)] = 0
+        if interval not in self._i_idx:
             self._tensor = self._tensor.reindex(
                 i=list(self._tensor.coords["i"].values) + [interval], fill_value=None
             )
+            self._tensor = xr.DataArray(
+                self._tensor.data.copy(), dims=self._tensor.dims, coords=self._tensor.coords
+            )
+            self._i_idx[interval] = len(self._tensor.coords["i"]) - 1
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
@@ -55,29 +69,35 @@ class NodeCache:
         else:
             self._missing[(u, interval)] = False
         self._last_ts[(u, interval)] = timestamp
-        u_idx = int(np.where(self._tensor.coords["u"] == u)[0])
-        i_idx = int(np.where(self._tensor.coords["i"] == interval)[0])
-        data = self._tensor.data.copy()
-        arr = data[u_idx, i_idx]
-        arr = np.roll(arr, -1, axis=0)
+        u_idx = self._u_idx[u]
+        i_idx = self._i_idx[interval]
+        arr = self._tensor.data[u_idx, i_idx]
+        arr[:-1] = arr[1:]
         arr[-1, 0] = timestamp
         arr[-1, 1] = payload
-        data[u_idx, i_idx] = arr
-        self._tensor = xr.DataArray(data, dims=self._tensor.dims, coords=self._tensor.coords)
+        self._tensor.data[u_idx, i_idx] = arr
+        filled = self._filled.get((u, interval), 0)
+        if filled < self.period:
+            filled += 1
+        self._filled[(u, interval)] = filled
 
     # ------------------------------------------------------------------
     def ready(self) -> bool:
-        if not self._tensor.coords["u"].size or not self._tensor.coords["i"].size:
+        if not self._u_idx or not self._i_idx:
             return False
-        ts = self._tensor.isel(f=0).values
-        return not ((ts == None).any())  # noqa: E711
+        for key, count in self._filled.items():
+            if count < self.period:
+                return False
+        return True
 
     def snapshot(self) -> dict[str, dict[int, list[tuple[int, Any]]]]:
         result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
         for u in self._tensor.coords["u"].values:
+            u_idx = self._u_idx[u]
             result[u] = {}
             for i in self._tensor.coords["i"].values:
-                slice_ = self._tensor.loc[dict(u=u, i=i)].values
+                i_idx = self._i_idx[i]
+                slice_ = self._tensor.data[u_idx, i_idx]
                 result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
         return result
 
