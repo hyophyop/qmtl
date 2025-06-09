@@ -6,7 +6,13 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import Gauge, Counter, CollectorRegistry, generate_latest, start_http_server
+from prometheus_client import (
+    Gauge,
+    Counter,
+    CollectorRegistry,
+    generate_latest,
+    start_http_server,
+)
 
 registry = CollectorRegistry()
 
@@ -23,6 +29,19 @@ lost_requests_total = Counter(
     "Total number of diff submissions lost due to queue errors",
     registry=registry,
 )
+
+# Traffic ratio for each sentinel version.
+gateway_sentinel_traffic_ratio = Gauge(
+    "gateway_sentinel_traffic_ratio",
+    "Traffic weight applied to a sentinel version",
+    ["version"],
+    registry=registry,
+)
+
+
+def set_sentinel_traffic_ratio(version: str, ratio: float) -> None:
+    """Record the routing ratio for a sentinel version."""
+    gateway_sentinel_traffic_ratio.labels(version=version).set(ratio)
 
 
 def observe_gateway_latency(duration_ms: float) -> None:
@@ -53,3 +72,4 @@ def reset_metrics() -> None:
     gateway_e2e_latency_p95._val = 0  # type: ignore[attr-defined]
     lost_requests_total._value.set(0)  # type: ignore[attr-defined]
     lost_requests_total._val = 0  # type: ignore[attr-defined]
+    gateway_sentinel_traffic_ratio.clear()
