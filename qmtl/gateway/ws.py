@@ -101,5 +101,14 @@ class WebSocketHub:
         )
         await self.broadcast(event)
 
+    async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
+        """Broadcast sentinel weight updates."""
+        event = format_event(
+            "qmtl.gateway",
+            "sentinel_weight",
+            {"sentinel_id": sentinel_id, "weight": weight},
+        )
+        await self.broadcast(event)
+
 
 __all__ = ["WebSocketHub"]

@@ -17,6 +17,7 @@ from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
 from . import metrics as gw_metrics
 from .watch import QueueWatchHub
+from .ws import WebSocketHub
 _INITIAL_STATUS = "queued"
 
 
@@ -174,6 +175,7 @@ def create_app(
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
     watch_hub: Optional[QueueWatchHub] = None,
+    ws_hub: Optional[WebSocketHub] = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -183,6 +185,7 @@ def create_app(
     manager = StrategyManager(redis=r, database=db, fsm=fsm)
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
     watch = watch_hub or QueueWatchHub()
+    ws = ws_hub
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
@@ -235,6 +238,16 @@ def create_app(
                     interval = None
             if tags and interval is not None:
                 await watch.broadcast(tags, interval, list(queues))
+        elif event_type == "sentinel_weight" and ws is not None:
+            sid = data.get("sentinel_id")
+            weight = data.get("weight")
+            if sid is not None and weight is not None:
+                try:
+                    weight = float(weight)
+                except (TypeError, ValueError):
+                    weight = None
+                if weight is not None:
+                    await ws.send_sentinel_weight(sid, weight)
         return {"ok": True}
 
     @app.get("/queues/by_tag")

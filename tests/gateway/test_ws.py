@@ -96,3 +96,26 @@ async def test_hub_logs_send_errors(caplog):
     assert any(
         "Failed to send message to client" in record.message for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_hub_sends_sentinel_weight():
+    hub = WebSocketHub()
+    port = await hub.start()
+    url = f"ws://localhost:{port}"
+    received = []
+
+    async def client():
+        async with websockets.connect(url) as ws:
+            msg = await ws.recv()
+            received.append(json.loads(msg))
+
+    task = asyncio.create_task(client())
+    await asyncio.sleep(0.1)
+    await hub.send_sentinel_weight("s1", 0.5)
+    await asyncio.sleep(0.1)
+    await hub.stop()
+    await task
+
+    assert received[0]["type"] == "sentinel_weight"
+    assert received[0]["data"] == {"sentinel_id": "s1", "weight": 0.5}
