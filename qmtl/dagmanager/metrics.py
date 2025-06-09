@@ -135,5 +135,7 @@ def reset_metrics() -> None:
     sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
-    active_version_weight._metrics.clear()  # type: ignore[attr-defined]
-    active_version_weight._vals = {}  # type: ignore[attr-defined]
+    sentinel_gap_count._val = 0  # type: ignore[attr-defined]
+    orphan_queue_total.set(0)
+    orphan_queue_total._val = 0  # type: ignore[attr-defined]
+
