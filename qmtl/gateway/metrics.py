@@ -24,6 +24,21 @@ lost_requests_total = Counter(
     registry=registry,
 )
 
+# Track the percentage of traffic routed to each sentinel version
+gateway_sentinel_traffic_ratio = Gauge(
+    "gateway_sentinel_traffic_ratio",
+    "Observed traffic ratio for a sentinel version",
+    ["version"],
+    registry=registry,
+)
+gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
+
+
+def set_sentinel_traffic_ratio(version: str, ratio: float) -> None:
+    """Update the live traffic ratio for a sentinel version."""
+    gateway_sentinel_traffic_ratio.labels(version=version).set(ratio)
+    gateway_sentinel_traffic_ratio._vals[version] = ratio  # type: ignore[attr-defined]
+
 
 def observe_gateway_latency(duration_ms: float) -> None:
     """Record a request latency and update the p95 gauge."""
@@ -53,3 +68,6 @@ def reset_metrics() -> None:
     gateway_e2e_latency_p95._val = 0  # type: ignore[attr-defined]
     lost_requests_total._value.set(0)  # type: ignore[attr-defined]
     lost_requests_total._val = 0  # type: ignore[attr-defined]
+    gateway_sentinel_traffic_ratio.clear()
+    gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
+

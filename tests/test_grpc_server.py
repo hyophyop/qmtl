@@ -8,6 +8,7 @@ import httpx
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.http_server import create_app
+from qmtl.dagmanager import metrics
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -241,6 +242,8 @@ async def test_http_sentinel_traffic(monkeypatch):
     weights: dict[str, float] = {}
     captured: dict = {}
 
+    metrics.reset_metrics()
+
     async def mock_post(url, json, **_):
         captured.update(json)
         return httpx.Response(202)
@@ -263,11 +266,13 @@ async def test_http_sentinel_traffic(monkeypatch):
     assert captured["type"] == "sentinel_weight"
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
+    assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.7
 
 
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic_overwrite():
     weights = {"v1": 0.1}
+    metrics.reset_metrics()
     app = create_app(weights=weights)
     transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -276,3 +281,4 @@ async def test_http_sentinel_traffic_overwrite():
             json={"version": "v1", "weight": 0.4},
         )
     assert weights["v1"] == 0.4
+    assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.4

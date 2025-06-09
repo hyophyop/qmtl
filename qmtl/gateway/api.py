@@ -248,6 +248,7 @@ def create_app(
                     weight = None
                 if weight is not None:
                     await ws.send_sentinel_weight(sid, weight)
+                    gw_metrics.set_sentinel_traffic_ratio(sid, weight)
         return {"ok": True}
 
     @app.get("/queues/by_tag")

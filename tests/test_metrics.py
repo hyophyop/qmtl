@@ -53,12 +53,14 @@ def test_metrics_exposed():
     metrics.queue_create_error_total.inc()
     metrics.orphan_queue_total.set(2)
     metrics.sentinel_gap_count.inc()
+    metrics.set_active_version_weight("v1", 0.4)
 
     data = metrics.collect_metrics()
     assert "diff_duration_ms_p95" in data
     assert "queue_create_error_total" in data
     assert "orphan_queue_total" in data
     assert "sentinel_gap_count" in data
+    assert "dagmgr_active_version_weight" in data
 
 
 def test_diff_duration_and_error_metrics():

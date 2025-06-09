@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
+from . import metrics
 
 
 class WeightUpdate(BaseModel):
@@ -25,6 +26,7 @@ def create_app(
     @app.post("/callbacks/sentinel-traffic", status_code=status.HTTP_202_ACCEPTED)
     async def sentinel_traffic(update: WeightUpdate):
         store[update.version] = update.weight
+        metrics.set_active_version_weight(update.version, update.weight)
         if gateway_url:
             event = format_event(
                 "qmtl.dagmanager",
