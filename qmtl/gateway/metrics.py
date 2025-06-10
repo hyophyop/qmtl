@@ -6,6 +6,7 @@ from collections import deque
 from typing import Deque
 import time
 
+# Initialize the registry before referencing it below.
 # Track the percentage of traffic routed to each sentinel version. Avoid
 # duplicate registration if this module is reloaded.
 if "gateway_sentinel_traffic_ratio" in registry._names_to_collectors:

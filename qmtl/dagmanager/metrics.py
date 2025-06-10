@@ -66,6 +66,8 @@ orphan_queue_total = Gauge(
 
 # Expose the active traffic weight per version. Guard against duplicate
 # registration when this module is reloaded during tests.
+# Use the existing collector if it is already registered to avoid
+# Prometheus errors on module reload.
 if "dagmgr_active_version_weight" in registry._names_to_collectors:
     dagmgr_active_version_weight = registry._names_to_collectors[
         "dagmgr_active_version_weight"
