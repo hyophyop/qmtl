@@ -1,4 +1,5 @@
 import pytest
+import xarray as xr
 from qmtl.sdk import Node, StreamInput, Runner, NodeCache
 
 
@@ -88,4 +89,33 @@ def test_on_missing_policy_skip_and_fail():
     Runner.feed_queue_data(node2, "q1", 60, 1, {"v": 1})
     with pytest.raises(RuntimeError):
         Runner.feed_queue_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
+
+
+def test_latest_and_get_slice_list():
+    cache = NodeCache(period=3)
+    cache.append("u1", 60, 1, {"v": 1})
+    assert cache.latest("u1", 60) == (1, {"v": 1})
+    cache.append("u1", 60, 2, {"v": 2})
+    assert cache.latest("u1", 60) == (2, {"v": 2})
+
+    # Request more items than cached -> only existing returned
+    assert cache.get_slice("u1", 60, count=5) == [
+        (1, {"v": 1}),
+        (2, {"v": 2}),
+    ]
+
+    # Unknown upstream -> empty result
+    assert cache.latest("unknown", 60) is None
+    assert cache.get_slice("unknown", 60, count=2) == []
+
+
+def test_get_slice_xarray():
+    cache = NodeCache(period=4)
+    for ts in range(1, 5):
+        cache.append("u1", 60, ts, {"v": ts})
+
+    da = cache.get_slice("u1", 60, start=1, end=3)
+    assert isinstance(da, xr.DataArray)
+    assert da.shape == (2, 2)
+    assert list(da[:, 0].astype(int)) == [2, 3]
 

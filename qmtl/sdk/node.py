@@ -119,6 +119,67 @@ class NodeCache:
                 result[u][i] = self._last_ts.get((u, i))
         return result
 
+    # ------------------------------------------------------------------
+    def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
+        """Return the most recent ``(timestamp, payload)`` for a pair."""
+        u_idx = self._u_idx.get(u)
+        i_idx = self._i_idx.get(interval)
+        if u_idx is None or i_idx is None:
+            return None
+        if self._filled.get((u, interval), 0) == 0:
+            return None
+        arr = self._tensor.data[u_idx, i_idx]
+        ts = arr[-1, 0]
+        if ts is None:
+            return None
+        return int(ts), arr[-1, 1]
+
+    def get_slice(
+        self,
+        u: str,
+        interval: int,
+        *,
+        count: int | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ):
+        """Return a windowed slice for ``(u, interval)``.
+
+        If ``count`` is given a ``list`` of the latest ``count`` items is
+        returned. Otherwise an ``xarray.DataArray`` slice from ``start`` to
+        ``end`` along the period dimension is provided. Unknown upstreams or
+        intervals yield an empty result.
+        """
+
+        u_idx = self._u_idx.get(u)
+        i_idx = self._i_idx.get(interval)
+        if u_idx is None or i_idx is None:
+            if count is not None:
+                return []
+            return xr.DataArray(
+                np.empty((0, 2), dtype=object),
+                dims=("p", "f"),
+                coords={"p": [], "f": ["t", "v"]},
+            )
+
+        arr = self._tensor.sel(u=u, i=interval)
+
+        if count is not None:
+            if count <= 0:
+                return []
+            subset = arr.isel(p=slice(-count, None)).data
+            return [(int(t), v) for t, v in subset if t is not None]
+
+        slice_start = start if start is not None else 0
+        slice_end = end if end is not None else self.period
+
+        slice_start = max(0, slice_start + self.period if slice_start < 0 else slice_start)
+        slice_end = max(0, slice_end + self.period if slice_end < 0 else slice_end)
+        slice_start = min(self.period, slice_start)
+        slice_end = min(self.period, slice_end)
+
+        return arr.isel(p=slice(slice_start, slice_end))
+
 
 class Node:
     """Represents a processing node in a strategy DAG.
