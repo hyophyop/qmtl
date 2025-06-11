@@ -6,9 +6,7 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import Gauge, Counter, CollectorRegistry, generate_latest, start_http_server
-
-registry = CollectorRegistry()
+from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
 
 # Metrics defined in documentation
 # 95th percentile diff duration in milliseconds
@@ -17,13 +15,13 @@ _diff_samples: Deque[float] = deque(maxlen=100)
 diff_duration_ms_p95 = Gauge(
     "diff_duration_ms_p95",
     "95th percentile duration of diff processing in milliseconds",
-    registry=registry,
+    registry=global_registry,
 )
 
 queue_create_error_total = Counter(
     "queue_create_error_total",
     "Total number of queue creation failures",
-    registry=registry,
+    registry=global_registry,
 )
 # expose value proxy for tests
 class _ValueProxy:
@@ -54,34 +52,32 @@ queue_create_error_total._value = _ValueProxy(queue_create_error_total._raw_valu
 sentinel_gap_count = Gauge(
     "sentinel_gap_count",
     "Number of missing sentinel events detected",
-    registry=registry,
+    registry=global_registry,
 )
 sentinel_gap_count._val = 0  # type: ignore[attr-defined]
 
 orphan_queue_total = Gauge(
     "orphan_queue_total",
     "Number of orphan queues discovered during GC",
-    registry=registry,
+    registry=global_registry,
 )
 
-active_version_weight = Gauge(
-    "dagmgr_active_version_weight",
-    "Traffic weight for active DAG version",
-    ["version"],
-    registry=registry,
-)
-active_version_weight = Gauge(
-    "dagmgr_active_version_weight",
-    "Traffic weight for active DAG version",
-    ["version"],
-    registry=registry,
-)
-
+# Expose the active traffic weight per version. Guard against duplicate
+# registration when this module is reloaded during tests.
+if "active_version_weight" in global_registry._names_to_collectors:
+    active_version_weight = global_registry._names_to_collectors["active_version_weight"]
+else:
+    active_version_weight = Gauge(
+        "active_version_weight",
+        "Live traffic weight seen by Gateway for each model version",
+        ["version"],
+        registry=global_registry,
+    )
+active_version_weight._vals = {}  # type: ignore[attr-defined]
 
 def set_active_version_weight(version: str, weight: float) -> None:
-    """Record the live traffic weight for a version."""
     active_version_weight.labels(version=version).set(weight)
-
+    active_version_weight._vals[version] = weight  # type: ignore[attr-defined]
 
 
 def observe_diff_duration(duration_ms: float) -> None:
@@ -98,7 +94,7 @@ def observe_diff_duration(duration_ms: float) -> None:
 
 def start_metrics_server(port: int = 8000) -> None:
     """Start a background HTTP server to expose metrics."""
-    start_http_server(port, registry=registry)
+    start_http_server(port, registry=global_registry)
 
 
 def _run_forever() -> None:
@@ -121,7 +117,7 @@ if __name__ == "__main__":  # pragma: no cover - CLI entry
 
 def collect_metrics() -> str:
     """Return metrics in text exposition format."""
-    return generate_latest(registry).decode()
+    return generate_latest(global_registry).decode()
 
 
 def reset_metrics() -> None:
@@ -135,7 +131,8 @@ def reset_metrics() -> None:
     sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
-    sentinel_gap_count._val = 0  # type: ignore[attr-defined]
-    orphan_queue_total.set(0)
-    orphan_queue_total._val = 0  # type: ignore[attr-defined]
-
+    if hasattr(active_version_weight, "clear"):
+        active_version_weight.clear()
+    active_version_weight._vals = {}  # type: ignore[attr-defined]
+    if hasattr(active_version_weight, "_metrics"):
+        active_version_weight._metrics.clear()

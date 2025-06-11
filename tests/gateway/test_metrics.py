@@ -33,11 +33,13 @@ def test_metrics_endpoint(app):
     metrics.reset_metrics()
     metrics.lost_requests_total.inc()
     metrics.observe_gateway_latency(42)
+    metrics.set_sentinel_traffic_ratio("v1", 0.5)
     client = TestClient(app)
     resp = client.get("/metrics")
     assert resp.status_code == 200
     assert "lost_requests_total" in resp.text
     assert "gateway_e2e_latency_p95" in resp.text
+    assert "gateway_sentinel_traffic_ratio" in resp.text
 
 
 def test_latency_metric_recorded(app):

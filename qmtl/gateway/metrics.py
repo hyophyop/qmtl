@@ -6,42 +6,40 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import (
-    Gauge,
-    Counter,
-    CollectorRegistry,
-    generate_latest,
-    start_http_server,
-)
-
-registry = CollectorRegistry()
+from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
 
 _e2e_samples: Deque[float] = deque(maxlen=100)
 
 gateway_e2e_latency_p95 = Gauge(
     "gateway_e2e_latency_p95",
     "95th percentile end-to-end latency in milliseconds",
-    registry=registry,
+    registry=global_registry,
 )
 
 lost_requests_total = Counter(
     "lost_requests_total",
     "Total number of diff submissions lost due to queue errors",
-    registry=registry,
-)
-
-# Traffic ratio for each sentinel version.
-gateway_sentinel_traffic_ratio = Gauge(
-    "gateway_sentinel_traffic_ratio",
-    "Traffic weight applied to a sentinel version",
-    ["version"],
-    registry=registry,
+    registry=global_registry,
 )
 
 
-def set_sentinel_traffic_ratio(version: str, ratio: float) -> None:
-    """Record the routing ratio for a sentinel version."""
-    gateway_sentinel_traffic_ratio.labels(version=version).set(ratio)
+# Track the percentage of traffic routed to each sentinel version
+if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
+    gateway_sentinel_traffic_ratio = global_registry._names_to_collectors["gateway_sentinel_traffic_ratio"]
+else:
+    gateway_sentinel_traffic_ratio = Gauge(
+        "gateway_sentinel_traffic_ratio",
+        "Traffic ratio reported by each sentinel instance (0~1)",
+        ["sentinel_id"],
+        registry=global_registry,
+    )
+gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
+
+
+def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
+    """Update the live traffic ratio for a sentinel version."""
+    gateway_sentinel_traffic_ratio.labels(sentinel_id=sentinel_id).set(ratio)
+    gateway_sentinel_traffic_ratio._vals[sentinel_id] = ratio  # type: ignore[attr-defined]
 
 
 def observe_gateway_latency(duration_ms: float) -> None:
@@ -57,12 +55,12 @@ def observe_gateway_latency(duration_ms: float) -> None:
 
 def start_metrics_server(port: int = 8000) -> None:
     """Start an HTTP server to expose metrics."""
-    start_http_server(port, registry=registry)
+    start_http_server(port, registry=global_registry)
 
 
 def collect_metrics() -> str:
     """Return metrics in text exposition format."""
-    return generate_latest(registry).decode()
+    return generate_latest(global_registry).decode()
 
 
 def reset_metrics() -> None:
@@ -73,3 +71,7 @@ def reset_metrics() -> None:
     lost_requests_total._value.set(0)  # type: ignore[attr-defined]
     lost_requests_total._val = 0  # type: ignore[attr-defined]
     gateway_sentinel_traffic_ratio.clear()
+    gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
+    if hasattr(gateway_sentinel_traffic_ratio, "_metrics"):
+        gateway_sentinel_traffic_ratio._metrics.clear()
+
