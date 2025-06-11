@@ -119,6 +119,16 @@ class NodeCache:
                 result[u][i] = self._last_ts.get((u, i))
         return result
 
+    def as_xarray(self) -> xr.DataArray:
+        """Return a read-only ``xarray`` view of the internal tensor.
+
+        Callers must **not** mutate the returned :class:`xarray.DataArray`.
+        """
+        da = self._tensor.copy(deep=False)
+        da.data = da.data.view()
+        da.data.setflags(write=False)
+        return da
+
     # ------------------------------------------------------------------
     def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
         """Return the most recent ``(timestamp, payload)`` for a pair."""
