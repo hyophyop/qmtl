@@ -11,6 +11,8 @@ import numpy as np
 import xarray as xr
 import httpx
 
+from .cache_view import CacheView
+
 from qmtl.dagmanager import compute_node_id
 
 
@@ -100,6 +102,10 @@ class NodeCache:
                 slice_ = self._tensor.data[u_idx, i_idx]
                 result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
         return result
+
+    def view(self) -> CacheView:
+        """Return a :class:`CacheView` built from :meth:`snapshot`."""
+        return CacheView(self.snapshot())
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
         """Return gap flags for all ``(u, interval)`` pairs."""
