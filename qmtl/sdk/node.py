@@ -103,9 +103,13 @@ class NodeCache:
                 result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
         return result
 
-    def view(self) -> CacheView:
-        """Return a :class:`CacheView` built from :meth:`snapshot`."""
-        return CacheView(self.snapshot())
+    def view(self, *, track_access: bool = False) -> CacheView:
+        """Return a :class:`CacheView` built from :meth:`snapshot`.
+
+        When ``track_access`` is ``True`` every accessed ``(upstream_id, interval)``
+        pair is recorded and can be retrieved via :meth:`CacheView.access_log`.
+        """
+        return CacheView(self.snapshot(), track_access=track_access)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
         """Return gap flags for all ``(u, interval)`` pairs."""

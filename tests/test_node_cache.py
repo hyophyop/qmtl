@@ -155,3 +155,17 @@ def test_cache_view_access():
     with pytest.raises(AttributeError):
         _ = view.missing
 
+
+def test_cache_view_access_logging_and_reset():
+    cache = NodeCache(period=2)
+    cache.append("btc_price", 60, 1, {"v": 1})
+
+    view = cache.view(track_access=True)
+    _ = view["btc_price"][60].latest()
+    assert view.access_log() == [("btc_price", 60)]
+
+    view2 = cache.view(track_access=True)
+    assert view2.access_log() == []
+    _ = view2["btc_price"][60]
+    assert view2.access_log() == [("btc_price", 60)]
+
