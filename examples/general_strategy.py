@@ -5,8 +5,8 @@ class GeneralStrategy(Strategy):
     def setup(self):
         price_stream = StreamInput(interval=60, period=30)
 
-        def generate_signal(cache):
-            price = pd.DataFrame([v for _, v in cache[price_stream.node_id][60]])
+        def generate_signal(view):
+            price = pd.DataFrame([v for _, v in view[price_stream][60]])
             momentum = price["close"].pct_change().rolling(5).mean()
             signal = (momentum > 0).astype(int)
             return pd.DataFrame({"signal": signal})

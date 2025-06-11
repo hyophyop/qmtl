@@ -20,8 +20,8 @@ class MyStrategy(Strategy):
     def setup(self):
         price = StreamInput(interval=60, period=30)
 
-        def compute(cache):
-            return cache
+        def compute(view):
+            return view
 
         out = Node(input=price, compute_fn=compute, name="out")
         self.add_nodes([price, out])

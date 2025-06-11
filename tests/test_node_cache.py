@@ -6,8 +6,8 @@ from qmtl.sdk import Node, StreamInput, Runner, NodeCache
 def test_cache_warmup_and_compute():
     calls = []
 
-    def fn(cache):
-        calls.append(cache)
+    def fn(view):
+        calls.append(view)
 
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
@@ -36,8 +36,8 @@ def test_cache_warmup_and_compute():
 def test_multiple_upstreams():
     calls = []
 
-    def fn(cache):
-        calls.append(cache)
+    def fn(view):
+        calls.append(view)
 
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
@@ -73,8 +73,8 @@ def test_gap_detection():
 def test_on_missing_policy_skip_and_fail():
     calls = []
 
-    def fn(cache):
-        calls.append(cache)
+    def fn(view):
+        calls.append(view)
 
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
@@ -154,6 +154,16 @@ def test_cache_view_access():
         _ = view["missing"][60]
     with pytest.raises(AttributeError):
         _ = view.missing
+
+
+def test_cache_view_accepts_node_instance():
+    stream = StreamInput(interval=60, period=2)
+    cache = NodeCache(period=2)
+    cache.append(stream.node_id, 60, 1, {"v": 1})
+
+    view = cache.view()
+
+    assert view[stream][60].latest() == (1, {"v": 1})
 
 
 def test_cache_view_access_logging_and_reset():

@@ -155,8 +155,8 @@ def test_feed_queue_data_with_ray(monkeypatch):
 
     calls = []
 
-    def compute(cache):
-        calls.append(cache)
+    def compute(view):
+        calls.append(view)
 
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
@@ -175,8 +175,8 @@ def test_feed_queue_data_without_ray(monkeypatch):
 
     calls = []
 
-    def compute(cache):
-        calls.append(cache)
+    def compute(view):
+        calls.append(view)
 
     src = StreamInput(interval=60, period=2)
     node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
