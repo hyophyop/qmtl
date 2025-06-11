@@ -12,3 +12,8 @@ Run all unit and integration tests with:
 uv run pytest -q tests
 ```
 
+## SDK Tutorial
+
+For instructions on implementing strategies with the SDK, see
+[docs/sdk_tutorial.md](docs/sdk_tutorial.md).
+
