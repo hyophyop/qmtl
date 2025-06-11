@@ -14,19 +14,19 @@ def test_cache_warmup_and_compute():
 
     Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
-    assert node.cache.snapshot()["q1"][60] == [(60, {"v": 1})]
+    assert node.cache.get_slice("q1", 60, count=2) == [(60, {"v": 1})]
     assert not calls
 
     Runner.feed_queue_data(node, "q1", 60, 120, {"v": 2})
     assert not node.pre_warmup
-    assert node.cache.snapshot()["q1"][60] == [
+    assert node.cache.get_slice("q1", 60, count=2) == [
         (60, {"v": 1}),
         (120, {"v": 2}),
     ]
     assert len(calls) == 1
 
     Runner.feed_queue_data(node, "q1", 60, 180, {"v": 3})
-    assert node.cache.snapshot()["q1"][60] == [
+    assert node.cache.get_slice("q1", 60, count=2) == [
         (120, {"v": 2}),
         (180, {"v": 3}),
     ]
@@ -50,9 +50,9 @@ def test_multiple_upstreams():
     Runner.feed_queue_data(node, "u2", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert len(calls) == 1
-    snap = node.cache.snapshot()
-    assert snap["u1"][60][-1][0] == 120
-    assert snap["u2"][60][-1][0] == 120
+    view = node.cache.view()
+    assert view["u1"][60].latest()[0] == 120
+    assert view["u2"][60].latest()[0] == 120
 
 
 def test_tensor_memory():
@@ -120,24 +120,27 @@ def test_get_slice_xarray():
     assert list(da[:, 0].astype(int)) == [2, 3]
 
 
-def test_as_xarray_view_is_read_only_and_matches_snapshot():
+def test_as_xarray_view_is_read_only_and_matches_get_slice():
     cache = NodeCache(period=2)
     cache.append("u1", 60, 1, {"v": 1})
     cache.append("u1", 60, 2, {"v": 2})
 
-    snap = cache.snapshot()
     da = cache.as_xarray()
-
+    expected = {}
     for u in da.coords["u"].values:
+        expected[u] = {}
         for i in da.coords["i"].values:
             arr = da.sel(u=u, i=i).data
             arr_list = [(int(t), v) for t, v in arr if t is not None]
-            assert arr_list == snap[u][i]
+            expected[u][i] = arr_list
+            assert arr_list == cache.get_slice(u, i, count=cache.period)
 
     with pytest.raises(ValueError):
         da.data[0, 0, 0, 0] = 99
 
-    assert cache.snapshot() == snap
+    for u, mp in expected.items():
+        for i, arr_list in mp.items():
+            assert cache.get_slice(u, i, count=cache.period) == arr_list
 
 
 def test_cache_view_access():

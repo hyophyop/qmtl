@@ -52,3 +52,9 @@ CLI에 대한 전체 옵션은 다음 명령으로 확인할 수 있습니다.
 python -m qmtl.sdk --help
 ```
 
+## 캐시 조회
+
+`compute_fn`에는 `NodeCache.view()`가 반환하는 **읽기 전용 CacheView** 객체가
+전달됩니다. 이전 버전에서 사용하던 `NodeCache.snapshot()`은 내부 구현으로
+변경되었으므로 전략 코드에서 직접 호출하지 않아야 합니다.
+

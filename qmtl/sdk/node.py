@@ -92,7 +92,13 @@ class NodeCache:
                 return False
         return True
 
-    def snapshot(self) -> dict[str, dict[int, list[tuple[int, Any]]]]:
+    def _snapshot(self) -> dict[str, dict[int, list[tuple[int, Any]]]]:
+        """Return a deep copy of the cache contents.
+
+        This helper exists primarily for tests and should not be relied on by
+        strategy code. ``CacheView`` instances returned by :meth:`view` provide
+        the recommended read-only access to the cache.
+        """
         result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
         for u in self._tensor.coords["u"].values:
             u_idx = self._u_idx[u]
@@ -104,12 +110,23 @@ class NodeCache:
         return result
 
     def view(self, *, track_access: bool = False) -> CacheView:
-        """Return a :class:`CacheView` built from :meth:`snapshot`.
+        """Return a :class:`CacheView` over the current cache contents.
 
-        When ``track_access`` is ``True`` every accessed ``(upstream_id, interval)``
-        pair is recorded and can be retrieved via :meth:`CacheView.access_log`.
+        The returned view is read-only and mirrors the structure of
+        ``_snapshot()`` without creating intermediate copies. When
+        ``track_access`` is ``True`` every accessed ``(upstream_id, interval)``
+        pair is recorded and can be retrieved via
+        :meth:`CacheView.access_log`.
         """
-        return CacheView(self.snapshot(), track_access=track_access)
+        data: dict[str, dict[int, list[tuple[int, Any]]]] = {}
+        for u in self._tensor.coords["u"].values:
+            u_idx = self._u_idx[u]
+            data[u] = {}
+            for i in self._tensor.coords["i"].values:
+                i_idx = self._i_idx[i]
+                slice_ = self._tensor.data[u_idx, i_idx]
+                data[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
+        return CacheView(data, track_access=track_access)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
         """Return gap flags for all ``(u, interval)`` pairs."""
@@ -204,7 +221,11 @@ class NodeCache:
 class Node:
     """Represents a processing node in a strategy DAG.
 
-    ``compute_fn`` must accept exactly **one argument** – a :class:`CacheView` returned by :py:meth:`NodeCache.view`. The view provides read-only access to the cached data and mirrors the structure of :meth:`NodeCache.snapshot`. Positional arguments other than the cache view are **not** supported.
+    ``compute_fn`` must accept exactly **one argument** – a :class:`CacheView`
+    returned by :py:meth:`NodeCache.view`. The view provides read-only access to
+    the cached data and mirrors the structure returned by
+    :py:meth:`NodeCache.view`. Positional arguments other than the cache view are
+    **not** supported.
     """
 
     # ------------------------------------------------------------------
