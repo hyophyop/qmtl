@@ -139,3 +139,19 @@ def test_as_xarray_view_is_read_only_and_matches_snapshot():
 
     assert cache.snapshot() == snap
 
+
+def test_cache_view_access():
+    cache = NodeCache(period=2)
+    cache.append("btc_price", 60, 1, {"v": 1})
+    cache.append("btc_price", 60, 2, {"v": 2})
+
+    view = cache.view()
+
+    assert view["btc_price"][60].latest() == (2, {"v": 2})
+    assert view.btc_price[60].latest() == (2, {"v": 2})
+
+    with pytest.raises(KeyError):
+        _ = view["missing"][60]
+    with pytest.raises(AttributeError):
+        _ = view.missing
+
