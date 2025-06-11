@@ -119,3 +119,23 @@ def test_get_slice_xarray():
     assert da.shape == (2, 2)
     assert list(da[:, 0].astype(int)) == [2, 3]
 
+
+def test_as_xarray_view_is_read_only_and_matches_snapshot():
+    cache = NodeCache(period=2)
+    cache.append("u1", 60, 1, {"v": 1})
+    cache.append("u1", 60, 2, {"v": 2})
+
+    snap = cache.snapshot()
+    da = cache.as_xarray()
+
+    for u in da.coords["u"].values:
+        for i in da.coords["i"].values:
+            arr = da.sel(u=u, i=i).data
+            arr_list = [(int(t), v) for t, v in arr if t is not None]
+            assert arr_list == snap[u][i]
+
+    with pytest.raises(ValueError):
+        da.data[0, 0, 0, 0] = 99
+
+    assert cache.snapshot() == snap
+
