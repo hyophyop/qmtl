@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from qmtl.sdk import Strategy, Node, TagQueryNode, Runner
+import pandas as pd
+
+
+class TagQueryStrategy(Strategy):
+    """Example using TagQueryNode with multi-stage processing."""
+
+    def setup(self):
+        indicators = TagQueryNode(
+            query_tags=["ta-indicator"],
+            interval="1h",
+            period=24,
+        )
+
+        def calc_corr(view) -> pd.DataFrame:
+            frames = [pd.DataFrame([v for _, v in view[u][3600]]) for u in view]
+            if not frames:
+                return pd.DataFrame()
+            df = pd.concat(frames, axis=1)
+            return df.corr(method="pearson")
+
+        corr_node = Node(input=indicators, compute_fn=calc_corr, name="corr_matrix")
+
+        def avg_corr(view) -> pd.DataFrame:
+            latest = view[corr_node][3600].latest()
+            if latest is None:
+                return pd.DataFrame()
+            _, corr_df = latest
+            return pd.DataFrame({"avg_corr": [corr_df.mean().mean()]})
+
+        avg_node = Node(input=corr_node, compute_fn=avg_corr, name="avg_corr")
+
+        self.add_nodes([indicators, corr_node, avg_node])
+
+    def define_execution(self):
+        self.set_target("avg_corr")
+
+
+if __name__ == "__main__":
+    Runner.live(TagQueryStrategy)
