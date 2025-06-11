@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from . import metrics as sdk_metrics
+
 
 class CacheView:
     """Simple hierarchical read-only view over a cache snapshot.
@@ -31,6 +33,7 @@ class CacheView:
                 u, i = new_path
                 if isinstance(u, str) and isinstance(i, int):
                     self._access_log.append((u, i))
+                    sdk_metrics.observe_cache_read(u, i)
             return CacheView(
                 self._data[key],
                 track_access=self._track_access,

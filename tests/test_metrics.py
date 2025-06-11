@@ -102,3 +102,25 @@ def test_metrics_server_exposes_http():
     resp = httpx.get(f"http://localhost:{port}/metrics")
     assert resp.status_code == 200
     assert "diff_duration_ms_p95" in resp.text
+
+
+def test_cache_view_metrics_increment():
+    from qmtl.sdk import metrics as sdk_metrics
+    from qmtl.sdk.node import NodeCache
+
+    sdk_metrics.reset_metrics()
+    cache = NodeCache(period=2)
+    cache.append("u1", 60, 1, {"v": 1})
+
+    view = cache.view(track_access=True)
+    _ = view["u1"][60].latest()
+
+    assert sdk_metrics.cache_read_total.labels(
+        upstream_id="u1", interval="60"
+    )._value.get() == 1
+    assert (
+        sdk_metrics.cache_last_read_timestamp.labels(
+            upstream_id="u1", interval="60"
+        )._value.get()
+        > 0
+    )

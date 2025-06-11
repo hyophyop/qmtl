@@ -6,6 +6,7 @@ from .strategy import Strategy
 from .runner import Runner
 from .cli import main as _cli
 from .ws_client import WebSocketClient
+from . import metrics
 
 __all__ = [
     "Node",
@@ -16,5 +17,6 @@ __all__ = [
     "Strategy",
     "Runner",
     "WebSocketClient",
+    "metrics",
     "_cli",
 ]
