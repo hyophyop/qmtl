@@ -204,10 +204,7 @@ class NodeCache:
 class Node:
     """Represents a processing node in a strategy DAG.
 
-    ``compute_fn`` must accept exactly **one argument** – a snapshot of this
-    node's 4‑D cache returned by :pymeth:`NodeCache.snapshot`.  The snapshot is a
-    ``dict`` keyed by upstream node ID and interval.  Positional arguments other
-    than the cache snapshot are **not** supported.
+    ``compute_fn`` must accept exactly **one argument** – a :class:`CacheView` returned by :py:meth:`NodeCache.view`. The view provides read-only access to the cached data and mirrors the structure of :meth:`NodeCache.snapshot`. Positional arguments other than the cache view are **not** supported.
     """
 
     # ------------------------------------------------------------------
@@ -330,7 +327,7 @@ class Node:
             if on_missing == "skip":
                 return
         if not self.pre_warmup and self.compute_fn:
-            self.compute_fn(self.cache.snapshot())
+            self.compute_fn(self.cache.view())
 
     def to_dict(self) -> dict:
         return {

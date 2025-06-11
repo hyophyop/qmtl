@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from .node import Node
 
 from . import metrics as sdk_metrics
 
@@ -28,6 +31,10 @@ class CacheView:
 
     def __getitem__(self, key: Any) -> Any:
         if isinstance(self._data, Mapping):
+            from .node import Node  # local import to avoid circular dependency
+            if isinstance(key, Node):
+                key = key.node_id
+
             new_path = self._path + (key,)
             if self._track_access and len(new_path) == 2:
                 u, i = new_path

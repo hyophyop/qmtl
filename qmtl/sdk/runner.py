@@ -20,14 +20,14 @@ class Runner:
     _ray_available = ray is not None
 
     @staticmethod
-    def _execute_compute_fn(fn, cache_snapshot) -> None:
+    def _execute_compute_fn(fn, cache_view) -> None:
         """Run ``fn`` using Ray when available."""
         if Runner._ray_available:
             if not ray.is_initialized():  # type: ignore[attr-defined]
                 ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
-            ray.remote(fn).remote(cache_snapshot)  # type: ignore[attr-defined]
+            ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]
         else:
-            fn(cache_snapshot)
+            fn(cache_view)
 
     @staticmethod
     def _post_gateway(
@@ -93,7 +93,7 @@ class Runner:
             if on_missing == "skip":
                 return
         if not node.pre_warmup and node.compute_fn:
-            Runner._execute_compute_fn(node.compute_fn, node.cache.snapshot())
+            Runner._execute_compute_fn(node.compute_fn, node.cache.view())
 
     @staticmethod
     def backtest(

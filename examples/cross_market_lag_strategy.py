@@ -5,14 +5,12 @@ class CrossMarketLagStrategy(Strategy):
     def setup(self):
         btc_price = StreamInput(tags=["BTC", "price", "binance"], interval=60, period=120)
         mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval=60, period=120)
-
-        def lagged_corr(cache):
-            btc = pd.DataFrame([v for _, v in cache[btc_price.node_id][60]])
-            mstr = pd.DataFrame([v for _, v in cache[mstr_price.node_id][60]])
+        def lagged_corr(view):
+            btc = pd.DataFrame([v for _, v in view[btc_price][60]])
+            mstr = pd.DataFrame([v for _, v in view[mstr_price][60]])
             btc_shift = btc["close"].shift(90)
             corr = btc_shift.corr(mstr["close"])
             return pd.DataFrame({"lag_corr": [corr]})
-
         corr_node = Node(
             input={"btc": btc_price, "mstr": mstr_price},
             compute_fn=lagged_corr,

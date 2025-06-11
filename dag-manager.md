@@ -15,7 +15,7 @@
 | **SRE Friendly**                    | gRPC/HTTP 인터페이스, 메트릭·로그·Alert 통합, Admin CLI          | §6, §10      |
 
 > **설계 철학:** “계산 그래프 + 메시징 큐”를 **불변 ID**로 연결해 재현성·롤백 가능성을 최우선. 모든 변형은 새 노드·큐로 분기하고, 레거시는 TTL+GC로 안전 제거.
-> SDK 측에서 실행되는 모든 `compute_fn`은 `NodeCache.snapshot()`이 반환하는 4‑D 캐시 스냅샷(dict) 하나만을 인자로 받는다.
+> SDK 측에서 실행되는 모든 `compute_fn`은 `NodeCache.view()`가 반환하는 read-only `CacheView` 한 개만을 인자로 받는다.
 
 ---
 

@@ -9,9 +9,9 @@ class CorrelationStrategy(Strategy):
             period=24,
         )
 
-        def calc_corr(cache):
+        def calc_corr(view):
             df = pd.concat(
-                [pd.DataFrame([v for _, v in cache[u][3600]]) for u in cache],
+                [pd.DataFrame([v for _, v in view[u][3600]]) for u in view],
                 axis=1,
             )
             return df.corr(method="pearson")
