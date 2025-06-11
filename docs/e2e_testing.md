@@ -36,3 +36,9 @@ Execute the end-to-end tests within the uv environment:
 uv run -- pytest tests/e2e
 ```
 
+To execute the entire test suite run:
+
+```bash
+uv run pytest -q tests
+```
+
