@@ -190,6 +190,25 @@ def create_app(
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub
 
+    class Gateway:
+        def __init__(self, ws_hub: Optional[WebSocketHub] = None):
+            self.ws_hub = ws_hub
+            self._sentinel_weights: dict[str, float] = {}
+
+        async def _handle_sentinel_weight(self, payload: dict) -> None:
+            sid: str = payload["sentinel_id"]
+            weight: float = payload["weight"]
+            # 1) Hub 브로드캐스트 (항상 1회만, 동일 값 중복 방지)
+            if self._sentinel_weights.get(sid) != weight and self.ws_hub:
+                await self.ws_hub.send_sentinel_weight(sid, weight)
+                self._sentinel_weights[sid] = weight
+            # 2) Metric은 유효 범위 내에서만
+            if 0.0 <= weight <= 1.0:
+                from . import metrics as gw_metrics
+                gw_metrics.set_sentinel_traffic_ratio(sid, weight)
+            else:
+                logger.warning("Ignoring out-of-range sentinel weight %s for %s", weight, sid)
+
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
         start = time.perf_counter()
@@ -241,26 +260,13 @@ def create_app(
                     interval = None
             if tags and interval is not None:
                 await watch.broadcast(tags, interval, list(queues))
-        elif event_type == "sentinel_weight" and ws is not None:
-            sid = data.get("sentinel_id")
-            weight = data.get("weight")
-            if isinstance(sid, str) and sid and weight is not None:
-                try:
-                    weight = float(weight)
-                except (TypeError, ValueError):
-                    weight = None
-                if weight is not None:
-                    await ws.send_sentinel_weight(sid, weight)
-                    gw_metrics.set_sentinel_traffic_ratio(sid, weight)
-                    if 0.0 <= weight <= 1.0:
-                        await ws.send_sentinel_weight(sid, weight)
-                        gw_metrics.set_sentinel_traffic_ratio(sid, weight)
-                    else:
-                        logger.warning(
-                            "Ignoring out-of-range sentinel weight %s for %s",
-                            weight,
-                            sid,
-                        )
+        elif event_type == "sentinel_weight":
+            gateway = getattr(app.state, "gateway", None)
+            if gateway is None:
+                gateway = Gateway(ws)
+                app.state.gateway = gateway
+            await gateway._handle_sentinel_weight(data)
+            return {"ok": True}
 
         return {"ok": True}
 
