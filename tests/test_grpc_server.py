@@ -13,7 +13,6 @@ from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
-
 class FakeSession:
     def __init__(self, result=None):
         self.result = result or []
@@ -82,7 +81,9 @@ async def test_grpc_redo_diff(monkeypatch):
 
         def diff(self, request: DiffRequest):
             called["sid"] = request.strategy_id
-            return DiffChunk(queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel")
+            return DiffChunk(
+                queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel"
+            )
 
     monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
 
@@ -220,7 +221,7 @@ async def test_grpc_tag_query():
     await server.stop(None)
     assert list(resp.queues) == ["q1", "q2"]
 
-    
+
 @pytest.mark.asyncio
 async def test_grpc_queue_stats():
     driver = FakeDriver()
@@ -236,12 +237,13 @@ async def test_grpc_queue_stats():
     await server.stop(None)
     assert dict(resp.sizes) == {"topic1": 3}
 
-    
+
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic(monkeypatch):
     metrics.reset_metrics()
     weights: dict[str, float] = {}
     captured: dict = {}
+    driver = FakeDriver()
 
     metrics.reset_metrics()
 
@@ -254,7 +256,7 @@ async def test_http_sentinel_traffic(monkeypatch):
         mock_post,
     )
 
-    app = create_app(weights=weights, gateway_url="http://gw")
+    app = create_app(weights=weights, gateway_url="http://gw", driver=driver)
     transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
@@ -271,14 +273,19 @@ async def test_http_sentinel_traffic(monkeypatch):
     assert captured["type"] == "sentinel_weight"
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
+    query, params = driver.session_obj.run_calls[0]
+    assert "traffic_weight" in query
+    assert params["version"] == "v1"
+    assert params["weight"] == 0.7
 
 
 @pytest.mark.asyncio
 async def test_http_sentinel_traffic_overwrite():
     metrics.reset_metrics()
     weights = {"v1": 0.1}
+    driver = FakeDriver()
     metrics.reset_metrics()
-    app = create_app(weights=weights)
+    app = create_app(weights=weights, driver=driver)
     transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
@@ -287,3 +294,6 @@ async def test_http_sentinel_traffic_overwrite():
         )
     assert weights["v1"] == 0.4
     assert metrics.active_version_weight._vals["v1"] == 0.4
+    query, params = driver.session_obj.run_calls[0]
+    assert params["version"] == "v1"
+    assert params["weight"] == 0.4
