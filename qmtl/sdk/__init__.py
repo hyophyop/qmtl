@@ -6,6 +6,7 @@ from .strategy import Strategy
 from .runner import Runner
 from .cli import main as _cli
 from .ws_client import WebSocketClient
+from .backfill import BackfillSource, QuestDBSource
 from . import metrics
 
 __all__ = [
@@ -17,6 +18,8 @@ __all__ = [
     "Strategy",
     "Runner",
     "WebSocketClient",
+    "BackfillSource",
+    "QuestDBSource",
     "metrics",
     "_cli",
 ]
