@@ -3,6 +3,7 @@ from __future__ import annotations
 """Utilities for Kafka topic naming and configuration."""
 
 from dataclasses import dataclass
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -19,11 +20,32 @@ _QUEUE_CONFIG = {
 }
 
 
-def topic_name(asset: str, node_type: str, code_hash: str, version: str, *, dryrun: bool = False) -> str:
-    """Return topic name following `{asset}_{node_type}_{short_hash}_{version}{_dryrun?}`."""
-    short_hash = code_hash[:6]
-    suffix = "_dryrun" if dryrun else ""
-    return f"{asset}_{node_type}_{short_hash}_{version}{suffix}"
+def topic_name(
+    asset: str,
+    node_type: str,
+    code_hash: str,
+    version: str,
+    *,
+    dryrun: bool = False,
+    existing: Iterable[str] | None = None,
+) -> str:
+    """Return unique topic name per spec.
+
+    The name follows ``{asset}_{node_type}_{short_hash}_{version}{_sim?}`` where
+    ``short_hash`` initially uses the first six characters of ``code_hash`` and
+    grows by two characters until the name is unique within ``existing``.
+    """
+
+    taken = set(existing or [])
+    length = 6
+    suffix = "_sim" if dryrun else ""
+
+    while True:
+        short_hash = code_hash[:length]
+        name = f"{asset}_{node_type}_{short_hash}_{version}{suffix}"
+        if name not in taken:
+            return name
+        length += 2
 
 
 def get_config(queue_type: str) -> TopicConfig:

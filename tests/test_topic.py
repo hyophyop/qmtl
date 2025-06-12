@@ -18,10 +18,23 @@ class FakeAdmin:
 
 
 def test_topic_name_generation():
-    name = topic_name("btc", "Indicator", "abcdef123456", "v1")
-    assert name == "btc_Indicator_abcdef_v1"
-    sim = topic_name("btc", "Indicator", "abcdef123456", "v1", dryrun=True)
-    assert sim.endswith("_dryrun")
+    existing = {"btc_Indicator_abcdef_v1"}
+    name = topic_name(
+        "btc",
+        "Indicator",
+        "abcdef123456",
+        "v1",
+        existing=existing,
+    )
+    assert name == "btc_Indicator_abcdef12_v1"
+    sim = topic_name(
+        "btc",
+        "Indicator",
+        "abcdef123456",
+        "v1",
+        dryrun=True,
+    )
+    assert sim.endswith("_sim")
 
 
 def test_queue_config_values():

@@ -16,6 +16,7 @@ from .diff_service import (
     NodeRecord,
     StreamSender,
 )
+from .topic import topic_name
 from .neo4j_export import export_schema, connect
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
@@ -40,11 +41,20 @@ class _MemQueue(QueueManager):
     def __init__(self) -> None:
         self.topics: Dict[str, str] = {}
 
-    def upsert(self, node_id: str) -> str:
-        topic = self.topics.get(node_id)
+    def upsert(
+        self,
+        asset: str,
+        node_type: str,
+        code_hash: str,
+        version: str,
+        *,
+        dryrun: bool = False,
+    ) -> str:
+        key = (asset, node_type, code_hash, version, dryrun)
+        topic = self.topics.get(key)
         if not topic:
-            topic = f"topic_{node_id}"
-            self.topics[node_id] = topic
+            topic = topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
+            self.topics[key] = topic
         return topic
 
 
