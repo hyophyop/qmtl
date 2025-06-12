@@ -44,7 +44,7 @@ def test_gc_policy_drop_and_archive():
 
     processed = gc.collect(now)
 
-    assert processed == ["raw_q", "sentinel_q"]
+    assert [q.name for q in processed] == ["raw_q", "sentinel_q"]
     assert store.dropped == ["raw_q", "sentinel_q"]
     assert archive.archived == ["sentinel_q"]
 
@@ -73,7 +73,7 @@ def test_gc_respects_grace_period():
 
     processed = gc.collect(now)
 
-    assert processed == []
+    assert [q.name for q in processed] == []
     assert store.dropped == []
 
 
@@ -87,7 +87,7 @@ def test_gc_archives_with_client():
 
     processed = gc.collect(now)
 
-    assert processed == ["s"]
+    assert [q.name for q in processed] == ["s"]
     assert store.dropped == ["s"]
     assert archive.archived == ["s"]
 

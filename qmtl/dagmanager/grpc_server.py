@@ -35,6 +35,18 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         if self._callback_url:
             # Consider submitting this to a background task
             # if the callback should not block the stream or terminate it on failure.
+            for node in chunk.new_nodes:
+                if node.tags and node.interval is not None:
+                    event = format_event(
+                        "qmtl.dagmanager",
+                        "queue_update",
+                        {
+                            "tags": node.tags,
+                            "interval": node.interval,
+                            "queues": [chunk.queue_map.get(node.node_id, "")],
+                        },
+                    )
+                    await post_with_backoff(self._callback_url, event)
             event = format_event(
                 "qmtl.dagmanager",
                 "diff",
@@ -51,11 +63,13 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         admin: KafkaAdmin | None = None,
         repo: Neo4jNodeRepository | None = None,
         diff: DiffService | None = None,
+        callback_url: str | None = None,
     ) -> None:
         self._gc = gc
         self._admin = admin
         self._repo = repo
         self._diff = diff
+        self._callback_url = callback_url
 
     async def Cleanup(
         self,
@@ -63,7 +77,20 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.CleanupResponse:
         if self._gc is not None:
-            self._gc.collect()
+            processed = self._gc.collect()
+            if self._callback_url:
+                for qi in processed:
+                    if getattr(qi, "interval", None) is not None:
+                        event = format_event(
+                            "qmtl.dagmanager",
+                            "queue_update",
+                            {
+                                "tags": [qi.tag],
+                                "interval": qi.interval,
+                                "queues": [qi.name],
+                            },
+                        )
+                        await post_with_backoff(self._callback_url, event)
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(
@@ -152,7 +179,7 @@ def serve(
         TagQueryServicer(repo), server
     )
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
-        AdminServiceServicer(gc, admin, repo, diff=diff_service), server
+        AdminServiceServicer(gc, admin, repo, diff=diff_service, callback_url=callback_url), server
     )
     dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
     bound_port = server.add_insecure_port(f"{host}:{port}")

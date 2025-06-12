@@ -21,6 +21,7 @@ class QueueInfo:
     name: str
     tag: str
     created_at: datetime
+    interval: int | None = None
 
 
 class QueueStore(Protocol):
@@ -90,8 +91,8 @@ class GarbageCollector:
         self.batch_size = batch_size
         self.archive = archive
 
-    def collect(self, now: Optional[datetime] = None) -> list[str]:
-        """Run one GC batch and return processed queue names."""
+    def collect(self, now: Optional[datetime] = None) -> list[QueueInfo]:
+        """Run one GC batch and return processed QueueInfo items."""
         now = now or datetime.utcnow()
         all_queues = list(self.store.list_orphan_queues())
         orphan_queue_total.set(len(all_queues))
@@ -108,7 +109,7 @@ class GarbageCollector:
         if self.metrics.messages_in_per_sec() >= 80:
             batch = max(1, batch // 2)
         queues = queues[:batch]
-        processed = []
+        processed: list[QueueInfo] = []
         for q, rule in queues:
             if rule.action == "drop":
                 self.store.drop_queue(q.name)
@@ -116,7 +117,7 @@ class GarbageCollector:
                 if self.archive is not None and q.tag == "sentinel":
                     self.archive.archive(q.name)
                 self.store.drop_queue(q.name)
-            processed.append(q.name)
+            processed.append(q)
         return processed
 
 
