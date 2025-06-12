@@ -51,6 +51,22 @@ def _make_dag(nodes):
     return json.dumps({"nodes": nodes})
 
 
+def test_pre_scan_and_db_fetch_topo_order():
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2", "inputs": ["A"]},
+        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+    ])
+    req = DiffRequest(strategy_id="s", dag_json=dag)
+
+    service.diff(req)
+    assert repo.fetched[0] == ["A", "B"]
+
+
 def test_pre_scan_and_db_fetch():
     repo = FakeRepo()
     queue = FakeQueue()
@@ -208,3 +224,23 @@ def test_sentinel_gap_metric_increment():
 
     service.diff(DiffRequest(strategy_id="s", dag_json=dag))
     assert metrics.sentinel_gap_count._value.get() == 1  # type: ignore[attr-defined]
+
+
+def test_pre_scan_uses_custom_json_loader(monkeypatch):
+    calls = []
+
+    def fake_loads(data):
+        calls.append(data)
+        return {"nodes": []}
+
+    import qmtl.dagmanager.diff_service as mod
+
+    monkeypatch.setattr(mod, "_json_loads", fake_loads)
+
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    service.diff(DiffRequest(strategy_id="s", dag_json="{}"))
+    assert calls == ["{}"]
