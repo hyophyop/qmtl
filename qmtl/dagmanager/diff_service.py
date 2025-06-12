@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, List, Dict, TYPE_CHECKING
 
 try:  # optional high performance json
@@ -33,6 +33,7 @@ class DiffRequest:
 class DiffChunk:
     queue_map: Dict[str, str]
     sentinel_id: str
+    new_nodes: List["NodeInfo"] = field(default_factory=list)
 
 
 @dataclass
@@ -41,6 +42,8 @@ class NodeInfo:
     node_type: str
     code_hash: str
     schema_hash: str
+    interval: int | None
+    tags: list[str]
 
 
 @dataclass
@@ -127,6 +130,8 @@ class DiffService:
                 node_type=node_map[n].get("node_type", ""),
                 code_hash=node_map[n]["code_hash"],
                 schema_hash=node_map[n]["schema_hash"],
+                interval=node_map[n].get("interval"),
+                tags=list(node_map[n].get("tags", [])),
             )
             for n in ordered
         ]
@@ -168,8 +173,12 @@ class DiffService:
     # Step 5 is handled inside _hash_compare via queue upsert --------------
 
     # Step 6 ---------------------------------------------------------------
-    def _stream_send(self, queue_map: Dict[str, str], sentinel_id: str) -> None:
-        self.stream_sender.send(DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id))
+    def _stream_send(
+        self, queue_map: Dict[str, str], sentinel_id: str, new_nodes: List[NodeInfo]
+    ) -> None:
+        self.stream_sender.send(
+            DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=list(new_nodes))
+        )
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
@@ -182,8 +191,8 @@ class DiffService:
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id)
-            return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
+            self._stream_send(queue_map, sentinel_id, new_nodes)
+            return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=new_nodes)
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)
@@ -202,7 +211,8 @@ class Neo4jNodeRepository(NodeRepository):
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
             "WHERE c.node_id IN $ids "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
-            "c.code_hash AS code_hash, c.schema_hash AS schema_hash, q.topic AS topic"
+            "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
+            "q.topic AS topic, q.interval AS interval, c.tags AS tags"
         )
         with self.driver.session() as session:
             result = session.run(query, ids=list(node_ids))
@@ -213,6 +223,8 @@ class Neo4jNodeRepository(NodeRepository):
                     node_type=r.get("node_type", ""),
                     code_hash=r.get("code_hash"),
                     schema_hash=r.get("schema_hash"),
+                    interval=r.get("interval"),
+                    tags=list(r.get("tags", [])),
                     topic=r.get("topic"),
                 )
             return records

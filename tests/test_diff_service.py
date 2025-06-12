@@ -93,7 +93,15 @@ def test_pre_scan_and_db_fetch():
 def test_hash_compare_and_queue_upsert():
     repo = FakeRepo()
     # existing node A
-    repo.records["A"] = NodeRecord("A", "N", "c1", "s1", topic_name("asset", "N", "c1", "v1"))
+    repo.records["A"] = NodeRecord(
+        "A",
+        "N",
+        "c1",
+        "s1",
+        None,
+        [],
+        topic_name("asset", "N", "c1", "v1"),
+    )
     queue = FakeQueue()
     stream = FakeStream()
     service = DiffService(repo, queue, stream)
@@ -229,7 +237,15 @@ def test_integration_with_backends():
 def test_sentinel_gap_metric_increment():
     metrics.reset_metrics()
     repo = FakeRepo()
-    repo.records["A"] = NodeRecord("A", "N", "c1", "s1", topic_name("asset", "N", "c1", "v1"))
+    repo.records["A"] = NodeRecord(
+        "A",
+        "N",
+        "c1",
+        "s1",
+        None,
+        [],
+        topic_name("asset", "N", "c1", "v1"),
+    )
     queue = FakeQueue()
     stream = FakeStream()
     service = DiffService(repo, queue, stream)

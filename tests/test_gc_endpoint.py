@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 import httpx
 
 from qmtl.dagmanager.api import create_app
+from qmtl.dagmanager.gc import QueueInfo
+from datetime import datetime
 
 
 class FakeGC:
@@ -10,7 +12,7 @@ class FakeGC:
 
     def collect(self):
         self.calls += 1
-        return ["q1"]
+        return [QueueInfo("q1", "raw", datetime.utcnow(), interval=60)]
 
 
 def test_gc_route_triggers_collect():

@@ -25,9 +25,14 @@ def create_app(gc: GarbageCollector, *, callback_url: Optional[str] = None) -> F
 
     @app.post("/admin/gc-trigger", status_code=status.HTTP_202_ACCEPTED)
     async def trigger_gc(payload: GcRequest) -> GcResponse:
-        processed = gc.collect()
+        infos = gc.collect()
+        processed = [q.name for q in infos]
         if callback_url:
-            event = format_event("qmtl.dagmanager", "gc", {"id": payload.id, "queues": processed})
+            event = format_event(
+                "qmtl.dagmanager",
+                "gc",
+                {"id": payload.id, "queues": processed},
+            )
             await post_with_backoff(callback_url, event)
         return GcResponse(processed=processed)
 
