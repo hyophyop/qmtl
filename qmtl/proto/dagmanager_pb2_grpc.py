@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-from qmtl.proto import dagmanager_pb2 as qmtl_dot_proto_dot_dagmanager__pb2
+import dagmanager_pb2 as dagmanager__pb2
 
-GRPC_GENERATED_VERSION = '1.73.0'
+GRPC_GENERATED_VERSION = '1.72.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in qmtl/proto/dagmanager_pb2_grpc.py depends on'
+        + f' but the generated code in dagmanager_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,8 +36,13 @@ class DiffServiceStub(object):
         """
         self.Diff = channel.unary_stream(
                 '/qmtl.dagmanager.DiffService/Diff',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffChunk.FromString,
+                request_serializer=dagmanager__pb2.DiffRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.DiffChunk.FromString,
+                _registered_method=True)
+        self.AckChunk = channel.unary_unary(
+                '/qmtl.dagmanager.DiffService/AckChunk',
+                request_serializer=dagmanager__pb2.ChunkAck.SerializeToString,
+                response_deserializer=dagmanager__pb2.ChunkAck.FromString,
                 _registered_method=True)
 
 
@@ -50,13 +55,24 @@ class DiffServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AckChunk(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DiffServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Diff': grpc.unary_stream_rpc_method_handler(
                     servicer.Diff,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffChunk.SerializeToString,
+                    request_deserializer=dagmanager__pb2.DiffRequest.FromString,
+                    response_serializer=dagmanager__pb2.DiffChunk.SerializeToString,
+            ),
+            'AckChunk': grpc.unary_unary_rpc_method_handler(
+                    servicer.AckChunk,
+                    request_deserializer=dagmanager__pb2.ChunkAck.FromString,
+                    response_serializer=dagmanager__pb2.ChunkAck.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -84,8 +100,35 @@ class DiffService(object):
             request,
             target,
             '/qmtl.dagmanager.DiffService/Diff',
-            qmtl_dot_proto_dot_dagmanager__pb2.DiffRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.DiffChunk.FromString,
+            dagmanager__pb2.DiffRequest.SerializeToString,
+            dagmanager__pb2.DiffChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AckChunk(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/qmtl.dagmanager.DiffService/AckChunk',
+            dagmanager__pb2.ChunkAck.SerializeToString,
+            dagmanager__pb2.ChunkAck.FromString,
             options,
             channel_credentials,
             insecure,
@@ -108,8 +151,8 @@ class TagQueryStub(object):
         """
         self.GetQueues = channel.unary_unary(
                 '/qmtl.dagmanager.TagQuery/GetQueues',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.TagQueryRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.TagQueryReply.FromString,
+                request_serializer=dagmanager__pb2.TagQueryRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.TagQueryReply.FromString,
                 _registered_method=True)
 
 
@@ -127,8 +170,8 @@ def add_TagQueryServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetQueues': grpc.unary_unary_rpc_method_handler(
                     servicer.GetQueues,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.TagQueryRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.TagQueryReply.SerializeToString,
+                    request_deserializer=dagmanager__pb2.TagQueryRequest.FromString,
+                    response_serializer=dagmanager__pb2.TagQueryReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -156,8 +199,8 @@ class TagQuery(object):
             request,
             target,
             '/qmtl.dagmanager.TagQuery/GetQueues',
-            qmtl_dot_proto_dot_dagmanager__pb2.TagQueryRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.TagQueryReply.FromString,
+            dagmanager__pb2.TagQueryRequest.SerializeToString,
+            dagmanager__pb2.TagQueryReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -180,18 +223,18 @@ class AdminServiceStub(object):
         """
         self.Cleanup = channel.unary_unary(
                 '/qmtl.dagmanager.AdminService/Cleanup',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.CleanupRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.CleanupResponse.FromString,
+                request_serializer=dagmanager__pb2.CleanupRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.CleanupResponse.FromString,
                 _registered_method=True)
         self.GetQueueStats = channel.unary_unary(
                 '/qmtl.dagmanager.AdminService/GetQueueStats',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.QueueStatsRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.QueueStats.FromString,
+                request_serializer=dagmanager__pb2.QueueStatsRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.QueueStats.FromString,
                 _registered_method=True)
         self.RedoDiff = channel.unary_unary(
                 '/qmtl.dagmanager.AdminService/RedoDiff',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.RedoDiffRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffResult.FromString,
+                request_serializer=dagmanager__pb2.RedoDiffRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.DiffResult.FromString,
                 _registered_method=True)
 
 
@@ -221,18 +264,18 @@ def add_AdminServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Cleanup': grpc.unary_unary_rpc_method_handler(
                     servicer.Cleanup,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.CleanupRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.CleanupResponse.SerializeToString,
+                    request_deserializer=dagmanager__pb2.CleanupRequest.FromString,
+                    response_serializer=dagmanager__pb2.CleanupResponse.SerializeToString,
             ),
             'GetQueueStats': grpc.unary_unary_rpc_method_handler(
                     servicer.GetQueueStats,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.QueueStatsRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.QueueStats.SerializeToString,
+                    request_deserializer=dagmanager__pb2.QueueStatsRequest.FromString,
+                    response_serializer=dagmanager__pb2.QueueStats.SerializeToString,
             ),
             'RedoDiff': grpc.unary_unary_rpc_method_handler(
                     servicer.RedoDiff,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.RedoDiffRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.DiffResult.SerializeToString,
+                    request_deserializer=dagmanager__pb2.RedoDiffRequest.FromString,
+                    response_serializer=dagmanager__pb2.DiffResult.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -260,8 +303,8 @@ class AdminService(object):
             request,
             target,
             '/qmtl.dagmanager.AdminService/Cleanup',
-            qmtl_dot_proto_dot_dagmanager__pb2.CleanupRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.CleanupResponse.FromString,
+            dagmanager__pb2.CleanupRequest.SerializeToString,
+            dagmanager__pb2.CleanupResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -287,8 +330,8 @@ class AdminService(object):
             request,
             target,
             '/qmtl.dagmanager.AdminService/GetQueueStats',
-            qmtl_dot_proto_dot_dagmanager__pb2.QueueStatsRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.QueueStats.FromString,
+            dagmanager__pb2.QueueStatsRequest.SerializeToString,
+            dagmanager__pb2.QueueStats.FromString,
             options,
             channel_credentials,
             insecure,
@@ -314,8 +357,8 @@ class AdminService(object):
             request,
             target,
             '/qmtl.dagmanager.AdminService/RedoDiff',
-            qmtl_dot_proto_dot_dagmanager__pb2.RedoDiffRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.DiffResult.FromString,
+            dagmanager__pb2.RedoDiffRequest.SerializeToString,
+            dagmanager__pb2.DiffResult.FromString,
             options,
             channel_credentials,
             insecure,
@@ -338,8 +381,8 @@ class HealthCheckStub(object):
         """
         self.Ping = channel.unary_unary(
                 '/qmtl.dagmanager.HealthCheck/Ping',
-                request_serializer=qmtl_dot_proto_dot_dagmanager__pb2.PingRequest.SerializeToString,
-                response_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.PingReply.FromString,
+                request_serializer=dagmanager__pb2.PingRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.PingReply.FromString,
                 _registered_method=True)
 
 
@@ -357,8 +400,8 @@ def add_HealthCheckServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Ping': grpc.unary_unary_rpc_method_handler(
                     servicer.Ping,
-                    request_deserializer=qmtl_dot_proto_dot_dagmanager__pb2.PingRequest.FromString,
-                    response_serializer=qmtl_dot_proto_dot_dagmanager__pb2.PingReply.SerializeToString,
+                    request_deserializer=dagmanager__pb2.PingRequest.FromString,
+                    response_serializer=dagmanager__pb2.PingReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -386,8 +429,8 @@ class HealthCheck(object):
             request,
             target,
             '/qmtl.dagmanager.HealthCheck/Ping',
-            qmtl_dot_proto_dot_dagmanager__pb2.PingRequest.SerializeToString,
-            qmtl_dot_proto_dot_dagmanager__pb2.PingReply.FromString,
+            dagmanager__pb2.PingRequest.SerializeToString,
+            dagmanager__pb2.PingReply.FromString,
             options,
             channel_credentials,
             insecure,

@@ -17,6 +17,12 @@ class _NullStream(StreamSender):
     def send(self, chunk) -> None:  # pragma: no cover - simple no-op
         pass
 
+    def wait_for_ack(self) -> None:  # pragma: no cover - noop
+        pass
+
+    def ack(self) -> None:  # pragma: no cover - noop
+        pass
+
 
 class _EmptyStore(QueueStore):
     def list_orphan_queues(self) -> Iterable[QueueInfo]:  # pragma: no cover - noop

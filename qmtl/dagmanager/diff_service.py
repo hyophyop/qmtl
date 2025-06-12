@@ -33,8 +33,8 @@ class DiffRequest:
 class DiffChunk:
     queue_map: Dict[str, str]
     sentinel_id: str
-    new_nodes: List["NodeInfo"] = field(default_factory=list)
     buffering_nodes: List["NodeInfo"] = field(default_factory=list)
+    new_nodes: List["NodeInfo"] = field(default_factory=list)
 
 
 @dataclass
@@ -85,6 +85,14 @@ class StreamSender:
     """Interface to send diff results as a stream."""
 
     def send(self, chunk: DiffChunk) -> None:
+        raise NotImplementedError
+
+    def wait_for_ack(self) -> None:
+        """Block until the client acknowledges the last chunk."""
+        raise NotImplementedError
+
+    def ack(self) -> None:
+        """Signal that the last chunk was received."""
         raise NotImplementedError
 
 
@@ -185,14 +193,32 @@ class DiffService:
         new_nodes: List[NodeInfo],
         buffering_nodes: List[NodeInfo],
     ) -> None:
-        self.stream_sender.send(
-            DiffChunk(
-                queue_map=queue_map,
-                sentinel_id=sentinel_id,
-                new_nodes=list(new_nodes),
-                buffering_nodes=list(buffering_nodes),
+        CHUNK_SIZE = 100
+        total = max(len(new_nodes), len(buffering_nodes))
+        if total == 0:
+            # 그래도 최소 1개는 보내야 함 (empty chunk)
+            self.stream_sender.send(
+                DiffChunk(
+                    queue_map=queue_map,
+                    sentinel_id=sentinel_id,
+                    new_nodes=[],
+                    buffering_nodes=[],
+                )
             )
-        )
+            self.stream_sender.wait_for_ack()
+            return
+        for i in range(0, total, CHUNK_SIZE):
+            chunk_new = new_nodes[i:i+CHUNK_SIZE]
+            chunk_buf = buffering_nodes[i:i+CHUNK_SIZE]
+            self.stream_sender.send(
+                DiffChunk(
+                    queue_map=queue_map,
+                    sentinel_id=sentinel_id,
+                    new_nodes=chunk_new,
+                    buffering_nodes=chunk_buf,
+                )
+            )
+            self.stream_sender.wait_for_ack()
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()

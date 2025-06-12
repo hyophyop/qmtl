@@ -12,8 +12,14 @@ message DiffChunk {
   repeated string buffer_nodes = 3;
 }
 
+message ChunkAck {
+  string sentinel_id = 1;
+  uint32 chunk_id = 2;
+}
+
 service DiffService {
   rpc Diff(DiffRequest) returns (stream DiffChunk);
+  rpc AckChunk(ChunkAck) returns (ChunkAck);
 }
 
 message TagQueryRequest {

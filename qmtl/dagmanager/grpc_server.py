@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import AsyncIterable
+from typing import AsyncIterable, Dict
+import asyncio
+import threading
 
 import grpc
 
@@ -10,6 +12,7 @@ from .diff_service import (
     Neo4jNodeRepository,
     KafkaQueueManager,
     StreamSender,
+    DiffChunk,
 )
 from .kafka_admin import KafkaAdmin
 from .callbacks import post_with_backoff
@@ -18,46 +21,89 @@ from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
+class _GrpcStream(StreamSender):
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self.loop = loop
+        self.queue: asyncio.Queue[DiffChunk] = asyncio.Queue()
+        self._ack = threading.Event()
+
+    def send(self, chunk: DiffChunk) -> None:
+        asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
+
+    def wait_for_ack(self) -> None:
+        self._ack.wait()
+        self._ack.clear()
+
+    def ack(self) -> None:
+        self._ack.set()
+
+
 class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
     def __init__(self, service: DiffService, callback_url: str | None = None) -> None:
         self._service = service
         self._callback_url = callback_url
+
+    def __init__(self, service: DiffService, callback_url: str | None = None) -> None:
+        self._service = service
+        self._callback_url = callback_url
+        self._streams: Dict[str, _GrpcStream] = {}
 
     async def Diff(
         self,
         request: dagmanager_pb2.DiffRequest,
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[dagmanager_pb2.DiffChunk]:
-        chunk = self._service.diff(
-            DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json)
+        sentinel_id = f"{request.strategy_id}-sentinel"
+        stream = _GrpcStream(asyncio.get_running_loop())
+        self._streams[sentinel_id] = stream
+        svc = DiffService(self._service.node_repo, self._service.queue_manager, stream)
+        loop = asyncio.get_running_loop()
+
+        def run_diff() -> DiffChunk:
+            return svc.diff(DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json))
+
+        fut = loop.run_in_executor(None, run_diff)
+        try:
+            while True:
+                if fut.done() and stream.queue.empty():
+                    break
+                chunk = await stream.queue.get()
+                pb = dagmanager_pb2.DiffChunk(
+                    chunk_id=chunk.chunk_id if hasattr(chunk, 'chunk_id') else 0,
+                    queue_map=chunk.queue_map,
+                    sentinel_id=chunk.sentinel_id,
+                    buffer_nodes=[n.node_id for n in getattr(chunk, 'buffering_nodes', [])],
+                )
+                if self._callback_url and getattr(chunk, 'new_nodes', None):
+                    for node in chunk.new_nodes:
+                        if node.tags and node.interval is not None:
+                            event = format_event(
+                                "qmtl.dagmanager",
+                                "queue_update",
+                                {
+                                    "tags": node.tags,
+                                    "interval": node.interval,
+                                    "queues": [chunk.queue_map.get(node.node_id, "")],
+                                },
+                            )
+                            await post_with_backoff(self._callback_url, event)
+                yield pb
+        finally:
+            fut.cancel()
+            await fut
+            self._streams.pop(sentinel_id, None)
+
+    async def AckChunk(
+        self,
+        request: dagmanager_pb2.ChunkAck,
+        context: grpc.aio.ServicerContext,
+    ) -> dagmanager_pb2.ChunkAck:
+        stream = self._streams.get(request.sentinel_id)
+        if stream is not None:
+            stream.ack()
+        return dagmanager_pb2.ChunkAck(
+            sentinel_id=request.sentinel_id, chunk_id=request.chunk_id
         )
-        pb = dagmanager_pb2.DiffChunk(
-            queue_map=chunk.queue_map,
-            sentinel_id=chunk.sentinel_id,
-            buffer_nodes=[n.node_id for n in chunk.buffering_nodes],
-        )
-        if self._callback_url:
-            # Consider submitting this to a background task
-            # if the callback should not block the stream or terminate it on failure.
-            for node in chunk.new_nodes:
-                if node.tags and node.interval is not None:
-                    event = format_event(
-                        "qmtl.dagmanager",
-                        "queue_update",
-                        {
-                            "tags": node.tags,
-                            "interval": node.interval,
-                            "queues": [chunk.queue_map.get(node.node_id, "")],
-                        },
-                    )
-                    await post_with_backoff(self._callback_url, event)
-            event = format_event(
-                "qmtl.dagmanager",
-                "diff",
-                {"strategy_id": request.strategy_id},
-            )
-            await post_with_backoff(self._callback_url, event)
-        yield pb
 
 
 class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):

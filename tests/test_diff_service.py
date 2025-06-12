@@ -43,9 +43,16 @@ class FakeQueue(QueueManager):
 class FakeStream(StreamSender):
     def __init__(self):
         self.chunks = []
+        self.waits = 0
 
     def send(self, chunk):
         self.chunks.append(chunk)
+
+    def wait_for_ack(self):
+        self.waits += 1
+
+    def ack(self):
+        pass
 
 
 def _make_dag(nodes):
@@ -303,3 +310,20 @@ def test_pre_scan_uses_custom_json_loader(monkeypatch):
 
     service.diff(DiffRequest(strategy_id="s", dag_json="{}"))
     assert calls == ["{}"]
+
+
+def test_stream_chunking_and_ack():
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    nodes = [
+        {"node_id": str(i), "node_type": "N", "code_hash": "c", "schema_hash": "s"}
+        for i in range(250)
+    ]
+    dag = _make_dag(nodes)
+    service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    assert len(stream.chunks) == 3
+    assert stream.waits == 3

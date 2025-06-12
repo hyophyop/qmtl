@@ -53,6 +53,12 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
+    def wait_for_ack(self):
+        pass
+
+    def ack(self):
+        pass
+
 
 @pytest.mark.asyncio
 async def test_grpc_diff():
@@ -64,9 +70,39 @@ async def test_grpc_diff():
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
         request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json="{}")
-        responses = [r async for r in stub.Diff(request)]
+        responses = []
+        async for chunk in stub.Diff(request):
+            responses.append(chunk)
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+            )
     await server.stop(None)
     assert responses[0].sentinel_id == "s-sentinel"
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_multiple_chunks():
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    nodes = [
+        {"node_id": str(i), "node_type": "N", "code_hash": "c", "schema_hash": "s"}
+        for i in range(120)
+    ]
+    dag_json = json.dumps({"nodes": nodes})
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+        received = []
+        async for chunk in stub.Diff(request):
+            received.append(chunk.chunk_id)
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+            )
+    await server.stop(None)
+    assert received == [0, 1]
 
 
 @pytest.mark.asyncio
@@ -131,7 +167,10 @@ async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
         request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json="{}")
-        [_ async for _ in stub.Diff(request)]
+        async for chunk in stub.Diff(request):
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+            )
     await server.stop(None)
 
     assert captured["type"] == "diff"

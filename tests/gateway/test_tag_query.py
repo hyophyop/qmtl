@@ -51,6 +51,12 @@ class _FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
+    def wait_for_ack(self):
+        pass
+
+    def ack(self):
+        pass
+
 
 class FakeDB(Database):
     async def insert_strategy(self, strategy_id: str, meta=None):

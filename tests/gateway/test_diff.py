@@ -29,6 +29,9 @@ def make_stub(chunks, fail_times=0):
                 raise grpc.RpcError("fail")
             return gen()
 
+        async def AckChunk(self, ack):
+            return ack
+
     return Stub, lambda: call_count
 
 
