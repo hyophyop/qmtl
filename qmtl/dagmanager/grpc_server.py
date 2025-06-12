@@ -31,7 +31,11 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         chunk = self._service.diff(
             DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json)
         )
-        pb = dagmanager_pb2.DiffChunk(queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id)
+        pb = dagmanager_pb2.DiffChunk(
+            queue_map=chunk.queue_map,
+            sentinel_id=chunk.sentinel_id,
+            buffer_nodes=[n.node_id for n in chunk.buffering_nodes],
+        )
         if self._callback_url:
             # Consider submitting this to a background task
             # if the callback should not block the stream or terminate it on failure.

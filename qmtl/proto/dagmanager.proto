@@ -9,6 +9,7 @@ message DiffRequest {
 message DiffChunk {
   map<string,string> queue_map = 1;
   string sentinel_id = 2;
+  repeated string buffer_nodes = 3;
 }
 
 service DiffService {
