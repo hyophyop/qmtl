@@ -31,9 +31,9 @@ class DiffRequest:
 
 @dataclass
 class DiffChunk:
-    chunk_id: int
     queue_map: Dict[str, str]
     sentinel_id: str
+    buffering_nodes: List["NodeInfo"] = field(default_factory=list)
     new_nodes: List["NodeInfo"] = field(default_factory=list)
 
 
@@ -152,28 +152,32 @@ class DiffService:
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
         self, nodes: Iterable[NodeInfo], existing: Dict[str, NodeRecord]
-    ) -> tuple[Dict[str, str], List[NodeInfo]]:
+    ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
+        buffering_nodes: List[NodeInfo] = []
         for n in nodes:
             rec = existing.get(n.node_id)
-            if rec and rec.code_hash == n.code_hash and rec.schema_hash == n.schema_hash:
-                queue_map[n.node_id] = rec.topic
-            else:
-                try:
-                    topic = self.queue_manager.upsert(
-                        "asset",
-                        n.node_type,
-                        n.code_hash,
-                        "v1",
-                    )
-                except Exception:
-                    queue_create_error_total.inc()
-                    queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
-                    raise
-                queue_map[n.node_id] = topic
-                new_nodes.append(n)
-        return queue_map, new_nodes
+            if rec:
+                if rec.code_hash == n.code_hash:
+                    queue_map[n.node_id] = rec.topic
+                    if rec.schema_hash != n.schema_hash:
+                        buffering_nodes.append(n)
+                    continue
+            try:
+                topic = self.queue_manager.upsert(
+                    "asset",
+                    n.node_type,
+                    n.code_hash,
+                    "v1",
+                )
+            except Exception:
+                queue_create_error_total.inc()
+                queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
+                raise
+            queue_map[n.node_id] = topic
+            new_nodes.append(n)
+        return queue_map, new_nodes, buffering_nodes
 
     # Step 4 ---------------------------------------------------------------
     def _insert_sentinel(self, sentinel_id: str, nodes: Iterable[NodeInfo]) -> None:
@@ -183,47 +187,39 @@ class DiffService:
 
     # Step 6 ---------------------------------------------------------------
     def _stream_send(
-        self, queue_map: Dict[str, str], sentinel_id: str, new_nodes: List[NodeInfo]
+        self,
+        queue_map: Dict[str, str],
+        sentinel_id: str,
+        new_nodes: List[NodeInfo],
+        buffering_nodes: List[NodeInfo],
     ) -> None:
-        items = list(queue_map.items())
-        start = 0
-        chunk_id = 0
-        first = True
-        while start < len(items):
-            size = 0
-            chunk_items: Dict[str, str] = {}
-            count = 0
-            while start < len(items) and count < 100 and size < 1024 * 1024:
-                k, v = items[start]
-                size += len(k.encode()) + len(v.encode())
-                chunk_items[k] = v
-                start += 1
-                count += 1
-            self.stream_sender.send(
-                DiffChunk(
-                    chunk_id=chunk_id,
-                    queue_map=chunk_items,
-                    sentinel_id=sentinel_id,
-                    new_nodes=list(new_nodes) if first else [],
-                )
+        self.stream_sender.send(
+            DiffChunk(
+                queue_map=queue_map,
+                sentinel_id=sentinel_id,
+                new_nodes=list(new_nodes),
+                buffering_nodes=list(buffering_nodes),
             )
-            self.stream_sender.wait_for_ack()
-            chunk_id += 1
-            first = False
+        )
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
             nodes = self._pre_scan(request.dag_json)
             existing = self._db_fetch([n.node_id for n in nodes])
-            queue_map, new_nodes = self._hash_compare(nodes, existing)
+            queue_map, new_nodes, buffering_nodes = self._hash_compare(nodes, existing)
             sentinel_id = f"{request.strategy_id}-sentinel"
             self._insert_sentinel(sentinel_id, new_nodes)
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id, new_nodes)
-            return DiffChunk(chunk_id=0, queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=new_nodes)
+            self._stream_send(queue_map, sentinel_id, new_nodes, buffering_nodes)
+            return DiffChunk(
+                queue_map=queue_map,
+                sentinel_id=sentinel_id,
+                new_nodes=new_nodes,
+                buffering_nodes=buffering_nodes,
+            )
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)

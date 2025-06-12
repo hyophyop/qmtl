@@ -140,6 +140,7 @@ class StrategyManager:
     redis: redis.Redis
     database: Database
     fsm: StrategyFSM
+    insert_sentinel: bool = True
 
     async def submit(self, payload: StrategySubmit) -> str:
         strategy_id = str(uuid.uuid4())
@@ -149,11 +150,12 @@ class StrategyManager:
             dag_dict = json.loads(dag_bytes.decode())
         except Exception:
             dag_dict = json.loads(payload.dag_json)
-        sentinel = {
-            "node_type": "VersionSentinel",
-            "node_id": f"{strategy_id}-sentinel",
-        }
-        dag_dict.setdefault("nodes", []).append(sentinel)
+        if self.insert_sentinel:
+            sentinel = {
+                "node_type": "VersionSentinel",
+                "node_id": f"{strategy_id}-sentinel",
+            }
+            dag_dict.setdefault("nodes", []).append(sentinel)
         encoded_dag = base64.b64encode(json.dumps(dag_dict).encode()).decode()
 
         try:
@@ -179,13 +181,15 @@ def create_app(
     dag_client: Optional[DagManagerClient] = None,
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
+    *,
+    insert_sentinel: bool = True,
 ) -> FastAPI:
     app = FastAPI()
 
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     db = database or PostgresDatabase("postgresql://localhost/qmtl")
     fsm = StrategyFSM(redis=r, database=db)
-    manager = StrategyManager(redis=r, database=db, fsm=fsm)
+    manager = StrategyManager(redis=r, database=db, fsm=fsm, insert_sentinel=insert_sentinel)
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub

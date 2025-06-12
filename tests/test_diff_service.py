@@ -127,6 +127,33 @@ def test_hash_compare_and_queue_upsert():
     assert queue.calls == [("asset", "N", "c2", "v1", False)]
 
 
+def test_schema_change_buffering_flag():
+    repo = FakeRepo()
+    repo.records["A"] = NodeRecord(
+        "A",
+        "N",
+        "c1",
+        "old",
+        None,
+        [],
+        topic_name("asset", "N", "c1", "v1"),
+    )
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "new"},
+    ])
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    expected_a = topic_name("asset", "N", "c1", "v1")
+    assert chunk.queue_map["A"] == expected_a
+    assert queue.calls == []
+    assert not chunk.new_nodes
+    assert [n.node_id for n in chunk.buffering_nodes] == ["A"]
+
+
 def test_sentinel_insert_and_stream():
     repo = FakeRepo()
     queue = FakeQueue()

@@ -69,11 +69,12 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                     break
                 chunk = await stream.queue.get()
                 pb = dagmanager_pb2.DiffChunk(
-                    chunk_id=chunk.chunk_id,
+                    chunk_id=chunk.chunk_id if hasattr(chunk, 'chunk_id') else 0,
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
+                    buffer_nodes=[n.node_id for n in getattr(chunk, 'buffering_nodes', [])],
                 )
-                if self._callback_url and chunk.new_nodes:
+                if self._callback_url and getattr(chunk, 'new_nodes', None):
                     for node in chunk.new_nodes:
                         if node.tags and node.interval is not None:
                             event = format_event(
@@ -86,14 +87,9 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                                 },
                             )
                             await post_with_backoff(self._callback_url, event)
-                    event = format_event(
-                        "qmtl.dagmanager",
-                        "diff",
-                        {"strategy_id": request.strategy_id},
-                    )
-                    await post_with_backoff(self._callback_url, event)
                 yield pb
         finally:
+            fut.cancel()
             await fut
             self._streams.pop(sentinel_id, None)
 

@@ -7,9 +7,9 @@ message DiffRequest {
 }
 
 message DiffChunk {
-  uint32 chunk_id = 1;
-  map<string,string> queue_map = 2;
-  string sentinel_id = 3;
+  map<string,string> queue_map = 1;
+  string sentinel_id = 2;
+  repeated string buffer_nodes = 3;
 }
 
 message ChunkAck {
