@@ -25,10 +25,14 @@ class DagManagerClient:
             try:
                 queue_map: Dict[str, str] = {}
                 sentinel_id = ""
+                buffer_nodes: list[str] = []
                 async for chunk in stub.Diff(request):
                     queue_map.update(dict(chunk.queue_map))
                     sentinel_id = chunk.sentinel_id
-                return dagmanager_pb2.DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
+                    buffer_nodes.extend(chunk.buffer_nodes)
+                return dagmanager_pb2.DiffChunk(
+                    queue_map=queue_map, sentinel_id=sentinel_id, buffer_nodes=buffer_nodes
+                )
             except Exception:
                 if attempt == retries - 1:
                     raise

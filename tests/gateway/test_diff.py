@@ -49,6 +49,22 @@ async def test_diff_collects_chunks(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_diff_returns_buffer_nodes(monkeypatch):
+    chunks = [
+        dagmanager_pb2.DiffChunk(
+            queue_map={"A": "topic_a"}, sentinel_id="s", buffer_nodes=["A"]
+        )
+    ]
+    Stub, _ = make_stub(chunks)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
+    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+
+    client = DagManagerClient("127.0.0.1:1")
+    result = await client.diff("sid", "{}")
+    assert result.buffer_nodes == ["A"]
+
+
+@pytest.mark.asyncio
 async def test_diff_retries(monkeypatch):
     chunk = dagmanager_pb2.DiffChunk(queue_map={"A": "t"}, sentinel_id="s")
     Stub, get_calls = make_stub([chunk], fail_times=2)
