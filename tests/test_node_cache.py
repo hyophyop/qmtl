@@ -57,7 +57,7 @@ def test_multiple_upstreams():
 
 def test_tensor_memory():
     cache = NodeCache(period=4)
-    cache.append("u1", 60, 1, {"v": 1})
+    cache.append("u1", 60, 60, {"v": 1})
     expected = 1 * 1 * 4 * 2 * 8
     assert cache._tensor.nbytes == expected
 
@@ -68,6 +68,18 @@ def test_gap_detection():
     assert not cache.missing_flags()["u1"][60]
     cache.append("u1", 60, 3, {"v": 2})
     assert cache.missing_flags()["u1"][60]
+
+
+def test_timestamp_bucket_and_gap_handling():
+    cache = NodeCache(period=2)
+    cache.append("u1", 60, 102, {"v": 1})
+    assert cache.get_slice("u1", 60, count=1) == [(60, {"v": 1})]
+    cache.append("u1", 60, 170, {"v": 2})
+    assert cache.get_slice("u1", 60, count=2) == [
+        (60, {"v": 1}),
+        (120, {"v": 2}),
+    ]
+    assert not cache.missing_flags()["u1"][60]
 
 
 def test_on_missing_policy_skip_and_fail():
@@ -93,28 +105,28 @@ def test_on_missing_policy_skip_and_fail():
 
 def test_latest_and_get_slice_list():
     cache = NodeCache(period=3)
-    cache.append("u1", 60, 1, {"v": 1})
-    assert cache.latest("u1", 60) == (1, {"v": 1})
-    cache.append("u1", 60, 2, {"v": 2})
-    assert cache.latest("u1", 60) == (2, {"v": 2})
+    cache.append("u1", 1, 1, {"v": 1})
+    assert cache.latest("u1", 1) == (1, {"v": 1})
+    cache.append("u1", 1, 2, {"v": 2})
+    assert cache.latest("u1", 1) == (2, {"v": 2})
 
     # Request more items than cached -> only existing returned
-    assert cache.get_slice("u1", 60, count=5) == [
+    assert cache.get_slice("u1", 1, count=5) == [
         (1, {"v": 1}),
         (2, {"v": 2}),
     ]
 
     # Unknown upstream -> empty result
-    assert cache.latest("unknown", 60) is None
-    assert cache.get_slice("unknown", 60, count=2) == []
+    assert cache.latest("unknown", 1) is None
+    assert cache.get_slice("unknown", 1, count=2) == []
 
 
 def test_get_slice_xarray():
     cache = NodeCache(period=4)
     for ts in range(1, 5):
-        cache.append("u1", 60, ts, {"v": ts})
+        cache.append("u1", 1, ts, {"v": ts})
 
-    da = cache.get_slice("u1", 60, start=1, end=3)
+    da = cache.get_slice("u1", 1, start=1, end=3)
     assert isinstance(da, xr.DataArray)
     assert da.shape == (2, 2)
     assert list(da[:, 0].astype(int)) == [2, 3]
@@ -122,8 +134,8 @@ def test_get_slice_xarray():
 
 def test_as_xarray_view_is_read_only_and_matches_get_slice():
     cache = NodeCache(period=2)
-    cache.append("u1", 60, 1, {"v": 1})
-    cache.append("u1", 60, 2, {"v": 2})
+    cache.append("u1", 1, 1, {"v": 1})
+    cache.append("u1", 1, 2, {"v": 2})
 
     da = cache.as_xarray()
     expected = {}
@@ -145,16 +157,16 @@ def test_as_xarray_view_is_read_only_and_matches_get_slice():
 
 def test_cache_view_access():
     cache = NodeCache(period=2)
-    cache.append("btc_price", 60, 1, {"v": 1})
-    cache.append("btc_price", 60, 2, {"v": 2})
+    cache.append("btc_price", 1, 1, {"v": 1})
+    cache.append("btc_price", 1, 2, {"v": 2})
 
     view = cache.view()
 
-    assert view["btc_price"][60].latest() == (2, {"v": 2})
-    assert view.btc_price[60].latest() == (2, {"v": 2})
+    assert view["btc_price"][1].latest() == (2, {"v": 2})
+    assert view.btc_price[1].latest() == (2, {"v": 2})
 
     with pytest.raises(KeyError):
-        _ = view["missing"][60]
+        _ = view["missing"][1]
     with pytest.raises(AttributeError):
         _ = view.missing
 
@@ -162,11 +174,11 @@ def test_cache_view_access():
 def test_cache_view_accepts_node_instance():
     stream = StreamInput(interval=60, period=2)
     cache = NodeCache(period=2)
-    cache.append(stream.node_id, 60, 1, {"v": 1})
+    cache.append(stream.node_id, 60, 60, {"v": 1})
 
     view = cache.view()
 
-    assert view[stream][60].latest() == (1, {"v": 1})
+    assert view[stream][60].latest() == (60, {"v": 1})
 
 
 def test_cache_view_access_logging_and_reset():
