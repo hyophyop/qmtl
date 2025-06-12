@@ -28,6 +28,9 @@ class DagManagerClient:
                 async for chunk in stub.Diff(request):
                     queue_map.update(dict(chunk.queue_map))
                     sentinel_id = chunk.sentinel_id
+                    await stub.AckChunk(
+                        dagmanager_pb2.ChunkAck(sentinel_id=sentinel_id, chunk_id=chunk.chunk_id)
+                    )
                 return dagmanager_pb2.DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id)
             except Exception:
                 if attempt == retries - 1:

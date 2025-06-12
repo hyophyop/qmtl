@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-import qmtl.proto.dagmanager_pb2 as dagmanager__pb2
+from . import dagmanager_pb2 as dagmanager__pb2
 
-GRPC_GENERATED_VERSION = '1.72.1'
+GRPC_GENERATED_VERSION = '1.73.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -39,12 +39,23 @@ class DiffServiceStub(object):
                 request_serializer=dagmanager__pb2.DiffRequest.SerializeToString,
                 response_deserializer=dagmanager__pb2.DiffChunk.FromString,
                 _registered_method=True)
+        self.AckChunk = channel.unary_unary(
+                '/qmtl.dagmanager.DiffService/AckChunk',
+                request_serializer=dagmanager__pb2.ChunkAck.SerializeToString,
+                response_deserializer=dagmanager__pb2.ChunkAck.FromString,
+                _registered_method=True)
 
 
 class DiffServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Diff(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AckChunk(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -57,6 +68,11 @@ def add_DiffServiceServicer_to_server(servicer, server):
                     servicer.Diff,
                     request_deserializer=dagmanager__pb2.DiffRequest.FromString,
                     response_serializer=dagmanager__pb2.DiffChunk.SerializeToString,
+            ),
+            'AckChunk': grpc.unary_unary_rpc_method_handler(
+                    servicer.AckChunk,
+                    request_deserializer=dagmanager__pb2.ChunkAck.FromString,
+                    response_serializer=dagmanager__pb2.ChunkAck.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -86,6 +102,33 @@ class DiffService(object):
             '/qmtl.dagmanager.DiffService/Diff',
             dagmanager__pb2.DiffRequest.SerializeToString,
             dagmanager__pb2.DiffChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AckChunk(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/qmtl.dagmanager.DiffService/AckChunk',
+            dagmanager__pb2.ChunkAck.SerializeToString,
+            dagmanager__pb2.ChunkAck.FromString,
             options,
             channel_credentials,
             insecure,

@@ -31,6 +31,7 @@ class DiffRequest:
 
 @dataclass
 class DiffChunk:
+    chunk_id: int
     queue_map: Dict[str, str]
     sentinel_id: str
     new_nodes: List["NodeInfo"] = field(default_factory=list)
@@ -84,6 +85,14 @@ class StreamSender:
     """Interface to send diff results as a stream."""
 
     def send(self, chunk: DiffChunk) -> None:
+        raise NotImplementedError
+
+    def wait_for_ack(self) -> None:
+        """Block until the client acknowledges the last chunk."""
+        raise NotImplementedError
+
+    def ack(self) -> None:
+        """Signal that the last chunk was received."""
         raise NotImplementedError
 
 
@@ -176,9 +185,31 @@ class DiffService:
     def _stream_send(
         self, queue_map: Dict[str, str], sentinel_id: str, new_nodes: List[NodeInfo]
     ) -> None:
-        self.stream_sender.send(
-            DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=list(new_nodes))
-        )
+        items = list(queue_map.items())
+        start = 0
+        chunk_id = 0
+        first = True
+        while start < len(items):
+            size = 0
+            chunk_items: Dict[str, str] = {}
+            count = 0
+            while start < len(items) and count < 100 and size < 1024 * 1024:
+                k, v = items[start]
+                size += len(k.encode()) + len(v.encode())
+                chunk_items[k] = v
+                start += 1
+                count += 1
+            self.stream_sender.send(
+                DiffChunk(
+                    chunk_id=chunk_id,
+                    queue_map=chunk_items,
+                    sentinel_id=sentinel_id,
+                    new_nodes=list(new_nodes) if first else [],
+                )
+            )
+            self.stream_sender.wait_for_ack()
+            chunk_id += 1
+            first = False
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
@@ -192,7 +223,7 @@ class DiffService:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
             self._stream_send(queue_map, sentinel_id, new_nodes)
-            return DiffChunk(queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=new_nodes)
+            return DiffChunk(chunk_id=0, queue_map=queue_map, sentinel_id=sentinel_id, new_nodes=new_nodes)
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)

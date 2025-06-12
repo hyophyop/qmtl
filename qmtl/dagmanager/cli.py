@@ -62,6 +62,12 @@ class _PrintStream(StreamSender):
     def send(self, chunk) -> None:
         print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
 
+    def wait_for_ack(self) -> None:
+        pass
+
+    def ack(self) -> None:
+        pass
+
 
 async def _cmd_diff(args: argparse.Namespace) -> None:
     data = Path(args.file).read_text()

@@ -41,6 +41,12 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
+    def wait_for_ack(self):
+        pass
+
+    def ack(self):
+        pass
+
 
 class DummyMetrics:
     def __init__(self, val: float = 0) -> None:
