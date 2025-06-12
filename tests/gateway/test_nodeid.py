@@ -60,3 +60,23 @@ async def test_sentinel_inserted(client_and_redis):
     dag_saved = json.loads(base64.b64decode(encoded).decode())
     assert any(n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"])
 
+
+@pytest.mark.asyncio
+async def test_sentinel_skip():
+    redis = FakeRedis(decode_responses=True)
+    db = FakeDB()
+    app = create_app(redis_client=redis, database=db, insert_sentinel=False)
+    client = TestClient(app)
+    dag = {"nodes": []}
+    payload = StrategySubmit(
+        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+        meta=None,
+        run_type="dry-run",
+    )
+    resp = client.post("/strategies", json=payload.model_dump())
+    assert resp.status_code == 202
+    sid = resp.json()["strategy_id"]
+    encoded = await redis.hget(f"strategy:{sid}", "dag")
+    dag_saved = json.loads(base64.b64decode(encoded).decode())
+    assert not any(n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"])
+
