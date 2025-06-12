@@ -65,17 +65,18 @@ class NodeCache:
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
         self._ensure_coords(u, interval)
+        timestamp_bucket = timestamp - (timestamp % interval)
         prev = self._last_ts.get((u, interval))
-        if prev is not None and prev + interval != timestamp:
+        if prev is not None and prev + interval != timestamp_bucket:
             self._missing[(u, interval)] = True
         else:
             self._missing[(u, interval)] = False
-        self._last_ts[(u, interval)] = timestamp
+        self._last_ts[(u, interval)] = timestamp_bucket
         u_idx = self._u_idx[u]
         i_idx = self._i_idx[interval]
         arr = self._tensor.data[u_idx, i_idx]
         arr[:-1] = arr[1:]
-        arr[-1, 0] = timestamp
+        arr[-1, 0] = timestamp_bucket
         arr[-1, 1] = payload
         self._tensor.data[u_idx, i_idx] = arr
         filled = self._filled.get((u, interval), 0)
