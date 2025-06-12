@@ -2,7 +2,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from qmtl.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, QueueManager, StreamSender
+from qmtl.dagmanager.diff_service import (
+    DiffService,
+    DiffRequest,
+    NodeRepository,
+    QueueManager,
+    StreamSender,
+)
+from qmtl.dagmanager.topic import topic_name
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 import httpx
 import time
@@ -21,12 +28,12 @@ class FakeRepo(NodeRepository):
 
 
 class FakeQueue(QueueManager):
-    def upsert(self, node_id):
-        return "topic"
+    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
+        return topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
 
 
 class FailingQueue(QueueManager):
-    def upsert(self, node_id):
+    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
         raise RuntimeError("fail")
 
 
@@ -44,7 +51,11 @@ class DummyMetrics:
 
 
 def _make_dag():
-    return '{"nodes": [{"node_id": "A", "code_hash": "c", "schema_hash": "s"}]}'
+    return (
+        '{"nodes": ['
+        '{"node_id": "A", "node_type": "N", "code_hash": "c", "schema_hash": "s"}'
+        ']}'
+    )
 
 
 def test_metrics_exposed():

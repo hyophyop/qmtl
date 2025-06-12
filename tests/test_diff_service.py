@@ -10,6 +10,7 @@ from qmtl.dagmanager.diff_service import (
     KafkaQueueManager,
 )
 from qmtl.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.dagmanager.topic import topic_name
 from qmtl.dagmanager import metrics
 
 
@@ -34,9 +35,9 @@ class FakeQueue(QueueManager):
     def __init__(self):
         self.calls = []
 
-    def upsert(self, node_id):
-        self.calls.append(node_id)
-        return f"topic_{node_id}"
+    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
+        self.calls.append((asset, node_type, code_hash, version, dryrun))
+        return topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
 
 
 class FakeStream(StreamSender):
@@ -58,8 +59,14 @@ def test_pre_scan_and_db_fetch_topo_order():
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2", "inputs": ["A"]},
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+        {
+            "node_id": "B",
+            "node_type": "N",
+            "code_hash": "c2",
+            "schema_hash": "s2",
+            "inputs": ["A"],
+        },
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
     ])
     req = DiffRequest(strategy_id="s", dag_json=dag)
 
@@ -74,8 +81,8 @@ def test_pre_scan_and_db_fetch():
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
-        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "node_type": "N", "code_hash": "c2", "schema_hash": "s2"},
     ])
     req = DiffRequest(strategy_id="s", dag_json=dag)
 
@@ -86,21 +93,23 @@ def test_pre_scan_and_db_fetch():
 def test_hash_compare_and_queue_upsert():
     repo = FakeRepo()
     # existing node A
-    repo.records["A"] = NodeRecord("A", "c1", "s1", "topic_A")
+    repo.records["A"] = NodeRecord("A", "N", "c1", "s1", topic_name("asset", "N", "c1", "v1"))
     queue = FakeQueue()
     stream = FakeStream()
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
-        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "node_type": "N", "code_hash": "c2", "schema_hash": "s2"},
     ])
     req = DiffRequest(strategy_id="s", dag_json=dag)
 
     chunk = service.diff(req)
-    assert chunk.queue_map["A"] == "topic_A"
-    assert chunk.queue_map["B"] == "topic_B"
-    assert queue.calls == ["B"]
+    expected_a = topic_name("asset", "N", "c1", "v1")
+    expected_b = topic_name("asset", "N", "c2", "v1")
+    assert chunk.queue_map["A"] == expected_a
+    assert chunk.queue_map["B"] == expected_b
+    assert queue.calls == [("asset", "N", "c2", "v1", False)]
 
 
 def test_sentinel_insert_and_stream():
@@ -110,7 +119,7 @@ def test_sentinel_insert_and_stream():
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
     ])
     req = DiffRequest(strategy_id="strategy", dag_json=dag)
 
@@ -188,7 +197,12 @@ class FakeAdmin:
 def test_integration_with_backends():
     """DiffService using Neo4jNodeRepository and KafkaQueueManager."""
     records = [
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1", "topic": "topic_A"}
+        {
+            "node_id": "A",
+            "code_hash": "c1",
+            "schema_hash": "s1",
+            "topic": topic_name("asset", "N", "c1", "v1"),
+        }
     ]
     driver = FakeDriver(records)
     admin = FakeAdmin()
@@ -198,28 +212,30 @@ def test_integration_with_backends():
     service = DiffService(repo, queue_manager, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
-        {"node_id": "B", "code_hash": "c2", "schema_hash": "s2"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "node_type": "N", "code_hash": "c2", "schema_hash": "s2"},
     ])
 
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
-    assert chunk.queue_map == {"A": "topic_A", "B": "topic_B"}
+    expected_a = topic_name("asset", "N", "c1", "v1")
+    expected_b = topic_name("asset", "N", "c2", "v1")
+    assert chunk.queue_map == {"A": expected_a, "B": expected_b}
     assert any("sid" in p for _, p in driver.session_obj.run_calls)
-    assert admin.created and admin.created[0][0] == "topic_B"
+    assert admin.created and admin.created[0][0] == expected_b
     assert stream.chunks[0] == chunk
 
 
 def test_sentinel_gap_metric_increment():
     metrics.reset_metrics()
     repo = FakeRepo()
-    repo.records["A"] = NodeRecord("A", "c1", "s1", "topic_A")
+    repo.records["A"] = NodeRecord("A", "N", "c1", "s1", topic_name("asset", "N", "c1", "v1"))
     queue = FakeQueue()
     stream = FakeStream()
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
     ])
 
     service.diff(DiffRequest(strategy_id="s", dag_json=dag))

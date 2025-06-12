@@ -17,7 +17,7 @@ from .metrics import (
     sentinel_gap_count,
 )
 from .kafka_admin import KafkaAdmin
-from .topic import TopicConfig
+from .topic import TopicConfig, topic_name
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -38,6 +38,7 @@ class DiffChunk:
 @dataclass
 class NodeInfo:
     node_id: str
+    node_type: str
     code_hash: str
     schema_hash: str
 
@@ -64,7 +65,15 @@ class NodeRepository:
 class QueueManager:
     """Interface to create or update queues."""
 
-    def upsert(self, node_id: str) -> str:
+    def upsert(
+        self,
+        asset: str,
+        node_type: str,
+        code_hash: str,
+        version: str,
+        *,
+        dryrun: bool = False,
+    ) -> str:
         raise NotImplementedError
 
 
@@ -115,6 +124,7 @@ class DiffService:
         return [
             NodeInfo(
                 node_id=node_map[n]["node_id"],
+                node_type=node_map[n].get("node_type", ""),
                 code_hash=node_map[n]["code_hash"],
                 schema_hash=node_map[n]["schema_hash"],
             )
@@ -137,7 +147,12 @@ class DiffService:
                 queue_map[n.node_id] = rec.topic
             else:
                 try:
-                    topic = self.queue_manager.upsert(n.node_id)
+                    topic = self.queue_manager.upsert(
+                        "asset",
+                        n.node_type,
+                        n.code_hash,
+                        "v1",
+                    )
                 except Exception:
                     queue_create_error_total.inc()
                     queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
@@ -186,8 +201,8 @@ class Neo4jNodeRepository(NodeRepository):
         query = (
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
             "WHERE c.node_id IN $ids "
-            "RETURN c.node_id AS node_id, c.code_hash AS code_hash, "
-            "c.schema_hash AS schema_hash, q.topic AS topic"
+            "RETURN c.node_id AS node_id, c.node_type AS node_type, "
+            "c.code_hash AS code_hash, c.schema_hash AS schema_hash, q.topic AS topic"
         )
         with self.driver.session() as session:
             result = session.run(query, ids=list(node_ids))
@@ -195,6 +210,7 @@ class Neo4jNodeRepository(NodeRepository):
             for r in result:
                 records[r["node_id"]] = NodeRecord(
                     node_id=r["node_id"],
+                    node_type=r.get("node_type", ""),
                     code_hash=r.get("code_hash"),
                     schema_hash=r.get("schema_hash"),
                     topic=r.get("topic"),
@@ -232,8 +248,24 @@ class KafkaQueueManager(QueueManager):
         self.admin = admin
         self.config = config or TopicConfig(1, 1, 24 * 60 * 60 * 1000)
 
-    def upsert(self, node_id: str) -> str:
-        topic = f"topic_{node_id}"
+    def upsert(
+        self,
+        asset: str,
+        node_type: str,
+        code_hash: str,
+        version: str,
+        *,
+        dryrun: bool = False,
+    ) -> str:
+        existing = self.admin.client.list_topics().keys()
+        topic = topic_name(
+            asset,
+            node_type,
+            code_hash,
+            version,
+            dryrun=dryrun,
+            existing=existing,
+        )
         self.admin.create_topic_if_needed(topic, self.config)
         return topic
 
