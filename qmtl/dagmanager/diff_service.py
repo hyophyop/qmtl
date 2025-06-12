@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Iterable, List, Dict, TYPE_CHECKING
+
+try:  # optional high performance json
+    import orjson as _json
+except Exception:  # pragma: no cover - fallback
+    import json as _json
+
+_json_loads = _json.loads
 import time
 
 from .metrics import (
@@ -84,17 +90,36 @@ class DiffService:
 
     # Step 1 ---------------------------------------------------------------
     def _pre_scan(self, dag_json: str) -> List[NodeInfo]:
-        data = json.loads(dag_json)
-        nodes = []
-        for n in data.get("nodes", []):
-            nodes.append(
-                NodeInfo(
-                    node_id=n["node_id"],
-                    code_hash=n["code_hash"],
-                    schema_hash=n["schema_hash"],
-                )
+        """Parse DAG JSON and return nodes in topological order."""
+        data = _json_loads(dag_json)
+
+        node_map = {n["node_id"]: n for n in data.get("nodes", [])}
+        deps: Dict[str, set[str]] = {
+            nid: set(node_map[nid].get("inputs", [])) for nid in node_map
+        }
+
+        ordered: List[str] = []
+        ready = [nid for nid, d in deps.items() if not d]
+        while ready:
+            nid = ready.pop(0)
+            ordered.append(nid)
+            for other, d in deps.items():
+                if nid in d:
+                    d.remove(nid)
+                    if not d:
+                        ready.append(other)
+
+        if len(ordered) != len(node_map):  # cycle fallback to given order
+            ordered = list(node_map.keys())
+
+        return [
+            NodeInfo(
+                node_id=node_map[n]["node_id"],
+                code_hash=node_map[n]["code_hash"],
+                schema_hash=node_map[n]["schema_hash"],
             )
-        return nodes
+            for n in ordered
+        ]
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
