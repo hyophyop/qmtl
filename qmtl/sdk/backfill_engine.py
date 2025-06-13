@@ -3,9 +3,13 @@ from __future__ import annotations
 """Asynchronous engine for running backfill jobs."""
 
 import asyncio
+import logging
 
 from .backfill import BackfillSource
 from .node import Node
+from . import metrics as sdk_metrics
+
+logger = logging.getLogger(__name__)
 
 
 class BackfillEngine:
@@ -18,6 +22,17 @@ class BackfillEngine:
 
     # --------------------------------------------------------------
     async def _run_job(self, node: Node, start: int, end: int) -> None:
+        sdk_metrics.observe_backfill_start(node.node_id, node.interval)
+        logger.info(
+            "backfill.start",
+            extra={
+                "node_id": node.node_id,
+                "interval": node.interval,
+                "start": start,
+                "end": end,
+            },
+        )
+
         attempts = 0
         while True:
             try:
@@ -29,16 +44,54 @@ class BackfillEngine:
                     interval=node.interval,
                 )
                 if df is None:
+                    sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)
+                    logger.info(
+                        "backfill.complete",
+                        extra={
+                            "node_id": node.node_id,
+                            "interval": node.interval,
+                            "start": start,
+                            "end": end,
+                        },
+                    )
                     return
                 items = [
                     (int(row.get("ts", 0)), row.to_dict())
                     for _, row in df.iterrows()
                 ]
                 node.cache.backfill_bulk(node.node_id, node.interval, items)
+                sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)
+                logger.info(
+                    "backfill.complete",
+                    extra={
+                        "node_id": node.node_id,
+                        "interval": node.interval,
+                        "start": start,
+                        "end": end,
+                    },
+                )
                 return
             except Exception:
                 attempts += 1
+                sdk_metrics.observe_backfill_retry(node.node_id, node.interval)
+                logger.info(
+                    "backfill.retry",
+                    extra={
+                        "node_id": node.node_id,
+                        "interval": node.interval,
+                        "attempt": attempts,
+                    },
+                )
                 if attempts > self.max_retries:
+                    sdk_metrics.observe_backfill_failure(node.node_id, node.interval)
+                    logger.error(
+                        "backfill.failed",
+                        extra={
+                            "node_id": node.node_id,
+                            "interval": node.interval,
+                            "attempts": attempts,
+                        },
+                    )
                     raise
                 await asyncio.sleep(0.1 * attempts)
 
