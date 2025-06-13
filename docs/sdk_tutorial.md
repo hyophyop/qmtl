@@ -32,11 +32,12 @@ class MyStrategy(Strategy):
 
 ## 실행 모드
 
-전략은 `Runner` 클래스로 실행합니다. 모드는 `backtest`, `dryrun`, `live` 세 가지가 있으며 CLI 또는 Python 코드에서 선택할 수 있습니다.
+전략은 `Runner` 클래스로 실행합니다. 모드는 `backtest`, `dryrun`, `live`, `offline` 네 가지가 있으며 CLI 또는 Python 코드에서 선택할 수 있습니다.
 
 ```bash
 # 커맨드라인 예시
 python -m qmtl.sdk tests.sample_strategy:SampleStrategy --mode backtest --start-time 2024-01-01 --end-time 2024-02-01
+python -m qmtl.sdk tests.sample_strategy:SampleStrategy --mode offline
 ```
 
 ```python

@@ -9,21 +9,26 @@ from tests.sample_strategy import SampleStrategy
 
 
 def test_backtest(capsys):
-    strategy = Runner.backtest(SampleStrategy, start_time="s", end_time="e")
+    strategy = Runner.backtest(
+        SampleStrategy,
+        start_time="s",
+        end_time="e",
+        gateway_url="http://gw",
+    )
     captured = capsys.readouterr().out
     assert "[BACKTEST] SampleStrategy" in captured
     assert isinstance(strategy, SampleStrategy)
 
 
 def test_dryrun(capsys):
-    strategy = Runner.dryrun(SampleStrategy)
+    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
     assert "[DRYRUN] SampleStrategy" in captured
     assert isinstance(strategy, SampleStrategy)
 
 
 def test_live(capsys):
-    strategy = Runner.live(SampleStrategy)
+    strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
     assert "[LIVE] SampleStrategy" in captured
     assert isinstance(strategy, SampleStrategy)
@@ -71,8 +76,8 @@ def test_gateway_error(monkeypatch):
         Runner.dryrun(SampleStrategy, gateway_url="http://gw")
 
 
-def test_offline_flag():
-    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw", offline=True)
+def test_offline_mode():
+    strategy = Runner.offline(SampleStrategy)
     assert all(n.execute for n in strategy.nodes)
     assert all(n.queue_topic is None for n in strategy.nodes)
 
@@ -83,11 +88,8 @@ def test_connection_failure(monkeypatch):
 
     monkeypatch.setattr(httpx, "post", mock_post)
 
-    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
-    assert all(n.execute for n in strategy.nodes)
-    assert all(n.queue_topic is None for n in strategy.nodes)
-    offline = Runner.dryrun(SampleStrategy, offline=True)
-    assert [n.node_id for n in offline.nodes] == [n.node_id for n in strategy.nodes]
+    with pytest.raises(RuntimeError):
+        Runner.dryrun(SampleStrategy, gateway_url="http://gw")
 
 
 def test_offline_same_ids(monkeypatch):
@@ -103,7 +105,7 @@ def test_offline_same_ids(monkeypatch):
     monkeypatch.setattr(httpx, "post", mock_post)
 
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
-    offline = Runner.dryrun(SampleStrategy, offline=True)
+    offline = Runner.offline(SampleStrategy)
     assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]
 
 
@@ -120,8 +122,8 @@ def test_no_gateway_same_ids(monkeypatch):
     monkeypatch.setattr(httpx, "post", mock_post)
 
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
-    no_gateway = Runner.dryrun(SampleStrategy)
-    assert [n.node_id for n in online.nodes] == [n.node_id for n in no_gateway.nodes]
+    with pytest.raises(RuntimeError):
+        Runner.dryrun(SampleStrategy)
 
 
 def test_feed_queue_data_with_ray(monkeypatch):

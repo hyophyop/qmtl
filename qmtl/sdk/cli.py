@@ -7,11 +7,11 @@ from .runner import Runner
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run QMTL strategy")
     parser.add_argument("strategy", help="Import path as module:Class")
-    parser.add_argument("--mode", choices=["backtest", "dryrun", "live"], required=True)
+    parser.add_argument("--mode", choices=["backtest", "dryrun", "live", "offline"], required=True)
     parser.add_argument("--start-time")
     parser.add_argument("--end-time")
     parser.add_argument("--on-missing", default="skip")
-    parser.add_argument("--offline", action="store_true", help="Run without contacting the Gateway")
+    parser.add_argument("--gateway-url")
     args = parser.parse_args()
 
     module_name, class_name = args.strategy.split(":")
@@ -24,9 +24,11 @@ def main() -> None:
             start_time=args.start_time,
             end_time=args.end_time,
             on_missing=args.on_missing,
-            offline=args.offline,
+            gateway_url=args.gateway_url,
         )
     elif args.mode == "dryrun":
-        Runner.dryrun(strategy_cls, offline=args.offline)
+        Runner.dryrun(strategy_cls, gateway_url=args.gateway_url)
     elif args.mode == "live":
-        Runner.live(strategy_cls, offline=args.offline)
+        Runner.live(strategy_cls, gateway_url=args.gateway_url)
+    else:  # offline
+        Runner.offline(strategy_cls)
