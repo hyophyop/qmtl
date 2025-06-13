@@ -13,6 +13,7 @@ import httpx
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
+from .runner import Runner
 
 from qmtl.dagmanager import compute_node_id
 
@@ -424,7 +425,7 @@ class Node:
             if on_missing == "skip":
                 return
         if not self.pre_warmup and self.compute_fn:
-            self.compute_fn(self.cache.view())
+            Runner._execute_compute_fn(self.compute_fn, self.cache.view())
 
     def to_dict(self) -> dict:
         return {
