@@ -70,14 +70,15 @@ CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
    | 케이스                             | 처리               | 큐 정책                                             |
    | ------------------------------- | ---------------- | ------------------------------------------------ |
    | code\_hash & schema\_hash 완전 동일 | **재사용**          | 기존 Queue join                                    |
-   | Back‑compat 스키마 변경              | **재사용 + 버퍼링 모드** | 큐 lag = history size, 다운스트림 필드 요구 시 pass‑through |
+   | Back‑compat 스키마 변경              | **재사용 + 버퍼링 모드** | 큐 lag = history size, 7일 이후 자동 full‑recompute |
    | Breaking 스키마 or code 변경         | **신규 노드·큐**      | `topic_suffix=_v{n}`, TTL inherit                |
 4. **Sentinel 삽입** `CREATE (:VersionSentinel{...})‑[:HAS]->(new_nodes)` (옵션)
 5. **Queue Upsert**
 
    * Kafka Admin API must run with idempotent topic creation enabled as noted in the architecture (section 2).
-   * gRPC Bulk `CreateTopicsRequest` idempotent
-   * 실패 시 `409 CONFLICT` → skip + log.
+   * gRPC Bulk `CreateTopicsRequest` idempotent.
+   * 실패 시 `CREATE_TOPICS→VERIFY→WAIT→BACKOFF` 5단계 재시도를 수행하고,
+     VERIFY 단계에서 broker metadata를 조회하여 유사 이름 충돌 여부를 확인한다.
 6. **Stream 전송** 100 items/≤1 MiB chunk + ACK window(10).
 
 ### 2.3 알고리즘 복잡도
@@ -177,6 +178,9 @@ sequenceDiagram
 
 ---
 
+각 행은 Runbook 마크다운 파일과 대응되는 ID를 가지며, Grafana Dashboard URL과
+교차 링크된다. 이를 통해 "재현 가능 사고 대응" 절차를 문서화한다.
+
 ## 6. 관측 & 메트릭 (확장)
 
 | Metric                     | Target | Alert Rule               |
@@ -184,6 +188,7 @@ sequenceDiagram
 | `diff_duration_ms_p95`     | <80 ms | `>200ms for 5m → WARN`   |
 | `queue_create_error_total` | =0     | `>0 in 15m → CRIT`       |
 | `sentinel_gap_count`       | <1     | `>=1 → WARN`             |
+| `nodecache_resident_bytes` | stable | `>5e9 for 5m → WARN`     |
 | `orphan_queue_total`       | ↓      | trend up 3h → GC inspect |
 
 ---
@@ -222,6 +227,8 @@ sequenceDiagram
 * **Unit:** `pytest plugins` → hash calculation, schema diff edge cases.
 * **Integration:** Docker‑Compose (Kafka, Neo4j, Gateway stub) → Diff latency, GC batch.
 * **Chaos:** Toxiproxy split‑brain, network delay injection.
+* **CI/CD Gate:** SSA DAG Lint와 20종 백테스트 → 24h 카나리아 → 50% 프로모션
+  이후 자동 배포, `dagmgr redo-diff --sentinel <id> --rollback`으로 역방향 롤백.
 
 ---
 

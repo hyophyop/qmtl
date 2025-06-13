@@ -21,14 +21,21 @@ receivers:
  groups:
    - name: qmtl
      rules:
-       - alert: DiffDurationHigh
-         expr: diff_duration_ms_p95 > 200
-         for: 5m
-         labels:
-           severity: warning
-         annotations:
-           summary: Diff processing slow
-       - alert: QueueCreateErrors
+      - alert: DiffDurationHigh
+        expr: diff_duration_ms_p95 > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Diff processing slow
+      - alert: NodeCacheMemoryHigh
+        expr: nodecache_resident_bytes > 5e9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: NodeCache memory usage high
+      - alert: QueueCreateErrors
          expr: queue_create_error_total > 0
          for: 15m
          labels:
