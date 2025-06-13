@@ -104,76 +104,88 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
-        offline: bool = False,
     ) -> Strategy:
-        """Run strategy in backtest mode."""
+        """Run strategy in backtest mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        queue_map = {}
-        offline = offline or not gateway_url
-        if gateway_url and not offline:
-            try:
-                queue_map = Runner._post_gateway(
-                    gateway_url=gateway_url,
-                    dag=dag,
-                    meta=meta,
-                    run_type="backtest",
-                )
-            except httpx.RequestError:
-                print(f"Warning: Gateway connection failed during backtest. Operating in offline mode.") # Consider using a proper logger
-                offline = True
-        Runner._apply_queue_map(strategy, queue_map if not offline else {})
+        if not gateway_url:
+            raise RuntimeError("gateway_url is required for backtest mode")
+
+        try:
+            queue_map = Runner._post_gateway(
+                gateway_url=gateway_url,
+                dag=dag,
+                meta=meta,
+                run_type="backtest",
+            )
+        except httpx.RequestError as exc:
+            raise RuntimeError("failed to connect to Gateway") from exc
+
+        Runner._apply_queue_map(strategy, queue_map)
         # Placeholder for backtest logic
         return strategy
 
     @staticmethod
     def dryrun(
-        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None, offline: bool = False
+        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
     ) -> Strategy:
-        """Run strategy in dry-run (paper trading) mode."""
+        """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[DRYRUN] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        queue_map = {}
-        offline = offline or not gateway_url
-        if gateway_url and not offline:
-            try:
-                queue_map = Runner._post_gateway(
-                    gateway_url=gateway_url,
-                    dag=dag,
-                    meta=meta,
-                    run_type="dry-run",
-                )
-            except httpx.RequestError:
-                offline = True
-        Runner._apply_queue_map(strategy, queue_map if not offline else {})
+
+        if not gateway_url:
+            raise RuntimeError("gateway_url is required for dry-run mode")
+
+        try:
+            queue_map = Runner._post_gateway(
+                gateway_url=gateway_url,
+                dag=dag,
+                meta=meta,
+                run_type="dry-run",
+            )
+        except httpx.RequestError as exc:
+            raise RuntimeError("failed to connect to Gateway") from exc
+
+        Runner._apply_queue_map(strategy, queue_map)
         # Placeholder for dry-run logic
         return strategy
 
     @staticmethod
     def live(
-        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None, offline: bool = False
+        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
     ) -> Strategy:
-        """Run strategy in live trading mode."""
+        """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
         print(f"[LIVE] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
-        queue_map = {}
-        offline = offline or not gateway_url
-        if gateway_url and not offline:
-            try:
-                queue_map = Runner._post_gateway(
-                    gateway_url=gateway_url,
-                    dag=dag,
-                    meta=meta,
-                    run_type="live",
-                )
-            except httpx.RequestError:
-                offline = True
-        Runner._apply_queue_map(strategy, queue_map if not offline else {})
+
+        if not gateway_url:
+            raise RuntimeError("gateway_url is required for live mode")
+
+        try:
+            queue_map = Runner._post_gateway(
+                gateway_url=gateway_url,
+                dag=dag,
+                meta=meta,
+                run_type="live",
+            )
+        except httpx.RequestError as exc:
+            raise RuntimeError("failed to connect to Gateway") from exc
+
+        Runner._apply_queue_map(strategy, queue_map)
         # Placeholder for live trading logic
+        return strategy
+
+    @staticmethod
+    def offline(strategy_cls: type[Strategy]) -> Strategy:
+        """Execute ``strategy_cls`` locally without Gateway interaction."""
+        strategy = Runner._prepare(strategy_cls)
+        print(f"[OFFLINE] {strategy_cls.__name__} starting")
+        Runner._apply_queue_map(strategy, {})
+        # Placeholder for offline execution logic
         return strategy
