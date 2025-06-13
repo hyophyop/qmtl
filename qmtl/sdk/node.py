@@ -12,6 +12,7 @@ import xarray as xr
 import httpx
 
 from .cache_view import CacheView
+from .backfill_state import BackfillState
 
 from qmtl.dagmanager import compute_node_id
 
@@ -37,6 +38,7 @@ class NodeCache:
         self._u_idx: dict[str, int] = {}
         self._i_idx: dict[int, int] = {}
         self._filled: dict[tuple[str, int], int] = {}
+        self.backfill_state = BackfillState()
 
     # ------------------------------------------------------------------
     def _ensure_coords(self, u: str, interval: int) -> None:
@@ -239,6 +241,20 @@ class NodeCache:
         for ts, payload in items:
             bucket = ts - (ts % interval)
             backfill_items.append((bucket, payload))
+
+        if backfill_items:
+            ranges: list[tuple[int, int]] = []
+            start_range = backfill_items[0][0]
+            prev = start_range
+            for ts, _ in backfill_items[1:]:
+                if ts == prev + interval:
+                    prev = ts
+                else:
+                    ranges.append((start_range, prev))
+                    start_range = ts
+                    prev = ts
+            ranges.append((start_range, prev))
+            self.backfill_state.mark_ranges(u, interval, ranges)
 
         # Capture latest data after collecting items so concurrent ``append``
         # operations are taken into account during the merge.

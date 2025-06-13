@@ -237,3 +237,23 @@ def test_backfill_bulk_respects_live_append():
     assert cache.last_timestamps()["u1"][60] == 120
     assert not cache.missing_flags()["u1"][60]
 
+
+def test_backfill_state_ranges():
+    cache = NodeCache(period=5)
+    cache.backfill_bulk(
+        "u1",
+        60,
+        [
+            (60, {"v": 1}),
+            (120, {"v": 2}),
+            (240, {"v": 4}),
+        ],
+    )
+    assert cache.backfill_state.ranges("u1", 60) == [(60, 120), (240, 240)]
+
+
+def test_backfill_state_merge_multiple_calls():
+    cache = NodeCache(period=5)
+    cache.backfill_bulk("u1", 60, [(60, {}), (120, {}), (240, {})])
+    cache.backfill_bulk("u1", 60, [(180, {}), (300, {})])
+    assert cache.backfill_state.ranges("u1", 60) == [(60, 300)]
