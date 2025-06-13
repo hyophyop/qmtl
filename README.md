@@ -17,3 +17,8 @@ uv run pytest -q tests
 For instructions on implementing strategies with the SDK, see
 [docs/sdk_tutorial.md](docs/sdk_tutorial.md).
 
+## Backfills
+
+Learn how to preload historical data using BackfillSource objects in
+[docs/backfill.md](docs/backfill.md).
+
