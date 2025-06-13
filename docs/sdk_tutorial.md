@@ -59,3 +59,8 @@ python -m qmtl.sdk --help
 전달됩니다. 이전 버전에서 사용하던 `NodeCache.snapshot()`은 내부 구현으로
 변경되었으므로 전략 코드에서 직접 호출하지 않아야 합니다.
 
+## 백필 작업
+
+노드 캐시를 과거 데이터로 초기화하는 방법은
+[backfill.md](backfill.md) 문서를 참고하세요.
+
