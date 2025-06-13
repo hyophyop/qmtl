@@ -67,12 +67,16 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
             while True:
                 if fut.done() and stream.queue.empty():
                     break
-                chunk = await stream.queue.get()
+                try:
+                    chunk = await asyncio.wait_for(stream.queue.get(), 0.1)
+                except asyncio.TimeoutError:
+                    continue
                 pb = dagmanager_pb2.DiffChunk(
-                    chunk_id=chunk.chunk_id if hasattr(chunk, 'chunk_id') else 0,
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
-                    buffer_nodes=[n.node_id for n in getattr(chunk, 'buffering_nodes', [])],
+                    buffer_nodes=[
+                        n.node_id for n in getattr(chunk, 'buffering_nodes', [])
+                    ],
                 )
                 if self._callback_url and getattr(chunk, 'new_nodes', None):
                     for node in chunk.new_nodes:

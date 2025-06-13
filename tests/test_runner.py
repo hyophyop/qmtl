@@ -8,7 +8,18 @@ from qmtl.sdk.runner import Runner
 from tests.sample_strategy import SampleStrategy
 
 
-def test_backtest(capsys):
+def test_backtest(capsys, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
     strategy = Runner.backtest(
         SampleStrategy,
         start_time="s",
@@ -20,14 +31,36 @@ def test_backtest(capsys):
     assert isinstance(strategy, SampleStrategy)
 
 
-def test_dryrun(capsys):
+def test_dryrun(capsys, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
     strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
     assert "[DRYRUN] SampleStrategy" in captured
     assert isinstance(strategy, SampleStrategy)
 
 
-def test_live(capsys):
+def test_live(capsys, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
     strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
     assert "[LIVE] SampleStrategy" in captured

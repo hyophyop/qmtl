@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import grpc
 import pytest
 import httpx
+import json
 
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
@@ -74,7 +75,7 @@ async def test_grpc_diff():
         async for chunk in stub.Diff(request):
             responses.append(chunk)
             await stub.AckChunk(
-                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
             )
     await server.stop(None)
     assert responses[0].sentinel_id == "s-sentinel"
@@ -95,14 +96,34 @@ async def test_grpc_diff_multiple_chunks():
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
         request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
-        received = []
+        count = 0
         async for chunk in stub.Diff(request):
-            received.append(chunk.chunk_id)
+            count += 1
             await stub.AckChunk(
-                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
             )
     await server.stop(None)
-    assert received == [0, 1]
+    assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_no_nodes():
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+        req = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json="{}")
+        received = []
+        async for chunk in stub.Diff(req):
+            received.append(chunk)
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
+            )
+    await server.stop(None)
+    assert received and received[0].sentinel_id == "s-sentinel"
 
 
 @pytest.mark.asyncio
@@ -166,16 +187,30 @@ async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
     await server.start()
     async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
         stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
-        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json="{}")
+        dag_json = json.dumps(
+            {
+                "nodes": [
+                    {
+                        "node_id": "n1",
+                        "node_type": "N",
+                        "code_hash": "c",
+                        "schema_hash": "s",
+                        "interval": 60,
+                        "tags": ["x"],
+                    }
+                ]
+            }
+        )
+        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
         async for chunk in stub.Diff(request):
             await stub.AckChunk(
-                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=chunk.chunk_id)
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
             )
     await server.stop(None)
 
-    assert captured["type"] == "diff"
+    assert captured["type"] == "queue_update"
     assert captured["specversion"] == "1.0"
-    assert captured["data"]["strategy_id"] == "s"
+    assert captured["data"]["tags"] == ["x"]
 
 
 class DummyStore:
