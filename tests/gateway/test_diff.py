@@ -55,7 +55,9 @@ async def test_diff_collects_chunks(monkeypatch):
 async def test_diff_returns_buffer_nodes(monkeypatch):
     chunks = [
         dagmanager_pb2.DiffChunk(
-            queue_map={"A": "topic_a"}, sentinel_id="s", buffer_nodes=["A"]
+            queue_map={"A": "topic_a"},
+            sentinel_id="s",
+            buffer_nodes=[dagmanager_pb2.BufferInstruction(node_id="A", lag=5)]
         )
     ]
     Stub, _ = make_stub(chunks)
@@ -64,7 +66,8 @@ async def test_diff_returns_buffer_nodes(monkeypatch):
 
     client = DagManagerClient("127.0.0.1:1")
     result = await client.diff("sid", "{}")
-    assert result.buffer_nodes == ["A"]
+    assert [b.node_id for b in result.buffer_nodes] == ["A"]
+    assert result.buffer_nodes[0].lag == 5
 
 
 @pytest.mark.asyncio

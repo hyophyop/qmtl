@@ -25,7 +25,7 @@ class DagManagerClient:
             try:
                 queue_map: Dict[str, str] = {}
                 sentinel_id = ""
-                buffer_nodes: list[str] = []
+                buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
                 async for chunk in stub.Diff(request):
                     queue_map.update(dict(chunk.queue_map))
                     sentinel_id = chunk.sentinel_id

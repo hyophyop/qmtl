@@ -106,6 +106,7 @@ def test_hash_compare_and_queue_upsert():
         "c1",
         "s1",
         None,
+        None,
         [],
         topic_name("asset", "N", "c1", "v1"),
     )
@@ -135,6 +136,7 @@ def test_schema_change_buffering_flag():
         "c1",
         "old",
         None,
+        None,
         [],
         topic_name("asset", "N", "c1", "v1"),
     )
@@ -143,7 +145,7 @@ def test_schema_change_buffering_flag():
     service = DiffService(repo, queue, stream)
 
     dag = _make_dag([
-        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "new"},
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "new", "period": 3},
     ])
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
@@ -152,6 +154,7 @@ def test_schema_change_buffering_flag():
     assert queue.calls == []
     assert not chunk.new_nodes
     assert [n.node_id for n in chunk.buffering_nodes] == ["A"]
+    assert chunk.buffering_nodes[0].lag == 3
 
 
 def test_sentinel_insert_and_stream():
@@ -276,6 +279,7 @@ def test_sentinel_gap_metric_increment():
         "N",
         "c1",
         "s1",
+        None,
         None,
         [],
         topic_name("asset", "N", "c1", "v1"),

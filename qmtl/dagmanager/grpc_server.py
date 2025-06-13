@@ -75,7 +75,17 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
                     buffer_nodes=[
-                        n.node_id for n in getattr(chunk, 'buffering_nodes', [])
+                        dagmanager_pb2.BufferInstruction(
+                            node_id=n.node_id,
+                            node_type=n.node_type,
+                            code_hash=n.code_hash,
+                            schema_hash=n.schema_hash,
+                            interval=n.interval or 0,
+                            period=n.period or 0,
+                            tags=list(n.tags),
+                            lag=n.lag,
+                        )
+                        for n in getattr(chunk, 'buffering_nodes', [])
                     ],
                 )
                 if self._callback_url and getattr(chunk, 'new_nodes', None):
