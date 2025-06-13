@@ -218,6 +218,60 @@ class NodeCache:
 
         return arr.isel(p=slice(slice_start, slice_end))
 
+    def backfill_bulk(
+        self,
+        u: str,
+        interval: int,
+        items: Iterable[tuple[int, Any]],
+    ) -> None:
+        """Merge historical ``items`` with existing cache contents.
+
+        ``items`` must be ordered by timestamp in ascending order. Existing
+        payloads are kept when timestamps collide so that live ``append()``
+        calls that happen during a backfill take precedence.
+        """
+
+        self._ensure_coords(u, interval)
+        u_idx = self._u_idx[u]
+        i_idx = self._i_idx[interval]
+
+        backfill_items: list[tuple[int, Any]] = []
+        for ts, payload in items:
+            bucket = ts - (ts % interval)
+            backfill_items.append((bucket, payload))
+
+        # Capture latest data after collecting items so concurrent ``append``
+        # operations are taken into account during the merge.
+        arr = self._tensor.data[u_idx, i_idx]
+        existing: dict[int, Any] = {
+            int(t): v for t, v in arr if t is not None
+        }
+
+        ts_payload: dict[int, Any] = dict(existing)
+        for ts, payload in backfill_items:
+            ts_payload.setdefault(ts, payload)
+
+        merged = sorted(ts_payload.items())[-self.period :]
+
+        new_arr = np.empty((self.period, 2), dtype=object)
+        new_arr[:] = None
+        start = self.period - len(merged)
+        for idx, (ts, payload) in enumerate(merged):
+            new_arr[start + idx, 0] = ts
+            new_arr[start + idx, 1] = payload
+
+        self._tensor.data[u_idx, i_idx] = new_arr
+        self._filled[(u, interval)] = len(merged)
+
+        prev_last = self._last_ts.get((u, interval))
+        if merged:
+            last_ts = merged[-1][0]
+            if prev_last is None:
+                self._missing[(u, interval)] = False
+            elif last_ts != prev_last:
+                self._missing[(u, interval)] = prev_last + interval != last_ts
+            self._last_ts[(u, interval)] = last_ts
+
 
 class Node:
     """Represents a processing node in a strategy DAG.
