@@ -72,6 +72,9 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
 | **t – timestamp index** | `floor(epoch / i)` 로 정규화된 캔들 타임스탬프 | `10:01 … 10:10`                          |
 
 * **데이터 구조**: 4‑D xarray 또는 PyArrow Tensor `C[u,i,p,t]` 로 구현.
+* **메모리 가드레일**: period × interval 초과 영역은 슬라이스 단위로 즉시 evict하며,
+  Tensor 슬라이스는 Apache Arrow chunk로 매핑해 zero‑copy 전달한다. GC 작업은 Ray
+  Actor로 분리 스케줄링한다.
 * **다중 인터벌·다중 업스트림 지원**: `u` 축 (업스트림)과 `i` 축 (인터벌)을 분리함으로써 1m·5m·1h 등 다양한 간격과 여러 태그 큐를 동시에 저장·검색 가능.
 * **캐시 채우기 규칙**: 노드는 `∀(u,i) : |C[u,i]| ≥ Pᵢ` 조건을 만족할 때에만 프로세싱 함수가 호출된다.
 * **타임스탬프 정렬 예시**: interval = 1 m, period = 10, 시스템 UTC = 10:10:30 ⇒ 필요한 `t` 슬롯은 10:01 … 10:10 (10개 캔들).
@@ -364,3 +367,32 @@ Runner.dryrun(CrossMarketLagStrategy)
 | Infra       | 메시지 중개 및 운영 관측 지표 수집                 | Redpanda, Prometheus, Grafana, MinIO  |
 
 ---
+
+## 6. Deterministic Checklist (v0.9)
+
+아래 항목들은 전역 DAG 일관성 및 고신뢰 큐 오케스트레이션을 보장하기 위해 실무에서
+검증해야 하는 세부 사항이다.
+
+1. **Gateway ↔ SDK CRC 검증** — Gateway가 계산한 `node_id`와 SDK가 사전 계산한
+   값이 `crc32` 필드로 상호 검증된다.
+2. **NodeCache 가드레일 & GC** — period × interval 초과 슬라이스를 즉시 evict하고
+   Arrow chunk 기반 zero‑copy 전달을 보장한다.
+3. **Kafka Topic Create 재시도** — `CREATE_TOPICS→VERIFY→WAIT→BACKOFF` 5단계로
+   재시도하며, VERIFY 단계에서 broker metadata를 조회해 유사 이름 충돌을 제거한다.
+4. **Sentinel Traffic Shift 확인** — `traffic_weight` 변경 시 Gateway와 SDK가 5초
+   이내 동기화되었는지 측정한다.
+5. **TagQueryNode 동적 확장** — Gateway가 새 `(tags, interval)` 큐를 발견하면
+   `tagquery.upsert` CloudEvent를 발행해 SDK 버퍼 초기화를 유도한다.
+6. **Minor‑schema 버퍼링** — `schema_minor_change`는 재사용하되 7일 후 자동
+   full‑recompute가 실행된다.
+7. **SSA DAG Lint** — SDK 빌드 시 DAG를 SSA 중간 표현으로 변환해 해시 불일치를
+   탐지한다.
+8. **Golden‑Signal Alert** — Prometheus Rule CRD로 `diff_duration_ms_p95`,
+   `nodecache_resident_bytes`, `sentinel_gap_count`에 대한 Alert가 관리된다.
+9. **극단 장애 플레이북** — Neo4j 전체 장애, Kafka 메타데이터 손상, Redis AOF
+   손실 시나리오별 Runbook과 Grafana 대시보드를 교차 링크한다.
+10. **4‑단계 CI/CD Gate** — Pre‑merge SSA Lint와 빠른 백테스트, 24h 카나리아,
+    50% 프로모션, 한 줄 롤백 명령으로 이어지는 파이프라인을 구축한다.
+
+위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
+
