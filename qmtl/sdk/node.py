@@ -323,6 +323,11 @@ class Node:
         config: dict | None = None,
         schema: dict | None = None,
     ) -> None:
+        if interval is None or interval <= 0:
+            raise ValueError("interval must be positive")
+        if period is None or period <= 0:
+            raise ValueError("period must be positive")
+
         self.input = input
         self.inputs = self._normalize_inputs(input)
         self.compute_fn = compute_fn
