@@ -149,6 +149,8 @@ class Runner:
         backfill_end: int | None = None,
     ) -> Strategy:
         """Run strategy in backtest mode. Requires ``gateway_url``."""
+        if start_time is None or end_time is None:
+            raise ValueError("start_time and end_time are required")
         strategy = Runner._prepare(strategy_cls)
         print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
         dag = strategy.serialize()

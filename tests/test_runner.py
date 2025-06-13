@@ -31,6 +31,33 @@ def test_backtest(capsys, monkeypatch):
     assert isinstance(strategy, SampleStrategy)
 
 
+def test_backtest_requires_start_and_end(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    with pytest.raises(ValueError):
+        Runner.backtest(
+            SampleStrategy,
+            gateway_url="http://gw",
+            end_time="e",
+        )
+
+    with pytest.raises(ValueError):
+        Runner.backtest(
+            SampleStrategy,
+            gateway_url="http://gw",
+            start_time="s",
+        )
+
+
 def test_dryrun(capsys, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
