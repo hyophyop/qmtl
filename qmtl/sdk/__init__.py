@@ -1,6 +1,7 @@
 """QMTL strategy SDK."""
 
 from .node import Node, StreamInput, TagQueryNode, NodeCache
+from .backfill_state import BackfillState
 from .cache_view import CacheView
 from .strategy import Strategy
 from .runner import Runner
@@ -14,6 +15,7 @@ __all__ = [
     "StreamInput",
     "TagQueryNode",
     "NodeCache",
+    "BackfillState",
     "CacheView",
     "Strategy",
     "Runner",
