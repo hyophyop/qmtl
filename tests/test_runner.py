@@ -220,3 +220,76 @@ def test_feed_queue_data_without_ray(monkeypatch):
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
 
     assert len(calls) == 1
+
+
+def test_backfill_started(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    called = []
+
+    async def dummy_run_backfill(strategy, source, start, end):
+        called.append((start, end))
+
+    monkeypatch.setattr(Runner, "_run_backfill", staticmethod(dummy_run_backfill))
+    monkeypatch.setattr(Runner, "_create_backfill_source", staticmethod(lambda s: object()))
+
+    Runner.dryrun(
+        SampleStrategy,
+        gateway_url="http://gw",
+        backfill_source="dummy",
+        backfill_start=1,
+        backfill_end=2,
+    )
+
+    assert called == [(1, 2)]
+
+
+def test_cli_backfill_options(monkeypatch):
+    import sys
+    from qmtl.sdk.cli import main
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    def mock_post(url, json):
+        with httpx.Client(transport=transport) as client:
+            return client.post(url, json=json)
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    called = []
+
+    async def dummy_run_backfill(strategy, source, start, end):
+        called.append((start, end))
+
+    monkeypatch.setattr(Runner, "_run_backfill", staticmethod(dummy_run_backfill))
+    monkeypatch.setattr(Runner, "_create_backfill_source", staticmethod(lambda s: object()))
+
+    argv = [
+        "qmtl.sdk",
+        "tests.sample_strategy:SampleStrategy",
+        "--mode",
+        "dryrun",
+        "--gateway-url",
+        "http://gw",
+        "--backfill-source",
+        "dummy",
+        "--backfill-start",
+        "1",
+        "--backfill-end",
+        "2",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    main()
+    assert called == [(1, 2)]
