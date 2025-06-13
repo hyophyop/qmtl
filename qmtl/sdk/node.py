@@ -328,6 +328,26 @@ class Node:
         if period is None or period <= 0:
             raise ValueError("period must be positive")
 
+        if compute_fn is not None:
+            sig = inspect.signature(compute_fn)
+            positional = [
+                p
+                for p in sig.parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            has_var_positional = any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL
+                for p in sig.parameters.values()
+            )
+            if len(positional) != 1 or has_var_positional:
+                raise TypeError(
+                    "compute_fn must accept exactly one positional argument"
+                )
+
         self.input = input
         self.inputs = self._normalize_inputs(input)
         self.compute_fn = compute_fn
