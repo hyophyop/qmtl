@@ -194,3 +194,46 @@ def test_cache_view_access_logging_and_reset():
     _ = view2["btc_price"][60]
     assert view2.access_log() == [("btc_price", 60)]
 
+
+def test_backfill_bulk_merge_and_last_timestamp_update():
+    cache = NodeCache(period=4)
+    cache.append("u1", 60, 120, {"v": 2})
+    cache.append("u1", 60, 180, {"v": 3})
+
+    cache.backfill_bulk(
+        "u1",
+        60,
+        [
+            (60, {"v": 1}),
+            (120, {"v": "dup"}),
+            (240, {"v": 4}),
+        ],
+    )
+
+    assert cache.get_slice("u1", 60, count=4) == [
+        (60, {"v": 1}),
+        (120, {"v": 2}),
+        (180, {"v": 3}),
+        (240, {"v": 4}),
+    ]
+    assert cache.last_timestamps()["u1"][60] == 240
+    assert not cache.missing_flags()["u1"][60]
+
+
+def test_backfill_bulk_respects_live_append():
+    cache = NodeCache(period=3)
+
+    def gen():
+        yield (60, {"v": 1})
+        cache.append("u1", 60, 120, {"v": "live"})
+        yield (120, {"v": "bf"})
+
+    cache.backfill_bulk("u1", 60, gen())
+
+    assert cache.get_slice("u1", 60, count=3) == [
+        (60, {"v": 1}),
+        (120, {"v": "live"}),
+    ]
+    assert cache.last_timestamps()["u1"][60] == 120
+    assert not cache.missing_flags()["u1"][60]
+
