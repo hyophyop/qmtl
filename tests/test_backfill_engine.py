@@ -1,5 +1,6 @@
 import asyncio
 import time
+import logging
 import pandas as pd
 import pytest
 
@@ -59,3 +60,53 @@ async def test_retry_logic():
     await engine.wait()
     assert src.calls == 2
     assert node.cache.latest(node.node_id, 60) == (60, {"ts": 60, "v": 1})
+
+
+@pytest.mark.asyncio
+async def test_metrics_and_logs(caplog):
+    from qmtl.sdk import metrics as sdk_metrics
+    sdk_metrics.reset_metrics()
+
+    node = Node(interval=60, period=1)
+    df = pd.DataFrame([{"ts": 60, "v": 1}])
+    src = DummySource(df, delay=0.0, fail=1)
+    engine = BackfillEngine(src, max_retries=2)
+
+    with caplog.at_level(logging.INFO):
+        engine.submit(node, 60, 60)
+        await engine.wait()
+
+    node_id = node.node_id
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0
+    assert sdk_metrics.backfill_last_timestamp._vals[(node_id, "60")] == 60
+    assert sdk_metrics.backfill_retry_total._vals[(node_id, "60")] == 1
+    assert sdk_metrics.backfill_failure_total._vals.get((node_id, "60"), 0) == 0
+
+    msgs = [r.message for r in caplog.records]
+    assert "backfill.start" in msgs
+    assert "backfill.retry" in msgs
+    assert "backfill.complete" in msgs
+
+
+@pytest.mark.asyncio
+async def test_failure_metrics_and_logs(caplog):
+    from qmtl.sdk import metrics as sdk_metrics
+    sdk_metrics.reset_metrics()
+
+    node = Node(interval=60, period=1)
+    df = pd.DataFrame([])
+    src = DummySource(df, delay=0.0, fail=5)
+    engine = BackfillEngine(src, max_retries=2)
+
+    with caplog.at_level(logging.INFO):
+        engine.submit(node, 0, 0)
+        with pytest.raises(RuntimeError):
+            await engine.wait()
+
+    key = (node.node_id, "60")
+    assert sdk_metrics.backfill_failure_total._vals[key] == 1
+    assert sdk_metrics.backfill_retry_total._vals[key] == 3
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0
+    msgs = [r.message for r in caplog.records]
+    assert msgs.count("backfill.retry") >= 3
+    assert "backfill.failed" in msgs
