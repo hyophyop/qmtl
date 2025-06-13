@@ -33,7 +33,7 @@ class DiffRequest:
 class DiffChunk:
     queue_map: Dict[str, str]
     sentinel_id: str
-    buffering_nodes: List["NodeInfo"] = field(default_factory=list)
+    buffering_nodes: List["BufferInstruction"] = field(default_factory=list)
     new_nodes: List["NodeInfo"] = field(default_factory=list)
 
 
@@ -44,12 +44,18 @@ class NodeInfo:
     code_hash: str
     schema_hash: str
     interval: int | None
+    period: int | None
     tags: list[str]
 
 
 @dataclass
 class NodeRecord(NodeInfo):
     topic: str
+
+
+@dataclass
+class BufferInstruction(NodeInfo):
+    lag: int
 
 
 class NodeRepository:
@@ -140,6 +146,7 @@ class DiffService:
                 code_hash=node_map[n]["code_hash"],
                 schema_hash=node_map[n]["schema_hash"],
                 interval=node_map[n].get("interval"),
+                period=node_map[n].get("period"),
                 tags=list(node_map[n].get("tags", [])),
             )
             for n in ordered
@@ -179,6 +186,25 @@ class DiffService:
             new_nodes.append(n)
         return queue_map, new_nodes, buffering_nodes
 
+    def _buffer_instructions(self, nodes: Iterable[NodeInfo]) -> List[BufferInstruction]:
+        """Create buffering instructions with lag equal to ``period``."""
+        result: List[BufferInstruction] = []
+        for n in nodes:
+            lag = n.period or 0
+            result.append(
+                BufferInstruction(
+                    node_id=n.node_id,
+                    node_type=n.node_type,
+                    code_hash=n.code_hash,
+                    schema_hash=n.schema_hash,
+                    interval=n.interval,
+                    period=n.period,
+                    tags=list(n.tags),
+                    lag=lag,
+                )
+            )
+        return result
+
     # Step 4 ---------------------------------------------------------------
     def _insert_sentinel(self, sentinel_id: str, nodes: Iterable[NodeInfo]) -> None:
         self.node_repo.insert_sentinel(sentinel_id, [n.node_id for n in nodes])
@@ -191,7 +217,7 @@ class DiffService:
         queue_map: Dict[str, str],
         sentinel_id: str,
         new_nodes: List[NodeInfo],
-        buffering_nodes: List[NodeInfo],
+        buffering_nodes: List[BufferInstruction],
     ) -> None:
         CHUNK_SIZE = 100
         total = max(len(new_nodes), len(buffering_nodes))
@@ -225,18 +251,19 @@ class DiffService:
         try:
             nodes = self._pre_scan(request.dag_json)
             existing = self._db_fetch([n.node_id for n in nodes])
-            queue_map, new_nodes, buffering_nodes = self._hash_compare(nodes, existing)
+            queue_map, new_nodes, buffering = self._hash_compare(nodes, existing)
+            instructions = self._buffer_instructions(buffering)
             sentinel_id = f"{request.strategy_id}-sentinel"
             self._insert_sentinel(sentinel_id, new_nodes)
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id, new_nodes, buffering_nodes)
+            self._stream_send(queue_map, sentinel_id, new_nodes, instructions)
             return DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,
                 new_nodes=new_nodes,
-                buffering_nodes=buffering_nodes,
+                buffering_nodes=instructions,
             )
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
@@ -257,7 +284,7 @@ class Neo4jNodeRepository(NodeRepository):
             "WHERE c.node_id IN $ids "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
-            "q.topic AS topic, q.interval AS interval, c.tags AS tags"
+            "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags"
         )
         with self.driver.session() as session:
             result = session.run(query, ids=list(node_ids))
@@ -269,6 +296,7 @@ class Neo4jNodeRepository(NodeRepository):
                     code_hash=r.get("code_hash"),
                     schema_hash=r.get("schema_hash"),
                     interval=r.get("interval"),
+                    period=r.get("period"),
                     tags=list(r.get("tags", [])),
                     topic=r.get("topic"),
                 )

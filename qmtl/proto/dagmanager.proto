@@ -6,10 +6,21 @@ message DiffRequest {
   string dag_json = 2;
 }
 
+message BufferInstruction {
+  string node_id = 1;
+  string node_type = 2;
+  string code_hash = 3;
+  string schema_hash = 4;
+  int64 interval = 5;
+  int32 period = 6;
+  repeated string tags = 7;
+  int32 lag = 8;
+}
+
 message DiffChunk {
   map<string,string> queue_map = 1;
   string sentinel_id = 2;
-  repeated string buffer_nodes = 3;
+  repeated BufferInstruction buffer_nodes = 3;
 }
 
 message ChunkAck {
