@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
+import asyncio
 from typing import Optional
 
 import httpx
 
 from .strategy import Strategy
+from .backfill import BackfillSource, QuestDBSource
 
 try:  # Optional Ray dependency
     import ray  # type: ignore
@@ -18,6 +20,44 @@ class Runner:
     """Execute strategies in various modes."""
 
     _ray_available = ray is not None
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _create_backfill_source(spec: str) -> BackfillSource:
+        """Return BackfillSource instance for ``spec``."""
+        if spec.startswith("questdb:"):
+            dsn = spec.split(":", 1)[1]
+            return QuestDBSource(dsn)
+        raise RuntimeError("unsupported backfill source")
+
+    @staticmethod
+    async def _run_backfill(
+        strategy: Strategy,
+        source: BackfillSource,
+        start: int,
+        end: int,
+    ) -> None:
+        async def _backfill_node(node):
+            if node.interval is None:
+                return
+            df = await asyncio.to_thread(
+                source.fetch,
+                start,
+                end,
+                node_id=node.node_id,
+                interval=node.interval,
+            )
+            if df is None:
+                return
+            items = []
+            for _, row in df.iterrows():
+                ts = int(row.get("ts", 0))
+                items.append((ts, row.to_dict()))
+            node.cache.backfill_bulk(node.node_id, node.interval, items)
+
+        tasks = [asyncio.create_task(_backfill_node(n)) for n in strategy.nodes]
+        if tasks:
+            await asyncio.gather(*tasks)
 
     @staticmethod
     def _execute_compute_fn(fn, cache_view) -> None:
@@ -104,6 +144,9 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        backfill_source: str | None = None,
+        backfill_start: int | None = None,
+        backfill_end: int | None = None,
     ) -> Strategy:
         """Run strategy in backtest mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
@@ -124,12 +167,16 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        if backfill_source and backfill_start is not None and backfill_end is not None:
+            src = Runner._create_backfill_source(backfill_source)
+            asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
         # Placeholder for backtest logic
         return strategy
 
     @staticmethod
     def dryrun(
         strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
+        , backfill_source: str | None = None, backfill_start: int | None = None, backfill_end: int | None = None
     ) -> Strategy:
         """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
@@ -151,12 +198,16 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        if backfill_source and backfill_start is not None and backfill_end is not None:
+            src = Runner._create_backfill_source(backfill_source)
+            asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
         # Placeholder for dry-run logic
         return strategy
 
     @staticmethod
     def live(
-        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None
+        strategy_cls: type[Strategy], *, gateway_url: str | None = None, meta: Optional[dict] = None,
+        backfill_source: str | None = None, backfill_start: int | None = None, backfill_end: int | None = None
     ) -> Strategy:
         """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
@@ -178,6 +229,9 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        if backfill_source and backfill_start is not None and backfill_end is not None:
+            src = Runner._create_backfill_source(backfill_source)
+            asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
         # Placeholder for live trading logic
         return strategy
 
