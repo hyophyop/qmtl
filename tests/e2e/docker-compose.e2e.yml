@@ -42,7 +42,7 @@ services:
     image: python:3
     working_dir: /src
     volumes:
-      - ../:/src
+      - ../..:/src
     command: ["bash", "-c", "pip install -e .[dev] && qmtl-dagmgr-server"]
     depends_on:
       - kafka
@@ -64,7 +64,7 @@ services:
     image: python:3
     working_dir: /src
     volumes:
-      - ../:/src
+      - ../..:/src
     command: ["bash", "-c", "pip install -e .[dev] && qmtl-gateway serve"]
     depends_on:
       - dag-manager
