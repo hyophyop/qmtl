@@ -26,6 +26,12 @@ def create_app(
     driver: "Driver" | None = None,
 ) -> FastAPI:
     app = FastAPI()
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Simple health probe used in CI pipelines."""
+        return {"status": "ok"}
+
     store = weights if weights is not None else {}
 
     @app.post("/callbacks/sentinel-traffic", status_code=status.HTTP_202_ACCEPTED)

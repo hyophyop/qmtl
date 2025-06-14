@@ -186,6 +186,11 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
 
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Health check endpoint used for CI/e2e loops."""
+        return {"status": "ok"}
+
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     db = database or PostgresDatabase("postgresql://localhost/qmtl")
     fsm = StrategyFSM(redis=r, database=db)

@@ -23,6 +23,11 @@ def create_app(gc: GarbageCollector, *, callback_url: Optional[str] = None) -> F
     """Return a FastAPI app exposing admin routes."""
     app = FastAPI()
 
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Health check endpoint for e2e testing."""
+        return {"status": "ok"}
+
     @app.post("/admin/gc-trigger", status_code=status.HTTP_202_ACCEPTED)
     async def trigger_gc(payload: GcRequest) -> GcResponse:
         infos = gc.collect()
