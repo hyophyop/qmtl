@@ -134,6 +134,16 @@ class PostgresDatabase(Database):
         )
         return row["status"] if row else None
 
+    async def healthy(self) -> bool:
+        """Return ``True`` if the database connection is usable."""
+        if self._pool is None:
+            return False
+        try:
+            await self._pool.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
 
 @dataclass
 class StrategyManager:

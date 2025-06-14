@@ -23,5 +23,13 @@ class RedisFIFOQueue:
             return None
         return data.decode() if isinstance(data, bytes) else data
 
+    async def healthy(self) -> bool:
+        """Return ``True`` if the underlying Redis connection is alive."""
+        try:
+            pong = await self.redis.ping()
+            return bool(pong)
+        except Exception:
+            return False
+
 
 __all__ = ["RedisFIFOQueue"]

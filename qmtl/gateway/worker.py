@@ -35,6 +35,24 @@ class StrategyWorker:
         self.worker_id = worker_id or str(uuid.uuid4())
         self._handler = handler
 
+    async def healthy(self) -> bool:
+        """Return ``True`` if all critical dependencies are reachable."""
+        try:
+            redis_ok = await self.redis.ping()
+        except Exception:
+            redis_ok = False
+        db_ok = True
+        if hasattr(self.database, "healthy"):
+            try:
+                db_ok = await self.database.healthy()
+            except Exception:
+                db_ok = False
+        try:
+            dag_ok = await self.dag_client.ping()
+        except Exception:
+            dag_ok = False
+        return bool(redis_ok) and dag_ok and db_ok
+
     async def _process(self, strategy_id: str) -> bool:
         lock_key = f"lock:{strategy_id}"
         locked = await self.redis.set(lock_key, self.worker_id, nx=True, px=60000)
