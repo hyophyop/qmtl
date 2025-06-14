@@ -76,9 +76,12 @@ message DiffResult {
   string sentinel_id = 2;
 }
 
-message PingRequest {}
-message PingReply {}
+message StatusRequest {}
+message StatusReply {
+  string neo4j = 1;
+  string state = 2;
+}
 
 service HealthCheck {
-  rpc Ping(PingRequest) returns (PingReply);
+  rpc Status(StatusRequest) returns (StatusReply);
 }

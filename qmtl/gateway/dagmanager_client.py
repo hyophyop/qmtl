@@ -14,13 +14,13 @@ class DagManagerClient:
     def __init__(self, target: str) -> None:
         self._target = target
 
-    async def ping(self) -> bool:
-        """Return ``True`` if the remote DAG manager responds to ``Ping``."""
+    async def status(self) -> bool:
+        """Return ``True`` if the remote DAG manager reports healthy status."""
         channel = grpc.aio.insecure_channel(self._target)
         stub = dagmanager_pb2_grpc.HealthCheckStub(channel)
         try:
-            await stub.Ping(dagmanager_pb2.PingRequest())
-            return True
+            reply = await stub.Status(dagmanager_pb2.StatusRequest())
+            return reply.neo4j == "ok" and reply.state == "running"
         except Exception:
             return False
         finally:
