@@ -69,7 +69,7 @@ async def _run(args: argparse.Namespace) -> None:
     )
     await grpc_server.start()
 
-    app = create_app(gc, callback_url=args.gc_callback)
+    app = create_app(gc, callback_url=args.gc_callback, driver=driver)
     config = uvicorn.Config(app, host=args.http_host, port=args.http_port, loop="asyncio", log_level="info")
     http_server = uvicorn.Server(config)
 

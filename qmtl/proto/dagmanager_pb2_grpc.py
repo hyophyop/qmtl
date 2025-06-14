@@ -379,17 +379,17 @@ class HealthCheckStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Ping = channel.unary_unary(
-                '/qmtl.dagmanager.HealthCheck/Ping',
-                request_serializer=dagmanager__pb2.PingRequest.SerializeToString,
-                response_deserializer=dagmanager__pb2.PingReply.FromString,
+        self.Status = channel.unary_unary(
+                '/qmtl.dagmanager.HealthCheck/Status',
+                request_serializer=dagmanager__pb2.StatusRequest.SerializeToString,
+                response_deserializer=dagmanager__pb2.StatusReply.FromString,
                 _registered_method=True)
 
 
 class HealthCheckServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Ping(self, request, context):
+    def Status(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -398,10 +398,10 @@ class HealthCheckServicer(object):
 
 def add_HealthCheckServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Ping': grpc.unary_unary_rpc_method_handler(
-                    servicer.Ping,
-                    request_deserializer=dagmanager__pb2.PingRequest.FromString,
-                    response_serializer=dagmanager__pb2.PingReply.SerializeToString,
+            'Status': grpc.unary_unary_rpc_method_handler(
+                    servicer.Status,
+                    request_deserializer=dagmanager__pb2.StatusRequest.FromString,
+                    response_serializer=dagmanager__pb2.StatusReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -415,7 +415,7 @@ class HealthCheck(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Ping(request,
+    def Status(request,
             target,
             options=(),
             channel_credentials=None,
@@ -428,9 +428,9 @@ class HealthCheck(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/qmtl.dagmanager.HealthCheck/Ping',
-            dagmanager__pb2.PingRequest.SerializeToString,
-            dagmanager__pb2.PingReply.FromString,
+            '/qmtl.dagmanager.HealthCheck/Status',
+            dagmanager__pb2.StatusRequest.SerializeToString,
+            dagmanager__pb2.StatusReply.FromString,
             options,
             channel_credentials,
             insecure,

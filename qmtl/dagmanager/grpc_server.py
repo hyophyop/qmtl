@@ -19,6 +19,7 @@ from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
+from .status import get_status
 
 
 class _GrpcStream(StreamSender):
@@ -212,12 +213,19 @@ class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
 
 
 class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
-    async def Ping(
+    def __init__(self, driver) -> None:
+        self._driver = driver
+
+    async def Status(
         self,
-        request: dagmanager_pb2.PingRequest,
+        request: dagmanager_pb2.StatusRequest,
         context: grpc.aio.ServicerContext,
-    ) -> dagmanager_pb2.PingReply:
-        return dagmanager_pb2.PingReply()
+    ) -> dagmanager_pb2.StatusReply:
+        info = get_status(self._driver)
+        return dagmanager_pb2.StatusReply(
+            neo4j=info.get("neo4j", "unknown"),
+            state=info.get("dag_manager", "unknown"),
+        )
 
 
 def serve(
@@ -245,6 +253,8 @@ def serve(
     dagmanager_pb2_grpc.add_AdminServiceServicer_to_server(
         AdminServiceServicer(gc, admin, repo, diff=diff_service, callback_url=callback_url), server
     )
-    dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(HealthServicer(), server)
+    dagmanager_pb2_grpc.add_HealthCheckServicer_to_server(
+        HealthServicer(neo4j_driver), server
+    )
     bound_port = server.add_insecure_port(f"{host}:{port}")
     return server, bound_port

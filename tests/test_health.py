@@ -30,22 +30,22 @@ def test_gateway_health():
     assert resp.json()["status"] == "ok"
 
 
-def test_dagmanager_http_health():
+def test_dagmanager_http_status():
     client = TestClient(dag_http_create_app())
-    resp = client.get("/health")
+    resp = client.get("/status")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
 
 
-def test_dagmanager_api_health():
+def test_dagmanager_api_status():
     client = TestClient(dag_api_create_app(DummyGC()))
-    resp = client.get("/health")
+    resp = client.get("/status")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    assert "neo4j" in resp.json()
 
 
 @pytest.mark.asyncio
-async def test_grpc_ping():
+async def test_grpc_status():
     from qmtl.dagmanager.grpc_server import serve
 
     class FakeDriver:
@@ -86,7 +86,7 @@ async def test_grpc_ping():
     await server.start()
     try:
         client = DagManagerClient(f"127.0.0.1:{port}")
-        assert await client.ping() is True
+        assert await client.status() is True
     finally:
         await server.stop(None)
 
@@ -125,9 +125,9 @@ async def test_worker_healthy(monkeypatch):
     fsm = StrategyFSM(redis, db)
     queue = RedisFIFOQueue(redis)
     client = DagManagerClient("127.0.0.1:1")
-    async def ping():
+    async def status():
         return True
-    monkeypatch.setattr(client, "ping", ping)
+    monkeypatch.setattr(client, "status", status)
 
     worker = StrategyWorker(redis, db, fsm, queue, client)
     assert await worker.healthy() is True

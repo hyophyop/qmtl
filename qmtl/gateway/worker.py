@@ -48,7 +48,7 @@ class StrategyWorker:
             except Exception:
                 db_ok = False
         try:
-            dag_ok = await self.dag_client.ping()
+            dag_ok = await self.dag_client.status()
         except Exception:
             dag_ok = False
         return bool(redis_ok) and dag_ok and db_ok

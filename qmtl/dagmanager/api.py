@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .gc import GarbageCollector
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
+from .status import get_status
+
+if TYPE_CHECKING:  # pragma: no cover - optional import for typing
+    from neo4j import Driver
 
 
 class GcRequest(BaseModel):
@@ -19,14 +23,19 @@ class GcResponse(BaseModel):
     processed: list[str]
 
 
-def create_app(gc: GarbageCollector, *, callback_url: Optional[str] = None) -> FastAPI:
+def create_app(
+    gc: GarbageCollector,
+    *,
+    callback_url: Optional[str] = None,
+    driver: "Driver" | None = None,
+) -> FastAPI:
     """Return a FastAPI app exposing admin routes."""
     app = FastAPI()
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        """Health check endpoint for e2e testing."""
-        return {"status": "ok"}
+    @app.get("/status")
+    async def status_endpoint() -> dict[str, str]:
+        """Return system status including Neo4j connectivity."""
+        return get_status(driver)
 
     @app.post("/admin/gc-trigger", status_code=status.HTTP_202_ACCEPTED)
     async def trigger_gc(payload: GcRequest) -> GcResponse:

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from . import metrics
+from .status import get_status
 
 
 class WeightUpdate(BaseModel):
@@ -27,10 +28,10 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        """Simple health probe used in CI pipelines."""
-        return {"status": "ok"}
+    @app.get("/status")
+    async def status_endpoint() -> dict[str, str]:
+        """Return system status including Neo4j connectivity."""
+        return get_status(driver)
 
     store = weights if weights is not None else {}
 
