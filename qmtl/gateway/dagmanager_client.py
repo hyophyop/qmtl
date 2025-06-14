@@ -14,6 +14,18 @@ class DagManagerClient:
     def __init__(self, target: str) -> None:
         self._target = target
 
+    async def ping(self) -> bool:
+        """Return ``True`` if the remote DAG manager responds to ``Ping``."""
+        channel = grpc.aio.insecure_channel(self._target)
+        stub = dagmanager_pb2_grpc.HealthCheckStub(channel)
+        try:
+            await stub.Ping(dagmanager_pb2.PingRequest())
+            return True
+        except Exception:
+            return False
+        finally:
+            await channel.close()
+
     async def diff(self, strategy_id: str, dag_json: str) -> dagmanager_pb2.DiffChunk:
         """Call ``DiffService.Diff`` with retries and collect the stream."""
         request = dagmanager_pb2.DiffRequest(strategy_id=strategy_id, dag_json=dag_json)

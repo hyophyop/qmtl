@@ -49,6 +49,10 @@ class WebSocketHub:
         async with self._lock:
             self._clients.clear()
 
+    def is_running(self) -> bool:
+        """Return ``True`` if the WebSocket server is active."""
+        return self._server is not None
+
     async def _handler(self, websocket: WebSocketServerProtocol) -> None:
         async with self._lock:
             self._clients.add(websocket)
