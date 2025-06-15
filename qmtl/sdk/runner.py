@@ -3,7 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import asyncio
-from typing import Optional
+import time
+from typing import Optional, Iterable
 
 import httpx
 
@@ -94,6 +95,104 @@ class Runner:
 
     # ------------------------------------------------------------------
     @staticmethod
+    def _missing_ranges(
+        coverage: Iterable[tuple[int, int]], start: int, end: int, interval: int
+    ) -> list[tuple[int, int]]:
+        """Return timestamp gaps in ``[start, end]``."""
+        ranges = sorted([tuple(r) for r in coverage])
+        merged: list[tuple[int, int]] = []
+        for s, e in ranges:
+            if not merged:
+                merged.append((s, e))
+                continue
+            ls, le = merged[-1]
+            if s <= le + interval:
+                merged[-1] = (ls, max(le, e))
+            else:
+                merged.append((s, e))
+
+        gaps: list[tuple[int, int]] = []
+        cur = start
+        for s, e in merged:
+            if e < start:
+                continue
+            if s > end:
+                break
+            if s > cur:
+                gaps.append((cur, min(s - interval, end)))
+            cur = max(cur, e + interval)
+            if cur > end:
+                break
+        if cur <= end:
+            gaps.append((cur, end))
+        return [g for g in gaps if g[0] <= g[1]]
+
+    @staticmethod
+    async def _ensure_node_history(
+        node,
+        start: int,
+        end: int,
+        *,
+        stop_on_ready: bool = False,
+    ) -> None:
+        """Ensure history coverage for a single ``StreamInput`` node."""
+        if node.interval is None or start is None or end is None:
+            return
+        provider = getattr(node, "history_provider", None)
+        if provider is None:
+            await node.load_history(start, end)
+            return
+
+        while node.pre_warmup:
+            cov = await provider.coverage(
+                node_id=node.node_id, interval=node.interval
+            )
+            missing = Runner._missing_ranges(cov, start, end, node.interval)
+            if not missing:
+                await node.load_history(start, end)
+                return
+            for s, e in missing:
+                await provider.fill_missing(
+                    s, e, node_id=node.node_id, interval=node.interval
+                )
+                if stop_on_ready and not node.pre_warmup:
+                    return
+
+    @staticmethod
+    async def _ensure_history(
+        strategy: Strategy,
+        start: int | None = None,
+        end: int | None = None,
+        *,
+        stop_on_ready: bool = False,
+    ) -> None:
+        """Ensure history coverage for all ``StreamInput`` nodes."""
+        from .node import StreamInput
+
+        tasks = []
+        now = int(time.time())
+        for n in strategy.nodes:
+            if not isinstance(n, StreamInput):
+                continue
+            if start is None or end is None:
+                if n.interval is None or n.period is None:
+                    continue
+                rng_end = now - (now % n.interval)
+                rng_start = rng_end - n.interval * n.period + n.interval
+            else:
+                rng_start = start
+                rng_end = end
+            task = asyncio.create_task(
+                Runner._ensure_node_history(
+                    n, rng_start, rng_end, stop_on_ready=stop_on_ready
+                )
+            )
+            tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks)
+
+    # ------------------------------------------------------------------
+    @staticmethod
     def feed_queue_data(
         node,
         queue_id: str,
@@ -147,7 +246,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy, start_time, end_time)
+        await Runner._ensure_history(strategy, start_time, end_time)
         # Placeholder for backtest logic
         return strategy
 
@@ -199,7 +298,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy, None, None)
+        await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         # Placeholder for dry-run logic
         return strategy
 
@@ -244,7 +343,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy, None, None)
+        await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         # Placeholder for live trading logic
         return strategy
 
