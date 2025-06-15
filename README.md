@@ -30,6 +30,8 @@ uv pip install -e .[transforms]
 
 ## Backfills
 
-Learn how to preload historical data using BackfillSource objects in
+[docs/backfill.md](docs/backfill.md) explains how to preload historical data by
+injecting `HistoryProvider` instances
+into `StreamInput` nodes. This also covers persisting data via `EventRecorder`.
 [docs/backfill.md](docs/backfill.md).
 

@@ -7,7 +7,7 @@ import pandas as pd
 import asyncpg
 
 
-class CacheLoader(Protocol):
+class HistoryProvider(Protocol):
     """Interface for loading historical data into node caches."""
 
     async def fetch(
@@ -28,7 +28,7 @@ class EventRecorder(Protocol):
 
 
 class QuestDBLoader:
-    """CacheLoader implementation backed by QuestDB."""
+    """HistoryProvider implementation backed by QuestDB."""
 
     def __init__(self, dsn: str, table: str = "node_data") -> None:
         self.dsn = dsn

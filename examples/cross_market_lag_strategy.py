@@ -1,10 +1,33 @@
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.sdk import (
+    Strategy,
+    Node,
+    StreamInput,
+    Runner,
+    QuestDBLoader,
+    QuestDBRecorder,
+)
 import pandas as pd
 
 class CrossMarketLagStrategy(Strategy):
     def setup(self):
-        btc_price = StreamInput(tags=["BTC", "price", "binance"], interval=60, period=120)
-        mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval=60, period=120)
+        btc_price = StreamInput(
+            tags=["BTC", "price", "binance"],
+            interval=60,
+            period=120,
+            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
+            start=1700000000,
+            end=1700003600,
+            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+        )
+        mstr_price = StreamInput(
+            tags=["MSTR", "price", "nasdaq"],
+            interval=60,
+            period=120,
+            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
+            start=1700000000,
+            end=1700003600,
+            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+        )
         def lagged_corr(view):
             btc = pd.DataFrame([v for _, v in view[btc_price][60]])
             mstr = pd.DataFrame([v for _, v in view[mstr_price][60]])
