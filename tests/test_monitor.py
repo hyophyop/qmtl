@@ -1,3 +1,4 @@
+import pytest
 from qmtl.dagmanager.monitor import Monitor, MetricsBackend, Neo4jCluster, KafkaSession, DiffStream
 from qmtl.dagmanager.alerts import AlertManager
 
@@ -46,7 +47,7 @@ class FakePagerDuty:
     def __init__(self):
         self.sent = []
 
-    def send(self, msg: str) -> None:
+    async def send(self, msg: str) -> None:
         self.sent.append(msg)
 
 
@@ -54,11 +55,12 @@ class FakeSlack:
     def __init__(self):
         self.sent = []
 
-    def send(self, msg: str) -> None:
+    async def send(self, msg: str) -> None:
         self.sent.append(msg)
 
 
-def test_monitor_triggers_recovery_and_alerts():
+@pytest.mark.asyncio
+async def test_monitor_triggers_recovery_and_alerts():
     metrics = FakeMetrics(leader=True, disconnects=1, stall=True)
     cluster = FakeCluster()
     kafka = FakeKafka()
@@ -68,7 +70,7 @@ def test_monitor_triggers_recovery_and_alerts():
     manager = AlertManager(pd, slack)
     monitor = Monitor(metrics, cluster, kafka, stream, manager)
 
-    monitor.check_once()
+    await monitor.check_once()
 
     assert cluster.elected == 1
     assert kafka.retried == 1

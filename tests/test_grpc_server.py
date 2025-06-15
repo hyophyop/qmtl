@@ -142,6 +142,9 @@ async def test_grpc_redo_diff(monkeypatch):
                 queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel"
             )
 
+        async def diff_async(self, request: DiffRequest):
+            return self.diff(request)
+
     monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
 
     driver = FakeDriver()

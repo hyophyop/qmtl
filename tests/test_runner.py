@@ -14,11 +14,18 @@ def test_backtest(capsys, monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     strategy = Runner.backtest(
         SampleStrategy,
@@ -37,11 +44,18 @@ def test_backtest_requires_start_and_end(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     with pytest.raises(ValueError):
         Runner.backtest(
@@ -64,11 +78,18 @@ def test_dryrun(capsys, monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
@@ -82,11 +103,18 @@ def test_live(capsys, monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
     captured = capsys.readouterr().out
@@ -108,11 +136,18 @@ def test_gateway_queue_mapping(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     first_node = strategy.nodes[0]
@@ -126,11 +161,18 @@ def test_gateway_error(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     with pytest.raises(RuntimeError):
         Runner.dryrun(SampleStrategy, gateway_url="http://gw")
@@ -143,10 +185,17 @@ def test_offline_mode():
 
 
 def test_connection_failure(monkeypatch):
-    def mock_post(url, json):
-        raise httpx.RequestError("fail", request=httpx.Request("POST", url))
+    class DummyClient:
+        def __init__(self, *a, **k):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def post(self, url, json=None):
+            raise httpx.RequestError("fail", request=httpx.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     with pytest.raises(RuntimeError):
         Runner.dryrun(SampleStrategy, gateway_url="http://gw")
@@ -158,11 +207,18 @@ def test_offline_same_ids(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     offline = Runner.offline(SampleStrategy)
@@ -175,11 +231,18 @@ def test_no_gateway_same_ids(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     online = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     with pytest.raises(RuntimeError):
@@ -255,11 +318,18 @@ def test_backfill_started(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     called = []
 
@@ -289,11 +359,18 @@ def test_cli_backfill_options(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_post(url, json):
-        with httpx.Client(transport=transport) as client:
-            return client.post(url, json=json)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
 
-    monkeypatch.setattr(httpx, "post", mock_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     called = []
 

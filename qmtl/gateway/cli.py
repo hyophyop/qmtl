@@ -8,7 +8,7 @@ import redis.asyncio as redis
 from .api import create_app, PostgresDatabase
 
 
-def main(argv: list[str] | None = None) -> None:
+async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
     parser = argparse.ArgumentParser(prog="qmtl-gateway")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address")
@@ -27,9 +27,8 @@ def main(argv: list[str] | None = None) -> None:
 
     redis_client = redis.from_url(args.redis_dsn, decode_responses=True)
     db = PostgresDatabase(args.postgres_dsn)
-    # Connect database if possible; ignore failures to ease testing
     try:
-        asyncio.run(db.connect())
+        await db.connect()
     except Exception:
         pass
 
@@ -38,6 +37,10 @@ def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
     uvicorn.run(app, host=args.host, port=args.port)
+
+
+def main(argv: list[str] | None = None) -> None:
+    asyncio.run(_main(argv))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

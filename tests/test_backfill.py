@@ -24,10 +24,11 @@ async def dummy_connect(_):
     return DummyConn(rows)
 
 
-def test_questdb_fetch(monkeypatch):
+@pytest.mark.asyncio
+async def test_questdb_fetch(monkeypatch):
     monkeypatch.setattr("qmtl.sdk.backfill.asyncpg.connect", dummy_connect)
     src = QuestDBSource("db")
-    df = src.fetch(1, 3, node_id="n1", interval=60)
+    df = await src.fetch(1, 3, node_id="n1", interval=60)
     expected = pd.DataFrame([{"ts": 1, "value": 10}, {"ts": 2, "value": 20}])
     pd.testing.assert_frame_equal(df.reset_index(drop=True), expected)
 

@@ -10,6 +10,7 @@ except Exception:  # pragma: no cover - fallback
 
 _json_loads = _json.loads
 import time
+import asyncio
 
 from .metrics import (
     observe_diff_duration,
@@ -268,6 +269,9 @@ class DiffService:
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)
+
+    async def diff_async(self, request: DiffRequest) -> DiffChunk:
+        return await asyncio.to_thread(self.diff, request)
 
 
 class Neo4jNodeRepository(NodeRepository):

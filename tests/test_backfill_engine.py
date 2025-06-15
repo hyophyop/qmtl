@@ -15,11 +15,11 @@ class DummySource:
         self.fail = fail
         self.calls = 0
 
-    def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self.calls += 1
         if self.calls <= self.fail:
             raise RuntimeError("fail")
-        time.sleep(self.delay)
+        await asyncio.sleep(self.delay)
         return self.df
 
 

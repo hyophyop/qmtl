@@ -8,7 +8,7 @@ class DummyMonitor:
     def __init__(self):
         self.called = 0
 
-    def check_once(self) -> None:
+    async def check_once(self) -> None:
         self.called += 1
 
 

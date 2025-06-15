@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 import httpx
+import asyncio
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
@@ -493,7 +494,19 @@ class TagQueryNode(Node):
         self.upstreams: list[str] = []
 
     def resolve(self, gateway_url: str | None = None, *, offline: bool = False) -> list[str]:
-        """Fetch matching queues from ``gateway_url``.
+        """Fetch matching queues synchronously."""
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(self.resolve_async(gateway_url, offline=offline))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    async def resolve_async(
+        self, gateway_url: str | None = None, *, offline: bool = False
+    ) -> list[str]:
+        """Fetch matching queues from ``gateway_url`` asynchronously.
 
         If ``gateway_url`` is ``None`` or the request fails, an empty list is
         returned and ``upstreams`` is cleared so the node can operate in
@@ -506,8 +519,9 @@ class TagQueryNode(Node):
         url = gateway_url.rstrip("/") + "/queues/by_tag"
         params = {"tags": ",".join(self.query_tags), "interval": self.interval}
         try:
-            resp = httpx.get(url, params=params)
-            resp.raise_for_status()
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
         except httpx.RequestError:
             self.upstreams = []
             return []

@@ -1,10 +1,11 @@
 import argparse
 import importlib
 
+import asyncio
 from .runner import Runner
 
 
-def main() -> None:
+async def _main() -> None:
     parser = argparse.ArgumentParser(description="Run QMTL strategy")
     parser.add_argument("strategy", help="Import path as module:Class")
     parser.add_argument("--mode", choices=["backtest", "dryrun", "live", "offline"], required=True)
@@ -22,7 +23,7 @@ def main() -> None:
     strategy_cls = getattr(module, class_name)
 
     if args.mode == "backtest":
-        Runner.backtest(
+        await Runner.backtest_async(
             strategy_cls,
             start_time=args.start_time,
             end_time=args.end_time,
@@ -33,7 +34,7 @@ def main() -> None:
             backfill_end=args.backfill_end,
         )
     elif args.mode == "dryrun":
-        Runner.dryrun(
+        await Runner.dryrun_async(
             strategy_cls,
             gateway_url=args.gateway_url,
             backfill_source=args.backfill_source,
@@ -41,7 +42,7 @@ def main() -> None:
             backfill_end=args.backfill_end,
         )
     elif args.mode == "live":
-        Runner.live(
+        await Runner.live_async(
             strategy_cls,
             gateway_url=args.gateway_url,
             backfill_source=args.backfill_source,
@@ -50,3 +51,6 @@ def main() -> None:
         )
     else:  # offline
         Runner.offline(strategy_cls)
+
+def main() -> None:
+    asyncio.run(_main())
