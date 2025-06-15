@@ -14,5 +14,5 @@ pip install qmtl[transforms]
 Example:
 
 ```python
-from qmtl.transforms import rate_of_change
+from qmtl.transforms import rate_of_change, stochastic, angle
 ```
