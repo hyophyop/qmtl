@@ -7,7 +7,8 @@ from .strategy import Strategy
 from .runner import Runner
 from .cli import main as _cli
 from .ws_client import WebSocketClient
-from .backfill import BackfillSource, QuestDBSource
+from .backfill import BackfillSource
+from .data_io import CacheLoader, DataSink, QuestDBLoader, QuestDBSink
 from .backfill_engine import BackfillEngine
 from . import metrics
 
@@ -22,7 +23,10 @@ __all__ = [
     "Runner",
     "WebSocketClient",
     "BackfillSource",
-    "QuestDBSource",
+    "CacheLoader",
+    "DataSink",
+    "QuestDBLoader",
+    "QuestDBSink",
     "BackfillEngine",
     "metrics",
     "_cli",
