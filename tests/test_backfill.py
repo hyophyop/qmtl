@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from qmtl.sdk.data_io import QuestDBLoader, QuestDBSink
+from qmtl.sdk.data_io import QuestDBLoader, QuestDBRecorder
 
 
 class DummyConn:
@@ -50,11 +50,26 @@ async def test_questdb_persist(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
-    sink = QuestDBSink("db", table="t")
-    await sink.persist("n", 60, 1, {"v": 99})
+    recorder = QuestDBRecorder("db", table="t")
+    await recorder.persist("n", 60, 1, {"v": 99})
 
     assert record["dsn"] == "db"
     assert record["closed"] is True
     assert "INSERT INTO t" in record["query"]
     assert record["args"] == ("n", 60, 1, 99)
+
+
+def test_stream_input_records_on_feed():
+    from qmtl.sdk.node import StreamInput
+
+    events = []
+
+    class DummyRecorder:
+        async def persist(self, node_id, interval, timestamp, payload):
+            events.append((node_id, interval, timestamp, payload))
+
+    s = StreamInput(interval=60, period=1, event_recorder=DummyRecorder())
+
+    s.feed("s", 60, 1, {"v": 1})
+    assert events == [(s.node_id, 60, 1, {"v": 1})]
 

@@ -17,7 +17,7 @@ from .backfill_state import BackfillState
 from .runner import Runner
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
-    from .data_io import CacheLoader
+    from .data_io import CacheLoader, EventRecorder
 
 from qmtl.dagmanager import compute_node_id
 
@@ -440,6 +440,14 @@ class Node:
     ) -> None:
         """Insert new data into ``cache`` and trigger ``compute_fn`` when ready."""
         self.cache.append(upstream_id, interval, timestamp, payload)
+        recorder = getattr(self, "event_recorder", None)
+        if recorder is not None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(recorder.persist(self.node_id, interval, timestamp, payload))
+            else:
+                loop.create_task(recorder.persist(self.node_id, interval, timestamp, payload))
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
         missing = self.cache.missing_flags().get(upstream_id, {}).get(interval, False)
@@ -478,6 +486,7 @@ class StreamInput(Node):
         history_provider: "CacheLoader" | None = None,
         start: int | None = None,
         end: int | None = None,
+        event_recorder: "EventRecorder" | None = None,
     ) -> None:
         super().__init__(
             input=None,
@@ -490,6 +499,7 @@ class StreamInput(Node):
         self.history_provider = history_provider
         self.start = start
         self.end = end
+        self.event_recorder = event_recorder
 
     async def load_history(self) -> None:
         """Load historical data if a provider was configured."""
