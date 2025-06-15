@@ -17,6 +17,16 @@ uv run pytest -q tests
 For instructions on implementing strategies with the SDK, see
 [docs/sdk_tutorial.md](docs/sdk_tutorial.md).
 
+## Optional Extensions
+
+Install additional indicator, stream, or generator packages only when needed:
+
+```bash
+uv pip install -e .[indicators]
+uv pip install -e .[streams]
+uv pip install -e .[generators]
+```
+
 ## Backfills
 
 Learn how to preload historical data using BackfillSource objects in
