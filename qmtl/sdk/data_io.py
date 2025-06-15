@@ -16,6 +16,18 @@ class HistoryProvider(Protocol):
         """Return data in ``[start, end)`` for ``node_id`` and ``interval``."""
         ...
 
+    async def coverage(
+        self, *, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:
+        """Return timestamp ranges available for ``node_id`` and ``interval``."""
+        ...
+
+    async def fill_missing(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        """Populate gaps in ``[start, end]`` for ``node_id`` and ``interval``."""
+        ...
+
 
 class EventRecorder(Protocol):
     """Interface for persisting processed node data."""
@@ -49,6 +61,58 @@ class QuestDBLoader:
             await conn.close()
 
         return pd.DataFrame([dict(r) for r in rows])
+
+    async def coverage(
+        self, *, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:
+        """Return contiguous timestamp ranges available for ``node_id``."""
+        conn = await asyncpg.connect(self.dsn)
+        try:
+            sql = (
+                f"SELECT ts FROM {self.table} "
+                "WHERE node_id=$1 AND interval=$2 ORDER BY ts"
+            )
+            rows = await conn.fetch(sql, node_id, interval)
+        finally:
+            await conn.close()
+
+        ts_values = [int(r["ts"]) for r in rows]
+        if not ts_values:
+            return []
+        ranges: list[tuple[int, int]] = []
+        start = ts_values[0]
+        prev = start
+        for ts in ts_values[1:]:
+            if ts == prev + interval:
+                prev = ts
+            else:
+                ranges.append((start, prev))
+                start = ts
+                prev = ts
+        ranges.append((start, prev))
+        return ranges
+
+    async def fill_missing(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        """Insert placeholder rows for any missing timestamps."""
+        conn = await asyncpg.connect(self.dsn)
+        try:
+            sql_fetch = (
+                f"SELECT ts FROM {self.table} "
+                "WHERE node_id=$1 AND interval=$2 AND ts >= $3 AND ts <= $4"
+            )
+            rows = await conn.fetch(sql_fetch, node_id, interval, start, end)
+            existing = {int(r["ts"]) for r in rows}
+            for ts in range(start, end + 1, interval):
+                if ts not in existing:
+                    sql_ins = (
+                        f"INSERT INTO {self.table}(node_id, interval, ts) "
+                        "VALUES($1, $2, $3)"
+                    )
+                    await conn.execute(sql_ins, node_id, interval, ts)
+        finally:
+            await conn.close()
 
 
 class QuestDBRecorder:
