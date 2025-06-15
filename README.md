@@ -23,6 +23,16 @@ uv pip install -e .[generators]
 uv pip install -e .[transforms]
 ```
 
+## Optional Modules
+
+Install additional functionality on demand. Each entry links to its
+documentation and shows the corresponding extra:
+
+- [Indicators](qmtl/indicators/README.md) &mdash; `pip install qmtl[indicators]`
+- [Streams](qmtl/streams/README.md) &mdash; `pip install qmtl[streams]`
+- [Generators](qmtl/generators/README.md) &mdash; `pip install qmtl[generators]`
+- [Transforms](qmtl/transforms/README.md) &mdash; `pip install qmtl[transforms]`
+
 ## End-to-End Testing
 
 For instructions on spinning up the entire stack and running the e2e suite, see [docs/e2e_testing.md](docs/e2e_testing.md).
