@@ -23,6 +23,25 @@ uv pip install -e .[generators]
 uv pip install -e .[transforms]
 ```
 
+
+## Development Workflow
+
+Here’s a short workflow summary based on the repository’s guidelines:
+
+1. **Environment Setup** – Use the `uv` tool and install dependencies in editable mode:
+
+   ```bash
+   uv pip install -e .[dev]
+   ```
+
+   This command ensures all development dependencies are available.
+
+2. **Testing** – Run `pytest` (via the `uv` environment) before committing any changes to verify everything works properly. Commit only after tests pass.
+
+3. **Design Approach** – Follow the Single Responsibility Principle (SRP) when designing modules and classes. This keeps features modular and easier to maintain.
+
+For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
+
 ## Optional Modules
 
 Install additional functionality on demand. Each entry links to its
@@ -32,6 +51,7 @@ documentation and shows the corresponding extra:
 - [Streams](qmtl/streams/README.md) &mdash; `pip install qmtl[streams]`
 - [Generators](qmtl/generators/README.md) &mdash; `pip install qmtl[generators]`
 - [Transforms](qmtl/transforms/README.md) &mdash; `pip install qmtl[transforms]`
+
 
 ## End-to-End Testing
 
