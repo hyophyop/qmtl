@@ -23,11 +23,32 @@ class DummyGC:
         return [QueueInfo("q", "raw", datetime.utcnow(), interval=60)]
 
 
-def test_gateway_health():
-    client = TestClient(gw_create_app())
-    resp = client.get("/health")
+class FakeDagClient:
+    async def status(self):
+        return True
+
+
+class FakeDB(PostgresDatabase):
+    def __init__(self):
+        super().__init__("postgresql://localhost/test")
+        self._pool = None
+
+    async def healthy(self):
+        return True
+
+
+def test_gateway_status():
+    redis_client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    db = FakeDB()
+    client = TestClient(
+        gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient())
+    )
+    resp = client.get("/status")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    data = resp.json()
+    assert data["redis"] == "ok"
+    assert data["postgres"] == "ok"
+    assert data["dag_manager"] == "ok"
 
 
 def test_dagmanager_http_status():
