@@ -4,7 +4,15 @@ This guide explains how to populate node caches with past values before a strate
 
 ## Configuring a HistoryProvider
 
-A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It must implement the `fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame` where each row contains a timestamp column `ts` and any payload fields.
+A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It
+must implement the `fetch(start, end, *, node_id, interval)` method and return a
+`pandas.DataFrame` where each row contains a timestamp column `ts` and any
+payload fields.  Advanced providers can optionally expose:
+
+- `coverage(node_id, interval)` returning a list of `(start, end)` timestamp
+  ranges already present in the underlying store.
+- `fill_missing(start, end, node_id, interval)` instructing the provider to
+  populate gaps within the given range.
 
 The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 

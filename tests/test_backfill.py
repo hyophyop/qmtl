@@ -34,6 +34,57 @@ async def test_questdb_fetch(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_questdb_coverage(monkeypatch):
+    class DummyConn:
+        def __init__(self):
+            self.closed = False
+
+        async def fetch(self, query, *args):
+            return [
+                {"ts": 60},
+                {"ts": 120},
+                {"ts": 240},
+                {"ts": 300},
+            ]
+
+        async def close(self):
+            self.closed = True
+
+    async def _connect(_):
+        return DummyConn()
+
+    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    src = QuestDBLoader("db")
+    ranges = await src.coverage(node_id="n", interval=60)
+    assert ranges == [(60, 120), (240, 300)]
+
+
+@pytest.mark.asyncio
+async def test_questdb_fill_missing(monkeypatch):
+    executed: list[tuple[str, tuple]] = []
+
+    class DummyConn:
+        async def fetch(self, query, *args):
+            return [{"ts": 60}, {"ts": 180}]
+
+        async def execute(self, query, *args):
+            executed.append((query, args))
+
+        async def close(self):
+            pass
+
+    async def _connect(_):
+        return DummyConn()
+
+    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    src = QuestDBLoader("db")
+    await src.fill_missing(60, 180, node_id="n", interval=60)
+
+    # only timestamp 120 should be inserted
+    assert any(args[2] == 120 for _, args in executed)
+
+
+@pytest.mark.asyncio
 async def test_questdb_persist(monkeypatch):
     record: dict = {}
 
