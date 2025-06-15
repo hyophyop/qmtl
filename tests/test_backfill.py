@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from qmtl.sdk.data_io import QuestDBLoader, QuestDBRecorder
+from tests.dummy_fetcher import DummyDataFetcher
 
 
 class DummyConn:
@@ -60,7 +61,7 @@ async def test_questdb_coverage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_questdb_fill_missing_error_without_fetcher(monkeypatch):
+async def test_questdb_fill_missing_no_fetcher(monkeypatch):
     executed: list[tuple[str, tuple]] = []
 
     class DummyConn:
@@ -83,15 +84,30 @@ async def test_questdb_fill_missing_error_without_fetcher(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_questdb_fill_missing_with_fetcher(monkeypatch):
-    executed: list[tuple[str, tuple]] = []
+async def test_fill_missing_without_fetcher_raises(monkeypatch):
+    class DummyConn:
+        async def fetch(self, query, *args):
+            return []
 
-    class DummyFetcher:
-        async def fetch(self, start, end, *, node_id, interval):
-            return pd.DataFrame([
-                {"ts": 120, "value": 1},
-                {"ts": 180, "value": 2},
-            ])
+        async def execute(self, query, *args):
+            pass
+
+        async def close(self):
+            pass
+
+    async def _connect(_):
+        return DummyConn()
+
+    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    loader = QuestDBLoader("db")
+    with pytest.raises(RuntimeError):
+        await loader.fill_missing(0, 0, node_id="n", interval=60)
+
+
+@pytest.mark.asyncio
+async def test_questdb_fill_missing(monkeypatch):
+    executed: list[tuple[str, tuple]] = []
+    fetcher = DummyDataFetcher()
 
     class DummyConn:
         async def fetch(self, query, *args):
@@ -107,12 +123,14 @@ async def test_questdb_fill_missing_with_fetcher(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
-    fetcher = DummyFetcher()
     src = QuestDBLoader("db", fetcher=fetcher)
     await src.fill_missing(60, 180, node_id="n", interval=60)
 
-    inserted_ts = [args[2] for _, args in executed]
-    assert 120 in inserted_ts and 180 in inserted_ts
+    inserted_args = [args for _, args in executed]
+    assert inserted_args == [
+        ("n", 60, 120, 1),
+        ("n", 60, 180, 2),
+    ]
 
 
 @pytest.mark.asyncio
