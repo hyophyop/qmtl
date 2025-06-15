@@ -5,6 +5,7 @@ import json
 import httpx
 import pytest
 from qmtl.sdk.runner import Runner
+from qmtl.sdk.node import StreamInput
 from tests.sample_strategy import SampleStrategy
 
 
@@ -312,7 +313,7 @@ def test_feed_queue_data_without_ray(monkeypatch):
     assert len(calls) == 1
 
 
-def test_backfill_started(monkeypatch):
+def test_load_history_called(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
 
@@ -333,24 +334,20 @@ def test_backfill_started(monkeypatch):
 
     called = []
 
-    async def dummy_run_backfill(strategy, source, start, end):
-        called.append((start, end))
+    async def dummy_load_history(self):
+        called.append(self)
 
-    monkeypatch.setattr(Runner, "_run_backfill", staticmethod(dummy_run_backfill))
-    monkeypatch.setattr(Runner, "_create_backfill_source", staticmethod(lambda s: object()))
+    monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
     Runner.dryrun(
         SampleStrategy,
         gateway_url="http://gw",
-        backfill_source="dummy",
-        backfill_start=1,
-        backfill_end=2,
     )
 
-    assert called == [(1, 2)]
+    assert len(called) == 1
 
 
-def test_cli_backfill_options(monkeypatch):
+def test_cli_execution(monkeypatch):
     import sys
     from qmtl.sdk.cli import main
 
@@ -374,11 +371,10 @@ def test_cli_backfill_options(monkeypatch):
 
     called = []
 
-    async def dummy_run_backfill(strategy, source, start, end):
-        called.append((start, end))
+    async def dummy_load_history(self):
+        called.append(self)
 
-    monkeypatch.setattr(Runner, "_run_backfill", staticmethod(dummy_run_backfill))
-    monkeypatch.setattr(Runner, "_create_backfill_source", staticmethod(lambda s: object()))
+    monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
     argv = [
         "qmtl.sdk",
@@ -387,13 +383,7 @@ def test_cli_backfill_options(monkeypatch):
         "dryrun",
         "--gateway-url",
         "http://gw",
-        "--backfill-source",
-        "dummy",
-        "--backfill-start",
-        "1",
-        "--backfill-end",
-        "2",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()
-    assert called == [(1, 2)]
+    assert len(called) == 1

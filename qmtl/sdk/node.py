@@ -5,7 +5,7 @@ import inspect
 import json
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import xarray as xr
@@ -15,6 +15,9 @@ import asyncio
 from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .runner import Runner
+
+if TYPE_CHECKING:  # pragma: no cover - type checking import
+    from .data_io import CacheLoader
 
 from qmtl.dagmanager import compute_node_id
 
@@ -466,8 +469,39 @@ class Node:
 class StreamInput(Node):
     """Represents an upstream data stream placeholder."""
 
-    def __init__(self, tags: list[str] | None = None, interval: int | None = None, period: int | None = None) -> None:
-        super().__init__(input=None, compute_fn=None, name="stream_input", interval=interval, period=period, tags=tags or [])
+    def __init__(
+        self,
+        tags: list[str] | None = None,
+        interval: int | None = None,
+        period: int | None = None,
+        *,
+        history_provider: "CacheLoader" | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> None:
+        super().__init__(
+            input=None,
+            compute_fn=None,
+            name="stream_input",
+            interval=interval,
+            period=period,
+            tags=tags or [],
+        )
+        self.history_provider = history_provider
+        self.start = start
+        self.end = end
+
+    async def load_history(self) -> None:
+        """Load historical data if a provider was configured."""
+        if not self.history_provider or self.interval is None:
+            return
+        if self.start is None or self.end is None:
+            return
+        from .backfill_engine import BackfillEngine
+
+        engine = BackfillEngine(self.history_provider)
+        engine.submit(self, self.start, self.end)
+        await engine.wait()
 
 
 class TagQueryNode(Node):
