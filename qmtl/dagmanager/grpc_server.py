@@ -58,12 +58,9 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         stream = _GrpcStream(asyncio.get_running_loop())
         self._streams[sentinel_id] = stream
         svc = DiffService(self._service.node_repo, self._service.queue_manager, stream)
-        loop = asyncio.get_running_loop()
-
-        def run_diff() -> DiffChunk:
-            return svc.diff(DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json))
-
-        fut = loop.run_in_executor(None, run_diff)
+        fut = asyncio.create_task(
+            svc.diff_async(DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json))
+        )
         try:
             while True:
                 if fut.done() and stream.queue.empty():

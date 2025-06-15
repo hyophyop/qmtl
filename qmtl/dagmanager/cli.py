@@ -121,7 +121,7 @@ def _cmd_export_schema(args: argparse.Namespace) -> None:
         print(text, end="")
 
 
-def main(argv: list[str] | None = None) -> None:
+async def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl-dagm")
     parser.add_argument("--target", default="localhost:50051", help="gRPC service target")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -150,15 +150,19 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.cmd == "diff":
-        asyncio.run(_cmd_diff(args))
+        await _cmd_diff(args)
     elif args.cmd == "queue-stats":
-        asyncio.run(_cmd_queue_stats(args))
+        await _cmd_queue_stats(args)
     elif args.cmd == "gc":
-        asyncio.run(_cmd_gc(args))
+        await _cmd_gc(args)
     elif args.cmd == "redo-diff":
-        asyncio.run(_cmd_redo_diff(args))
+        await _cmd_redo_diff(args)
     elif args.cmd == "export-schema":
         _cmd_export_schema(args)
+
+
+def main(argv: list[str] | None = None) -> None:
+    asyncio.run(_main(argv))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

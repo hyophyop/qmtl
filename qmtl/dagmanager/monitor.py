@@ -51,19 +51,19 @@ class Monitor:
     stream: DiffStream
     alerts: AlertManager
 
-    def check_once(self) -> None:
+    async def check_once(self) -> None:
         """Inspect metrics once and trigger recovery/alerts."""
         if self.metrics.neo4j_leader_is_null():
             self.neo4j.elect_leader()
-            self.alerts.send_pagerduty("Neo4j leader down")
+            await self.alerts.send_pagerduty("Neo4j leader down")
 
         if self.metrics.kafka_zookeeper_disconnects() > 0:
             self.kafka.retry()
-            self.alerts.send_slack("Kafka session lost")
+            await self.alerts.send_slack("Kafka session lost")
 
         if self.metrics.diff_chunk_ack_timeout():
             self.stream.resume_from_last_offset()
-            self.alerts.send_slack("Diff stream stalled")
+            await self.alerts.send_slack("Diff stream stalled")
 
 
 @dataclass
@@ -82,7 +82,7 @@ class MonitorLoop:
     async def _run(self) -> None:
         try:
             while True:
-                self.monitor.check_once()
+                await self.monitor.check_once()
                 await asyncio.sleep(self.interval)
         except asyncio.CancelledError:  # pragma: no cover - background task
             pass

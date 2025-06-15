@@ -1,21 +1,30 @@
 import httpx
+import pytest
 from qmtl.dagmanager.alerts import PagerDutyClient, SlackClient
 
 
-def test_alert_clients(monkeypatch):
+@pytest.mark.asyncio
+async def test_alert_clients(monkeypatch):
     calls = []
 
-    def fake_post(url, json):
-        calls.append((url, json))
-        return httpx.Response(202)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def post(self, url, json=None):
+            calls.append((url, json))
+            return httpx.Response(202)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     pd = PagerDutyClient("http://pd")
     sl = SlackClient("http://slack")
 
-    pd.send("neo4j down")
-    sl.send("kafka lost")
+    await pd.send("neo4j down")
+    await sl.send("kafka lost")
 
     assert calls == [
         ("http://pd", {"text": "neo4j down"}),

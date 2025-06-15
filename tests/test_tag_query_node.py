@@ -16,11 +16,20 @@ def test_resolve(monkeypatch):
 
     transport = httpx.MockTransport(handler)
 
-    def mock_get(url, params=None):
-        with httpx.Client(transport=transport) as client:
-            return client.get(url, params=params)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def get(self, url, params=None):
+            request = httpx.Request("GET", url, params=params)
+            resp = handler(request)
+            resp.request = request
+            return resp
 
-    monkeypatch.setattr(httpx, "get", mock_get)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     node.resolve("http://gw")
     assert node.upstreams == ["q1", "q2"]
@@ -64,10 +73,11 @@ async def test_subscribe_updates(monkeypatch):
 def test_resolve_offline(monkeypatch):
     node = TagQueryNode(["t1"], interval=60, period=2)
 
-    def mock_get(url, params=None):
-        raise httpx.RequestError("fail", request=httpx.Request("GET", url))
+    class DummyClient:
+        def __init__(self, *a, **k):
+            raise httpx.RequestError("fail", request=httpx.Request("GET", "u"))
 
-    monkeypatch.setattr(httpx, "get", mock_get)
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     queues = node.resolve("http://gw")
     assert queues == []

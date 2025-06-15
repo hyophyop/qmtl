@@ -36,8 +36,7 @@ class BackfillEngine:
         attempts = 0
         while True:
             try:
-                df = await asyncio.to_thread(
-                    self.source.fetch,
+                df = await self.source.fetch(
                     start,
                     end,
                     node_id=node.node_id,
