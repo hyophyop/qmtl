@@ -17,7 +17,7 @@ class CacheLoader(Protocol):
         ...
 
 
-class DataSink(Protocol):
+class EventRecorder(Protocol):
     """Interface for persisting processed node data."""
 
     async def persist(
@@ -51,8 +51,8 @@ class QuestDBLoader:
         return pd.DataFrame([dict(r) for r in rows])
 
 
-class QuestDBSink:
-    """DataSink implementation that writes records to QuestDB."""
+class QuestDBRecorder:
+    """EventRecorder implementation that writes records to QuestDB."""
 
     def __init__(self, dsn: str, table: str = "node_data") -> None:
         self.dsn = dsn
