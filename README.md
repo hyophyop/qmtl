@@ -35,7 +35,19 @@ documentation and shows the corresponding extra:
 
 ## End-to-End Testing
 
-For instructions on spinning up the entire stack and running the e2e suite, see [docs/e2e_testing.md](docs/e2e_testing.md).
+Bring up the stack with Docker Compose:
+
+```bash
+docker compose -f tests/docker-compose.e2e.yml up -d
+```
+
+Run the tests using uv:
+
+```bash
+uv run -- pytest tests/e2e
+```
+
+See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
 
 ## Running the Test Suite
 
