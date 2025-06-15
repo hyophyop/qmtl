@@ -10,3 +10,4 @@
   `gateway.md` and `dag-manager.md`.
 - When providing task lists or suggestions, highlight opportunities for
   parallel execution where feasible.
+- 질문에 대한 답이나 제안을 요청받은 경우에는 test 과정을 생략한다.
