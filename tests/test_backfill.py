@@ -60,7 +60,7 @@ async def test_questdb_coverage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_questdb_fill_missing(monkeypatch):
+async def test_questdb_fill_missing_error_without_fetcher(monkeypatch):
     executed: list[tuple[str, tuple]] = []
 
     class DummyConn:
@@ -78,10 +78,41 @@ async def test_questdb_fill_missing(monkeypatch):
 
     monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
     src = QuestDBLoader("db")
+    with pytest.raises(RuntimeError):
+        await src.fill_missing(60, 180, node_id="n", interval=60)
+
+
+@pytest.mark.asyncio
+async def test_questdb_fill_missing_with_fetcher(monkeypatch):
+    executed: list[tuple[str, tuple]] = []
+
+    class DummyFetcher:
+        async def fetch(self, start, end, *, node_id, interval):
+            return pd.DataFrame([
+                {"ts": 120, "value": 1},
+                {"ts": 180, "value": 2},
+            ])
+
+    class DummyConn:
+        async def fetch(self, query, *args):
+            return [{"ts": 60}]
+
+        async def execute(self, query, *args):
+            executed.append((query, args))
+
+        async def close(self):
+            pass
+
+    async def _connect(_):
+        return DummyConn()
+
+    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    fetcher = DummyFetcher()
+    src = QuestDBLoader("db", fetcher=fetcher)
     await src.fill_missing(60, 180, node_id="n", interval=60)
 
-    # only timestamp 120 should be inserted
-    assert any(args[2] == 120 for _, args in executed)
+    inserted_ts = [args[2] for _, args in executed]
+    assert 120 in inserted_ts and 180 in inserted_ts
 
 
 @pytest.mark.asyncio

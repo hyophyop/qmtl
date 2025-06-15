@@ -14,12 +14,25 @@ payload fields.  Advanced providers can optionally expose:
 - `fill_missing(start, end, node_id, interval)` instructing the provider to
   populate gaps within the given range.
 
+In some cases a provider may rely on a separate **DataFetcher** object to
+retrieve missing rows.  A `DataFetcher` exposes a single asynchronous
+`fetch(start, end, *, node_id, interval)` method returning the same frame
+structure.  When a provider is created without a fetcher, calling
+`fill_missing` will raise a `RuntimeError`.
+
 The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 
 ```python
 from qmtl.sdk import QuestDBLoader
 
 source = QuestDBLoader("postgresql://user:pass@localhost:8812/qdb")
+
+# with an external fetcher supplying missing rows
+# fetcher = MyFetcher()
+# source = QuestDBLoader(
+#     "postgresql://user:pass@localhost:8812/qdb",
+#     fetcher=fetcher,
+# )
 ```
 
 Custom providers can implement `HistoryProvider` or provide an object with the same interface.
@@ -33,7 +46,10 @@ from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
 
 stream = StreamInput(
     interval=60,
-    history_provider=QuestDBLoader("postgresql://user:pass@localhost:8812/qdb"),
+    history_provider=QuestDBLoader(
+        "postgresql://user:pass@localhost:8812/qdb",
+        fetcher=fetcher,
+    ),
     start=1700000000,
     end=1700003600,
     event_recorder=QuestDBRecorder("postgresql://user:pass@localhost:8812/qdb"),
