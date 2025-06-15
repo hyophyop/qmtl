@@ -100,13 +100,17 @@ For instructions on implementing strategies with the SDK, see
 
 ## Example Strategies
 
-Run a sample strategy with:
+Run the samples inside the `examples/` directory:
 
 ```bash
 python examples/general_strategy.py
+python examples/indicators_strategy.py
+python examples/transforms_strategy.py
+python examples/generators_example.py
+python examples/extensions_combined_strategy.py
 ```
 
-See [examples/README.md](examples/README.md) for more details.
+See [examples/README.md](examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
 
 ## Backfills
 
