@@ -17,7 +17,7 @@ from .backfill_state import BackfillState
 from .runner import Runner
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
-    from .data_io import HistoryProvider, EventRecorder
+    from qmtl.io import HistoryProvider, EventRecorder
 
 from qmtl.dagmanager import compute_node_id
 

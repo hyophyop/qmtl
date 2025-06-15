@@ -18,7 +18,7 @@ extras are also documented:
 
 ```bash
 uv pip install -e .[indicators]
-uv pip install -e .[streams]
+uv pip install -e .[io]
 uv pip install -e .[generators]
 uv pip install -e .[transforms]
 ```
@@ -48,7 +48,7 @@ Install additional functionality on demand. Each entry links to its
 documentation and shows the corresponding extra:
 
 - [Indicators](qmtl/indicators/README.md) &mdash; `pip install qmtl[indicators]`
-- [Streams](qmtl/streams/README.md) &mdash; `pip install qmtl[streams]`
+- [IO](qmtl/io) &mdash; `pip install qmtl[io]`
 - [Generators](qmtl/generators/README.md) &mdash; `pip install qmtl[generators]`
 - [Transforms](qmtl/transforms/README.md) &mdash; `pip install qmtl[transforms]`
 

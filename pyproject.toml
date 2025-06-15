@@ -30,9 +30,8 @@ dev = [
 ]
 
 ray = ["ray"]
-backfill = ["pandas", "asyncpg"]
+io = ["pandas", "asyncpg"]
 indicators = []
-streams = []
 generators = []
 transforms = []
 

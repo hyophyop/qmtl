@@ -1,11 +1,5 @@
-from qmtl.sdk import (
-    Strategy,
-    Node,
-    StreamInput,
-    Runner,
-    QuestDBLoader,
-    QuestDBRecorder,
-)
+from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.io import QuestDBLoader, QuestDBRecorder
 import pandas as pd
 
 class CrossMarketLagStrategy(Strategy):

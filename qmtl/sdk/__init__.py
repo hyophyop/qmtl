@@ -7,12 +7,12 @@ from .strategy import Strategy
 from .runner import Runner
 from .cli import main as _cli
 from .ws_client import WebSocketClient
-from .data_io import (
+from qmtl.sdk.data_io import (
+    DataFetcher,
     HistoryProvider,
     EventRecorder,
     QuestDBLoader,
     QuestDBRecorder,
-    DataFetcher,
 )
 from .backfill_engine import BackfillEngine
 from . import metrics
