@@ -75,12 +75,17 @@ class Runner:
                 node.queue_topic = None
 
     @staticmethod
-    async def _load_history(strategy: Strategy) -> None:
+    async def _load_history(
+        strategy: Strategy, start: int | None = None, end: int | None = None
+    ) -> None:
         """Load history for all StreamInput nodes."""
         from .node import StreamInput
 
+        if start is None or end is None:
+            return
+
         tasks = [
-            asyncio.create_task(n.load_history())
+            asyncio.create_task(n.load_history(start, end))
             for n in strategy.nodes
             if isinstance(n, StreamInput)
         ]
@@ -142,7 +147,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy)
+        await Runner._load_history(strategy, start_time, end_time)
         # Placeholder for backtest logic
         return strategy
 
@@ -194,7 +199,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy)
+        await Runner._load_history(strategy, None, None)
         # Placeholder for dry-run logic
         return strategy
 
@@ -239,7 +244,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await Runner._load_history(strategy)
+        await Runner._load_history(strategy, None, None)
         # Placeholder for live trading logic
         return strategy
 
@@ -268,6 +273,6 @@ class Runner:
         strategy = Runner._prepare(strategy_cls)
         print(f"[OFFLINE] {strategy_cls.__name__} starting")
         Runner._apply_queue_map(strategy, {})
-        await Runner._load_history(strategy)
+        await Runner._load_history(strategy, None, None)
         # Placeholder for offline execution logic
         return strategy
