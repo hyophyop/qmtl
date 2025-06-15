@@ -25,6 +25,7 @@ Install additional indicator, stream, or generator packages only when needed:
 uv pip install -e .[indicators]
 uv pip install -e .[streams]
 uv pip install -e .[generators]
+uv pip install -e .[transforms]
 ```
 
 ## Backfills

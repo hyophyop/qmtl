@@ -34,6 +34,7 @@ backfill = ["pandas", "asyncpg"]
 indicators = []
 streams = []
 generators = []
+transforms = []
 
 [project.scripts]
 qmtl-dagm = "qmtl.dagmanager.cli:main"
