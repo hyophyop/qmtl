@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 from qmtl.sdk.runner import Runner
-from qmtl.sdk.node import StreamInput
+from qmtl.sdk.node import StreamInput, Node
 from tests.sample_strategy import SampleStrategy
 
 
@@ -393,3 +393,57 @@ def test_cli_execution(monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
     main()
     assert called == [("1", "2")]
+
+
+def test_history_gap_fill(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    coverage_calls = []
+    fill_calls = []
+
+    class DummyProvider:
+        def __init__(self):
+            self.ranges = []
+
+        async def fetch(self, start, end, *, node_id, interval):
+            return None
+
+        async def coverage(self, *, node_id, interval):
+            coverage_calls.append((node_id, interval))
+            return list(self.ranges)
+
+        async def fill_missing(self, start, end, *, node_id, interval):
+            fill_calls.append((start, end, node_id, interval))
+            self.ranges.append((start, end))
+
+    provider = DummyProvider()
+
+    class Strat(SampleStrategy):
+        def setup(self):
+            src = StreamInput(interval=1, period=1, history_provider=provider)
+            node = Node(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
+            self.add_nodes([src, node])
+
+    Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
+
+    assert coverage_calls
+    assert fill_calls
