@@ -7,6 +7,15 @@ import pandas as pd
 import asyncpg
 
 
+class DataFetcher(Protocol):
+    """Retrieve historical rows for a node."""
+
+    async def fetch(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        ...
+
+
 class HistoryProvider(Protocol):
     """Interface for loading historical data into node caches."""
 
@@ -25,7 +34,12 @@ class HistoryProvider(Protocol):
     async def fill_missing(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> None:
-        """Populate gaps in ``[start, end]`` for ``node_id`` and ``interval``."""
+        """Populate gaps in ``[start, end]`` for ``node_id`` and ``interval``.
+
+        Implementations may retrieve missing rows from an injected
+        :class:`DataFetcher` instance. When no fetcher is available, this
+        method should raise ``RuntimeError``.
+        """
         ...
 
 
@@ -42,9 +56,16 @@ class EventRecorder(Protocol):
 class QuestDBLoader:
     """HistoryProvider implementation backed by QuestDB."""
 
-    def __init__(self, dsn: str, table: str = "node_data") -> None:
+    def __init__(
+        self,
+        dsn: str,
+        table: str = "node_data",
+        *,
+        fetcher: DataFetcher | None = None,
+    ) -> None:
         self.dsn = dsn
         self.table = table
+        self.fetcher = fetcher
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -95,7 +116,11 @@ class QuestDBLoader:
     async def fill_missing(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> None:
-        """Insert placeholder rows for any missing timestamps."""
+        """Insert real rows for any missing timestamps."""
+
+        if self.fetcher is None:
+            raise RuntimeError("DataFetcher not configured")
+
         conn = await asyncpg.connect(self.dsn)
         try:
             sql_fetch = (
@@ -104,13 +129,31 @@ class QuestDBLoader:
             )
             rows = await conn.fetch(sql_fetch, node_id, interval, start, end)
             existing = {int(r["ts"]) for r in rows}
-            for ts in range(start, end + 1, interval):
-                if ts not in existing:
-                    sql_ins = (
-                        f"INSERT INTO {self.table}(node_id, interval, ts) "
-                        "VALUES($1, $2, $3)"
-                    )
-                    await conn.execute(sql_ins, node_id, interval, ts)
+
+            df = await self.fetcher.fetch(
+                start, end, node_id=node_id, interval=interval
+            )
+
+            for _, row in df.iterrows():
+                ts = int(row.get("ts", 0))
+                if ts in existing:
+                    continue
+                payload = {k: row[k] for k in row.index if k != "ts"}
+                columns = ", ".join(payload.keys())
+                values = payload.values()
+                placeholders = ", ".join(
+                    f"${i}" for i in range(4, 4 + len(payload))
+                )
+                sql_ins = (
+                    f"INSERT INTO {self.table}(node_id, interval, ts"
+                    + (f", {columns}" if columns else "")
+                    + f") VALUES($1, $2, $3"
+                    + (f", {placeholders}" if placeholders else "")
+                    + ")"
+                )
+                await conn.execute(
+                    sql_ins, node_id, interval, ts, *values
+                )
         finally:
             await conn.close()
 
