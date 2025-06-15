@@ -1,6 +1,6 @@
 import pandas as pd
 
-from qmtl.sdk.data_io import DataFetcher
+from qmtl.io import DataFetcher
 
 
 class DummyDataFetcher:

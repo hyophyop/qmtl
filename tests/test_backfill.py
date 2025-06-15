@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from qmtl.sdk.data_io import QuestDBLoader, QuestDBRecorder
+from qmtl.io import QuestDBLoader, QuestDBRecorder
 from tests.dummy_fetcher import DummyDataFetcher
 
 
@@ -27,7 +27,7 @@ async def dummy_connect(_):
 
 @pytest.mark.asyncio
 async def test_questdb_fetch(monkeypatch):
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", dummy_connect)
+    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", dummy_connect)
     src = QuestDBLoader("db")
     df = await src.fetch(1, 3, node_id="n1", interval=60)
     expected = pd.DataFrame([{"ts": 1, "value": 10}, {"ts": 2, "value": 20}])
@@ -54,7 +54,7 @@ async def test_questdb_coverage(monkeypatch):
     async def _connect(_):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db")
     ranges = await src.coverage(node_id="n", interval=60)
     assert ranges == [(60, 120), (240, 300)]
@@ -77,7 +77,7 @@ async def test_questdb_fill_missing_no_fetcher(monkeypatch):
     async def _connect(_):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db")
     with pytest.raises(RuntimeError):
         await src.fill_missing(60, 180, node_id="n", interval=60)
@@ -98,7 +98,7 @@ async def test_fill_missing_without_fetcher_raises(monkeypatch):
     async def _connect(_):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
     loader = QuestDBLoader("db")
     with pytest.raises(RuntimeError):
         await loader.fill_missing(0, 0, node_id="n", interval=60)
@@ -122,7 +122,7 @@ async def test_questdb_fill_missing(monkeypatch):
     async def _connect(_):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db", fetcher=fetcher)
     await src.fill_missing(60, 180, node_id="n", interval=60)
 
@@ -149,7 +149,7 @@ async def test_questdb_persist(monkeypatch):
         record["dsn"] = dsn
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.sdk.data_io.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.io.eventrecorder.asyncpg.connect", _connect)
     recorder = QuestDBRecorder("db", table="t")
     await recorder.persist("n", 60, 1, {"v": 99})
 

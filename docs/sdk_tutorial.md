@@ -13,7 +13,7 @@ uv pip install -e .[dev]
 
 ```bash
 uv pip install -e .[indicators]  # 기술 지표 노드 모음
-uv pip install -e .[streams]     # 거래소 스트림 커넥터
+uv pip install -e .[io]         # 데이터 IO 모듈
 uv pip install -e .[generators]  # 시뮬레이션 데이터 생성기
 ```
 

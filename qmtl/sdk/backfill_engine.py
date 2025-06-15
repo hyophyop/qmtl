@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .data_io import HistoryProvider
+from qmtl.io import HistoryProvider
 from .node import Node
 from . import metrics as sdk_metrics
 
