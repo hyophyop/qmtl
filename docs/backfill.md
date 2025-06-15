@@ -35,6 +35,39 @@ source = QuestDBLoader("postgresql://user:pass@localhost:8812/qdb")
 # )
 ```
 
+### Example `DataFetcher`
+
+When historical rows are missing, the loader can query any external service.
+Below is a minimal fetcher that reads candlesticks from Binance:
+
+```python
+import httpx
+import pandas as pd
+from qmtl.sdk import DataFetcher
+
+class BinanceFetcher:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        url = (
+            "https://api.binance.com/api/v3/klines"
+            f"?symbol={node_id}&interval={interval}m"
+            f"&startTime={start * 1000}&endTime={end * 1000}"
+        )
+        async with httpx.AsyncClient() as client:
+            data = (await client.get(url)).json()
+        return pd.DataFrame(
+            [
+                {"ts": int(r[0] / 1000), "open": float(r[1]), "close": float(r[4])}
+                for r in data
+            ]
+        )
+
+fetcher = BinanceFetcher()
+loader = QuestDBLoader(
+    "postgresql://user:pass@localhost:8812/qdb",
+    fetcher=fetcher,
+)
+```
+
 Custom providers can implement `HistoryProvider` or provide an object with the same interface.
 
 ### Injecting into `StreamInput`

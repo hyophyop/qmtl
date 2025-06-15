@@ -35,3 +35,35 @@ injecting `HistoryProvider` instances
 into `StreamInput` nodes. This also covers persisting data via `EventRecorder`.
 [docs/backfill.md](docs/backfill.md).
 
+### QuestDBLoader with a custom fetcher
+
+`QuestDBLoader` can pull missing rows from any async source. Implement a
+`DataFetcher` and pass it to the loader:
+
+```python
+import httpx
+import pandas as pd
+from qmtl.sdk import DataFetcher, QuestDBLoader
+
+class BinanceFetcher:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        url = (
+            "https://api.binance.com/api/v3/klines"
+            f"?symbol={node_id}&interval={interval}m"
+            f"&startTime={start * 1000}&endTime={end * 1000}"
+        )
+        async with httpx.AsyncClient() as client:
+            data = (await client.get(url)).json()
+        rows = [
+            {"ts": int(d[0] / 1000), "open": float(d[1]), "close": float(d[4])}
+            for d in data
+        ]
+        return pd.DataFrame(rows)
+
+fetcher = BinanceFetcher()
+loader = QuestDBLoader(
+    "postgresql://user:pass@localhost:8812/qdb",
+    fetcher=fetcher,
+)
+```
+
