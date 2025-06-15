@@ -14,6 +14,12 @@ payload fields.  Advanced providers can optionally expose:
 - `fill_missing(start, end, node_id, interval)` instructing the provider to
   populate gaps within the given range.
 
+`coverage()` should return contiguous, inclusive ranges that already exist in
+the storage backend. When `fill_missing()` is implemented the provider is
+responsible for inserting real rows for any missing timestamps in a requested
+range. A runner can use these APIs to determine what portions of history need to
+be fetched or created before loading data into a strategy.
+
 In some cases a provider may rely on a separate **DataFetcher** object to
 retrieve missing rows.  A `DataFetcher` exposes a single asynchronous
 `fetch(start, end, *, node_id, interval)` method returning the same frame
@@ -83,22 +89,25 @@ stream = StreamInput(
         "postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,
     ),
-    start=1700000000,
-    end=1700003600,
     event_recorder=QuestDBRecorder("postgresql://user:pass@localhost:8812/qdb"),
 )
 ```
 
 ## Running a Backfill
 
-Backfills can be triggered when executing a strategy through the CLI or the `Runner` API. Provide the source specification along with the timestamp range:
+Backfills can be triggered when executing a strategy through the CLI or the
+`Runner` API. The `Runner` receives ``start_time`` and ``end_time`` arguments
+which define the historical range to load. Before fetching rows it checks
+``HistoryProvider.coverage()`` for every ``StreamInput`` and, when gaps are
+detected, calls ``fill_missing()`` if available.  This ensures caches contain a
+contiguous history before live processing begins.
 
 ```bash
 python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
-       --mode dryrun \
-       --gateway-url http://localhost:8000 \
-       --backfill-source questdb:postgresql://user:pass@localhost:8812/qdb \
-       --backfill-start 1700000000 --backfill-end 1700003600
+       --mode backtest \
+       --start-time 1700000000 \
+       --end-time 1700003600 \
+       --gateway-url http://localhost:8000
 ```
 
 The same operation via Python code:
@@ -107,12 +116,11 @@ The same operation via Python code:
 from qmtl.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.dryrun(
+Runner.backtest(
     SampleStrategy,
+    start_time=1700000000,
+    end_time=1700003600,
     gateway_url="http://localhost:8000",
-    backfill_source="questdb:postgresql://user:pass@localhost:8812/qdb",
-    backfill_start=1700000000,
-    backfill_end=1700003600,
 )
 ```
 
