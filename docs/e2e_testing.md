@@ -42,3 +42,17 @@ To execute the entire test suite run:
 uv run pytest -q tests
 ```
 
+## Backfills
+
+Start a backfill when executing a strategy to load historical data before
+live processing begins:
+
+```bash
+python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
+       --mode backtest \
+       --start-time 1700000000 \
+       --end-time 1700003600
+```
+
+See [backfill.md](backfill.md) for a full overview of the workflow.
+

@@ -23,6 +23,7 @@ uv pip install -e .[generators]
 uv pip install -e .[transforms]
 ```
 
+
 ## Development Workflow
 
 Here’s a short workflow summary based on the repository’s guidelines:
@@ -41,9 +42,32 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
 For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
 
+## Optional Modules
+
+Install additional functionality on demand. Each entry links to its
+documentation and shows the corresponding extra:
+
+- [Indicators](qmtl/indicators/README.md) &mdash; `pip install qmtl[indicators]`
+- [Streams](qmtl/streams/README.md) &mdash; `pip install qmtl[streams]`
+- [Generators](qmtl/generators/README.md) &mdash; `pip install qmtl[generators]`
+- [Transforms](qmtl/transforms/README.md) &mdash; `pip install qmtl[transforms]`
+
+
 ## End-to-End Testing
 
-For instructions on spinning up the entire stack and running the e2e suite, see [docs/e2e_testing.md](docs/e2e_testing.md).
+Bring up the stack with Docker Compose:
+
+```bash
+docker compose -f tests/docker-compose.e2e.yml up -d
+```
+
+Run the tests using uv:
+
+```bash
+uv run -- pytest tests/e2e
+```
+
+See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
 
 ## Running the Test Suite
 
@@ -73,6 +97,16 @@ information on configuration and advanced usage.
 
 For instructions on implementing strategies with the SDK, see
 [docs/sdk_tutorial.md](docs/sdk_tutorial.md).
+
+## Example Strategies
+
+Run a sample strategy with:
+
+```bash
+python examples/general_strategy.py
+```
+
+See [examples/README.md](examples/README.md) for more details.
 
 ## Backfills
 
