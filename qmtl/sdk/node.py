@@ -17,7 +17,7 @@ from .backfill_state import BackfillState
 from .runner import Runner
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
-    from .data_io import CacheLoader, EventRecorder
+    from .data_io import HistoryProvider, EventRecorder
 
 from qmtl.dagmanager import compute_node_id
 
@@ -483,7 +483,7 @@ class StreamInput(Node):
         interval: int | None = None,
         period: int | None = None,
         *,
-        history_provider: "CacheLoader" | None = None,
+        history_provider: "HistoryProvider" | None = None,
         start: int | None = None,
         end: int | None = None,
         event_recorder: "EventRecorder" | None = None,

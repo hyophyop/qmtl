@@ -1,9 +1,23 @@
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.sdk import (
+    Strategy,
+    Node,
+    StreamInput,
+    Runner,
+    QuestDBLoader,
+    QuestDBRecorder,
+)
 import pandas as pd
 
 class GeneralStrategy(Strategy):
     def setup(self):
-        price_stream = StreamInput(interval=60, period=30)
+        price_stream = StreamInput(
+            interval=60,
+            period=30,
+            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
+            start=1700000000,
+            end=1700003600,
+            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+        )
 
         def generate_signal(view):
             price = pd.DataFrame([v for _, v in view[price_stream][60]])

@@ -2,9 +2,9 @@
 
 This guide explains how to populate node caches with past values before a strategy starts processing live data.
 
-## Configuring a CacheLoader
+## Configuring a HistoryProvider
 
-A `CacheLoader` provides historical data for a `(node_id, interval)` pair. It must implement the `fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame` where each row contains a timestamp column `ts` and any payload fields.
+A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It must implement the `fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame` where each row contains a timestamp column `ts` and any payload fields.
 
 The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 
@@ -14,7 +14,23 @@ from qmtl.sdk import QuestDBLoader
 source = QuestDBLoader("postgresql://user:pass@localhost:8812/qdb")
 ```
 
-Custom loaders can implement `CacheLoader` or provide an object with the same interface.
+Custom providers can implement `HistoryProvider` or provide an object with the same interface.
+
+### Injecting into `StreamInput`
+
+Historical data and event recording can be supplied when creating a `StreamInput`:
+
+```python
+from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+
+stream = StreamInput(
+    interval=60,
+    history_provider=QuestDBLoader("postgresql://user:pass@localhost:8812/qdb"),
+    start=1700000000,
+    end=1700003600,
+    event_recorder=QuestDBRecorder("postgresql://user:pass@localhost:8812/qdb"),
+)
+```
 
 ## Running a Backfill
 
