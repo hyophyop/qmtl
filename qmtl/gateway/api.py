@@ -19,6 +19,7 @@ from .fsm import StrategyFSM
 from . import metrics as gw_metrics
 from .watch import QueueWatchHub
 from .ws import WebSocketHub
+from .status import get_status as gateway_status
 _INITIAL_STATUS = "queued"
 
 logger = logging.getLogger(__name__)
@@ -196,11 +197,6 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        """Health check endpoint used for CI/e2e loops."""
-        return {"status": "ok"}
-
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     db = database or PostgresDatabase("postgresql://localhost/qmtl")
     fsm = StrategyFSM(redis=r, database=db)
@@ -208,6 +204,15 @@ def create_app(
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub
+
+    @app.get("/status")
+    async def status_endpoint() -> dict[str, str]:
+        return await gateway_status(r, db, dagm)
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Deprecated health check; alias for ``/status``."""
+        return await gateway_status(r, db, dagm)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
