@@ -1,6 +1,7 @@
 """QMTL strategy SDK."""
 
 from .node import Node, StreamInput, TagQueryNode, NodeCache
+from .generators import GarchInput, HestonInput, RoughBergomiInput
 from .backfill_state import BackfillState
 from .cache_view import CacheView
 from .strategy import Strategy
@@ -24,6 +25,9 @@ __all__ = [
     "BackfillSource",
     "QuestDBSource",
     "BackfillEngine",
+    "GarchInput",
+    "HestonInput",
+    "RoughBergomiInput",
     "metrics",
     "_cli",
 ]
