@@ -1,5 +1,26 @@
 # qmtl
 
+## Installation
+
+Set up a fresh environment using [uv](https://github.com/astral-sh/uv) and
+install development dependencies:
+
+```bash
+uv venv
+uv pip install -e .[dev]
+```
+
+These commands match the steps in the SDK tutorial
+([docs/sdk_tutorial.md](docs/sdk_tutorial.md)) lines 5&ndash;18, where optional
+extras are also documented:
+
+```bash
+uv pip install -e .[indicators]
+uv pip install -e .[streams]
+uv pip install -e .[generators]
+uv pip install -e .[transforms]
+```
+
 ## End-to-End Testing
 
 For instructions on spinning up the entire stack and running the e2e suite, see [docs/e2e_testing.md](docs/e2e_testing.md).
@@ -16,17 +37,6 @@ uv run pytest -q tests
 
 For instructions on implementing strategies with the SDK, see
 [docs/sdk_tutorial.md](docs/sdk_tutorial.md).
-
-## Optional Extensions
-
-Install additional indicator, stream, or generator packages only when needed:
-
-```bash
-uv pip install -e .[indicators]
-uv pip install -e .[streams]
-uv pip install -e .[generators]
-uv pip install -e .[transforms]
-```
 
 ## Backfills
 
