@@ -8,3 +8,5 @@
 - Use `pytest` for running tests. Ensure `pytest` succeeds before committing.
 - Implementations must adhere to the specifications in `architecture.md`,
   `gateway.md` and `dag-manager.md`.
+- When providing task lists or suggestions, highlight opportunities for
+  parallel execution where feasible.
