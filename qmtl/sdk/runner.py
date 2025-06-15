@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import asyncio
+import time
 from typing import Optional
 
 import httpx
@@ -85,7 +86,11 @@ class Runner:
         }
         resp = httpx.post(url, json=payload)
         if resp.status_code == 202:
-            return resp.json().get("queue_map", {})
+            data = resp.json()
+            return {
+                "strategy_id": data.get("strategy_id"),
+                "queue_map": data.get("queue_map", {}),
+            }
         if resp.status_code == 409:
             raise RuntimeError("duplicate strategy")
         if resp.status_code == 422:
@@ -110,6 +115,22 @@ class Runner:
             else:
                 node.execute = True
                 node.queue_topic = None
+
+    @staticmethod
+    def wait_gateway(gateway_url: str, *, attempts: int = 30, delay: float = 1.0) -> None:
+        """Block until Gateway ``/status`` responds or raise after ``attempts``."""
+        url = gateway_url.rstrip("/") + "/status"
+        for _ in range(attempts):
+            try:
+                resp = httpx.get(url, timeout=2.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("status") in {"ok", "degraded"}:
+                        return
+            except Exception:
+                pass
+            time.sleep(delay)
+        raise RuntimeError("Gateway not ready")
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -159,7 +180,7 @@ class Runner:
             raise RuntimeError("gateway_url is required for backtest mode")
 
         try:
-            queue_map = Runner._post_gateway(
+            result = Runner._post_gateway(
                 gateway_url=gateway_url,
                 dag=dag,
                 meta=meta,
@@ -167,8 +188,8 @@ class Runner:
             )
         except httpx.RequestError as exc:
             raise RuntimeError("failed to connect to Gateway") from exc
-
-        Runner._apply_queue_map(strategy, queue_map)
+        strategy.strategy_id = result.get("strategy_id")
+        Runner._apply_queue_map(strategy, result.get("queue_map", {}))
         if backfill_source and backfill_start is not None and backfill_end is not None:
             src = Runner._create_backfill_source(backfill_source)
             asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
@@ -190,7 +211,7 @@ class Runner:
             raise RuntimeError("gateway_url is required for dry-run mode")
 
         try:
-            queue_map = Runner._post_gateway(
+            result = Runner._post_gateway(
                 gateway_url=gateway_url,
                 dag=dag,
                 meta=meta,
@@ -198,8 +219,8 @@ class Runner:
             )
         except httpx.RequestError as exc:
             raise RuntimeError("failed to connect to Gateway") from exc
-
-        Runner._apply_queue_map(strategy, queue_map)
+        strategy.strategy_id = result.get("strategy_id")
+        Runner._apply_queue_map(strategy, result.get("queue_map", {}))
         if backfill_source and backfill_start is not None and backfill_end is not None:
             src = Runner._create_backfill_source(backfill_source)
             asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
@@ -221,7 +242,7 @@ class Runner:
             raise RuntimeError("gateway_url is required for live mode")
 
         try:
-            queue_map = Runner._post_gateway(
+            result = Runner._post_gateway(
                 gateway_url=gateway_url,
                 dag=dag,
                 meta=meta,
@@ -229,8 +250,8 @@ class Runner:
             )
         except httpx.RequestError as exc:
             raise RuntimeError("failed to connect to Gateway") from exc
-
-        Runner._apply_queue_map(strategy, queue_map)
+        strategy.strategy_id = result.get("strategy_id")
+        Runner._apply_queue_map(strategy, result.get("queue_map", {}))
         if backfill_source and backfill_start is not None and backfill_end is not None:
             src = Runner._create_backfill_source(backfill_source)
             asyncio.run(Runner._run_backfill(strategy, src, backfill_start, backfill_end))
