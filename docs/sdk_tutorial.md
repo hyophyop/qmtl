@@ -9,6 +9,14 @@ uv venv
 uv pip install -e .[dev]
 ```
 
+필요에 따라 선택적 확장 패키지를 설치할 수 있습니다.
+
+```bash
+uv pip install -e .[indicators]  # 기술 지표 노드 모음
+uv pip install -e .[streams]     # 거래소 스트림 커넥터
+uv pip install -e .[generators]  # 시뮬레이션 데이터 생성기
+```
+
 ## 기본 구조
 
 SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()`과 `define_execution()` 메서드를 구현합니다. 노드는 `StreamInput`, `Node`, `TagQueryNode` 등을 이용해 정의하며 모든 노드는 하나 이상의 업스트림을 가져야 합니다.
