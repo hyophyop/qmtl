@@ -35,6 +35,22 @@ Run all unit and integration tests with:
 uv run pytest -q tests
 ```
 
+## Running Services
+
+Start the gateway HTTP server and interact with the DAG manager using the
+provided CLI tools.
+
+```bash
+qmtl-gateway --redis-dsn redis://localhost:6379 \
+             --postgres-dsn postgresql://localhost/qmtl
+
+# submit a DAG diff
+qmtl-dagm diff --file dag.json --target localhost:50051
+```
+
+See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
+information on configuration and advanced usage.
+
 ## SDK Tutorial
 
 For instructions on implementing strategies with the SDK, see
