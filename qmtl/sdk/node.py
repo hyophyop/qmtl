@@ -484,8 +484,6 @@ class StreamInput(Node):
         period: int | None = None,
         *,
         history_provider: "HistoryProvider" | None = None,
-        start: int | None = None,
-        end: int | None = None,
         event_recorder: "EventRecorder" | None = None,
     ) -> None:
         super().__init__(
@@ -497,20 +495,16 @@ class StreamInput(Node):
             tags=tags or [],
         )
         self.history_provider = history_provider
-        self.start = start
-        self.end = end
         self.event_recorder = event_recorder
 
-    async def load_history(self) -> None:
+    async def load_history(self, start: int, end: int) -> None:
         """Load historical data if a provider was configured."""
         if not self.history_provider or self.interval is None:
-            return
-        if self.start is None or self.end is None:
             return
         from .backfill_engine import BackfillEngine
 
         engine = BackfillEngine(self.history_provider)
-        engine.submit(self, self.start, self.end)
+        engine.submit(self, start, end)
         await engine.wait()
 
 

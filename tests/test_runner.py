@@ -334,17 +334,19 @@ def test_load_history_called(monkeypatch):
 
     called = []
 
-    async def dummy_load_history(self):
-        called.append(self)
+    async def dummy_load_history(self, start, end):
+        called.append((start, end))
 
     monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
-    Runner.dryrun(
+    Runner.backtest(
         SampleStrategy,
+        start_time=1,
+        end_time=2,
         gateway_url="http://gw",
     )
 
-    assert len(called) == 1
+    assert called == [(1, 2)]
 
 
 def test_cli_execution(monkeypatch):
@@ -371,8 +373,8 @@ def test_cli_execution(monkeypatch):
 
     called = []
 
-    async def dummy_load_history(self):
-        called.append(self)
+    async def dummy_load_history(self, start, end):
+        called.append((start, end))
 
     monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
@@ -380,10 +382,14 @@ def test_cli_execution(monkeypatch):
         "qmtl.sdk",
         "tests.sample_strategy:SampleStrategy",
         "--mode",
-        "dryrun",
+        "backtest",
+        "--start-time",
+        "1",
+        "--end-time",
+        "2",
         "--gateway-url",
         "http://gw",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()
-    assert len(called) == 1
+    assert called == [("1", "2")]

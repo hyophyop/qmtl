@@ -123,10 +123,8 @@ async def test_streaminput_load_history():
         interval=60,
         period=3,
         history_provider=src,
-        start=60,
-        end=120,
     )
-    await stream.load_history()
+    await stream.load_history(60, 120)
     assert stream.cache.get_slice(stream.node_id, 60, count=2) == [
         (60, {"ts": 60, "v": 1}),
         (120, {"ts": 120, "v": 2}),
