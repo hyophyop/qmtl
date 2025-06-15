@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 import pytest
 
-from qmtl.sdk.node import Node
+from qmtl.sdk.node import Node, StreamInput
 from qmtl.sdk.backfill_engine import BackfillEngine
 
 
@@ -110,3 +110,24 @@ async def test_failure_metrics_and_logs(caplog):
     msgs = [r.message for r in caplog.records]
     assert msgs.count("backfill.retry") >= 3
     assert "backfill.failed" in msgs
+
+
+@pytest.mark.asyncio
+async def test_streaminput_load_history():
+    df = pd.DataFrame([
+        {"ts": 60, "v": 1},
+        {"ts": 120, "v": 2},
+    ])
+    src = DummySource(df, delay=0.0)
+    stream = StreamInput(
+        interval=60,
+        period=3,
+        history_provider=src,
+        start=60,
+        end=120,
+    )
+    await stream.load_history()
+    assert stream.cache.get_slice(stream.node_id, 60, count=2) == [
+        (60, {"ts": 60, "v": 1}),
+        (120, {"ts": 120, "v": 2}),
+    ]

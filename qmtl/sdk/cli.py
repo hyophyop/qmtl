@@ -13,9 +13,6 @@ async def _main() -> None:
     parser.add_argument("--end-time")
     parser.add_argument("--on-missing", default="skip")
     parser.add_argument("--gateway-url")
-    parser.add_argument("--backfill-source")
-    parser.add_argument("--backfill-start", type=int)
-    parser.add_argument("--backfill-end", type=int)
     args = parser.parse_args()
 
     module_name, class_name = args.strategy.split(":")
@@ -29,28 +26,19 @@ async def _main() -> None:
             end_time=args.end_time,
             on_missing=args.on_missing,
             gateway_url=args.gateway_url,
-            backfill_source=args.backfill_source,
-            backfill_start=args.backfill_start,
-            backfill_end=args.backfill_end,
         )
     elif args.mode == "dryrun":
         await Runner.dryrun_async(
             strategy_cls,
             gateway_url=args.gateway_url,
-            backfill_source=args.backfill_source,
-            backfill_start=args.backfill_start,
-            backfill_end=args.backfill_end,
         )
     elif args.mode == "live":
         await Runner.live_async(
             strategy_cls,
             gateway_url=args.gateway_url,
-            backfill_source=args.backfill_source,
-            backfill_start=args.backfill_start,
-            backfill_end=args.backfill_end,
         )
     else:  # offline
-        Runner.offline(strategy_cls)
+        await Runner.offline_async(strategy_cls)
 
 def main() -> None:
     asyncio.run(_main())
