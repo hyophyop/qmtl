@@ -40,6 +40,16 @@ uv run pytest -q tests
 For instructions on implementing strategies with the SDK, see
 [docs/sdk_tutorial.md](docs/sdk_tutorial.md).
 
+## Example Strategies
+
+Run a sample strategy with:
+
+```bash
+python examples/general_strategy.py
+```
+
+See [examples/README.md](examples/README.md) for more details.
+
 ## Backfills
 
 [docs/backfill.md](docs/backfill.md) explains how to preload historical data by
