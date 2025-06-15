@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .backfill import BackfillSource
+from .data_io import CacheLoader
 from .node import Node
 from . import metrics as sdk_metrics
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class BackfillEngine:
     """Run backfill jobs concurrently using ``asyncio`` tasks."""
 
-    def __init__(self, source: BackfillSource, *, max_retries: int = 3) -> None:
+    def __init__(self, source: CacheLoader, *, max_retries: int = 3) -> None:
         self.source = source
         self.max_retries = max_retries
         self._tasks: set[asyncio.Task] = set()

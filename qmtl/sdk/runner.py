@@ -8,7 +8,7 @@ from typing import Optional
 import httpx
 
 from .strategy import Strategy
-from .backfill import BackfillSource, QuestDBSource
+from .data_io import CacheLoader, QuestDBLoader
 
 try:  # Optional Ray dependency
     import ray  # type: ignore
@@ -23,17 +23,17 @@ class Runner:
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _create_backfill_source(spec: str) -> BackfillSource:
-        """Return BackfillSource instance for ``spec``."""
+    def _create_backfill_source(spec: str) -> CacheLoader:
+        """Return CacheLoader instance for ``spec``."""
         if spec.startswith("questdb:"):
             dsn = spec.split(":", 1)[1]
-            return QuestDBSource(dsn)
+            return QuestDBLoader(dsn)
         raise RuntimeError("unsupported backfill source")
 
     @staticmethod
     async def _run_backfill(
         strategy: Strategy,
-        source: BackfillSource,
+        source: CacheLoader,
         start: int,
         end: int,
     ) -> None:

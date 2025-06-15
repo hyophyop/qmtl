@@ -2,19 +2,19 @@
 
 This guide explains how to populate node caches with past values before a strategy starts processing live data.
 
-## Configuring a BackfillSource
+## Configuring a CacheLoader
 
-A `BackfillSource` provides historical data for a `(node_id, interval)` pair. It must implement the `fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame` where each row contains a timestamp column `ts` and any payload fields.
+A `CacheLoader` provides historical data for a `(node_id, interval)` pair. It must implement the `fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame` where each row contains a timestamp column `ts` and any payload fields.
 
-The SDK ships with `QuestDBSource` which reads from a QuestDB instance:
+The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 
 ```python
-from qmtl.sdk import QuestDBSource
+from qmtl.sdk import QuestDBLoader
 
-source = QuestDBSource("postgresql://user:pass@localhost:8812/qdb")
+source = QuestDBLoader("postgresql://user:pass@localhost:8812/qdb")
 ```
 
-Custom sources can subclass `BackfillSource` or provide an object with the same interface.
+Custom loaders can implement `CacheLoader` or provide an object with the same interface.
 
 ## Running a Backfill
 
