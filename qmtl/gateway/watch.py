@@ -35,6 +35,8 @@ class QueueWatchHub:
     async def broadcast(self, tags: List[str], interval: int, queues: List[str]) -> None:
         key = self._key(tags, interval)
         async with self._lock:
+            if self._latest.get(key, []) == list(queues):
+                return
             targets = list(self._subs.get(key, []))
             self._latest[key] = list(queues)
         for q in targets:
