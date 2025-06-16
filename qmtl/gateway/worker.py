@@ -10,6 +10,7 @@ from .dagmanager_client import DagManagerClient
 from .ws import WebSocketHub
 from .fsm import StrategyFSM
 from .queue import RedisFIFOQueue
+from ..dagmanager.alerts import AlertManager
 
 
 class StrategyWorker:
@@ -25,6 +26,8 @@ class StrategyWorker:
         ws_hub: Optional[WebSocketHub] = None,
         worker_id: Optional[str] = None,
         handler: Optional[Callable[[str], Awaitable[None]]] = None,
+        alert_manager: Optional[AlertManager] = None,
+        grpc_fail_threshold: int = 3,
     ) -> None:
         self.redis = redis_client
         self.database = database
@@ -34,6 +37,9 @@ class StrategyWorker:
         self.ws_hub = ws_hub
         self.worker_id = worker_id or str(uuid.uuid4())
         self._handler = handler
+        self.alerts = alert_manager
+        self._grpc_fail_thresh = grpc_fail_threshold
+        self._grpc_fail_count = 0
 
     async def healthy(self) -> bool:
         """Return ``True`` if all critical dependencies are reachable."""
@@ -71,7 +77,13 @@ class StrategyWorker:
 
             try:
                 diff_result = await self.dag_client.diff(strategy_id, dag_json)
+                self._grpc_fail_count = 0
             except Exception:
+                self._grpc_fail_count += 1
+                if self._grpc_fail_count >= self._grpc_fail_thresh:
+                    if self.alerts:
+                        await self.alerts.send_slack("gRPC diff repeatedly failed")
+                    self._grpc_fail_count = 0
                 state = await self.fsm.transition(strategy_id, "FAIL")
                 if self.ws_hub:
                     await self.ws_hub.send_progress(strategy_id, state)
