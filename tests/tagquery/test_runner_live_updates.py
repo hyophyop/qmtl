@@ -5,7 +5,7 @@ import pytest
 
 from qmtl.sdk import Strategy, TagQueryNode, Runner
 from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.watch import QueueWatchHub
+from qmtl.gateway.ws import WebSocketHub
 from qmtl.common.cloudevents import format_event
 from fakeredis.aioredis import FakeRedis
 
@@ -37,26 +37,42 @@ class TQStrategy(Strategy):
 
 @pytest.mark.asyncio
 async def test_live_auto_subscribes(monkeypatch):
-    watch = QueueWatchHub()
+    class DummyWS:
+        def __init__(self, url, *, on_message=None):
+            self.on_message = on_message
+
+        async def start(self):
+            pass
+
+        async def stop(self):
+            pass
+
+        async def _handle(self, data):
+            if self.on_message:
+                await self.on_message(data)
+
+    class DummyHub(WebSocketHub):
+        def __init__(self, client):
+            super().__init__()
+            self.client = client
+
+        async def send_queue_update(self, tags, interval, queues):  # type: ignore[override]
+            await self.client._handle({
+                "type": "queue_update",
+                "data": {"tags": tags, "interval": interval, "queues": queues},
+            })
+
+    client = DummyWS("ws://dummy")
+    def ws_factory(url, *, on_message=None):
+        client.on_message = on_message
+        return client
+    hub = DummyHub(client)
     redis = FakeRedis(decode_responses=True)
-    gw_app = create_app(dag_client=DummyDag(), watch_hub=watch, redis_client=redis, database=FakeDB())
+    gw_app = create_app(dag_client=DummyDag(), ws_hub=hub, redis_client=redis, database=FakeDB())
     transport = httpx.ASGITransport(gw_app)
 
     real_client = httpx.AsyncClient
-
-    class DummyStream:
-        def __init__(self, gen):
-            self._gen = gen
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            await self._gen.aclose()
-
-        async def aiter_lines(self):
-            async for queues in self._gen:
-                yield json.dumps({"queues": queues})
+    monkeypatch.setattr("qmtl.sdk.tagquery_manager.WebSocketClient", ws_factory)
 
     class DummyClient:
         def __init__(self, *a, **k):
@@ -71,12 +87,6 @@ async def test_live_auto_subscribes(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             await self._client.__aexit__(exc_type, exc, tb)
 
-        def stream(self, method, url, params=None):
-            if url.endswith("/queues/watch"):
-                gen = watch.subscribe(["t1"], 60)
-                return DummyStream(gen)
-            return self._client.stream(method, url, params=params)
-
         async def post(self, url, json=None):
             return await self._client.post(url, json=json)
 
@@ -84,7 +94,7 @@ async def test_live_auto_subscribes(monkeypatch):
             return await self._client.get(url, params=params)
 
     monkeypatch.setattr("qmtl.sdk.runner.httpx.AsyncClient", DummyClient)
-    monkeypatch.setattr("qmtl.sdk.node.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
 
     strat = await Runner.live_async(TQStrategy, gateway_url="http://gw")
 
@@ -103,9 +113,5 @@ async def test_live_auto_subscribes(monkeypatch):
     node = strat.tq
     assert node.upstreams == ["q1"]
     assert node.execute
-    assert hasattr(strat, "update_tasks") and strat.update_tasks
-
-    for t in strat.update_tasks:
-        t.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await t
+    assert hasattr(strat, "tag_query_manager")
+    await strat.tag_query_manager.stop()
