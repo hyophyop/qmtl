@@ -30,6 +30,7 @@ class StrategySubmit(BaseModel):
     dag_json: str = Field(..., description="Base64 encoded DAG JSON")
     meta: Optional[dict] = Field(default=None)
     run_type: str
+    node_ids_crc32: int
 
 
 class StrategyAck(BaseModel):
@@ -241,12 +242,18 @@ def create_app(
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
         start = time.perf_counter()
-        strategy_id = await manager.submit(payload)
         try:
             dag_bytes = base64.b64decode(payload.dag_json)
             dag = json.loads(dag_bytes.decode())
         except Exception:
             dag = json.loads(payload.dag_json)
+
+        from qmtl.common import crc32_of_list
+        crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
+        if crc != payload.node_ids_crc32:
+            raise HTTPException(status_code=400, detail="node id checksum mismatch")
+
+        strategy_id = await manager.submit(payload)
 
         queue_map: dict[str, list[str] | str] = {}
         node_ids: list[str] = []

@@ -47,10 +47,13 @@ class Runner:
         run_type: str,
     ) -> dict:
         url = gateway_url.rstrip("/") + "/strategies"
+        from qmtl.common import crc32_of_list
+
         payload = {
             "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
             "meta": meta,
             "run_type": run_type,
+            "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json=payload)
