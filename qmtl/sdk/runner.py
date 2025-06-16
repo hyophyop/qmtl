@@ -300,6 +300,56 @@ class Runner:
                 )
         return tasks
 
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _collect_history_events(
+        strategy: Strategy, start: int | None, end: int | None
+    ) -> list[tuple[int, any, any]]:
+        """Gather cached history items for all ``StreamInput`` nodes."""
+        from .node import StreamInput
+
+        events: list[tuple[int, any, any]] = []
+        for node in strategy.nodes:
+            if not isinstance(node, StreamInput):
+                continue
+            snapshot = node.cache._snapshot().get(node.node_id, {})
+            items = snapshot.get(node.interval, []) if node.interval is not None else []
+            for ts, payload in items:
+                if start is not None and ts < start:
+                    continue
+                if end is not None and ts > end:
+                    continue
+                events.append((ts, node, payload))
+        events.sort(key=lambda e: e[0])
+        return events
+
+    @staticmethod
+    def _maybe_int(value) -> int | None:
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _replay_history_events(
+        strategy: Strategy,
+        events: list[tuple[int, any, any]],
+        *,
+        on_missing: str = "skip",
+    ) -> None:
+        """Feed cached history to dependent nodes in timestamp order."""
+        for ts, src, payload in events:
+            for node in strategy.nodes:
+                if src in node.inputs:
+                    Runner.feed_queue_data(
+                        node,
+                        src.node_id,
+                        src.interval,
+                        ts,
+                        payload,
+                        on_missing=on_missing,
+                    )
+
     @staticmethod
     async def backtest_async(
         strategy_cls: type[Strategy],
@@ -332,7 +382,10 @@ class Runner:
 
         Runner._apply_queue_map(strategy, queue_map)
         await Runner._ensure_history(strategy, start_time, end_time)
-        # Placeholder for backtest logic
+        start = Runner._maybe_int(start_time)
+        end = Runner._maybe_int(end_time)
+        events = Runner._collect_history_events(strategy, start, end)
+        Runner._replay_history_events(strategy, events, on_missing=on_missing)
         return strategy
 
     @staticmethod
@@ -468,5 +521,6 @@ class Runner:
         print(f"[OFFLINE] {strategy_cls.__name__} starting")
         Runner._apply_queue_map(strategy, {})
         await Runner._load_history(strategy, None, None)
-        # Placeholder for offline execution logic
+        events = Runner._collect_history_events(strategy, None, None)
+        Runner._replay_history_events(strategy, events)
         return strategy
