@@ -28,8 +28,9 @@ class CrossMarketLagStrategy(Strategy):
             btc_shift = btc["close"].shift(90)
             corr = btc_shift.corr(mstr["close"])
             return pd.DataFrame({"lag_corr": [corr]})
+
         corr_node = Node(
-            input={"btc": btc_price, "mstr": mstr_price},
+            input=[btc_price, mstr_price],
             compute_fn=lagged_corr,
             name="btc_mstr_corr",
         )

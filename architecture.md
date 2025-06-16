@@ -348,7 +348,7 @@ class CrossMarketLagStrategy(Strategy):
         mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval="60s", period=120)
 
         corr_node = Node(
-            input={"btc": btc_price, "mstr": mstr_price},
+            input=[btc_price, mstr_price],
             compute_fn=lagged_corr,
             name="btc_mstr_corr"
         )
