@@ -13,6 +13,8 @@ class TagQueryStrategy(Strategy):
             interval="1h",
             period=24,
         )
+        # Runner creates TagQueryManager so the node receives queue mappings
+        # and subscriptions automatically.
 
         def calc_corr(view) -> pd.DataFrame:
             frames = [pd.DataFrame([v for _, v in view[u][3600]]) for u in view]
@@ -36,4 +38,6 @@ class TagQueryStrategy(Strategy):
 
 
 if __name__ == "__main__":
+    # Simply running the strategy triggers automatic tag resolution and
+    # WebSocket subscriptions.
     Runner.live(TagQueryStrategy)

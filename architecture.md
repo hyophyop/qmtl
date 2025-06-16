@@ -303,10 +303,25 @@ if __name__ == "__main__":
 
 **TagQueryNode 동작 요약**
 
-1. Gateway는 (query\_tags, interval) 조건으로 글로벌 DAG를 탐색한다.
-2. 해당 조건에 부합하는 모든 큐들을 업스트림으로 설정한다.
-3. SDK는 각 큐의 데이터를 수집해 read-only **CacheView** 하나로 묶어 `compute_fn`에 전달한다. `compute_fn`은 반드시 이 뷰 단일 인자만을 받아야 하며, 병합 방식 역시 함수 내부에서 정의한다.
-4. 각 큐가 설정된 period를 만족하지 않으면 노드는 ‘pre-warmup’ 상태에 머물며, 충족 시점부터 연산을 시작한다. Gateway는 `(query_tags, interval)` 조건에 부합하는 신규 큐가 전역 DAG에 추가될 때마다 콜백 이벤트를 통해 TagQueryNode에 알리고, 해당 노드는 런타임 중에도 업스트림 큐 목록을 동적으로 확장할 수 있다.
+1. Runner가 생성한 **TagQueryManager**가 Gateway에 `(query_tags, interval)` 조건을 조회한다.
+2. Gateway는 글로벌 DAG을 탐색한 후 매칭되는 큐 목록을 반환하고, TagQueryManager가 이를 ``TagQueryNode`` 에 전달한다.
+3. TagQueryNode는 받은 큐 ID만 보관하며, 실제 Kafka 구독과 WebSocket 갱신 역시 TagQueryManager가 담당한다.
+4. SDK는 각 큐의 데이터를 수집해 read-only **CacheView** 하나로 묶어 `compute_fn`에 전달한다. `compute_fn`은 반드시 이 뷰 단일 인자만을 받아야 하며, 병합 방식 역시 함수 내부에서 정의한다.
+5. 각 큐가 설정된 period를 만족하지 않으면 노드는 ‘pre-warmup’ 상태에 머물며, Gateway가 새로운 큐를 발견하면 TagQueryManager가 `update_queues()`를 호출해 런타임 중에도 업스트림 목록을 확장한다.
+
+```mermaid
+sequenceDiagram
+    participant R as Runner
+    participant M as TagQueryManager
+    participant G as Gateway
+    participant N as TagQueryNode
+    R->>M: register TagQueryNode
+    M->>G: GET /queues/by_tag
+    G-->>M: queue list
+    M->>N: update_queues(list)
+    G-->>M: queue_update (WebSocket)
+    M->>N: update_queues(list)
+```
 
 이 구조로 전략 작성자는 **큐 이름이나 위치를 몰라도 태그 기반으로 지표 집합을 참조**할 수 있으며, 지표가 추가될 때마다 전략 수정 없이 자동 반영된다.
 
@@ -377,7 +392,8 @@ Runner.dryrun(CrossMarketLagStrategy)
 4. **Sentinel Traffic Shift 확인** — `traffic_weight` 변경 시 Gateway와 SDK가 5초
    이내 동기화되었는지 측정한다.
 5. **TagQueryNode 동적 확장** — Gateway가 새 `(tags, interval)` 큐를 발견하면
-   `tagquery.upsert` CloudEvent를 발행해 SDK 버퍼 초기화를 유도한다.
+   `tagquery.upsert` CloudEvent를 발행하고, Runner의 **TagQueryManager**가 이를
+   수신해 각 노드의 버퍼를 자동 초기화한다.
 6. **Minor‑schema 버퍼링** — `schema_minor_change`는 재사용하되 7일 후 자동
    full‑recompute가 실행된다.
 7. **SSA DAG Lint** — SDK 빌드 시 DAG를 SSA 중간 표현으로 변환해 해시 불일치를

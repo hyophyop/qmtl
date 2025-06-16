@@ -8,6 +8,8 @@ class CorrelationStrategy(Strategy):
             interval="1h",
             period=24,
         )
+        # Queue resolution and subscription are handled automatically by Runner
+        # through TagQueryManager.
 
         def calc_corr(view):
             df = pd.concat(
@@ -25,4 +27,6 @@ class CorrelationStrategy(Strategy):
 
 
 if __name__ == "__main__":
+    # Running via Runner will automatically fetch matching queues and
+    # subscribe to updates.
     Runner.live(CorrelationStrategy)
