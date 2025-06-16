@@ -105,5 +105,10 @@ class StrategyWorker:
         await self._process(strategy_id)
         return strategy_id
 
+    async def close(self) -> None:
+        """Close resources associated with this worker."""
+        if hasattr(self.dag_client, "close"):
+            await self.dag_client.close()
+
 
 __all__ = ["StrategyWorker"]
