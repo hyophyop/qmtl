@@ -19,6 +19,7 @@ class FakeRepo(NodeRepository):
         self.fetched = []
         self.sentinels = []
         self.records = {}
+        self.buffered: dict[str, int] = {}
 
     def get_nodes(self, node_ids):
         self.fetched.append(list(node_ids))
@@ -29,6 +30,15 @@ class FakeRepo(NodeRepository):
 
     def get_queues_by_tag(self, tags, interval):
         return []
+
+    def mark_buffering(self, node_id, *, timestamp_ms=None):
+        self.buffered[node_id] = timestamp_ms or 0
+
+    def clear_buffering(self, node_id):
+        self.buffered.pop(node_id, None)
+
+    def get_buffering_nodes(self, older_than_ms):
+        return [n for n, t in self.buffered.items() if t < older_than_ms]
 
 
 class FakeQueue(QueueManager):

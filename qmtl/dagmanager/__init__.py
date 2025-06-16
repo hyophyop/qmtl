@@ -35,6 +35,7 @@ from .topic import TopicConfig, topic_name, get_config
 from .kafka_admin import KafkaAdmin
 from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 from .gc_scheduler import GCScheduler
+from .buffer_scheduler import BufferingScheduler
 from .alerts import PagerDutyClient, SlackClient, AlertManager
 from .monitor import Monitor, MonitorLoop
 from .completion import QueueCompletionMonitor
@@ -51,6 +52,7 @@ __all__ = [
     "DEFAULT_POLICY",
     "S3ArchiveClient",
     "GCScheduler",
+    "BufferingScheduler",
     "PagerDutyClient",
     "SlackClient",
     "AlertManager",

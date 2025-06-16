@@ -76,6 +76,20 @@ class NodeRepository:
         """Return ``NodeRecord`` for the given queue topic, if any."""
         raise NotImplementedError
 
+    # buffering -------------------------------------------------------------
+
+    def mark_buffering(self, node_id: str, *, timestamp_ms: int | None = None) -> None:
+        """Record when ``node_id`` entered buffering mode."""
+        raise NotImplementedError
+
+    def clear_buffering(self, node_id: str) -> None:
+        """Remove buffering state from the given node."""
+        raise NotImplementedError
+
+    def get_buffering_nodes(self, older_than_ms: int) -> list[str]:
+        """Return node IDs buffering since before ``older_than_ms``."""
+        raise NotImplementedError
+
 
 class QueueManager:
     """Interface to create or update queues."""
@@ -196,6 +210,7 @@ class DiffService:
         result: List[BufferInstruction] = []
         for n in nodes:
             lag = n.period or 0
+            self.node_repo.mark_buffering(n.node_id)
             result.append(
                 BufferInstruction(
                     node_id=n.node_id,
@@ -356,6 +371,34 @@ class Neo4jNodeRepository(NodeRepository):
                 tags=list(record.get("tags", [])),
                 topic=record.get("topic"),
             )
+
+    # buffering -------------------------------------------------------------
+
+    def mark_buffering(self, node_id: str, *, timestamp_ms: int | None = None) -> None:
+        query = (
+            "MATCH (c:ComputeNode {node_id: $nid}) "
+            "SET c.buffering_since = coalesce(c.buffering_since, $ts)"
+        )
+        ts = timestamp_ms or int(time.time() * 1000)
+        with self.driver.session() as session:
+            session.run(query, nid=node_id, ts=ts)
+
+    def clear_buffering(self, node_id: str) -> None:
+        query = (
+            "MATCH (c:ComputeNode {node_id: $nid}) "
+            "REMOVE c.buffering_since"
+        )
+        with self.driver.session() as session:
+            session.run(query, nid=node_id)
+
+    def get_buffering_nodes(self, older_than_ms: int) -> list[str]:
+        query = (
+            "MATCH (c:ComputeNode) WHERE c.buffering_since < $cutoff "
+            "RETURN c.node_id AS node_id"
+        )
+        with self.driver.session() as session:
+            result = session.run(query, cutoff=older_than_ms)
+            return [r.get("node_id") for r in result]
 
 
 class KafkaQueueManager(QueueManager):
