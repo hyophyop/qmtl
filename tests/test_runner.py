@@ -3,9 +3,11 @@ import base64
 import json
 
 import httpx
+import pandas as pd
 import pytest
 from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import StreamInput, ProcessingNode
+from qmtl.sdk import Strategy
 from tests.sample_strategy import SampleStrategy
 
 
@@ -520,3 +522,109 @@ def test_history_gap_fill_stops_on_ready(monkeypatch):
 
     assert coverage_calls == [(holder["src"].node_id, 1)]
     assert len(fill_calls) == 1
+
+
+def test_backtest_replay_history_multi_inputs(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    class DummyProvider:
+        async def fetch(self, start, end, *, node_id, interval):
+            return pd.DataFrame([
+                {"ts": 60, "v": 1},
+                {"ts": 120, "v": 2},
+            ])
+
+        async def coverage(self, *, node_id, interval):
+            return [(60, 120)]
+
+        async def fill_missing(self, start, end, *, node_id, interval):
+            pass
+
+    calls = []
+
+    class Strat(Strategy):
+        def setup(self):
+            a = StreamInput(interval=60, period=2, history_provider=DummyProvider())
+            b = StreamInput(interval=60, period=2, history_provider=DummyProvider())
+
+            def compute(view):
+                av = view[a][60].latest()[1]["v"]
+                bv = view[b][60].latest()[1]["v"]
+                calls.append(av + bv)
+
+            node = ProcessingNode(input=[a, b], compute_fn=compute, name="out", interval=60, period=2)
+            self.add_nodes([a, b, node])
+
+    Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
+
+    assert calls == [4]
+
+
+def test_backtest_on_missing_fail(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    class GapProvider:
+        async def fetch(self, start, end, *, node_id, interval):
+            return pd.DataFrame([
+                {"ts": 60, "v": 1},
+                {"ts": 180, "v": 2},
+            ])
+
+        async def coverage(self, *, node_id, interval):
+            return [(60, 180)]
+
+        async def fill_missing(self, start, end, *, node_id, interval):
+            pass
+
+    class Strat(Strategy):
+        def setup(self):
+            src = StreamInput(interval=60, period=2, history_provider=GapProvider())
+            node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval=60, period=2)
+            self.add_nodes([src, node])
+
+    with pytest.raises(RuntimeError):
+        Runner.backtest(
+            Strat,
+            start_time=60,
+            end_time=180,
+            on_missing="fail",
+            gateway_url="http://gw",
+        )
