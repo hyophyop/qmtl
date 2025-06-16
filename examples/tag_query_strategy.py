@@ -33,8 +33,6 @@ class TagQueryStrategy(Strategy):
         avg_node = Node(input=corr_node, compute_fn=avg_corr, name="avg_corr")
 
         self.add_nodes([indicators, corr_node, avg_node])
-
-    def define_execution(self):
         self.set_target("avg_corr")
 
 

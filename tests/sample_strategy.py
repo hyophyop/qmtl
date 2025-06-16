@@ -5,6 +5,4 @@ class SampleStrategy(Strategy):
         src = StreamInput(interval=1, period=1)
         node = Node(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
         self.add_nodes([src, node])
-
-    def define_execution(self):
         self.set_target("out")

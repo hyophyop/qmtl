@@ -25,8 +25,6 @@ class GeneralStrategy(Strategy):
             name="momentum_signal",
         )
         self.add_nodes([price_stream, signal_node])
-
-    def define_execution(self):
         self.set_target("momentum_signal")
 
 

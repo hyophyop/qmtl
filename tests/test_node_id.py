@@ -12,15 +12,12 @@ class _S(Strategy):
         src = StreamInput(interval=1, period=1)
         node = Node(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
         self.add_nodes([src, node])
-
-    def define_execution(self):
         self.set_target("out")
 
 
 def test_strategy_serialize():
     s = _S()
     s.setup()
-    s.define_execution()
     dag = s.serialize()
     assert "nodes" in dag
     ids = [n["node_id"] for n in dag["nodes"]]
