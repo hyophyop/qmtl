@@ -23,7 +23,8 @@ class WebSocketHub:
         self._server: Optional[websockets.server.Serve] = None
         self._clients: set[WebSocketServerProtocol] = set()
         self._lock = asyncio.Lock()
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._sentinel: object = object()
+        self._queue: asyncio.Queue[object] = asyncio.Queue()
         self._stop_event = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
 
@@ -37,6 +38,7 @@ class WebSocketHub:
 
     async def stop(self) -> None:
         """Stop the server and cleanup resources."""
+        await self._queue.put(self._sentinel)
         await self._queue.join()
         self._stop_event.set()
         if self._server:
@@ -63,11 +65,11 @@ class WebSocketHub:
                 self._clients.discard(websocket)
 
     async def _sender_loop(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                msg = await asyncio.wait_for(self._queue.get(), 0.1)
-            except asyncio.TimeoutError:
-                continue
+        while True:
+            msg = await self._queue.get()
+            if msg is self._sentinel:
+                self._queue.task_done()
+                break
             async with self._lock:
                 clients = list(self._clients)
             if clients:

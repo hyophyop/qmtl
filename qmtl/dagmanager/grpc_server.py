@@ -25,7 +25,7 @@ from .status import get_status
 class _GrpcStream(StreamSender):
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self.loop = loop
-        self.queue: asyncio.Queue[DiffChunk] = asyncio.Queue()
+        self.queue: asyncio.Queue[DiffChunk | None] = asyncio.Queue()
         self._ack = threading.Event()
 
     def send(self, chunk: DiffChunk) -> None:
@@ -61,14 +61,12 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         fut = asyncio.create_task(
             svc.diff_async(DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json))
         )
+        fut.add_done_callback(lambda _fut: stream.queue.put_nowait(None))
         try:
             while True:
-                if fut.done() and stream.queue.empty():
+                chunk = await stream.queue.get()
+                if chunk is None:
                     break
-                try:
-                    chunk = await asyncio.wait_for(stream.queue.get(), 0.1)
-                except asyncio.TimeoutError:
-                    continue
                 pb = dagmanager_pb2.DiffChunk(
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
