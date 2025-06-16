@@ -284,6 +284,8 @@ def create_app(
                     interval = None
             if tags and interval is not None:
                 await watch.broadcast(tags, interval, list(queues))
+                if ws:
+                    await ws.send_queue_update(tags, interval, list(queues))
         elif event_type == "sentinel_weight":
             gateway = getattr(app.state, "gateway", None)
             if gateway is None:

@@ -105,6 +105,17 @@ class WebSocketHub:
         )
         await self.broadcast(event)
 
+    async def send_queue_update(
+        self, tags: list[str], interval: int, queues: list[str]
+    ) -> None:
+        """Broadcast queue update events."""
+        event = format_event(
+            "qmtl.gateway",
+            "queue_update",
+            {"tags": tags, "interval": interval, "queues": queues},
+        )
+        await self.broadcast(event)
+
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         """Broadcast sentinel weight updates."""
         event = format_event(
