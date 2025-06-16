@@ -6,7 +6,7 @@ class CrossMarketLagStrategy(Strategy):
     def setup(self):
         btc_price = StreamInput(
             tags=["BTC", "price", "binance"],
-            interval=60,
+            interval="60s",
             period=120,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
             start=1700000000,
@@ -15,7 +15,7 @@ class CrossMarketLagStrategy(Strategy):
         )
         mstr_price = StreamInput(
             tags=["MSTR", "price", "nasdaq"],
-            interval=60,
+            interval="60s",
             period=120,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
             start=1700000000,

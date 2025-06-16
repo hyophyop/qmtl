@@ -84,7 +84,7 @@ Historical data and event recording can be supplied when creating a `StreamInput
 from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
 
 stream = StreamInput(
-    interval=60,
+    interval="60s",
     history_provider=QuestDBLoader(
         "postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,

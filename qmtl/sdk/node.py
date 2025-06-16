@@ -14,6 +14,7 @@ import asyncio
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
+from .util import parse_interval, parse_period
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -321,16 +322,14 @@ class Node:
         input: Node | Iterable[Node] | Mapping[str, Node] | None = None,
         compute_fn=None,
         name: str | None = None,
-        interval: int | None = None,
-        period: int | None = None,
+        interval: int | str | None = None,
+        period: int | str | None = None,
         tags: list[str] | None = None,
         config: dict | None = None,
         schema: dict | None = None,
     ) -> None:
-        if interval is None or interval <= 0:
-            raise ValueError("interval must be positive")
-        if period is None or period <= 0:
-            raise ValueError("period must be positive")
+        interval_val = parse_interval(interval)
+        period_val = parse_period(period)
 
         if compute_fn is not None:
             sig = inspect.signature(compute_fn)
@@ -356,14 +355,14 @@ class Node:
         self.inputs = self._normalize_inputs(input)
         self.compute_fn = compute_fn
         self.name = name
-        self.interval = interval
-        self.period = period
+        self.interval = interval_val
+        self.period = period_val
         self.tags = tags or []
         self.config = config or {}
         self.schema = schema or {}
         self.execute = True
         self.queue_topic: str | None = None
-        self.cache = NodeCache(period or 0)
+        self.cache = NodeCache(period_val or 0)
         self.pre_warmup = True
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
@@ -505,8 +504,8 @@ class StreamInput(SourceNode):
     def __init__(
         self,
         tags: list[str] | None = None,
-        interval: int | None = None,
-        period: int | None = None,
+        interval: int | str | None = None,
+        period: int | str | None = None,
         *,
         history_provider: "HistoryProvider" | None = None,
         event_recorder: "EventRecorder" | None = None,
@@ -540,8 +539,8 @@ class TagQueryNode(SourceNode):
         self,
         query_tags: list[str],
         *,
-        interval: int,
-        period: int,
+        interval: int | str,
+        period: int | str,
         compute_fn=None,
         name: str | None = None,
     ) -> None:
