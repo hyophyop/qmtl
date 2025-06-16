@@ -35,7 +35,6 @@ class CrossMarketLagStrategy(Strategy):
         )
 
         self.add_nodes([btc_price, mstr_price, corr_node])
-        self.set_target("btc_mstr_corr")
 
 
 if __name__ == "__main__":

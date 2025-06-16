@@ -8,9 +8,5 @@ class EmaStrategy(Strategy):
         self.ema_node = ema(self.price, window=10)
         self.add_nodes([self.price, self.ema_node])
 
-    def define_execution(self):
-        self.set_target(self.ema_node.name)
-
-
 if __name__ == "__main__":
     Runner.offline(EmaStrategy)

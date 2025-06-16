@@ -245,7 +245,6 @@ class GeneralStrategy(Strategy):
         )
 
         self.add_nodes([price_stream, signal_node])
-        self.set_target("momentum_signal")
 
 # 백테스트 실행 예시
 if __name__ == "__main__":
@@ -291,7 +290,6 @@ class CorrelationStrategy(Strategy):
         )
 
         self.add_nodes([indicators, corr_node])
-        self.set_target("indicator_corr")
 
 # 실시간 실행 예시
 if __name__ == "__main__":
@@ -337,7 +335,6 @@ class CrossMarketLagStrategy(Strategy):
         )
 
         self.add_nodes([btc_price, mstr_price, corr_node])
-        self.set_target("btc_mstr_corr")
 
 # 실시간 dry‑run: 거래 여부 검증
 Runner.dryrun(CrossMarketLagStrategy)

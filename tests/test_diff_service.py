@@ -184,7 +184,6 @@ def test_diff_with_sdk_nodes():
             src = StreamInput(interval=1, period=1)
             node = Node(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
             self.add_nodes([src, node])
-            self.set_target("out")
 
     s = _S()
     s.setup()

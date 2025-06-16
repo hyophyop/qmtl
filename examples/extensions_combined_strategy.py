@@ -11,9 +11,5 @@ class CombinedExtensionsStrategy(Strategy):
         self.roc_node = rate_of_change(self.ema_node, period=5)
         self.add_nodes([self.source, self.ema_node, self.roc_node])
 
-    def define_execution(self):
-        self.set_target(self.roc_node.name)
-
-
 if __name__ == "__main__":
     Runner.offline(CombinedExtensionsStrategy)
