@@ -456,7 +456,7 @@ class Node:
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
                 return
-        if not self.pre_warmup and self.compute_fn:
+        if not self.pre_warmup and self.compute_fn and self.execute:
             Runner._execute_compute_fn(self.compute_fn, self.cache.view())
 
     def to_dict(self) -> dict:
@@ -530,6 +530,7 @@ class TagQueryNode(Node):
         )
         self.query_tags = list(query_tags)
         self.upstreams: list[str] = []
+        self.execute = False
 
     def resolve(self, gateway_url: str | None = None, *, offline: bool = False) -> list[str]:
         """Fetch matching queues synchronously."""
@@ -562,10 +563,12 @@ class TagQueryNode(Node):
                 resp.raise_for_status()
         except httpx.RequestError:
             self.upstreams = []
+            self.execute = False
             return []
 
         queues = resp.json().get("queues", [])
         self.upstreams = queues
+        self.execute = bool(queues)
         return queues
 
     async def subscribe_updates(self, gateway_url: str | None = None, *, offline: bool = False) -> None:
@@ -575,6 +578,7 @@ class TagQueryNode(Node):
         simply returns and the node remains in offline mode.
         """
         if offline or not gateway_url:
+            self.execute = False
             return
 
         url = gateway_url.rstrip("/") + "/queues/watch"
@@ -594,7 +598,9 @@ class TagQueryNode(Node):
                         queues = data.get("queues")
                         if queues is not None:
                             self.upstreams = queues
+                            self.execute = bool(queues)
         except httpx.RequestError:
             # Connection issues -> operate offline
+            self.execute = False
             return
 
