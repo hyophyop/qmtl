@@ -25,21 +25,42 @@ class Pipeline:
                 node.queue_topic, {"interval": interval, "timestamp": timestamp, "payload": payload}
             )
 
-    def _propagate(self, node: Node, interval: int, timestamp: int, payload: Any) -> None:
+    def _propagate(
+        self,
+        node: Node,
+        interval: int,
+        timestamp: int,
+        payload: Any,
+        *,
+        on_missing: str = "skip",
+    ) -> None:
         for child in self.downstream.get(node, []):
             result = Runner.feed_queue_data(
-                child, node.node_id, interval, timestamp, payload
+                child,
+                node.node_id,
+                interval,
+                timestamp,
+                payload,
+                on_missing=on_missing,
             )
             out = payload if not child.execute or child.compute_fn is None else result
             if out is None:
                 continue
             self._publish(child, child.interval or interval, timestamp, out)
-            self._propagate(child, child.interval or interval, timestamp, out)
+            self._propagate(
+                child,
+                child.interval or interval,
+                timestamp,
+                out,
+                on_missing=on_missing,
+            )
 
     # ------------------------------------------------------------------
-    def feed(self, node: Node, timestamp: int, payload: Any) -> None:
+    def feed(
+        self, node: Node, timestamp: int, payload: Any, *, on_missing: str = "skip"
+    ) -> None:
         """Feed ``payload`` into ``node`` and propagate through the graph."""
         interval = node.interval or 0
         node.feed(node.node_id, interval, timestamp, payload)
         self._publish(node, interval, timestamp, payload)
-        self._propagate(node, interval, timestamp, payload)
+        self._propagate(node, interval, timestamp, payload, on_missing=on_missing)

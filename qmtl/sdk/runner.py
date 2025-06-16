@@ -342,6 +342,45 @@ class Runner:
             return None
 
     @staticmethod
+    async def _replay_history(
+        strategy: Strategy,
+        start: int | None,
+        end: int | None,
+        *,
+        on_missing: str = "skip",
+    ) -> None:
+        """Replay cached history through a :class:`Pipeline`."""
+        from .node import StreamInput
+        from qmtl import Pipeline
+
+        pipeline = Pipeline(strategy.nodes)
+
+        async def collect(node: StreamInput) -> list[tuple[int, StreamInput, any]]:
+            items = node.cache.get_slice(node.node_id, node.interval, count=node.period)
+            return [
+                (ts, node, payload)
+                for ts, payload in items
+                if (start is None or ts >= start) and (end is None or ts <= end)
+            ]
+
+        tasks = [
+            asyncio.create_task(collect(n))
+            for n in strategy.nodes
+            if isinstance(n, StreamInput) and n.interval is not None
+        ]
+
+        events: list[tuple[int, StreamInput, any]] = []
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for res in results:
+                events.extend(res)
+
+        events.sort(key=lambda e: e[0])
+
+        for ts, node, payload in events:
+            pipeline.feed(node, ts, payload, on_missing=on_missing)
+
+    @staticmethod
     def _replay_history_events(
         strategy: Strategy,
         events: list[tuple[int, any, any]],
@@ -397,8 +436,7 @@ class Runner:
         await Runner._ensure_history(strategy, start_time, end_time)
         start = Runner._maybe_int(start_time)
         end = Runner._maybe_int(end_time)
-        events = Runner._collect_history_events(strategy, start, end)
-        Runner._replay_history_events(strategy, events, on_missing=on_missing)
+        await Runner._replay_history(strategy, start, end, on_missing=on_missing)
         return strategy
 
     @staticmethod
@@ -532,6 +570,5 @@ class Runner:
         Runner._apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         await Runner._load_history(strategy, None, None)
-        events = Runner._collect_history_events(strategy, None, None)
-        Runner._replay_history_events(strategy, events)
+        await Runner._replay_history(strategy, None, None)
         return strategy
