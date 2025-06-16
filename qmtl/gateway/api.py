@@ -205,6 +205,10 @@ def create_app(
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub
 
+    @app.on_event("shutdown")
+    async def _shutdown() -> None:
+        await dagm.close()
+
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
         return await gateway_status(r, db, dagm)

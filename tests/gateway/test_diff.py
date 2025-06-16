@@ -43,6 +43,8 @@ async def test_diff_collects_chunks(monkeypatch):
     ]
     Stub, _ = make_stub(chunks)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     client = DagManagerClient("127.0.0.1:1")
@@ -62,6 +64,8 @@ async def test_diff_returns_buffer_nodes(monkeypatch):
     ]
     Stub, _ = make_stub(chunks)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     client = DagManagerClient("127.0.0.1:1")
@@ -75,6 +79,8 @@ async def test_diff_retries(monkeypatch):
     chunk = dagmanager_pb2.DiffChunk(queue_map={"A": "t"}, sentinel_id="s")
     Stub, get_calls = make_stub([chunk], fail_times=2)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
     orig_sleep = asyncio.sleep
     monkeypatch.setattr(asyncio, "sleep", lambda t: orig_sleep(0))

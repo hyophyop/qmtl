@@ -9,22 +9,26 @@ from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
 class DagManagerClient:
-    """gRPC client for DAG‑Manager services."""
+    """gRPC client for DAG‑Manager services using a persistent channel."""
 
     def __init__(self, target: str) -> None:
         self._target = target
+        self._channel = grpc.aio.insecure_channel(self._target)
+        self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
+        self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
+        self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
+
+    async def close(self) -> None:
+        """Close the underlying gRPC channel."""
+        await self._channel.close()
 
     async def status(self) -> bool:
         """Return ``True`` if the remote DAG manager reports healthy status."""
-        channel = grpc.aio.insecure_channel(self._target)
-        stub = dagmanager_pb2_grpc.HealthCheckStub(channel)
         try:
-            reply = await stub.Status(dagmanager_pb2.StatusRequest())
+            reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
             return reply.neo4j == "ok" and reply.state == "running"
         except Exception:
             return False
-        finally:
-            await channel.close()
 
     async def diff(self, strategy_id: str, dag_json: str) -> dagmanager_pb2.DiffChunk:
         """Call ``DiffService.Diff`` with retries and collect the stream."""
@@ -32,13 +36,11 @@ class DagManagerClient:
         backoff = 0.5
         retries = 5
         for attempt in range(retries):
-            channel = grpc.aio.insecure_channel(self._target)
-            stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
             try:
                 queue_map: Dict[str, str] = {}
                 sentinel_id = ""
                 buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
-                async for chunk in stub.Diff(request):
+                async for chunk in self._diff_stub.Diff(request):
                     queue_map.update(dict(chunk.queue_map))
                     sentinel_id = chunk.sentinel_id
                     buffer_nodes.extend(chunk.buffer_nodes)
@@ -50,8 +52,6 @@ class DagManagerClient:
                     raise
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 4)
-            finally:
-                await channel.close()
 
     async def get_queues_by_tag(self, tags: list[str], interval: int) -> list[str]:
         """Return queues matching ``tags`` and ``interval``.
@@ -64,18 +64,14 @@ class DagManagerClient:
         backoff = 0.5
         retries = 5
         for attempt in range(retries):
-            channel = grpc.aio.insecure_channel(self._target)
-            stub = dagmanager_pb2_grpc.TagQueryStub(channel)
             try:
-                response = await stub.GetQueues(request)
+                response = await self._tag_stub.GetQueues(request)
                 return list(response.queues)
             except Exception:
                 if attempt == retries - 1:
                     raise
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 4)
-            finally:
-                await channel.close()
         return []
 
 
