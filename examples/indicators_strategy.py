@@ -4,7 +4,7 @@ from qmtl.indicators import ema
 
 class EmaStrategy(Strategy):
     def setup(self):
-        self.price = StreamInput(interval=60, period=20)
+        self.price = StreamInput(interval="60s", period=20)
         self.ema_node = ema(self.price, window=10)
         self.add_nodes([self.price, self.ema_node])
 

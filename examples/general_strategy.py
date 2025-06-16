@@ -5,7 +5,7 @@ import pandas as pd
 class GeneralStrategy(Strategy):
     def setup(self):
         price_stream = StreamInput(
-            interval=60,
+            interval="60s",
             period=30,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
             start=1700000000,

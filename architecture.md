@@ -83,7 +83,7 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
 
 #### 설계 요구사항 요약
 
-1. **필수 `interval` 필드** — 모든 `Node` 메타 정의에 `interval`을 **필수 (primary key)** 로 포함한다. 예) `interval: 1m`, `5m`, `1h`.
+1. **필수 `interval` 필드** — 모든 `Node` 메타 정의에 `interval`을 **필수 (primary key)** 로 포함한다. 예) `interval: 1m`, `5m`, `1h`. 정수(초)나 문자열 형식(`"1h"`, `"30m"`, `"45s"`) 모두 허용된다.
 2. **업스트림 데이터 캐시** — 3‑D 맵 대신 4‑D Tensor `C[u,i,p,t]` 구조를 사용한다. 축 정의는 위 표를 참조하며, 큐 인서트는 벡터 단위·만료는 FIFO pop으로 수행된다.
 3. **프로세싱 함수(Compute-Fn) 규약** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. 모든 `compute_fn`은 `NodeCache.view()`이 반환하는 **read-only CacheView** 한 개만을 인자로 받으며, I/O(큐 publish, DB write) 역시 금지.
 
@@ -156,11 +156,11 @@ TimeScaleDB의 Continuous Aggregates 원리를 연산 캐시 계층에 적용하
   ```python
   price_stream = StreamInput(
             tags=["BTC", "price"],  # 다중 태그로 큐 자동 매핑
-            interval=60,    # 1분 간격 데이터
+            interval="60s",    # 1분 간격 데이터
             period=30       # 최소 30개 필요
         )
       tags=["BTC", "price"],  # 여러 태그 지정
-      interval=60,
+      interval="60s",
       period=30
   )
   ```
@@ -238,7 +238,7 @@ def generate_signal(view) -> pd.DataFrame:
 class GeneralStrategy(Strategy):
     def setup(self):
         price_stream = StreamInput(
-            interval=60,    # 1분 간격 데이터
+            interval="60s",    # 1분 간격 데이터
             period=30       # 최소 30개 필요
         )
 
@@ -329,8 +329,8 @@ def lagged_corr(view) -> pd.DataFrame:
 
 class CrossMarketLagStrategy(Strategy):
     def setup(self):
-        btc_price = StreamInput(tags=["BTC", "price", "binance"], interval=60, period=120)
-        mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval=60, period=120)
+        btc_price = StreamInput(tags=["BTC", "price", "binance"], interval="60s", period=120)
+        mstr_price = StreamInput(tags=["MSTR", "price", "nasdaq"], interval="60s", period=120)
 
         corr_node = Node(
             input={"btc": btc_price, "mstr": mstr_price},

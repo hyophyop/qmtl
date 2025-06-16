@@ -23,6 +23,7 @@ from qmtl.sdk.data_io import (
     QuestDBRecorder,
 )
 from .backfill_engine import BackfillEngine
+from .util import parse_interval, parse_period
 from . import metrics
 
 __all__ = [
@@ -45,5 +46,7 @@ __all__ = [
     "QuestDBRecorder",
     "BackfillEngine",
     "metrics",
+    "parse_interval",
+    "parse_period",
     "_cli",
 ]
