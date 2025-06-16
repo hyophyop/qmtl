@@ -22,7 +22,6 @@ class CorrelationStrategy(Strategy):
             name="indicator_corr",
         )
         self.add_nodes([indicators, corr_node])
-        self.set_target("indicator_corr")
 
 
 if __name__ == "__main__":
