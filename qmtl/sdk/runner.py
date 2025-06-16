@@ -206,8 +206,12 @@ class Runner:
         payload,
         *,
         on_missing: str = "skip",
-    ) -> None:
-        """Insert queue data into ``node`` and trigger its ``compute_fn``."""
+    ):
+        """Insert queue data into ``node`` and trigger its ``compute_fn``.
+
+        Returns the compute function result when executed locally. ``None`` is
+        returned if the node did not run or Ray was used for execution.
+        """
         node.cache.append(queue_id, interval, timestamp, payload)
         if node.pre_warmup and node.cache.ready():
             node.pre_warmup = False
@@ -217,8 +221,13 @@ class Runner:
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
                 return
+        result = None
         if not node.pre_warmup and node.compute_fn and node.execute:
-            Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+            if Runner._ray_available:
+                Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+            else:
+                result = node.compute_fn(node.cache.view())
+        return result
 
     # ------------------------------------------------------------------
     @staticmethod
