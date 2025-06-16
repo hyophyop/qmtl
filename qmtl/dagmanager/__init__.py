@@ -36,6 +36,7 @@ from .kafka_admin import KafkaAdmin
 from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 from .alerts import PagerDutyClient, SlackClient, AlertManager
 from .monitor import Monitor, MonitorLoop
+from .completion import QueueCompletionMonitor
 from .metrics import start_metrics_server
 from .api import create_app
 
@@ -53,6 +54,7 @@ __all__ = [
     "AlertManager",
     "Monitor",
     "MonitorLoop",
+    "QueueCompletionMonitor",
     "start_metrics_server",
     "create_app",
 ]

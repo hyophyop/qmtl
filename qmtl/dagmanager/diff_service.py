@@ -72,6 +72,10 @@ class NodeRepository:
         """Return queue topics matching ``tags`` and ``interval``."""
         raise NotImplementedError
 
+    def get_node_by_queue(self, queue: str) -> NodeRecord | None:
+        """Return ``NodeRecord`` for the given queue topic, if any."""
+        raise NotImplementedError
+
 
 class QueueManager:
     """Interface to create or update queues."""
@@ -328,6 +332,30 @@ class Neo4jNodeRepository(NodeRepository):
         with self.driver.session() as session:
             result = session.run(query, tags=list(tags), interval=interval)
             return [r.get("topic") for r in result]
+
+    def get_node_by_queue(self, queue: str) -> NodeRecord | None:
+        query = (
+            "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue {topic: $queue}) "
+            "RETURN c.node_id AS node_id, c.node_type AS node_type, "
+            "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
+            "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags "
+            "LIMIT 1"
+        )
+        with self.driver.session() as session:
+            result = session.run(query, queue=queue)
+            record = result.single()
+            if record is None:
+                return None
+            return NodeRecord(
+                node_id=record["node_id"],
+                node_type=record.get("node_type", ""),
+                code_hash=record.get("code_hash"),
+                schema_hash=record.get("schema_hash"),
+                interval=record.get("interval"),
+                period=record.get("period"),
+                tags=list(record.get("tags", [])),
+                topic=record.get("topic"),
+            )
 
 
 class KafkaQueueManager(QueueManager):
