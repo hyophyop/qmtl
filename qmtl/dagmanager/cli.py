@@ -36,6 +36,12 @@ class _MemRepo(NodeRepository):
     def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
         return []
 
+    def get_node_by_queue(self, queue: str) -> NodeRecord | None:
+        for rec in self.records.values():
+            if rec.topic == queue:
+                return rec
+        return None
+
 
 class _MemQueue(QueueManager):
     def __init__(self) -> None:
