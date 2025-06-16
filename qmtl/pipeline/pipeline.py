@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from qmtl.kafka import Producer
 from qmtl.sdk import Node
+from qmtl.sdk.runner import Runner
 
 
 class Pipeline:
@@ -26,7 +27,9 @@ class Pipeline:
 
     def _propagate(self, node: Node, interval: int, timestamp: int, payload: Any) -> None:
         for child in self.downstream.get(node, []):
-            result = child.feed(node.node_id, interval, timestamp, payload)
+            result = Runner.feed_queue_data(
+                child, node.node_id, interval, timestamp, payload
+            )
             out = payload if not child.execute or child.compute_fn is None else result
             if out is None:
                 continue

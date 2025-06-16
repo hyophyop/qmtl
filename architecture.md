@@ -110,6 +110,10 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
        compute: stats.corr
    ```
 
+8. **실행 흐름 분리** — ``Node.feed`` 는 데이터를 캐시에 저장만 하고,
+   필요한 데이터가 모이면 ``True`` 를 반환해 Runner 에게 계산을 위임한다.
+   이로써 ``Node`` 는 ``Runner`` 에 의존하지 않으므로 테스트가 한층 용이하다.
+
 #### 런타임 처리 절차
 
 ```mermaid
