@@ -13,6 +13,10 @@ class DagManagerClient:
 
     def __init__(self, target: str) -> None:
         self._target = target
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
         self._channel = grpc.aio.insecure_channel(self._target)
         self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
         self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
