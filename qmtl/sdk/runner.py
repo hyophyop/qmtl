@@ -225,17 +225,16 @@ class Runner:
         Returns the compute function result when executed locally. ``None`` is
         returned if the node did not run or Ray was used for execution.
         """
-        node.cache.append(queue_id, interval, timestamp, payload)
-        if node.pre_warmup and node.cache.ready():
-            node.pre_warmup = False
-        missing = node.cache.missing_flags().get(queue_id, {}).get(interval, False)
-        if missing:
-            if on_missing == "fail":
-                raise RuntimeError("gap detected")
-            if on_missing == "skip":
-                return
+        ready = node.feed(
+            queue_id,
+            interval,
+            timestamp,
+            payload,
+            on_missing=on_missing,
+        )
+
         result = None
-        if not node.pre_warmup and node.compute_fn and node.execute:
+        if ready and node.execute and node.compute_fn:
             if Runner._ray_available:
                 Runner._execute_compute_fn(node.compute_fn, node.cache.view())
             else:

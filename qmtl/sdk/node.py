@@ -14,7 +14,6 @@ import asyncio
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
-from .runner import Runner
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -437,13 +436,14 @@ class Node:
         payload,
         *,
         on_missing: str = "skip",
-    ):
-        """Insert new data into ``cache`` and trigger ``compute_fn`` when ready.
+    ) -> bool:
+        """Insert new data into ``cache`` and signal compute readiness.
 
-        Returns the compute function result when executed locally. ``None`` is
-        returned if the node did not run or Ray was used for execution.
+        Returns ``True`` when the node has collected enough data to execute its
+        ``compute_fn``. The function **never** triggers execution directly.
         """
         self.cache.append(upstream_id, interval, timestamp, payload)
+
         recorder = getattr(self, "event_recorder", None)
         if recorder is not None:
             try:
@@ -451,22 +451,21 @@ class Node:
             except RuntimeError:
                 asyncio.run(recorder.persist(self.node_id, interval, timestamp, payload))
             else:
-                loop.create_task(recorder.persist(self.node_id, interval, timestamp, payload))
+                loop.create_task(
+                    recorder.persist(self.node_id, interval, timestamp, payload)
+                )
+
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
+
         missing = self.cache.missing_flags().get(upstream_id, {}).get(interval, False)
         if missing:
             if on_missing == "fail":
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
-                return
-        result = None
-        if not self.pre_warmup and self.compute_fn and self.execute:
-            if Runner._ray_available:
-                Runner._execute_compute_fn(self.compute_fn, self.cache.view())
-            else:
-                result = self.compute_fn(self.cache.view())
-        return result
+                return False
+
+        return not self.pre_warmup and self.compute_fn is not None
 
     def to_dict(self) -> dict:
         return {

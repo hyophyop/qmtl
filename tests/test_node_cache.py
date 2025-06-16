@@ -33,7 +33,7 @@ def test_cache_warmup_and_compute():
     assert len(calls) == 2
 
 
-def test_node_feed_respects_execute_flag(monkeypatch):
+def test_node_feed_does_not_execute(monkeypatch):
     monkeypatch.setattr(Runner, "_ray_available", False)
 
     calls = []
@@ -45,9 +45,11 @@ def test_node_feed_respects_execute_flag(monkeypatch):
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
     node.execute = False
 
-    node.feed("q1", 60, 60, {"v": 1})
-    node.feed("q1", 60, 120, {"v": 2})
+    ready1 = node.feed("q1", 60, 60, {"v": 1})
+    ready2 = node.feed("q1", 60, 120, {"v": 2})
 
+    assert not ready1
+    assert ready2
     assert len(calls) == 0
 
 
