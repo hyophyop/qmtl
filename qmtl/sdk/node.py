@@ -456,7 +456,7 @@ class Node:
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
                 return
-        if not self.pre_warmup and self.compute_fn:
+        if not self.pre_warmup and self.compute_fn and self.execute:
             Runner._execute_compute_fn(self.compute_fn, self.cache.view())
 
     def to_dict(self) -> dict:

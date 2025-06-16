@@ -313,6 +313,26 @@ def test_feed_queue_data_without_ray(monkeypatch):
     assert len(calls) == 1
 
 
+def test_feed_queue_data_respects_execute_flag(monkeypatch):
+    from qmtl.sdk import Node, StreamInput
+
+    monkeypatch.setattr(Runner, "_ray_available", False)
+
+    calls = []
+
+    def compute(view):
+        calls.append(view)
+
+    src = StreamInput(interval=60, period=2)
+    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node.execute = False
+
+    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
+
+    assert not calls
+
+
 def test_load_history_called(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})

@@ -33,6 +33,24 @@ def test_cache_warmup_and_compute():
     assert len(calls) == 2
 
 
+def test_node_feed_respects_execute_flag(monkeypatch):
+    monkeypatch.setattr(Runner, "_ray_available", False)
+
+    calls = []
+
+    def fn(view):
+        calls.append(view)
+
+    src = StreamInput(interval=60, period=2)
+    node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    node.execute = False
+
+    node.feed("q1", 60, 60, {"v": 1})
+    node.feed("q1", 60, 120, {"v": 2})
+
+    assert len(calls) == 0
+
+
 def test_multiple_upstreams():
     calls = []
 

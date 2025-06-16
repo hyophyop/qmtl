@@ -211,7 +211,7 @@ class Runner:
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
                 return
-        if not node.pre_warmup and node.compute_fn:
+        if not node.pre_warmup and node.compute_fn and node.execute:
             Runner._execute_compute_fn(node.compute_fn, node.cache.view())
 
     @staticmethod
