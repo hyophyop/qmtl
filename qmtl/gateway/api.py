@@ -4,6 +4,7 @@ import json
 import uuid
 import base64
 import logging
+import hashlib
 from dataclasses import dataclass
 from typing import Optional, Coroutine, Any
 import asyncio
@@ -155,34 +156,44 @@ class StrategyManager:
     fsm: StrategyFSM
     insert_sentinel: bool = True
 
-    async def submit(self, payload: StrategySubmit) -> str:
-        strategy_id = str(uuid.uuid4())
-
+    async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
         try:
             dag_bytes = base64.b64decode(payload.dag_json)
             dag_dict = json.loads(dag_bytes.decode())
         except Exception:
             dag_dict = json.loads(payload.dag_json)
+
+        dag_hash = hashlib.sha256(
+            json.dumps(dag_dict, sort_keys=True).encode()
+        ).hexdigest()
+        existing = await self.redis.get(f"dag_hash:{dag_hash}")
+        if existing:
+            existing_id = existing.decode() if isinstance(existing, bytes) else existing
+            return existing_id, True
+
+        strategy_id = str(uuid.uuid4())
+        dag_for_storage = dag_dict.copy()
         if self.insert_sentinel:
             sentinel = {
                 "node_type": "VersionSentinel",
                 "node_id": f"{strategy_id}-sentinel",
             }
-            dag_dict.setdefault("nodes", []).append(sentinel)
-        encoded_dag = base64.b64encode(json.dumps(dag_dict).encode()).decode()
+            dag_for_storage.setdefault("nodes", []).append(sentinel)
+        encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
 
         try:
             await self.redis.rpush("strategy_queue", strategy_id)
             await self.redis.hset(
                 f"strategy:{strategy_id}",
-                mapping={"dag": encoded_dag},
+                mapping={"dag": encoded_dag, "hash": dag_hash},
             )
+            await self.redis.set(f"dag_hash:{dag_hash}", strategy_id)
         except Exception:
             gw_metrics.lost_requests_total.inc()
             gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
             raise
         await self.fsm.create(strategy_id, payload.meta)
-        return strategy_id
+        return strategy_id, False
 
     async def status(self, strategy_id: str) -> Optional[str]:
         return await self.fsm.get(strategy_id)
@@ -253,7 +264,9 @@ def create_app(
         if crc != payload.node_ids_crc32:
             raise HTTPException(status_code=400, detail="node id checksum mismatch")
 
-        strategy_id = await manager.submit(payload)
+        strategy_id, existed = await manager.submit(payload)
+        if existed:
+            raise HTTPException(status_code=409, detail={"strategy_id": strategy_id})
 
         queue_map: dict[str, list[str] | str] = {}
         node_ids: list[str] = []
