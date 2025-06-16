@@ -67,3 +67,9 @@ receivers:
           severity: critical
         annotations:
           summary: Diff submissions lost
+      - alert: GCSchedulerStall
+        expr: time() - gc_last_run_timestamp > 600
+        labels:
+          severity: warning
+        annotations:
+          summary: Garbage collector has not run for 10 minutes

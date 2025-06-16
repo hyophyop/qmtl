@@ -1,0 +1,12 @@
+{
+  "title": "QMTL GC",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Orphan Queue Count",
+      "targets": [
+        {"expr": "orphan_queue_total"}
+      ]
+    }
+  ]
+}

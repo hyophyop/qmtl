@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Iterable, Protocol, Optional
 
 from .metrics import orphan_queue_total
+from .metrics import gc_last_run_timestamp
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,8 @@ class GarbageCollector:
                     self.archive.archive(q.name)
                 self.store.drop_queue(q.name)
             processed.append(q)
+        gc_last_run_timestamp.set(now.timestamp())
+        gc_last_run_timestamp._val = gc_last_run_timestamp._value.get()  # type: ignore[attr-defined]
         return processed
 
 
