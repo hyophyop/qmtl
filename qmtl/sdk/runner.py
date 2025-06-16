@@ -9,6 +9,11 @@ from typing import Optional, Iterable
 import httpx
 
 from .strategy import Strategy
+
+try:  # Optional aiokafka dependency
+    from aiokafka import AIOKafkaConsumer  # type: ignore
+except Exception:  # pragma: no cover - aiokafka not installed
+    AIOKafkaConsumer = None  # type: ignore
 try:  # Optional Ray dependency
     import ray  # type: ignore
 except Exception:  # pragma: no cover - Ray not installed
@@ -19,6 +24,7 @@ class Runner:
     """Execute strategies in various modes."""
 
     _ray_available = ray is not None
+    _kafka_available = AIOKafkaConsumer is not None
 
     # ------------------------------------------------------------------
 
@@ -213,6 +219,64 @@ class Runner:
                 return
         if not node.pre_warmup and node.compute_fn and node.execute:
             Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    async def _consume_node(
+        node,
+        *,
+        bootstrap_servers: str,
+        stop_event: asyncio.Event,
+    ) -> None:
+        """Consume Kafka messages for ``node`` and feed them into the cache."""
+        if not Runner._kafka_available:
+            raise RuntimeError("aiokafka not available")
+        consumer = AIOKafkaConsumer(
+            node.queue_topic,
+            bootstrap_servers=bootstrap_servers,
+            enable_auto_commit=True,
+        )
+        await consumer.start()
+        try:
+            async for msg in consumer:
+                try:
+                    payload = json.loads(msg.value)
+                except Exception:
+                    payload = msg.value
+                ts = int(msg.timestamp / 1000)
+                Runner.feed_queue_data(
+                    node,
+                    node.queue_topic,
+                    node.interval,
+                    ts,
+                    payload,
+                )
+                if stop_event.is_set():
+                    break
+        finally:
+            await consumer.stop()
+
+    @staticmethod
+    def spawn_consumer_tasks(
+        strategy: Strategy,
+        *,
+        bootstrap_servers: str,
+        stop_event: asyncio.Event,
+    ) -> list[asyncio.Task]:
+        """Spawn Kafka consumer tasks for nodes with ``queue_topic``."""
+        tasks = []
+        for n in strategy.nodes:
+            if n.queue_topic:
+                tasks.append(
+                    asyncio.create_task(
+                        Runner._consume_node(
+                            n,
+                            bootstrap_servers=bootstrap_servers,
+                            stop_event=stop_event,
+                        )
+                    )
+                )
+        return tasks
 
     @staticmethod
     async def backtest_async(
