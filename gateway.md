@@ -128,7 +128,10 @@ Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG 
 
 Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
 
-When resolving `TagQueryNode` dependencies, Gateway queries DAG-Manager for all queues matching `(tags, interval)` and returns the resulting mapping to the SDK so that only nodes lacking upstream queues execute locally.
+When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**
+calls ``/queues/by_tag``. Gateway consults DAG-Manager for queues matching
+`(tags, interval)` and returns the list so that TagQueryNode instances remain
+network‑agnostic and only nodes lacking upstream queues execute locally.
 
 Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
@@ -137,7 +140,8 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 * **NodeID CRC 파이프라인** – SDK가 전송한 `node_id`와 Gateway가 재계산한 값이
   diff 요청 및 응답의 `crc32` 필드로 상호 검증된다.
 * **TagQueryNode 런타임 확장** – Gateway가 새 `(tags, interval)` 큐를 발견하면
-  `tagquery.upsert` CloudEvent를 발행해 SDK가 버퍼를 자동 초기화한다.
+  `tagquery.upsert` CloudEvent를 발행하고 Runner의 **TagQueryManager**가 이를
+  수신해 노드 버퍼를 자동 초기화한다.
 * **Sentinel Traffic Δ 확인 루프** – `traffic_weight` 변경 후 Gateway 라우팅
   테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 `sentinel_skew_seconds`
   지표로 측정한다.
