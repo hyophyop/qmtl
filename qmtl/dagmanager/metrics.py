@@ -62,6 +62,12 @@ orphan_queue_total = Gauge(
     registry=global_registry,
 )
 
+gc_last_run_timestamp = Gauge(
+    "gc_last_run_timestamp",
+    "Timestamp of the last successful garbage collection",
+    registry=global_registry,
+)
+
 # Expose the active traffic weight per version. Guard against duplicate
 # registration when this module is reloaded during tests.
 if "active_version_weight" in global_registry._names_to_collectors:
@@ -131,6 +137,8 @@ def reset_metrics() -> None:
     sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
+    gc_last_run_timestamp.set(0)
+    gc_last_run_timestamp._val = 0  # type: ignore[attr-defined]
     if hasattr(active_version_weight, "clear"):
         active_version_weight.clear()
     active_version_weight._vals = {}  # type: ignore[attr-defined]
