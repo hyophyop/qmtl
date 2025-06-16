@@ -301,25 +301,26 @@ class Node:
     returned by :py:meth:`NodeCache.view`. The view provides read-only access to
     the cached data and mirrors the structure returned by
     :py:meth:`NodeCache.view`. Positional arguments other than the cache view are
-    **not** supported.
+    **not** supported. ``input`` may be a single ``Node`` or an iterable of
+    ``Node`` instances. Passing dictionaries is no longer supported.
     """
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _normalize_inputs(inp: Node | Iterable[Node] | Mapping[str, Node] | None) -> list[Node]:
+    def _normalize_inputs(inp: Node | Iterable[Node] | None) -> list[Node]:
         if inp is None:
             return []
         if isinstance(inp, Node):
             return [inp]
         if isinstance(inp, Mapping):
-            return list(inp.values())
+            raise TypeError("mapping inputs no longer supported")
         if isinstance(inp, Iterable):
             return list(inp)
         raise TypeError("invalid input type")
 
     def __init__(
         self,
-        input: Node | Iterable[Node] | Mapping[str, Node] | None = None,
+        input: Node | Iterable[Node] | None = None,
         compute_fn=None,
         name: str | None = None,
         interval: int | str | None = None,
@@ -492,7 +493,7 @@ class SourceNode(Node):
 class ProcessingNode(Node):
     """Node that processes data from one or more upstream nodes."""
 
-    def __init__(self, input: Node | Iterable[Node] | Mapping[str, Node], *args, **kwargs) -> None:
+    def __init__(self, input: Node | Iterable[Node], *args, **kwargs) -> None:
         super().__init__(input=input, *args, **kwargs)
         if not self.inputs:
             raise ValueError("processing node requires at least one upstream")

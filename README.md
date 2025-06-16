@@ -112,6 +112,8 @@ python examples/extensions_combined_strategy.py
 
 See [examples/README.md](examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
 
+`ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
+
 ## Backfills
 
 [docs/backfill.md](docs/backfill.md) explains how to preload historical data by

@@ -13,9 +13,8 @@ def test_multi_input_serialization_list():
 def test_multi_input_serialization_dict():
     s1 = StreamInput(interval=60, period=1)
     s2 = StreamInput(interval=60, period=1)
-    node = ProcessingNode(input={"a": s1, "b": s2}, compute_fn=lambda x: x, name="out", interval=60, period=1)
-    d = node.to_dict()
-    assert set(d["inputs"]) == {s1.node_id, s2.node_id}
+    with pytest.raises(TypeError):
+        ProcessingNode(input={"a": s1, "b": s2}, compute_fn=lambda x: x, name="out", interval=60, period=1)
 
 
 def test_multi_input_with_tag_query():
