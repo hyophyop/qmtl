@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from fakeredis.aioredis import FakeRedis
 
 from qmtl.gateway.api import create_app, Database, StrategySubmit
+from qmtl.common import crc32_of_list
 
 
 class FakeDB(Database):
@@ -37,7 +38,12 @@ def app():
 
 def test_ingest_and_status(app):
     client = TestClient(app)
-    payload = StrategySubmit(dag_json="{}", meta={"user": "alice"}, run_type="dry-run")
+    payload = StrategySubmit(
+        dag_json="{}",
+        meta={"user": "alice"},
+        run_type="dry-run",
+        node_ids_crc32=crc32_of_list([]),
+    )
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 202
     sid = resp.json()["strategy_id"]

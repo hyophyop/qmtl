@@ -7,6 +7,7 @@ from fakeredis.aioredis import FakeRedis
 
 from qmtl.dagmanager import compute_node_id
 from qmtl.gateway.api import create_app, Database, StrategySubmit
+from qmtl.common import crc32_of_list
 
 
 class FakeDB(Database):
@@ -52,6 +53,7 @@ async def test_sentinel_inserted(client_and_redis):
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
         run_type="dry-run",
+        node_ids_crc32=crc32_of_list([]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 202
@@ -72,6 +74,7 @@ async def test_sentinel_skip():
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
         run_type="dry-run",
+        node_ids_crc32=crc32_of_list([]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 202

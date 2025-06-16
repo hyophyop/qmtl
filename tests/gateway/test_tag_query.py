@@ -8,6 +8,7 @@ import asyncio
 from qmtl.gateway.watch import QueueWatchHub
 
 from qmtl.gateway.api import create_app, Database
+from qmtl.common import crc32_of_list
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.diff_service import StreamSender
@@ -118,6 +119,7 @@ def test_submit_tag_query_node(client):
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
         "run_type": "dry-run",
+        "node_ids_crc32": crc32_of_list(["N1"]),
     }
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202
@@ -170,6 +172,7 @@ def test_multiple_tag_query_nodes_handle_errors():
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
         "run_type": "dry-run",
+        "node_ids_crc32": crc32_of_list(["N1", "N2"]),
     }
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202

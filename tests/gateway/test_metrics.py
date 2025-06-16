@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from fakeredis.aioredis import FakeRedis
 
 from qmtl.gateway.api import create_app, Database, StrategySubmit
+from qmtl.common import crc32_of_list
 from qmtl.gateway import metrics
 
 
@@ -45,7 +46,12 @@ def test_metrics_endpoint(app):
 def test_latency_metric_recorded(app):
     metrics.reset_metrics()
     client = TestClient(app, raise_server_exceptions=False)
-    payload = StrategySubmit(dag_json="{}", meta=None, run_type="dry-run")
+    payload = StrategySubmit(
+        dag_json="{}",
+        meta=None,
+        run_type="dry-run",
+        node_ids_crc32=crc32_of_list([]),
+    )
     client.post("/strategies", json=payload.model_dump())
     assert metrics.gateway_e2e_latency_p95._value.get() > 0
 
@@ -61,7 +67,12 @@ def test_lost_requests_counter(monkeypatch):
     db = FakeDB()
     app = create_app(redis_client=redis, database=db)
     client = TestClient(app, raise_server_exceptions=False)
-    payload = StrategySubmit(dag_json="{}", meta=None, run_type="dry-run")
+    payload = StrategySubmit(
+        dag_json="{}",
+        meta=None,
+        run_type="dry-run",
+        node_ids_crc32=crc32_of_list([]),
+    )
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 500
     assert metrics.lost_requests_total._value.get() == 1
