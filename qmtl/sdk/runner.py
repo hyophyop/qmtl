@@ -61,7 +61,6 @@ class Runner:
     def _prepare(strategy_cls: type[Strategy]) -> Strategy:
         strategy = strategy_cls()
         strategy.setup()
-        strategy.define_execution()
         return strategy
 
     @staticmethod

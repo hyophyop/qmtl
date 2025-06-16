@@ -35,8 +35,6 @@ class CrossMarketLagStrategy(Strategy):
         )
 
         self.add_nodes([btc_price, mstr_price, corr_node])
-
-    def define_execution(self):
         self.set_target("btc_mstr_corr")
 
 

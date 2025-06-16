@@ -22,8 +22,6 @@ class CorrelationStrategy(Strategy):
             name="indicator_corr",
         )
         self.add_nodes([indicators, corr_node])
-
-    def define_execution(self):
         self.set_target("indicator_corr")
 
 
