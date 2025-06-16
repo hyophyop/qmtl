@@ -201,6 +201,32 @@ async def test_watch_hub_broadcast():
 
 
 @pytest.mark.asyncio
+async def test_watch_hub_broadcast_only_on_change():
+    hub = QueueWatchHub()
+    results: list[list[str]] = []
+
+    async def listener() -> None:
+        async for data in hub.subscribe(["t1"], 60):
+            results.append(data)
+
+    task = asyncio.create_task(listener())
+    await asyncio.sleep(0)
+
+    await hub.broadcast(["t1"], 60, ["q3"])
+    await asyncio.sleep(0.05)
+    await hub.broadcast(["t1"], 60, ["q3"])
+    await asyncio.sleep(0.05)
+    await hub.broadcast(["t1"], 60, ["q4"])
+    await asyncio.sleep(0.05)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert results == [["q3"], ["q4"]]
+
+
+@pytest.mark.asyncio
 async def test_dag_client_queries_grpc():
     driver = _FakeDriver([{"topic": "q1"}, {"topic": "q2"}])
     admin = _FakeAdmin()
