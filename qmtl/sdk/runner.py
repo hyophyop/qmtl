@@ -70,15 +70,25 @@ class Runner:
         return strategy
 
     @staticmethod
-    def _apply_queue_map(strategy: Strategy, queue_map: dict[str, str]) -> None:
+    def _apply_queue_map(strategy: Strategy, queue_map: dict[str, str | list[str]]) -> None:
+        from .node import TagQueryNode
+
         for node in strategy.nodes:
-            topic = queue_map.get(node.node_id)
-            if topic:
-                node.execute = False
-                node.queue_topic = topic
+            mapping = queue_map.get(node.node_id)
+            if isinstance(node, TagQueryNode):
+                if isinstance(mapping, list):
+                    node.upstreams = list(mapping)
+                    node.execute = bool(mapping)
+                else:
+                    node.upstreams = []
+                    node.execute = False
             else:
-                node.execute = True
-                node.queue_topic = None
+                if mapping:
+                    node.execute = False
+                    node.queue_topic = mapping  # type: ignore[assignment]
+                else:
+                    node.execute = True
+                    node.queue_topic = None
 
     @staticmethod
     async def _load_history(
@@ -416,6 +426,16 @@ class Runner:
 
         Runner._apply_queue_map(strategy, queue_map)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
+        from .node import TagQueryNode
+
+        update_tasks = []
+        for n in strategy.nodes:
+            if isinstance(n, TagQueryNode):
+                update_tasks.append(
+                    asyncio.create_task(n.subscribe_updates(gateway_url))
+                )
+        setattr(strategy, "update_tasks", update_tasks)
+
         # Placeholder for live trading logic
         return strategy
 
