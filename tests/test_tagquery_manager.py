@@ -19,10 +19,13 @@ async def test_resolve_and_update(monkeypatch):
     class DummyClient:
         def __init__(self, *a, **k):
             self._client = httpx.Client(transport=transport)
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             self._client.close()
+
         async def get(self, url, params=None):
             request = httpx.Request("GET", url, params=params)
             resp = handler(request)
@@ -42,4 +45,47 @@ async def test_resolve_and_update(monkeypatch):
         "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"]},
     })
     assert node.upstreams == ["q2"]
+
+    await manager.handle_message({
+        "event": "queue_update",
+        "data": {"tags": ["t1"], "interval": 60, "queues": []},
+    })
+    assert node.upstreams == []
+    assert not node.execute
+
     await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_resolve_handles_empty(monkeypatch):
+    node = TagQueryNode(["t1"], interval=60, period=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"queues": []})
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def get(self, url, params=None):
+            request = httpx.Request("GET", url, params=params)
+            resp = handler(request)
+            resp.request = request
+            return resp
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    manager = TagQueryManager("http://gw")
+    manager.register(node)
+    await manager.resolve_tags()
+    assert node.upstreams == []
+    assert not node.execute
+
