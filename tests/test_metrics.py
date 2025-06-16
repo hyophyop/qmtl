@@ -26,6 +26,15 @@ class FakeRepo(NodeRepository):
     def get_queues_by_tag(self, tags, interval):
         return []
 
+    def mark_buffering(self, node_id, *, timestamp_ms=None):
+        pass
+
+    def clear_buffering(self, node_id):
+        pass
+
+    def get_buffering_nodes(self, older_than_ms):
+        return []
+
 
 class FakeQueue(QueueManager):
     def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
