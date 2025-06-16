@@ -1,7 +1,7 @@
-from qmtl.sdk import Node, StreamInput, Strategy
+from qmtl.sdk import SourceNode, ProcessingNode, StreamInput, Strategy
 
 def test_node_id_generation():
-    node = Node(compute_fn=lambda x: x, name="n", interval=1, period=1)
+    node = SourceNode(compute_fn=lambda x: x, name="n", interval=1, period=1)
     node_id = node.node_id
     assert len(node_id) == 64
     assert node_id == node.node_id  # deterministic
@@ -10,7 +10,7 @@ def test_node_id_generation():
 class _S(Strategy):
     def setup(self):
         src = StreamInput(interval=1, period=1)
-        node = Node(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
+        node = ProcessingNode(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
         self.add_nodes([src, node])
 
 

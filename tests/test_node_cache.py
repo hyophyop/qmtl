@@ -1,6 +1,6 @@
 import pytest
 import xarray as xr
-from qmtl.sdk import Node, StreamInput, Runner, NodeCache
+from qmtl.sdk import ProcessingNode, StreamInput, Runner, NodeCache
 
 
 def test_cache_warmup_and_compute():
@@ -10,7 +10,7 @@ def test_cache_warmup_and_compute():
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
 
     Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
@@ -42,7 +42,7 @@ def test_node_feed_respects_execute_flag(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
     node.execute = False
 
     node.feed("q1", 60, 60, {"v": 1})
@@ -58,7 +58,7 @@ def test_multiple_upstreams():
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
 
     Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "u2", 60, 60, {"v": 1})
@@ -107,7 +107,7 @@ def test_on_missing_policy_skip_and_fail():
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
 
     Runner.feed_queue_data(node, "q1", 60, 1, {"v": 1})
     # Gap -> should skip
@@ -115,7 +115,7 @@ def test_on_missing_policy_skip_and_fail():
     assert node.cache.missing_flags()["q1"][60]
     assert len(calls) == 0
 
-    node2 = Node(input=src, compute_fn=fn, name="n2", interval=60, period=2)
+    node2 = ProcessingNode(input=src, compute_fn=fn, name="n2", interval=60, period=2)
     Runner.feed_queue_data(node2, "q1", 60, 1, {"v": 1})
     with pytest.raises(RuntimeError):
         Runner.feed_queue_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")

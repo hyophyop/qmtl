@@ -187,12 +187,12 @@ def test_sentinel_insert_and_stream():
 
 def test_diff_with_sdk_nodes():
     """End-to-end check with nodes serialized by the SDK."""
-    from qmtl.sdk import StreamInput, Node, Strategy
+    from qmtl.sdk import StreamInput, ProcessingNode, Strategy
 
     class _S(Strategy):
         def setup(self):
             src = StreamInput(interval=1, period=1)
-            node = Node(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
+            node = ProcessingNode(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
             self.add_nodes([src, node])
 
     s = _S()

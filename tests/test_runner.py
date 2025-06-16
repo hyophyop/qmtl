@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 from qmtl.sdk.runner import Runner
-from qmtl.sdk.node import StreamInput, Node
+from qmtl.sdk.node import StreamInput, ProcessingNode
 from tests.sample_strategy import SampleStrategy
 
 
@@ -251,7 +251,7 @@ def test_no_gateway_same_ids(monkeypatch):
 
 
 def test_feed_queue_data_with_ray(monkeypatch):
-    from qmtl.sdk import Node, StreamInput
+    from qmtl.sdk import ProcessingNode, StreamInput
 
     class DummyRay:
         def __init__(self):
@@ -285,7 +285,7 @@ def test_feed_queue_data_with_ray(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
@@ -295,7 +295,7 @@ def test_feed_queue_data_with_ray(monkeypatch):
 
 
 def test_feed_queue_data_without_ray(monkeypatch):
-    from qmtl.sdk import Node, StreamInput
+    from qmtl.sdk import ProcessingNode, StreamInput
 
     monkeypatch.setattr(Runner, "_ray_available", False)
 
@@ -305,7 +305,7 @@ def test_feed_queue_data_without_ray(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
@@ -314,7 +314,7 @@ def test_feed_queue_data_without_ray(monkeypatch):
 
 
 def test_feed_queue_data_respects_execute_flag(monkeypatch):
-    from qmtl.sdk import Node, StreamInput
+    from qmtl.sdk import ProcessingNode, StreamInput
 
     monkeypatch.setattr(Runner, "_ray_available", False)
 
@@ -324,7 +324,7 @@ def test_feed_queue_data_respects_execute_flag(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
     node.execute = False
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
@@ -460,7 +460,7 @@ def test_history_gap_fill(monkeypatch):
     class Strat(SampleStrategy):
         def setup(self):
             src = StreamInput(interval=1, period=1, history_provider=provider)
-            node = Node(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
+            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
             self.add_nodes([src, node])
 
     Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
@@ -513,7 +513,7 @@ def test_history_gap_fill_stops_on_ready(monkeypatch):
         def setup(self):
             src = StreamInput(interval=1, period=1, history_provider=provider)
             holder["src"] = src
-            node = Node(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
+            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
             self.add_nodes([src, node])
 
     Runner.dryrun(Strat, gateway_url="http://gw")

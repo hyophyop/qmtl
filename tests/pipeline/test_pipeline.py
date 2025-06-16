@@ -1,7 +1,7 @@
 import pytest
 
 from qmtl.pipeline import Pipeline
-from qmtl.sdk import Node, StreamInput
+from qmtl.sdk import ProcessingNode, StreamInput
 
 
 class DummyProducer:
@@ -22,13 +22,13 @@ def test_basic_flow():
         ts, val = view[src][1].latest()
         return val * 2
 
-    n1 = Node(input=src, compute_fn=mul2, name="n1", interval=1, period=1)
+    n1 = ProcessingNode(input=src, compute_fn=mul2, name="n1", interval=1, period=1)
 
     def add1(view):
         ts, val = view[n1][1].latest()
         return val + 1
 
-    n2 = Node(input=n1, compute_fn=add1, name="n2", interval=1, period=1)
+    n2 = ProcessingNode(input=n1, compute_fn=add1, name="n2", interval=1, period=1)
 
     prod = DummyProducer()
     n1.queue_topic = "n1"
@@ -46,9 +46,9 @@ def test_basic_flow():
 
 def test_execute_false_pass_through():
     src = StreamInput(interval=1, period=1)
-    n1 = Node(input=src, compute_fn=lambda v: None, name="n1", interval=1, period=1)
+    n1 = ProcessingNode(input=src, compute_fn=lambda v: None, name="n1", interval=1, period=1)
     n1.execute = False
-    n2 = Node(input=n1, compute_fn=lambda v: v[n1][1].latest()[1] + 5, name="n2", interval=1, period=1)
+    n2 = ProcessingNode(input=n1, compute_fn=lambda v: v[n1][1].latest()[1] + 5, name="n2", interval=1, period=1)
 
     pipe = Pipeline([src, n1, n2])
 

@@ -483,7 +483,24 @@ class Node:
         }
 
 
-class StreamInput(Node):
+class SourceNode(Node):
+    """Base class for nodes without upstream dependencies."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("input", None)
+        super().__init__(*args, **kwargs)
+
+
+class ProcessingNode(Node):
+    """Node that processes data from one or more upstream nodes."""
+
+    def __init__(self, input: Node | Iterable[Node] | Mapping[str, Node], *args, **kwargs) -> None:
+        super().__init__(input=input, *args, **kwargs)
+        if not self.inputs:
+            raise ValueError("processing node requires at least one upstream")
+
+
+class StreamInput(SourceNode):
     """Represents an upstream data stream placeholder."""
 
     def __init__(
@@ -517,7 +534,7 @@ class StreamInput(Node):
         await engine.wait()
 
 
-class TagQueryNode(Node):
+class TagQueryNode(SourceNode):
     """Node that selects upstream queues by tag and interval."""
 
     def __init__(

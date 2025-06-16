@@ -19,10 +19,10 @@ uv pip install -e .[generators]  # 시뮬레이션 데이터 생성기
 
 ## 기본 구조
 
-SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `Node`, `TagQueryNode` 등을 이용해 정의하며 모든 노드는 하나 이상의 업스트림을 가져야 합니다.
+SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다.
 
 ```python
-from qmtl.sdk import Strategy, Node, StreamInput
+from qmtl.sdk import Strategy, ProcessingNode, StreamInput
 
 class MyStrategy(Strategy):
     def setup(self):
@@ -31,7 +31,7 @@ class MyStrategy(Strategy):
         def compute(view):
             return view
 
-        out = Node(input=price, compute_fn=compute, name="out")
+        out = ProcessingNode(input=price, compute_fn=compute, name="out")
         self.add_nodes([price, out])
 ```
 

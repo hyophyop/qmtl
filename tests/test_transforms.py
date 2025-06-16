@@ -1,10 +1,10 @@
 from qmtl.transforms import rate_of_change, stochastic, angle
-from qmtl.sdk.node import Node
+from qmtl.sdk.node import SourceNode
 from qmtl.sdk.cache_view import CacheView
 
 
 def test_rate_of_change_compute():
-    src = Node(interval=1, period=3)
+    src = SourceNode(interval=1, period=3)
     node = rate_of_change(src, period=2)
     data = {src.node_id: {1: [(0, 1), (1, 3)]}}
     view = CacheView(data)
@@ -12,7 +12,7 @@ def test_rate_of_change_compute():
 
 
 def test_stochastic_compute():
-    src = Node(interval=1, period=3)
+    src = SourceNode(interval=1, period=3)
     node = stochastic(src, window=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 3)]}}
     view = CacheView(data)
@@ -20,7 +20,7 @@ def test_stochastic_compute():
 
 
 def test_angle_compute():
-    src = Node(interval=1, period=3)
+    src = SourceNode(interval=1, period=3)
     node = angle(src, window=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 3)]}}
     view = CacheView(data)
