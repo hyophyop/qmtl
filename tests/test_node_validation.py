@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk.node import Node
+from qmtl.sdk.node import SourceNode, ProcessingNode
 
 @pytest.mark.parametrize(
     "interval,period",
@@ -14,7 +14,7 @@ from qmtl.sdk.node import Node
 )
 def test_invalid_node_parameters(interval, period):
     with pytest.raises(ValueError):
-        Node(interval=interval, period=period)
+        SourceNode(interval=interval, period=period)
 
 
 @pytest.mark.parametrize(
@@ -27,4 +27,9 @@ def test_invalid_node_parameters(interval, period):
 )
 def test_invalid_compute_fn(fn):
     with pytest.raises(TypeError):
-        Node(compute_fn=fn, interval=1, period=1)
+        SourceNode(compute_fn=fn, interval=1, period=1)
+
+
+def test_processing_node_requires_input():
+    with pytest.raises(ValueError):
+        ProcessingNode(input=None, compute_fn=lambda v: v, interval=1, period=1)

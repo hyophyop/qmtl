@@ -1,5 +1,5 @@
 import qmtl.sdk.runner as rmod
-from qmtl.sdk import Node, StreamInput
+from qmtl.sdk import ProcessingNode, StreamInput
 
 
 def test_node_feed_with_ray(monkeypatch):
@@ -34,7 +34,7 @@ def test_node_feed_with_ray(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
     node.feed("q", 60, 60, {"v": 1})
     node.feed("q", 60, 120, {"v": 2})
@@ -52,7 +52,7 @@ def test_node_feed_without_ray(monkeypatch):
         calls.append(view)
 
     src = StreamInput(interval=60, period=2)
-    node = Node(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
 
     node.feed("q", 60, 60, {"v": 1})
     node.feed("q", 60, 120, {"v": 2})
