@@ -9,6 +9,7 @@ from typing import Optional, Iterable
 import httpx
 
 from .strategy import Strategy
+from .tagquery_manager import TagQueryManager
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -92,6 +93,17 @@ class Runner:
                 else:
                     node.execute = True
                     node.queue_topic = None
+
+    @staticmethod
+    def _init_tag_manager(strategy: Strategy, gateway_url: str | None) -> TagQueryManager:
+        from .node import TagQueryNode
+
+        manager = TagQueryManager(gateway_url)
+        for n in strategy.nodes:
+            if isinstance(n, TagQueryNode):
+                manager.register(n)
+        setattr(strategy, "tag_query_manager", manager)
+        return manager
 
     @staticmethod
     async def _load_history(
@@ -364,6 +376,7 @@ class Runner:
         if start_time is None or end_time is None:
             raise ValueError("start_time and end_time are required")
         strategy = Runner._prepare(strategy_cls)
+        manager = Runner._init_tag_manager(strategy, gateway_url)
         print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
@@ -381,6 +394,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, start_time, end_time)
         start = Runner._maybe_int(start_time)
         end = Runner._maybe_int(end_time)
@@ -418,6 +432,7 @@ class Runner:
     ) -> Strategy:
         """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
+        manager = Runner._init_tag_manager(strategy, gateway_url)
         print(f"[DRYRUN] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
@@ -436,6 +451,7 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         # Placeholder for dry-run logic
         return strategy
@@ -463,6 +479,7 @@ class Runner:
     ) -> Strategy:
         """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
+        manager = Runner._init_tag_manager(strategy, gateway_url)
         print(f"[LIVE] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
@@ -481,17 +498,10 @@ class Runner:
             raise RuntimeError("failed to connect to Gateway") from exc
 
         Runner._apply_queue_map(strategy, queue_map)
+        await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
-        from .node import TagQueryNode
-
-        update_tasks = []
-        for n in strategy.nodes:
-            if isinstance(n, TagQueryNode):
-                update_tasks.append(
-                    asyncio.create_task(n.subscribe_updates(gateway_url))
-                )
-        setattr(strategy, "update_tasks", update_tasks)
-
+        await manager.start()
+        
         # Placeholder for live trading logic
         return strategy
 
@@ -518,8 +528,10 @@ class Runner:
     @staticmethod
     async def offline_async(strategy_cls: type[Strategy]) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
+        manager = Runner._init_tag_manager(strategy, None)
         print(f"[OFFLINE] {strategy_cls.__name__} starting")
         Runner._apply_queue_map(strategy, {})
+        await manager.resolve_tags(offline=True)
         await Runner._load_history(strategy, None, None)
         events = Runner._collect_history_events(strategy, None, None)
         Runner._replay_history_events(strategy, events)

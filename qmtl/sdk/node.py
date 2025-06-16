@@ -558,75 +558,8 @@ class TagQueryNode(SourceNode):
         self.upstreams: list[str] = []
         self.execute = False
 
-    def resolve(self, gateway_url: str | None = None, *, offline: bool = False) -> list[str]:
-        """Fetch matching queues synchronously."""
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(self.resolve_async(gateway_url, offline=offline))
-        finally:
-            asyncio.set_event_loop(None)
-            loop.close()
-
-    async def resolve_async(
-        self, gateway_url: str | None = None, *, offline: bool = False
-    ) -> list[str]:
-        """Fetch matching queues from ``gateway_url`` asynchronously.
-
-        If ``gateway_url`` is ``None`` or the request fails, an empty list is
-        returned and ``upstreams`` is cleared so the node can operate in
-        offline mode.
-        """
-        if offline or not gateway_url:
-            self.upstreams = []
-            return []
-
-        url = gateway_url.rstrip("/") + "/queues/by_tag"
-        params = {"tags": ",".join(self.query_tags), "interval": self.interval}
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, params=params)
-                resp.raise_for_status()
-        except httpx.RequestError:
-            self.upstreams = []
-            self.execute = False
-            return []
-
-        queues = resp.json().get("queues", [])
-        self.upstreams = queues
+    def update_queues(self, queues: list[str]) -> None:
+        """Update ``upstreams`` and execution flag."""
+        self.upstreams = list(queues)
         self.execute = bool(queues)
-        return queues
-
-    async def subscribe_updates(self, gateway_url: str | None = None, *, offline: bool = False) -> None:
-        """Subscribe to queue updates via streaming endpoint.
-
-        If ``gateway_url`` is ``None`` or the connection fails, the method
-        simply returns and the node remains in offline mode.
-        """
-        if offline or not gateway_url:
-            self.execute = False
-            return
-
-        url = gateway_url.rstrip("/") + "/queues/watch"
-        params = {"tags": ",".join(self.query_tags), "interval": self.interval}
-        try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream("GET", url, params=params) as resp:
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        if line.startswith("data:"):
-                            line = line[5:].strip()
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        queues = data.get("queues")
-                        if queues is not None:
-                            self.upstreams = queues
-                            self.execute = bool(queues)
-        except httpx.RequestError:
-            # Connection issues -> operate offline
-            self.execute = False
-            return
 

@@ -23,14 +23,8 @@ class WebSocketClient:
         self.on_message = on_message
         self.queue_topics: dict[str, str] = {}
         self.sentinel_weights: dict[str, float] = {}
-        self.tag_nodes: dict[tuple[tuple[str], int], list["TagQueryNode"]] = {}
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
-
-    def register_tag_query_node(self, node: "TagQueryNode") -> None:
-        """Register a :class:`TagQueryNode` for queue update handling."""
-        key = (tuple(sorted(node.query_tags)), node.interval)
-        self.tag_nodes.setdefault(key, []).append(node)
 
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -41,21 +35,7 @@ class WebSocketClient:
             if qid and topic:
                 self.queue_topics[qid] = topic
         elif event == "queue_update":
-            tags = payload.get("tags") or []
-            interval = payload.get("interval")
-            queues = payload.get("queues", [])
-            if isinstance(tags, str):
-                tags = [t for t in tags.split(",") if t]
-            if interval is not None:
-                try:
-                    interval = int(interval)
-                except (TypeError, ValueError):
-                    interval = None
-            if tags and interval is not None:
-                key = (tuple(sorted(tags)), interval)
-                for node in self.tag_nodes.get(key, []):
-                    node.upstreams = list(queues)
-                    node.execute = bool(queues)
+            pass  # handled by caller via ``on_message``
         elif event == "sentinel_weight":
             sid = payload.get("sentinel_id")
             weight = payload.get("weight")

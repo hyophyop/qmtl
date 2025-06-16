@@ -12,6 +12,7 @@ from .backfill_state import BackfillState
 from .cache_view import CacheView
 from .strategy import Strategy
 from .runner import Runner
+from .tagquery_manager import TagQueryManager
 from .cli import main as _cli
 from .ws_client import WebSocketClient
 from qmtl.sdk.data_io import (
@@ -35,6 +36,7 @@ __all__ = [
     "CacheView",
     "Strategy",
     "Runner",
+    "TagQueryManager",
     "WebSocketClient",
     "HistoryProvider",
     "DataFetcher",

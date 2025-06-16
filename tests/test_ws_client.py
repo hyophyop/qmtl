@@ -5,7 +5,6 @@ import pytest
 import websockets
 
 from qmtl.sdk.ws_client import WebSocketClient
-from qmtl.sdk import TagQueryNode
 
 
 @pytest.mark.asyncio
@@ -25,16 +24,18 @@ async def test_ws_client_updates_state():
     port = server.sockets[0].getsockname()[1]
     url = f"ws://localhost:{port}"
     try:
-        client = WebSocketClient(url)
-        node = TagQueryNode(["t"], interval=60, period=1)
-        client.register_tag_query_node(node)
+        received: list[dict] = []
+
+        async def on_msg(data):
+            received.append(data)
+
+        client = WebSocketClient(url, on_message=on_msg)
         await client.start()
         await asyncio.sleep(0.2)
         await client.stop()
         assert client.queue_topics == {"n1": "t1"}
         assert client.sentinel_weights == {"s1": 0.75}
-        assert node.upstreams == ["q1"]
-        assert node.execute
+        assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
     finally:
         server.close()
         await server.wait_closed()
