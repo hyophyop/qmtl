@@ -5,7 +5,8 @@ import uuid
 import base64
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Coroutine, Any
+import asyncio
 
 from fastapi import FastAPI, HTTPException, status, Response
 from fastapi.responses import StreamingResponse
@@ -248,15 +249,24 @@ def create_app(
             dag = json.loads(payload.dag_json)
 
         queue_map: dict[str, list[str] | str] = {}
+        node_ids: list[str] = []
+        queries: list[Coroutine[Any, Any, list[str]]] = []
         for node in dag.get("nodes", []):
             if node.get("node_type") == "TagQueryNode":
                 tags = node.get("tags", [])
                 interval = int(node.get("interval", 0))
-                try:
-                    queues = await dagm.get_queues_by_tag(tags, interval)
-                except Exception:
-                    queues = []
-                queue_map[node["node_id"]] = queues
+                node_ids.append(node["node_id"])
+                queries.append(dagm.get_queues_by_tag(tags, interval))
+
+        results = []
+        if queries:
+            results = await asyncio.gather(*queries, return_exceptions=True)
+
+        for nid, result in zip(node_ids, results):
+            if isinstance(result, Exception):
+                queue_map[nid] = []
+            else:
+                queue_map[nid] = result
 
         resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map)
         duration_ms = (time.perf_counter() - start) * 1000

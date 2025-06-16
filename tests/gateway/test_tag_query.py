@@ -125,6 +125,58 @@ def test_submit_tag_query_node(client):
     assert dag.called_with == (["t1"], 60)
 
 
+def test_multiple_tag_query_nodes_handle_errors():
+    class ErrorDag(DagManagerClient):
+        def __init__(self):
+            super().__init__("dummy")
+            self.calls = []
+
+        async def get_queues_by_tag(self, tags, interval):
+            self.calls.append((tags, interval))
+            if "bad" in tags:
+                raise RuntimeError("boom")
+            return [f"{tags[0]}_q"]
+
+    redis = FakeRedis(decode_responses=True)
+    dag = ErrorDag()
+    app = create_app(redis_client=redis, database=FakeDB(), dag_client=dag)
+    c = TestClient(app)
+
+    dag_json = {
+        "nodes": [
+            {
+                "node_id": "N1",
+                "node_type": "TagQueryNode",
+                "interval": 60,
+                "period": 2,
+                "tags": ["good"],
+                "code_hash": "ch",
+                "schema_hash": "sh",
+                "inputs": [],
+            },
+            {
+                "node_id": "N2",
+                "node_type": "TagQueryNode",
+                "interval": 30,
+                "period": 2,
+                "tags": ["bad"],
+                "code_hash": "ch",
+                "schema_hash": "sh",
+                "inputs": [],
+            },
+        ]
+    }
+    payload = {
+        "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+        "meta": None,
+        "run_type": "dry-run",
+    }
+    resp = c.post("/strategies", json=payload)
+    assert resp.status_code == 202
+    assert resp.json()["queue_map"] == {"N1": ["good_q"], "N2": []}
+    assert len(dag.calls) == 2
+
+
 @pytest.mark.asyncio
 async def test_watch_hub_broadcast():
     hub = QueueWatchHub()
