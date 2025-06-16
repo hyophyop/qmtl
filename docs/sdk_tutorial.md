@@ -19,7 +19,7 @@ uv pip install -e .[generators]  # 시뮬레이션 데이터 생성기
 
 ## 기본 구조
 
-SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다.
+SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다. `TagQueryNode` 자체는 네트워크 요청을 수행하지 않고, Runner가 생성하는 **TagQueryManager**가 Gateway와 통신하여 큐 목록을 갱신합니다.
 
 ```python
 from qmtl.sdk import Strategy, ProcessingNode, StreamInput
@@ -49,6 +49,9 @@ python -m qmtl.sdk tests.sample_strategy:SampleStrategy --mode offline
 from qmtl.sdk import Runner
 Runner.dryrun(MyStrategy)
 ```
+
+`Runner`를 사용하면 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여
+해당 태그에 매칭되는 큐를 조회하고 WebSocket 구독을 시작합니다.
 
 ## CLI 도움말
 
