@@ -437,8 +437,12 @@ class Node:
         payload,
         *,
         on_missing: str = "skip",
-    ) -> None:
-        """Insert new data into ``cache`` and trigger ``compute_fn`` when ready."""
+    ):
+        """Insert new data into ``cache`` and trigger ``compute_fn`` when ready.
+
+        Returns the compute function result when executed locally. ``None`` is
+        returned if the node did not run or Ray was used for execution.
+        """
         self.cache.append(upstream_id, interval, timestamp, payload)
         recorder = getattr(self, "event_recorder", None)
         if recorder is not None:
@@ -456,8 +460,13 @@ class Node:
                 raise RuntimeError("gap detected")
             if on_missing == "skip":
                 return
+        result = None
         if not self.pre_warmup and self.compute_fn and self.execute:
-            Runner._execute_compute_fn(self.compute_fn, self.cache.view())
+            if Runner._ray_available:
+                Runner._execute_compute_fn(self.compute_fn, self.cache.view())
+            else:
+                result = self.compute_fn(self.cache.view())
+        return result
 
     def to_dict(self) -> dict:
         return {
