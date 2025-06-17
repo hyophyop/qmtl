@@ -6,13 +6,26 @@ from .runner import Runner
 
 
 async def _main() -> None:
-    parser = argparse.ArgumentParser(description="Run QMTL strategy")
+    parser = argparse.ArgumentParser(
+        description="Run QMTL strategy (backtest/dry-run/live/offline)"
+    )
     parser.add_argument("strategy", help="Import path as module:Class")
-    parser.add_argument("--mode", choices=["backtest", "dryrun", "live", "offline"], required=True)
+    parser.add_argument(
+        "--mode",
+        choices=["backtest", "dryrun", "live", "offline"],
+        required=True,
+        help=(
+            "Execution mode: backtest replays history, dryrun connects to the Gateway without trading, "
+            "live executes with real queues, offline runs locally without Gateway"
+        ),
+    )
     parser.add_argument("--start-time")
     parser.add_argument("--end-time")
     parser.add_argument("--on-missing", default="skip")
-    parser.add_argument("--gateway-url")
+    parser.add_argument(
+        "--gateway-url",
+        help="Gateway base URL (required for backtest, dryrun and live modes)",
+    )
     args = parser.parse_args()
 
     module_name, class_name = args.strategy.split(":")

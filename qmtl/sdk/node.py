@@ -352,7 +352,7 @@ class Node:
             )
             if len(positional) != 1 or has_var_positional:
                 raise TypeError(
-                    "compute_fn must accept exactly one positional argument (지원되지 않는 함수 시그니처)"
+                    "compute_fn must accept exactly one positional argument (지원되지 않는 함수 시그니처). compute_fn(view) 형태로 작성했는지 확인하세요"
                 )
 
         self.input = input
@@ -499,7 +499,9 @@ class ProcessingNode(Node):
     def __init__(self, input: Node | Iterable[Node], *args, **kwargs) -> None:
         super().__init__(input=input, *args, **kwargs)
         if not self.inputs:
-            raise ValueError("processing node requires at least one upstream")
+            raise ValueError(
+                "processing node requires at least one upstream (node.input에 올바른 업스트림 노드를 지정했는지 확인하세요)"
+            )
 
 
 class StreamInput(SourceNode):

@@ -121,6 +121,8 @@ invokes this method in every mode, so manual calls are rarely needed.
 
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
+See [docs/faq.md](docs/faq.md) for common questions such as using `TagQueryNode` during backtesting.
+
 ## Backfills
 
 [docs/backfill.md](docs/backfill.md) explains how to preload historical data by
