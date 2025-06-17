@@ -349,7 +349,7 @@ class Node:
             )
             if len(positional) != 1 or has_var_positional:
                 raise TypeError(
-                    "compute_fn must accept exactly one positional argument"
+                    "compute_fn must accept exactly one positional argument (지원되지 않는 함수 시그니처)"
                 )
 
         self.input = input
