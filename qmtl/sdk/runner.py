@@ -6,10 +6,9 @@ import asyncio
 import time
 from typing import Optional, Iterable
 import logging
+import httpx
 
 logger = logging.getLogger(__name__)
-
-import httpx
 
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
@@ -428,9 +427,11 @@ class Runner:
             raise ValueError("start_time and end_time are required")
         strategy = Runner._prepare(strategy_cls)
         manager = Runner._init_tag_manager(strategy, gateway_url)
-        print(f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}")
+        logger.info(
+            f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}"
+        )
         dag = strategy.serialize()
-        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
+        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
         if not gateway_url:
             raise RuntimeError("gateway_url is required for backtest mode")
 
@@ -485,9 +486,9 @@ class Runner:
         """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
         manager = Runner._init_tag_manager(strategy, gateway_url)
-        print(f"[DRYRUN] {strategy_cls.__name__} starting")
+        logger.info(f"[DRYRUN] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
-        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
+        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
         if not gateway_url:
             raise RuntimeError("gateway_url is required for dry-run mode")
@@ -534,9 +535,9 @@ class Runner:
         """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
         manager = Runner._init_tag_manager(strategy, gateway_url)
-        print(f"[LIVE] {strategy_cls.__name__} starting")
+        logger.info(f"[LIVE] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
-        print(f"Sending DAG to service: {[n['node_id'] for n in dag['nodes']]}")
+        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
         if not gateway_url:
             raise RuntimeError("gateway_url is required for live mode")
@@ -585,7 +586,7 @@ class Runner:
     async def offline_async(strategy_cls: type[Strategy]) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
         manager = Runner._init_tag_manager(strategy, None)
-        print(f"[OFFLINE] {strategy_cls.__name__} starting")
+        logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
         Runner._apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         await Runner._load_history(strategy, None, None)

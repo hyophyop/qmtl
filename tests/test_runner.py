@@ -1,6 +1,7 @@
 import sys
 import base64
 import json
+import logging
 
 import httpx
 import pandas as pd
@@ -11,7 +12,7 @@ from qmtl.sdk import Strategy
 from tests.sample_strategy import SampleStrategy
 
 
-def test_backtest(capsys, monkeypatch):
+def test_backtest(caplog, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
 
@@ -30,14 +31,15 @@ def test_backtest(capsys, monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    strategy = Runner.backtest(
-        SampleStrategy,
-        start_time="s",
-        end_time="e",
-        gateway_url="http://gw",
-    )
-    captured = capsys.readouterr().out
-    assert "[BACKTEST] SampleStrategy" in captured
+    with caplog.at_level(logging.INFO):
+        strategy = Runner.backtest(
+            SampleStrategy,
+            start_time="s",
+            end_time="e",
+            gateway_url="http://gw",
+        )
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("[BACKTEST] SampleStrategy" in m for m in messages)
     assert isinstance(strategy, SampleStrategy)
 
 
@@ -75,7 +77,7 @@ def test_backtest_requires_start_and_end(monkeypatch):
         )
 
 
-def test_dryrun(capsys, monkeypatch):
+def test_dryrun(caplog, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
 
@@ -94,13 +96,14 @@ def test_dryrun(capsys, monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
-    captured = capsys.readouterr().out
-    assert "[DRYRUN] SampleStrategy" in captured
+    with caplog.at_level(logging.INFO):
+        strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("[DRYRUN] SampleStrategy" in m for m in messages)
     assert isinstance(strategy, SampleStrategy)
 
 
-def test_live(capsys, monkeypatch):
+def test_live(caplog, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
 
@@ -119,9 +122,10 @@ def test_live(capsys, monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
-    captured = capsys.readouterr().out
-    assert "[LIVE] SampleStrategy" in captured
+    with caplog.at_level(logging.INFO):
+        strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("[LIVE] SampleStrategy" in m for m in messages)
     assert isinstance(strategy, SampleStrategy)
 
 
