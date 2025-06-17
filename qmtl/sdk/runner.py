@@ -6,7 +6,6 @@ import asyncio
 import time
 from typing import Optional, Iterable
 import logging
-
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -82,6 +81,7 @@ class Runner:
 
         for node in strategy.nodes:
             mapping = queue_map.get(node.node_id)
+            old_execute = node.execute
             if isinstance(node, TagQueryNode):
                 if isinstance(mapping, list):
                     node.upstreams = list(mapping)
@@ -96,6 +96,15 @@ class Runner:
                 else:
                     node.execute = True
                     node.queue_topic = None
+
+            if node.execute != old_execute:
+                logger.debug(
+                    "execute changed for %s: %s -> %s (mapping=%s)",
+                    node.node_id,
+                    old_execute,
+                    node.execute,
+                    mapping,
+                )
 
     @staticmethod
     def _init_tag_manager(strategy: Strategy, gateway_url: str | None) -> TagQueryManager:
