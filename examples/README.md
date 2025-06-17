@@ -11,6 +11,10 @@
 - `generators_example.py`: GARCH 기반 시뮬레이션 데이터 생성
 - `extensions_combined_strategy.py`: 확장 모듈 조합 예제
 - `ws_metrics_example.py`: WebSocket 클라이언트와 메트릭 활용
+- `mode_switch_example.py`: 모드별 실행 방법 예제
+- `backfill_history_example.py`: QuestDBLoader를 이용한 캐시 백필 예제
+- `metrics_recorder_example.py`: EventRecorder와 메트릭 저장 예제
+- `parallel_strategies_example.py`: 멀티 스트래티지 병렬 실행 예제
 
 ## 예제 실행 방법
 
@@ -24,6 +28,10 @@ python examples/transforms_strategy.py
 python examples/generators_example.py
 python examples/extensions_combined_strategy.py
 python examples/ws_metrics_example.py
+python examples/mode_switch_example.py
+python examples/backfill_history_example.py
+python examples/metrics_recorder_example.py
+python examples/parallel_strategies_example.py
 ```
 
 > **중요:**
