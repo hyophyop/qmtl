@@ -112,6 +112,13 @@ python examples/extensions_combined_strategy.py
 
 See [examples/README.md](examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
 
+## TagQuery Node Resolution
+
+`TagQueryNode` instances no longer resolve queues themselves. The
+`TagQueryManager.resolve_tags()` method retrieves queue mappings from the Gateway
+and updates all registered nodes. `Runner` creates a manager automatically and
+invokes this method in every mode, so manual calls are rarely needed.
+
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
 ## Backfills
