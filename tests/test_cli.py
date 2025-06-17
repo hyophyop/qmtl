@@ -34,4 +34,4 @@ def test_cli_offline():
         "offline",
     ], capture_output=True, text=True)
     assert result.returncode == 0
-    assert "[OFFLINE] SampleStrategy" in result.stdout
+    assert "[OFFLINE] SampleStrategy" in result.stderr
