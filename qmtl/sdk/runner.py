@@ -429,7 +429,9 @@ class Runner:
                 run_type="backtest",
             )
         except httpx.RequestError as exc:
-            raise RuntimeError("failed to connect to Gateway") from exc
+            raise RuntimeError(
+                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
+            ) from exc
 
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
@@ -485,7 +487,9 @@ class Runner:
                 run_type="dry-run",
             )
         except httpx.RequestError as exc:
-            raise RuntimeError("failed to connect to Gateway") from exc
+            raise RuntimeError(
+                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
+            ) from exc
 
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
@@ -532,7 +536,9 @@ class Runner:
                 run_type="live",
             )
         except httpx.RequestError as exc:
-            raise RuntimeError("failed to connect to Gateway") from exc
+            raise RuntimeError(
+                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
+            ) from exc
 
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
