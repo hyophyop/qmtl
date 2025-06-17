@@ -6,6 +6,7 @@ import json
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import Any, TYPE_CHECKING
+import logging
 
 import numpy as np
 import xarray as xr
@@ -20,6 +21,8 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
 
 from qmtl.dagmanager import compute_node_id
+
+logger = logging.getLogger(__name__)
 
 
 class NodeCache:
@@ -559,6 +562,17 @@ class TagQueryNode(SourceNode):
 
     def update_queues(self, queues: list[str]) -> None:
         """Update ``upstreams`` and execution flag."""
+        prev_exec = self.execute
+        prev_q = self.upstreams
         self.upstreams = list(queues)
         self.execute = bool(queues)
+        if self.execute != prev_exec or self.upstreams != prev_q:
+            logger.info(
+                "tag_query.update",
+                extra={
+                    "node_id": self.node_id,
+                    "queues": self.upstreams,
+                    "execute": self.execute,
+                },
+            )
 
