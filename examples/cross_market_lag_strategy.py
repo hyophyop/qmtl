@@ -9,8 +9,6 @@ class CrossMarketLagStrategy(Strategy):
             interval="60s",
             period=120,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            start=1700000000,
-            end=1700003600,
             event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
         )
         mstr_price = StreamInput(
@@ -18,8 +16,6 @@ class CrossMarketLagStrategy(Strategy):
             interval="60s",
             period=120,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            start=1700000000,
-            end=1700003600,
             event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
         )
         def lagged_corr(view):
@@ -39,4 +35,5 @@ class CrossMarketLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
+    # For backtesting provide start_time and end_time to Runner.backtest
     Runner.dryrun(CrossMarketLagStrategy)
