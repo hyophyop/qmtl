@@ -8,8 +8,6 @@ class GeneralStrategy(Strategy):
             interval="60s",
             period=30,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            start=1700000000,
-            end=1700003600,
             event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
         )
 
@@ -28,6 +26,7 @@ class GeneralStrategy(Strategy):
 
 
 if __name__ == "__main__":
+    # The backfill range is provided via Runner.backtest
     Runner.backtest(
         GeneralStrategy,
         start_time="2024-01-01T00:00:00Z",
