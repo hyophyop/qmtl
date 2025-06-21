@@ -93,6 +93,16 @@ qmtl-dagm diff --file dag.json --target localhost:50051
 See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
 information on configuration and advanced usage.
 
+## SDK Docker Environment
+
+Spin up the Gateway and DAG Manager with all required services using Docker Compose:
+
+```bash
+docker compose -f docker-compose.sdk.yml up -d
+```
+
+This starts Neo4j, Postgres, Redis, Kafka and Zookeeper alongside the two components. Refer to [docs/sdk_docker.md](docs/sdk_docker.md) for full instructions.
+
 ## SDK Tutorial
 
 For instructions on implementing strategies with the SDK, see
