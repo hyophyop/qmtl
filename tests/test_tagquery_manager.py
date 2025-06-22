@@ -12,6 +12,7 @@ async def test_resolve_and_update(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/queues/by_tag"
+        assert request.url.params.get("match_mode") == "any"
         return httpx.Response(200, json={"queues": ["q1"]})
 
     transport = httpx.MockTransport(handler)
@@ -42,13 +43,13 @@ async def test_resolve_and_update(monkeypatch):
 
     await manager.handle_message({
         "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"]},
+        "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"], "match_mode": "any"},
     })
     assert node.upstreams == ["q2"]
 
     await manager.handle_message({
         "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": []},
+        "data": {"tags": ["t1"], "interval": 60, "queues": [], "match_mode": "any"},
     })
     assert node.upstreams == []
     assert not node.execute
@@ -88,4 +89,26 @@ async def test_resolve_handles_empty(monkeypatch):
     await manager.resolve_tags()
     assert node.upstreams == []
     assert not node.execute
+
+
+@pytest.mark.asyncio
+async def test_match_mode_routes_updates():
+    node_any = TagQueryNode(["t1"], interval=60, period=1, match_mode="any")
+    node_all = TagQueryNode(["t1"], interval=60, period=1, match_mode="all")
+    manager = TagQueryManager()
+    manager.register(node_any)
+    manager.register(node_all)
+
+    await manager.handle_message({
+        "event": "queue_update",
+        "data": {"tags": ["t1"], "interval": 60, "queues": ["q1"], "match_mode": "all"},
+    })
+    assert node_all.upstreams == ["q1"]
+    assert node_any.upstreams == []
+
+    await manager.handle_message({
+        "event": "queue_update",
+        "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"]},
+    })
+    assert node_any.upstreams == ["q2"]
 

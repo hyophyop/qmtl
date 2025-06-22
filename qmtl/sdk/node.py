@@ -554,6 +554,7 @@ class TagQueryNode(SourceNode):
         *,
         interval: int | str,
         period: int | str,
+        match_mode: str = "any",
         compute_fn=None,
         name: str | None = None,
     ) -> None:
@@ -566,6 +567,7 @@ class TagQueryNode(SourceNode):
             tags=list(query_tags),
         )
         self.query_tags = list(query_tags)
+        self.match_mode = match_mode
         self.upstreams: list[str] = []
         self.execute = False
 
