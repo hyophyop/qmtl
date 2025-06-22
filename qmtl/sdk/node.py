@@ -305,7 +305,8 @@ class Node:
     the cached data and mirrors the structure returned by
     :py:meth:`NodeCache.view`. Positional arguments other than the cache view are
     **not** supported. ``input`` may be a single ``Node`` or an iterable of
-    ``Node`` instances. Passing dictionaries is no longer supported.
+    ``Node`` instances. Passing dictionaries is no longer supported. Tags can be
+    assigned at initialization or later via :py:meth:`add_tag`.
     """
 
     # ------------------------------------------------------------------
@@ -373,6 +374,12 @@ class Node:
         return (
             f"Node(name={self.name!r}, interval={self.interval}, period={self.period})"
         )
+
+    def add_tag(self, tag: str) -> "Node":
+        """Append ``tag`` to :attr:`tags` if missing and return ``self``."""
+        if tag not in self.tags:
+            self.tags.append(tag)
+        return self
 
     # --- hashing helpers -------------------------------------------------
     @staticmethod

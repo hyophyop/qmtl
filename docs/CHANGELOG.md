@@ -9,3 +9,4 @@
   removed `start`/`end` arguments from `StreamInput`.
 - `TagQueryNode.resolve()` has been removed. Use
   `TagQueryManager.resolve_tags()` to fetch queue mappings before execution.
+- Added `Node.add_tag()` to attach tags after node creation.
