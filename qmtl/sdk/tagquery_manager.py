@@ -29,15 +29,15 @@ class TagQueryManager:
             )
         else:
             self.client = None
-        self._nodes: Dict[Tuple[Tuple[str, ...], int], List[TagQueryNode]] = {}
+        self._nodes: Dict[Tuple[Tuple[str, ...], int, str], List[TagQueryNode]] = {}
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
-        key = (tuple(sorted(node.query_tags)), node.interval)
+        key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
         self._nodes.setdefault(key, []).append(node)
 
     def unregister(self, node: TagQueryNode) -> None:
-        key = (tuple(sorted(node.query_tags)), node.interval)
+        key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
         lst = self._nodes.get(key)
         if lst and node in lst:
             lst.remove(node)
@@ -55,8 +55,12 @@ class TagQueryManager:
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
         async with httpx.AsyncClient() as client:
-            for (tags, interval), nodes in self._nodes.items():
-                params = {"tags": ",".join(tags), "interval": interval}
+            for (tags, interval, match_mode), nodes in self._nodes.items():
+                params = {
+                    "tags": ",".join(tags),
+                    "interval": interval,
+                    "match_mode": match_mode,
+                }
                 try:
                     resp = await client.get(url, params=params)
                     resp.raise_for_status()
@@ -75,13 +79,14 @@ class TagQueryManager:
             tags = payload.get("tags") or []
             interval = payload.get("interval")
             queues = payload.get("queues", [])
+            match_mode = payload.get("match_mode", "any")
             if isinstance(tags, str):
                 tags = [t for t in tags.split(",") if t]
             try:
                 interval = int(interval)
             except (TypeError, ValueError):
                 return
-            key = (tuple(sorted(tags)), interval)
+            key = (tuple(sorted(tags)), interval, match_mode)
             for n in self._nodes.get(key, []):
                 n.update_queues(list(queues))
 
