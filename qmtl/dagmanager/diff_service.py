@@ -68,8 +68,14 @@ class NodeRepository:
     def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
         raise NotImplementedError
 
-    def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
-        """Return queue topics matching ``tags`` and ``interval``."""
+    def get_queues_by_tag(
+        self, tags: Iterable[str], interval: int, match_mode: str = "any"
+    ) -> list[str]:
+        """Return queue topics matching ``tags`` and ``interval``.
+
+        ``match_mode`` determines whether all tags must match ("all") or any
+        tag may match ("any").
+        """
         raise NotImplementedError
 
     def get_node_by_queue(self, queue: str) -> NodeRecord | None:
@@ -336,12 +342,18 @@ class Neo4jNodeRepository(NodeRepository):
         with self.driver.session() as session:
             session.run(query, sid=sentinel_id, ids=list(node_ids))
 
-    def get_queues_by_tag(self, tags: Iterable[str], interval: int) -> list[str]:
+    def get_queues_by_tag(
+        self, tags: Iterable[str], interval: int, match_mode: str = "any"
+    ) -> list[str]:
         if not tags:
             return []
+        if match_mode == "all":
+            cond = "ALL(t IN $tags WHERE t IN c.tags)"
+        else:
+            cond = "ANY(t IN c.tags WHERE t IN $tags)"
         query = (
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
-            "WHERE any(t IN c.tags WHERE t IN $tags) AND q.interval = $interval "
+            f"WHERE {cond} AND q.interval = $interval "
             "RETURN q.topic AS topic"
         )
         with self.driver.session() as session:

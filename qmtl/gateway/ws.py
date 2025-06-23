@@ -108,13 +108,22 @@ class WebSocketHub:
         await self.broadcast(event)
 
     async def send_queue_update(
-        self, tags: list[str], interval: int, queues: list[str]
+        self,
+        tags: list[str],
+        interval: int,
+        queues: list[str],
+        match_mode: str = "any",
     ) -> None:
         """Broadcast queue update events."""
         event = format_event(
             "qmtl.gateway",
             "queue_update",
-            {"tags": tags, "interval": interval, "queues": queues},
+            {
+                "tags": tags,
+                "interval": interval,
+                "queues": queues,
+                "match_mode": match_mode,
+            },
         )
         await self.broadcast(event)
 

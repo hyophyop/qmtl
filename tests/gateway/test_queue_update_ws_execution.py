@@ -11,7 +11,7 @@ from qmtl.common.cloudevents import format_event
 
 
 class DummyDag:
-    async def get_queues_by_tag(self, tags, interval):
+    async def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
 
 
@@ -20,10 +20,15 @@ class DummyHub(WebSocketHub):
         super().__init__()
         self.client = client
 
-    async def send_queue_update(self, tags, interval, queues):  # type: ignore[override]
+    async def send_queue_update(self, tags, interval, queues, match_mode="any"):  # type: ignore[override]
         await self.client._handle({
             "type": "queue_update",
-            "data": {"tags": tags, "interval": interval, "queues": queues},
+            "data": {
+                "tags": tags,
+                "interval": interval,
+                "queues": queues,
+                "match_mode": match_mode,
+            },
         })
 
 
@@ -43,7 +48,7 @@ async def test_node_unpauses_on_queue_update():
     event = format_event(
         "qmtl.dagmanager",
         "queue_update",
-        {"tags": ["t1"], "interval": 60, "queues": ["q1"]},
+        {"tags": ["t1"], "interval": 60, "queues": ["q1"], "match_mode": "any"},
     )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/callbacks/dag-event", json=event)

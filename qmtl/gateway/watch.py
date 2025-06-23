@@ -13,12 +13,14 @@ class QueueWatchHub:
         self._latest: DefaultDict[str, List[str]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
-    def _key(self, tags: List[str], interval: int) -> str:
-        return f"{','.join(sorted(tags))}:{interval}"
+    def _key(self, tags: List[str], interval: int, match_mode: str) -> str:
+        return f"{','.join(sorted(tags))}:{interval}:{match_mode}"
 
-    async def subscribe(self, tags: List[str], interval: int) -> AsyncGenerator[List[str], None]:
+    async def subscribe(
+        self, tags: List[str], interval: int, match_mode: str
+    ) -> AsyncGenerator[List[str], None]:
         q: asyncio.Queue[List[str]] = asyncio.Queue()
-        key = self._key(tags, interval)
+        key = self._key(tags, interval, match_mode)
         async with self._lock:
             self._subs[key].append(q)
             initial = list(self._latest.get(key, []))
@@ -32,8 +34,10 @@ class QueueWatchHub:
             async with self._lock:
                 self._subs[key].remove(q)
 
-    async def broadcast(self, tags: List[str], interval: int, queues: List[str]) -> None:
-        key = self._key(tags, interval)
+    async def broadcast(
+        self, tags: List[str], interval: int, queues: List[str], match_mode: str
+    ) -> None:
+        key = self._key(tags, interval, match_mode)
         async with self._lock:
             if self._latest.get(key, []) == list(queues):
                 return

@@ -57,14 +57,18 @@ class DagManagerClient:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 4)
 
-    async def get_queues_by_tag(self, tags: list[str], interval: int) -> list[str]:
+    async def get_queues_by_tag(
+        self, tags: list[str], interval: int, match_mode: str = "any"
+    ) -> list[str]:
         """Return queues matching ``tags`` and ``interval``.
 
         This delegates to DAG‑Manager which is expected to expose a
         ``TagQuery`` RPC. Retries with exponential backoff are applied
         similar to :meth:`diff`.
         """
-        request = dagmanager_pb2.TagQueryRequest(tags=tags, interval=interval)
+        request = dagmanager_pb2.TagQueryRequest(
+            tags=tags, interval=interval, match_mode=match_mode
+        )
         backoff = 0.5
         retries = 5
         for attempt in range(retries):

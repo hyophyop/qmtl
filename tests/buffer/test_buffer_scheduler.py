@@ -18,7 +18,7 @@ class FakeRepo(NodeRepository):
     def insert_sentinel(self, sentinel_id, node_ids):
         pass
 
-    def get_queues_by_tag(self, tags, interval):
+    def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
 
     def get_node_by_queue(self, queue):

@@ -28,7 +28,7 @@ class FakeRepo(NodeRepository):
     def insert_sentinel(self, sentinel_id, node_ids):
         self.sentinels.append((sentinel_id, list(node_ids)))
 
-    def get_queues_by_tag(self, tags, interval):
+    def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
 
     def mark_buffering(self, node_id, *, timestamp_ms=None):
