@@ -62,6 +62,16 @@ class DagManagerClient:
     ) -> list[str]:
         """Return queues matching ``tags`` and ``interval``.
 
+        Parameters
+        ----------
+        tags:
+            태그 이름 목록.
+        interval:
+            조회할 바 주기(초 단위).
+        match_mode:
+            ``"any"`` (기본값)일 때는 하나 이상의 태그가 일치하면 매칭하며,
+            ``"all"`` 은 모든 태그가 존재하는 큐만 반환한다.
+
         This delegates to DAG‑Manager which is expected to expose a
         ``TagQuery`` RPC. Retries with exponential backoff are applied
         similar to :meth:`diff`.

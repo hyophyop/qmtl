@@ -12,6 +12,7 @@ class TagQueryStrategy(Strategy):
             query_tags=["ta-indicator"],
             interval="1h",
             period=24,
+            match_mode="any",  # default OR matching
         )
         # Runner creates TagQueryManager so the node receives queue mappings
         # and subscriptions automatically.

@@ -284,6 +284,7 @@ class CorrelationStrategy(Strategy):
             query_tags=["ta-indicator"],  # RSI, MFI 등 사전 계산 지표 노드들과 매칭
             interval="1h",               # 1시간 바 기준
             period=24,                    # 24시간 캐시(24개)
+            match_mode="any",             # 기본값은 OR 매칭
             compute_fn=calc_corr          # 병합 후 바로 상관계수 계산
         )
 
@@ -294,6 +295,9 @@ class CorrelationStrategy(Strategy):
         )
 
         self.add_nodes([indicators, corr_node])
+
+        # match_mode="any" 는 하나 이상의 태그가 일치하면 매칭되며,
+        # "all" 로 지정하면 모든 태그가 존재하는 큐만 선택된다.
 
 # 실시간 실행 예시
 if __name__ == "__main__":
