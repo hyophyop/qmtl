@@ -78,8 +78,8 @@ class DummyDag(DagManagerClient):
         super().__init__("dummy")
         self.called_with = None
 
-    async def get_queues_by_tag(self, tags, interval):
-        self.called_with = (tags, interval)
+    async def get_queues_by_tag(self, tags, interval, match_mode="any"):
+        self.called_with = (tags, interval, match_mode)
         return ["q1", "q2"]
 
 
@@ -93,10 +93,12 @@ def client():
 
 def test_queues_by_tag_route(client):
     c, dag = client
-    resp = c.get("/queues/by_tag", params={"tags": "t1,t2", "interval": "60"})
+    resp = c.get(
+        "/queues/by_tag", params={"tags": "t1,t2", "interval": "60", "match": "any"}
+    )
     assert resp.status_code == 200
     assert resp.json()["queues"] == ["q1", "q2"]
-    assert dag.called_with == (["t1", "t2"], 60)
+    assert dag.called_with == (["t1", "t2"], 60, "any")
 
 
 def test_submit_tag_query_node(client):
@@ -124,7 +126,7 @@ def test_submit_tag_query_node(client):
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202
     assert resp.json()["queue_map"] == {"N1": ["q1", "q2"]}
-    assert dag.called_with == (["t1"], 60)
+    assert dag.called_with == (["t1"], 60, "any")
 
 
 def test_multiple_tag_query_nodes_handle_errors():
@@ -133,8 +135,8 @@ def test_multiple_tag_query_nodes_handle_errors():
             super().__init__("dummy")
             self.calls = []
 
-        async def get_queues_by_tag(self, tags, interval):
-            self.calls.append((tags, interval))
+        async def get_queues_by_tag(self, tags, interval, match_mode="any"):
+            self.calls.append((tags, interval, match_mode))
             if "bad" in tags:
                 raise RuntimeError("boom")
             return [f"{tags[0]}_q"]
@@ -185,7 +187,7 @@ async def test_watch_hub_broadcast():
     hub = QueueWatchHub()
 
     async def listen():
-        gen = hub.subscribe(["t1"], 60)
+        gen = hub.subscribe(["t1"], 60, "any")
         try:
             return await asyncio.wait_for(gen.__anext__(), 2.0)
         except asyncio.TimeoutError:
@@ -195,7 +197,7 @@ async def test_watch_hub_broadcast():
 
     task = asyncio.create_task(listen())
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q3"])
+    await hub.broadcast(["t1"], 60, ["q3"], "any")
     try:
         result = await task
         assert result == ["q3"]
@@ -209,17 +211,17 @@ async def test_watch_hub_broadcast_only_on_change():
     results: list[list[str]] = []
 
     async def listener() -> None:
-        async for data in hub.subscribe(["t1"], 60):
+        async for data in hub.subscribe(["t1"], 60, "any"):
             results.append(data)
 
     task = asyncio.create_task(listener())
     await asyncio.sleep(0)
 
-    await hub.broadcast(["t1"], 60, ["q3"])
+    await hub.broadcast(["t1"], 60, ["q3"], "any")
     await asyncio.sleep(0.05)
-    await hub.broadcast(["t1"], 60, ["q3"])
+    await hub.broadcast(["t1"], 60, ["q3"], "any")
     await asyncio.sleep(0.05)
-    await hub.broadcast(["t1"], 60, ["q4"])
+    await hub.broadcast(["t1"], 60, ["q4"], "any")
     await asyncio.sleep(0.05)
 
     task.cancel()
@@ -237,6 +239,6 @@ async def test_dag_client_queries_grpc():
     server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
     client = DagManagerClient(f"127.0.0.1:{port}")
-    queues = await client.get_queues_by_tag(["t"], 60)
+    queues = await client.get_queues_by_tag(["t"], 60, "any")
     await server.stop(None)
     assert queues == ["q1", "q2"]

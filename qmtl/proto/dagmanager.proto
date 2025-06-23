@@ -36,6 +36,7 @@ service DiffService {
 message TagQueryRequest {
   repeated string tags = 1;
   int64 interval = 2;
+  string match_mode = 3;
 }
 
 message TagQueryReply {

@@ -62,7 +62,12 @@ class QueueCompletionMonitor:
                     event = format_event(
                         "qmtl.dagmanager",
                         "queue_update",
-                        {"tags": list(record.tags), "interval": record.interval, "queues": []},
+                        {
+                            "tags": list(record.tags),
+                            "interval": record.interval,
+                            "queues": [],
+                            "match_mode": "any",
+                        },
                     )
                     await post_with_backoff(self.callback_url, event)
                     self._completed.add(topic)

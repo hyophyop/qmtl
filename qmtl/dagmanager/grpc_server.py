@@ -94,6 +94,7 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                                     "tags": node.tags,
                                     "interval": node.interval,
                                     "queues": [chunk.queue_map.get(node.node_id, "")],
+                                    "match_mode": "any",
                                 },
                             )
                             await post_with_backoff(self._callback_url, event)
@@ -148,6 +149,7 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
                                 "tags": [qi.tag],
                                 "interval": qi.interval,
                                 "queues": [qi.name],
+                                "match_mode": "any",
                             },
                         )
                         await post_with_backoff(self._callback_url, event)
@@ -175,7 +177,9 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
             except Exception:
                 tags = []
             if tags and interval:
-                queues = set(self._repo.get_queues_by_tag(tags, interval))
+                queues = set(
+                    self._repo.get_queues_by_tag(tags, interval, match_mode="any")
+                )
                 sizes = {k: v for k, v in sizes.items() if k in queues}
         return dagmanager_pb2.QueueStats(sizes=sizes)
 
@@ -203,7 +207,9 @@ class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
         request: dagmanager_pb2.TagQueryRequest,
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.TagQueryReply:
-        queues = self._repo.get_queues_by_tag(request.tags, request.interval)
+        queues = self._repo.get_queues_by_tag(
+            request.tags, request.interval, match_mode=request.match_mode or "any"
+        )
         return dagmanager_pb2.TagQueryReply(queues=queues)
 
 

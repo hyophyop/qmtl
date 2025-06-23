@@ -12,7 +12,13 @@ async def test_ws_client_updates_state():
     events = [
         {"event": "queue_created", "queue_id": "n1", "topic": "t1"},
         {"event": "sentinel_weight", "sentinel_id": "s1", "weight": 0.75},
-        {"event": "queue_update", "tags": ["t"], "interval": 60, "queues": ["q1"]},
+        {
+            "event": "queue_update",
+            "tags": ["t"],
+            "interval": 60,
+            "queues": ["q1"],
+            "match_mode": "any",
+        },
     ]
 
     async def handler(websocket):

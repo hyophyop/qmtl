@@ -275,8 +275,9 @@ def create_app(
             if node.get("node_type") == "TagQueryNode":
                 tags = node.get("tags", [])
                 interval = int(node.get("interval", 0))
+                match_mode = node.get("match_mode", "any")
                 node_ids.append(node["node_id"])
-                queries.append(dagm.get_queues_by_tag(tags, interval))
+                queries.append(dagm.get_queues_by_tag(tags, interval, match_mode))
 
         results = []
         if queries:
@@ -309,6 +310,7 @@ def create_app(
             tags = data.get("tags") or []
             interval = data.get("interval")
             queues = data.get("queues", [])
+            match_mode = data.get("match_mode", "any")
             if isinstance(tags, str):
                 tags = [t for t in tags.split(",") if t]
             if interval is not None:
@@ -317,9 +319,9 @@ def create_app(
                 except (TypeError, ValueError):
                     interval = None
             if tags and interval is not None:
-                await watch.broadcast(tags, interval, list(queues))
+                await watch.broadcast(tags, interval, list(queues), match_mode)
                 if ws:
-                    await ws.send_queue_update(tags, interval, list(queues))
+                    await ws.send_queue_update(tags, interval, list(queues), match_mode)
         elif event_type == "sentinel_weight":
             gateway = getattr(app.state, "gateway", None)
             if gateway is None:
@@ -331,25 +333,31 @@ def create_app(
         return {"ok": True}
 
     @app.get("/queues/by_tag")
-    async def queues_by_tag(tags: str, interval: int) -> dict:
+    async def queues_by_tag(
+        tags: str, interval: int, match: str = "any", match_mode: str | None = None
+    ) -> dict:
+        mode = match_mode or match
         tag_list = [t for t in tags.split(",") if t]
-        queues = await dagm.get_queues_by_tag(tag_list, interval)
+        queues = await dagm.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
 
     @app.get("/queues/watch")
-    async def queues_watch(tags: str, interval: int):
+    async def queues_watch(
+        tags: str, interval: int, match: str = "any", match_mode: str | None = None
+    ):
         tag_list = [t for t in tags.split(",") if t]
+        mode = match_mode or match
 
         async def streamer():
             try:
-                initial = await dagm.get_queues_by_tag(tag_list, interval)
+                initial = await dagm.get_queues_by_tag(tag_list, interval, mode)
             except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
                 # It's good practice to log this error for observability
                 # import logging
                 # logging.warning(f"Failed to get initial queues for tags='{tag_list}' interval={interval}: {e}")
                 initial = []
             yield json.dumps({"queues": initial}) + "\n"
-            async for queues in watch.subscribe(tag_list, interval):
+            async for queues in watch.subscribe(tag_list, interval, mode):
                 yield json.dumps({"queues": queues}) + "\n"
 
         return StreamingResponse(streamer(), media_type="text/plain")
