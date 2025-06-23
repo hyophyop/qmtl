@@ -348,9 +348,9 @@ class Neo4jNodeRepository(NodeRepository):
         if not tags:
             return []
         if match_mode == "all":
-            cond = "ALL(t IN $tags WHERE t IN c.tags)"
+            cond = "all(t IN $tags WHERE t IN c.tags)"
         else:
-            cond = "ANY(t IN c.tags WHERE t IN $tags)"
+            cond = "any(t IN c.tags WHERE t IN $tags)"
         query = (
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
             f"WHERE {cond} AND q.interval = $interval "

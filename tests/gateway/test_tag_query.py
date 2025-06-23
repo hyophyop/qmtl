@@ -11,7 +11,7 @@ from qmtl.gateway.api import create_app, Database
 from qmtl.common import crc32_of_list
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.dagmanager.grpc_server import serve
-from qmtl.dagmanager.diff_service import StreamSender
+from qmtl.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
 import grpc
 
 
@@ -242,3 +242,33 @@ async def test_dag_client_queries_grpc():
     queues = await client.get_queues_by_tag(["t"], 60, "any")
     await server.stop(None)
     assert queues == ["q1", "q2"]
+
+
+def test_repository_match_modes():
+    class CaptureDriver:
+        def __init__(self):
+            self.last_query = ""
+
+        class Session:
+            def __init__(self, driver: 'CaptureDriver') -> None:
+                self.driver = driver
+
+            def run(self, query, **params):
+                self.driver.last_query = query
+                return []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                pass
+
+        def session(self):
+            return CaptureDriver.Session(self)
+
+    driver = CaptureDriver()
+    repo = Neo4jNodeRepository(driver)
+    repo.get_queues_by_tag(["a"], 60, "any")
+    assert "any(" in driver.last_query.lower()
+    repo.get_queues_by_tag(["a"], 60, "all")
+    assert "all(" in driver.last_query.lower()
