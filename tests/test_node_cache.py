@@ -78,8 +78,8 @@ def test_multiple_upstreams():
 def test_tensor_memory():
     cache = NodeCache(period=4)
     cache.append("u1", 60, 60, {"v": 1})
-    expected = 1 * 1 * 4 * 2 * 8
-    assert cache._tensor.nbytes == expected
+    expected = 4 * 2 * 8
+    assert cache.resident_bytes == expected
 
 
 def test_gap_detection():
