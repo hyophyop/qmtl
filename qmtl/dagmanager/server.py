@@ -65,6 +65,10 @@ async def _run(args: argparse.Namespace) -> None:
             args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
         )
         repo = None
+    elif args.repo_backend == "memory":
+        from .node_repository import MemoryNodeRepository
+
+        repo = MemoryNodeRepository(args.memory_repo_path)
     if args.queue_backend == "kafka":
         admin_client = _KafkaAdminClient(args.kafka_bootstrap)
         queue = None
@@ -94,11 +98,20 @@ async def _run(args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl dagmgr-server", description="Run DAG manager gRPC and HTTP servers")
     parser.add_argument("--config")
-    parser.add_argument("--repo-backend", default="neo4j")
+    parser.add_argument(
+        "--repo-backend",
+        default="neo4j",
+        help="Repository backend (neo4j, memory)",
+    )
     parser.add_argument("--queue-backend", default="kafka")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="neo4j")
+    parser.add_argument(
+        "--memory-repo-path",
+        default="memrepo.gpickle",
+        help="Path to persist graph for memory repo",
+    )
     parser.add_argument("--kafka-bootstrap", default="localhost:9092")
     parser.add_argument("--grpc-host", default="0.0.0.0")
     parser.add_argument("--grpc-port", type=int, default=50051)

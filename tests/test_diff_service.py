@@ -9,6 +9,7 @@ from qmtl.dagmanager.diff_service import (
     Neo4jNodeRepository,
     KafkaQueueManager,
 )
+from qmtl.dagmanager.node_repository import MemoryNodeRepository
 from qmtl.dagmanager.kafka_admin import KafkaAdmin
 from qmtl.dagmanager.topic import topic_name
 from qmtl.dagmanager import metrics
@@ -275,6 +276,40 @@ def test_integration_with_backends():
     assert any("sid" in p for _, p in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == expected_b
     assert stream.chunks[0] == chunk
+
+
+def test_integration_with_memory_repo(tmp_path):
+    path = tmp_path / "mem.gpickle"
+    repo = MemoryNodeRepository(str(path))
+    repo.add_node(
+        NodeRecord(
+            "A",
+            "N",
+            "c1",
+            "s1",
+            None,
+            None,
+            [],
+            topic_name("asset", "N", "c1", "v1"),
+        )
+    )
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "node_type": "N", "code_hash": "c2", "schema_hash": "s2"},
+    ])
+
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    expected_a = topic_name("asset", "N", "c1", "v1")
+    expected_b = topic_name("asset", "N", "c2", "v1")
+    assert chunk.queue_map == {"A": expected_a, "B": expected_b}
+    # ensure persistence
+    repo2 = MemoryNodeRepository(str(path))
+    assert "A" in repo2.get_nodes(["A"])
 
 
 def test_sentinel_gap_metric_increment():

@@ -6,6 +6,7 @@ dependencies = [
     "prometheus-client",
     "boto3",
     "xarray",
+    "networkx",
 ]
 
 [project.optional-dependencies]
