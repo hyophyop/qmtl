@@ -40,7 +40,7 @@ services:
 
   dag-manager:
     image: python:3
-    command: ["qmtl-dagm", "grpc-server"]
+    command: ["qmtl", "dagmgr-server"]
     depends_on:
       - kafka
       - neo4j
@@ -49,7 +49,7 @@ services:
 
   gateway:
     image: python:3
-    command: ["qmtl-gateway", "serve"]
+    command: ["qmtl", "gw", "serve"]
     depends_on:
       - dag-manager
       - redis

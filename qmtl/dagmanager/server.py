@@ -92,7 +92,7 @@ async def _run(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="qmtl-dagmgr-server", description="Run DAG manager gRPC and HTTP servers")
+    parser = argparse.ArgumentParser(prog="qmtl dagmgr-server", description="Run DAG manager gRPC and HTTP servers")
     parser.add_argument("--config")
     parser.add_argument("--repo-backend", default="neo4j")
     parser.add_argument("--queue-backend", default="kafka")

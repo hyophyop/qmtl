@@ -11,7 +11,7 @@ from .config import GatewayConfig, load_gateway_config
 
 async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
-    parser = argparse.ArgumentParser(prog="qmtl-gateway")
+    parser = argparse.ArgumentParser(prog="qmtl gw")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address")
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
     parser.add_argument("--config", help="Path to configuration file")

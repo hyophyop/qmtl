@@ -236,13 +236,13 @@ sequenceDiagram
 
 ```shell
 # diff dry‑run
-qmtl-dagm diff --file dag.json --dry-run
+qmtl dagm diff --file dag.json --dry-run
 # queue stats
-qmtl-dagm queue-stats --tag indicator --interval 1h
+qmtl dagm queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
-qmtl-dagm gc --sentinel v1.2.3
+qmtl dagm gc --sentinel v1.2.3
 # export schema DDL
-qmtl-dagm export-schema --out schema.cypher
+qmtl dagm export-schema --out schema.cypher
 ```
 
 For canary deployment steps see
@@ -250,7 +250,7 @@ For canary deployment steps see
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl-dagmgr-server`는 YAML 형식의 설정 파일을 읽어 기본 값을 채울 수 있다.
+`qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일을 읽어 기본 값을 채울 수 있다.
 `--config` 옵션으로 경로를 지정하며 CLI 플래그가 우선 적용된다.
 
 예시:
@@ -265,7 +265,7 @@ kafka_bootstrap: localhost:9092
 ```
 
 ```
-qmtl-dagmgr-server --config dagmgr.yml --repo-backend neo4j \
+qmtl dagmgr-server --config dagmgr.yml --repo-backend neo4j \
                    --queue-backend kafka --neo4j-uri bolt://db:7687
 ```
 

@@ -149,12 +149,12 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 
 ### Gateway CLI Options
 
-The ``qmtl-gateway`` entrypoint reads configuration from a YAML/JSON file or command-line flags.
+The ``qmtl gw`` subcommand reads configuration from a YAML/JSON file or command-line flags.
 The file may contain ``redis_dsn``, ``database_backend`` and ``database_dsn`` fields.
 
 ```
-qmtl-gateway --config gateway.yml --database-backend postgres \
-             --redis-dsn redis://localhost:6379 --database-dsn postgresql://db
+qmtl gw --config gateway.yml --database-backend postgres \
+        --redis-dsn redis://localhost:6379 --database-dsn postgresql://db
 ```
 
 Available flags:

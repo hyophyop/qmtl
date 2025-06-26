@@ -1,13 +1,16 @@
+from __future__ import annotations
 import argparse
 import importlib
 
 import asyncio
+from typing import List
 from .runner import Runner
 
 
-async def _main() -> None:
+async def _main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Run QMTL strategy (backtest/dry-run/live/offline)"
+        prog="qmtl sdk",
+        description="Run QMTL strategy (backtest/dry-run/live/offline)",
     )
     parser.add_argument("strategy", help="Import path as module:Class")
     parser.add_argument(
@@ -26,7 +29,7 @@ async def _main() -> None:
         "--gateway-url",
         help="Gateway base URL (required for backtest, dryrun and live modes)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     module_name, class_name = args.strategy.split(":")
     module = importlib.import_module(module_name)
@@ -53,5 +56,6 @@ async def _main() -> None:
     else:  # offline
         await Runner.offline_async(strategy_cls)
 
-def main() -> None:
-    asyncio.run(_main())
+def main(argv: List[str] | None = None) -> None:
+    asyncio.run(_main(argv))
+

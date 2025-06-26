@@ -130,7 +130,7 @@ def _cmd_export_schema(args: argparse.Namespace) -> None:
 
 
 async def _main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="qmtl-dagm")
+    parser = argparse.ArgumentParser(prog="qmtl dagm")
     parser.add_argument("--target", default="localhost:50051", help="gRPC service target")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
