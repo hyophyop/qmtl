@@ -69,22 +69,22 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
 | **u – upstream\_id**    | 태그 또는 큐 ID (인터벌 포함)                | `btc_price_binance`, `eth_price_binance` |
 | **i – interval**        | 데이터 수신 간격 (초·분·시) **– 노드 필수**      | `60s`, `5m`, `1h`                        |
 | **p – period slot**     | 롤링 윈도우 인덱스 $0 … P<sub>i</sub>−1$   | `0‑29` (30 bars)                         |
-| **t – timestamp index** | `floor(epoch / i)` 로 정규화된 캔들 타임스탬프 | `10:01 … 10:10`                          |
+| **f – feature index**   | `"t"`(버킷 타임스탬프) 또는 `"v"`(값)        | `"t"`, `"v"`                            |
 
-* **데이터 구조**: 4‑D xarray 또는 PyArrow Tensor `C[u,i,p,t]` 로 구현.
+* **데이터 구조**: 4‑D xarray 또는 PyArrow Tensor `C[u,i,p,f]` 로 구현.
 * **메모리 가드레일**: period × interval 초과 영역은 슬라이스 단위로 즉시 evict하며,
   Tensor 슬라이스는 Apache Arrow chunk로 매핑해 zero‑copy 전달한다. GC 작업은 Ray
   Actor로 분리 스케줄링한다.
 * **다중 인터벌·다중 업스트림 지원**: `u` 축 (업스트림)과 `i` 축 (인터벌)을 분리함으로써 1m·5m·1h 등 다양한 간격과 여러 태그 큐를 동시에 저장·검색 가능.
 * **캐시 채우기 규칙**: 노드는 `∀(u,i) : |C[u,i]| ≥ Pᵢ` 조건을 만족할 때에만 프로세싱 함수가 호출된다.
-* **타임스탬프 정렬 예시**: interval = 1 m, period = 10, 시스템 UTC = 10:10:30 ⇒ 필요한 `t` 슬롯은 10:01 … 10:10 (10개 캔들).
+* **타임스탬프 정렬 예시**: interval = 1 m, period = 10, 시스템 UTC = 10:10:30 ⇒ `f="t"` 슬롯에는 10:01 … 10:10(10개 캔들)이 저장된다.
 * **결측 처리**: 캔들 누락 시 `missing_flag` ↦ 재동기화 요청 또는 `on_missing` 정책(`skip`/`fail`) 적용.
 * **타임스탬프 버킷팅**: NodeCache는 타임스탬프 입력 전에 `timestamp - (timestamp % interval)` 값을 적용해 저장하며 gap 검출도 버킷 값에 기반한다.
 
 #### 설계 요구사항 요약
 
 1. **필수 `interval` 필드** — 모든 `Node` 메타 정의에 `interval`을 **필수 (primary key)** 로 포함한다. 예) `interval: 1m`, `5m`, `1h`. 정수(초)나 문자열 형식(`"1h"`, `"30m"`, `"45s"`) 모두 허용된다.
-2. **업스트림 데이터 캐시** — 3‑D 맵 대신 4‑D Tensor `C[u,i,p,t]` 구조를 사용한다. 축 정의는 위 표를 참조하며, 큐 인서트는 벡터 단위·만료는 FIFO pop으로 수행된다.
+2. **업스트림 데이터 캐시** — 3‑D 맵 대신 4‑D Tensor `C[u,i,p,f]` 구조를 사용한다. 축 정의는 위 표를 참조하며, 큐 인서트는 벡터 단위·만료는 FIFO pop으로 수행된다.
 3. **프로세싱 함수(Compute-Fn) 규약** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. 모든 `compute_fn`은 `NodeCache.view()`이 반환하는 **read-only CacheView** 한 개만을 인자로 받으며, I/O(큐 publish, DB write) 역시 금지.
 
    ```python
@@ -122,7 +122,7 @@ flowchart LR
         U1["Upstream Queue u₁<br/>(interval 1 m)"]
         U2["Upstream Queue u₂<br/>(interval 5 m)"]
     end
-    U1 -->|append| C["4‑D Cache C[u,i,p,t]"]
+    U1 -->|append| C["4‑D Cache C[u,i,p,f]"]
     U2 -->|append| C
     C -->|period Pᵢ satisfied?| FN[/"Processing&nbsp;Function<br/>fn(view)"/]
     FN --> OUT["Node Output<br/>(→ downstream or queue)"]
