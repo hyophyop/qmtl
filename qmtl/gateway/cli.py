@@ -5,6 +5,8 @@ import asyncio
 
 import redis.asyncio as redis
 
+from .redis_client import InMemoryRedis
+
 from .api import create_app
 from .config import GatewayConfig, load_gateway_config
 
@@ -18,6 +20,11 @@ async def _main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--redis-dsn",
         help="Redis connection DSN",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use in-memory Redis instead of connecting to a server",
     )
     parser.add_argument("--database-dsn", help="Database connection DSN")
     parser.add_argument(
@@ -37,7 +44,10 @@ async def _main(argv: list[str] | None = None) -> None:
     if args.database_backend:
         config.database_backend = args.database_backend
 
-    redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
+    if args.offline:
+        redis_client = InMemoryRedis()
+    else:
+        redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
     app = create_app(
         redis_client=redis_client,
         database_backend=config.database_backend,
