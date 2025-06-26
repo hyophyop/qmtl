@@ -175,6 +175,30 @@ def test_as_xarray_view_is_read_only_and_matches_get_slice():
             assert cache.get_slice(u, i, count=cache.period) == arr_list
 
 
+def test_ring_buffer_wraparound():
+    cache = NodeCache(period=3)
+    cache.append("u1", 1, 1, {"v": 1})
+    cache.append("u1", 1, 2, {"v": 2})
+    cache.append("u1", 1, 3, {"v": 3})
+    cache.append("u1", 1, 4, {"v": 4})
+
+    assert cache.get_slice("u1", 1, count=3) == [
+        (2, {"v": 2}),
+        (3, {"v": 3}),
+        (4, {"v": 4}),
+    ]
+    assert cache.latest("u1", 1) == (4, {"v": 4})
+
+    cache.append("u1", 1, 5, {"v": 5})
+
+    assert cache.get_slice("u1", 1, count=3) == [
+        (3, {"v": 3}),
+        (4, {"v": 4}),
+        (5, {"v": 5}),
+    ]
+    assert cache.latest("u1", 1) == (5, {"v": 5})
+
+
 def test_cache_view_access():
     cache = NodeCache(period=2)
     cache.append("btc_price", 1, 1, {"v": 1})
