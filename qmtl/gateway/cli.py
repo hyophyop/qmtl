@@ -43,8 +43,10 @@ async def _main(argv: list[str] | None = None) -> None:
         config.database_dsn = args.database_dsn
     if args.database_backend:
         config.database_backend = args.database_backend
-
     if args.offline:
+        config.offline = True
+
+    if config.offline:
         redis_client = InMemoryRedis()
     else:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
