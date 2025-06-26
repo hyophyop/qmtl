@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 from dataclasses import dataclass
 from typing import Iterable
 
 import uvicorn
 
 from .grpc_server import serve
+from .config import DagManagerConfig, load_dagmanager_config
 from .api import create_app
 from .gc import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
@@ -51,21 +53,34 @@ class _KafkaAdminClient:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    from neo4j import GraphDatabase  # pragma: no cover - external dependency
+    driver = None
+    repo = None
+    admin_client = None
+    queue = None
 
-    driver = GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password))
-    admin = _KafkaAdminClient(args.kafka_bootstrap)
+    if args.repo_backend == "neo4j":
+        from neo4j import GraphDatabase  # pragma: no cover - external dependency
+
+        driver = GraphDatabase.driver(
+            args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+        )
+        repo = None
+    if args.queue_backend == "kafka":
+        admin_client = _KafkaAdminClient(args.kafka_bootstrap)
+        queue = None
 
     gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
 
     grpc_server, _ = serve(
         driver,
-        admin,
+        admin_client,
         _NullStream(),
         host=args.grpc_host,
         port=args.grpc_port,
         callback_url=args.diff_callback,
         gc=gc,
+        repo=repo,
+        queue=queue,
     )
     await grpc_server.start()
 
@@ -78,6 +93,9 @@ async def _run(args: argparse.Namespace) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl-dagmgr-server", description="Run DAG manager gRPC and HTTP servers")
+    parser.add_argument("--config")
+    parser.add_argument("--repo-backend", default="neo4j")
+    parser.add_argument("--queue-backend", default="kafka")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="neo4j")
@@ -89,6 +107,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--diff-callback")
     parser.add_argument("--gc-callback")
     args = parser.parse_args(argv)
+
+    if args.config:
+        cfg = load_dagmanager_config(args.config)
+        for field in dataclasses.fields(DagManagerConfig):
+            if getattr(args, field.name, None) == parser.get_default(field.name):
+                setattr(args, field.name, getattr(cfg, field.name))
 
     asyncio.run(_run(args))
 

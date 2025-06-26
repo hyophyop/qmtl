@@ -13,6 +13,8 @@ from .diff_service import (
     KafkaQueueManager,
     StreamSender,
     DiffChunk,
+    NodeRepository,
+    QueueManager,
 )
 from .kafka_admin import KafkaAdmin
 from .callbacks import post_with_backoff
@@ -122,7 +124,7 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         self,
         gc: GarbageCollector | None = None,
         admin: KafkaAdmin | None = None,
-        repo: Neo4jNodeRepository | None = None,
+        repo: NodeRepository | None = None,
         diff: DiffService | None = None,
         callback_url: str | None = None,
     ) -> None:
@@ -199,7 +201,7 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
 
 
 class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
-    def __init__(self, repo: Neo4jNodeRepository) -> None:
+    def __init__(self, repo: NodeRepository) -> None:
         self._repo = repo
 
     async def GetQueues(
@@ -238,10 +240,14 @@ def serve(
     port: int = 50051,
     callback_url: str | None = None,
     gc: GarbageCollector | None = None,
+    repo: NodeRepository | None = None,
+    queue: QueueManager | None = None,
 ) -> tuple[grpc.aio.Server, int]:
-    repo = Neo4jNodeRepository(neo4j_driver)
-    admin = KafkaAdmin(kafka_admin_client)
-    queue = KafkaQueueManager(admin)
+    admin = KafkaAdmin(kafka_admin_client) if kafka_admin_client is not None else None
+    if repo is None:
+        repo = Neo4jNodeRepository(neo4j_driver)
+    if queue is None and admin is not None:
+        queue = KafkaQueueManager(admin)
     diff_service = DiffService(repo, queue, stream_sender)
 
     server = grpc.aio.server()
