@@ -28,4 +28,6 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
     """Load :class:`DagManagerConfig` from a YAML file."""
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
+    if not isinstance(data, dict):
+        raise TypeError("DagManager config must be a mapping")
     return DagManagerConfig(**data)
