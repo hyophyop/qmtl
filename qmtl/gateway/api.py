@@ -14,7 +14,6 @@ from fastapi.responses import StreamingResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
-import asyncpg
 
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
@@ -22,7 +21,7 @@ from . import metrics as gw_metrics
 from .watch import QueueWatchHub
 from .ws import WebSocketHub
 from .status import get_status as gateway_status
-_INITIAL_STATUS = "queued"
+from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -43,136 +42,6 @@ class StatusResponse(BaseModel):
     status: str
 
 
-class Database:
-    async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
-        raise NotImplementedError
-
-    async def set_status(self, strategy_id: str, status: str) -> None:
-        raise NotImplementedError
-
-    async def get_status(self, strategy_id: str) -> Optional[str]:
-        raise NotImplementedError
-
-    async def append_event(self, strategy_id: str, event: str) -> None:
-        raise NotImplementedError
-
-
-class PostgresDatabase(Database):
-    """PostgreSQL-backed implementation."""
-
-    def __init__(self, dsn: str) -> None:
-        self._dsn = dsn
-        self._pool: Optional[asyncpg.Pool] = None
-
-    async def connect(self) -> None:
-        self._pool = await asyncpg.create_pool(self._dsn)
-        await self._pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategies (
-                id TEXT PRIMARY KEY,
-                meta JSONB,
-                status TEXT
-            )
-            """
-        )
-        await self._pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_events (
-                id SERIAL PRIMARY KEY,
-                strategy_id TEXT,
-                event TEXT,
-                ts TIMESTAMPTZ DEFAULT now()
-            )
-            """
-        )
-        await self._pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS event_log (
-                id SERIAL PRIMARY KEY,
-                strategy_id TEXT,
-                event TEXT,
-                ts TIMESTAMPTZ DEFAULT now()
-            )
-            """
-        )
-
-    async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
-        assert self._pool
-        await self._pool.execute(
-            "INSERT INTO strategies(id, meta, status) VALUES($1, $2, $3)",
-            strategy_id,
-            json.dumps(meta) if meta is not None else None,
-            _INITIAL_STATUS,
-        )
-        await self.append_event(strategy_id, f"INIT:{_INITIAL_STATUS}")
-
-    async def set_status(self, strategy_id: str, status: str) -> None:
-        assert self._pool
-        await self._pool.execute(
-            "UPDATE strategies SET status=$1 WHERE id=$2",
-            status,
-            strategy_id,
-        )
-
-    async def append_event(self, strategy_id: str, event: str) -> None:
-        assert self._pool
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute("SET LOCAL synchronous_commit = 'on'")
-                await conn.execute(
-                    "INSERT INTO strategy_events(strategy_id, event) VALUES($1, $2)",
-                    strategy_id,
-                    event,
-                )
-                await conn.execute(
-                    "INSERT INTO event_log(strategy_id, event) VALUES($1, $2)",
-                    strategy_id,
-                    event,
-                )
-
-    async def get_status(self, strategy_id: str) -> Optional[str]:
-        assert self._pool
-        row = await self._pool.fetchrow(
-            "SELECT status FROM strategies WHERE id=$1",
-            strategy_id,
-        )
-        return row["status"] if row else None
-
-    async def healthy(self) -> bool:
-        """Return ``True`` if the database connection is usable."""
-        if self._pool is None:
-            return False
-        try:
-            await self._pool.execute("SELECT 1")
-            return True
-        except Exception:
-            return False
-
-
-class MemoryDatabase(Database):
-    """In-memory database stub used for testing or development."""
-
-    def __init__(self) -> None:
-        self.strategies: dict[str, dict] = {}
-        self.events: list[tuple[str, str]] = []
-
-    async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
-        self.strategies[strategy_id] = {"meta": meta, "status": _INITIAL_STATUS}
-        await self.append_event(strategy_id, f"INIT:{_INITIAL_STATUS}")
-
-    async def set_status(self, strategy_id: str, status: str) -> None:
-        if strategy_id in self.strategies:
-            self.strategies[strategy_id]["status"] = status
-
-    async def get_status(self, strategy_id: str) -> Optional[str]:
-        data = self.strategies.get(strategy_id)
-        return data["status"] if data else None
-
-    async def append_event(self, strategy_id: str, event: str) -> None:
-        self.events.append((strategy_id, event))
-
-    async def healthy(self) -> bool:
-        return True
 
 
 @dataclass
@@ -246,6 +115,8 @@ def create_app(
             db = PostgresDatabase(database_dsn or "postgresql://localhost/qmtl")
         elif database_backend == "memory":
             db = MemoryDatabase()
+        elif database_backend == "sqlite":
+            db = SQLiteDatabase(database_dsn or ":memory:")
         else:
             raise ValueError(f"Unsupported database backend: {database_backend}")
     fsm = StrategyFSM(redis=r, database=db)

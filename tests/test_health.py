@@ -10,7 +10,7 @@ from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.api import PostgresDatabase
+from qmtl.gateway.database import PostgresDatabase
 
 import fakeredis
 import grpc
