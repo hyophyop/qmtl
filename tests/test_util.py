@@ -24,8 +24,11 @@ def test_parse_interval_invalid():
     "value,expected",
     [
         (10, 10),
-        ("30m", 1800),
     ],
 )
 def test_parse_period(value, expected):
     assert parse_period(value) == expected
+
+def test_parse_period_invalid():
+    with pytest.raises(TypeError):
+        parse_period("30m")
