@@ -48,7 +48,19 @@ class NodeCache:
         self._u_idx: dict[str, int] = {}
         self._i_idx: dict[int, int] = {}
         self._filled: dict[tuple[str, int], int] = {}
+        self._offset: dict[tuple[str, int], int] = {}
         self.backfill_state = BackfillState()
+
+    def _ordered_array(self, u: str, interval: int) -> np.ndarray:
+        """Return internal array for ``(u, interval)`` ordered oldest->latest."""
+        u_idx = self._u_idx[u]
+        i_idx = self._i_idx[interval]
+        arr = self._tensor.data[u_idx, i_idx]
+        filled = self._filled.get((u, interval), 0)
+        offset = self._offset.get((u, interval), 0)
+        if filled < self.period:
+            return np.concatenate((arr[filled:], arr[:filled]))
+        return np.concatenate((arr[offset:], arr[:offset]))
 
     # ------------------------------------------------------------------
     def _ensure_coords(self, u: str, interval: int) -> None:
@@ -65,6 +77,7 @@ class NodeCache:
             self._last_ts[(u, interval)] = None  # type: ignore[assignment]
             self._missing[(u, interval)] = False
             self._filled[(u, interval)] = 0
+            self._offset[(u, interval)] = 0
         if interval not in self._i_idx:
             self._tensor = self._tensor.reindex(
                 i=list(self._tensor.coords["i"].values) + [interval], fill_value=None
@@ -87,10 +100,12 @@ class NodeCache:
         u_idx = self._u_idx[u]
         i_idx = self._i_idx[interval]
         arr = self._tensor.data[u_idx, i_idx]
-        arr[:-1] = arr[1:]
-        arr[-1, 0] = timestamp_bucket
-        arr[-1, 1] = payload
+        off = self._offset.get((u, interval), 0)
+        arr[off, 0] = timestamp_bucket
+        arr[off, 1] = payload
         self._tensor.data[u_idx, i_idx] = arr
+        off = (off + 1) % self.period
+        self._offset[(u, interval)] = off
         filled = self._filled.get((u, interval), 0)
         if filled < self.period:
             filled += 1
@@ -114,12 +129,10 @@ class NodeCache:
         """
         result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
         for u in self._tensor.coords["u"].values:
-            u_idx = self._u_idx[u]
             result[u] = {}
             for i in self._tensor.coords["i"].values:
-                i_idx = self._i_idx[i]
-                slice_ = self._tensor.data[u_idx, i_idx]
-                result[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
+                arr = self._ordered_array(u, i)
+                result[u][i] = [(int(t), v) for t, v in arr if t is not None]
         return result
 
     def view(self, *, track_access: bool = False) -> CacheView:
@@ -133,12 +146,10 @@ class NodeCache:
         """
         data: dict[str, dict[int, list[tuple[int, Any]]]] = {}
         for u in self._tensor.coords["u"].values:
-            u_idx = self._u_idx[u]
             data[u] = {}
             for i in self._tensor.coords["i"].values:
-                i_idx = self._i_idx[i]
-                slice_ = self._tensor.data[u_idx, i_idx]
-                data[u][i] = [(int(t), v) for t, v in slice_ if t is not None]
+                arr = self._ordered_array(u, i)
+                data[u][i] = [(int(t), v) for t, v in arr if t is not None]
         return CacheView(data, track_access=track_access)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
@@ -164,7 +175,16 @@ class NodeCache:
 
         Callers must **not** mutate the returned :class:`xarray.DataArray`.
         """
-        da = self._tensor.copy(deep=False)
+        u_vals = list(self._tensor.coords["u"].values)
+        i_vals = list(self._tensor.coords["i"].values)
+        data = np.empty((len(u_vals), len(i_vals), self.period, 2), dtype=object)
+        data[:] = None
+        for u in u_vals:
+            for i in i_vals:
+                u_idx = self._u_idx[u]
+                i_idx = self._i_idx[i]
+                data[u_idx, i_idx] = self._ordered_array(u, i)
+        da = xr.DataArray(data, dims=self._tensor.dims, coords=self._tensor.coords)
         da.data = da.data.view()
         da.data.setflags(write=False)
         return da
@@ -179,10 +199,12 @@ class NodeCache:
         if self._filled.get((u, interval), 0) == 0:
             return None
         arr = self._tensor.data[u_idx, i_idx]
-        ts = arr[-1, 0]
+        off = self._offset.get((u, interval), 0)
+        idx = (off - 1) % self.period
+        ts = arr[idx, 0]
         if ts is None:
             return None
-        return int(ts), arr[-1, 1]
+        return int(ts), arr[idx, 1]
 
     def get_slice(
         self,
@@ -212,13 +234,22 @@ class NodeCache:
                 coords={"p": [], "f": ["t", "v"]},
             )
 
-        arr = self._tensor.sel(u=u, i=interval)
+        filled = self._filled.get((u, interval), 0)
+        off = self._offset.get((u, interval), 0)
+        arr = self._tensor.data[u_idx, i_idx]
 
         if count is not None:
             if count <= 0:
                 return []
-            subset = arr.isel(p=slice(-count, None)).data
+            n = min(count, filled)
+            if filled < self.period:
+                data = arr[:filled]
+            else:
+                data = np.concatenate((arr[off:], arr[:off]))
+            subset = data[-n:]
             return [(int(t), v) for t, v in subset if t is not None]
+
+        ordered = self._ordered_array(u, interval)
 
         slice_start = start if start is not None else 0
         slice_end = end if end is not None else self.period
@@ -228,7 +259,12 @@ class NodeCache:
         slice_start = min(self.period, slice_start)
         slice_end = min(self.period, slice_end)
 
-        return arr.isel(p=slice(slice_start, slice_end))
+        da = xr.DataArray(
+            ordered,
+            dims=("p", "f"),
+            coords={"p": list(range(self.period)), "f": ["t", "v"]},
+        )
+        return da.isel(p=slice(slice_start, slice_end))
 
     def backfill_bulk(
         self,
@@ -281,13 +317,14 @@ class NodeCache:
 
         new_arr = np.empty((self.period, 2), dtype=object)
         new_arr[:] = None
-        start = self.period - len(merged)
         for idx, (ts, payload) in enumerate(merged):
-            new_arr[start + idx, 0] = ts
-            new_arr[start + idx, 1] = payload
+            new_arr[idx % self.period, 0] = ts
+            new_arr[idx % self.period, 1] = payload
 
         self._tensor.data[u_idx, i_idx] = new_arr
-        self._filled[(u, interval)] = len(merged)
+        filled = min(len(merged), self.period)
+        self._filled[(u, interval)] = filled
+        self._offset[(u, interval)] = len(merged) % self.period
 
         prev_last = self._last_ts.get((u, interval))
         if merged:
