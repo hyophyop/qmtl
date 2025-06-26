@@ -83,11 +83,11 @@ Start the gateway HTTP server and interact with the DAG manager using the
 provided CLI tools.
 
 ```bash
-qmtl-gateway --redis-dsn redis://localhost:6379 \
-             --postgres-dsn postgresql://localhost/qmtl
+qmtl gw --redis-dsn redis://localhost:6379 \
+        --postgres-dsn postgresql://localhost/qmtl
 
 # submit a DAG diff
-qmtl-dagm diff --file dag.json --target localhost:50051
+qmtl dagm diff --file dag.json --target localhost:50051
 ```
 
 See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
