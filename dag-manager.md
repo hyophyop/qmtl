@@ -263,3 +263,18 @@ neo4j_password: secret
 queue_backend: kafka
 kafka_bootstrap: localhost:9092
 ```
+
+```
+qmtl-dagmgr-server --config dagmgr.yml --repo-backend neo4j \
+                   --queue-backend kafka --neo4j-uri bolt://db:7687
+```
+
+Available flags:
+
+- ``--config`` – path to configuration file.
+- ``--repo-backend`` – select repository implementation (default ``neo4j``).
+- ``--queue-backend`` – select queue implementation (default ``kafka``).
+- ``--neo4j-uri`` – Neo4j connection URI.
+- ``--neo4j-user`` – database user.
+- ``--neo4j-password`` – database password.
+- ``--kafka-bootstrap`` – Kafka bootstrap servers.
