@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import Any, TYPE_CHECKING
@@ -16,6 +17,7 @@ import asyncio
 from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .util import parse_interval, parse_period
+from . import arrow_cache
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -367,7 +369,10 @@ class Node:
         self.schema = schema or {}
         self.execute = True
         self.queue_topic: str | None = None
-        self.cache = NodeCache(period_val or 0)
+        if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
+            self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
+        else:
+            self.cache = NodeCache(period_val or 0)
         self.pre_warmup = True
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr

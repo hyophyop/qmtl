@@ -8,6 +8,7 @@ from .node import (
     TagQueryNode,
     NodeCache,
 )
+from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
 from .cache_view import CacheView
 from .strategy import Strategy
@@ -15,6 +16,7 @@ from .runner import Runner
 from .tagquery_manager import TagQueryManager
 from .cli import main as _cli
 from .ws_client import WebSocketClient
+from . import arrow_cache
 from qmtl.sdk.data_io import (
     DataFetcher,
     HistoryProvider,
@@ -33,6 +35,7 @@ __all__ = [
     "StreamInput",
     "TagQueryNode",
     "NodeCache",
+    "NodeCacheArrow",
     "BackfillState",
     "CacheView",
     "Strategy",
