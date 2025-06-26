@@ -7,7 +7,7 @@ import redis.asyncio as redis
 from xstate.machine import Machine
 
 if TYPE_CHECKING:
-    from .api import Database
+    from .database import Database
 
 
 @dataclass

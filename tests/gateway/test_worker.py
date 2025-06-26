@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from qmtl.gateway.queue import RedisFIFOQueue
 from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.api import Database
+from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.ws import WebSocketHub
 

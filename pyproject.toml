@@ -18,6 +18,7 @@ dev = [
     "uvicorn",
     "fakeredis",
     "asyncpg",
+    "aiosqlite",
     "xstate",
     "websockets",
     "redis",

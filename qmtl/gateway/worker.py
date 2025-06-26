@@ -5,7 +5,7 @@ from typing import Awaitable, Callable, Optional
 
 import redis.asyncio as redis
 
-from .api import Database
+from .database import Database
 from .dagmanager_client import DagManagerClient
 from .ws import WebSocketHub
 from .fsm import StrategyFSM

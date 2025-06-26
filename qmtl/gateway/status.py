@@ -8,7 +8,7 @@ import time
 import redis.asyncio as redis
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
-    from .api import Database
+    from .database import Database
 from .dagmanager_client import DagManagerClient
 
 _STATUS_CACHE: dict[str, str] | None = None

@@ -23,7 +23,7 @@ async def _main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--database-backend",
         default="postgres",
-        help="Database backend (postgres, memory)",
+        help="Database backend (postgres, memory, sqlite)",
     )
     args = parser.parse_args(argv)
 

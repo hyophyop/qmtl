@@ -2,7 +2,7 @@ import pytest
 from fakeredis.aioredis import FakeRedis
 
 from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.api import Database
+from qmtl.gateway.database import Database
 
 
 class FakeDB(Database):
