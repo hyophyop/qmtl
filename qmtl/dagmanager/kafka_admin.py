@@ -29,6 +29,36 @@ class AdminClient(Protocol):
         ...
 
 
+class InMemoryAdminClient:
+    """Simple in-memory implementation of :class:`AdminClient`."""
+
+    def __init__(self) -> None:
+        self.topics: Dict[str, dict] = {}
+
+    def list_topics(self) -> Mapping[str, dict]:
+        return self.topics
+
+    def create_topic(
+        self,
+        name: str,
+        *,
+        num_partitions: int,
+        replication_factor: int,
+        config: Mapping[str, str] | None = None,
+    ) -> None:
+        if name in self.topics:
+            raise TopicExistsError
+        self.topics[name] = {
+            "config": dict(config or {}),
+            "num_partitions": num_partitions,
+            "replication_factor": replication_factor,
+            "size": 0,
+        }
+
+    def get_size(self, name: str) -> int:
+        return int(self.topics.get(name, {}).get("size", 0))
+
+
 @dataclass
 class KafkaAdmin:
     client: AdminClient
@@ -61,4 +91,9 @@ class KafkaAdmin:
         return stats
 
 
-__all__ = ["KafkaAdmin", "AdminClient", "TopicExistsError"]
+__all__ = [
+    "KafkaAdmin",
+    "AdminClient",
+    "TopicExistsError",
+    "InMemoryAdminClient",
+]
