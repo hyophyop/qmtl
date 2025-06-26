@@ -26,11 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 class NodeCache:
-    """4-D tensor cache ``C[u,i,p,t]`` implemented with ``xarray``.
+    """4-D tensor cache ``C[u,i,p,f]`` implemented with ``xarray``.
 
-    Besides the tensor itself the cache tracks the last timestamp for every
-    ``(u, interval)`` pair and whether the most recently appended timestamp
-    introduced a gap (``last_timestamp + interval != timestamp``).
+    The last axis ``f`` holds two features: ``"t"`` for the bucketed timestamp
+    and ``"v"`` for the associated payload. In addition to the tensor the cache
+    tracks the last timestamp for every ``(u, interval)`` pair and whether the
+    most recently appended timestamp introduced a gap
+    (``last_timestamp + interval != timestamp``).
     """
 
     def __init__(self, period: int) -> None:
