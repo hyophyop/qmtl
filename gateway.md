@@ -146,3 +146,20 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 * **Sentinel Traffic Δ 확인 루프** – `traffic_weight` 변경 후 Gateway 라우팅
   테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 `sentinel_skew_seconds`
   지표로 측정한다.
+
+### Gateway CLI Options
+
+The ``qmtl-gateway`` entrypoint reads configuration from a YAML/JSON file or command-line flags.
+The file may contain ``redis_dsn``, ``database_backend`` and ``database_dsn`` fields.
+
+```
+qmtl-gateway --config gateway.yml --database-backend postgres \
+             --redis-dsn redis://localhost:6379 --database-dsn postgresql://db
+```
+
+Available flags:
+
+- ``--config`` – path to configuration file.
+- ``--database-backend`` – select database implementation (default ``postgres``).
+- ``--database-dsn`` – database connection string.
+- ``--redis-dsn`` – Redis connection string.

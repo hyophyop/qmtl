@@ -149,6 +149,32 @@ class PostgresDatabase(Database):
             return False
 
 
+class MemoryDatabase(Database):
+    """In-memory database stub used for testing or development."""
+
+    def __init__(self) -> None:
+        self.strategies: dict[str, dict] = {}
+        self.events: list[tuple[str, str]] = []
+
+    async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
+        self.strategies[strategy_id] = {"meta": meta, "status": _INITIAL_STATUS}
+        await self.append_event(strategy_id, f"INIT:{_INITIAL_STATUS}")
+
+    async def set_status(self, strategy_id: str, status: str) -> None:
+        if strategy_id in self.strategies:
+            self.strategies[strategy_id]["status"] = status
+
+    async def get_status(self, strategy_id: str) -> Optional[str]:
+        data = self.strategies.get(strategy_id)
+        return data["status"] if data else None
+
+    async def append_event(self, strategy_id: str, event: str) -> None:
+        self.events.append((strategy_id, event))
+
+    async def healthy(self) -> bool:
+        return True
+
+
 @dataclass
 class StrategyManager:
     redis: redis.Redis
@@ -207,16 +233,28 @@ def create_app(
     ws_hub: Optional[WebSocketHub] = None,
     *,
     insert_sentinel: bool = True,
+    database_backend: str = "postgres",
+    database_dsn: str | None = None,
 ) -> FastAPI:
     app = FastAPI()
 
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
-    db = database or PostgresDatabase("postgresql://localhost/qmtl")
+    if database is not None:
+        db = database
+    else:
+        if database_backend == "postgres":
+            db = PostgresDatabase(database_dsn or "postgresql://localhost/qmtl")
+        elif database_backend == "memory":
+            db = MemoryDatabase()
+        else:
+            raise ValueError(f"Unsupported database backend: {database_backend}")
     fsm = StrategyFSM(redis=r, database=db)
     manager = StrategyManager(redis=r, database=db, fsm=fsm, insert_sentinel=insert_sentinel)
     dagm = dag_client or DagManagerClient("127.0.0.1:50051")
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub
+
+    app.state.database = db
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:

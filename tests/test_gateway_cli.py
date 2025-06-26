@@ -7,4 +7,6 @@ def test_gateway_cli_help():
     assert result.returncode == 0
     assert "--host" in result.stdout
     assert "--port" in result.stdout
+    assert "--config" in result.stdout
+    assert "--database-backend" in result.stdout
 
