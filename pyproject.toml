@@ -27,6 +27,7 @@ dev = [
     "grpcio-tools",
     "pytest-asyncio",
     "xstate",
+    "pyarrow",
 ]
 
 ray = ["ray"]

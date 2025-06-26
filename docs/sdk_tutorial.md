@@ -80,6 +80,10 @@ python -m qmtl.sdk --help
 전달됩니다. 이전 버전에서 사용하던 `NodeCache.snapshot()`은 내부 구현으로
 변경되었으므로 전략 코드에서 직접 호출하지 않아야 합니다.
 
+PyArrow 기반 캐시를 사용하려면 환경 변수 `QMTL_ARROW_CACHE=1`을 설정합니다.
+만료 슬라이스 정리는 `QMTL_CACHE_EVICT_INTERVAL`(초) 값에 따라 주기적으로 실행되며
+Ray가 설치되어 있는 경우 Ray Actor에서 동작합니다.
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은
