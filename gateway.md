@@ -150,7 +150,16 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 ### Gateway CLI Options
 
 The ``qmtl gw`` subcommand reads configuration from a YAML/JSON file or command-line flags.
-The file may contain ``redis_dsn``, ``database_backend`` and ``database_dsn`` fields.
+The file may contain ``redis_dsn``, ``database_backend``, ``database_dsn`` and ``offline`` fields.
+
+Example YAML configuration:
+
+```yaml
+redis_dsn: redis://localhost:6379
+database_backend: sqlite
+database_dsn: sqlite:///qmtl.db
+offline: true
+```
 
 ```
 qmtl gw --config gateway.yml --database-backend postgres \
@@ -163,3 +172,4 @@ Available flags:
 - ``--database-backend`` – select database implementation (default ``postgres``).
 - ``--database-dsn`` – database connection string.
 - ``--redis-dsn`` – Redis connection string.
+- ``--offline`` – use in-memory Redis (overrides ``redis_dsn``).

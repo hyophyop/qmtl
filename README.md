@@ -83,8 +83,13 @@ Start the gateway HTTP server and interact with the DAG manager using the
 provided CLI tools.
 
 ```bash
-qmtl gw --redis-dsn redis://localhost:6379 \
-        --postgres-dsn postgresql://localhost/qmtl
+qmtl gw --config gateway.yml
+
+# gateway.yml example
+# redis_dsn: redis://localhost:6379
+# database_backend: sqlite
+# database_dsn: sqlite:///qmtl.db
+# offline: true
 
 # submit a DAG diff
 qmtl dagm diff --file dag.json --target localhost:50051
