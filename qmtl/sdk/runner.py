@@ -347,6 +347,16 @@ class Runner:
         return events
 
     @staticmethod
+    def run_pipeline(strategy: Strategy) -> None:
+        """Execute a :class:`Pipeline` using cached history from ``strategy``."""
+        from qmtl import Pipeline
+
+        pipeline = Pipeline(strategy.nodes)
+        events = Runner._collect_history_events(strategy, None, None)
+        for ts, node, payload in events:
+            pipeline.feed(node, ts, payload)
+
+    @staticmethod
     def _maybe_int(value) -> int | None:
         try:
             return int(value)
@@ -482,6 +492,7 @@ class Runner:
         *,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        offline: bool = False,
     ) -> Strategy:
         """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
@@ -506,9 +517,12 @@ class Runner:
             ) from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await manager.resolve_tags(offline=False)
+        offline_mode = offline or not Runner._kafka_available
+        await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
-        # Placeholder for dry-run logic
+        if offline_mode:
+            Runner.run_pipeline(strategy)
+        # Placeholder for dry-run logic when Kafka available
         return strategy
 
     def dryrun(
@@ -516,12 +530,14 @@ class Runner:
         *,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        offline: bool = False,
     ) -> Strategy:
         return asyncio.run(
             Runner.dryrun_async(
                 strategy_cls,
                 gateway_url=gateway_url,
                 meta=meta,
+                offline=offline,
             )
         )
 
@@ -531,6 +547,7 @@ class Runner:
         *,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        offline: bool = False,
     ) -> Strategy:
         """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
@@ -555,10 +572,14 @@ class Runner:
             ) from exc
 
         Runner._apply_queue_map(strategy, queue_map)
-        await manager.resolve_tags(offline=False)
+        offline_mode = offline or not Runner._kafka_available
+        await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
-        await manager.start()
-        
+        if offline_mode:
+            Runner.run_pipeline(strategy)
+        else:
+            await manager.start()
+
         # Placeholder for live trading logic
         return strategy
 
@@ -568,12 +589,14 @@ class Runner:
         *,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        offline: bool = False,
     ) -> Strategy:
         return asyncio.run(
             Runner.live_async(
                 strategy_cls,
                 gateway_url=gateway_url,
                 meta=meta,
+                offline=offline,
             )
         )
 
