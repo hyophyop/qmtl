@@ -247,3 +247,19 @@ qmtl-dagm export-schema --out schema.cypher
 
 For canary deployment steps see
 [`docs/canary_rollout.md`](docs/canary_rollout.md).
+
+## 12. 서버 설정 파일 사용법
+
+`qmtl-dagmgr-server`는 YAML 형식의 설정 파일을 읽어 기본 값을 채울 수 있다.
+`--config` 옵션으로 경로를 지정하며 CLI 플래그가 우선 적용된다.
+
+예시:
+
+```yaml
+repo_backend: neo4j
+neo4j_uri: bolt://db:7687
+neo4j_user: neo4j
+neo4j_password: secret
+queue_backend: kafka
+kafka_bootstrap: localhost:9092
+```
