@@ -27,71 +27,71 @@ from qmtl.dagmanager import compute_node_id
 logger = logging.getLogger(__name__)
 
 
-class NodeCache:
-    """4-D tensor cache ``C[u,i,p,f]`` implemented with ``xarray``.
+class _RingBuffer:
+    def __init__(self, period: int) -> None:
+        self.period = period
+        self.data = np.empty((period, 2), dtype=object)
+        self.data[:] = None
+        self.offset = 0
+        self.filled = 0
 
-    The last axis ``f`` holds two features: ``"t"`` for the bucketed timestamp
-    and ``"v"`` for the associated payload. In addition to the tensor the cache
-    tracks the last timestamp for every ``(u, interval)`` pair and whether the
-    most recently appended timestamp introduced a gap
-    (``last_timestamp + interval != timestamp``).
-    """
+    def append(self, timestamp: int, payload: Any) -> None:
+        self.data[self.offset, 0] = timestamp
+        self.data[self.offset, 1] = payload
+        self.offset = (self.offset + 1) % self.period
+        if self.filled < self.period:
+            self.filled += 1
+
+    def ordered(self) -> np.ndarray:
+        if self.filled < self.period:
+            return np.concatenate((self.data[self.filled :], self.data[: self.filled]))
+        return np.concatenate((self.data[self.offset :], self.data[: self.offset]))
+
+    def latest(self) -> tuple[int, Any] | None:
+        if self.filled == 0:
+            return None
+        idx = (self.offset - 1) % self.period
+        ts = self.data[idx, 0]
+        if ts is None:
+            return None
+        return int(ts), self.data[idx, 1]
+
+
+class NodeCache:
+    """In-memory cache backed by per-pair ring buffers."""
 
     def __init__(self, period: int) -> None:
         self.period = period
-        self._tensor = xr.DataArray(
-            np.empty((0, 0, period, 2), dtype=object),
-            dims=("u", "i", "p", "f"),
-            coords={"u": [], "i": [], "p": list(range(period)), "f": ["t", "v"]},
-        )
+        self._buffers: dict[tuple[str, int], _RingBuffer] = {}
         self._last_ts: dict[tuple[str, int], int | None] = {}
         self._missing: dict[tuple[str, int], bool] = {}
-        # Pre-computed index mappings and fill counters for readiness checks
-        self._u_idx: dict[str, int] = {}
-        self._i_idx: dict[int, int] = {}
         self._filled: dict[tuple[str, int], int] = {}
         self._offset: dict[tuple[str, int], int] = {}
         self.backfill_state = BackfillState()
 
     def _ordered_array(self, u: str, interval: int) -> np.ndarray:
         """Return internal array for ``(u, interval)`` ordered oldest->latest."""
-        u_idx = self._u_idx[u]
-        i_idx = self._i_idx[interval]
-        arr = self._tensor.data[u_idx, i_idx]
+        buf = self._buffers[(u, interval)]
         filled = self._filled.get((u, interval), 0)
         offset = self._offset.get((u, interval), 0)
         if filled < self.period:
-            return np.concatenate((arr[filled:], arr[:filled]))
-        return np.concatenate((arr[offset:], arr[:offset]))
+            return np.concatenate((buf.data[filled:], buf.data[:filled]))
+        return np.concatenate((buf.data[offset:], buf.data[:offset]))
 
     # ------------------------------------------------------------------
-    def _ensure_coords(self, u: str, interval: int) -> None:
-        if u not in self._u_idx:
-            self._tensor = self._tensor.reindex(
-                u=list(self._tensor.coords["u"].values) + [u], fill_value=None
-            )
-            # reindex returns read-only memory -> copy to enable mutation
-            self._tensor = xr.DataArray(
-                self._tensor.data.copy(), dims=self._tensor.dims, coords=self._tensor.coords
-            )
-            self._u_idx[u] = len(self._tensor.coords["u"]) - 1
-        if (u, interval) not in self._last_ts:
-            self._last_ts[(u, interval)] = None  # type: ignore[assignment]
-            self._missing[(u, interval)] = False
-            self._filled[(u, interval)] = 0
-            self._offset[(u, interval)] = 0
-        if interval not in self._i_idx:
-            self._tensor = self._tensor.reindex(
-                i=list(self._tensor.coords["i"].values) + [interval], fill_value=None
-            )
-            self._tensor = xr.DataArray(
-                self._tensor.data.copy(), dims=self._tensor.dims, coords=self._tensor.coords
-            )
-            self._i_idx[interval] = len(self._tensor.coords["i"]) - 1
+    def _ensure_buffer(self, u: str, interval: int) -> _RingBuffer:
+        key = (u, interval)
+        if key not in self._buffers:
+            self._buffers[key] = _RingBuffer(self.period)
+            self._last_ts[key] = None
+            self._missing[key] = False
+            self._filled[key] = 0
+            self._offset[key] = 0
+        return self._buffers[key]
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
-        self._ensure_coords(u, interval)
+        buf = self._ensure_buffer(u, interval)
         timestamp_bucket = timestamp - (timestamp % interval)
         prev = self._last_ts.get((u, interval))
         if prev is not None and prev + interval != timestamp_bucket:
@@ -99,25 +99,23 @@ class NodeCache:
         else:
             self._missing[(u, interval)] = False
         self._last_ts[(u, interval)] = timestamp_bucket
-        u_idx = self._u_idx[u]
-        i_idx = self._i_idx[interval]
-        arr = self._tensor.data[u_idx, i_idx]
         off = self._offset.get((u, interval), 0)
-        arr[off, 0] = timestamp_bucket
-        arr[off, 1] = payload
-        self._tensor.data[u_idx, i_idx] = arr
+        buf.data[off, 0] = timestamp_bucket
+        buf.data[off, 1] = payload
         off = (off + 1) % self.period
         self._offset[(u, interval)] = off
+        buf.offset = off
         filled = self._filled.get((u, interval), 0)
         if filled < self.period:
             filled += 1
         self._filled[(u, interval)] = filled
+        buf.filled = filled
 
     # ------------------------------------------------------------------
     def ready(self) -> bool:
-        if not self._u_idx or not self._i_idx:
+        if not self._buffers:
             return False
-        for key, count in self._filled.items():
+        for count in self._filled.values():
             if count < self.period:
                 return False
         return True
@@ -130,11 +128,10 @@ class NodeCache:
         the recommended read-only access to the cache.
         """
         result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
-        for u in self._tensor.coords["u"].values:
-            result[u] = {}
-            for i in self._tensor.coords["i"].values:
-                arr = self._ordered_array(u, i)
-                result[u][i] = [(int(t), v) for t, v in arr if t is not None]
+        for (u, i), buf in self._buffers.items():
+            result.setdefault(u, {})[i] = [
+                (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
+            ]
         return result
 
     def view(self, *, track_access: bool = False) -> CacheView:
@@ -147,29 +144,24 @@ class NodeCache:
         :meth:`CacheView.access_log`.
         """
         data: dict[str, dict[int, list[tuple[int, Any]]]] = {}
-        for u in self._tensor.coords["u"].values:
-            data[u] = {}
-            for i in self._tensor.coords["i"].values:
-                arr = self._ordered_array(u, i)
-                data[u][i] = [(int(t), v) for t, v in arr if t is not None]
+        for (u, i), buf in self._buffers.items():
+            data.setdefault(u, {})[i] = [
+                (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
+            ]
         return CacheView(data, track_access=track_access)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
         """Return gap flags for all ``(u, interval)`` pairs."""
         result: dict[str, dict[int, bool]] = {}
-        for u in self._tensor.coords["u"].values:
-            result[u] = {}
-            for i in self._tensor.coords["i"].values:
-                result[u][i] = self._missing.get((u, i), False)
+        for (u, i), flag in self._missing.items():
+            result.setdefault(u, {})[i] = flag
         return result
 
     def last_timestamps(self) -> dict[str, dict[int, int | None]]:
         """Return last timestamps for all ``(u, interval)`` pairs."""
         result: dict[str, dict[int, int | None]] = {}
-        for u in self._tensor.coords["u"].values:
-            result[u] = {}
-            for i in self._tensor.coords["i"].values:
-                result[u][i] = self._last_ts.get((u, i))
+        for (u, i), ts in self._last_ts.items():
+            result.setdefault(u, {})[i] = ts
         return result
 
     def as_xarray(self) -> xr.DataArray:
@@ -177,36 +169,35 @@ class NodeCache:
 
         Callers must **not** mutate the returned :class:`xarray.DataArray`.
         """
-        u_vals = list(self._tensor.coords["u"].values)
-        i_vals = list(self._tensor.coords["i"].values)
+        u_vals = sorted({u for u, _ in self._buffers.keys()})
+        i_vals = sorted({i for _, i in self._buffers.keys()})
         data = np.empty((len(u_vals), len(i_vals), self.period, 2), dtype=object)
         data[:] = None
-        for u in u_vals:
-            for i in i_vals:
-                u_idx = self._u_idx[u]
-                i_idx = self._i_idx[i]
-                data[u_idx, i_idx] = self._ordered_array(u, i)
-        da = xr.DataArray(data, dims=self._tensor.dims, coords=self._tensor.coords)
+        for u_idx, u in enumerate(u_vals):
+            for i_idx, i in enumerate(i_vals):
+                if (u, i) in self._buffers:
+                    data[u_idx, i_idx] = self._ordered_array(u, i)
+        da = xr.DataArray(
+            data,
+            dims=("u", "i", "p", "f"),
+            coords={"u": u_vals, "i": i_vals, "p": list(range(self.period)), "f": ["t", "v"]},
+        )
         da.data = da.data.view()
         da.data.setflags(write=False)
         return da
 
+    @property
+    def resident_bytes(self) -> int:
+        """Return total memory used by cached arrays in bytes."""
+        return sum(buf.data.nbytes for buf in self._buffers.values())
+
     # ------------------------------------------------------------------
     def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
         """Return the most recent ``(timestamp, payload)`` for a pair."""
-        u_idx = self._u_idx.get(u)
-        i_idx = self._i_idx.get(interval)
-        if u_idx is None or i_idx is None:
+        buf = self._buffers.get((u, interval))
+        if not buf:
             return None
-        if self._filled.get((u, interval), 0) == 0:
-            return None
-        arr = self._tensor.data[u_idx, i_idx]
-        off = self._offset.get((u, interval), 0)
-        idx = (off - 1) % self.period
-        ts = arr[idx, 0]
-        if ts is None:
-            return None
-        return int(ts), arr[idx, 1]
+        return buf.latest()
 
     def get_slice(
         self,
@@ -225,9 +216,8 @@ class NodeCache:
         intervals yield an empty result.
         """
 
-        u_idx = self._u_idx.get(u)
-        i_idx = self._i_idx.get(interval)
-        if u_idx is None or i_idx is None:
+        buf = self._buffers.get((u, interval))
+        if buf is None:
             if count is not None:
                 return []
             return xr.DataArray(
@@ -238,7 +228,7 @@ class NodeCache:
 
         filled = self._filled.get((u, interval), 0)
         off = self._offset.get((u, interval), 0)
-        arr = self._tensor.data[u_idx, i_idx]
+        arr = buf.data
 
         if count is not None:
             if count <= 0:
@@ -281,9 +271,7 @@ class NodeCache:
         calls that happen during a backfill take precedence.
         """
 
-        self._ensure_coords(u, interval)
-        u_idx = self._u_idx[u]
-        i_idx = self._i_idx[interval]
+        self._ensure_buffer(u, interval)
 
         backfill_items: list[tuple[int, Any]] = []
         for ts, payload in items:
@@ -306,10 +294,8 @@ class NodeCache:
 
         # Capture latest data after collecting items so concurrent ``append``
         # operations are taken into account during the merge.
-        arr = self._tensor.data[u_idx, i_idx]
-        existing: dict[int, Any] = {
-            int(t): v for t, v in arr if t is not None
-        }
+        arr = self._buffers[(u, interval)].data
+        existing: dict[int, Any] = {int(t): v for t, v in arr if t is not None}
 
         ts_payload: dict[int, Any] = dict(existing)
         for ts, payload in backfill_items:
@@ -323,10 +309,12 @@ class NodeCache:
             new_arr[idx % self.period, 0] = ts
             new_arr[idx % self.period, 1] = payload
 
-        self._tensor.data[u_idx, i_idx] = new_arr
+        self._buffers[(u, interval)].data = new_arr
         filled = min(len(merged), self.period)
         self._filled[(u, interval)] = filled
         self._offset[(u, interval)] = len(merged) % self.period
+        self._buffers[(u, interval)].filled = filled
+        self._buffers[(u, interval)].offset = len(merged) % self.period
 
         prev_last = self._last_ts.get((u, interval))
         if merged:
