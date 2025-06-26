@@ -32,14 +32,12 @@ def parse_interval(value: int | str | None) -> int:
     raise TypeError("interval must be int or str")
 
 
-def parse_period(value: int | str | None) -> int:
-    """Parse period strings like ``"30m"`` and return seconds."""
+def parse_period(value: int | None) -> int:
+    """Validate that ``value`` is a positive bar count and return it."""
     if value is None:
         raise ValueError("period must not be None")
-    if isinstance(value, int):
-        if value <= 0:
-            raise ValueError("period must be positive")
-        return value
-    if isinstance(value, str):
-        return _parse_time_str(value)
-    raise TypeError("period must be int or str")
+    if not isinstance(value, int):
+        raise TypeError("period must be int")
+    if value <= 0:
+        raise ValueError("period must be positive")
+    return value
