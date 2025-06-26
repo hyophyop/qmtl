@@ -68,6 +68,12 @@ async def _run(args: argparse.Namespace) -> None:
     if args.queue_backend == "kafka":
         admin_client = _KafkaAdminClient(args.kafka_bootstrap)
         queue = None
+    elif args.queue_backend == "memory":
+        from .kafka_admin import InMemoryAdminClient, KafkaAdmin
+        from .diff_service import KafkaQueueManager
+
+        admin_client = InMemoryAdminClient()
+        queue = KafkaQueueManager(KafkaAdmin(admin_client))
 
     gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
 
