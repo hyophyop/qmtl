@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import pytest
 import yaml
 
 from qmtl.gateway.config import load_gateway_config, GatewayConfig
@@ -34,3 +35,15 @@ def test_load_gateway_config_json(tmp_path: Path) -> None:
     assert cfg.database_backend == "memory"
     assert cfg.database_dsn == data["database_dsn"]
     assert cfg.offline is False
+
+
+def test_load_gateway_config_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_gateway_config("nope.yml")
+
+
+def test_load_gateway_config_malformed(tmp_path: Path):
+    p = tmp_path / "bad.yml"
+    p.write_text("- 1")
+    with pytest.raises(TypeError):
+        load_gateway_config(str(p))

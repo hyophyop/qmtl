@@ -4,9 +4,11 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Dict, Iterable
 
 import grpc
+import yaml
 
 from .diff_service import (
     DiffRequest,
@@ -20,6 +22,22 @@ from .topic import topic_name
 from .neo4j_export import export_schema, connect
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
+
+
+@dataclass
+class AdminCLIConfig:
+    """Configuration for the admin CLI."""
+
+    target: str = "localhost:50051"
+
+
+def load_admin_cli_config(path: str) -> AdminCLIConfig:
+    """Load admin CLI configuration from YAML file."""
+    with open(path, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    if not isinstance(data, dict):
+        raise TypeError("Admin CLI config must be a mapping")
+    return AdminCLIConfig(**data)
 
 
 class _MemRepo(NodeRepository):
@@ -131,7 +149,8 @@ def _cmd_export_schema(args: argparse.Namespace) -> None:
 
 async def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl dagm")
-    parser.add_argument("--target", default="localhost:50051", help="gRPC service target")
+    parser.add_argument("--config", help="Path to admin CLI config")
+    parser.add_argument("--target", help="gRPC service target")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_diff = sub.add_parser("diff", help="Run diff")
@@ -156,6 +175,12 @@ async def _main(argv: list[str] | None = None) -> None:
     p_exp.add_argument("--out")
 
     args = parser.parse_args(argv)
+
+    cfg = AdminCLIConfig()
+    if args.config:
+        cfg = load_admin_cli_config(args.config)
+    if args.target is None:
+        args.target = cfg.target
 
     if args.cmd == "diff":
         await _cmd_diff(args)

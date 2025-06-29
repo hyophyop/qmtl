@@ -14,37 +14,12 @@ from .config import GatewayConfig, load_gateway_config
 async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
     parser = argparse.ArgumentParser(prog="qmtl gw")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind address")
-    parser.add_argument("--port", type=int, default=8000, help="Bind port")
     parser.add_argument("--config", help="Path to configuration file")
-    parser.add_argument(
-        "--redis-dsn",
-        help="Redis connection DSN",
-    )
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Use in-memory Redis instead of connecting to a server",
-    )
-    parser.add_argument("--database-dsn", help="Database connection DSN")
-    parser.add_argument(
-        "--database-backend",
-        default="postgres",
-        help="Database backend (postgres, memory, sqlite)",
-    )
     args = parser.parse_args(argv)
 
     config = GatewayConfig()
     if args.config:
         config = load_gateway_config(args.config)
-    if args.redis_dsn:
-        config.redis_dsn = args.redis_dsn
-    if args.database_dsn:
-        config.database_dsn = args.database_dsn
-    if args.database_backend:
-        config.database_backend = args.database_backend
-    if args.offline:
-        config.offline = True
 
     if config.offline:
         redis_client = InMemoryRedis()
@@ -64,7 +39,7 @@ async def _main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(app, host=config.host, port=config.port)
 
 
 def main(argv: list[str] | None = None) -> None:

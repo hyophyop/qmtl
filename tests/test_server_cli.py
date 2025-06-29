@@ -5,15 +5,17 @@ from qmtl.dagmanager.server import main
 def test_server_help(capsys):
     with pytest.raises(SystemExit):
         main(["--help"])
-    assert "qmtl dagmgr-server" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "qmtl dagmgr-server" in out
+    assert "--config" in out
 
 
 def test_server_defaults(monkeypatch):
     captured = {}
 
-    async def fake_run(args):
-        captured["repo"] = args.repo_backend
-        captured["queue"] = args.queue_backend
+    async def fake_run(cfg):
+        captured["repo"] = cfg.repo_backend
+        captured["queue"] = cfg.queue_backend
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
     main([])
@@ -27,8 +29,8 @@ def test_server_config_file(monkeypatch, tmp_path):
 
     captured = {}
 
-    async def fake_run(args):
-        captured["uri"] = args.neo4j_uri
+    async def fake_run(cfg):
+        captured["uri"] = cfg.neo4j_uri
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
     main(["--config", str(cfg)])

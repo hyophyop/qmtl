@@ -1,0 +1,9 @@
+# Example gateway configuration
+host: 0.0.0.0  # HTTP bind address
+port: 8000     # HTTP port
+redis_dsn: redis://localhost:6379
+# database_backend can be postgres, sqlite or memory
+database_backend: postgres
+# connection string for the selected backend
+database_dsn: postgresql://localhost/qmtl
+offline: false  # use in-memory Redis when true
