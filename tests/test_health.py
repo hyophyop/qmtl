@@ -12,7 +12,6 @@ from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.database import PostgresDatabase
 
-import fakeredis
 import grpc
 import asyncio
 import pytest
@@ -37,8 +36,8 @@ class FakeDB(PostgresDatabase):
         return True
 
 
-def test_gateway_status():
-    redis_client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+def test_gateway_status(fake_redis):
+    redis_client = fake_redis
     db = FakeDB()
     client = TestClient(
         gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient())
@@ -113,8 +112,8 @@ async def test_grpc_status():
 
 
 @pytest.mark.asyncio
-async def test_queue_healthy():
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+async def test_queue_healthy(fake_redis):
+    redis = fake_redis
     queue = RedisFIFOQueue(redis)
     assert await queue.healthy() is True
 
@@ -131,8 +130,8 @@ async def test_ws_hub_is_running():
 
 
 @pytest.mark.asyncio
-async def test_worker_healthy(monkeypatch):
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+async def test_worker_healthy(monkeypatch, fake_redis):
+    redis = fake_redis
 
     class FakeDB(PostgresDatabase):
         def __init__(self):

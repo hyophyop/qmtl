@@ -7,7 +7,6 @@ from qmtl.sdk import Strategy, TagQueryNode, Runner
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.common.cloudevents import format_event
-from fakeredis.aioredis import FakeRedis
 
 
 class DummyDag:
@@ -36,7 +35,7 @@ class TQStrategy(Strategy):
 
 
 @pytest.mark.asyncio
-async def test_live_auto_subscribes(monkeypatch):
+async def test_live_auto_subscribes(monkeypatch, fake_redis):
     class DummyWS:
         def __init__(self, url, *, on_message=None):
             self.on_message = on_message
@@ -72,7 +71,7 @@ async def test_live_auto_subscribes(monkeypatch):
         client.on_message = on_message
         return client
     hub = DummyHub(client)
-    redis = FakeRedis(decode_responses=True)
+    redis = fake_redis
     gw_app = create_app(dag_client=DummyDag(), ws_hub=hub, redis_client=redis, database=FakeDB())
     transport = httpx.ASGITransport(gw_app)
 

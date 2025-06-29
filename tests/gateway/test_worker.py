@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-from fakeredis.aioredis import FakeRedis
 
 from types import SimpleNamespace
 
@@ -34,8 +33,8 @@ class FakeDB(Database):
 
 
 @pytest.mark.asyncio
-async def test_worker_locking_single_processing():
-    redis = FakeRedis(decode_responses=True)
+async def test_worker_locking_single_processing(fake_redis):
+    redis = fake_redis
     queue = RedisFIFOQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
@@ -75,8 +74,8 @@ class DummyHub(WebSocketHub):
 
 
 @pytest.mark.asyncio
-async def test_worker_diff_success_broadcasts():
-    redis = FakeRedis(decode_responses=True)
+async def test_worker_diff_success_broadcasts(fake_redis):
+    redis = fake_redis
     queue = RedisFIFOQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
@@ -104,8 +103,8 @@ async def test_worker_diff_success_broadcasts():
 
 
 @pytest.mark.asyncio
-async def test_worker_diff_failure_sets_failed_and_broadcasts():
-    redis = FakeRedis(decode_responses=True)
+async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
+    redis = fake_redis
     queue = RedisFIFOQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)

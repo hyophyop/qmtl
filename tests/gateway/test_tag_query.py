@@ -2,7 +2,6 @@ import json
 import base64
 import pytest
 from fastapi.testclient import TestClient
-from fakeredis.aioredis import FakeRedis
 import asyncio
 
 from qmtl.gateway.watch import QueueWatchHub
@@ -84,10 +83,9 @@ class DummyDag(DagManagerClient):
 
 
 @pytest.fixture
-def client():
-    redis = FakeRedis(decode_responses=True)
+def client(fake_redis):
     dag = DummyDag()
-    app = create_app(redis_client=redis, database=FakeDB(), dag_client=dag)
+    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
     return TestClient(app), dag
 
 
@@ -129,7 +127,7 @@ def test_submit_tag_query_node(client):
     assert dag.called_with == (["t1"], 60, "any")
 
 
-def test_multiple_tag_query_nodes_handle_errors():
+def test_multiple_tag_query_nodes_handle_errors(fake_redis):
     class ErrorDag(DagManagerClient):
         def __init__(self):
             super().__init__("dummy")
@@ -141,9 +139,8 @@ def test_multiple_tag_query_nodes_handle_errors():
                 raise RuntimeError("boom")
             return [f"{tags[0]}_q"]
 
-    redis = FakeRedis(decode_responses=True)
     dag = ErrorDag()
-    app = create_app(redis_client=redis, database=FakeDB(), dag_client=dag)
+    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
     c = TestClient(app)
 
     dag_json = {
