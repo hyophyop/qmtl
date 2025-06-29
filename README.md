@@ -36,7 +36,13 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
    This command ensures all development dependencies are available.
 
-2. **Testing** – Run `pytest` (via the `uv` environment) before committing any changes to verify everything works properly. Commit only after tests pass.
+2. **Testing** – Run the tests via `uv` before committing:
+
+   ```bash
+   uv run -- pytest
+   ```
+
+   Commit only after tests pass.
 
 3. **Design Approach** – Follow the Single Responsibility Principle (SRP) when designing modules and classes. This keeps features modular and easier to maintain.
 
@@ -74,7 +80,7 @@ See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
 Run all unit and integration tests with:
 
 ```bash
-uv run pytest -q tests
+uv run -- pytest
 ```
 
 ## Running Services
@@ -83,17 +89,13 @@ Start the gateway HTTP server and interact with the DAG manager using the
 provided CLI tools.
 
 ```bash
-qmtl gw --config gateway.yml
-
-# gateway.yml example
-# redis_dsn: redis://localhost:6379
-# database_backend: sqlite
-# database_dsn: sqlite:///qmtl.db
-# offline: true
+qmtl gw --config examples/gateway.yml
 
 # submit a DAG diff
 qmtl dagm diff --file dag.json --target localhost:50051
 ```
+
+Customize the sample YAML files in `examples/` to match your environment.
 
 See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
 information on configuration and advanced usage.

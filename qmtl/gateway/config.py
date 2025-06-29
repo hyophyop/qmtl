@@ -9,6 +9,8 @@ import yaml
 class GatewayConfig:
     """Configuration for Gateway service."""
 
+    host: str = "0.0.0.0"
+    port: int = 8000
     redis_dsn: str = "redis://localhost:6379"
     database_backend: str = "postgres"
     database_dsn: str = "postgresql://localhost/qmtl"

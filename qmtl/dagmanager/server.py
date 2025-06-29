@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import dataclasses
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -52,27 +51,27 @@ class _KafkaAdminClient:
         pass  # pragma: no cover - noop
 
 
-async def _run(args: argparse.Namespace) -> None:
+async def _run(cfg: DagManagerConfig) -> None:
     driver = None
     repo = None
     admin_client = None
     queue = None
 
-    if args.repo_backend == "neo4j":
+    if cfg.repo_backend == "neo4j":
         from neo4j import GraphDatabase  # pragma: no cover - external dependency
 
         driver = GraphDatabase.driver(
-            args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password)
+            cfg.neo4j_uri, auth=(cfg.neo4j_user, cfg.neo4j_password)
         )
         repo = None
-    elif args.repo_backend == "memory":
+    elif cfg.repo_backend == "memory":
         from .node_repository import MemoryNodeRepository
 
-        repo = MemoryNodeRepository(args.memory_repo_path)
-    if args.queue_backend == "kafka":
-        admin_client = _KafkaAdminClient(args.kafka_bootstrap)
+        repo = MemoryNodeRepository(cfg.memory_repo_path)
+    if cfg.queue_backend == "kafka":
+        admin_client = _KafkaAdminClient(cfg.kafka_bootstrap)
         queue = None
-    elif args.queue_backend == "memory":
+    elif cfg.queue_backend == "memory":
         from .kafka_admin import InMemoryAdminClient, KafkaAdmin
         from .diff_service import KafkaQueueManager
 
@@ -85,55 +84,34 @@ async def _run(args: argparse.Namespace) -> None:
         driver,
         admin_client,
         _NullStream(),
-        host=args.grpc_host,
-        port=args.grpc_port,
-        callback_url=args.diff_callback,
+        host=cfg.grpc_host,
+        port=cfg.grpc_port,
+        callback_url=cfg.diff_callback,
         gc=gc,
         repo=repo,
         queue=queue,
     )
     await grpc_server.start()
 
-    app = create_app(gc, callback_url=args.gc_callback, driver=driver)
-    config = uvicorn.Config(app, host=args.http_host, port=args.http_port, loop="asyncio", log_level="info")
+    app = create_app(gc, callback_url=cfg.gc_callback, driver=driver)
+    config = uvicorn.Config(app, host=cfg.http_host, port=cfg.http_port, loop="asyncio", log_level="info")
     http_server = uvicorn.Server(config)
 
     await asyncio.gather(http_server.serve(), grpc_server.wait_for_termination())
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="qmtl dagmgr-server", description="Run DAG manager gRPC and HTTP servers")
-    parser.add_argument("--config")
-    parser.add_argument(
-        "--repo-backend",
-        default="neo4j",
-        help="Repository backend (neo4j, memory)",
+    parser = argparse.ArgumentParser(
+        prog="qmtl dagmgr-server", description="Run DAG manager gRPC and HTTP servers"
     )
-    parser.add_argument("--queue-backend", default="kafka")
-    parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
-    parser.add_argument("--neo4j-user", default="neo4j")
-    parser.add_argument("--neo4j-password", default="neo4j")
-    parser.add_argument(
-        "--memory-repo-path",
-        default="memrepo.gpickle",
-        help="Path to persist graph for memory repo",
-    )
-    parser.add_argument("--kafka-bootstrap", default="localhost:9092")
-    parser.add_argument("--grpc-host", default="0.0.0.0")
-    parser.add_argument("--grpc-port", type=int, default=50051)
-    parser.add_argument("--http-host", default="0.0.0.0")
-    parser.add_argument("--http-port", type=int, default=8000)
-    parser.add_argument("--diff-callback")
-    parser.add_argument("--gc-callback")
+    parser.add_argument("--config", help="Path to configuration file")
     args = parser.parse_args(argv)
 
+    cfg = DagManagerConfig()
     if args.config:
         cfg = load_dagmanager_config(args.config)
-        for field in dataclasses.fields(DagManagerConfig):
-            if getattr(args, field.name, None) == parser.get_default(field.name):
-                setattr(args, field.name, getattr(cfg, field.name))
 
-    asyncio.run(_run(args))
+    asyncio.run(_run(cfg))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

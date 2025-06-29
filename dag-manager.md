@@ -250,8 +250,8 @@ For canary deployment steps see
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일을 읽어 기본 값을 채울 수 있다.
-`--config` 옵션으로 경로를 지정하며 CLI 플래그가 우선 적용된다.
+`qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
+모든 서버 옵션은 YAML에 작성하고 ``--config`` 로 경로를 지정한다.
 
 예시:
 
@@ -265,16 +265,11 @@ kafka_bootstrap: localhost:9092
 ```
 
 ```
-qmtl dagmgr-server --config dagmgr.yml --repo-backend neo4j \
-                   --queue-backend kafka --neo4j-uri bolt://db:7687
+qmtl dagmgr-server --config examples/dagmgr.yml
 ```
 
 Available flags:
 
 - ``--config`` – path to configuration file.
-- ``--repo-backend`` – select repository implementation (default ``neo4j``).
-- ``--queue-backend`` – select queue implementation (default ``kafka``).
-- ``--neo4j-uri`` – Neo4j connection URI.
-- ``--neo4j-user`` – database user.
-- ``--neo4j-password`` – database password.
-- ``--kafka-bootstrap`` – Kafka bootstrap servers.
+
+`examples/dagmgr.yml` contains comments showing every available field.
