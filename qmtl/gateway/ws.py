@@ -8,7 +8,7 @@ from typing import Optional
 from ..common.cloudevents import format_event
 
 import websockets
-from websockets.server import WebSocketServerProtocol
+from websockets.asyncio.server import Server, ServerConnection
 
 
 logger = logging.getLogger(__name__)
@@ -20,8 +20,8 @@ class WebSocketHub:
     def __init__(self, host: str = "localhost", port: int = 0) -> None:
         self.host = host
         self.port = port
-        self._server: Optional[websockets.server.Serve] = None
-        self._clients: set[WebSocketServerProtocol] = set()
+        self._server: Optional[Server] = None
+        self._clients: set[ServerConnection] = set()
         self._lock = asyncio.Lock()
         self._sentinel: object = object()
         self._queue: asyncio.Queue[object] = asyncio.Queue()
@@ -55,7 +55,7 @@ class WebSocketHub:
         """Return ``True`` if the WebSocket server is active."""
         return self._server is not None
 
-    async def _handler(self, websocket: WebSocketServerProtocol) -> None:
+    async def _handler(self, websocket: ServerConnection) -> None:
         async with self._lock:
             self._clients.add(websocket)
         try:
