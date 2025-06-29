@@ -10,6 +10,7 @@ from typing import Optional, Coroutine, Any
 import asyncio
 
 from fastapi import FastAPI, HTTPException, status, Response
+from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
 import time
 from pydantic import BaseModel, Field
@@ -105,8 +106,6 @@ def create_app(
     database_backend: str = "postgres",
     database_dsn: str | None = None,
 ) -> FastAPI:
-    app = FastAPI()
-
     r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     if database is not None:
         db = database
@@ -125,11 +124,13 @@ def create_app(
     watch = watch_hub or QueueWatchHub()
     ws = ws_hub
 
-    app.state.database = db
-
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
         await dagm.close()
+
+    app = FastAPI(lifespan=lifespan)
+    app.state.database = db
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
