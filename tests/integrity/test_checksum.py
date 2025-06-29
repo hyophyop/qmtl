@@ -3,7 +3,6 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from fakeredis.aioredis import FakeRedis
 
 from qmtl.gateway.api import create_app, Database, StrategySubmit
 from qmtl.common import crc32_of_list
@@ -24,10 +23,9 @@ class FakeDB(Database):
 
 
 @pytest.fixture
-def client():
-    redis = FakeRedis(decode_responses=True)
+def client(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=redis, database=db)
+    app = create_app(redis_client=fake_redis, database=db)
     return TestClient(app)
 
 

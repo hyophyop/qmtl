@@ -1,5 +1,4 @@
 import pytest
-from fakeredis.aioredis import FakeRedis
 
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.database import Database
@@ -24,8 +23,8 @@ class FakeDB(Database):
 
 
 @pytest.mark.asyncio
-async def test_state_recovery_after_redis_failure():
-    redis = FakeRedis(decode_responses=True)
+async def test_state_recovery_after_redis_failure(fake_redis):
+    redis = fake_redis
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
 

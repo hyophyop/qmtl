@@ -3,7 +3,6 @@ import json
 import hashlib
 import pytest
 from fastapi.testclient import TestClient
-from fakeredis.aioredis import FakeRedis
 
 from qmtl.dagmanager import compute_node_id
 from qmtl.gateway.api import create_app, Database, StrategySubmit
@@ -30,11 +29,10 @@ class FakeDB(Database):
 
 
 @pytest.fixture
-def client_and_redis():
-    redis = FakeRedis(decode_responses=True)
+def client_and_redis(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=redis, database=db)
-    return TestClient(app), redis
+    app = create_app(redis_client=fake_redis, database=db)
+    return TestClient(app), fake_redis
 
 
 def test_compute_node_id_collision():
@@ -64,8 +62,8 @@ async def test_sentinel_inserted(client_and_redis):
 
 
 @pytest.mark.asyncio
-async def test_sentinel_skip():
-    redis = FakeRedis(decode_responses=True)
+async def test_sentinel_skip(fake_redis):
+    redis = fake_redis
     db = FakeDB()
     app = create_app(redis_client=redis, database=db, insert_sentinel=False)
     client = TestClient(app)
