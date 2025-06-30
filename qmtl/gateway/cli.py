@@ -39,7 +39,14 @@ async def _main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
-    uvicorn.run(app, host=config.host, port=config.port)
+    try:
+        uvicorn.run(app, host=config.host, port=config.port)
+    finally:
+        if hasattr(db, "close"):
+            try:
+                await db.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
 
 def main(argv: list[str] | None = None) -> None:

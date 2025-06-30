@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app as gw_create_app
@@ -19,7 +19,7 @@ import pytest
 
 class DummyGC:
     def collect(self):
-        return [QueueInfo("q", "raw", datetime.utcnow(), interval=60)]
+        return [QueueInfo("q", "raw", datetime.now(UTC), interval=60)]
 
 
 class FakeDagClient:

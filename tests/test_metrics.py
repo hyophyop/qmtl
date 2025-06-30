@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import pytest
 
@@ -103,7 +103,7 @@ def test_diff_duration_and_error_metrics():
 
 def test_gc_sets_orphan_gauge():
     metrics.reset_metrics()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     store = [QueueInfo("q", "raw", now - timedelta(days=10))]
 
     class Store:

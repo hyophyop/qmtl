@@ -3,7 +3,7 @@ import httpx
 
 from qmtl.dagmanager.api import create_app
 from qmtl.dagmanager.gc import QueueInfo
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 class FakeGC:
@@ -12,7 +12,7 @@ class FakeGC:
 
     def collect(self):
         self.calls += 1
-        return [QueueInfo("q1", "raw", datetime.utcnow(), interval=60)]
+        return [QueueInfo("q1", "raw", datetime.now(UTC), interval=60)]
 
 
 def test_gc_route_triggers_collect():

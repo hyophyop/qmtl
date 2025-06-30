@@ -23,7 +23,7 @@ def _load_graph(path: Path) -> None:
         except Exception:
             try:
                 data = json.loads(path.read_text())
-                _GRAPH = nx.node_link_graph(data)
+                _GRAPH = nx.node_link_graph(data, edges="edges")
             except Exception:
                 _GRAPH = nx.DiGraph()
     _LOADED = True
@@ -36,7 +36,7 @@ def _save_graph() -> None:
         nx.write_gpickle(_GRAPH, _GRAPH_PATH)
     except Exception:
         try:
-            data = nx.node_link_data(_GRAPH)
+            data = nx.node_link_data(_GRAPH, edges="edges")
             _GRAPH_PATH.write_text(json.dumps(data))
         except Exception:
             pass

@@ -3,7 +3,7 @@ from __future__ import annotations
 """Garbage collection utilities for orphan Kafka queues."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Iterable, Protocol, Optional
 
 from .metrics import orphan_queue_total
@@ -63,7 +63,7 @@ class S3ArchiveClient:
 
     def archive(self, queue: str) -> None:
         """Store queue dump in ``self.bucket`` under a timestamped key."""
-        key = f"{queue}-{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}"
+        key = f"{queue}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}"
         self._client.put_object(Bucket=self.bucket, Key=key, Body=b"")
 
 
@@ -94,7 +94,7 @@ class GarbageCollector:
 
     def collect(self, now: Optional[datetime] = None) -> list[QueueInfo]:
         """Run one GC batch and return processed QueueInfo items."""
-        now = now or datetime.utcnow()
+        now = now or datetime.now(UTC)
         all_queues = list(self.store.list_orphan_queues())
         orphan_queue_total.set(len(all_queues))
         orphan_queue_total._val = len(all_queues)  # type: ignore[attr-defined]
