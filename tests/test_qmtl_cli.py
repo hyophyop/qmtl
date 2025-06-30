@@ -7,3 +7,4 @@ def test_qmtl_help():
     assert result.returncode == 0
     assert "gw" in result.stdout
     assert "dagm" in result.stdout
+    assert "init" in result.stdout
