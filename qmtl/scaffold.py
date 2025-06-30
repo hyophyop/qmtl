@@ -11,6 +11,12 @@ def create_project(path: Path) -> None:
     dest = Path(path)
     dest.mkdir(parents=True, exist_ok=True)
 
+    # extension package directories
+    for sub in ["generators", "indicators", "transforms"]:
+        pkg = dest / sub
+        pkg.mkdir(exist_ok=True)
+        (pkg / "__init__.py").touch()
+
     shutil.copy(_EXAMPLES_DIR / "qmtl.yml", dest / "qmtl.yml")
     shutil.copy(_EXAMPLES_DIR / "general_strategy.py", dest / "strategy.py")
 

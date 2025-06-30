@@ -12,7 +12,9 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagmgr-server", help="Run DAG manager servers", add_help=False)
     sub.add_parser("sdk", help="Run strategy via SDK", add_help=False)
     p_init = sub.add_parser("init", help="Initialize new project")
-    p_init.add_argument("path", help="Project directory")
+    p_init.add_argument(
+        "--path", required=True, help="Project directory to create scaffolding"
+    )
 
     args, rest = parser.parse_known_args(argv)
 
