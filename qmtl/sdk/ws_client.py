@@ -25,6 +25,7 @@ class WebSocketClient:
         self.sentinel_weights: dict[str, float] = {}
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        self._ws: websockets.WebSocketClientProtocol | None = None
 
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -50,6 +51,7 @@ class WebSocketClient:
 
     async def _listen(self) -> None:
         async with websockets.connect(self.url) as ws:
+            self._ws = ws
             while not self._stop_event.is_set():
                 try:
                     msg = await ws.recv()
@@ -65,6 +67,7 @@ class WebSocketClient:
                 except json.JSONDecodeError:
                     continue
                 await self._handle(data)
+            self._ws = None
 
     async def start(self) -> None:
         """Start listening in the background."""
@@ -75,6 +78,9 @@ class WebSocketClient:
     async def stop(self) -> None:
         """Stop the background listener."""
         self._stop_event.set()
+        if self._ws is not None:
+            await self._ws.close()
+            self._ws = None
         if self._task is not None:
             await self._task
             self._task = None
