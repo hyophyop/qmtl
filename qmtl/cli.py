@@ -11,6 +11,8 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagm", help="Dag manager admin CLI", add_help=False)
     sub.add_parser("dagmgr-server", help="Run DAG manager servers", add_help=False)
     sub.add_parser("sdk", help="Run strategy via SDK", add_help=False)
+    p_init = sub.add_parser("init", help="Initialize new project")
+    p_init.add_argument("path", help="Project directory")
 
     args, rest = parser.parse_known_args(argv)
 
@@ -28,6 +30,11 @@ def main(argv: List[str] | None = None) -> None:
         from .sdk.cli import main as sdk_main
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
+    elif args.cmd == "init":
+        from pathlib import Path
+        from .scaffold import create_project
+
+        create_project(Path(args.path))
     else:
         parser.print_help()
 
