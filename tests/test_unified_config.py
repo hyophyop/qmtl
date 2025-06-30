@@ -44,3 +44,27 @@ def test_load_unified_config_malformed(tmp_path: Path) -> None:
     cfg_file.write_text("- 1")
     with pytest.raises(TypeError):
         load_config(str(cfg_file))
+
+
+def test_load_unified_config_defaults(tmp_path: Path) -> None:
+    """Empty files should load default configs."""
+    cfg_file = tmp_path / "empty.yml"
+    cfg_file.write_text("{}")
+    cfg = load_config(str(cfg_file))
+    assert isinstance(cfg, UnifiedConfig)
+    assert cfg.gateway.redis_dsn == "redis://localhost:6379"
+    assert cfg.dagmanager.grpc_port == 50051
+
+
+def test_load_unified_config_bad_gateway(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "bad.yml"
+    cfg_file.write_text(yaml.safe_dump({"gateway": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="gateway section must be a mapping"):
+        load_config(str(cfg_file))
+
+
+def test_load_unified_config_bad_dagmanager(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "bad.yml"
+    cfg_file.write_text(yaml.safe_dump({"dagmanager": [1]}))
+    with pytest.raises(TypeError, match="dagmanager section must be a mapping"):
+        load_config(str(cfg_file))
