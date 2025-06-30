@@ -8,7 +8,8 @@ from typing import Iterable
 import uvicorn
 
 from .grpc_server import serve
-from .config import DagManagerConfig, load_dagmanager_config
+from .config import DagManagerConfig
+from ..config import load_config
 from .api import create_app
 from .gc import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
@@ -109,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
 
     cfg = DagManagerConfig()
     if args.config:
-        cfg = load_dagmanager_config(args.config)
+        cfg = load_config(args.config).dagmanager
 
     asyncio.run(_run(cfg))
 

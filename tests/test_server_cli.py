@@ -1,4 +1,5 @@
 import pytest
+import yaml
 from qmtl.dagmanager.server import main
 
 
@@ -25,7 +26,7 @@ def test_server_defaults(monkeypatch):
 
 def test_server_config_file(monkeypatch, tmp_path):
     cfg = tmp_path / "cfg.yml"
-    cfg.write_text("neo4j_uri: bolt://test:7687\n")
+    cfg.write_text(yaml.safe_dump({"dagmanager": {"neo4j_uri": "bolt://test:7687"}}))
 
     captured = {}
 
