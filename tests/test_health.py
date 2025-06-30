@@ -26,6 +26,9 @@ class FakeDagClient:
     async def status(self):
         return True
 
+    async def close(self) -> None:
+        pass
+
 
 class FakeDB(PostgresDatabase):
     def __init__(self):
@@ -39,29 +42,29 @@ class FakeDB(PostgresDatabase):
 def test_gateway_status(fake_redis):
     redis_client = fake_redis
     db = FakeDB()
-    client = TestClient(
+    with TestClient(
         gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient())
-    )
-    resp = client.get("/status")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["redis"] == "ok"
-    assert data["postgres"] == "ok"
-    assert data["dag_manager"] == "ok"
+    ) as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["redis"] == "ok"
+        assert data["postgres"] == "ok"
+        assert data["dag_manager"] == "ok"
 
 
 def test_dagmanager_http_status():
-    client = TestClient(dag_http_create_app())
-    resp = client.get("/status")
-    assert resp.status_code == 200
-    assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
+    with TestClient(dag_http_create_app()) as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
 
 
 def test_dagmanager_api_status():
-    client = TestClient(dag_api_create_app(DummyGC()))
-    resp = client.get("/status")
-    assert resp.status_code == 200
-    assert "neo4j" in resp.json()
+    with TestClient(dag_api_create_app(DummyGC())) as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        assert "neo4j" in resp.json()
 
 
 @pytest.mark.asyncio

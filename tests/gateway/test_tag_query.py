@@ -86,7 +86,8 @@ class DummyDag(DagManagerClient):
 def client(fake_redis):
     dag = DummyDag()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
-    return TestClient(app), dag
+    with TestClient(app) as c:
+        yield c, dag
 
 
 def test_queues_by_tag_route(client):
@@ -141,42 +142,41 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
 
     dag = ErrorDag()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
-    c = TestClient(app)
-
-    dag_json = {
-        "nodes": [
-            {
-                "node_id": "N1",
-                "node_type": "TagQueryNode",
-                "interval": 60,
-                "period": 2,
-                "tags": ["good"],
-                "code_hash": "ch",
-                "schema_hash": "sh",
-                "inputs": [],
-            },
-            {
-                "node_id": "N2",
-                "node_type": "TagQueryNode",
-                "interval": 30,
-                "period": 2,
-                "tags": ["bad"],
-                "code_hash": "ch",
-                "schema_hash": "sh",
-                "inputs": [],
-            },
-        ]
-    }
-    payload = {
-        "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
-        "meta": None,
-        "run_type": "dry-run",
-        "node_ids_crc32": crc32_of_list(["N1", "N2"]),
-    }
-    resp = c.post("/strategies", json=payload)
-    assert resp.status_code == 202
-    assert resp.json()["queue_map"] == {"N1": ["good_q"], "N2": []}
-    assert len(dag.calls) == 2
+    with TestClient(app) as c:
+        dag_json = {
+            "nodes": [
+                {
+                    "node_id": "N1",
+                    "node_type": "TagQueryNode",
+                    "interval": 60,
+                    "period": 2,
+                    "tags": ["good"],
+                    "code_hash": "ch",
+                    "schema_hash": "sh",
+                    "inputs": [],
+                },
+                {
+                    "node_id": "N2",
+                    "node_type": "TagQueryNode",
+                    "interval": 30,
+                    "period": 2,
+                    "tags": ["bad"],
+                    "code_hash": "ch",
+                    "schema_hash": "sh",
+                    "inputs": [],
+                },
+            ]
+        }
+        payload = {
+            "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+            "meta": None,
+            "run_type": "dry-run",
+            "node_ids_crc32": crc32_of_list(["N1", "N2"]),
+        }
+        resp = c.post("/strategies", json=payload)
+        assert resp.status_code == 202
+        assert resp.json()["queue_map"] == {"N1": ["good_q"], "N2": []}
+        assert len(dag.calls) == 2
 
 
 @pytest.mark.asyncio

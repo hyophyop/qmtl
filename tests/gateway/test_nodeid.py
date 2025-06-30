@@ -32,7 +32,8 @@ class FakeDB(Database):
 def client_and_redis(fake_redis):
     db = FakeDB()
     app = create_app(redis_client=fake_redis, database=db)
-    return TestClient(app), fake_redis
+    with TestClient(app) as c:
+        yield c, fake_redis
 
 
 def test_compute_node_id_collision():
@@ -66,18 +67,20 @@ async def test_sentinel_skip(fake_redis):
     redis = fake_redis
     db = FakeDB()
     app = create_app(redis_client=redis, database=db, insert_sentinel=False)
-    client = TestClient(app)
-    dag = {"nodes": []}
-    payload = StrategySubmit(
-        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
-        meta=None,
-        run_type="dry-run",
-        node_ids_crc32=crc32_of_list([]),
-    )
-    resp = client.post("/strategies", json=payload.model_dump())
-    assert resp.status_code == 202
-    sid = resp.json()["strategy_id"]
-    encoded = await redis.hget(f"strategy:{sid}", "dag")
-    dag_saved = json.loads(base64.b64decode(encoded).decode())
-    assert not any(n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"])
+    with TestClient(app) as client:
+        dag = {"nodes": []}
+        payload = StrategySubmit(
+            dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+            meta=None,
+            run_type="dry-run",
+            node_ids_crc32=crc32_of_list([]),
+        )
+        resp = client.post("/strategies", json=payload.model_dump())
+        assert resp.status_code == 202
+        sid = resp.json()["strategy_id"]
+        encoded = await redis.hget(f"strategy:{sid}", "dag")
+        dag_saved = json.loads(base64.b64decode(encoded).decode())
+        assert not any(
+            n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"]
+        )
 

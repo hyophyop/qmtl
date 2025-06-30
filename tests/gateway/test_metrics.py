@@ -33,8 +33,8 @@ def test_metrics_endpoint(app):
     metrics.lost_requests_total.inc()
     metrics.observe_gateway_latency(42)
     metrics.set_sentinel_traffic_ratio("v1", 0.5)
-    client = TestClient(app)
-    resp = client.get("/metrics")
+    with TestClient(app) as client:
+        resp = client.get("/metrics")
     assert resp.status_code == 200
     assert "lost_requests_total" in resp.text
     assert "gateway_e2e_latency_p95" in resp.text
@@ -43,15 +43,15 @@ def test_metrics_endpoint(app):
 
 def test_latency_metric_recorded(app):
     metrics.reset_metrics()
-    client = TestClient(app, raise_server_exceptions=False)
-    payload = StrategySubmit(
-        dag_json="{}",
-        meta=None,
-        run_type="dry-run",
-        node_ids_crc32=crc32_of_list([]),
-    )
-    client.post("/strategies", json=payload.model_dump())
-    assert metrics.gateway_e2e_latency_p95._value.get() > 0
+    with TestClient(app, raise_server_exceptions=False) as client:
+        payload = StrategySubmit(
+            dag_json="{}",
+            meta=None,
+            run_type="dry-run",
+            node_ids_crc32=crc32_of_list([]),
+        )
+        client.post("/strategies", json=payload.model_dump())
+        assert metrics.gateway_e2e_latency_p95._value.get() > 0
 
 
 def test_lost_requests_counter(monkeypatch, fake_redis):
@@ -63,13 +63,13 @@ def test_lost_requests_counter(monkeypatch, fake_redis):
     monkeypatch.setattr(redis, "rpush", fail)
     db = FakeDB()
     app = create_app(redis_client=redis, database=db)
-    client = TestClient(app, raise_server_exceptions=False)
-    payload = StrategySubmit(
-        dag_json="{}",
-        meta=None,
-        run_type="dry-run",
-        node_ids_crc32=crc32_of_list([]),
-    )
-    resp = client.post("/strategies", json=payload.model_dump())
-    assert resp.status_code == 500
-    assert metrics.lost_requests_total._value.get() == 1
+    with TestClient(app, raise_server_exceptions=False) as client:
+        payload = StrategySubmit(
+            dag_json="{}",
+            meta=None,
+            run_type="dry-run",
+            node_ids_crc32=crc32_of_list([]),
+        )
+        resp = client.post("/strategies", json=payload.model_dump())
+        assert resp.status_code == 500
+        assert metrics.lost_requests_total._value.get() == 1

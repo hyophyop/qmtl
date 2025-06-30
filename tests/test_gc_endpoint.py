@@ -18,11 +18,11 @@ class FakeGC:
 def test_gc_route_triggers_collect():
     gc = FakeGC()
     app = create_app(gc)
-    client = TestClient(app)
-    resp = client.post("/admin/gc-trigger", json={"id": "s"})
-    assert resp.status_code == 202
-    assert gc.calls == 1
-    assert resp.json()["processed"] == ["q1"]
+    with TestClient(app) as client:
+        resp = client.post("/admin/gc-trigger", json={"id": "s"})
+        assert resp.status_code == 202
+        assert gc.calls == 1
+        assert resp.json()["processed"] == ["q1"]
 
 
 def test_gc_route_emits_callback(monkeypatch):
@@ -36,11 +36,11 @@ def test_gc_route_emits_callback(monkeypatch):
     monkeypatch.setattr("qmtl.dagmanager.api.post_with_backoff", fake_post)
 
     app = create_app(gc, callback_url="http://gw/cb")
-    client = TestClient(app)
-    client.post("/admin/gc-trigger", json={"id": "x"})
+    with TestClient(app) as client:
+        client.post("/admin/gc-trigger", json={"id": "x"})
 
-    assert events
-    assert events[0][0] == "http://gw/cb"
-    assert events[0][1]["type"] == "gc"
-    assert events[0][1]["data"]["id"] == "x"
+        assert events
+        assert events[0][0] == "http://gw/cb"
+        assert events[0][1]["type"] == "gc"
+        assert events[0][1]["data"]["id"] == "x"
 
