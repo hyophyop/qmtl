@@ -40,8 +40,6 @@ transforms = []
 
 [project.scripts]
 qmtl = "qmtl.cli:main"
-qmtl-dagm = "qmtl.dagmanager.cli:main"
-qmtl-gateway = "qmtl.gateway.cli:main"
 
 [build-system]
 requires = ["setuptools"]
