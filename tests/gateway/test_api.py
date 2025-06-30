@@ -35,17 +35,17 @@ def app(fake_redis):
 
 
 def test_ingest_and_status(app):
-    client = TestClient(app)
-    payload = StrategySubmit(
-        dag_json="{}",
-        meta={"user": "alice"},
-        run_type="dry-run",
-        node_ids_crc32=crc32_of_list([]),
-    )
-    resp = client.post("/strategies", json=payload.model_dump())
-    assert resp.status_code == 202
-    sid = resp.json()["strategy_id"]
+    with TestClient(app) as client:
+        payload = StrategySubmit(
+            dag_json="{}",
+            meta={"user": "alice"},
+            run_type="dry-run",
+            node_ids_crc32=crc32_of_list([]),
+        )
+        resp = client.post("/strategies", json=payload.model_dump())
+        assert resp.status_code == 202
+        sid = resp.json()["strategy_id"]
 
-    resp = client.get(f"/strategies/{sid}/status")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "queued"
+        resp = client.get(f"/strategies/{sid}/status")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "queued"

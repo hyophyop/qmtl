@@ -26,7 +26,8 @@ class FakeDB(Database):
 def client(fake_redis):
     db = FakeDB()
     app = create_app(redis_client=fake_redis, database=db)
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 def make_payload(dag: dict) -> StrategySubmit:
