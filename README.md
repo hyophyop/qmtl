@@ -85,11 +85,16 @@ uv run -- pytest
 
 ## Running Services
 
-Start the gateway HTTP server and interact with the DAG manager using the
-provided CLI tools.
+Start the Gateway and DAG manager using the combined configuration file. Each
+service reads its own section from `qmtl.yml`.
 
 ```bash
+
+# start the gateway HTTP server
 qmtl gw --config examples/qmtl.yml
+
+# start the DAG manager
+qmtl dagmgr-server --config examples/qmtl.yml
 
 # submit a DAG diff
 qmtl dagm diff --file dag.json --target localhost:50051
