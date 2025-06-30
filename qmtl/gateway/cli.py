@@ -8,7 +8,8 @@ import redis.asyncio as redis
 from .redis_client import InMemoryRedis
 
 from .api import create_app
-from .config import GatewayConfig, load_gateway_config
+from .config import GatewayConfig
+from ..config import load_config
 
 
 async def _main(argv: list[str] | None = None) -> None:
@@ -19,7 +20,7 @@ async def _main(argv: list[str] | None = None) -> None:
 
     config = GatewayConfig()
     if args.config:
-        config = load_gateway_config(args.config)
+        config = load_config(args.config).gateway
 
     if config.offline:
         redis_client = InMemoryRedis()
