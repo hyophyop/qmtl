@@ -251,7 +251,7 @@ For canary deployment steps see
 ## 12. 서버 설정 파일 사용법
 
 `qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
-모든 서버 옵션은 YAML에 작성하고 ``--config`` 로 경로를 지정한다.
+아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 ``--config`` 로 경로를 지정한다.
 
 예시:
 
@@ -268,8 +268,9 @@ kafka_bootstrap: localhost:9092
 qmtl dagmgr-server --config examples/qmtl.yml
 ```
 
+해당 명령은 `examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
+`examples/qmtl.yml` contains comments showing every available field.
+
 Available flags:
 
 - ``--config`` – path to configuration file.
-
-`examples/qmtl.yml` contains comments showing every available field.

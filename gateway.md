@@ -149,14 +149,14 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 
 ### Gateway CLI Options
 
-The ``qmtl gw`` subcommand only accepts ``--config``. All server parameters such as
-``host``, ``port`` and database settings must be provided via YAML.
+Run the Gateway service using the combined configuration file:
 
 ```bash
 qmtl gw --config examples/qmtl.yml
 ```
 
-See ``examples/qmtl.yml`` for a fully annotated configuration template.
+The command reads the ``gateway`` section of ``examples/qmtl.yml`` for all
+server parameters. See the file for a fully annotated configuration template.
 
 Available flags:
 
