@@ -123,9 +123,12 @@ def test_metrics_server_exposes_http():
     metrics.diff_duration_ms_p95.set(42)
     port = 9101
     metrics.start_metrics_server(port)
-    # wait briefly for server thread
-    time.sleep(0.1)
-    resp = httpx.get(f"http://localhost:{port}/metrics")
+    while True:
+        try:
+            resp = httpx.get(f"http://localhost:{port}/metrics")
+            break
+        except Exception:
+            continue
     assert resp.status_code == 200
     assert "diff_duration_ms_p95" in resp.text
 

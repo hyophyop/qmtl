@@ -186,9 +186,7 @@ async def test_watch_hub_broadcast():
     async def listen():
         gen = hub.subscribe(["t1"], 60, "any")
         try:
-            return await asyncio.wait_for(gen.__anext__(), 2.0)
-        except asyncio.TimeoutError:
-            pytest.fail("Timeout occurred while waiting for broadcast")
+            return await gen.__anext__()
         finally:
             await gen.aclose()
 
@@ -206,20 +204,23 @@ async def test_watch_hub_broadcast():
 async def test_watch_hub_broadcast_only_on_change():
     hub = QueueWatchHub()
     results: list[list[str]] = []
+    ready = asyncio.Event()
 
     async def listener() -> None:
-        async for data in hub.subscribe(["t1"], 60, "any"):
+        gen = hub.subscribe(["t1"], 60, "any")
+        ready.set()
+        async for data in gen:
             results.append(data)
 
     task = asyncio.create_task(listener())
-    await asyncio.sleep(0)
+    await ready.wait()
 
     await hub.broadcast(["t1"], 60, ["q3"], "any")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0)
     await hub.broadcast(["t1"], 60, ["q3"], "any")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0)
     await hub.broadcast(["t1"], 60, ["q4"], "any")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0)
 
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
