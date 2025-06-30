@@ -265,11 +265,11 @@ kafka_bootstrap: localhost:9092
 ```
 
 ```
-qmtl dagmgr-server --config examples/dagmgr.yml
+qmtl dagmgr-server --config examples/qmtl.yml
 ```
 
 Available flags:
 
 - ``--config`` – path to configuration file.
 
-`examples/dagmgr.yml` contains comments showing every available field.
+`examples/qmtl.yml` contains comments showing every available field.

@@ -89,7 +89,7 @@ Start the gateway HTTP server and interact with the DAG manager using the
 provided CLI tools.
 
 ```bash
-qmtl gw --config examples/gateway.yml
+qmtl gw --config examples/qmtl.yml
 
 # submit a DAG diff
 qmtl dagm diff --file dag.json --target localhost:50051

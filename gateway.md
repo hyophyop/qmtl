@@ -153,10 +153,10 @@ The ``qmtl gw`` subcommand only accepts ``--config``. All server parameters such
 ``host``, ``port`` and database settings must be provided via YAML.
 
 ```bash
-qmtl gw --config examples/gateway.yml
+qmtl gw --config examples/qmtl.yml
 ```
 
-See ``examples/gateway.yml`` for a fully annotated configuration template.
+See ``examples/qmtl.yml`` for a fully annotated configuration template.
 
 Available flags:
 

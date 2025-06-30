@@ -2,6 +2,8 @@
 
 이 디렉터리는 QMTL SDK의 구조적 예제 전략 코드를 제공합니다. 각 예제는 `architecture.md` 문서의 부록 및 주요 설계 예시를 기반으로 하며, 실제 전략 개발 시 참고할 수 있습니다.
 
+Gateway와 DAG manager 실행을 위한 예시 설정은 `qmtl.yml` 파일에 포함되어 있습니다. 환경에 맞게 수정 후 CLI에서 `--config` 인자로 사용할 수 있습니다.
+
 - `general_strategy.py`: 기본 모멘텀 신호 전략
 - `tag_query_strategy.py`: 태그 기반 지표 조회 및 다중 노드 조합 예시
 - `correlation_strategy.py`: 태그로 선택한 지표들의 상관계수 계산
