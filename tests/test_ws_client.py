@@ -45,3 +45,21 @@ async def test_ws_client_updates_state():
     finally:
         server.close()
         await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_ws_client_stop_closes_session():
+    async def handler(websocket):
+        await asyncio.sleep(1)
+
+    server = await websockets.serve(handler, "localhost", 0)
+    port = server.sockets[0].getsockname()[1]
+    url = f"ws://localhost:{port}"
+    try:
+        client = WebSocketClient(url)
+        await client.start()
+        await asyncio.sleep(0.1)
+        await asyncio.wait_for(client.stop(), timeout=0.5)
+    finally:
+        server.close()
+        await server.wait_closed()
