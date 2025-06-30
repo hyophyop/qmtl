@@ -128,6 +128,12 @@ def create_app(
     async def lifespan(app: FastAPI):
         yield
         await dagm.close()
+        db_obj = getattr(app.state, "database", None)
+        if db_obj is not None and hasattr(db_obj, "close"):
+            try:
+                await db_obj.close()  # type: ignore[attr-defined]
+            except Exception:
+                logger.exception("Failed to close database connection")
 
     app = FastAPI(lifespan=lifespan)
     app.state.database = db

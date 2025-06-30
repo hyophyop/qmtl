@@ -8,4 +8,7 @@ async def fake_redis():
     try:
         yield redis
     finally:
-        await redis.close()
+        if hasattr(redis, "aclose"):
+            await redis.aclose(close_connection_pool=True)
+        else:
+            await redis.close()

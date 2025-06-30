@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import grpc
 import pytest
@@ -246,7 +246,7 @@ class DummyArchive:
 
 @pytest.mark.asyncio
 async def test_grpc_cleanup_triggers_gc():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     store = DummyStore([QueueInfo("q", "raw", now - timedelta(days=10))])
     gc = GarbageCollector(store, DummyMetrics(), batch_size=1)
 
@@ -264,7 +264,7 @@ async def test_grpc_cleanup_triggers_gc():
 
 @pytest.mark.asyncio
 async def test_grpc_cleanup_archives():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     store = DummyStore([QueueInfo("s", "sentinel", now - timedelta(days=400))])
     archive = DummyArchive()
     gc = GarbageCollector(store, DummyMetrics(), archive=archive, batch_size=1)

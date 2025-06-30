@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo, S3ArchiveClient
 
@@ -32,7 +32,7 @@ class FakeArchive:
 
 
 def test_gc_policy_drop_and_archive():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     queues = [
         QueueInfo("raw_q", "raw", now - timedelta(days=10)),
         QueueInfo("sentinel_q", "sentinel", now - timedelta(days=220)),
@@ -50,7 +50,7 @@ def test_gc_policy_drop_and_archive():
 
 
 def test_gc_batch_halved_on_high_load():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     queues = [
         QueueInfo(f"q{i}", "raw", now - timedelta(days=10)) for i in range(4)
     ]
@@ -64,7 +64,7 @@ def test_gc_batch_halved_on_high_load():
 
 
 def test_gc_respects_grace_period():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     # Queue age is exactly TTL but within grace period
     queues = [QueueInfo("q", "raw", now - timedelta(days=7))]
     store = FakeStore(queues)
@@ -78,7 +78,7 @@ def test_gc_respects_grace_period():
 
 
 def test_gc_archives_with_client():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     queues = [QueueInfo("s", "sentinel", now - timedelta(days=400))]
     store = FakeStore(queues)
     metrics = FakeMetrics(0)
@@ -110,7 +110,7 @@ def test_s3_archive_client_puts_object():
 
 
 def test_gc_invokes_s3_archive():
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     queues = [QueueInfo("q", "sentinel", now - timedelta(days=400))]
     store = FakeStore(queues)
     metrics = FakeMetrics(0)

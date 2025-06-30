@@ -30,6 +30,11 @@ class Database:
     async def healthy(self) -> bool:
         raise NotImplementedError
 
+    async def close(self) -> None:
+        """Release any held resources."""
+        # Default implementation for backends that do not need cleanup
+        return None
+
 
 class PostgresDatabase(Database):
     """PostgreSQL-backed implementation."""
@@ -120,6 +125,10 @@ class PostgresDatabase(Database):
             return True
         except Exception:
             return False
+
+    async def close(self) -> None:
+        if self._pool is not None:
+            await self._pool.close()
 
 
 class SQLiteDatabase(Database):
@@ -215,6 +224,10 @@ class SQLiteDatabase(Database):
             return True
         except Exception:
             return False
+
+    async def close(self) -> None:
+        if self._conn is not None:
+            await self._conn.close()
 
 
 class MemoryDatabase(Database):
