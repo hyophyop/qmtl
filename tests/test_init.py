@@ -14,7 +14,14 @@ def test_create_project(tmp_path: Path):
 
 def test_init_cli(tmp_path: Path):
     dest = tmp_path / "cli_proj"
-    result = subprocess.run([sys.executable, "-m", "qmtl", "init", str(dest)], capture_output=True, text=True)
+    result = subprocess.run([
+        sys.executable,
+        "-m",
+        "qmtl",
+        "init",
+        "--path",
+        str(dest),
+    ], capture_output=True, text=True)
     assert result.returncode == 0
     assert (dest / "qmtl.yml").is_file()
     assert (dest / "strategy.py").is_file()
