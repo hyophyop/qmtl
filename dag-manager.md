@@ -264,6 +264,10 @@ queue_backend: kafka
 kafka_bootstrap: localhost:9092
 ```
 
+The sample file installed by ``qmtl init`` instead defaults to in-memory
+repositories and queues for local development. Commented lines show the above
+cluster configuration ready to be enabled.
+
 ```
 qmtl dagmgr-server --config examples/qmtl.yml
 ```
