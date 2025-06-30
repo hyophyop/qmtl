@@ -23,6 +23,33 @@ uv pip install -e .[generators]
 uv pip install -e .[transforms]
 ```
 
+## Project Initialization
+
+Create a new working directory with `qmtl init`. The command generates a
+project scaffold containing extension packages and a sample strategy:
+
+```bash
+qmtl init --path my_qmtl_project
+cd my_qmtl_project
+```
+
+The scaffold includes empty `generators/`, `indicators/` and
+`transforms/` packages. Install their optional extras so Python can
+discover your extensions:
+
+```bash
+uv pip install -e .[generators,indicators,transforms]
+```
+
+Run the default strategy to verify everything is set up correctly:
+
+```bash
+python strategy.py
+```
+
+See `examples/README.md` for additional strategies that can be executed
+in the same way.
+
 
 ## Development Workflow
 
