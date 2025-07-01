@@ -106,28 +106,34 @@ def create_app(
     database_backend: str = "postgres",
     database_dsn: str | None = None,
 ) -> FastAPI:
-    r = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
+    redis_conn = redis_client or redis.Redis(
+        host="localhost", port=6379, decode_responses=True
+    )
     if database is not None:
-        db = database
+        database_obj = database
     else:
         if database_backend == "postgres":
-            db = PostgresDatabase(database_dsn or "postgresql://localhost/qmtl")
+            database_obj = PostgresDatabase(
+                database_dsn or "postgresql://localhost/qmtl"
+            )
         elif database_backend == "memory":
-            db = MemoryDatabase()
+            database_obj = MemoryDatabase()
         elif database_backend == "sqlite":
-            db = SQLiteDatabase(database_dsn or ":memory:")
+            database_obj = SQLiteDatabase(database_dsn or ":memory:")
         else:
             raise ValueError(f"Unsupported database backend: {database_backend}")
-    fsm = StrategyFSM(redis=r, database=db)
-    manager = StrategyManager(redis=r, database=db, fsm=fsm, insert_sentinel=insert_sentinel)
-    dagm = dag_client or DagManagerClient("127.0.0.1:50051")
-    watch = watch_hub or QueueWatchHub()
-    ws = ws_hub
+    fsm = StrategyFSM(redis=redis_conn, database=database_obj)
+    manager = StrategyManager(
+        redis=redis_conn, database=database_obj, fsm=fsm, insert_sentinel=insert_sentinel
+    )
+    dag_manager = dag_client or DagManagerClient("127.0.0.1:50051")
+    watch_hub_local = watch_hub or QueueWatchHub()
+    ws_hub_local = ws_hub
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
-        await dagm.close()
+        await dag_manager.close()
         db_obj = getattr(app.state, "database", None)
         if db_obj is not None and hasattr(db_obj, "close"):
             try:
@@ -136,16 +142,16 @@ def create_app(
                 logger.exception("Failed to close database connection")
 
     app = FastAPI(lifespan=lifespan)
-    app.state.database = db
+    app.state.database = database_obj
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        return await gateway_status(r, db, dagm)
+        return await gateway_status(redis_conn, database_obj, dag_manager)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
-        return await gateway_status(r, db, dagm)
+        return await gateway_status(redis_conn, database_obj, dag_manager)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
@@ -193,7 +199,9 @@ def create_app(
                 interval = int(node.get("interval", 0))
                 match_mode = node.get("match_mode", "any")
                 node_ids.append(node["node_id"])
-                queries.append(dagm.get_queues_by_tag(tags, interval, match_mode))
+                queries.append(
+                    dag_manager.get_queues_by_tag(tags, interval, match_mode)
+                )
 
         results = []
         if queries:
@@ -235,13 +243,17 @@ def create_app(
                 except (TypeError, ValueError):
                     interval = None
             if tags and interval is not None:
-                await watch.broadcast(tags, interval, list(queues), match_mode)
-                if ws:
-                    await ws.send_queue_update(tags, interval, list(queues), match_mode)
+                await watch_hub_local.broadcast(
+                    tags, interval, list(queues), match_mode
+                )
+                if ws_hub_local:
+                    await ws_hub_local.send_queue_update(
+                        tags, interval, list(queues), match_mode
+                    )
         elif event_type == "sentinel_weight":
             gateway = getattr(app.state, "gateway", None)
             if gateway is None:
-                gateway = Gateway(ws)
+                gateway = Gateway(ws_hub_local)
                 app.state.gateway = gateway
             await gateway._handle_sentinel_weight(data)
             return {"ok": True}
@@ -254,7 +266,7 @@ def create_app(
     ) -> dict:
         mode = match_mode or match
         tag_list = [t for t in tags.split(",") if t]
-        queues = await dagm.get_queues_by_tag(tag_list, interval, mode)
+        queues = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
 
     @app.get("/queues/watch")
@@ -266,14 +278,14 @@ def create_app(
 
         async def streamer():
             try:
-                initial = await dagm.get_queues_by_tag(tag_list, interval, mode)
+                initial = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
             except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
                 # It's good practice to log this error for observability
                 # import logging
                 # logging.warning(f"Failed to get initial queues for tags='{tag_list}' interval={interval}: {e}")
                 initial = []
             yield json.dumps({"queues": initial}) + "\n"
-            async for queues in watch.subscribe(tag_list, interval, mode):
+            async for queues in watch_hub_local.subscribe(tag_list, interval, mode):
                 yield json.dumps({"queues": queues}) + "\n"
 
         return StreamingResponse(streamer(), media_type="text/plain")

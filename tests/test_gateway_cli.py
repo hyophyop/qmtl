@@ -9,8 +9,8 @@ def test_gateway_cli_help():
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):
-    cfg = tmp_path / "cfg.yml"
-    cfg.write_text(
+    config_path = tmp_path / "cfg.yml"
+    config_path.write_text(
         "\n".join(
             [
                 "gateway:",
@@ -46,7 +46,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     fake_uvicorn = SimpleNamespace(run=lambda app, host, port: captured.update({"host": host, "port": port}))
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
 
-    cli.main(["--config", str(cfg)])
+    cli.main(["--config", str(config_path)])
 
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 12345

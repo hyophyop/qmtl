@@ -62,7 +62,7 @@ async def _run(cfg: DagManagerConfig) -> None:
         from neo4j import GraphDatabase  # pragma: no cover - external dependency
 
         driver = GraphDatabase.driver(
-            cfg.neo4j_uri, auth=(cfg.neo4j_user, cfg.neo4j_password)
+            cfg.neo4j_dsn, auth=(cfg.neo4j_user, cfg.neo4j_password)
         )
         repo = None
     elif cfg.repo_backend == "memory":
@@ -70,7 +70,7 @@ async def _run(cfg: DagManagerConfig) -> None:
 
         repo = MemoryNodeRepository(cfg.memory_repo_path)
     if cfg.queue_backend == "kafka":
-        admin_client = _KafkaAdminClient(cfg.kafka_bootstrap)
+        admin_client = _KafkaAdminClient(cfg.kafka_dsn)
         queue = None
     elif cfg.queue_backend == "memory":
         from .kafka_admin import InMemoryAdminClient, KafkaAdmin

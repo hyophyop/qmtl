@@ -38,21 +38,21 @@ def test_topic_name_generation():
 
 
 def test_queue_config_values():
-    cfg = get_config("raw")
-    assert cfg == TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000)
+    config = get_config("raw")
+    assert config == TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000)
     ind = get_config("indicator")
     assert ind == TopicConfig(partitions=1, replication_factor=2, retention_ms=30 * 24 * 60 * 60 * 1000)
-    exec_cfg = get_config("trade_exec")
-    assert exec_cfg == TopicConfig(partitions=1, replication_factor=3, retention_ms=90 * 24 * 60 * 60 * 1000)
+    exec_config = get_config("trade_exec")
+    assert exec_config == TopicConfig(partitions=1, replication_factor=3, retention_ms=90 * 24 * 60 * 60 * 1000)
 
 
 def test_idempotent_topic_creation():
     admin = FakeAdmin({"exists": {}})
     wrapper = KafkaAdmin(admin)
 
-    cfg = TopicConfig(1, 1, 1000)
-    wrapper.create_topic_if_needed("exists", cfg)
-    wrapper.create_topic_if_needed("new", cfg)
+    config = TopicConfig(1, 1, 1000)
+    wrapper.create_topic_if_needed("exists", config)
+    wrapper.create_topic_if_needed("new", config)
 
     assert len(admin.created) == 1
     name, parts, repl, conf = admin.created[0]
