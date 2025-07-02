@@ -25,9 +25,9 @@ def test_invalid_node_parameters(interval, period):
 )
 def test_invalid_compute_fn(fn):
     with pytest.raises(TypeError):
-        SourceNode(compute_fn=fn, interval=1, period=1)
+        SourceNode(compute_fn=fn, interval="1s", period=1)
 
 
 def test_processing_node_requires_input():
     with pytest.raises(ValueError):
-        ProcessingNode(input=None, compute_fn=lambda v: v, interval=1, period=1)
+        ProcessingNode(input=None, compute_fn=lambda v: v, interval="1s", period=1)

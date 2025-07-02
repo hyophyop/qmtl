@@ -187,10 +187,10 @@ import pandas as pd
 from qmtl.sdk import DataFetcher, QuestDBLoader
 
 class BinanceFetcher:
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
         url = (
             "https://api.binance.com/api/v3/klines"
-            f"?symbol={node_id}&interval={interval}m"
+            f"?symbol={node_id}&interval={interval}"
             f"&startTime={start * 1000}&endTime={end * 1000}"
         )
         async with httpx.AsyncClient() as client:

@@ -47,8 +47,8 @@ def test_backtest_executes_nodes(monkeypatch):
 
     class Strat(Strategy):
         def setup(self):
-            src = StreamInput(interval=60, period=2, history_provider=DummyProvider())
-            node = Node(input=src, compute_fn=lambda v: calls.append(v), interval=60, period=2)
+            src = StreamInput(interval="60s", period=2, history_provider=DummyProvider())
+            node = Node(input=src, compute_fn=lambda v: calls.append(v), interval="60s", period=2)
             self.add_nodes([src, node])
 
     Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
@@ -60,9 +60,9 @@ def test_offline_executes_nodes():
 
     class Strat(Strategy):
         def setup(self):
-            src = StreamInput(interval=60, period=2)
+            src = StreamInput(interval="60s", period=2)
             src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
-            node = Node(input=src, compute_fn=lambda v: calls.append(v), interval=60, period=2)
+            node = Node(input=src, compute_fn=lambda v: calls.append(v), interval="60s", period=2)
             self.add_nodes([src, node])
 
     Runner.offline(Strat)

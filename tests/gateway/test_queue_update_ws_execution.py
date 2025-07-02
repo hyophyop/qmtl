@@ -40,7 +40,7 @@ async def test_node_unpauses_on_queue_update():
     gw_app = create_app(dag_client=DummyDag(), ws_hub=ws_hub)
     transport = httpx.ASGITransport(gw_app)
     calls = []
-    node = TagQueryNode(["t1"], interval=60, period=1, compute_fn=lambda v: calls.append(v))
+    node = TagQueryNode(["t1"], interval="60s", period=1, compute_fn=lambda v: calls.append(v))
     manager.register(node)
 
     assert not node.execute

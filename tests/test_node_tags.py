@@ -3,7 +3,7 @@ from qmtl.sdk.node import SourceNode
 
 
 def test_add_tag():
-    n = SourceNode(interval=1, period=1)
+    n = SourceNode(interval="1s", period=1)
     original = n.node_id
     assert n.tags == []
 

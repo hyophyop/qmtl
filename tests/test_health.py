@@ -19,7 +19,7 @@ import pytest
 
 class DummyGC:
     def collect(self):
-        return [QueueInfo("q", "raw", datetime.now(UTC), interval=60)]
+        return [QueueInfo("q", "raw", datetime.now(UTC), interval="60s")]
 
 
 class FakeDagClient:

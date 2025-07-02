@@ -192,8 +192,8 @@ def test_diff_with_sdk_nodes():
 
     class _S(Strategy):
         def setup(self):
-            src = StreamInput(interval=1, period=1)
-            node = ProcessingNode(input=src, compute_fn=lambda x: x, name="out", interval=1, period=1)
+            src = StreamInput(interval="1s", period=1)
+            node = ProcessingNode(input=src, compute_fn=lambda x: x, name="out", interval="1s", period=1)
             self.add_nodes([src, node])
 
     s = _S()
