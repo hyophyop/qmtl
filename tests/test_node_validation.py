@@ -4,8 +4,6 @@ from qmtl.sdk.node import SourceNode, ProcessingNode
 @pytest.mark.parametrize(
     "interval,period",
     [
-        (None, 1),
-        (1, None),
         (0, 1),
         (1, 0),
         (-1, 1),

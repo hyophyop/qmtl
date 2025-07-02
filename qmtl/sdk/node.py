@@ -362,8 +362,8 @@ class Node:
         config: dict | None = None,
         schema: dict | None = None,
     ) -> None:
-        interval_val = parse_interval(interval)
-        period_val = parse_period(period)
+        interval_val = parse_interval(interval) if interval is not None else None
+        period_val = parse_period(period) if period is not None else None
 
         if compute_fn is not None:
             sig = inspect.signature(compute_fn)

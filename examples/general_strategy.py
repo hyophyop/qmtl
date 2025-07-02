@@ -3,10 +3,11 @@ from qmtl.io import QuestDBLoader, QuestDBRecorder
 import pandas as pd
 
 class GeneralStrategy(Strategy):
+    def __init__(self):
+        super().__init__(default_interval="60s", default_period=30)
+
     def setup(self):
         price_stream = StreamInput(
-            interval="60s",
-            period=30,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
             event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
         )
