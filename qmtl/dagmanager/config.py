@@ -11,12 +11,12 @@ class DagManagerConfig:
     """Configuration for DAG manager server."""
 
     repo_backend: str = "neo4j"
-    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_dsn: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
     memory_repo_path: str = "memrepo.gpickle"
     queue_backend: str = "kafka"
-    kafka_bootstrap: str = "localhost:9092"
+    kafka_dsn: str = "localhost:9092"
     grpc_host: str = "0.0.0.0"
     grpc_port: int = 50051
     http_host: str = "0.0.0.0"

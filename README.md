@@ -75,6 +75,10 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
 For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
 
+## Coding Style
+
+Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dag_manager`.
+
 ## Optional Modules
 
 Install additional functionality on demand. Each entry links to its

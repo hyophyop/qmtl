@@ -15,11 +15,11 @@ dagmanager:
   queue_backend: memory
   # Example cluster configuration using Neo4j and Kafka
   # repo_backend: neo4j
-  # neo4j_uri: bolt://localhost:7687
+  # neo4j_dsn: bolt://localhost:7687
   # neo4j_user: neo4j
   # neo4j_password: neo4j
   # queue_backend: kafka
-  # kafka_bootstrap: localhost:9092
+  # kafka_dsn: localhost:9092
   grpc_host: 0.0.0.0
   grpc_port: 50051
   http_host: 0.0.0.0

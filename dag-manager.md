@@ -257,11 +257,11 @@ For canary deployment steps see
 
 ```yaml
 repo_backend: neo4j
-neo4j_uri: bolt://db:7687
+neo4j_dsn: bolt://db:7687
 neo4j_user: neo4j
 neo4j_password: secret
 queue_backend: kafka
-kafka_bootstrap: localhost:9092
+kafka_dsn: localhost:9092
 ```
 
 The sample file installed by ``qmtl init`` instead defaults to in-memory
