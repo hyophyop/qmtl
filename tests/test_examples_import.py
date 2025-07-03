@@ -7,6 +7,7 @@ MODULES = [
     "examples.backfill_history_example",
     "examples.metrics_recorder_example",
     "examples.parallel_strategies_example",
+    "examples.multi_asset_lag_strategy",
 ]
 
 @pytest.mark.parametrize("mod", MODULES)
