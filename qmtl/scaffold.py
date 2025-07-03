@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
 import importlib.resources as resources
 
 
-_EXAMPLES_PKG = "examples"
+_EXAMPLES_PKG = "qmtl.examples"
 
 
 def create_project(path: Path) -> None:
@@ -19,9 +18,13 @@ def create_project(path: Path) -> None:
         pkg.mkdir(exist_ok=True)
         (pkg / "__init__.py").touch()
 
-    examples_dir = resources.files(_EXAMPLES_PKG)
-    shutil.copy(examples_dir / "qmtl.yml", dest / "qmtl.yml")
-    shutil.copy(examples_dir / "general_strategy.py", dest / "strategy.py")
+    examples = resources.files(_EXAMPLES_PKG)
+    (dest / "qmtl.yml").write_bytes(
+        examples.joinpath("qmtl.yml").read_bytes()
+    )
+    (dest / "strategy.py").write_bytes(
+        examples.joinpath("general_strategy.py").read_bytes()
+    )
 
 
 __all__ = ["create_project"]
