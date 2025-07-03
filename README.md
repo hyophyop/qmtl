@@ -203,7 +203,11 @@ class BinanceFetcher:
 
 fetcher = BinanceFetcher()
 loader = QuestDBLoader(
-    "postgresql://user:pass@localhost:8812/qdb",
+    host="localhost",
+    port=8812,
+    database="qdb",
+    user="user",
+    password="pass",
     fetcher=fetcher,
 )
 ```

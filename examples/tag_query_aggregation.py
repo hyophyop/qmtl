@@ -27,7 +27,11 @@ class TagQueryAggregationStrategy(Strategy):
 
         corr_node = Node(input=indicators, compute_fn=calc_corr, name="indicator_corr")
         # persist correlation matrices if a database is configured
-        corr_node.event_recorder = QuestDBRecorder("postgresql://localhost:8812/qdb")
+        corr_node.event_recorder = QuestDBRecorder(
+            host="localhost",
+            port=8812,
+            database="qdb",
+        )
 
         self.add_nodes([indicators, corr_node])
 
