@@ -6,6 +6,7 @@ MODULES = [
     "examples.mode_switch_example",
     "examples.backfill_history_example",
     "examples.metrics_recorder_example",
+    "examples.recorder_strategy",
     "examples.parallel_strategies_example",
 ]
 
