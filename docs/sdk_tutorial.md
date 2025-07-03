@@ -63,6 +63,18 @@ from qmtl.sdk import Runner
 Runner.dryrun(MyStrategy, gateway_url="http://gw")
 ```
 
+과거 데이터를 재생하려면 `Runner.backtest()`에 시작 및 종료 시점을 전달합니다.
+
+```python
+from qmtl.sdk import Runner
+Runner.backtest(
+    MyStrategy,
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-02-01T00:00:00Z",
+    gateway_url="http://gw",
+)
+```
+
 `Runner`를 사용하면 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여
 해당 태그에 매칭되는 큐를 조회하고 WebSocket 구독을 시작합니다. 백테스트와 dry-run 모드에서도 Gateway URL을 지정하지 않으면 `RuntimeError`가 발생합니다.
 

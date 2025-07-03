@@ -8,6 +8,7 @@ Gateway와 DAG manager 실행을 위한 예시 설정은 `qmtl.yml` 파일에 �
 - `tag_query_strategy.py`: 태그 기반 지표 조회 및 다중 노드 조합 예시
 - `correlation_strategy.py`: 태그로 선택한 지표들의 상관계수 계산
 - `cross_market_lag_strategy.py`: 교차 시장 시차 상관 전략
+- `multi_asset_lag_strategy.py`: 다중 자산 시차 상관 전략
 - `indicators_strategy.py`: EMA 지표 활용 예제
 - `transforms_strategy.py`: rate-of-change 변환 예제
 - `generators_example.py`: GARCH 기반 시뮬레이션 데이터 생성
@@ -26,6 +27,7 @@ python examples/general_strategy.py
 python examples/tag_query_strategy.py
 python examples/correlation_strategy.py
 python examples/cross_market_lag_strategy.py
+python examples/multi_asset_lag_strategy.py
 python examples/indicators_strategy.py
 python examples/transforms_strategy.py
 python examples/generators_example.py
@@ -36,6 +38,19 @@ python examples/backfill_history_example.py
 python examples/metrics_recorder_example.py
 python examples/questdb_parallel_example.py
 python examples/parallel_strategies_example.py
+```
+
+백테스트 범위를 지정하려면 `Runner.backtest()` 함수에 시작/종료 타임스탬프를 넘겨줍니다.
+
+```python
+from qmtl.sdk import Runner
+from examples.multi_asset_lag_strategy import MultiAssetLagStrategy
+
+Runner.backtest(
+    MultiAssetLagStrategy,
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-02-01T00:00:00Z",
+)
 ```
 
 > **중요:**
