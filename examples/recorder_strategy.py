@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner, metrics
-from qmtl.io import QuestDBLoader, QuestDBRecorder
+from qmtl.sdk import (
+    Strategy,
+    Node,
+    StreamInput,
+    Runner,
+    metrics,
+    QuestDBLoader,
+    QuestDBRecorder,
+)
 
 
 class RecorderStrategy(Strategy):
