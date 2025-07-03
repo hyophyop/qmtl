@@ -17,7 +17,7 @@ class DummyConn:
         self.closed = True
 
 
-async def dummy_connect(_):
+async def dummy_connect(*_args, **_kwargs):
     rows = [
         {"ts": 1, "value": 10},
         {"ts": 2, "value": 20},
@@ -51,7 +51,7 @@ async def test_questdb_coverage(monkeypatch):
         async def close(self):
             self.closed = True
 
-    async def _connect(_):
+    async def _connect(*_args, **_kwargs):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
@@ -74,7 +74,7 @@ async def test_questdb_fill_missing_no_fetcher(monkeypatch):
         async def close(self):
             pass
 
-    async def _connect(_):
+    async def _connect(*_args, **_kwargs):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
@@ -95,7 +95,7 @@ async def test_fill_missing_without_fetcher_raises(monkeypatch):
         async def close(self):
             pass
 
-    async def _connect(_):
+    async def _connect(*_args, **_kwargs):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
@@ -119,7 +119,7 @@ async def test_questdb_fill_missing(monkeypatch):
         async def close(self):
             pass
 
-    async def _connect(_):
+    async def _connect(*_args, **_kwargs):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
@@ -145,8 +145,8 @@ async def test_questdb_persist(monkeypatch):
         async def close(self):
             record["closed"] = True
 
-    async def _connect(dsn):
-        record["dsn"] = dsn
+    async def _connect(*args, **kwargs):
+        record["dsn"] = kwargs.get("dsn") or (args[0] if args else None)
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.eventrecorder.asyncpg.connect", _connect)

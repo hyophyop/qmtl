@@ -11,8 +11,16 @@ class RecorderStrategy(Strategy):
         price = StreamInput(
             interval="60s",
             period=30,
-            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+            history_provider=QuestDBLoader(
+                host="localhost",
+                port=8812,
+                database="qdb",
+            ),
+            event_recorder=QuestDBRecorder(
+                host="localhost",
+                port=8812,
+                database="qdb",
+            ),
         )
 
         def momentum(view) -> pd.DataFrame:

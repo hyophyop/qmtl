@@ -31,12 +31,22 @@ The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 ```python
 from qmtl.sdk import QuestDBLoader
 
-source = QuestDBLoader("postgresql://user:pass@localhost:8812/qdb")
+source = QuestDBLoader(
+    host="localhost",
+    port=8812,
+    database="qdb",
+    user="user",
+    password="pass",
+)
 
 # with an external fetcher supplying missing rows
 # fetcher = MyFetcher()
 # source = QuestDBLoader(
-#     "postgresql://user:pass@localhost:8812/qdb",
+#     host="localhost",
+#     port=8812,
+#     database="qdb",
+#     user="user",
+#     password="pass",
 #     fetcher=fetcher,
 # )
 ```
@@ -69,7 +79,11 @@ class BinanceFetcher:
 
 fetcher = BinanceFetcher()
 loader = QuestDBLoader(
-    "postgresql://user:pass@localhost:8812/qdb",
+    host="localhost",
+    port=8812,
+    database="qdb",
+    user="user",
+    password="pass",
     fetcher=fetcher,
 )
 ```
@@ -86,10 +100,20 @@ from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
 stream = StreamInput(
     interval="60s",
     history_provider=QuestDBLoader(
-        "postgresql://user:pass@localhost:8812/qdb",
+        host="localhost",
+        port=8812,
+        database="qdb",
+        user="user",
+        password="pass",
         fetcher=fetcher,
     ),
-    event_recorder=QuestDBRecorder("postgresql://user:pass@localhost:8812/qdb"),
+    event_recorder=QuestDBRecorder(
+        host="localhost",
+        port=8812,
+        database="qdb",
+        user="user",
+        password="pass",
+    ),
 )
 ```
 

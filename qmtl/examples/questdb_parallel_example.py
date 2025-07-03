@@ -12,7 +12,11 @@ class MA1(BaseMA1):
         super().setup()
         for node in self.nodes:
             if isinstance(node, StreamInput):
-                node.event_recorder = QuestDBRecorder("postgresql://localhost:8812/qdb")
+                node.event_recorder = QuestDBRecorder(
+                    host="localhost",
+                    port=8812,
+                    database="qdb",
+                )
 
 
 class MA2(BaseMA2):
@@ -20,7 +24,11 @@ class MA2(BaseMA2):
         super().setup()
         for node in self.nodes:
             if isinstance(node, StreamInput):
-                node.event_recorder = QuestDBRecorder("postgresql://localhost:8812/qdb")
+                node.event_recorder = QuestDBRecorder(
+                    host="localhost",
+                    port=8812,
+                    database="qdb",
+                )
 
 
 async def main() -> None:

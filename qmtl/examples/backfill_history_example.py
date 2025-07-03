@@ -8,7 +8,12 @@ from qmtl.examples import BinanceFetcher
 
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader("postgresql://localhost:8812/qdb", fetcher=fetcher)
+loader = QuestDBLoader(
+    host="localhost",
+    port=8812,
+    database="qdb",
+    fetcher=fetcher,
+)
 
 
 class BackfillHistoryStrategy(Strategy):

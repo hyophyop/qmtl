@@ -8,8 +8,16 @@ class GeneralStrategy(Strategy):
 
     def setup(self):
         price_stream = StreamInput(
-            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+            history_provider=QuestDBLoader(
+                host="localhost",
+                port=8812,
+                database="qdb",
+            ),
+            event_recorder=QuestDBRecorder(
+                host="localhost",
+                port=8812,
+                database="qdb",
+            ),
         )
 
         def generate_signal(view):
