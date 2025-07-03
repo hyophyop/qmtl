@@ -3,11 +3,11 @@ import importlib
 import pytest
 
 MODULES = [
-    "examples.mode_switch_example",
-    "examples.backfill_history_example",
-    "examples.metrics_recorder_example",
-    "examples.parallel_strategies_example",
-    "examples.multi_asset_lag_strategy",
+    "qmtl.examples.mode_switch_example",
+    "qmtl.examples.backfill_history_example",
+    "qmtl.examples.metrics_recorder_example",
+    "qmtl.examples.parallel_strategies_example",
+    "qmtl.examples.multi_asset_lag_strategy",
 ]
 
 @pytest.mark.parametrize("mod", MODULES)

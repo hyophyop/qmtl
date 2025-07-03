@@ -56,11 +56,14 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["qmtl"]
 include-package-data = true
 
-[tool.setuptools.data-files]
-"examples" = ["examples/*.py", "examples/*.yml", "examples/README.md"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qmtl*"]
+
+[tool.setuptools.package-data]
+"qmtl.examples" = ["*.py", "*.yml", "README.md"]
 
 [tool.pytest.ini_options]
 addopts = "-p pytest_asyncio"
