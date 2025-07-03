@@ -17,6 +17,7 @@ Gateway와 DAG manager 실행을 위한 예시 설정은 `qmtl.yml` 파일에 �
 - `mode_switch_example.py`: 모드별 실행 방법 예제
 - `backfill_history_example.py`: QuestDBLoader를 이용한 캐시 백필 예제
 - `metrics_recorder_example.py`: EventRecorder와 메트릭 저장 예제
+- `recorder_strategy.py`: QuestDBRecorder 사용 예제
 - `parallel_strategies_example.py`: 멀티 스트래티지 병렬 실행 예제
 - `questdb_parallel_example.py`: QuestDBRecorder를 활용한 병렬 실행 예제
 
@@ -36,6 +37,7 @@ python examples/ws_metrics_example.py
 python examples/mode_switch_example.py
 python examples/backfill_history_example.py
 python examples/metrics_recorder_example.py
+python examples/recorder_strategy.py
 python examples/questdb_parallel_example.py
 python examples/parallel_strategies_example.py
 ```

@@ -6,6 +6,7 @@ MODULES = [
     "qmtl.examples.mode_switch_example",
     "qmtl.examples.backfill_history_example",
     "qmtl.examples.metrics_recorder_example",
+    "qmtl.examples.recorder_strategy",
     "qmtl.examples.parallel_strategies_example",
     "qmtl.examples.multi_asset_lag_strategy",
 ]
