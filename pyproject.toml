@@ -7,6 +7,16 @@ dependencies = [
     "boto3",
     "xarray",
     "networkx",
+    "numpy",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+    "redis",
+    "asyncpg",
+    "aiosqlite",
+    "websockets",
+    "grpcio",
+    "PyYAML",
 ]
 
 [project.optional-dependencies]
