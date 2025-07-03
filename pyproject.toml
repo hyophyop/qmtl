@@ -55,5 +55,12 @@ qmtl = "qmtl.cli:main"
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["qmtl", "examples"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+examples = ["*.py", "*.yml", "README.md"]
+
 [tool.pytest.ini_options]
 addopts = "-p pytest_asyncio"
