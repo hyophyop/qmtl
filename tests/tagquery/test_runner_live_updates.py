@@ -30,7 +30,7 @@ class FakeDB(Database):
 
 class TQStrategy(Strategy):
     def setup(self):
-        self.tq = TagQueryNode(["t1"], interval=60, period=1)
+        self.tq = TagQueryNode(["t1"], interval="60s", period=1)
         self.add_nodes([self.tq])
 
 

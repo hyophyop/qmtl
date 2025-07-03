@@ -8,7 +8,7 @@ from qmtl.sdk.tagquery_manager import TagQueryManager
 
 @pytest.mark.asyncio
 async def test_resolve_and_update(monkeypatch):
-    node = TagQueryNode(["t1"], interval=60, period=1)
+    node = TagQueryNode(["t1"], interval="60s", period=1)
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/queues/by_tag"
@@ -59,7 +59,7 @@ async def test_resolve_and_update(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resolve_handles_empty(monkeypatch):
-    node = TagQueryNode(["t1"], interval=60, period=1)
+    node = TagQueryNode(["t1"], interval="60s", period=1)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"queues": []})
@@ -93,8 +93,8 @@ async def test_resolve_handles_empty(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_match_mode_routes_updates():
-    node_any = TagQueryNode(["t1"], interval=60, period=1, match_mode="any")
-    node_all = TagQueryNode(["t1"], interval=60, period=1, match_mode="all")
+    node_any = TagQueryNode(["t1"], interval="60s", period=1, match_mode="any")
+    node_all = TagQueryNode(["t1"], interval="60s", period=1, match_mode="all")
     manager = TagQueryManager()
     manager.register(node_any)
     manager.register(node_all)

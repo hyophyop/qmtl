@@ -9,8 +9,8 @@ def test_cache_warmup_and_compute():
     def fn(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
     Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
@@ -41,8 +41,8 @@ def test_node_feed_does_not_execute(monkeypatch):
     def fn(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
     node.execute = False
 
     ready1 = node.feed("q1", 60, 60, {"v": 1})
@@ -59,8 +59,8 @@ def test_multiple_upstreams():
     def fn(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
     Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "u2", 60, 60, {"v": 1})
@@ -108,8 +108,8 @@ def test_on_missing_policy_skip_and_fail():
     def fn(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
     Runner.feed_queue_data(node, "q1", 60, 1, {"v": 1})
     # Gap -> should skip
@@ -117,7 +117,7 @@ def test_on_missing_policy_skip_and_fail():
     assert node.cache.missing_flags()["q1"][60]
     assert len(calls) == 0
 
-    node2 = ProcessingNode(input=src, compute_fn=fn, name="n2", interval=60, period=2)
+    node2 = ProcessingNode(input=src, compute_fn=fn, name="n2", interval="60s", period=2)
     Runner.feed_queue_data(node2, "q1", 60, 1, {"v": 1})
     with pytest.raises(RuntimeError):
         Runner.feed_queue_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
@@ -216,7 +216,7 @@ def test_cache_view_access():
 
 
 def test_cache_view_accepts_node_instance():
-    stream = StreamInput(interval=60, period=2)
+    stream = StreamInput(interval="60s", period=2)
     cache = NodeCache(period=2)
     cache.append(stream.node_id, 60, 60, {"v": 1})
 

@@ -29,14 +29,14 @@ def _mock_gateway(monkeypatch):
 def _make_strategy(calls, results):
     class Strat(Strategy):
         def setup(self):
-            src = StreamInput(interval=60, period=2)
+            src = StreamInput(interval="60s", period=2)
             src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
 
             def n1_fn(view):
                 calls.append("n1")
                 return view[src][60].latest()[1]["v"] + 1
 
-            n1 = ProcessingNode(input=src, compute_fn=n1_fn, name="n1", interval=60, period=1)
+            n1 = ProcessingNode(input=src, compute_fn=n1_fn, name="n1", interval="60s", period=1)
 
             def n2_fn(view):
                 calls.append("n2")
@@ -45,7 +45,7 @@ def _make_strategy(calls, results):
                 results.append(out)
                 return out
 
-            n2 = ProcessingNode(input=n1, compute_fn=n2_fn, name="n2", interval=60, period=1)
+            n2 = ProcessingNode(input=n1, compute_fn=n2_fn, name="n2", interval="60s", period=1)
 
             self.add_nodes([src, n1, n2])
 

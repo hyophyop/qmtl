@@ -25,7 +25,7 @@ class DummySource:
 
 @pytest.mark.asyncio
 async def test_concurrent_backfill_and_live_append():
-    node = SourceNode(interval=60, period=5)
+    node = SourceNode(interval="60s", period=5)
     df = pd.DataFrame([
         {"ts": 60, "value": 1},
         {"ts": 120, "value": 2},
@@ -52,7 +52,7 @@ async def test_concurrent_backfill_and_live_append():
 
 @pytest.mark.asyncio
 async def test_retry_logic():
-    node = SourceNode(interval=60, period=2)
+    node = SourceNode(interval="60s", period=2)
     df = pd.DataFrame([{"ts": 60, "v": 1}])
     src = DummySource(df, delay=0.01, fail=1)
     engine = BackfillEngine(src, max_retries=2)
@@ -67,7 +67,7 @@ async def test_metrics_and_logs(caplog):
     from qmtl.sdk import metrics as sdk_metrics
     sdk_metrics.reset_metrics()
 
-    node = SourceNode(interval=60, period=1)
+    node = SourceNode(interval="60s", period=1)
     df = pd.DataFrame([{"ts": 60, "v": 1}])
     src = DummySource(df, delay=0.0, fail=1)
     engine = BackfillEngine(src, max_retries=2)
@@ -93,7 +93,7 @@ async def test_failure_metrics_and_logs(caplog):
     from qmtl.sdk import metrics as sdk_metrics
     sdk_metrics.reset_metrics()
 
-    node = SourceNode(interval=60, period=1)
+    node = SourceNode(interval="60s", period=1)
     df = pd.DataFrame([])
     src = DummySource(df, delay=0.0, fail=5)
     engine = BackfillEngine(src, max_retries=2)
@@ -120,7 +120,7 @@ async def test_streaminput_load_history():
     ])
     src = DummySource(df, delay=0.0)
     stream = StreamInput(
-        interval=60,
+        interval="60s",
         period=3,
         history_provider=src,
     )

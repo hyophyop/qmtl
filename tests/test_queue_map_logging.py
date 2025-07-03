@@ -5,11 +5,11 @@ from qmtl.sdk import Runner, Strategy, StreamInput, ProcessingNode, TagQueryNode
 
 class _Strat(Strategy):
     def setup(self):
-        self.src = StreamInput(interval=60, period=2)
+        self.src = StreamInput(interval="60s", period=2)
         self.proc = ProcessingNode(
-            input=self.src, compute_fn=lambda v: v, name="proc", interval=60, period=2
+            input=self.src, compute_fn=lambda v: v, name="proc", interval="60s", period=2
         )
-        self.tq = TagQueryNode(["t"], interval=60, period=2)
+        self.tq = TagQueryNode(["t"], interval="60s", period=2)
         self.add_nodes([self.src, self.proc, self.tq])
 
 

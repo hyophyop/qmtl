@@ -22,7 +22,7 @@ def test_arrow_cache_basic():
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
 def test_node_uses_arrow_cache(monkeypatch):
     monkeypatch.setenv("QMTL_ARROW_CACHE", "1")
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=lambda v: None, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2)
     assert isinstance(node.cache, arrow_cache.NodeCacheArrow)
     monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)

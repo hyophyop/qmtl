@@ -4,7 +4,7 @@ from qmtl.sdk import Strategy, StreamInput, ProcessingNode
 
 class DefaultStrategy(Strategy):
     def __init__(self):
-        super().__init__(default_interval=60, default_period=2)
+        super().__init__(default_interval="60s", default_period=2)
 
     def setup(self):
         src = StreamInput()
@@ -26,10 +26,10 @@ def test_defaults_applied():
 
 class OverrideStrategy(Strategy):
     def __init__(self):
-        super().__init__(default_interval=60, default_period=2)
+        super().__init__(default_interval="60s", default_period=2)
 
     def setup(self):
-        src = StreamInput(interval=30, period=1)
+        src = StreamInput(interval="30s", period=1)
         node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval="30s", period=3)
         self.add_nodes([src, node])
 

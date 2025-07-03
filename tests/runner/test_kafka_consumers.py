@@ -18,8 +18,8 @@ async def test_single_node_consumption(monkeypatch):
     def compute(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=compute, name="n1", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n1", interval="60s", period=2)
     node.queue_topic = "t1"
     strategy = DummyStrategy([src, node])
 
@@ -49,12 +49,12 @@ async def test_multi_node_consumption(monkeypatch):
     def compute2(view):
         calls.append("n2")
 
-    src1 = StreamInput(interval=60, period=2)
-    node1 = ProcessingNode(input=src1, compute_fn=compute1, name="n1", interval=60, period=2)
+    src1 = StreamInput(interval="60s", period=2)
+    node1 = ProcessingNode(input=src1, compute_fn=compute1, name="n1", interval="60s", period=2)
     node1.queue_topic = "t1"
 
-    src2 = StreamInput(interval=60, period=2)
-    node2 = ProcessingNode(input=src2, compute_fn=compute2, name="n2", interval=60, period=2)
+    src2 = StreamInput(interval="60s", period=2)
+    node2 = ProcessingNode(input=src2, compute_fn=compute2, name="n2", interval="60s", period=2)
     node2.queue_topic = "t2"
 
     strategy = DummyStrategy([src1, node1, src2, node2])

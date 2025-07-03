@@ -290,8 +290,8 @@ def test_feed_queue_data_with_ray(monkeypatch):
     def compute(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
@@ -310,8 +310,8 @@ def test_feed_queue_data_without_ray(monkeypatch):
     def compute(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
@@ -329,8 +329,8 @@ def test_feed_queue_data_respects_execute_flag(monkeypatch):
     def compute(view):
         calls.append(view)
 
-    src = StreamInput(interval=60, period=2)
-    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval=60, period=2)
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
     node.execute = False
 
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
@@ -465,8 +465,8 @@ def test_history_gap_fill(monkeypatch):
 
     class Strat(SampleStrategy):
         def setup(self):
-            src = StreamInput(interval=1, period=1, history_provider=provider)
-            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
+            src = StreamInput(interval="1s", period=1, history_provider=provider)
+            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval="1s", period=1)
             self.add_nodes([src, node])
 
     Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
@@ -517,9 +517,9 @@ def test_history_gap_fill_stops_on_ready(monkeypatch):
 
     class Strat(SampleStrategy):
         def setup(self):
-            src = StreamInput(interval=1, period=1, history_provider=provider)
+            src = StreamInput(interval="1s", period=1, history_provider=provider)
             holder["src"] = src
-            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval=1, period=1)
+            node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval="1s", period=1)
             self.add_nodes([src, node])
 
     Runner.dryrun(Strat, gateway_url="http://gw")
@@ -567,15 +567,15 @@ def test_backtest_replay_history_multi_inputs(monkeypatch):
 
     class Strat(Strategy):
         def setup(self):
-            a = StreamInput(interval=60, period=2, history_provider=DummyProvider())
-            b = StreamInput(interval=60, period=2, history_provider=DummyProvider())
+            a = StreamInput(interval="60s", period=2, history_provider=DummyProvider())
+            b = StreamInput(interval="60s", period=2, history_provider=DummyProvider())
 
             def compute(view):
                 av = view[a][60].latest()[1]["v"]
                 bv = view[b][60].latest()[1]["v"]
                 calls.append(av + bv)
 
-            node = ProcessingNode(input=[a, b], compute_fn=compute, name="out", interval=60, period=2)
+            node = ProcessingNode(input=[a, b], compute_fn=compute, name="out", interval="60s", period=2)
             self.add_nodes([a, b, node])
 
     Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
@@ -620,8 +620,8 @@ def test_backtest_on_missing_fail(monkeypatch):
 
     class Strat(Strategy):
         def setup(self):
-            src = StreamInput(interval=60, period=2, history_provider=GapProvider())
-            node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval=60, period=2)
+            src = StreamInput(interval="60s", period=2, history_provider=GapProvider())
+            node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval="60s", period=2)
             self.add_nodes([src, node])
 
     with pytest.raises(RuntimeError):
