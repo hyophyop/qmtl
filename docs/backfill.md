@@ -117,6 +117,10 @@ stream = StreamInput(
 )
 ```
 
+``StreamInput`` treats these dependencies as immutable. Attempting to modify
+``history_provider`` or ``event_recorder`` after creation will raise an
+``AttributeError``.
+
 ## Running a Backfill
 
 Backfills can be triggered when executing a strategy through the CLI or the

@@ -172,7 +172,9 @@ See [docs/faq.md](docs/faq.md) for common questions such as using `TagQueryNode`
 
 [docs/backfill.md](docs/backfill.md) explains how to preload historical data by
 injecting `HistoryProvider` instances
-into `StreamInput` nodes. This also covers persisting data via `EventRecorder`.
+into `StreamInput` nodes. These dependencies must be provided at creation time
+and cannot be reassigned later. The same guide covers persisting data via
+`EventRecorder`.
 [docs/backfill.md](docs/backfill.md).
 
 ### QuestDBLoader with a custom fetcher

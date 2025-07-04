@@ -544,7 +544,12 @@ class ProcessingNode(Node):
 
 
 class StreamInput(SourceNode):
-    """Represents an upstream data stream placeholder."""
+    """Represents an upstream data stream placeholder.
+
+    ``history_provider`` and ``event_recorder`` must be supplied when the
+    instance is created. These dependencies are immutable for the lifetime of
+    the node and attempts to reassign them will raise ``AttributeError``.
+    """
 
     def __init__(
         self,
@@ -563,8 +568,26 @@ class StreamInput(SourceNode):
             period=period,
             tags=tags or [],
         )
-        self.history_provider = history_provider
-        self.event_recorder = event_recorder
+        self._history_provider = history_provider
+        self._event_recorder = event_recorder
+
+    @property
+    def history_provider(self) -> "HistoryProvider" | None:
+        """Return the configured history provider."""
+        return self._history_provider
+
+    @history_provider.setter
+    def history_provider(self, value: "HistoryProvider" | None) -> None:
+        raise AttributeError("history_provider is read-only and must be provided via __init__")
+
+    @property
+    def event_recorder(self) -> "EventRecorder" | None:
+        """Return the configured event recorder."""
+        return self._event_recorder
+
+    @event_recorder.setter
+    def event_recorder(self, value: "EventRecorder" | None) -> None:
+        raise AttributeError("event_recorder is read-only and must be provided via __init__")
 
     async def load_history(self, start: int, end: int) -> None:
         """Load historical data if a provider was configured."""
