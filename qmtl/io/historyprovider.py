@@ -8,7 +8,7 @@ import asyncpg
 from qmtl.sdk.data_io import HistoryProvider, DataFetcher
 
 
-class QuestDBLoader:
+class QuestDBLoader(HistoryProvider):
     """HistoryProvider implementation backed by QuestDB."""
 
     def __init__(
