@@ -14,9 +14,7 @@ class MA1(BaseMA1):
             interval="60s",
             period=30,
             event_recorder=QuestDBRecorder(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
         )
 
@@ -34,9 +32,7 @@ class MA2(BaseMA2):
             interval="60s",
             period=60,
             event_recorder=QuestDBRecorder(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
         )
 

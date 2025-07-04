@@ -9,14 +9,10 @@ class CrossMarketLagStrategy(Strategy):
             interval="60s",
             period=120,
             history_provider=QuestDBLoader(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
             event_recorder=QuestDBRecorder(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
         )
         mstr_price = StreamInput(
@@ -24,14 +20,10 @@ class CrossMarketLagStrategy(Strategy):
             interval="60s",
             period=120,
             history_provider=QuestDBLoader(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
             event_recorder=QuestDBRecorder(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
         )
         def lagged_corr(view):

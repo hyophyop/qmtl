@@ -13,50 +13,20 @@ class QuestDBLoader(HistoryProvider):
 
     def __init__(
         self,
-        dsn: str | None = None,
+        dsn: str,
         *,
-        host: str = "localhost",
-        port: int = 8812,
-        database: str = "qdb",
-        user: str | None = None,
-        password: str | None = None,
         table: str = "node_data",
         fetcher: DataFetcher | None = None,
     ) -> None:
-        self._dsn_provided = dsn is not None
-        self.dsn = dsn or self._make_dsn(host, port, database, user, password)
-        self.host = host
-        self.port = port
-        self.database = database
-        self.user = user
-        self.password = password
+        self.dsn = dsn
         self.table = table
         self.fetcher = fetcher
 
-    @staticmethod
-    def _make_dsn(
-        host: str, port: int, database: str, user: str | None, password: str | None
-    ) -> str:
-        auth = ""
-        if user:
-            auth = user
-            if password:
-                auth += f":{password}"
-            auth += "@"
-        return f"postgresql://{auth}{host}:{port}/{database}"
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
-        conn = await asyncpg.connect(
-            **({"dsn": self.dsn} if self._dsn_provided else {
-                "host": self.host,
-                "port": self.port,
-                "database": self.database,
-                "user": self.user,
-                "password": self.password,
-            })
-        )
+        conn = await asyncpg.connect(dsn=self.dsn)
         try:
             sql = (
                 f"SELECT * FROM {self.table} "
@@ -73,15 +43,7 @@ class QuestDBLoader(HistoryProvider):
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
         """Return contiguous timestamp ranges available for ``node_id``."""
-        conn = await asyncpg.connect(
-            **({"dsn": self.dsn} if self._dsn_provided else {
-                "host": self.host,
-                "port": self.port,
-                "database": self.database,
-                "user": self.user,
-                "password": self.password,
-            })
-        )
+        conn = await asyncpg.connect(dsn=self.dsn)
         try:
             sql = (
                 f"SELECT ts FROM {self.table} "
@@ -115,15 +77,7 @@ class QuestDBLoader(HistoryProvider):
         if self.fetcher is None:
             raise RuntimeError("DataFetcher not configured")
 
-        conn = await asyncpg.connect(
-            **({"dsn": self.dsn} if self._dsn_provided else {
-                "host": self.host,
-                "port": self.port,
-                "database": self.database,
-                "user": self.user,
-                "password": self.password,
-            })
-        )
+        conn = await asyncpg.connect(dsn=self.dsn)
         try:
             sql_fetch = (
                 f"SELECT ts FROM {self.table} "
