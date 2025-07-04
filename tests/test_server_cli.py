@@ -20,8 +20,8 @@ def test_server_defaults(monkeypatch):
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
     main([])
-    assert captured["repo"] == "neo4j"
-    assert captured["queue"] == "kafka"
+    assert captured["repo"] == "memory"
+    assert captured["queue"] == "memory"
 
 
 def test_server_config_file(monkeypatch, tmp_path):

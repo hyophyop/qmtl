@@ -273,7 +273,8 @@ qmtl dagmgr-server --config examples/qmtl.yml
 ```
 
 해당 명령은 `examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
-`examples/qmtl.yml` contains comments showing every available field.
+``--config`` 를 생략하면 기본값으로 메모리 레포지토리와 큐가 사용된다. 샘플
+파일에는 모든 필드를 주석과 함께 설명한다.
 
 Available flags:
 

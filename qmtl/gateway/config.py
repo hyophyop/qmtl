@@ -12,9 +12,9 @@ class GatewayConfig:
     host: str = "0.0.0.0"
     port: int = 8000
     redis_dsn: str = "redis://localhost:6379"
-    database_backend: str = "postgres"
-    database_dsn: str = "postgresql://localhost/qmtl"
-    offline: bool = False
+    database_backend: str = "sqlite"
+    database_dsn: str = "./qmtl.db"
+    offline: bool = True
 
 
 def load_gateway_config(path: str) -> GatewayConfig:

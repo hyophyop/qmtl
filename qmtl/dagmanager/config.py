@@ -10,12 +10,12 @@ import yaml
 class DagManagerConfig:
     """Configuration for DAG manager server."""
 
-    repo_backend: str = "neo4j"
+    repo_backend: str = "memory"
     neo4j_dsn: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
     memory_repo_path: str = "memrepo.gpickle"
-    queue_backend: str = "kafka"
+    queue_backend: str = "memory"
     kafka_dsn: str = "localhost:9092"
     grpc_host: str = "0.0.0.0"
     grpc_port: int = 50051

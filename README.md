@@ -116,11 +116,10 @@ uv run -- pytest
 
 ## Running Services
 
-Start the Gateway and DAG manager using the combined configuration file. Each
-service reads its own section from `qmtl.yml`. The default template uses
-lightweight in-memory/SQLite backends for easy local testing. Commented lines in
-the file show how to enable cluster-ready services like Postgres, Neo4j and
-Kafka.
+Start the Gateway and DAG manager using the combined configuration file or rely
+on the built-in defaults. Without ``--config`` both services start in a local
+mode that uses SQLite and in-memory repositories. The sample ``qmtl.yml`` file
+demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 
 ```bash
 
