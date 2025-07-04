@@ -5,7 +5,7 @@ import asyncio
 
 
 class InMemoryRedis:
-    """Minimal in-memory Redis clone used for offline mode."""
+    """Minimal in-memory Redis clone used when ``queue_backend`` is ``memory``."""
 
     def __init__(self) -> None:
         self._values: Dict[str, Any] = {}

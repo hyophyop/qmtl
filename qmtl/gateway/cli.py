@@ -22,7 +22,7 @@ async def _main(argv: list[str] | None = None) -> None:
     if args.config:
         config = load_config(args.config).gateway
 
-    if config.offline:
+    if config.queue_backend == "memory":
         redis_client = InMemoryRedis()
     else:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)

@@ -5,6 +5,7 @@ gateway:
   # Lightweight local store for quick testing
   database_backend: sqlite
   database_dsn: ./qmtl.db
+  queue_backend: memory
   # To use Postgres in a production cluster uncomment below
   # database_backend: postgres
   # database_dsn: postgresql://user:pass@db/qmtl
