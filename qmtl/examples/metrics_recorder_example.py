@@ -12,14 +12,10 @@ class RecorderStrategy(Strategy):
             interval="60s",
             period=30,
             history_provider=QuestDBLoader(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
             event_recorder=QuestDBRecorder(
-                host="localhost",
-                port=8812,
-                database="qdb",
+                dsn="postgresql://localhost:8812/qdb",
             ),
         )
 

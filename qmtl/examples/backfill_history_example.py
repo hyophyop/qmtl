@@ -9,9 +9,7 @@ from qmtl.examples import BinanceFetcher
 
 fetcher = BinanceFetcher()
 loader = QuestDBLoader(
-    host="localhost",
-    port=8812,
-    database="qdb",
+    dsn="postgresql://localhost:8812/qdb",
     fetcher=fetcher,
 )
 
