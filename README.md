@@ -175,6 +175,19 @@ injecting `HistoryProvider` instances
 into `StreamInput` nodes. These dependencies must be provided at creation time
 and cannot be reassigned later. The same guide covers persisting data via
 `EventRecorder`.
+
+Example injection:
+
+```python
+from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+
+stream = StreamInput(
+    interval="60s",
+    history_provider=QuestDBLoader(dsn="postgresql://user:pass@localhost:8812/qdb"),
+    event_recorder=QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb"),
+)
+```
+
 [docs/backfill.md](docs/backfill.md).
 
 ### QuestDBLoader with a custom fetcher

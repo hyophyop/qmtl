@@ -100,19 +100,11 @@ from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
 stream = StreamInput(
     interval="60s",
     history_provider=QuestDBLoader(
-        host="localhost",
-        port=8812,
-        database="qdb",
-        user="user",
-        password="pass",
+        dsn="postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,
     ),
     event_recorder=QuestDBRecorder(
-        host="localhost",
-        port=8812,
-        database="qdb",
-        user="user",
-        password="pass",
+        dsn="postgresql://user:pass@localhost:8812/qdb",
     ),
 )
 ```
