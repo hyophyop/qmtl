@@ -156,9 +156,10 @@ qmtl gw --config examples/qmtl.yml
 ```
 
 The command reads the ``gateway`` section of ``examples/qmtl.yml`` for all
-server parameters. The template defaults to a lightweight SQLite database and
-Redis instance. Commented lines illustrate how to switch to a clustered
-Postgres setup. See the file for a fully annotated configuration template.
+server parameters. Omitting ``--config`` starts the service with built-in
+defaults that use SQLite and an in-memory Redis replacement. Commented lines in
+the sample file illustrate how to switch to a clustered Postgres setup. See the
+file for a fully annotated configuration template.
 
 Available flags:
 

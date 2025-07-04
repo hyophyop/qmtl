@@ -47,3 +47,10 @@ def test_load_gateway_config_malformed(tmp_path: Path):
     p.write_text("- 1")
     with pytest.raises(TypeError):
         load_gateway_config(str(p))
+
+
+def test_gateway_config_defaults() -> None:
+    cfg = GatewayConfig()
+    assert cfg.database_backend == "sqlite"
+    assert cfg.database_dsn == "./qmtl.db"
+    assert cfg.offline is True

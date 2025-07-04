@@ -31,3 +31,9 @@ def test_load_dagmanager_config_malformed(tmp_path: Path):
     with pytest.raises(TypeError):
         load_dagmanager_config(str(f))
 
+
+def test_dagmanager_config_defaults() -> None:
+    cfg = DagManagerConfig()
+    assert cfg.repo_backend == "memory"
+    assert cfg.queue_backend == "memory"
+
