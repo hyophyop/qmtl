@@ -8,7 +8,7 @@ import asyncpg
 from qmtl.sdk.data_io import EventRecorder
 
 
-class QuestDBRecorder:
+class QuestDBRecorder(EventRecorder):
     """EventRecorder implementation that writes records to QuestDB."""
 
     def __init__(
@@ -44,7 +44,7 @@ class QuestDBRecorder:
         return f"postgresql://{auth}{host}:{port}/{database}"
 
     async def persist(
-        self, node_id: str, interval: int, timestamp: int, payload: dict
+        self, node_id: str, interval: int, timestamp: int, payload: Any
     ) -> None:
         conn = await asyncpg.connect(
             **({"dsn": self.dsn} if self._dsn_provided else {
