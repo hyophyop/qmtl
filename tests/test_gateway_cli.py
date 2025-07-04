@@ -16,7 +16,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
                 "gateway:",
                 "  host: 127.0.0.1",
                 "  port: 12345",
-                "  offline: true",
+                "  queue_backend: memory",
                 "  database_backend: memory",
                 "  database_dsn: 'sqlite:///:memory:'",
             ]
@@ -53,4 +53,48 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     assert captured["db_backend"] == "memory"
     assert captured["db_dsn"] == "sqlite:///:memory:"
     assert captured["redis"]
+
+
+def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
+    config_path = tmp_path / "cfg.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  queue_backend: redis",
+                "  redis_dsn: redis://x:6379",
+                "  database_backend: memory",
+                "  database_dsn: 'sqlite:///:memory:'",
+            ]
+        )
+    )
+
+    captured = {}
+
+    from types import SimpleNamespace
+    from qmtl.gateway import cli
+
+    class DummyRedis:
+        pass
+
+    def fake_from_url(dsn, decode_responses=True):
+        captured["dsn"] = dsn
+        captured["decode"] = decode_responses
+        return DummyRedis()
+
+    def fake_create_app(**kwargs):
+        captured["redis"] = kwargs.get("redis_client")
+        return SimpleNamespace(state=SimpleNamespace(database=None))
+
+    monkeypatch.setattr(cli.redis, "from_url", fake_from_url)
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+
+    cli.main(["--config", str(config_path)])
+
+    assert isinstance(captured["redis"], DummyRedis)
+    assert captured["dsn"] == "redis://x:6379"
+    assert captured["decode"] is True
 
