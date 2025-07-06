@@ -2,9 +2,12 @@ from __future__ import annotations
 
 """Interfaces for I/O operations and legacy re-exports."""
 
-from typing import Protocol, Any
+from typing import Protocol, Any, TYPE_CHECKING
 from abc import ABC, abstractmethod
 import pandas as pd
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints
+    from .node import StreamInput
 
 
 class DataFetcher(Protocol):
@@ -18,6 +21,16 @@ class DataFetcher(Protocol):
 
 class HistoryProvider(ABC):
     """Load historical data into node caches."""
+
+    def bind_stream(self, stream: "StreamInput") -> None:
+        """Associate this provider with ``stream``.
+
+        The default implementation stores ``stream.node_id`` in
+        ``self._stream_id`` so subclasses can infer a table name or similar
+        identifier. Storage backends may override this to perform additional
+        setup.
+        """
+        self._stream_id = stream.node_id
 
     @abstractmethod
     async def fetch(
@@ -43,6 +56,15 @@ class HistoryProvider(ABC):
 
 class EventRecorder(ABC):
     """Persist processed node data."""
+
+    def bind_stream(self, stream: "StreamInput") -> None:
+        """Associate this recorder with ``stream``.
+
+        The default implementation records ``stream.node_id`` in
+        ``self._stream_id`` for backends that use the identifier as a table
+        name. Subclasses may override as needed.
+        """
+        self._stream_id = stream.node_id
 
     @abstractmethod
     async def persist(

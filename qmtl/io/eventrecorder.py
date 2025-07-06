@@ -15,10 +15,17 @@ class QuestDBRecorder(EventRecorder):
         self,
         dsn: str,
         *,
-        table: str = "node_data",
+        table: str | None = None,
     ) -> None:
         self.dsn = dsn
-        self.table = table
+        self._table = table
+
+    @property
+    def table(self) -> str:
+        tbl = self._table or getattr(self, "_stream_id", None)
+        if tbl is None:
+            raise RuntimeError("table not specified and stream not bound")
+        return tbl
 
 
     async def persist(

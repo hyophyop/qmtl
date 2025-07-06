@@ -97,6 +97,10 @@ stream = StreamInput(
 )
 ```
 
+When the QuestDB loader or recorder is created without a ``table`` argument it
+automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
+explicitly to override this behaviour.
+
 ``StreamInput`` treats these dependencies as immutable. Attempting to modify
 ``history_provider`` or ``event_recorder`` after creation will raise an
 ``AttributeError``.
