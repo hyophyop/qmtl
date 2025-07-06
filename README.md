@@ -188,6 +188,9 @@ stream = StreamInput(
 )
 ```
 
+``QuestDBLoader`` and ``QuestDBRecorder`` will default to using
+``stream.node_id`` as the table name if ``table`` is not provided.
+
 [docs/backfill.md](docs/backfill.md).
 
 ### QuestDBLoader with a custom fetcher
