@@ -33,7 +33,7 @@ async def dummy_connect(*_args, **_kwargs):
 @pytest.mark.asyncio
 async def test_questdb_fetch(monkeypatch):
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", dummy_connect)
-    src = QuestDBLoader("db")
+    src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     df = await src.fetch(1, 3, node_id="n1", interval=60)
     expected = pd.DataFrame([{"ts": 1, "value": 10}, {"ts": 2, "value": 20}])
@@ -61,7 +61,7 @@ async def test_questdb_coverage(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
-    src = QuestDBLoader("db")
+    src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     ranges = await src.coverage(node_id="n", interval=60)
     assert ranges == [(60, 120), (240, 300)]
@@ -85,7 +85,7 @@ async def test_questdb_fill_missing_no_fetcher(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
-    src = QuestDBLoader("db")
+    src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     with pytest.raises(RuntimeError):
         await src.fill_missing(60, 180, node_id="n", interval=60)
@@ -107,7 +107,7 @@ async def test_fill_missing_without_fetcher_raises(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
-    loader = QuestDBLoader("db")
+    loader = QuestDBLoader("db", table="node_data")
     assert isinstance(loader, HistoryProvider)
     with pytest.raises(RuntimeError):
         await loader.fill_missing(0, 0, node_id="n", interval=60)
@@ -132,7 +132,7 @@ async def test_questdb_fill_missing(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
-    src = QuestDBLoader("db", fetcher=fetcher)
+    src = QuestDBLoader("db", table="node_data", fetcher=fetcher)
     assert isinstance(src, HistoryProvider)
     await src.fill_missing(60, 180, node_id="n", interval=60)
 

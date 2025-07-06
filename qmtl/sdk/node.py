@@ -569,7 +569,11 @@ class StreamInput(SourceNode):
             tags=tags or [],
         )
         self._history_provider = history_provider
+        if history_provider and hasattr(history_provider, "bind_stream"):
+            history_provider.bind_stream(self)
         self._event_recorder = event_recorder
+        if event_recorder and hasattr(event_recorder, "bind_stream"):
+            event_recorder.bind_stream(self)
 
     @property
     def history_provider(self) -> "HistoryProvider" | None:
