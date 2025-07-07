@@ -48,7 +48,8 @@ python strategy.py
 ```
 
 See `examples/README.md` for additional strategies that can be executed
-in the same way.
+in the same way. A more detailed walkthrough from project creation to
+testing is available in [docs/strategy_workflow.md](docs/strategy_workflow.md).
 
 
 ## Development Workflow
