@@ -39,6 +39,39 @@ python strategy.py
 This uses `Runner.offline()` behind the scenes to execute without external
 services.
 
+## 2a. Example Run Output
+
+The following snippet demonstrates the results of executing the above commands in a clean
+container. After creating the scaffold the directory structure looks like:
+
+```text
+$ ls -R my_qmtl_project | head
+my_qmtl_project:
+generators
+indicators
+qmtl.yml
+strategy.py
+transforms
+...
+```
+
+Attempting to install the optional extras directly fails because the scaffold does not contain
+`pyproject.toml`:
+
+```text
+$ uv pip install -e .[generators,indicators,transforms]
+error: /tmp/my_qmtl_project does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+```
+
+Running the default strategy without a Gateway URL also produces an error:
+
+```text
+$ python strategy.py
+RuntimeError: gateway_url is required for backtest mode
+```
+
+Provide a `--gateway-url` argument or modify the script to use `Runner.offline()` when running locally.
+
 ## 3. Develop Your Strategy
 
 Edit `strategy.py` or create new modules inside the extension packages. Each
@@ -71,6 +104,12 @@ Always run the unit tests before committing code:
 
 ```bash
 uv run -m pytest -W error
+```
+
+A sample execution inside the container finished successfully:
+
+```text
+======================= 260 passed, 1 skipped in 47.15s ========================
 ```
 
 End‑to‑end tests require Docker. Start the stack and execute the tests:
