@@ -1,8 +1,26 @@
 # Strategy Development and Testing Workflow
 
 This guide walks through the typical steps for creating and validating a new QMTL
-strategy. It starts from project initialization using `qmtl init` and concludes
-with running the test suite.
+strategy. It starts with installing the SDK and project initialization and
+concludes with running the test suite.
+
+## 0. Install QMTL
+
+Create a virtual environment and install the package in editable mode. The
+[README](../README.md) describes the details, but the basic steps are:
+
+```bash
+uv venv
+uv pip install -e .[dev]
+```
+
+Optional extras such as `generators`, `indicators` or `transforms` are installed
+from the repository root (or from PyPI) **before** creating your project
+directory:
+
+```bash
+uv pip install -e .[generators,indicators,transforms]
+```
 
 ## 1. Initialize a Project
 
@@ -14,14 +32,10 @@ cd my_qmtl_project
 ```
 
 The command copies a sample `strategy.py`, a `qmtl.yml` configuration and empty
-packages for `generators`, `indicators` and `transforms`. These packages let you
-extend the SDK by adding custom nodes.
-
-Install optional extras so Python can discover these extensions:
-
-```bash
-uv pip install -e .[generators,indicators,transforms]
-```
+packages for `generators`, `indicators` and `transforms`. These folders let you
+extend the SDK by adding custom nodes. Because the extras were installed in the
+previous step, no additional `pip install` commands are required inside the
+project directory.
 
 ## 2. Explore the Scaffold
 
@@ -35,9 +49,9 @@ Run the default strategy to verify that everything works:
 ```bash
 python strategy.py
 ```
-
-This uses `Runner.offline()` behind the scenes to execute without external
-services.
+The scaffolded script invokes `Runner.backtest()` which expects a running
+Gateway and DAG manager. Provide a `--gateway-url` argument, or modify the
+script to use `Runner.offline()` when testing without external services.
 
 ## 2a. Example Run Output
 
@@ -62,6 +76,9 @@ Attempting to install the optional extras directly fails because the scaffold do
 $ uv pip install -e .[generators,indicators,transforms]
 error: /tmp/my_qmtl_project does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
 ```
+
+Run the command from the repository root instead (or install from PyPI) to make
+the extras available.
 
 Running the default strategy without a Gateway URL also produces an error:
 
@@ -94,9 +111,15 @@ python -m qmtl.sdk mypkg.strategy:MyStrategy --mode backtest \
 ```
 
 Available modes are `backtest`, `dryrun`, `live` and `offline`. The first three
-require a running Gateway and DAG manager. Multiple strategies can be executed
-in parallel by launching separate processes or using the
-`parallel_strategies_example.py` script.
+require a running Gateway and DAG manager. Start them in separate terminals:
+
+```bash
+qmtl gw --config examples/qmtl.yml
+qmtl dagmgr-server --config examples/qmtl.yml
+```
+
+Multiple strategies can be executed in parallel by launching separate processes
+or using the `parallel_strategies_example.py` script.
 
 ## 5. Test Your Implementation
 
