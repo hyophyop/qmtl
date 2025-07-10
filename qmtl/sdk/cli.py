@@ -29,7 +29,15 @@ async def _main(argv: List[str] | None = None) -> None:
         "--gateway-url",
         help="Gateway base URL (required for backtest, dryrun and live modes)",
     )
+    parser.add_argument(
+        "--with-ray",
+        action="store_true",
+        help="Enable Ray-based execution of compute functions",
+    )
     args = parser.parse_args(argv)
+
+    if args.with_ray:
+        Runner.enable_ray()
 
     module_name, class_name = args.strategy.split(":")
     module = importlib.import_module(module_name)

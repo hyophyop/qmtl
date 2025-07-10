@@ -283,7 +283,8 @@ def test_feed_queue_data_with_ray(monkeypatch):
     import qmtl.sdk.runner as rmod
 
     monkeypatch.setattr(rmod, "ray", dummy_ray)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
+    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
+    rmod.Runner.enable_ray()
 
     calls = []
 
@@ -632,3 +633,32 @@ def test_backtest_on_missing_fail(monkeypatch):
             on_missing="fail",
             gateway_url="http://gw",
         )
+
+
+def test_enable_ray_requires_module(monkeypatch):
+    import qmtl.sdk.runner as rmod
+    monkeypatch.setattr(rmod, "ray", None)
+    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
+    with pytest.raises(RuntimeError):
+        rmod.Runner.enable_ray()
+
+
+def test_cli_with_ray(monkeypatch):
+    import sys
+    from qmtl.sdk.cli import main
+    import qmtl.sdk.runner as rmod
+
+    dummy_ray = object()
+    monkeypatch.setattr(rmod, "ray", dummy_ray)
+    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
+
+    argv = [
+        "qmtl.sdk",
+        "tests.sample_strategy:SampleStrategy",
+        "--mode",
+        "offline",
+        "--with-ray",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    main()
+    assert rmod.Runner._ray_available

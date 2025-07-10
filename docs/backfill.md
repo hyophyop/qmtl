@@ -139,7 +139,7 @@ Runner.backtest(
 During backtest and offline runs the SDK **replays** cached history through a
 ``Pipeline``.  Events from each ``StreamInput`` are collected concurrently with
 ``asyncio.gather`` and sorted by timestamp before being fed into the graph.
-If Ray is installed, compute functions may execute in parallel during this
+If Ray execution is enabled, compute functions may execute in parallel during this
 replay phase.
 
 ## Monitoring Progress

@@ -26,15 +26,26 @@ except Exception:  # pragma: no cover - Ray not installed
 class Runner:
     """Execute strategies in various modes."""
 
-    _ray_available = ray is not None
+    _ray_available = False
     _kafka_available = AIOKafkaConsumer is not None
+
+    @classmethod
+    def enable_ray(cls, enable: bool = True) -> None:
+        """Toggle Ray-based execution explicitly."""
+        if enable and ray is None:
+            raise RuntimeError("Ray not installed")
+        cls._ray_available = enable
+
+    @classmethod
+    def disable_ray(cls) -> None:
+        cls.enable_ray(False)
 
     # ------------------------------------------------------------------
 
     @staticmethod
     def _execute_compute_fn(fn, cache_view) -> None:
         """Run ``fn`` using Ray when available."""
-        if Runner._ray_available:
+        if Runner._ray_available and ray is not None:
             if not ray.is_initialized():  # type: ignore[attr-defined]
                 ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
             ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]
@@ -259,7 +270,7 @@ class Runner:
 
         result = None
         if ready and node.execute and node.compute_fn:
-            if Runner._ray_available:
+            if Runner._ray_available and ray is not None:
                 Runner._execute_compute_fn(node.compute_fn, node.cache.view())
             else:
                 result = node.compute_fn(node.cache.view())
