@@ -1,15 +1,8 @@
-from qmtl.sdk import Strategy, Runner
-from qmtl.generators import GarchInput
-from qmtl.indicators import ema
-from qmtl.transforms import rate_of_change
+import importlib
+_module = None
 
-
-class CombinedExtensionsStrategy(Strategy):
-    def setup(self):
-        self.source = GarchInput(interval="60s", period=30, seed=42)
-        self.ema_node = ema(self.source, window=5)
-        self.roc_node = rate_of_change(self.ema_node, period=5)
-        self.add_nodes([self.source, self.ema_node, self.roc_node])
-
-if __name__ == "__main__":
-    Runner.offline(CombinedExtensionsStrategy)
+def __getattr__(attr):
+    global _module
+    if _module is None:
+        _module = importlib.import_module('qmtl.examples.strategies.extensions_combined_strategy')
+    return getattr(_module, attr)

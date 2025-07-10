@@ -1,12 +1,8 @@
-from qmtl.generators import GarchInput
+import importlib
+_module = None
 
-
-def main() -> None:
-    stream = GarchInput(interval="60s", period=5, seed=42)
-    data = stream.generate(10)
-    for ts, payload in data:
-        print(ts, payload)
-
-
-if __name__ == "__main__":
-    main()
+def __getattr__(attr):
+    global _module
+    if _module is None:
+        _module = importlib.import_module('qmtl.examples.utils.generators_example')
+    return getattr(_module, attr)
