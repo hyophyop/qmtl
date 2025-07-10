@@ -143,8 +143,8 @@ Available modes are `backtest`, `dryrun`, `live` and `offline`. The first three
 require a running Gateway and DAG manager. Start them in separate terminals:
 
 ```bash
-qmtl gw --config examples/qmtl.yml
-qmtl dagmgr-server --config examples/qmtl.yml
+qmtl gw --config qmtl/examples/qmtl.yml
+qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 ```
 
 Multiple strategies can be executed in parallel by launching separate processes
@@ -193,7 +193,7 @@ wait
 ## 6. Next Steps
 
 Consult [architecture.md](../architecture.md) for a deep dive into the overall
-framework and `examples/` for reference strategies. When ready, deploy the
+framework and `qmtl/examples/` for reference strategies. When ready, deploy the
 Gateway and DAG manager using your customized `qmtl.yml`.
 
 > **운영/배포 체크리스트**
@@ -209,4 +209,4 @@ Gateway and DAG manager using your customized `qmtl.yml`.
 > - [faq.md](faq.md): 자주 묻는 질문
 > - [monitoring.md](monitoring.md): 모니터링 및 운영
 > - [canary_rollout.md](canary_rollout.md): 점진적 배포 전략
-> - [examples/](../../examples/): 다양한 전략 예제
+> - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제

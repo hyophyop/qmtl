@@ -12,10 +12,10 @@ Example Grafana dashboards are provided in `docs/dashboards/`. Import the JSON f
 
 ## QuestDB Recorder Demo
 
-The script `examples/questdb_parallel_example.py` runs two moving-average strategies in parallel while persisting every `StreamInput` payload to QuestDB. It starts the metrics server on port `8000` and prints aggregated Prometheus metrics when finished. Execute it as follows:
+The script `qmtl/examples/questdb_parallel_example.py` runs two moving-average strategies in parallel while persisting every `StreamInput` payload to QuestDB. It starts the metrics server on port `8000` and prints aggregated Prometheus metrics when finished. Execute it as follows:
 
 ```bash
-python examples/questdb_parallel_example.py
+python -m qmtl.examples.questdb_parallel_example
 ```
 
 Monitor `http://localhost:8000/metrics` during execution or check the printed output. Key counters include `node_processed_total` for processed events and `event_recorder_errors_total` when the recorder fails to persist rows.

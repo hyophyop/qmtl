@@ -47,7 +47,7 @@ Run the default strategy to verify everything is set up correctly:
 python strategy.py
 ```
 
-See `examples/README.md` for additional strategies that can be executed
+See `qmtl/examples/README.md` for additional strategies that can be executed
 in the same way. A more detailed walkthrough from project creation to
 testing is available in [docs/strategy_workflow.md](docs/strategy_workflow.md).
 
@@ -125,16 +125,16 @@ demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 ```bash
 
 # start the gateway HTTP server
-qmtl gw --config examples/qmtl.yml
+qmtl gw --config qmtl/examples/qmtl.yml
 
 # start the DAG manager
-qmtl dagmgr-server --config examples/qmtl.yml
+qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 
 # submit a DAG diff
 qmtl dagm diff --file dag.json --target localhost:50051
 ```
 
-Customize the sample YAML files in `examples/` to match your environment.
+Customize the sample YAML files in `qmtl/examples/` to match your environment.
 
 See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
 information on configuration and advanced usage.
@@ -146,17 +146,17 @@ For instructions on implementing strategies with the SDK, see
 
 ## Example Strategies
 
-Run the samples inside the `examples/` directory:
+Run the samples inside the `qmtl/examples/` directory:
 
 ```bash
-python examples/general_strategy.py
-python examples/indicators_strategy.py
-python examples/transforms_strategy.py
-python examples/generators_example.py
-python examples/extensions_combined_strategy.py
+python -m qmtl.examples.general_strategy
+python -m qmtl.examples.strategies.indicators_strategy
+python -m qmtl.examples.transforms_strategy
+python -m qmtl.examples.generators_example
+python -m qmtl.examples.extensions_combined_strategy
 ```
 
-See [examples/README.md](examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
+See [qmtl/examples/README.md](qmtl/examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
 
 ## TagQuery Node Resolution
 
