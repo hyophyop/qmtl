@@ -20,3 +20,29 @@ python -m qmtl.examples.questdb_parallel_example
 
 Monitor `http://localhost:8000/metrics` during execution or check the printed output. Key counters include `node_processed_total` for processed events and `event_recorder_errors_total` when the recorder fails to persist rows.
 
+## SDK Metrics
+
+The SDK's cache layer provides a small set of Prometheus metrics. Any service can
+expose these by calling `metrics.start_metrics_server()`.
+
+### Metric reference
+
+| Name | Type | Description | Labels |
+| ---- | ---- | ----------- | ------ |
+| `cache_read_total` | Counter | Total number of cache reads grouped by upstream and interval | `upstream_id`, `interval` |
+| `cache_last_read_timestamp` | Gauge | Unix timestamp of the most recent cache read | `upstream_id`, `interval` |
+| `backfill_last_timestamp` | Gauge | Latest timestamp successfully backfilled | `node_id`, `interval` |
+| `backfill_jobs_in_progress` | Gauge | Number of active backfill jobs | *(none)* |
+| `backfill_failure_total` | Counter | Total number of backfill jobs that ultimately failed | `node_id`, `interval` |
+| `backfill_retry_total` | Counter | Total number of backfill retry attempts | `node_id`, `interval` |
+
+Start the server as part of your application:
+
+```python
+from qmtl.sdk import metrics
+
+metrics.start_metrics_server(port=8000)
+```
+
+Metrics will then be available at `http://localhost:8000/metrics`.
+
