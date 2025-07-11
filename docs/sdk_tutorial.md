@@ -109,6 +109,27 @@ PyArrow 기반 캐시를 사용하려면 환경 변수 `QMTL_ARROW_CACHE=1`을 �
 만료 슬라이스 정리는 `QMTL_CACHE_EVICT_INTERVAL`(초) 값에 따라 주기적으로 실행되며
 Ray 실행을 `Runner.enable_ray()` 또는 CLI의 `--with-ray` 옵션으로 활성화한 경우 Ray Actor에서 동작합니다.
 
+## Cache Backends
+
+기본 `NodeCache`는 각 `(upstream_id, interval)` 쌍을 링 버퍼로 관리합니다. 누락된
+타임스탬프는 `missing_flags()`로 확인하고 마지막 버킷은 `last_timestamps()`로 조회할
+수 있습니다. `get_slice()`는 리스트 또는 `xarray.DataArray` 형태의 윈도우 데이터를
+반환합니다.
+
+PyArrow가 설치되어 있고 `QMTL_ARROW_CACHE=1`을 설정하면 `NodeCacheArrow` 백엔드가
+활성화됩니다. 만료된 슬라이스는 `QMTL_CACHE_EVICT_INTERVAL` 초 간격으로 제거되며
+Ray가 켜져 있으면 Actor에서, 그렇지 않으면 백그라운드 스레드에서 실행됩니다.
+
+캐시 조회 수는 `qmtl.sdk.metrics` 모듈의 `cache_read_total` 및
+`cache_last_read_timestamp` 지표로 모니터링할 수 있습니다. 다음과 같이 메트릭 서버를
+시작하면 `/metrics` 경로에서 값을 확인할 수 있습니다.
+
+```python
+from qmtl.sdk import metrics
+
+metrics.start_metrics_server(port=8000)
+```
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은
