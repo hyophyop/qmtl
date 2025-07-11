@@ -77,7 +77,8 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
   Actor로 분리 스케줄링한다.
 * **Arrow 캐시 백엔드 옵션**: 환경 변수 `QMTL_ARROW_CACHE=1`을 설정하면 PyArrow 기반
   캐시가 활성화됩니다. `QMTL_CACHE_EVICT_INTERVAL` 값으로 만료 슬라이스를 검사하는
-  주기를 조정하며, Ray가 설치되어 있는 경우 eviction 로직은 Ray Actor로 실행됩니다.
+  주기를 조정하며, Ray 실행을 `Runner.enable_ray()` 또는 CLI의 `--with-ray` 옵션으로
+  활성화한 경우 eviction 로직은 Ray Actor로 실행됩니다.
 * **다중 인터벌·다중 업스트림 지원**: `u` 축 (업스트림)과 `i` 축 (인터벌)을 분리함으로써 1m·5m·1h 등 다양한 간격과 여러 태그 큐를 동시에 저장·검색 가능.
 * **캐시 채우기 규칙**: 노드는 `∀(u,i) : |C[u,i]| ≥ Pᵢ` 조건을 만족할 때에만 프로세싱 함수가 호출된다.
 * **타임스탬프 정렬 예시**: interval = 1 m, period = 10, 시스템 UTC = 10:10:30 ⇒ `f="t"` 슬롯에는 10:01 … 10:10(10개 캔들)이 저장된다.
