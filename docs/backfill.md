@@ -161,3 +161,27 @@ metrics.start_metrics_server(port=8000)
 
 Access `http://localhost:8000/metrics` while a backfill is running to observe its progress.
 
+## BackfillEngine Internals
+
+``BackfillEngine`` drives the asynchronous loading of history. Each job is
+scheduled via :py:meth:`submit` which creates an ``asyncio`` task. The engine
+tracks outstanding tasks in an internal set and :py:meth:`wait` gathers them
+before returning. Jobs call ``HistoryProvider.fetch`` and merge the returned
+rows into the node cache using
+``NodeCache.backfill_bulk``. Completed timestamp ranges are recorded in
+``BackfillState`` so subsequent calls can skip already processed data.
+
+```python
+from qmtl.sdk import StreamInput
+
+stream = StreamInput(...)
+await stream.load_history(start_ts, end_ts)
+```
+
+The ``load_history`` method shown above instantiates ``BackfillEngine``
+internally and submits a single job for the configured provider. Failed fetches
+are retried up to ``max_retries`` times with a short delay. During execution the
+engine emits metrics such as ``backfill_jobs_in_progress``,
+``backfill_last_timestamp``, ``backfill_retry_total`` and
+``backfill_failure_total``.
+
