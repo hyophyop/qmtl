@@ -156,6 +156,12 @@ python -m qmtl.examples.generators_example
 python -m qmtl.examples.extensions_combined_strategy
 ```
 
+Append `--with-ray` to enable Ray-based execution:
+
+```bash
+python -m qmtl.examples.general_strategy --with-ray
+```
+
 See [qmtl/examples/README.md](qmtl/examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
 
 ## TagQuery Node Resolution

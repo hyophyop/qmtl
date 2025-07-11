@@ -31,6 +31,8 @@ class GeneralStrategy(Strategy):
 
 
 if __name__ == "__main__":
+    # Enable Ray execution when available
+    Runner.enable_ray()
     # The backfill range is provided via Runner.backtest
     Runner.backtest(
         GeneralStrategy,
