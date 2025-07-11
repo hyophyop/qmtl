@@ -5,14 +5,18 @@ This guide explains how to populate node caches with past values before a strate
 ## Configuring a HistoryProvider
 
 A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It
-must implement the `fetch(start, end, *, node_id, interval)` method and return a
-`pandas.DataFrame` where each row contains a timestamp column `ts` and any
-payload fields.  Advanced providers can optionally expose:
+must implement an asynchronous
+`fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame`
+where each row contains a timestamp column `ts` and any payload fields.  The
+method signature mirrors that of :py:meth:`DataFetcher.fetch` which providers may
+delegate to when retrieving rows from external services.  Advanced providers can
+optionally expose asynchronous helpers:
 
 - `coverage(node_id, interval)` returning a list of `(start, end)` timestamp
-  ranges already present in the underlying store.
+  ranges already present in the underlying store. This must be an
+  asynchronous coroutine.
 - `fill_missing(start, end, node_id, interval)` instructing the provider to
-  populate gaps within the given range.
+  populate gaps within the given range and is also a coroutine.
 
 `coverage()` should return contiguous, inclusive ranges that already exist in
 the storage backend. When `fill_missing()` is implemented the provider is
@@ -21,10 +25,10 @@ range. A runner can use these APIs to determine what portions of history need to
 be fetched or created before loading data into a strategy.
 
 In some cases a provider may rely on a separate **DataFetcher** object to
-retrieve missing rows.  A `DataFetcher` exposes a single asynchronous
-`fetch(start, end, *, node_id, interval)` method returning the same frame
+retrieve missing rows.  A ``DataFetcher`` exposes a single **asynchronous**
+``fetch(start, end, *, node_id, interval)`` coroutine returning the same frame
 structure.  When a provider is created without a fetcher, calling
-`fill_missing` will raise a `RuntimeError`.
+``fill_missing`` will raise a ``RuntimeError``.
 
 The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 
@@ -78,6 +82,17 @@ loader = QuestDBLoader(
 
 Custom providers can implement `HistoryProvider` or provide an object with the same interface.
 
+An accompanying **EventRecorder** persists processed rows. A recorder must
+implement the asynchronous ``persist(node_id, interval, timestamp, payload)``
+method which receives each node payload exactly as emitted. Like providers,
+recorders may implement ``bind_stream()`` to infer a table name from
+``stream.node_id``.
+
+When building custom providers or fetchers simply follow these method
+signatures and return ``pandas.DataFrame`` objects with a ``ts`` column.
+Subclasses are optional—any object adhering to the protocol works with the
+SDK.
+
 ### Injecting into `StreamInput`
 
 Historical data and event recording can be supplied when creating a `StreamInput`:
@@ -101,9 +116,9 @@ When the QuestDB loader or recorder is created without a ``table`` argument it
 automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
 explicitly to override this behaviour.
 
-``StreamInput`` treats these dependencies as immutable. Attempting to modify
-``history_provider`` or ``event_recorder`` after creation will raise an
-``AttributeError``.
+``StreamInput`` binds the provider and recorder during construction and then
+treats them as read-only. Attempting to modify ``history_provider`` or
+``event_recorder`` after creation will raise an ``AttributeError``.
 
 ## Running a Backfill
 
