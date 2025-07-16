@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "Test Coverage Monitor",
+  "description": "Monitors Python source code changes and ensures test coverage remains at 80% or above by running pytest with coverage analysis",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "qmtl/**/*.py",
+      "tests/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Python source code has been modified. Please run `uv run -- pytest --cov=qmtl --cov-report=term-missing --cov-fail-under=80` to verify that test coverage remains at 80% or above. If coverage drops below 80%, identify the uncovered code and suggest specific tests that need to be added or updated. Focus on the modified files and ensure all new code paths are properly tested."
+  }
+}
