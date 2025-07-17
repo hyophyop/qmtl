@@ -59,6 +59,30 @@ async def test_circuit_breaker_opens_on_failures():
 
 
 @pytest.mark.asyncio
+async def test_custom_on_open_preserved():
+    triggered = False
+
+    def custom_hook() -> None:
+        nonlocal triggered
+        triggered = True
+
+    breaker = AsyncCircuitBreaker(
+        max_failures=1,
+        reset_timeout=0.01,
+        on_open=custom_hook,
+    )
+    admin = KafkaAdmin(FailingAdmin(fail_times=1), breaker=breaker)
+    cfg = TopicConfig(1, 1, 1000)
+    metrics.reset_metrics()
+
+    with pytest.raises(RuntimeError):
+        await asyncio.to_thread(admin.create_topic_if_needed, "t", cfg)
+
+    assert triggered
+    assert metrics.kafka_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
 async def test_topic_exists_does_not_trip_breaker():
     client = ExistsAdmin()
     admin = KafkaAdmin(client, breaker=AsyncCircuitBreaker(max_failures=1, reset_timeout=0.01))
