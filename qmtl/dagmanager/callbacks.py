@@ -5,6 +5,8 @@ from typing import Any, Optional
 
 import httpx
 
+from ..common import AsyncCircuitBreaker
+
 
 async def post_with_backoff(
     url: str,
@@ -15,16 +17,26 @@ async def post_with_backoff(
     factor: float = 2.0,
     max_delay: float = 8.0,
     client: Optional[httpx.AsyncClient] = None,
+    circuit_breaker: "AsyncCircuitBreaker" | None = None,
 ) -> httpx.Response:
     """Send HTTP POST with exponential backoff."""
     delay = base
     async with (client if client is not None else httpx.AsyncClient()) as c:
-        for attempt in range(retries):
+        async def send() -> httpx.Response:
             resp = await c.post(url, json=payload)
-            if resp.status_code == 202:
-                return resp
-            if attempt < retries - 1:
-                await asyncio.sleep(delay)
-                delay = min(delay * factor, max_delay)
-        resp.raise_for_status()
-        return resp
+            if resp.status_code != 202:
+                raise RuntimeError(f"failed with status {resp.status_code}")
+            return resp
+
+        wrapped = circuit_breaker(send) if circuit_breaker else send
+
+        for attempt in range(retries):
+            try:
+                return await wrapped()
+            except Exception:
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                    delay = min(delay * factor, max_delay)
+                else:
+                    raise
+
