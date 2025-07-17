@@ -17,6 +17,7 @@ dependencies = [
     "websockets",
     "grpcio",
     "PyYAML",
+    "psutil",
 ]
 
 [project.optional-dependencies]
