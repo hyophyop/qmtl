@@ -17,6 +17,7 @@ from .diff_service import (
     QueueManager,
 )
 from .kafka_admin import KafkaAdmin
+from qmtl.common import AsyncCircuitBreaker
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .gc import GarbageCollector
@@ -242,8 +243,16 @@ def serve(
     gc: GarbageCollector | None = None,
     repo: NodeRepository | None = None,
     queue: QueueManager | None = None,
+    breaker_threshold: int = 3,
+    breaker_timeout: float = 60.0,
 ) -> tuple[grpc.aio.Server, int]:
-    admin = KafkaAdmin(kafka_admin_client) if kafka_admin_client is not None else None
+    admin = None
+    if kafka_admin_client is not None:
+        breaker = AsyncCircuitBreaker(
+            max_failures=breaker_threshold,
+            reset_timeout=breaker_timeout,
+        )
+        admin = KafkaAdmin(kafka_admin_client, breaker=breaker)
     if repo is None:
         repo = Neo4jNodeRepository(neo4j_driver)
     if queue is None and admin is not None:

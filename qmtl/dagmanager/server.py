@@ -5,6 +5,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Iterable
 
+from qmtl.common import AsyncCircuitBreaker
+
 import uvicorn
 
 from .grpc_server import serve
@@ -70,14 +72,25 @@ async def _run(cfg: DagManagerConfig) -> None:
 
         repo = MemoryNodeRepository(cfg.memory_repo_path)
     if cfg.queue_backend == "kafka":
+        from .kafka_admin import KafkaAdmin
+        from .diff_service import KafkaQueueManager
+
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
-        queue = None
+        breaker = AsyncCircuitBreaker(
+            max_failures=cfg.kafka_breaker_threshold,
+            reset_timeout=cfg.kafka_breaker_timeout,
+        )
+        queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
     elif cfg.queue_backend == "memory":
         from .kafka_admin import InMemoryAdminClient, KafkaAdmin
         from .diff_service import KafkaQueueManager
 
         admin_client = InMemoryAdminClient()
-        queue = KafkaQueueManager(KafkaAdmin(admin_client))
+        breaker = AsyncCircuitBreaker(
+            max_failures=cfg.kafka_breaker_threshold,
+            reset_timeout=cfg.kafka_breaker_timeout,
+        )
+        queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
 
     gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
 
@@ -91,6 +104,8 @@ async def _run(cfg: DagManagerConfig) -> None:
         gc=gc,
         repo=repo,
         queue=queue,
+        breaker_threshold=cfg.kafka_breaker_threshold,
+        breaker_timeout=cfg.kafka_breaker_timeout,
     )
     await grpc_server.start()
 
