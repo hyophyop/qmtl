@@ -85,6 +85,7 @@ async def test_breaker_opens_and_resets(monkeypatch):
     assert client.breaker.is_open
     assert metrics.dagclient_breaker_state._value.get() == 1
     assert metrics.dagclient_breaker_failures._value.get() == 2
+    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
 
     with pytest.raises(RuntimeError):
         await client.diff("s", "{}")
@@ -117,6 +118,7 @@ async def test_get_queues_uses_breaker(monkeypatch):
     with pytest.raises(RuntimeError):
         await client.get_queues_by_tag(["t"], 60)
     assert metrics.dagclient_breaker_state._value.get() == 1
+    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
     await client.close()
 
 
@@ -137,6 +139,7 @@ async def test_status_uses_breaker(monkeypatch):
     assert await client.status() is False
     assert client.breaker.is_open
     assert metrics.dagclient_breaker_state._value.get() == 1
+    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
     assert await client.status() is False
     await asyncio.sleep(0.06)
     assert await client.status() is True

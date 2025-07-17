@@ -15,6 +15,8 @@ class GatewayConfig:
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
     queue_backend: str = "memory"
+    dagclient_breaker_threshold: int = 3
+    dagclient_breaker_timeout: float = 60.0
 
 
 def load_gateway_config(path: str) -> GatewayConfig:

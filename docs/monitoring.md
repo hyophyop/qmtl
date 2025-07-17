@@ -20,6 +20,26 @@ python -m qmtl.examples.questdb_parallel_example
 
 Monitor `http://localhost:8000/metrics` during execution or check the printed output. Key counters include `node_processed_total` for processed events and `event_recorder_errors_total` when the recorder fails to persist rows.
 
+## Gateway & DAG Manager Metrics
+
+Both services expose a Prometheus endpoint. Circuit breaker activity is tracked via gauges:
+
+- `dagclient_breaker_open_total` — increments each time the Gateway's gRPC client trips open.
+- `kafka_breaker_open_total` — increments each time the DAG manager's Kafka admin breaker opens.
+
+Configuration options control the breakers:
+
+```yaml
+gateway:
+  dagclient_breaker_threshold: 3  # failures before opening
+  dagclient_breaker_timeout: 60.0 # seconds before reset
+dagmanager:
+  kafka_breaker_threshold: 3
+  kafka_breaker_timeout: 60.0
+  neo4j_breaker_threshold: 3
+  neo4j_breaker_timeout: 60.0
+```
+
 ## SDK Metrics
 
 The SDK's cache layer provides a small set of Prometheus metrics. Any service can
