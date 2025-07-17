@@ -4,6 +4,7 @@ import base64
 import json
 import asyncio
 import time
+import os
 from typing import Optional, Iterable
 import logging
 import httpx
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
+from qmtl.common import AsyncCircuitBreaker
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -28,6 +30,7 @@ class Runner:
 
     _ray_available = False
     _kafka_available = AIOKafkaConsumer is not None
+    _gateway_cb: AsyncCircuitBreaker | None = None
 
     @classmethod
     def enable_ray(cls, enable: bool = True) -> None:
@@ -39,6 +42,27 @@ class Runner:
     @classmethod
     def disable_ray(cls) -> None:
         cls.enable_ray(False)
+
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def set_gateway_circuit_breaker(
+        cls, cb: AsyncCircuitBreaker | None
+    ) -> None:
+        """Configure circuit breaker for Gateway communication."""
+        cls._gateway_cb = cb
+
+    @classmethod
+    def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker | None:
+        if cls._gateway_cb is None:
+            max_failures = os.getenv("QMTL_GW_CB_MAX_FAILURES")
+            reset_timeout = os.getenv("QMTL_GW_CB_RESET_TIMEOUT")
+            if max_failures or reset_timeout:
+                cls._gateway_cb = AsyncCircuitBreaker(
+                    max_failures=int(max_failures or 3),
+                    reset_timeout=float(reset_timeout or 60.0),
+                )
+        return cls._gateway_cb
 
     # ------------------------------------------------------------------
 
@@ -59,6 +83,7 @@ class Runner:
         dag: dict,
         meta: Optional[dict],
         run_type: str,
+        circuit_breaker: AsyncCircuitBreaker | None = None,
     ) -> dict:
         url = gateway_url.rstrip("/") + "/strategies"
         from qmtl.common import crc32_of_list
@@ -69,8 +94,13 @@ class Runner:
             "run_type": run_type,
             "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
         }
+        if circuit_breaker is None:
+            circuit_breaker = Runner._get_gateway_circuit_breaker()
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload)
+            post_fn = client.post
+            if circuit_breaker is not None:
+                post_fn = circuit_breaker(post_fn)
+            resp = await post_fn(url, json=payload)
         if resp.status_code == 202:
             return resp.json().get("queue_map", {})
         if resp.status_code == 409:
@@ -462,6 +492,7 @@ class Runner:
                 dag=dag,
                 meta=meta,
                 run_type="backtest",
+                circuit_breaker=Runner._get_gateway_circuit_breaker(),
             )
         except httpx.RequestError as exc:
             raise RuntimeError(
@@ -521,6 +552,7 @@ class Runner:
                 dag=dag,
                 meta=meta,
                 run_type="dry-run",
+                circuit_breaker=Runner._get_gateway_circuit_breaker(),
             )
         except httpx.RequestError as exc:
             raise RuntimeError(
@@ -576,6 +608,7 @@ class Runner:
                 dag=dag,
                 meta=meta,
                 run_type="live",
+                circuit_breaker=Runner._get_gateway_circuit_breaker(),
             )
         except httpx.RequestError as exc:
             raise RuntimeError(

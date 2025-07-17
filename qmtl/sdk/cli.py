@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import importlib
+import os
 
 import asyncio
 from typing import List
@@ -34,10 +35,34 @@ async def _main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="Enable Ray-based execution of compute functions",
     )
+    parser.add_argument(
+        "--gateway-cb-max-failures",
+        type=int,
+        default=os.getenv("QMTL_GW_CB_MAX_FAILURES"),
+        help="Max failures before Gateway circuit opens",
+    )
+    parser.add_argument(
+        "--gateway-cb-reset-timeout",
+        type=float,
+        default=os.getenv("QMTL_GW_CB_RESET_TIMEOUT"),
+        help="Reset timeout for Gateway circuit breaker",
+    )
     args = parser.parse_args(argv)
 
     if args.with_ray:
         Runner.enable_ray()
+
+    if args.gateway_cb_max_failures is not None or args.gateway_cb_reset_timeout is not None:
+        mf = args.gateway_cb_max_failures
+        rt = args.gateway_cb_reset_timeout
+        if mf is None:
+            mf = 3
+        if rt is None:
+            rt = 60.0
+        from qmtl.common import AsyncCircuitBreaker
+        Runner.set_gateway_circuit_breaker(
+            AsyncCircuitBreaker(max_failures=int(mf), reset_timeout=float(rt))
+        )
 
     module_name, class_name = args.strategy.split(":")
     module = importlib.import_module(module_name)
