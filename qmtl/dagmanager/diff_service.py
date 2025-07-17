@@ -19,6 +19,7 @@ from .metrics import (
 )
 from .kafka_admin import KafkaAdmin
 from .topic import TopicConfig, topic_name
+from qmtl.common import AsyncCircuitBreaker
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -62,14 +63,30 @@ class BufferInstruction(NodeInfo):
 class NodeRepository:
     """Interface to fetch nodes and insert sentinels."""
 
-    def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
+    def get_nodes(
+        self,
+        node_ids: Iterable[str],
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> Dict[str, NodeRecord]:
         raise NotImplementedError
 
-    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
+    def insert_sentinel(
+        self,
+        sentinel_id: str,
+        node_ids: Iterable[str],
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         raise NotImplementedError
 
     def get_queues_by_tag(
-        self, tags: Iterable[str], interval: int, match_mode: str = "any"
+        self,
+        tags: Iterable[str],
+        interval: int,
+        match_mode: str = "any",
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
     ) -> list[str]:
         """Return queue topics matching ``tags`` and ``interval``.
 
@@ -78,21 +95,42 @@ class NodeRepository:
         """
         raise NotImplementedError
 
-    def get_node_by_queue(self, queue: str) -> NodeRecord | None:
+    def get_node_by_queue(
+        self,
+        queue: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> NodeRecord | None:
         """Return ``NodeRecord`` for the given queue topic, if any."""
         raise NotImplementedError
 
     # buffering -------------------------------------------------------------
 
-    def mark_buffering(self, node_id: str, *, timestamp_ms: int | None = None) -> None:
+    def mark_buffering(
+        self,
+        node_id: str,
+        *,
+        timestamp_ms: int | None = None,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         """Record when ``node_id`` entered buffering mode."""
         raise NotImplementedError
 
-    def clear_buffering(self, node_id: str) -> None:
+    def clear_buffering(
+        self,
+        node_id: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         """Remove buffering state from the given node."""
         raise NotImplementedError
 
-    def get_buffering_nodes(self, older_than_ms: int) -> list[str]:
+    def get_buffering_nodes(
+        self,
+        older_than_ms: int,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> list[str]:
         """Return node IDs buffering since before ``older_than_ms``."""
         raise NotImplementedError
 
@@ -305,7 +343,12 @@ class Neo4jNodeRepository(NodeRepository):
     def __init__(self, driver: 'Driver') -> None:
         self.driver = driver
 
-    def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
+    def get_nodes(
+        self,
+        node_ids: Iterable[str],
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> Dict[str, NodeRecord]:
         if not node_ids:
             return {}
         query = (
@@ -315,7 +358,7 @@ class Neo4jNodeRepository(NodeRepository):
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
             "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             result = session.run(query, ids=list(node_ids))
             records: Dict[str, NodeRecord] = {}
             for r in result:
@@ -331,7 +374,13 @@ class Neo4jNodeRepository(NodeRepository):
                 )
             return records
 
-    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
+    def insert_sentinel(
+        self,
+        sentinel_id: str,
+        node_ids: Iterable[str],
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         if not node_ids:
             return
         query = (
@@ -339,11 +388,16 @@ class Neo4jNodeRepository(NodeRepository):
             "WITH s UNWIND $ids AS nid MATCH (c:ComputeNode {node_id: nid}) "
             "MERGE (s)-[:HAS]->(c)"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             session.run(query, sid=sentinel_id, ids=list(node_ids))
 
     def get_queues_by_tag(
-        self, tags: Iterable[str], interval: int, match_mode: str = "any"
+        self,
+        tags: Iterable[str],
+        interval: int,
+        match_mode: str = "any",
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
     ) -> list[str]:
         if not tags:
             return []
@@ -356,11 +410,16 @@ class Neo4jNodeRepository(NodeRepository):
             f"WHERE {cond} AND q.interval = $interval "
             "RETURN q.topic AS topic"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             result = session.run(query, tags=list(tags), interval=interval)
             return [r.get("topic") for r in result]
 
-    def get_node_by_queue(self, queue: str) -> NodeRecord | None:
+    def get_node_by_queue(
+        self,
+        queue: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> NodeRecord | None:
         query = (
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue {topic: $queue}) "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
@@ -368,7 +427,7 @@ class Neo4jNodeRepository(NodeRepository):
             "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags "
             "LIMIT 1"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             result = session.run(query, queue=queue)
             record = result.single()
             if record is None:
@@ -386,29 +445,45 @@ class Neo4jNodeRepository(NodeRepository):
 
     # buffering -------------------------------------------------------------
 
-    def mark_buffering(self, node_id: str, *, timestamp_ms: int | None = None) -> None:
+    def mark_buffering(
+        self,
+        node_id: str,
+        *,
+        timestamp_ms: int | None = None,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         query = (
             "MATCH (c:ComputeNode {node_id: $nid}) "
             "SET c.buffering_since = coalesce(c.buffering_since, $ts)"
         )
         ts = timestamp_ms or int(time.time() * 1000)
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             session.run(query, nid=node_id, ts=ts)
 
-    def clear_buffering(self, node_id: str) -> None:
+    def clear_buffering(
+        self,
+        node_id: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         query = (
             "MATCH (c:ComputeNode {node_id: $nid}) "
             "REMOVE c.buffering_since"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             session.run(query, nid=node_id)
 
-    def get_buffering_nodes(self, older_than_ms: int) -> list[str]:
+    def get_buffering_nodes(
+        self,
+        older_than_ms: int,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> list[str]:
         query = (
             "MATCH (c:ComputeNode) WHERE c.buffering_since < $cutoff "
             "RETURN c.node_id AS node_id"
         )
-        with self.driver.session() as session:
+        with self.driver.session(breaker=breaker) as session:
             result = session.run(query, cutoff=older_than_ms)
             return [r.get("node_id") for r in result]
 

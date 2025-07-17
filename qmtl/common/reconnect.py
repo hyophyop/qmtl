@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from .circuit_breaker import AsyncCircuitBreaker
+import asyncio
+
 import redis.asyncio as redis
 
 
@@ -34,15 +37,27 @@ class ReconnectingRedis:
 
 
 class _ReconnectingSession:
-    def __init__(self, factory: Callable[[], Any], reconnect: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        factory: Callable[[], Any],
+        reconnect: Callable[[], None],
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
         self._factory = factory
         self._reconnect = reconnect
         self._session = self._factory()
+        self._breaker = breaker
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
         for attempt in range(2):
             try:
-                return self._session.run(*args, **kwargs)
+                if self._breaker is None:
+                    return self._session.run(*args, **kwargs)
+                else:
+                    async def _call() -> Any:
+                        return await asyncio.to_thread(self._session.run, *args, **kwargs)
+
+                    return asyncio.run(self._breaker(_call)())
             except Exception:
                 if attempt == 1:
                     raise
@@ -77,11 +92,16 @@ class ReconnectingNeo4j:
         self._driver.close()
         self._driver = self._GraphDatabase.driver(self._uri, auth=self._auth)
 
-    def session(self, *args: Any, **kwargs: Any) -> _ReconnectingSession:
+    def session(
+        self,
+        *args: Any,
+        breaker: AsyncCircuitBreaker | None = None,
+        **kwargs: Any,
+    ) -> _ReconnectingSession:
         def factory():
             return self._driver.session(*args, **kwargs)
 
-        return _ReconnectingSession(factory, self._reconnect)
+        return _ReconnectingSession(factory, self._reconnect, breaker)
 
     def close(self) -> None:
         self._driver.close()
