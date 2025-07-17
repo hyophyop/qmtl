@@ -34,6 +34,12 @@ dagclient_breaker_failures = Gauge(
     registry=global_registry,
 )
 
+dagclient_breaker_open_total = Gauge(
+    "dagclient_breaker_open_total",
+    "Number of times the DAG manager client breaker opened",
+    registry=global_registry,
+)
+
 
 # Track the percentage of traffic routed to each sentinel version
 if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
@@ -90,4 +96,6 @@ def reset_metrics() -> None:
     dagclient_breaker_state._val = 0  # type: ignore[attr-defined]
     dagclient_breaker_failures.set(0)
     dagclient_breaker_failures._val = 0  # type: ignore[attr-defined]
+    dagclient_breaker_open_total.set(0)
+    dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
 

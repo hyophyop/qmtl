@@ -62,6 +62,12 @@ orphan_queue_total = Gauge(
     registry=global_registry,
 )
 
+kafka_breaker_open_total = Gauge(
+    "kafka_breaker_open_total",
+    "Number of times the Kafka admin circuit breaker opened",
+    registry=global_registry,
+)
+
 gc_last_run_timestamp = Gauge(
     "gc_last_run_timestamp",
     "Timestamp of the last successful garbage collection",
@@ -137,6 +143,8 @@ def reset_metrics() -> None:
     sentinel_gap_count._val = 0  # type: ignore[attr-defined]
     orphan_queue_total.set(0)
     orphan_queue_total._val = 0  # type: ignore[attr-defined]
+    kafka_breaker_open_total.set(0)
+    kafka_breaker_open_total._val = 0  # type: ignore[attr-defined]
     gc_last_run_timestamp.set(0)
     gc_last_run_timestamp._val = 0  # type: ignore[attr-defined]
     if hasattr(active_version_weight, "clear"):
