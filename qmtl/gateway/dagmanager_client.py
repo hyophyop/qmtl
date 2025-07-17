@@ -28,7 +28,10 @@ class DagManagerClient:
         self._breaker = AsyncCircuitBreaker(
             max_failures=breaker_max_failures,
             reset_timeout=breaker_reset_timeout,
-            on_open=lambda: gw_metrics.dagclient_breaker_state.set(1),
+            on_open=lambda: (
+                gw_metrics.dagclient_breaker_state.set(1),
+                gw_metrics.dagclient_breaker_open_total.inc(),
+            ),
             on_close=lambda: (
                 gw_metrics.dagclient_breaker_state.set(0),
                 gw_metrics.dagclient_breaker_failures.set(0),

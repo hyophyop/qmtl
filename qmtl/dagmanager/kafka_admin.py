@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, Mapping, Dict
 
 from qmtl.common import AsyncCircuitBreaker
+from . import metrics
 
 from .topic import TopicConfig
 
@@ -66,6 +67,17 @@ class InMemoryAdminClient:
 class KafkaAdmin:
     client: AdminClient
     breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
+
+    def __post_init__(self) -> None:
+        """Attach metric callbacks without overriding existing hooks."""
+        prev_on_open = self.breaker._on_open
+
+        def _on_open() -> None:
+            if prev_on_open is not None:
+                prev_on_open()
+            metrics.kafka_breaker_open_total.inc()
+
+        self.breaker._on_open = _on_open
 
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:
         """Create topic idempotently using a circuit breaker."""

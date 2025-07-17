@@ -19,6 +19,8 @@ class DagManagerConfig:
     kafka_dsn: str = "localhost:9092"
     kafka_breaker_threshold: int = 3
     kafka_breaker_timeout: float = 60.0
+    neo4j_breaker_threshold: int = 3
+    neo4j_breaker_timeout: float = 60.0
     grpc_host: str = "0.0.0.0"
     grpc_port: int = 50051
     http_host: str = "0.0.0.0"
