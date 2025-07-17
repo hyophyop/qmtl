@@ -343,6 +343,13 @@ class Neo4jNodeRepository(NodeRepository):
     def __init__(self, driver: 'Driver') -> None:
         self.driver = driver
 
+    def _open_session(self, breaker: AsyncCircuitBreaker | None):
+        """Return a driver session, passing ``breaker`` if supported."""
+        try:
+            return self.driver.session(breaker=breaker)
+        except TypeError:
+            return self.driver.session()
+
     def get_nodes(
         self,
         node_ids: Iterable[str],
@@ -358,7 +365,7 @@ class Neo4jNodeRepository(NodeRepository):
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
             "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             result = session.run(query, ids=list(node_ids))
             records: Dict[str, NodeRecord] = {}
             for r in result:
@@ -388,7 +395,7 @@ class Neo4jNodeRepository(NodeRepository):
             "WITH s UNWIND $ids AS nid MATCH (c:ComputeNode {node_id: nid}) "
             "MERGE (s)-[:HAS]->(c)"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             session.run(query, sid=sentinel_id, ids=list(node_ids))
 
     def get_queues_by_tag(
@@ -410,7 +417,7 @@ class Neo4jNodeRepository(NodeRepository):
             f"WHERE {cond} AND q.interval = $interval "
             "RETURN q.topic AS topic"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             result = session.run(query, tags=list(tags), interval=interval)
             return [r.get("topic") for r in result]
 
@@ -427,7 +434,7 @@ class Neo4jNodeRepository(NodeRepository):
             "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags "
             "LIMIT 1"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             result = session.run(query, queue=queue)
             record = result.single()
             if record is None:
@@ -457,7 +464,7 @@ class Neo4jNodeRepository(NodeRepository):
             "SET c.buffering_since = coalesce(c.buffering_since, $ts)"
         )
         ts = timestamp_ms or int(time.time() * 1000)
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             session.run(query, nid=node_id, ts=ts)
 
     def clear_buffering(
@@ -470,7 +477,7 @@ class Neo4jNodeRepository(NodeRepository):
             "MATCH (c:ComputeNode {node_id: $nid}) "
             "REMOVE c.buffering_since"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             session.run(query, nid=node_id)
 
     def get_buffering_nodes(
@@ -483,7 +490,7 @@ class Neo4jNodeRepository(NodeRepository):
             "MATCH (c:ComputeNode) WHERE c.buffering_since < $cutoff "
             "RETURN c.node_id AS node_id"
         )
-        with self.driver.session(breaker=breaker) as session:
+        with self._open_session(breaker) as session:
             result = session.run(query, cutoff=older_than_ms)
             return [r.get("node_id") for r in result]
 
