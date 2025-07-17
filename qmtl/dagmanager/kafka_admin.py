@@ -2,8 +2,11 @@ from __future__ import annotations
 
 """Simple Kafka Admin wrapper for idempotent topic creation."""
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from typing import Protocol, Mapping, Dict
+
+from qmtl.common import AsyncCircuitBreaker
 
 from .topic import TopicConfig
 
@@ -62,19 +65,27 @@ class InMemoryAdminClient:
 @dataclass
 class KafkaAdmin:
     client: AdminClient
+    breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
 
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:
-        """Create topic idempotently."""
-        try:
-            self.client.create_topic(
-                name,
-                num_partitions=config.partitions,
-                replication_factor=config.replication_factor,
-                config={"retention.ms": str(config.retention_ms)},
-            )
-        except TopicExistsError:
-            # another admin may have created the topic concurrently
-            pass
+        """Create topic idempotently using a circuit breaker."""
+
+        @self.breaker
+        async def _create() -> None:
+            try:
+                self.client.create_topic(
+                    name,
+                    num_partitions=config.partitions,
+                    replication_factor=config.replication_factor,
+                    config={"retention.ms": str(config.retention_ms)},
+                )
+            except TopicExistsError:
+                # Another admin may have created the topic concurrently.
+                return
+
+        # ``AsyncCircuitBreaker`` expects an async callable. ``asyncio.run``
+        # executes the decorated coroutine in a fresh loop.
+        asyncio.run(_create())
 
     def get_topic_sizes(self) -> Dict[str, int]:
         """Return approximate message count per topic."""
