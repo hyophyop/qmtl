@@ -22,6 +22,18 @@ lost_requests_total = Counter(
     registry=global_registry,
 )
 
+dagclient_breaker_state = Gauge(
+    "dagclient_breaker_state",
+    "DAG manager circuit breaker state (1=open, 0=closed)",
+    registry=global_registry,
+)
+
+dagclient_breaker_failures = Gauge(
+    "dagclient_breaker_failures",
+    "Consecutive failures recorded by the DAG manager circuit breaker",
+    registry=global_registry,
+)
+
 
 # Track the percentage of traffic routed to each sentinel version
 if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
@@ -74,4 +86,8 @@ def reset_metrics() -> None:
     gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
     if hasattr(gateway_sentinel_traffic_ratio, "_metrics"):
         gateway_sentinel_traffic_ratio._metrics.clear()
+    dagclient_breaker_state.set(0)
+    dagclient_breaker_state._val = 0  # type: ignore[attr-defined]
+    dagclient_breaker_failures.set(0)
+    dagclient_breaker_failures._val = 0  # type: ignore[attr-defined]
 
