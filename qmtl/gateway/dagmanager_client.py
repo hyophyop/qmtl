@@ -15,10 +15,12 @@ class DagManagerClient:
 
     def __init__(self, target: str, *, breaker_max_failures: int = 3, breaker_reset_timeout: float = 60.0) -> None:
         self._target = target
+        self._created_loop = None
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
+            self._created_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._created_loop)
         self._channel = grpc.aio.insecure_channel(self._target)
         self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
         self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
@@ -39,6 +41,8 @@ class DagManagerClient:
     async def close(self) -> None:
         """Close the underlying gRPC channel."""
         await self._channel.close()
+        if self._created_loop is not None:
+            self._created_loop.close()
 
     @property
     def breaker(self) -> AsyncCircuitBreaker:

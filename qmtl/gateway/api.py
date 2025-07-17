@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, Coroutine, Any
 import asyncio
 
-from fastapi import FastAPI, HTTPException, status, Response
+from fastapi import FastAPI, HTTPException, status, Response, Request
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
 import time
@@ -19,6 +19,7 @@ import redis.asyncio as redis
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
 from . import metrics as gw_metrics
+from .degradation import DegradationManager, DegradationLevel
 from .watch import QueueWatchHub
 from .ws import WebSocketHub
 from .status import get_status as gateway_status
@@ -50,6 +51,7 @@ class StrategyManager:
     redis: redis.Redis
     database: Database
     fsm: StrategyFSM
+    degrade: Optional[DegradationManager] = None
     insert_sentinel: bool = True
 
     async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
@@ -78,7 +80,10 @@ class StrategyManager:
         encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
 
         try:
-            await self.redis.rpush("strategy_queue", strategy_id)
+            if self.degrade and self.degrade.level == DegradationLevel.PARTIAL and not self.degrade.dag_ok:
+                self.degrade.local_queue.append(strategy_id)
+            else:
+                await self.redis.rpush("strategy_queue", strategy_id)
             await self.redis.hset(
                 f"strategy:{strategy_id}",
                 mapping={"dag": encoded_dag, "hash": dag_hash},
@@ -123,17 +128,23 @@ def create_app(
         else:
             raise ValueError(f"Unsupported database backend: {database_backend}")
     fsm = StrategyFSM(redis=redis_conn, database=database_obj)
-    manager = StrategyManager(
-        redis=redis_conn, database=database_obj, fsm=fsm, insert_sentinel=insert_sentinel
-    )
     dag_manager = dag_client or DagManagerClient("127.0.0.1:50051")
+    degradation = DegradationManager(redis_conn, database_obj, dag_manager)
+    manager = StrategyManager(
+        redis=redis_conn,
+        database=database_obj,
+        fsm=fsm,
+        degrade=degradation,
+        insert_sentinel=insert_sentinel,
+    )
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
-        await dag_manager.close()
+        if hasattr(dag_manager, "close"):
+            await dag_manager.close()
         db_obj = getattr(app.state, "database", None)
         if db_obj is not None and hasattr(db_obj, "close"):
             try:
@@ -143,10 +154,26 @@ def create_app(
 
     app = FastAPI(lifespan=lifespan)
     app.state.database = database_obj
+    app.state.degradation = degradation
+
+    @app.middleware("http")
+    async def _degrade_middleware(request: Request, call_next):
+        level = degradation.level
+        if level == DegradationLevel.STATIC:
+            return Response(status_code=204, headers={"Retry-After": "30"})
+        if (
+            level == DegradationLevel.MINIMAL
+            and request.url.path == "/strategies"
+            and request.method.upper() == "POST"
+        ):
+            return Response(status_code=503)
+        return await call_next(request)
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        return await gateway_status(redis_conn, database_obj, dag_manager)
+        status_data = await gateway_status(redis_conn, database_obj, dag_manager)
+        status_data["degrade_level"] = degradation.level.name
+        return status_data
 
     @app.get("/health")
     async def health() -> dict[str, str]:

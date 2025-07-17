@@ -47,6 +47,14 @@ else:
     )
 gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
 
+# Degradation level of the Gateway service
+degrade_level = Gauge(
+    "degrade_level",
+    "Current degradation level",
+    ["service"],
+    registry=global_registry,
+)
+
 
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
     """Update the live traffic ratio for a sentinel version."""
@@ -90,4 +98,5 @@ def reset_metrics() -> None:
     dagclient_breaker_state._val = 0  # type: ignore[attr-defined]
     dagclient_breaker_failures.set(0)
     dagclient_breaker_failures._val = 0  # type: ignore[attr-defined]
+    degrade_level.clear()
 
