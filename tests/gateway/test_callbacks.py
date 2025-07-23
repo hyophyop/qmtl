@@ -83,7 +83,6 @@ def test_dag_event_sentinel_weight_invalid():
         )
         resp = client.post("/callbacks/dag-event", json=event)
         assert resp.status_code == 202
-        # The hub should still receive the out-of-range weight, but the Gateway should log and ignore it for metrics.
-        assert hub.weights == [("v3", 1.2)]
-        # The metric should not be set for out-of-range values
+        # Invalid weights should be ignored entirely
+        assert hub.weights == []
         assert "v3" not in metrics.gateway_sentinel_traffic_ratio._vals
