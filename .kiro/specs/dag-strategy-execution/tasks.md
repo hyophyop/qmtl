@@ -1,20 +1,20 @@
 # Implementation Plan
 
-- [ ] 1. Set up core SDK foundation and node abstractions
+- [x] 1. Set up core SDK foundation and node abstractions
   - Create base Node class with deterministic NodeID generation using SHA-256
   - Implement Strategy base class for DAG composition
   - Create StreamInput class for external data ingestion
   - Write unit tests for NodeID generation and collision detection
   - _Requirements: 1.1, 1.3, 1.4_
 
-- [ ] 2. Implement 4-D tensor caching system for time-series data
+- [x] 2. Implement 4-D tensor caching system for time-series data
   - Create NodeCache class with 4-dimensional tensor structure C[u,i,p,f]
-  - Implement CircularBuffer for FIFO data management with period constraints
+  - Implement _RingBuffer for FIFO data management with period constraints
   - Add data validation and missing data policy handling (skip/fail/interpolate)
   - Write comprehensive tests for cache operations and eviction policies
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 3. Create Gateway service with FastAPI and state management
+- [x] 3. Create Gateway service with FastAPI and state management
   - Implement FastAPI application with DAG submission endpoints
   - Create finite state machine for strategy lifecycle management using xstate-py
   - Add Redis client for session state and PostgreSQL for persistent storage
@@ -22,7 +22,7 @@
   - Write API endpoint tests and FSM transition validation
   - _Requirements: 2.1, 6.2, 7.1_
 
-- [ ] 4. Build DAG Manager with Neo4j integration
+- [x] 4. Build DAG Manager with Neo4j integration
   - Create gRPC server for DAG diff operations
   - Implement Neo4j node repository with APOC queries for DAG storage
   - Build DAG diff service for computation deduplication logic
@@ -38,7 +38,7 @@
   - Write tests for tag matching logic and dynamic queue updates
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 6. Create multi-mode Runner execution engine
+- [x] 6. Create multi-mode Runner execution engine
   - Implement Runner class with backtest, dry-run, and live execution modes
   - Add Ray integration for parallel node processing
   - Create execution plan generation and node scheduling logic

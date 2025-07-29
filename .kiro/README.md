@@ -7,8 +7,7 @@ This directory contains Kiro-specific configuration files and steering rules for
 ```
 .kiro/
 ├── README.md           # This file
-├── settings/           # Kiro settings and configurations
-│   └── mcp.json       # Model Context Protocol server configurations
+├── hooks/              # Kiro automation hooks
 ├── steering/          # Context steering rules for AI assistance
 │   ├── tech.md        # Technology stack and tooling guidelines
 │   ├── structure.md   # Project structure and organization
