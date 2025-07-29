@@ -192,6 +192,17 @@ class NodeCache:
         return sum(buf.data.nbytes for buf in self._buffers.values())
 
     # ------------------------------------------------------------------
+    def drop(self, u: str, interval: int) -> None:
+        """Remove cached data for ``(u, interval)``."""
+        key = (u, interval)
+        self._buffers.pop(key, None)
+        self._last_ts.pop(key, None)
+        self._missing.pop(key, None)
+        self._filled.pop(key, None)
+        self._offset.pop(key, None)
+        self.backfill_state._ranges.pop(key, None)
+
+    # ------------------------------------------------------------------
     def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
         """Return the most recent ``(timestamp, payload)`` for a pair."""
         buf = self._buffers.get((u, interval))
@@ -633,16 +644,42 @@ class TagQueryNode(SourceNode):
     def update_queues(self, queues: list[str]) -> None:
         """Update ``upstreams`` and execution flag."""
         prev_exec = self.execute
-        prev_q = self.upstreams
+        prev_set = set(self.upstreams)
+        new_set = set(queues)
+        added = new_set - prev_set
+        removed = prev_set - new_set
+
         self.upstreams = list(queues)
         self.execute = bool(queues)
-        if self.execute != prev_exec or self.upstreams != prev_q:
+
+        warmup_reset = False
+        if added:
+            self.pre_warmup = True
+            warmup_reset = True
+
+        if removed and self.interval is not None:
+            for q in removed:
+                self.cache.drop(q, self.interval)
+
+        if not self.upstreams:
+            logger.warning(
+                "tag_query.update.empty",
+                extra={"node_id": self.node_id},
+            )
+
+        if (
+            self.execute != prev_exec
+            or added
+            or removed
+            or self.upstreams != list(prev_set)
+        ):
             logger.info(
                 "tag_query.update",
                 extra={
                     "node_id": self.node_id,
                     "queues": self.upstreams,
                     "execute": self.execute,
+                    "warmup_reset": warmup_reset,
                 },
             )
 

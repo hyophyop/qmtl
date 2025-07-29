@@ -169,6 +169,15 @@ class NodeCacheArrow:
                 return False
         return True
 
+    def drop(self, u: str, interval: int) -> None:
+        """Remove cached data for ``(u, interval)``."""
+        key = (u, interval)
+        self._slices.pop(key, None)
+        self._last_ts.pop(key, None)
+        self._missing.pop(key, None)
+        self._filled.pop(key, None)
+        self._last_seen.pop(key, None)
+
     def view(self, *, track_access: bool = False) -> ArrowCacheView:
         by_upstream: Dict[str, Dict[int, _Slice]] = {}
         for (u, i), sl in self._slices.items():
