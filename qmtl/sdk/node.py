@@ -202,6 +202,16 @@ class NodeCache:
         self._offset.pop(key, None)
         self.backfill_state._ranges.pop(key, None)
 
+    def drop_upstream(self, upstream_id: str, interval: int) -> None:
+        """Alias for :meth:`drop` removing cache for ``upstream_id``."""
+        key = (upstream_id, interval)
+        self._buffers.pop(key, None)
+        self._last_ts.pop(key, None)
+        self._missing.pop(key, None)
+        self._filled.pop(key, None)
+        self._offset.pop(key, None)
+        self.backfill_state._ranges.pop(key, None)
+
     # ------------------------------------------------------------------
     def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
         """Return the most recent ``(timestamp, payload)`` for a pair."""

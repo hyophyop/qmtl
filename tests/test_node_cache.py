@@ -301,3 +301,16 @@ def test_backfill_state_merge_multiple_calls():
     cache.backfill_bulk("u1", 60, [(60, {}), (120, {}), (240, {})])
     cache.backfill_bulk("u1", 60, [(180, {}), (300, {})])
     assert cache.backfill_state.ranges("u1", 60) == [(60, 300)]
+
+
+def test_drop_upstream_removes_data_and_is_idempotent():
+    cache = NodeCache(period=2)
+    cache.append("u1", 60, 60, {"v": 1})
+    assert cache.get_slice("u1", 60, count=1) == [(60, {"v": 1})]
+
+    cache.drop_upstream("u1", 60)
+    assert cache.get_slice("u1", 60, count=1) == []
+    assert "u1" not in cache.last_timestamps()
+
+    # second invocation should not raise
+    cache.drop_upstream("u1", 60)

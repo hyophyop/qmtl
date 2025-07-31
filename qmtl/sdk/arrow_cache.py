@@ -178,6 +178,15 @@ class NodeCacheArrow:
         self._filled.pop(key, None)
         self._last_seen.pop(key, None)
 
+    def drop_upstream(self, upstream_id: str, interval: int) -> None:
+        """Alias for :meth:`drop` removing cache for ``upstream_id``."""
+        key = (upstream_id, interval)
+        self._slices.pop(key, None)
+        self._last_ts.pop(key, None)
+        self._missing.pop(key, None)
+        self._filled.pop(key, None)
+        self._last_seen.pop(key, None)
+
     def view(self, *, track_access: bool = False) -> ArrowCacheView:
         by_upstream: Dict[str, Dict[int, _Slice]] = {}
         for (u, i), sl in self._slices.items():
