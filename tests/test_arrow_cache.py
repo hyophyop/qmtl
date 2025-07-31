@@ -26,3 +26,19 @@ def test_node_uses_arrow_cache(monkeypatch):
     node = ProcessingNode(input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2)
     assert isinstance(node.cache, arrow_cache.NodeCacheArrow)
     monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_drop_upstream_removes_data_and_is_idempotent():
+    cache = arrow_cache.NodeCacheArrow(period=2)
+    cache.append("u1", 60, 60, {"v": 1})
+    view = cache.view()
+    assert view["u1"][60].latest() == (60, {"v": 1})
+
+    cache.drop_upstream("u1", 60)
+    view = cache.view()
+    with pytest.raises(KeyError):
+        _ = view["u1"][60]
+
+    # second invocation should not raise
+    cache.drop_upstream("u1", 60)
