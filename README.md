@@ -26,12 +26,20 @@ uv pip install -e .[transforms]
 ## Project Initialization
 
 Create a new working directory with `qmtl init`. The command generates a
-project scaffold containing extension packages and a sample strategy:
+project scaffold containing extension packages and a sample strategy.
+Use `--strategy` to select from the built-in templates:
 
 ```bash
 qmtl init --path my_qmtl_project
+# list available templates
+qmtl init --list-templates
+
+# create project with the branching template
+qmtl init --path my_qmtl_project --strategy branching
 cd my_qmtl_project
 ```
+
+See [docs/templates.md](docs/templates.md) for a description of each template.
 
 The scaffold includes empty `generators/`, `indicators/` and
 `transforms/` packages. Install their optional extras so Python can

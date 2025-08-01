@@ -6,9 +6,18 @@ import importlib.resources as resources
 
 _EXAMPLES_PKG = "qmtl.examples"
 
+# Mapping of template names to example files relative to ``qmtl.examples``
+TEMPLATES = {
+    "general": "general_strategy.py",
+    "single_indicator": "templates/single_indicator.py",
+    "multi_indicator": "templates/multi_indicator.py",
+    "branching": "templates/branching.py",
+    "state_machine": "templates/state_machine.py",
+}
 
-def create_project(path: Path) -> None:
-    """Create a new project scaffold under *path*."""
+
+def create_project(path: Path, template: str = "general") -> None:
+    """Create a new project scaffold under *path* using the given *template*."""
     dest = Path(path)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -22,9 +31,14 @@ def create_project(path: Path) -> None:
     (dest / "qmtl.yml").write_bytes(
         examples.joinpath("qmtl.yml").read_bytes()
     )
+    try:
+        template_file = TEMPLATES[template]
+    except KeyError:
+        raise ValueError(f"unknown template: {template}")
+
     (dest / "strategy.py").write_bytes(
-        examples.joinpath("general_strategy.py").read_bytes()
+        examples.joinpath(template_file).read_bytes()
     )
 
 
-__all__ = ["create_project"]
+__all__ = ["create_project", "TEMPLATES"]

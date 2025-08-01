@@ -15,6 +15,16 @@ def main(argv: List[str] | None = None) -> None:
     p_init.add_argument(
         "--path", required=True, help="Project directory to create scaffolding"
     )
+    p_init.add_argument(
+        "--strategy",
+        default="general",
+        help="Strategy template to use",
+    )
+    p_init.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="List available templates and exit",
+    )
 
     args, rest = parser.parse_known_args(argv)
 
@@ -34,9 +44,14 @@ def main(argv: List[str] | None = None) -> None:
         sdk_main(rest)
     elif args.cmd == "init":
         from pathlib import Path
-        from .scaffold import create_project
+        from .scaffold import create_project, TEMPLATES
 
-        create_project(Path(args.path))
+        if args.list_templates:
+            for name in TEMPLATES:
+                print(name)
+            return
+
+        create_project(Path(args.path), template=args.strategy)
     else:
         parser.print_help()
 
