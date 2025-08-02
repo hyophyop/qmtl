@@ -64,7 +64,7 @@ where = ["."]
 include = ["qmtl*"]
 
 [tool.setuptools.package-data]
-"qmtl.examples" = ["*.py", "*.yml", "README.md"]
+"qmtl.examples" = ["*.py", "*.yml", "README.md", "data/*.csv"]
 
 [tool.pytest.ini_options]
 addopts = "-p pytest_asyncio"
