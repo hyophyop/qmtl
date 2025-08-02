@@ -14,6 +14,7 @@ from qmtl.gateway.database import PostgresDatabase
 
 import grpc
 import asyncio
+import gc
 import pytest
 
 
@@ -107,11 +108,14 @@ async def test_grpc_status():
     stream = FakeStream()
     server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
+    client = DagManagerClient(f"127.0.0.1:{port}")
     try:
-        client = DagManagerClient(f"127.0.0.1:{port}")
         assert await client.status() is True
     finally:
+        await client.close()
         await server.stop(None)
+        await server.wait_for_termination()
+        gc.collect()
 
 
 @pytest.mark.asyncio
@@ -154,3 +158,4 @@ async def test_worker_healthy(monkeypatch, fake_redis):
 
     worker = StrategyWorker(redis, db, fsm, queue, client)
     assert await worker.healthy() is True
+    await client.close()

@@ -51,6 +51,7 @@ async def test_diff_collects_chunks(monkeypatch):
     result = await client.diff("sid", "{}")
     assert result.queue_map == {"A": "topic_a", "B": "topic_b"}
     assert result.sentinel_id == "s"
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -72,6 +73,7 @@ async def test_diff_returns_buffer_nodes(monkeypatch):
     result = await client.diff("sid", "{}")
     assert [b.node_id for b in result.buffer_nodes] == ["A"]
     assert result.buffer_nodes[0].lag == 5
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -89,3 +91,4 @@ async def test_diff_retries(monkeypatch):
     result = await client.diff("sid", "{}")
     assert result.queue_map == {"A": "t"}
     assert get_calls() == 3
+    await client.close()

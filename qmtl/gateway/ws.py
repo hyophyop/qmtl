@@ -45,6 +45,7 @@ class WebSocketHub:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+            await asyncio.sleep(0)
         if self._task:
             await self._task
             self._task = None

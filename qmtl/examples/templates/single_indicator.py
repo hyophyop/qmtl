@@ -1,5 +1,8 @@
-from qmtl.sdk import Strategy, StreamInput, Runner
+import argparse
+
+from qmtl.examples.defaults import load_backtest_defaults
 from qmtl.indicators import ema
+from qmtl.sdk import Strategy, StreamInput, Runner
 
 
 class SingleIndicatorStrategy(Strategy):
@@ -12,8 +15,25 @@ class SingleIndicatorStrategy(Strategy):
         ema_node = ema(price, window=10)
         # Register nodes with the strategy
         self.add_nodes([price, ema_node])
-
-
 if __name__ == "__main__":
-    # Run entirely offline using the default runner
-    Runner.offline(SingleIndicatorStrategy)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backtest", action="store_true", help="Run backtest")
+    parser.add_argument("--start-time")
+    parser.add_argument("--end-time")
+    parser.add_argument("--on-missing")
+    args = parser.parse_args()
+
+    defaults = load_backtest_defaults(__file__)
+    start = args.start_time or defaults.get("start_time")
+    end = args.end_time or defaults.get("end_time")
+    on_missing = args.on_missing or defaults.get("on_missing", "skip")
+
+    if args.backtest:
+        Runner.backtest(
+            SingleIndicatorStrategy,
+            start_time=start,
+            end_time=end,
+            on_missing=on_missing,
+        )
+    else:
+        Runner.offline(SingleIndicatorStrategy)

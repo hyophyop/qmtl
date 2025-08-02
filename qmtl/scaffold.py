@@ -16,8 +16,21 @@ TEMPLATES = {
 }
 
 
-def create_project(path: Path, template: str = "general") -> None:
-    """Create a new project scaffold under *path* using the given *template*."""
+def create_project(
+    path: Path, template: str = "general", with_sample_data: bool = False
+) -> None:
+    """Create a new project scaffold under *path* using the given *template*.
+
+    Parameters
+    ----------
+    path:
+        Destination directory for the project.
+    template:
+        Name of example strategy template.
+    with_sample_data:
+        When ``True`` copy bundled example OHLCV data into ``data/`` of the
+        new project.
+    """
     dest = Path(path)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -31,6 +44,9 @@ def create_project(path: Path, template: str = "general") -> None:
     (dest / "qmtl.yml").write_bytes(
         examples.joinpath("qmtl.yml").read_bytes()
     )
+    (dest / "config.example.yml").write_bytes(
+        examples.joinpath("config.example.yml").read_bytes()
+    )
     try:
         template_file = TEMPLATES[template]
     except KeyError:
@@ -39,6 +55,14 @@ def create_project(path: Path, template: str = "general") -> None:
     (dest / "strategy.py").write_bytes(
         examples.joinpath(template_file).read_bytes()
     )
+
+    if with_sample_data:
+        data_dir = dest / "data"
+        data_dir.mkdir(exist_ok=True)
+        sample = examples.joinpath("data/sample_ohlcv.csv")
+        if sample.is_file():
+            (data_dir / "sample_ohlcv.csv").write_bytes(sample.read_bytes())
+
 
 
 __all__ = ["create_project", "TEMPLATES"]
