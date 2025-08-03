@@ -1,3 +1,19 @@
+r"""Multiple indicator strategy template.
+
+Node flow:
+    price -> fast_ema
+          -> slow_ema
+          -> rsi
+
+ASCII DAG::
+
+    [price]
+      |\
+      | \--->[slow_ema]
+      |-->[fast_ema]
+      \-->[rsi]
+"""
+
 import argparse
 
 from qmtl.examples.defaults import load_backtest_defaults
@@ -9,10 +25,14 @@ class MultiIndicatorStrategy(Strategy):
     """Combine several indicators from one input."""
 
     def setup(self):
+        # Price stream feeding all downstream indicators
         price = StreamInput(interval="60s", period=50)
+        # Short and long EMAs computed from the same source
         fast_ema = ema(price, window=5)
         slow_ema = ema(price, window=20)
+        # Relative strength index from the same price history
         rsi_node = rsi(price, window=14)
+        # Register all nodes so the DAG manager can schedule them
         self.add_nodes([price, fast_ema, slow_ema, rsi_node])
 
 

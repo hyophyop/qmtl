@@ -1,3 +1,13 @@
+r"""Single indicator strategy template.
+
+Node flow:
+    price -> ema
+
+ASCII DAG::
+
+    [price] -> [ema]
+"""
+
 import argparse
 
 from qmtl.examples.defaults import load_backtest_defaults
@@ -9,11 +19,11 @@ class SingleIndicatorStrategy(Strategy):
     """Simple EMA example."""
 
     def setup(self):
-        # Source price stream; real implementations would use a history provider
+        # Source price stream feeding the graph
         price = StreamInput(interval="60s", period=20)
-        # Apply an exponential moving average indicator
+        # Compute an exponential moving average from the price stream
         ema_node = ema(price, window=10)
-        # Register nodes with the strategy
+        # Register nodes with the strategy in execution order
         self.add_nodes([price, ema_node])
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
