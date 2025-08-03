@@ -2,6 +2,14 @@
 
 QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](architecture.md) for full details.
 
+Use the DAG manager CLI to preview DAG structures:
+
+```bash
+qmtl dagm diff --file dag.json --dry-run
+```
+
+The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/templates.md](docs/templates.md) for diagrams of the built-in strategy templates.
+
 ## Installation
 
 Set up a fresh environment using [uv](https://github.com/astral-sh/uv) and

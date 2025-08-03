@@ -63,6 +63,13 @@ def create_project(
         if sample.is_file():
             (data_dir / "sample_ohlcv.csv").write_bytes(sample.read_bytes())
 
+        # Copy example notebook for strategy analysis
+        nb_src = Path(__file__).resolve().parent.parent / "notebooks" / "strategy_analysis_example.ipynb"
+        if nb_src.is_file():
+            nb_dest_dir = dest / "notebooks"
+            nb_dest_dir.mkdir(exist_ok=True)
+            (nb_dest_dir / "strategy_analysis_example.ipynb").write_bytes(nb_src.read_bytes())
+
 
 
 __all__ = ["create_project", "TEMPLATES"]

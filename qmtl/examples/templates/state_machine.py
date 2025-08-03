@@ -1,3 +1,13 @@
+r"""State machine strategy template.
+
+Node flow:
+    price -> trend_state
+
+ASCII DAG::
+
+    [price] -> [trend_state]
+"""
+
 import argparse
 import pandas as pd
 
@@ -9,10 +19,12 @@ class StateMachineStrategy(Strategy):
     """Maintain a simple trend state between runs."""
 
     def setup(self):
+        # Price stream drives the state machine
         price = StreamInput(interval="60s", period=20)
         state = {"trend": None}
 
         def update_state(view):
+            # Determine trend direction and emit whether it changed
             df = pd.DataFrame([v for _, v in view[price][60]])
             ema = df["close"].ewm(span=10).mean().iloc[-1]
             trend = "long" if df["close"].iloc[-1] > ema else "short"
@@ -21,6 +33,7 @@ class StateMachineStrategy(Strategy):
             return pd.DataFrame({"trend": [trend], "changed": [changed]})
 
         trend_node = Node(input=price, compute_fn=update_state, name="trend_state")
+        # Register nodes to form the DAG
         self.add_nodes([price, trend_node])
 
 

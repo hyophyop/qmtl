@@ -247,7 +247,12 @@ async def test_dag_client_queries_grpc():
         await client.close()
         await server.stop(None)
         await server.wait_for_termination()
-        gc.collect()
+        client = None
+        server = None
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            gc.collect()
 
 
 def test_repository_match_modes():
