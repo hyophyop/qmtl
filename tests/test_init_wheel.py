@@ -3,22 +3,33 @@ import sys
 from pathlib import Path
 
 
-def test_qmtl_init_after_wheel_install(tmp_path: Path) -> None:
+def test_init_wheel(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
-    wheel_dir.mkdir()
-    build_py = Path(sys.base_prefix) / "bin" / "python3"
-    subprocess.run([build_py, "-m", "pip", "wheel", ".", "-w", str(wheel_dir)], check=True)
-
+    subprocess.run(
+        ["uv", "build", "--wheel", ".", "-o", str(wheel_dir)],
+        check=True,
+    )
     wheel = next(wheel_dir.glob("qmtl-*.whl"))
     env_dir = tmp_path / "venv"
-    subprocess.run([sys.executable, "-m", "venv", str(env_dir)], check=True)
-    env_python = env_dir / "bin" / "python"
-    if not env_python.exists():
-        env_python = env_dir / "Scripts" / "python.exe"
-    subprocess.run([env_python, "-m", "pip", "install", str(wheel)], check=True)
-
-    proj = tmp_path / "proj"
-    qmtl_cli = env_dir / ("Scripts" if env_python.name.endswith("python.exe") else "bin") / "qmtl"
-    subprocess.run([qmtl_cli, "init", "--path", str(proj)], check=True)
-    assert (proj / "qmtl.yml").is_file()
-    assert (proj / "strategy.py").is_file()
+    subprocess.run(["uv", "venv", str(env_dir)], check=True)
+    bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+    python = env_dir / bin_dir / "python"
+    subprocess.run(
+        [
+            "uv",
+            "pip",
+            "install",
+            str(wheel),
+            "--python",
+            str(python),
+        ],
+        check=True,
+    )
+    qmtl = env_dir / bin_dir / "qmtl"
+    dest = tmp_path / "proj"
+    subprocess.run(
+        [str(qmtl), "init", "--with-sample-data", "--path", str(dest)],
+        check=True,
+    )
+    assert (dest / "data" / "sample_ohlcv.csv").is_file()
+    assert (dest / "notebooks" / "strategy_analysis_example.ipynb").is_file()
