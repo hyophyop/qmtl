@@ -1,5 +1,6 @@
 import json
 import base64
+import gc
 import pytest
 from fastapi.testclient import TestClient
 import asyncio
@@ -88,6 +89,7 @@ def client(fake_redis):
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
     with TestClient(app) as c:
         yield c, dag
+    asyncio.run(dag.close())
 
 
 def test_queues_by_tag_route(client):
@@ -177,6 +179,7 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         assert resp.status_code == 202
         assert resp.json()["queue_map"] == {"N1": ["good_q"], "N2": []}
         assert len(dag.calls) == 2
+    asyncio.run(dag.close())
 
 
 @pytest.mark.asyncio
@@ -237,9 +240,14 @@ async def test_dag_client_queries_grpc():
     server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
     client = DagManagerClient(f"127.0.0.1:{port}")
-    queues = await client.get_queues_by_tag(["t"], 60, "any")
-    await server.stop(None)
-    assert queues == ["q1", "q2"]
+    try:
+        queues = await client.get_queues_by_tag(["t"], 60, "any")
+        assert queues == ["q1", "q2"]
+    finally:
+        await client.close()
+        await server.stop(None)
+        await server.wait_for_termination()
+        gc.collect()
 
 
 def test_repository_match_modes():

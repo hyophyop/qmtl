@@ -1,5 +1,8 @@
-from qmtl.sdk import Strategy, StreamInput, Node, Runner
+import argparse
 import pandas as pd
+
+from qmtl.examples.defaults import load_backtest_defaults
+from qmtl.sdk import Strategy, StreamInput, Node, Runner
 
 
 class StateMachineStrategy(Strategy):
@@ -22,4 +25,24 @@ class StateMachineStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.offline(StateMachineStrategy)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backtest", action="store_true", help="Run backtest")
+    parser.add_argument("--start-time")
+    parser.add_argument("--end-time")
+    parser.add_argument("--on-missing")
+    args = parser.parse_args()
+
+    defaults = load_backtest_defaults(__file__)
+    start = args.start_time or defaults.get("start_time")
+    end = args.end_time or defaults.get("end_time")
+    on_missing = args.on_missing or defaults.get("on_missing", "skip")
+
+    if args.backtest:
+        Runner.backtest(
+            StateMachineStrategy,
+            start_time=start,
+            end_time=end,
+            on_missing=on_missing,
+        )
+    else:
+        Runner.offline(StateMachineStrategy)

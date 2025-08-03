@@ -1,6 +1,9 @@
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.io import QuestDBLoader, QuestDBRecorder
+import argparse
 import pandas as pd
+
+from qmtl.examples.defaults import load_backtest_defaults
+from qmtl.io import QuestDBLoader, QuestDBRecorder
+from qmtl.sdk import Strategy, Node, StreamInput, Runner
 
 class GeneralStrategy(Strategy):
     def __init__(self):
@@ -31,12 +34,25 @@ class GeneralStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Enable Ray execution when available
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backtest", action="store_true", help="Run backtest")
+    parser.add_argument("--start-time")
+    parser.add_argument("--end-time")
+    parser.add_argument("--on-missing")
+    args = parser.parse_args()
+
+    defaults = load_backtest_defaults(__file__)
+    start = args.start_time or defaults.get("start_time")
+    end = args.end_time or defaults.get("end_time")
+    on_missing = args.on_missing or defaults.get("on_missing", "skip")
+
     Runner.enable_ray()
-    # The backfill range is provided via Runner.backtest
-    Runner.backtest(
-        GeneralStrategy,
-        start_time="2024-01-01T00:00:00Z",
-        end_time="2024-02-01T00:00:00Z",
-        on_missing="skip",
-    )
+    if args.backtest:
+        Runner.backtest(
+            GeneralStrategy,
+            start_time=start,
+            end_time=end,
+            on_missing=on_missing,
+        )
+    else:
+        Runner.offline(GeneralStrategy)

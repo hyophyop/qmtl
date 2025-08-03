@@ -25,6 +25,11 @@ def main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="List available templates and exit",
     )
+    p_init.add_argument(
+        "--with-sample-data",
+        action="store_true",
+        help="Include sample OHLCV CSV in project",
+    )
 
     args, rest = parser.parse_known_args(argv)
 
@@ -51,7 +56,11 @@ def main(argv: List[str] | None = None) -> None:
                 print(name)
             return
 
-        create_project(Path(args.path), template=args.strategy)
+        create_project(
+            Path(args.path),
+            template=args.strategy,
+            with_sample_data=args.with_sample_data,
+        )
     else:
         parser.print_help()
 
