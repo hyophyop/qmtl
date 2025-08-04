@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import asyncio
 from dataclasses import dataclass
@@ -11,7 +10,7 @@ import uvicorn
 
 from .grpc_server import serve
 from .config import DagManagerConfig
-from ..config import load_config
+from ..config import load_config, find_config_file
 from .api import create_app
 from .gc import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
@@ -123,9 +122,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", help="Path to configuration file")
     args = parser.parse_args(argv)
 
+    cfg_path = args.config or find_config_file()
     cfg = DagManagerConfig()
-    if args.config:
-        cfg = load_config(args.config).dagmanager
+    if cfg_path:
+        cfg = load_config(cfg_path).dagmanager
 
     asyncio.run(_run(cfg))
 
