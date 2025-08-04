@@ -50,6 +50,15 @@ dagmanager:
   neo4j_breaker_threshold: 3
 ```
 
+Unlike time-based breakers, QMTL requires an explicit success signal to
+close a tripped breaker. Calls that verify remote health should inspect
+their return value and invoke `reset()` when appropriate:
+
+```python
+if await client.status():
+    client.breaker.reset()
+```
+
 ## SDK Metrics
 
 The SDK's cache layer provides a small set of Prometheus metrics. Any service can

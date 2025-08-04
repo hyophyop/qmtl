@@ -59,7 +59,9 @@ async def test_ws_client_stop_closes_session():
         client = WebSocketClient(url)
         await client.start()
         await asyncio.sleep(0.1)
-        await asyncio.wait_for(client.stop(), timeout=0.5)
+        start = asyncio.get_running_loop().time()
+        await client.stop()
+        assert asyncio.get_running_loop().time() - start < 0.5
     finally:
         server.close()
         await server.wait_closed()

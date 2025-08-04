@@ -40,6 +40,7 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         raise
     if not isinstance(data, dict):
         raise TypeError("DagManager config must be a mapping")
+    # Breaker timeouts are deprecated; reset breakers manually on success.
     data.pop("dagclient_breaker_timeout", None)
     data.pop("kafka_breaker_timeout", None)
     data.pop("neo4j_breaker_timeout", None)

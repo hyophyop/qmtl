@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import contextlib
 from typing import Awaitable, Callable, Optional, TYPE_CHECKING
 
 import websockets
@@ -79,8 +80,11 @@ class WebSocketClient:
         """Stop the background listener."""
         self._stop_event.set()
         if self._ws is not None:
+            self._ws.close_timeout = 0
             await self._ws.close()
             self._ws = None
         if self._task is not None:
-            await self._task
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
             self._task = None
