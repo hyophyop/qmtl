@@ -47,8 +47,10 @@ gateway:
   dagclient_breaker_threshold: 3  # failures before opening
 dagmanager:
   kafka_breaker_threshold: 3
-  neo4j_breaker_threshold: 3
 ```
+
+The DAG Manager's Neo4j breaker uses a fixed threshold of 3 and cannot be
+configured.
 
 Unlike time-based breakers, QMTL requires an explicit success signal to
 close a tripped breaker. Calls that verify remote health should inspect
