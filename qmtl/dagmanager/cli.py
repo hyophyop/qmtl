@@ -17,6 +17,7 @@ from .diff_service import (
     NodeRecord,
     StreamSender,
 )
+from .monitor import AckStatus
 from .topic import topic_name
 from .neo4j_export import export_schema, connect
 from ..gateway.dagmanager_client import DagManagerClient
@@ -71,10 +72,10 @@ class _PrintStream(StreamSender):
     def send(self, chunk) -> None:
         print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
 
-    def wait_for_ack(self) -> None:
-        pass
+    def wait_for_ack(self) -> AckStatus:
+        return AckStatus.OK
 
-    def ack(self) -> None:
+    def ack(self, status: AckStatus = AckStatus.OK) -> None:
         pass
 
 

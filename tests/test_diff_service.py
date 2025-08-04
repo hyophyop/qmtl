@@ -9,6 +9,7 @@ from qmtl.dagmanager.diff_service import (
     Neo4jNodeRepository,
     KafkaQueueManager,
 )
+from qmtl.dagmanager.monitor import AckStatus
 from qmtl.dagmanager.node_repository import MemoryNodeRepository
 from qmtl.dagmanager.kafka_admin import KafkaAdmin
 from qmtl.dagmanager.topic import topic_name
@@ -59,10 +60,11 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         self.chunks.append(chunk)
 
-    def wait_for_ack(self):
+    def wait_for_ack(self) -> AckStatus:
         self.waits += 1
+        return AckStatus.OK
 
-    def ack(self):
+    def ack(self, status: AckStatus = AckStatus.OK):
         pass
 
 

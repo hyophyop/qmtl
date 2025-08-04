@@ -16,6 +16,7 @@ from .diff_service import (
     NodeRepository,
     QueueManager,
 )
+from .monitor import AckStatus
 from .kafka_admin import KafkaAdmin
 from qmtl.common import AsyncCircuitBreaker
 from .callbacks import post_with_backoff
@@ -30,16 +31,27 @@ class _GrpcStream(StreamSender):
         self.loop = loop
         self.queue: asyncio.Queue[DiffChunk | None] = asyncio.Queue()
         self._ack = threading.Event()
+        self._last_ack = AckStatus.OK
 
     def send(self, chunk: DiffChunk) -> None:
         asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
 
-    def wait_for_ack(self) -> None:
-        self._ack.wait()
-        self._ack.clear()
+    def wait_for_ack(self) -> AckStatus:
+        if self._ack.wait(timeout=1.0):
+            self._ack.clear()
+            return self._last_ack
+        self._last_ack = AckStatus.TIMEOUT
+        return self._last_ack
 
-    def ack(self) -> None:
+    def ack(self, status: AckStatus = AckStatus.OK) -> None:
+        self._last_ack = status
         self._ack.set()
+
+    def ack_status(self) -> AckStatus:
+        return self._last_ack
+
+    def resume_from_last_offset(self) -> None:
+        pass
 
 
 class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
