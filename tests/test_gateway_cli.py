@@ -1,11 +1,13 @@
 import subprocess
 import sys
+import pytest
 
 
-def test_gateway_cli_help():
-    result = subprocess.run([sys.executable, "-m", "qmtl", "gw", "--help"], capture_output=True, text=True)
+@pytest.mark.parametrize("cmd", ["gw", "dagm", "dagmgr-server", "sdk"])
+def test_cli_subcommand_help(cmd):
+    result = subprocess.run([sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True)
     assert result.returncode == 0
-    assert "--config" in result.stdout
+    assert f"usage: qmtl {cmd}" in result.stdout
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):
