@@ -16,9 +16,7 @@ class DagManagerConfig:
     memory_repo_path: str = "memrepo.gpickle"
     kafka_dsn: Optional[str] = None
     kafka_breaker_threshold: int = 3
-    kafka_breaker_timeout: float = 60.0
     neo4j_breaker_threshold: int = 3
-    neo4j_breaker_timeout: float = 60.0
     grpc_host: str = "0.0.0.0"
     grpc_port: int = 50051
     http_host: str = "0.0.0.0"
@@ -42,4 +40,7 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         raise
     if not isinstance(data, dict):
         raise TypeError("DagManager config must be a mapping")
+    data.pop("dagclient_breaker_timeout", None)
+    data.pop("kafka_breaker_timeout", None)
+    data.pop("neo4j_breaker_timeout", None)
     return DagManagerConfig(**data)
