@@ -1,5 +1,3 @@
-import pytest
-
 from qmtl.pipeline import Pipeline
 from qmtl.sdk import ProcessingNode, StreamInput
 
@@ -55,3 +53,36 @@ def test_execute_false_pass_through():
     # feed direct result through n1
     pipe.feed(n1, 1, 2)
     assert n2.compute_fn(n2.cache.view()) == 7
+
+
+def test_parallel_execution():
+    src = StreamInput(interval="1s", period=1)
+
+    def slow_mul2(view):
+        import time
+
+        ts, val = view[src][1].latest()
+        time.sleep(0.2)
+        return val * 2
+
+    def slow_mul3(view):
+        import time
+
+        ts, val = view[src][1].latest()
+        time.sleep(0.2)
+        return val * 3
+
+    n1 = ProcessingNode(input=src, compute_fn=slow_mul2, name="n1", interval="1s", period=1)
+    n2 = ProcessingNode(input=src, compute_fn=slow_mul3, name="n2", interval="1s", period=1)
+
+    pipe = Pipeline([src, n1, n2])
+
+    import time
+
+    start = time.perf_counter()
+    pipe.feed(src, 1, 10)
+    duration = time.perf_counter() - start
+
+    assert duration < 0.35
+    assert n1.compute_fn(n1.cache.view()) == 20
+    assert n2.compute_fn(n2.cache.view()) == 30
