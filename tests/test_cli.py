@@ -10,7 +10,7 @@ def test_cli_help():
     assert "usage: qmtl sdk" in result.stdout
 
 
-def test_cli_dryrun():
+def test_cli_dry_run():
     result = subprocess.run([
         sys.executable,
         "-m",

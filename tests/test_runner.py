@@ -77,7 +77,7 @@ def test_backtest_requires_start_and_end(monkeypatch):
         )
 
 
-def test_dryrun(caplog, monkeypatch):
+def test_dry_run(caplog, monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
 

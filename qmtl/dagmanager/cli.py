@@ -58,12 +58,12 @@ class _MemQueue(QueueManager):
         code_hash: str,
         version: str,
         *,
-        dryrun: bool = False,
+        dry_run: bool = False,
     ) -> str:
-        key = (asset, node_type, code_hash, version, dryrun)
+        key = (asset, node_type, code_hash, version, dry_run)
         topic = self.topics.get(key)
         if not topic:
-            topic = topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
+            topic = topic_name(asset, node_type, code_hash, version, dry_run=dry_run)
             self.topics[key] = topic
         return topic
 
@@ -163,7 +163,7 @@ async def _main(argv: list[str] | None = None) -> None:
 
     p_diff = sub.add_parser("diff", help="Run diff")
     p_diff.add_argument("--file", required=True)
-    p_diff.add_argument("--dry-run", action="store_true")
+    p_diff.add_argument("--dry_run", action="store_true")
 
     p_stats = sub.add_parser("queue-stats", help="Get queue statistics")
     p_stats.add_argument("--tag", default="")

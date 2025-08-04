@@ -47,9 +47,9 @@ class FakeQueue(QueueManager):
     def __init__(self):
         self.calls = []
 
-    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
-        self.calls.append((asset, node_type, code_hash, version, dryrun))
-        return topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
+    def upsert(self, asset, node_type, code_hash, version, *, dry_run=False):
+        self.calls.append((asset, node_type, code_hash, version, dry_run))
+        return topic_name(asset, node_type, code_hash, version, dry_run=dry_run)
 
 
 class FakeStream(StreamSender):

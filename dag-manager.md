@@ -113,10 +113,10 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ### 3.1 토픽 이름 컨벤션
 
 ```
-{asset}_{node_type}_{short_hash}_{version}{_dryrun?}
+{asset}_{node_type}_{short_hash}_{version}{_dry_run?}
 ```
 
-* **dry‑run** 플래그가 붙으면 `*_sim` 접미사.
+* **dry_run** 플래그가 붙으면 `*_sim` 접미사.
 * `short_hash = first 6 code_hash` → 충돌 시 길이+2.
 * 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
 
@@ -236,8 +236,8 @@ sequenceDiagram
 ## 11. Admin CLI Snippets (예)
 
 ```shell
-# diff dry‑run
-qmtl dagmanager diff --file dag.json --dry-run
+# diff dry_run
+qmtl dagmanager diff --file dag.json --dry_run
 # queue stats
 qmtl dagmanager queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel

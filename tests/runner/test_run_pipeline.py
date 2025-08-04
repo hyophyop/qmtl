@@ -52,7 +52,7 @@ def _make_strategy(calls, results):
     return Strat
 
 
-def test_dryrun_offline_pipeline(monkeypatch):
+def test_dry_run_offline_pipeline(monkeypatch):
     _mock_gateway(monkeypatch)
     monkeypatch.setattr(Runner, "_kafka_available", True)
     calls, results = [], []

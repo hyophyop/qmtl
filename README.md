@@ -5,7 +5,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gate
 Use the DAG Manager CLI to preview DAG structures:
 
 ```bash
-qmtl dagmanager diff --file dag.json --dry-run
+qmtl dagmanager diff --file dag.json --dry_run
 ```
 
 Every subcommand now exposes its own help message. For example:

@@ -146,7 +146,7 @@ class QueueManager:
         code_hash: str,
         version: str,
         *,
-        dryrun: bool = False,
+        dry_run: bool = False,
     ) -> str:
         raise NotImplementedError
 
@@ -510,7 +510,7 @@ class KafkaQueueManager(QueueManager):
         code_hash: str,
         version: str,
         *,
-        dryrun: bool = False,
+        dry_run: bool = False,
     ) -> str:
         existing = self.admin.client.list_topics().keys()
         topic = topic_name(
@@ -518,7 +518,7 @@ class KafkaQueueManager(QueueManager):
             node_type,
             code_hash,
             version,
-            dryrun=dryrun,
+            dry_run=dry_run,
             existing=existing,
         )
         self.admin.create_topic_if_needed(topic, self.config)

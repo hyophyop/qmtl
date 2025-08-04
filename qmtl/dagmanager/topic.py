@@ -26,7 +26,7 @@ def topic_name(
     code_hash: str,
     version: str,
     *,
-    dryrun: bool = False,
+    dry_run: bool = False,
     existing: Iterable[str] | None = None,
 ) -> str:
     """Return unique topic name per spec.
@@ -38,7 +38,7 @@ def topic_name(
 
     taken = set(existing or [])
     length = 6
-    suffix = "_sim" if dryrun else ""
+    suffix = "_sim" if dry_run else ""
 
     while True:
         short_hash = code_hash[:length]
