@@ -43,7 +43,6 @@ async def test_worker_locking_single_processing(fake_redis):
     await redis.hset("strategy:sid", mapping={"dag": "{}"})
 
     await queue.push("sid")
-    await queue.push("sid")
 
     async def diff(sid: str, dag: str):
         return SimpleNamespace(queue_map={}, sentinel_id="s")
@@ -53,7 +52,6 @@ async def test_worker_locking_single_processing(fake_redis):
     w1 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
     w2 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
 
-    await asyncio.gather(w1.run_once(), w2.run_once())
     await asyncio.gather(w1.run_once(), w2.run_once())
 
     assert db.completions.count("sid") == 1
@@ -129,4 +127,30 @@ async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
     assert hub.progress[0] == ("sid", "processing")
     assert hub.progress[-1] == ("sid", "failed")
     assert db.records["sid"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_worker_allows_immediate_reprocess(fake_redis):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+
+    await fsm.create("sid", None)
+    await redis.hset("strategy:sid", mapping={"dag": "{}"})
+
+    async def diff(sid: str, dag: str):
+        return SimpleNamespace(queue_map={}, sentinel_id="s")
+
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
+
+    await queue.push("sid")
+    await worker.run_once()
+    assert db.completions.count("sid") == 1
+    assert await redis.exists("lock:sid") == 0
+
+    await queue.push("sid")
+    await worker.run_once()
+    assert db.completions.count("sid") >= 2
 

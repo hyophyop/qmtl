@@ -105,9 +105,8 @@ class StrategyWorker:
                 await self.ws_hub.send_progress(strategy_id, state)
             return True
         finally:
-            # The lock expires automatically; explicit deletion would allow
-            # another worker to reprocess the same strategy immediately.
-            pass
+            # Explicitly remove the lock so reprocessing isn't delayed.
+            await self.redis.delete(lock_key)
 
     async def run_once(self) -> Optional[str]:
         """Pop and process a single strategy."""
