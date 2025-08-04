@@ -8,6 +8,15 @@ Use the DAG manager CLI to preview DAG structures:
 qmtl dagm diff --file dag.json --dry-run
 ```
 
+Every subcommand now exposes its own help message. For example:
+
+```bash
+qmtl gw --help
+qmtl dagm --help
+qmtl dagmgr-server --help
+qmtl sdk --help
+```
+
 The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/templates.md](docs/templates.md) for diagrams of the built-in strategy templates.
 
 ## Installation

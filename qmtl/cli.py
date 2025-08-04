@@ -7,10 +7,10 @@ from typing import List
 def main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("gw", help="Gateway CLI", add_help=False)
-    sub.add_parser("dagm", help="Dag manager admin CLI", add_help=False)
-    sub.add_parser("dagmgr-server", help="Run DAG manager servers", add_help=False)
-    sub.add_parser("sdk", help="Run strategy via SDK", add_help=False)
+    sub.add_parser("gw", help="Gateway CLI")
+    sub.add_parser("dagm", help="Dag manager admin CLI")
+    sub.add_parser("dagmgr-server", help="Run DAG manager servers")
+    sub.add_parser("sdk", help="Run strategy via SDK")
     p_init = sub.add_parser(
         "init",
         help="Initialize new project (see docs/strategy_workflow.md)",
