@@ -23,7 +23,7 @@ async def test_sentinel_traffic_triggers_ws(monkeypatch):
             path = url.replace("http://gw", "")
             return await client.post(path, json=json)
 
-    monkeypatch.setattr("qmtl.dagmanager.http_server.post_with_backoff", post_to_gateway)
+    monkeypatch.setattr("qmtl.dagmanager.http_server.post", post_to_gateway)
 
     dag_app = dag_create_app(gateway_url="http://gw/callbacks/dag-event")
     dag_transport = httpx.ASGITransport(dag_app)

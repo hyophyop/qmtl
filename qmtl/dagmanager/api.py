@@ -4,8 +4,10 @@ from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 from typing import Optional, TYPE_CHECKING
 
+import asyncio
+
 from .gc import GarbageCollector
-from .callbacks import post_with_backoff
+from .callbacks import post
 from ..common.cloudevents import format_event
 from .dagmanager_health import get_health
 
@@ -47,7 +49,14 @@ def create_app(
                 "gc",
                 {"id": payload.id, "queues": processed},
             )
-            await post_with_backoff(callback_url, event)
+            for attempt in range(3):
+                try:
+                    await post(callback_url, event)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(2**attempt)
         return GcResponse(processed=processed)
 
     return app

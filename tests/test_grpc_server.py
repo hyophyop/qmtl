@@ -175,7 +175,7 @@ async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
         return httpx.Response(202)
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.grpc_server.post_with_backoff",
+        "qmtl.dagmanager.grpc_server.post",
         mock_post,
     )
 
@@ -329,7 +329,7 @@ async def test_http_sentinel_traffic(monkeypatch):
         return httpx.Response(202)
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.http_server.post_with_backoff",
+        "qmtl.dagmanager.http_server.post",
         mock_post,
     )
 

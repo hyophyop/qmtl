@@ -33,7 +33,7 @@ def test_gc_route_emits_callback(monkeypatch):
         events.append((url, payload))
         return httpx.Response(202)
 
-    monkeypatch.setattr("qmtl.dagmanager.api.post_with_backoff", fake_post)
+    monkeypatch.setattr("qmtl.dagmanager.api.post", fake_post)
 
     app = create_app(gc, callback_url="http://gw/cb")
     with TestClient(app) as client:

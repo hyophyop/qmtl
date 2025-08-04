@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 import asyncio
 
-from .callbacks import post_with_backoff
+from .callbacks import post
 from ..common.cloudevents import format_event
 from .diff_service import NodeRepository
 from .kafka_admin import KafkaAdmin
@@ -69,7 +69,14 @@ class QueueCompletionMonitor:
                             "match_mode": "any",
                         },
                     )
-                    await post_with_backoff(self.callback_url, event)
+                    for attempt in range(3):
+                        try:
+                            await post(self.callback_url, event)
+                            break
+                        except Exception:
+                            if attempt == 2:
+                                raise
+                            await asyncio.sleep(2**attempt)
                     self._completed.add(topic)
 
 
