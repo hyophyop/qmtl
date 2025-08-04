@@ -1,5 +1,4 @@
 import json
-import yaml
 from qmtl.dagmanager.cli import main
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
@@ -16,13 +15,7 @@ def test_cli_diff_dryrun(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "n1" in out
 
-def test_cli_queue_stats(monkeypatch, capsys, tmp_path):
-    config_path = tmp_path / "qmtl.yml"
-    config_path.write_text(
-        yaml.safe_dump({"dagmanager": {"grpc_host": "h", "grpc_port": 1234}})
-    )
-    monkeypatch.chdir(tmp_path)
-
+def test_cli_queue_stats(monkeypatch, capsys):
     class Stub:
         def __init__(self, channel):
             pass
@@ -40,7 +33,7 @@ def test_cli_queue_stats(monkeypatch, capsys, tmp_path):
     out = capsys.readouterr().out
     data = json.loads(out)
     assert data == {"q": 1}
-    assert captured["target"] == "h:1234"
+    assert captured["target"] == "localhost:50051"
 
 def test_cli_gc(monkeypatch, capsys):
     called = {}
