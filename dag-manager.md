@@ -43,7 +43,7 @@
 ```cypher
 CREATE CONSTRAINT compute_pk IF NOT EXISTS
 ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
-CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ```
 ### 1.3 NodeID Generation
 - NodeID = SHA-256 hash of `(node_type, code_hash, config_hash, schema_hash)`.

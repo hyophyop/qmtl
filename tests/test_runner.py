@@ -158,7 +158,7 @@ def test_gateway_queue_mapping(monkeypatch):
 
     strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
     first_node = strategy.nodes[0]
-    assert first_node.queue_topic == "topic1"
+    assert first_node.kafka_topic == "topic1"
     assert not first_node.execute
 
 
@@ -188,7 +188,7 @@ def test_gateway_error(monkeypatch):
 def test_offline_mode():
     strategy = Runner.offline(SampleStrategy)
     assert all(n.execute for n in strategy.nodes)
-    assert all(n.queue_topic is None for n in strategy.nodes)
+    assert all(n.kafka_topic is None for n in strategy.nodes)
 
 
 def test_connection_failure(monkeypatch):

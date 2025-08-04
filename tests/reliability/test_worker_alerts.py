@@ -2,7 +2,7 @@ import asyncio
 import pytest
 
 from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.queue import RedisFIFOQueue
+from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.database import Database
 
@@ -43,7 +43,7 @@ class DummyAlerts:
 @pytest.mark.asyncio
 async def test_worker_alerts_after_repeated_failures(fake_redis):
     redis = fake_redis
-    queue = RedisFIFOQueue(redis, "strategy_queue")
+    queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
     alerts = DummyAlerts()

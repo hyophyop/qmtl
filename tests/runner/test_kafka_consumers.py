@@ -20,14 +20,14 @@ async def test_single_node_consumption(monkeypatch):
 
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=compute, name="n1", interval="60s", period=2)
-    node.queue_topic = "t1"
+    node.kafka_topic = "t1"
     strategy = DummyStrategy([src, node])
 
     stop_event = asyncio.Event()
 
     async def fake_consume(n, *, bootstrap_servers, stop_event):
-        Runner.feed_queue_data(n, n.queue_topic, 60, 60, {"v": 1})
-        Runner.feed_queue_data(n, n.queue_topic, 60, 120, {"v": 2})
+        Runner.feed_queue_data(n, n.kafka_topic, 60, 60, {"v": 1})
+        Runner.feed_queue_data(n, n.kafka_topic, 60, 120, {"v": 2})
         stop_event.set()
 
     monkeypatch.setattr(Runner, "_consume_node", fake_consume)
@@ -51,11 +51,11 @@ async def test_multi_node_consumption(monkeypatch):
 
     src1 = StreamInput(interval="60s", period=2)
     node1 = ProcessingNode(input=src1, compute_fn=compute1, name="n1", interval="60s", period=2)
-    node1.queue_topic = "t1"
+    node1.kafka_topic = "t1"
 
     src2 = StreamInput(interval="60s", period=2)
     node2 = ProcessingNode(input=src2, compute_fn=compute2, name="n2", interval="60s", period=2)
-    node2.queue_topic = "t2"
+    node2.kafka_topic = "t2"
 
     strategy = DummyStrategy([src1, node1, src2, node2])
 
@@ -63,8 +63,8 @@ async def test_multi_node_consumption(monkeypatch):
     counter = {"c": 0}
 
     async def fake_consume(n, *, bootstrap_servers, stop_event):
-        Runner.feed_queue_data(n, n.queue_topic, 60, 60, {"v": 1})
-        Runner.feed_queue_data(n, n.queue_topic, 60, 120, {"v": 2})
+        Runner.feed_queue_data(n, n.kafka_topic, 60, 60, {"v": 1})
+        Runner.feed_queue_data(n, n.kafka_topic, 60, 120, {"v": 2})
         counter["c"] += 1
         if counter["c"] == 2:
             stop_event.set()

@@ -22,4 +22,4 @@ def test_compute_node_id_sha3_fallback():
 def test_schema_queries():
     queries = get_schema_queries()
     assert "compute_pk" in queries[0]
-    assert "queue_topic" in queries[1]
+    assert "kafka_topic" in queries[1]

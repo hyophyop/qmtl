@@ -416,7 +416,7 @@ class Node:
         self.config = config or {}
         self.schema = schema or {}
         self.execute = True
-        self.queue_topic: str | None = None
+        self.kafka_topic: str | None = None
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:

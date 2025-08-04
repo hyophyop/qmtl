@@ -4,7 +4,7 @@ import pytest
 
 from types import SimpleNamespace
 
-from qmtl.gateway.queue import RedisFIFOQueue
+from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
@@ -35,7 +35,7 @@ class FakeDB(Database):
 @pytest.mark.asyncio
 async def test_worker_locking_single_processing(fake_redis):
     redis = fake_redis
-    queue = RedisFIFOQueue(redis, "strategy_queue")
+    queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
 
@@ -76,7 +76,7 @@ class DummyHub(WebSocketHub):
 @pytest.mark.asyncio
 async def test_worker_diff_success_broadcasts(fake_redis):
     redis = fake_redis
-    queue = RedisFIFOQueue(redis, "strategy_queue")
+    queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
 
@@ -105,7 +105,7 @@ async def test_worker_diff_success_broadcasts(fake_redis):
 @pytest.mark.asyncio
 async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
     redis = fake_redis
-    queue = RedisFIFOQueue(redis, "strategy_queue")
+    queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
 
