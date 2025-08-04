@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 import asyncio
 
 from qmtl.gateway.watch import QueueWatchHub
+from qmtl.sdk import MatchMode
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.common import crc32_of_list
@@ -187,7 +188,7 @@ async def test_watch_hub_broadcast():
     hub = QueueWatchHub()
 
     async def listen():
-        gen = hub.subscribe(["t1"], 60, "any")
+        gen = hub.subscribe(["t1"], 60, MatchMode.ANY)
         try:
             return await gen.__anext__()
         finally:
@@ -195,7 +196,7 @@ async def test_watch_hub_broadcast():
 
     task = asyncio.create_task(listen())
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q3"], "any")
+    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
     try:
         result = await task
         assert result == ["q3"]
@@ -210,7 +211,7 @@ async def test_watch_hub_broadcast_only_on_change():
     ready = asyncio.Event()
 
     async def listener() -> None:
-        gen = hub.subscribe(["t1"], 60, "any")
+        gen = hub.subscribe(["t1"], 60, MatchMode.ANY)
         ready.set()
         async for data in gen:
             results.append(data)
@@ -218,11 +219,11 @@ async def test_watch_hub_broadcast_only_on_change():
     task = asyncio.create_task(listener())
     await ready.wait()
 
-    await hub.broadcast(["t1"], 60, ["q3"], "any")
+    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q3"], "any")
+    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q4"], "any")
+    await hub.broadcast(["t1"], 60, ["q4"], MatchMode.ANY)
     await asyncio.sleep(0)
 
     task.cancel()

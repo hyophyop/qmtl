@@ -7,6 +7,7 @@ from .node import (
     StreamInput,
     TagQueryNode,
     NodeCache,
+    MatchMode,
 )
 from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
@@ -35,6 +36,7 @@ __all__ = [
     "StreamInput",
     "TagQueryNode",
     "NodeCache",
+    "MatchMode",
     "NodeCacheArrow",
     "BackfillState",
     "CacheView",
