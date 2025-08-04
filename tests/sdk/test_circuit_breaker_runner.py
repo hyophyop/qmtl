@@ -41,23 +41,19 @@ async def test_post_gateway_circuit_breaker(monkeypatch):
             run_type="x",
             circuit_breaker=cb,
         )
-
-
-
 @pytest.mark.asyncio
-async def test_env_config(monkeypatch):
+async def test_default_circuit_breaker(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
-    monkeypatch.setenv("QMTL_GW_CB_MAX_FAILURES", "1")
-    monkeypatch.setenv("QMTL_GW_CB_RESET_TIMEOUT", "60")
     Runner.set_gateway_circuit_breaker(None)
 
-    with pytest.raises(httpx.RequestError):
-        await Runner._post_gateway_async(
-            gateway_url="http://gw",
-            dag={},
-            meta=None,
-            run_type="x",
-        )
+    for _ in range(3):
+        with pytest.raises(httpx.RequestError):
+            await Runner._post_gateway_async(
+                gateway_url="http://gw",
+                dag={},
+                meta=None,
+                run_type="x",
+            )
 
     with pytest.raises(RuntimeError):
         await Runner._post_gateway_async(
