@@ -23,10 +23,10 @@ async def _main(argv: list[str] | None = None) -> None:
     if cfg_path:
         config = load_config(cfg_path).gateway
 
-    if config.queue_backend == "memory":
-        redis_client = InMemoryRedis()
-    else:
+    if config.redis_dsn:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
+    else:
+        redis_client = InMemoryRedis()
     app = create_app(
         redis_client=redis_client,
         database_backend=config.database_backend,

@@ -18,7 +18,6 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
                 "gateway:",
                 "  host: 127.0.0.1",
                 "  port: 12345",
-                "  queue_backend: memory",
                 "  database_backend: memory",
                 "  database_dsn: 'sqlite:///:memory:'",
             ]
@@ -66,7 +65,6 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
                 "gateway:",
                 "  host: 127.0.0.1",
                 "  port: 12345",
-                "  queue_backend: redis",
                 "  redis_dsn: redis://x:6379",
                 "  database_backend: memory",
                 "  database_dsn: 'sqlite:///:memory:'",

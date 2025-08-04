@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any
+from typing import Optional
 
 import yaml
 
@@ -11,10 +11,9 @@ class GatewayConfig:
 
     host: str = "0.0.0.0"
     port: int = 8000
-    redis_dsn: str = "redis://localhost:6379"
+    redis_dsn: Optional[str] = None
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
-    queue_backend: str = "memory"
     dagclient_breaker_threshold: int = 3
     dagclient_breaker_timeout: float = 60.0
 
@@ -26,6 +25,4 @@ def load_gateway_config(path: str) -> GatewayConfig:
     if not isinstance(data, dict):
         raise TypeError("Gateway config must be a mapping")
     cfg = GatewayConfig(**data)
-    if cfg.queue_backend not in {"memory", "redis"}:
-        raise ValueError("queue_backend must be 'memory' or 'redis'")
     return cfg
