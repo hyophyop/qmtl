@@ -32,6 +32,7 @@ class TagQueryManager:
         else:
             self.client = None
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
+        self._http_client: httpx.AsyncClient | None = None
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -56,21 +57,23 @@ class TagQueryManager:
             return
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
-        async with httpx.AsyncClient() as client:
-            for (tags, interval, match_mode), nodes in self._nodes.items():
-                params = {
-                    "tags": ",".join(tags),
-                    "interval": interval,
-                    "match_mode": match_mode.value,
-                }
-                try:
-                    resp = await client.get(url, params=params)
-                    resp.raise_for_status()
-                    queues = resp.json().get("queues", [])
-                except httpx.RequestError:
-                    queues = []
-                for n in nodes:
-                    n.update_queues(list(queues))
+        client = self._http_client
+        if client is None:
+            client = self._http_client = httpx.AsyncClient()
+        for (tags, interval, match_mode), nodes in self._nodes.items():
+            params = {
+                "tags": ",".join(tags),
+                "interval": interval,
+                "match_mode": match_mode.value,
+            }
+            try:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                queues = resp.json().get("queues", [])
+            except httpx.RequestError:
+                queues = []
+            for n in nodes:
+                n.update_queues(list(queues))
 
     # ------------------------------------------------------------------
     async def handle_message(self, data: dict) -> None:
@@ -103,3 +106,18 @@ class TagQueryManager:
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
+        if self._http_client is not None:
+            client = self._http_client
+            self._http_client = None
+            async_close = getattr(client, "aclose", None)
+            if async_close:
+                await async_close()
+            else:
+                sync_close = getattr(client, "close", None)
+                if sync_close:
+                    sync_close()
+                else:
+                    inner = getattr(client, "_client", None)
+                    inner_close = getattr(inner, "close", None)
+                    if inner_close:
+                        inner_close()
