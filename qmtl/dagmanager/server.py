@@ -78,9 +78,7 @@ async def _run(cfg: DagManagerConfig) -> None:
 
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
         # Manual reset of the breaker is expected after successful operations
-        breaker = AsyncCircuitBreaker(
-            max_failures=cfg.kafka_breaker_threshold,
-        )
+        breaker = AsyncCircuitBreaker()
         queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
     else:
         from .kafka_admin import InMemoryAdminClient, KafkaAdmin
@@ -88,9 +86,7 @@ async def _run(cfg: DagManagerConfig) -> None:
 
         admin_client = InMemoryAdminClient()
         # Manual reset of the breaker is expected after successful operations
-        breaker = AsyncCircuitBreaker(
-            max_failures=cfg.kafka_breaker_threshold,
-        )
+        breaker = AsyncCircuitBreaker()
         queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
 
     gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
@@ -105,7 +101,6 @@ async def _run(cfg: DagManagerConfig) -> None:
         gc=gc,
         repo=repo,
         queue=queue,
-        breaker_threshold=cfg.kafka_breaker_threshold,
     )
     await grpc_server.start()
 
