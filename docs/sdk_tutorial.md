@@ -9,12 +9,10 @@ uv venv
 uv pip install -e .[dev]
 ```
 
-필요에 따라 선택적 확장 패키지를 설치할 수 있습니다.
+필요에 따라 데이터 IO 모듈을 설치할 수 있습니다.
 
 ```bash
-uv pip install -e .[indicators]  # 기술 지표 노드 모음
-uv pip install -e .[io]         # 데이터 IO 모듈
-uv pip install -e .[generators]  # 시뮬레이션 데이터 생성기
+uv pip install -e .[io]  # 데이터 IO 모듈
 ```
 
 ## 기본 구조

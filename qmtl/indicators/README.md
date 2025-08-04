@@ -5,11 +5,7 @@ Common technical indicator nodes for the QMTL SDK.
 - Modules observe the Single Responsibility Principle and keep dependencies minimal.
 - When adding new indicators, include unit tests under `tests/`.
 
-Install only when needed:
-
-```bash
-pip install qmtl[indicators]
-```
+The indicators module ships with the core package; no extra install is required.
 
 Use with:
 

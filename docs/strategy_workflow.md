@@ -29,16 +29,6 @@ uv venv
 uv pip install -e .[dev]
 ```
 
-Optional extras such as `generators`, `indicators` or `transforms` are installed
-from the repository root (or from PyPI) **before** creating your project
-directory:
-
-```bash
-uv pip install -e .[generators,indicators,transforms]
-```
-
-> **Tip:** 프로젝트 scaffold 내부에서 extras를 설치하면 오류가 발생합니다. 반드시 저장소 루트에서 설치하세요.
-
 ## 1. Initialize a Project
 
 Create a dedicated directory for your strategy and generate the scaffold:
@@ -50,9 +40,7 @@ cd my_qmtl_project
 
 The command copies a sample `strategy.py`, a `qmtl.yml` configuration and empty
 packages for `generators`, `indicators` and `transforms`. These folders let you
-extend the SDK by adding custom nodes. Because the extras were installed in the
-previous step, no additional `pip install` commands are required inside the
-project directory.
+extend the SDK by adding custom nodes.
 
 ## 2. Explore the Scaffold
 
@@ -88,18 +76,7 @@ transforms
 ...
 ```
 
-Attempting to install the optional extras directly fails because the scaffold does not contain
-`pyproject.toml`:
-
-```text
-$ uv pip install -e .[generators,indicators,transforms]
-error: /tmp/my_qmtl_project does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
-```
-
-Run the command from the repository root instead (or install from PyPI) to make
-the extras available.
-
-Running the default strategy without a Gateway URL also produces an error:
+Running the default strategy without a Gateway URL produces an error:
 
 ```text
 $ python strategy.py
@@ -109,7 +86,6 @@ RuntimeError: gateway_url is required for backtest mode
 Provide a `--gateway-url` argument or modify the script to use `Runner.offline()` when running locally.
 
 > **자주 발생하는 문제**
-> - `pyproject.toml` 없음: scaffold 내부가 아닌 저장소 루트에서 extras 설치 필요
 > - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.offline()` 사용
 > - 의존성 충돌: `uv pip install -e .[dev]`로 재설치 권장
 

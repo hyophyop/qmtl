@@ -21,33 +21,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-
 dev = [
     "pytest",
     "pytest-asyncio",
-    "httpx",
-    "fastapi",
-    "uvicorn",
     "fakeredis",
-    "asyncpg",
-    "aiosqlite",
-    "xstate",
-    "websockets",
-    "redis",
-    "fakeredis",
-    "grpcio",
-    "PyYAML",
     "grpcio-tools",
-    "pytest-asyncio",
-    "xstate",
     "pyarrow",
+    "xstate",
 ]
 
 ray = ["ray"]
 io = ["pandas", "asyncpg"]
-indicators = []
-generators = []
-transforms = []
 
 [project.scripts]
 qmtl = "qmtl.cli:main"

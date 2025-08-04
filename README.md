@@ -21,14 +21,12 @@ uv pip install -e .[dev]
 ```
 
 These commands match the steps in the SDK tutorial
-([docs/sdk_tutorial.md](docs/sdk_tutorial.md)) lines 5&ndash;18, where optional
-extras are also documented:
+([docs/sdk_tutorial.md](docs/sdk_tutorial.md)).
+
+Install the `io` extra if you need additional data modules:
 
 ```bash
-uv pip install -e .[indicators]
 uv pip install -e .[io]
-uv pip install -e .[generators]
-uv pip install -e .[transforms]
 ```
 
 ## Project Initialization
@@ -50,12 +48,7 @@ cd my_qmtl_project
 See [docs/templates.md](docs/templates.md) for a description of each template.
 
 The scaffold includes empty `generators/`, `indicators/` and
-`transforms/` packages. Install their optional extras so Python can
-discover your extensions:
-
-```bash
-uv pip install -e .[generators,indicators,transforms]
-```
+`transforms/` packages for adding your own extensions.
 
 Run the default strategy to verify everything is set up correctly:
 
@@ -98,13 +91,12 @@ Use consistent naming for connection strings across the project. Prefer the `*_d
 
 ## Optional Modules
 
-Install additional functionality on demand. Each entry links to its
-documentation and shows the corresponding extra:
+Install additional functionality on demand:
 
-- [Indicators](qmtl/indicators/README.md) &mdash; `pip install qmtl[indicators]`
+- [Indicators](qmtl/indicators/README.md)
 - [IO](qmtl/io) &mdash; `pip install qmtl[io]`
-- [Generators](qmtl/generators/README.md) &mdash; `pip install qmtl[generators]`
-- [Transforms](qmtl/transforms/README.md) &mdash; `pip install qmtl[transforms]`
+- [Generators](qmtl/generators/README.md)
+- [Transforms](qmtl/transforms/README.md)
 
 
 ## End-to-End Testing
