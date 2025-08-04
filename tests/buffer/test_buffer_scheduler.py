@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from qmtl.dagmanager.buffer_scheduler import BufferingScheduler
@@ -54,7 +53,7 @@ async def test_scheduler_reprocesses_old_nodes():
     diff = FakeDiff()
     sched = BufferingScheduler(repo, diff, interval=0.01, delay_days=7)
     await sched.start()
-    await asyncio.sleep(0.03)
+    await sched.trigger()
     await sched.stop()
     assert diff.calls and diff.calls[0].strategy_id == "A"
     assert repo.cleared == ["A"]

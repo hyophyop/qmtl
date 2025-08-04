@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 import asyncio
 import json
@@ -18,6 +18,9 @@ class BufferingScheduler:
     interval: float = 3600.0
     delay_days: int = 7
     _task: Optional[asyncio.Task] = None
+    _queue: asyncio.Queue[asyncio.Future[None]] = field(
+        default_factory=asyncio.Queue, init=False
+    )
 
     async def start(self) -> None:
         if self._task is None:
@@ -31,11 +34,21 @@ class BufferingScheduler:
             finally:
                 self._task = None
 
+    async def trigger(self) -> None:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[None] = loop.create_future()
+        await self._queue.put(fut)
+        await fut
+
     async def _run(self) -> None:
         try:
             while True:
-                await self.check_once()
-                await asyncio.sleep(self.interval)
+                fut = await self._queue.get()
+                try:
+                    await self.check_once()
+                    fut.set_result(None)
+                except Exception as exc:  # pragma: no cover - pass through
+                    fut.set_exception(exc)
         except asyncio.CancelledError:  # pragma: no cover - background task
             pass
 

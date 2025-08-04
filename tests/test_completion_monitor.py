@@ -72,8 +72,10 @@ async def test_completion_emits_event(monkeypatch):
     )
 
     monitor = QueueCompletionMonitor(repo, admin, "http://gw/cb", threshold=1)
-    await monitor.check_once()
-    await monitor.check_once()
+    await monitor.start()
+    await monitor.trigger()
+    await monitor.trigger()
+    await monitor.stop()
 
     assert events
     evt = events[0]

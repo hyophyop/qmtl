@@ -23,6 +23,9 @@ class QueueCompletionMonitor:
     _stalled: Dict[str, int] = field(default_factory=dict)
     _completed: set[str] = field(default_factory=set)
     _task: Optional[asyncio.Task] = None
+    _queue: asyncio.Queue[asyncio.Future[None]] = field(
+        default_factory=asyncio.Queue, init=False
+    )
 
     async def start(self) -> None:
         if self._task is None:
@@ -36,11 +39,21 @@ class QueueCompletionMonitor:
             finally:
                 self._task = None
 
+    async def trigger(self) -> None:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[None] = loop.create_future()
+        await self._queue.put(fut)
+        await fut
+
     async def _run(self) -> None:
         try:
             while True:
-                await self.check_once()
-                await asyncio.sleep(self.interval)
+                fut = await self._queue.get()
+                try:
+                    await self.check_once()
+                    fut.set_result(None)
+                except Exception as exc:  # pragma: no cover - pass through
+                    fut.set_exception(exc)
         except asyncio.CancelledError:  # pragma: no cover - background task
             pass
 
