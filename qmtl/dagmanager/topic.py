@@ -13,7 +13,7 @@ class TopicConfig:
     retention_ms: int
 
 
-_QUEUE_CONFIG = {
+_TOPIC_CONFIG = {
     "raw": TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000),
     "indicator": TopicConfig(partitions=1, replication_factor=2, retention_ms=30 * 24 * 60 * 60 * 1000),
     "trade_exec": TopicConfig(partitions=1, replication_factor=3, retention_ms=90 * 24 * 60 * 60 * 1000),
@@ -48,12 +48,12 @@ def topic_name(
         length += 2
 
 
-def get_config(queue_type: str) -> TopicConfig:
-    """Return :class:`TopicConfig` for the given ``queue_type``."""
+def get_config(topic_type: str) -> TopicConfig:
+    """Return :class:`TopicConfig` for the given ``topic_type``."""
     try:
-        return _QUEUE_CONFIG[queue_type]
+        return _TOPIC_CONFIG[topic_type]
     except KeyError:
-        raise ValueError(f"unknown queue type: {queue_type}")
+        raise ValueError(f"unknown topic type: {topic_type}")
 
 
 __all__ = ["TopicConfig", "topic_name", "get_config"]
