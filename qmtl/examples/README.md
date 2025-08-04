@@ -4,7 +4,16 @@
 각 예제는 `architecture.md` 문서의 설계를 따르며, 실전 전략 구현 시 참고용으로 활용할 수 있습니다.
 
 예시 Gateway와 DAG manager 설정은 `qmtl.yml`에 포함되어 있습니다. 환경에 맞게 수정한 뒤
-CLI 실행 시 `--config` 인자로 전달하세요.
+CLI 실행 시 필요하다면 `--config` 인자로 전달하세요. 이 옵션을 생략하면 기본 로컬
+설정이 사용됩니다.
+
+```bash
+# 기본값으로 실행
+qmtl gw
+
+# 설정 파일을 사용하는 경우
+qmtl gw --config qmtl/examples/qmtl.yml
+```
 
 ## 구조
 

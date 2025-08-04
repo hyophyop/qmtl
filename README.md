@@ -143,16 +143,20 @@ Load the sample alert definitions from `alert_rules.yml` into Prometheus to enab
 ## Running Services
 
 Start the Gateway and DAG manager using the combined configuration file or rely
-on the built-in defaults. Without ``--config`` both services start in a local
-mode that uses SQLite and in-memory repositories. The sample ``qmtl.yml`` file
+on the built-in defaults. The ``--config`` flag is optional; without it both
+services start in a local mode that uses SQLite and in-memory repositories. The
+sample ``qmtl.yml`` file
 demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 
 ```bash
+# start the gateway HTTP server with defaults
+qmtl gw
 
-# start the gateway HTTP server
+# start the DAG manager with defaults
+qmtl dagmgr-server
+
+# use a custom configuration file
 qmtl gw --config qmtl/examples/qmtl.yml
-
-# start the DAG manager
 qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 
 # submit a DAG diff

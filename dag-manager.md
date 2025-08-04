@@ -251,7 +251,7 @@ For canary deployment steps see
 ## 12. 서버 설정 파일 사용법
 
 `qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
-아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 ``--config`` 로 경로를 지정한다.
+아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
 
 예시:
 
@@ -269,13 +269,17 @@ repositories and queues for local development. Commented lines show the above
 cluster configuration ready to be enabled.
 
 ```
+# 기본값으로 실행
+qmtl dagmgr-server
+
+# YAML 설정 파일로 실행
 qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
-``--config`` 를 생략하면 기본값으로 메모리 레포지토리와 큐가 사용된다. 샘플
+``--config`` 옵션을 생략하면 기본값으로 메모리 레포지토리와 큐가 사용된다. 샘플
 파일에는 모든 필드를 주석과 함께 설명한다.
 
 Available flags:
 
-- ``--config`` – path to configuration file.
+- ``--config`` – optional path to configuration file.
