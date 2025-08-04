@@ -14,14 +14,12 @@ class AsyncCircuitBreaker:
     def __init__(
         self,
         max_failures: int = 3,
-        reset_timeout: float = 60.0,
         *,
         on_open: Callable[[], None] | None = None,
         on_close: Callable[[], None] | None = None,
         on_failure: Callable[[int], None] | None = None,
     ) -> None:
         self._max_failures = max_failures
-        self._reset_timeout = reset_timeout
         self._on_open = on_open
         self._on_close = on_close
         self._on_failure = on_failure
@@ -32,24 +30,22 @@ class AsyncCircuitBreaker:
     def _now(self) -> float:
         return time.monotonic()
 
-    def _maybe_close(self) -> None:
-        if self._opened_at is None:
-            return
-        if self._now() - self._opened_at >= self._reset_timeout:
-            self._opened_at = None
-            self._failures = 0
-            if self._on_close:
-                self._on_close()
-
     # --- public API -------------------------------------------------------
     @property
     def is_open(self) -> bool:
-        self._maybe_close()
         return self._opened_at is not None
 
     @property
     def failures(self) -> int:
         return self._failures
+
+    def reset(self) -> None:
+        """Manually close the circuit and clear failure count."""
+        was_open = self._opened_at is not None
+        self._opened_at = None
+        self._failures = 0
+        if was_open and self._on_close:
+            self._on_close()
 
     def __call__(
         self, func: Callable[..., Awaitable[T]]

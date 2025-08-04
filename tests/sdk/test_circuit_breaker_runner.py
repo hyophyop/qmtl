@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import httpx
 
 from qmtl.sdk.runner import Runner
 from qmtl.common import AsyncCircuitBreaker
@@ -22,7 +23,7 @@ class DummyClient:
 @pytest.mark.asyncio
 async def test_post_gateway_circuit_breaker(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
-    cb = AsyncCircuitBreaker(max_failures=1, reset_timeout=60)
+    cb = AsyncCircuitBreaker(max_failures=1)
 
     with pytest.raises(httpx.RequestError):
         await Runner._post_gateway_async(

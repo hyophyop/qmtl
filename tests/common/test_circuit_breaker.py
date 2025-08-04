@@ -6,7 +6,7 @@ from qmtl.common import AsyncCircuitBreaker
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_basic():
-    cb = AsyncCircuitBreaker(max_failures=2, reset_timeout=0.1)
+    cb = AsyncCircuitBreaker(max_failures=2)
     calls = 0
 
     @cb
@@ -25,7 +25,7 @@ async def test_circuit_breaker_basic():
         await flaky()
     assert cb.failures == 2
 
-    await asyncio.sleep(0.11)
+    cb.reset()
     assert not cb.is_open
 
     with pytest.raises(RuntimeError):
@@ -39,7 +39,6 @@ async def test_circuit_breaker_callbacks():
     events = []
     cb = AsyncCircuitBreaker(
         max_failures=1,
-        reset_timeout=0.05,
         on_open=lambda: events.append("open"),
         on_close=lambda: events.append("close"),
         on_failure=lambda count: events.append(f"fail{count}"),
@@ -55,7 +54,23 @@ async def test_circuit_breaker_callbacks():
     assert events == ["fail1", "open"]
     assert cb.is_open
 
-    await asyncio.sleep(0.06)
-    # Access property to trigger state refresh
+    cb.reset()
     assert not cb.is_open
     assert events[-1] == "close"
+
+
+@pytest.mark.asyncio
+async def test_reset_closes_breaker():
+    cb = AsyncCircuitBreaker(max_failures=1)
+
+    @cb
+    async def boom():
+        raise RuntimeError("fail")
+
+    with pytest.raises(RuntimeError):
+        await boom()
+    assert cb.is_open
+
+    cb.reset()
+    assert not cb.is_open
+    assert cb.failures == 0
