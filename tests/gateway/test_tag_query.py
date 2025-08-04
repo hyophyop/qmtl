@@ -103,6 +103,22 @@ def test_queues_by_tag_route(client):
     assert dag.called_with == (["t1", "t2"], 60, "any")
 
 
+def test_queues_by_tag_route_error(fake_redis):
+    class ErrorDag(DagManagerClient):
+        def __init__(self):
+            super().__init__("dummy")
+
+        async def get_queues_by_tag(self, tags, interval, match_mode="any"):
+            raise grpc.RpcError("fail")
+
+    dag = ErrorDag()
+    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
+    with TestClient(app) as c:
+        resp = c.get("/queues/by_tag", params={"tags": "t1", "interval": "60"})
+        assert resp.status_code == 503
+    asyncio.run(dag.close())
+
+
 def test_submit_tag_query_node(client):
     c, dag = client
     dag_json = {

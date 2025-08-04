@@ -67,33 +67,23 @@ class DagManagerClient:
             return False
 
     async def diff(self, strategy_id: str, dag_json: str) -> dagmanager_pb2.DiffChunk:
-        """Call ``DiffService.Diff`` with retries and collect the stream."""
+        """Call ``DiffService.Diff`` and collect the stream."""
         request = dagmanager_pb2.DiffRequest(strategy_id=strategy_id, dag_json=dag_json)
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:
-            backoff = 0.5
-            retries = 5
-            for attempt in range(retries):
-                try:
-                    queue_map: Dict[str, str] = {}
-                    sentinel_id = ""
-                    buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
-                    async for chunk in self._diff_stub.Diff(request):
-                        queue_map.update(dict(chunk.queue_map))
-                        sentinel_id = chunk.sentinel_id
-                        buffer_nodes.extend(chunk.buffer_nodes)
-                    return dagmanager_pb2.DiffChunk(
-                        queue_map=queue_map,
-                        sentinel_id=sentinel_id,
-                        buffer_nodes=buffer_nodes,
-                    )
-                except Exception:
-                    if attempt == retries - 1:
-                        raise
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 4)
-            raise RuntimeError("unreachable")
+            queue_map: Dict[str, str] = {}
+            sentinel_id = ""
+            buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
+            async for chunk in self._diff_stub.Diff(request):
+                queue_map.update(dict(chunk.queue_map))
+                sentinel_id = chunk.sentinel_id
+                buffer_nodes.extend(chunk.buffer_nodes)
+            return dagmanager_pb2.DiffChunk(
+                queue_map=queue_map,
+                sentinel_id=sentinel_id,
+                buffer_nodes=buffer_nodes,
+            )
 
         result = await _call()
         gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
@@ -115,27 +105,16 @@ class DagManagerClient:
             ``"all"`` 은 모든 태그가 존재하는 큐만 반환한다.
 
         This delegates to DAG‑Manager which is expected to expose a
-        ``TagQuery`` RPC. Retries with exponential backoff are applied
-        similar to :meth:`diff`.
+        ``TagQuery`` RPC. Failures are propagated to the caller.
         """
         request = dagmanager_pb2.TagQueryRequest(
             tags=tags, interval=interval, match_mode=match_mode
         )
-        
+
         @self._breaker
         async def _call() -> list[str]:
-            backoff = 0.5
-            retries = 5
-            for attempt in range(retries):
-                try:
-                    response = await self._tag_stub.GetQueues(request)
-                    return list(response.queues)
-                except Exception:
-                    if attempt == retries - 1:
-                        raise
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 4)
-            return []
+            response = await self._tag_stub.GetQueues(request)
+            return list(response.queues)
 
         result = await _call()
         gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
