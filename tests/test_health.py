@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from qmtl.gateway.api import create_app as gw_create_app
 from qmtl.dagmanager.http_server import create_app as dag_http_create_app
 from qmtl.dagmanager.api import create_app as dag_api_create_app
-from qmtl.dagmanager.gc import QueueInfo
+from qmtl.dagmanager.garbage_collector import QueueInfo
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.monitor import AckStatus
 from qmtl.gateway.redis_queue import RedisTaskQueue

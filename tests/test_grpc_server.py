@@ -10,7 +10,7 @@ from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.http_server import create_app
 from qmtl.dagmanager import metrics
-from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
+from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.dagmanager.monitor import AckStatus
 

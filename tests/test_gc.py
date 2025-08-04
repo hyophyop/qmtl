@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, UTC
 
-from qmtl.dagmanager.gc import GarbageCollector, QueueInfo, S3ArchiveClient
+from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo, S3ArchiveClient
 
 
 class FakeStore:

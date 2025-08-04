@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 import httpx
 
 from qmtl.dagmanager.api import create_app
-from qmtl.dagmanager.gc import QueueInfo
+from qmtl.dagmanager.garbage_collector import QueueInfo
 from datetime import datetime, UTC
 
 
