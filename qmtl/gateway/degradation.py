@@ -39,6 +39,9 @@ class DegradationManager:
         self.dag_ok = True
         self.local_queue: list[str] = []
         self._task: Optional[asyncio.Task] = None
+        self._queue: asyncio.Queue[asyncio.Future[DegradationLevel]] = (
+            asyncio.Queue()
+        )
         self._gauge = metrics.degrade_level.labels(service="gateway")
         self._gauge.set(self.level.value)
 
@@ -54,6 +57,12 @@ class DegradationManager:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+    async def trigger(self) -> DegradationLevel:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[DegradationLevel] = loop.create_future()
+        await self._queue.put(fut)
+        return await fut
 
     async def _check_dependencies(self) -> None:
         try:
@@ -94,8 +103,12 @@ class DegradationManager:
     async def _loop(self) -> None:
         try:
             while True:
-                await self.update()
-                await asyncio.sleep(self.check_interval)
+                fut = await self._queue.get()
+                try:
+                    await self.update()
+                    fut.set_result(self.level)
+                except Exception as exc:  # pragma: no cover - pass through
+                    fut.set_exception(exc)
         except asyncio.CancelledError:
             pass
 

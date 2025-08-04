@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Monitoring and recovery actions for DAG-Manager."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, Optional
 import asyncio
 
@@ -59,17 +59,30 @@ class MonitorLoop:
     monitor: Monitor
     interval: float = 5.0
     _task: Optional[asyncio.Task] = None
+    _queue: asyncio.Queue[asyncio.Future[None]] = field(
+        default_factory=asyncio.Queue, init=False
+    )
 
     async def start(self) -> None:
         """Begin the monitoring loop."""
         if self._task is None:
             self._task = asyncio.create_task(self._run())
 
+    async def trigger(self) -> None:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[None] = loop.create_future()
+        await self._queue.put(fut)
+        await fut
+
     async def _run(self) -> None:
         try:
             while True:
-                await self.monitor.check_once()
-                await asyncio.sleep(self.interval)
+                fut = await self._queue.get()
+                try:
+                    await self.monitor.check_once()
+                    fut.set_result(None)
+                except Exception as exc:  # pragma: no cover - pass through
+                    fut.set_exception(exc)
         except asyncio.CancelledError:  # pragma: no cover - background task
             pass
 

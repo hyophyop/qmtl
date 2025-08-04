@@ -61,21 +61,23 @@ async def test_level_transitions(monkeypatch):
     dag = DummyDag()
     mgr = DegradationManager(redis, db, dag, check_interval=0.01)
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 10)
-    await mgr.update()
+    await mgr.start()
+    await mgr.trigger()
     assert mgr.level == DegradationLevel.NORMAL
 
     dag.ok = False
-    await mgr.update()
+    await mgr.trigger()
     assert mgr.level == DegradationLevel.PARTIAL
 
     db.ok = False
-    await mgr.update()
+    await mgr.trigger()
     assert mgr.level == DegradationLevel.MINIMAL
 
     redis.ok = False
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 96)
-    await mgr.update()
+    await mgr.trigger()
     assert mgr.level == DegradationLevel.STATIC
+    await mgr.stop()
 
 
 def make_app(fake_redis):

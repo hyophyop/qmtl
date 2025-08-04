@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from qmtl.dagmanager.monitor import MonitorLoop
@@ -17,6 +16,7 @@ async def test_monitor_loop_runs_periodically():
     mon = DummyMonitor()
     loop = MonitorLoop(mon, interval=0.01)  # type: ignore[arg-type]
     await loop.start()
-    await asyncio.sleep(0.03)
+    await loop.trigger()
+    await loop.trigger()
     await loop.stop()
-    assert mon.called >= 2
+    assert mon.called == 2
