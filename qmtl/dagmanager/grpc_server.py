@@ -32,10 +32,10 @@ class _GrpcStream(StreamSender):
         self._ack = threading.Event()
 
     def send(self, chunk: DiffChunk) -> None:
-        asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
-
-    def wait_for_ack(self) -> None:
-        self._ack.wait()
+        fut = asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
+        fut.result()
+        if not self._ack.wait(timeout=30):
+            raise TimeoutError("diff chunk ack timeout")
         self._ack.clear()
 
     def ack(self) -> None:

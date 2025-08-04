@@ -96,10 +96,6 @@ async def test_grpc_health():
     class FakeStream:
         def send(self, chunk):
             pass
-
-        def wait_for_ack(self):
-            pass
-
         def ack(self):
             pass
 

@@ -54,13 +54,9 @@ class FakeQueue(QueueManager):
 class FakeStream(StreamSender):
     def __init__(self):
         self.chunks = []
-        self.waits = 0
 
     def send(self, chunk):
         self.chunks.append(chunk)
-
-    def wait_for_ack(self):
-        self.waits += 1
 
     def ack(self):
         pass
@@ -371,4 +367,3 @@ def test_stream_chunking_and_ack():
     service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
     assert len(stream.chunks) == 3
-    assert stream.waits == 3

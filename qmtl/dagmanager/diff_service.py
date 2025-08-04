@@ -154,10 +154,12 @@ class StreamSender:
     """Interface to send diff results as a stream."""
 
     def send(self, chunk: DiffChunk) -> None:
-        raise NotImplementedError
+        """Send ``chunk`` and wait for receiver acknowledgement.
 
-    def wait_for_ack(self) -> None:
-        """Block until the client acknowledges the last chunk."""
+        Implementations should block until the remote side acknowledges the
+        chunk or raise an exception if the acknowledgement is not received or
+        the stream reports an error.
+        """
         raise NotImplementedError
 
     def ack(self) -> None:
@@ -295,7 +297,6 @@ class DiffService:
                     buffering_nodes=[],
                 )
             )
-            self.stream_sender.wait_for_ack()
             return
         for i in range(0, total, CHUNK_SIZE):
             chunk_new = new_nodes[i:i+CHUNK_SIZE]
@@ -308,7 +309,6 @@ class DiffService:
                     buffering_nodes=chunk_buf,
                 )
             )
-            self.stream_sender.wait_for_ack()
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
