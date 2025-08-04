@@ -8,7 +8,7 @@ from qmtl.common import AsyncCircuitBreaker
 
 @pytest.mark.asyncio
 async def test_post_with_breaker_trips_on_failures(monkeypatch):
-    cb = AsyncCircuitBreaker(max_failures=2, reset_timeout=0.1)
+    cb = AsyncCircuitBreaker(max_failures=2)
 
     async def mock_post(self, url, json=None):
         return httpx.Response(500)

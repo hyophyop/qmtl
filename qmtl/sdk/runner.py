@@ -54,7 +54,7 @@ class Runner:
     @classmethod
     def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
         if cls._gateway_cb is None:
-            cls._gateway_cb = AsyncCircuitBreaker(max_failures=3, reset_timeout=60.0)
+            cls._gateway_cb = AsyncCircuitBreaker(max_failures=3)
         return cls._gateway_cb
 
     # ------------------------------------------------------------------

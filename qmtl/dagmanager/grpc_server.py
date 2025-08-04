@@ -244,13 +244,11 @@ def serve(
     repo: NodeRepository | None = None,
     queue: QueueManager | None = None,
     breaker_threshold: int = 3,
-    breaker_timeout: float = 60.0,
 ) -> tuple[grpc.aio.Server, int]:
     admin = None
     if kafka_admin_client is not None:
         breaker = AsyncCircuitBreaker(
             max_failures=breaker_threshold,
-            reset_timeout=breaker_timeout,
         )
         admin = KafkaAdmin(kafka_admin_client, breaker=breaker)
     if repo is None:
