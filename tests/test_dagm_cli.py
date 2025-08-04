@@ -1,6 +1,5 @@
 import json
-from io import StringIO
-import sys
+import yaml
 from qmtl.dagmanager.cli import main
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
@@ -17,18 +16,31 @@ def test_cli_diff_dryrun(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "n1" in out
 
-def test_cli_queue_stats(monkeypatch, capsys):
+def test_cli_queue_stats(monkeypatch, capsys, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        yaml.safe_dump({"dagmanager": {"grpc_host": "h", "grpc_port": 1234}})
+    )
+    monkeypatch.chdir(tmp_path)
+
     class Stub:
         def __init__(self, channel):
             pass
         async def GetQueueStats(self, request):
             return dagmanager_pb2.QueueStats(sizes={"q": 1})
+
+    captured = {}
+    def fake_channel(target):
+        captured["target"] = target
+        return DummyChannel()
+
     monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
-    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+    monkeypatch.setattr(grpc.aio, "insecure_channel", fake_channel)
     main(["queue-stats"])
     out = capsys.readouterr().out
     data = json.loads(out)
     assert data == {"q": 1}
+    assert captured["target"] == "h:1234"
 
 def test_cli_gc(monkeypatch, capsys):
     called = {}

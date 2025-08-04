@@ -9,7 +9,7 @@ from .redis_client import InMemoryRedis
 
 from .api import create_app
 from .config import GatewayConfig
-from ..config import load_config
+from ..config import load_config, find_config_file
 
 
 async def _main(argv: list[str] | None = None) -> None:
@@ -18,9 +18,10 @@ async def _main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", help="Path to configuration file")
     args = parser.parse_args(argv)
 
+    cfg_path = args.config or find_config_file()
     config = GatewayConfig()
-    if args.config:
-        config = load_config(args.config).gateway
+    if cfg_path:
+        config = load_config(cfg_path).gateway
 
     if config.queue_backend == "memory":
         redis_client = InMemoryRedis()

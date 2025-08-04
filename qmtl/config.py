@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 import yaml
 
 from .gateway.config import GatewayConfig
@@ -13,6 +14,17 @@ class UnifiedConfig:
 
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     dagmanager: DagManagerConfig = field(default_factory=DagManagerConfig)
+
+
+def find_config_file(cwd: Path | None = None) -> str | None:
+    """Return path to ``qmtl.yml``/``qmtl.yaml`` in ``cwd`` if present."""
+
+    base = Path.cwd() if cwd is None else cwd
+    for name in ("qmtl.yml", "qmtl.yaml"):
+        candidate = base / name
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def load_config(path: str) -> UnifiedConfig:

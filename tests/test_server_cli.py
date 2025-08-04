@@ -11,7 +11,7 @@ def test_server_help(capsys):
     assert "--config" in out
 
 
-def test_server_defaults(monkeypatch):
+def test_server_defaults(monkeypatch, tmp_path):
     captured = {}
 
     async def fake_run(config):
@@ -19,13 +19,14 @@ def test_server_defaults(monkeypatch):
         captured["queue"] = config.queue_backend
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
+    monkeypatch.chdir(tmp_path)
     main([])
     assert captured["repo"] == "memory"
     assert captured["queue"] == "memory"
 
 
 def test_server_config_file(monkeypatch, tmp_path):
-    config_path = tmp_path / "cfg.yml"
+    config_path = tmp_path / "qmtl.yml"
     config_path.write_text(
         yaml.safe_dump({"dagmanager": {"neo4j_dsn": "bolt://test:7687"}})
     )
@@ -36,5 +37,6 @@ def test_server_config_file(monkeypatch, tmp_path):
         captured["uri"] = config.neo4j_dsn
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
-    main(["--config", str(config_path)])
+    monkeypatch.chdir(tmp_path)
+    main([])
     assert captured["uri"] == "bolt://test:7687"
