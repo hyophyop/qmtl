@@ -31,16 +31,20 @@ uv pip install -e .[dev]
 
 ## 1. Initialize a Project
 
-Create a dedicated directory for your strategy and generate the scaffold:
+Create a dedicated directory for your strategy and generate the scaffold. List
+available templates, then initialize the project with a chosen template and
+optional sample data:
 
 ```bash
-qmtl init --path my_qmtl_project
+qmtl init --list-templates
+qmtl init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
 The command copies a sample `strategy.py`, a `qmtl.yml` configuration and empty
 packages for `generators`, `indicators` and `transforms`. These folders let you
 extend the SDK by adding custom nodes.
+
 
 ## 2. Explore the Scaffold
 
@@ -146,7 +150,7 @@ End‑to‑end tests require Docker. Start the stack and execute the tests:
 
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up -d
-uv run -- pytest tests/e2e
+uv run -m pytest tests/e2e
 ```
 
 For details on the test environment refer to

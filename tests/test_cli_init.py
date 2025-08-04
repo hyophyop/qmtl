@@ -26,3 +26,13 @@ def test_cli_list_templates(capsys):
     out = capsys.readouterr().out.strip().splitlines()
     assert "branching" in out
     assert "general" in out
+
+
+def test_cli_help_contains_doc_links(capsys):
+    try:
+        qmtl.cli.main(["init", "--help"])
+    except SystemExit:
+        pass
+    out = capsys.readouterr().out
+    assert "docs/templates.md" in out
+    assert "docs/strategy_workflow.md" in out

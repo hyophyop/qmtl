@@ -9,7 +9,7 @@ def test_gateway_cli_help():
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):
-    config_path = tmp_path / "cfg.yml"
+    config_path = tmp_path / "qmtl.yml"
     config_path.write_text(
         "\n".join(
             [
@@ -45,8 +45,9 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
 
     fake_uvicorn = SimpleNamespace(run=lambda app, host, port: captured.update({"host": host, "port": port}))
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.chdir(tmp_path)
 
-    cli.main(["--config", str(config_path)])
+    cli.main([])
 
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 12345
@@ -56,7 +57,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
 
 
 def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
-    config_path = tmp_path / "cfg.yml"
+    config_path = tmp_path / "qmtl.yml"
     config_path.write_text(
         "\n".join(
             [
@@ -91,8 +92,9 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.redis, "from_url", fake_from_url)
     monkeypatch.setattr(cli, "create_app", fake_create_app)
     monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.chdir(tmp_path)
 
-    cli.main(["--config", str(config_path)])
+    cli.main([])
 
     assert isinstance(captured["redis"], DummyRedis)
     assert captured["dsn"] == "redis://x:6379"

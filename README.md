@@ -33,7 +33,9 @@ uv pip install -e .[io]
 
 Create a new working directory with `qmtl init`. The command generates a
 project scaffold containing extension packages and a sample strategy.
-Use `--strategy` to select from the built-in templates:
+Use `--strategy` to select from the built-in templates, `--list-templates` to
+see the choices and `--with-sample-data` to copy an example OHLCV CSV and
+notebook:
 
 ```bash
 qmtl init --path my_qmtl_project
@@ -42,6 +44,8 @@ qmtl init --list-templates
 
 # create project with the branching template
 qmtl init --path my_qmtl_project --strategy branching
+# include sample data
+qmtl init --path my_qmtl_project --with-sample-data
 cd my_qmtl_project
 ```
 
@@ -76,7 +80,7 @@ Here’s a short workflow summary based on the repository’s guidelines:
 2. **Testing** – Run the tests via `uv` before committing:
 
    ```bash
-   uv run -- pytest
+   uv run -m pytest
    ```
 
    Commit only after tests pass.
@@ -110,7 +114,7 @@ docker compose -f tests/docker-compose.e2e.yml up -d
 Run the tests using uv:
 
 ```bash
-uv run -- pytest tests/e2e
+uv run -m pytest tests/e2e
 ```
 
 See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
@@ -120,8 +124,12 @@ See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
 Run all unit and integration tests with:
 
 ```bash
-uv run -- pytest
+uv run -m pytest
 ```
+
+## Monitoring
+
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
 
 ## Running Services
 
