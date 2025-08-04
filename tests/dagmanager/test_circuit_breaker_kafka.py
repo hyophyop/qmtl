@@ -54,6 +54,7 @@ async def test_circuit_breaker_opens_on_failures():
     with pytest.raises(RuntimeError):
         await asyncio.to_thread(admin.create_topic_if_needed, "t", cfg)
     admin.breaker.reset()
+    await asyncio.to_thread(admin.create_topic_if_needed, "t", cfg)
     assert not admin.breaker.is_open
 
 

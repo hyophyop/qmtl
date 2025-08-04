@@ -29,3 +29,14 @@ async def test_post_with_breaker_trips_on_failures(monkeypatch):
     assert cb.is_open
     with pytest.raises(RuntimeError):
         await post_with_backoff("http://x", {}, retries=1, circuit_breaker=cb)
+
+    cb.reset()
+
+    async def mock_post_ok(self, url, json=None):
+        return httpx.Response(202)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post_ok)
+
+    resp = await post_with_backoff("http://x", {}, retries=1, circuit_breaker=cb)
+    assert resp.status_code == 202
+    assert not cb.is_open
