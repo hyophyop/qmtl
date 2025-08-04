@@ -2,8 +2,20 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 import warnings
+from typing import Any, Callable
 
 import dagmanager_pb2 as dagmanager__pb2
+
+
+def call_without_timeout(call: Callable[..., Any]) -> Callable[..., Any]:
+    """Return an adapter that disallows ``timeout`` for ``call``."""
+
+    def wrapped(request: Any, *args: Any, **kwargs: Any) -> Any:
+        if "timeout" in kwargs:
+            raise TypeError("timeout parameter is not supported")
+        return call(request, *args, **kwargs)
+
+    return wrapped
 
 GRPC_GENERATED_VERSION = '1.73.0'
 GRPC_VERSION = grpc.__version__
