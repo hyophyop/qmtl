@@ -72,7 +72,7 @@ def test_load_unified_config_defaults(tmp_path: Path) -> None:
     config_file.write_text("{}")
     config = load_config(str(config_file))
     assert isinstance(config, UnifiedConfig)
-    assert config.gateway.redis_dsn == "redis://localhost:6379"
+    assert config.gateway.redis_dsn is None
     assert config.dagmanager.grpc_port == 50051
     assert config.gateway.dagclient_breaker_threshold == 3
     assert config.gateway.dagclient_breaker_timeout == 60.0
