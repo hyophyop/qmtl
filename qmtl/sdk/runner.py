@@ -93,15 +93,19 @@ class Runner:
             post_fn = client.post
             if circuit_breaker is not None:
                 post_fn = circuit_breaker(post_fn)
-            resp = await post_fn(url, json=payload)
+            try:
+                resp = await post_fn(url, json=payload)
+            except Exception as exc:
+                return {"error": str(exc)}
         if resp.status_code == 202:
+            if circuit_breaker is not None:
+                circuit_breaker.reset()
             return resp.json().get("queue_map", {})
         if resp.status_code == 409:
-            raise RuntimeError("duplicate strategy")
+            return {"error": "duplicate strategy"}
         if resp.status_code == 422:
-            raise RuntimeError("invalid strategy payload")
-        resp.raise_for_status()
-        return {}
+            return {"error": "invalid strategy payload"}
+        return {"error": f"gateway error {resp.status_code}"}
 
     @staticmethod
     def _prepare(strategy_cls: type[Strategy]) -> Strategy:
@@ -479,18 +483,15 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for backtest mode")
 
-        try:
-            queue_map = await Runner._post_gateway_async(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="backtest",
-                circuit_breaker=Runner._get_gateway_circuit_breaker(),
-            )
-        except httpx.RequestError as exc:
-            raise RuntimeError(
-                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
-            ) from exc
+        queue_map = await Runner._post_gateway_async(
+            gateway_url=gateway_url,
+            dag=dag,
+            meta=meta,
+            run_type="backtest",
+            circuit_breaker=Runner._get_gateway_circuit_breaker(),
+        )
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
@@ -539,18 +540,15 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for dry-run mode")
 
-        try:
-            queue_map = await Runner._post_gateway_async(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="dry-run",
-                circuit_breaker=Runner._get_gateway_circuit_breaker(),
-            )
-        except httpx.RequestError as exc:
-            raise RuntimeError(
-                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
-            ) from exc
+        queue_map = await Runner._post_gateway_async(
+            gateway_url=gateway_url,
+            dag=dag,
+            meta=meta,
+            run_type="dry-run",
+            circuit_breaker=Runner._get_gateway_circuit_breaker(),
+        )
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
         Runner._apply_queue_map(strategy, queue_map)
         offline_mode = offline or not Runner._kafka_available
@@ -595,18 +593,15 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for live mode")
 
-        try:
-            queue_map = await Runner._post_gateway_async(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                run_type="live",
-                circuit_breaker=Runner._get_gateway_circuit_breaker(),
-            )
-        except httpx.RequestError as exc:
-            raise RuntimeError(
-                f"게이트웨이({gateway_url})에 접속할 수 없습니다: 서비스 가동 여부 확인 필요"
-            ) from exc
+        queue_map = await Runner._post_gateway_async(
+            gateway_url=gateway_url,
+            dag=dag,
+            meta=meta,
+            run_type="live",
+            circuit_breaker=Runner._get_gateway_circuit_breaker(),
+        )
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
         Runner._apply_queue_map(strategy, queue_map)
         offline_mode = offline or not Runner._kafka_available
