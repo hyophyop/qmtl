@@ -221,6 +221,9 @@ class DiffService:
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
         return self.node_repo.get_nodes(node_ids)
 
+    async def _db_fetch_async(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
+        return await asyncio.to_thread(self.node_repo.get_nodes, node_ids)
+
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
         self, nodes: Iterable[NodeInfo], existing: Dict[str, NodeRecord]
@@ -251,6 +254,45 @@ class DiffService:
             new_nodes.append(n)
         return queue_map, new_nodes, buffering_nodes
 
+    async def _queue_upsert_async(self, node: NodeInfo) -> str:
+        return await asyncio.to_thread(
+            self.queue_manager.upsert,
+            "asset",
+            node.node_type,
+            node.code_hash,
+            "v1",
+        )
+
+    async def _hash_compare_async(
+        self, nodes: Iterable[NodeInfo], existing: Dict[str, NodeRecord]
+    ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
+        queue_map: Dict[str, str] = {}
+        new_nodes: List[NodeInfo] = []
+        buffering_nodes: List[NodeInfo] = []
+        tasks: List[asyncio.Task[str]] = []
+        upsert_nodes: List[NodeInfo] = []
+        for n in nodes:
+            rec = existing.get(n.node_id)
+            if rec and rec.code_hash == n.code_hash:
+                queue_map[n.node_id] = rec.topic
+                if rec.schema_hash != n.schema_hash:
+                    buffering_nodes.append(n)
+                continue
+            new_nodes.append(n)
+            upsert_nodes.append(n)
+            tasks.append(asyncio.create_task(self._queue_upsert_async(n)))
+        topics: List[str] = []
+        if tasks:
+            try:
+                topics = await asyncio.gather(*tasks)
+            except Exception:
+                queue_create_error_total.inc()
+                queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
+                raise
+        for node, topic in zip(upsert_nodes, topics):
+            queue_map[node.node_id] = topic
+        return queue_map, new_nodes, buffering_nodes
+
     def _buffer_instructions(self, nodes: Iterable[NodeInfo]) -> List[BufferInstruction]:
         """Create buffering instructions with lag equal to ``period``."""
         result: List[BufferInstruction] = []
@@ -271,9 +313,40 @@ class DiffService:
             )
         return result
 
+    async def _buffer_instructions_async(
+        self, nodes: Iterable[NodeInfo]
+    ) -> List[BufferInstruction]:
+        async def _mark(n: NodeInfo) -> BufferInstruction:
+            await asyncio.to_thread(self.node_repo.mark_buffering, n.node_id)
+            lag = n.period or 0
+            return BufferInstruction(
+                node_id=n.node_id,
+                node_type=n.node_type,
+                code_hash=n.code_hash,
+                schema_hash=n.schema_hash,
+                interval=n.interval,
+                period=n.period,
+                tags=list(n.tags),
+                lag=lag,
+            )
+
+        if not nodes:
+            return []
+        tasks = [asyncio.create_task(_mark(n)) for n in nodes]
+        return list(await asyncio.gather(*tasks))
+
     # Step 4 ---------------------------------------------------------------
     def _insert_sentinel(self, sentinel_id: str, nodes: Iterable[NodeInfo]) -> None:
         self.node_repo.insert_sentinel(sentinel_id, [n.node_id for n in nodes])
+
+    async def _insert_sentinel_async(
+        self, sentinel_id: str, nodes: Iterable[NodeInfo]
+    ) -> None:
+        await asyncio.to_thread(
+            self.node_repo.insert_sentinel,
+            sentinel_id,
+            [n.node_id for n in nodes],
+        )
 
     # Step 5 is handled inside _hash_compare via queue upsert --------------
 
@@ -310,6 +383,17 @@ class DiffService:
                 )
             )
 
+    async def _stream_send_async(
+        self,
+        queue_map: Dict[str, str],
+        sentinel_id: str,
+        new_nodes: List[NodeInfo],
+        buffering_nodes: List[BufferInstruction],
+    ) -> None:
+        await asyncio.to_thread(
+            self._stream_send, queue_map, sentinel_id, new_nodes, buffering_nodes
+        )
+
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
@@ -334,7 +418,33 @@ class DiffService:
             observe_diff_duration(duration_ms)
 
     async def diff_async(self, request: DiffRequest) -> DiffChunk:
-        return await asyncio.to_thread(self.diff, request)
+        start = time.perf_counter()
+        try:
+            nodes = self._pre_scan(request.dag_json)
+            existing = await self._db_fetch_async([n.node_id for n in nodes])
+            queue_map, new_nodes, buffering = await self._hash_compare_async(
+                nodes, existing
+            )
+            sentinel_id = f"{request.strategy_id}-sentinel"
+            instructions, _ = await asyncio.gather(
+                self._buffer_instructions_async(buffering),
+                self._insert_sentinel_async(sentinel_id, new_nodes),
+            )
+            if not new_nodes:
+                sentinel_gap_count.inc()
+                sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
+            await self._stream_send_async(
+                queue_map, sentinel_id, new_nodes, instructions
+            )
+            return DiffChunk(
+                queue_map=queue_map,
+                sentinel_id=sentinel_id,
+                new_nodes=new_nodes,
+                buffering_nodes=instructions,
+            )
+        finally:
+            duration_ms = (time.perf_counter() - start) * 1000
+            observe_diff_duration(duration_ms)
 
 
 class Neo4jNodeRepository(NodeRepository):

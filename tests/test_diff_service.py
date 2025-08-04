@@ -1,4 +1,6 @@
 import json
+import time
+import pytest
 from qmtl.dagmanager.diff_service import (
     DiffService,
     DiffRequest,
@@ -367,3 +369,51 @@ def test_stream_chunking_and_ack():
     service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
     assert len(stream.chunks) == 3
+
+
+@pytest.mark.asyncio
+async def test_diff_async():
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+    ])
+
+    chunk = await service.diff_async(DiffRequest(strategy_id="strategy", dag_json=dag))
+
+    assert repo.sentinels == [("strategy-sentinel", ["A"])]
+    assert stream.chunks[0] == chunk
+
+
+@pytest.mark.asyncio
+async def test_queue_upserts_parallel():
+    repo = FakeRepo()
+
+    class SlowQueue(QueueManager):
+        def __init__(self):
+            self.timeline: list[tuple[float, float]] = []
+
+        def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
+            start = time.perf_counter()
+            time.sleep(0.1)
+            end = time.perf_counter()
+            self.timeline.append((start, end))
+            return topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
+
+    queue = SlowQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+        {"node_id": "B", "node_type": "N", "code_hash": "c2", "schema_hash": "s2"},
+    ])
+
+    await service.diff_async(DiffRequest(strategy_id="s", dag_json=dag))
+
+    assert len(queue.timeline) == 2
+    # second call should start before first call finished
+    assert queue.timeline[1][0] < queue.timeline[0][1]
