@@ -4,7 +4,6 @@ import base64
 import json
 import asyncio
 import time
-import os
 from typing import Optional, Iterable
 import logging
 import httpx
@@ -53,15 +52,9 @@ class Runner:
         cls._gateway_cb = cb
 
     @classmethod
-    def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker | None:
+    def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
         if cls._gateway_cb is None:
-            max_failures = os.getenv("QMTL_GW_CB_MAX_FAILURES")
-            reset_timeout = os.getenv("QMTL_GW_CB_RESET_TIMEOUT")
-            if max_failures or reset_timeout:
-                cls._gateway_cb = AsyncCircuitBreaker(
-                    max_failures=int(max_failures or 3),
-                    reset_timeout=float(reset_timeout or 60.0),
-                )
+            cls._gateway_cb = AsyncCircuitBreaker(max_failures=3, reset_timeout=60.0)
         return cls._gateway_cb
 
     # ------------------------------------------------------------------
