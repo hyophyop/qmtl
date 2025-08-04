@@ -4,7 +4,7 @@ This document outlines sample Prometheus alerts and Grafana dashboards for QMTL 
 
 ## Alert Rules
 
-Prometheus can load `alert_rules.yml` to activate alerts for the DAG manager and gateway. The repository ships a minimal example with a couple of core alerts. Mount the file into your Prometheus container and expand it as needed.
+Prometheus can load `alert_rules.yml` to activate alerts for the DAG Manager and gateway. The repository ships a minimal example with a couple of core alerts. Mount the file into your Prometheus container and expand it as needed.
 
 ### Additional Alert Reference
 
@@ -21,7 +21,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 
 ## Grafana Dashboards
 
-Example Grafana dashboards are provided in `docs/dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG manager.
+Example Grafana dashboards are provided in `docs/dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
 
 ## QuestDB Recorder Demo
 
@@ -38,7 +38,7 @@ Monitor `http://localhost:8000/metrics` during execution or check the printed ou
 Both services expose a Prometheus endpoint. Circuit breaker activity is tracked via gauges:
 
 - `dagclient_breaker_open_total` — increments each time the Gateway's gRPC client trips open.
-- `kafka_breaker_open_total` — increments each time the DAG manager's Kafka admin breaker opens.
+- `kafka_breaker_open_total` — increments each time the DAG Manager's Kafka admin breaker opens.
 
 Configuration options control the breakers:
 

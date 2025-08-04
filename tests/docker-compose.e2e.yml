@@ -38,7 +38,7 @@ services:
     ports:
       - "9092:9092"
 
-  dag-manager:
+  dagmanager:
     image: python:3
     command: ["qmtl", "dagmanager-server"]
     depends_on:
@@ -51,7 +51,7 @@ services:
     image: python:3
     command: ["qmtl", "gw", "serve"]
     depends_on:
-      - dag-manager
+      - dagmanager
       - redis
     ports:
       - "8000:8000"

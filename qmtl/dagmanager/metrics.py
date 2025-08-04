@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Prometheus metrics for DAG manager."""
+"""Prometheus metrics for DAG Manager."""
 
 from collections import deque
 from typing import Deque

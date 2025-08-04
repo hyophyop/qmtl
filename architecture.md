@@ -15,7 +15,7 @@ QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 
 ## 1. 시스템 구성: 계층 간 상호작용과 처리 흐름
 
 ```
-Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
+Strategy SDK ──▶ Gateway ──▶ DAG Manager ──▶ Graph DB (Neo4j)
      │                │                    │                │
      │                │                    └──▶ Kafka Queue 생성
      │                └── 결과 큐 상태 회신 ◀───┘
@@ -23,8 +23,8 @@ Strategy SDK ──▶ Gateway ──▶ DAG-Manager ──▶ Graph DB (Neo4j)
 ```
 
 1. **SDK**는 전략 코드를 DAG로 직렬화하며, 각 노드는 메타데이터, 연산 함수, 입력 태그를 포함한다.
-2. **Gateway**는 DAG를 DAG-Manager로 전송하며, Neo4j 기반 전역 DAG와 비교하여 중복 연산을 제거하는 Diff 연산을 수행한다. 이 Diff 연산은 DAG 내 각 노드의 연산 정의를 구성하는 요소들 — 예를 들어 `node_type`, `code_hash`, `config_hash`, `schema_hash` — 을 기반으로 결정적 NodeID를 생성하고, 이 NodeID가 전역 DAG에 이미 존재하는지를 판별하는 방식으로 이루어진다. 일치하는 노드가 있을 경우, 해당 노드는 재실행되지 않고, DAG-Manager가 관리 중인 기존 Kafka/Redpanda 큐의 토픽에서 이미 생산되고 있는 스트림 데이터를 구독하는 방식으로 참조하여 계산 자원의 낭비를 방지한다. 이때 SDK는 해당 노드에 대한 처리 함수는 실행하지 않으며, 해당 큐의 오프셋 정보만을 추적하여 후속 노드로 데이터를 전달한다.
-3. **DAG-Manager**는 DAG 내 신규 노드에 대해 큐가 필요한지를 판별하며, Kafka 또는 Redpanda를 사용해 idempotent 큐 생성을 수행한다.
+2. **Gateway**는 DAG를 DAG Manager로 전송하며, Neo4j 기반 전역 DAG와 비교하여 중복 연산을 제거하는 Diff 연산을 수행한다. 이 Diff 연산은 DAG 내 각 노드의 연산 정의를 구성하는 요소들 — 예를 들어 `node_type`, `code_hash`, `config_hash`, `schema_hash` — 을 기반으로 결정적 NodeID를 생성하고, 이 NodeID가 전역 DAG에 이미 존재하는지를 판별하는 방식으로 이루어진다. 일치하는 노드가 있을 경우, 해당 노드는 재실행되지 않고, DAG Manager가 관리 중인 기존 Kafka/Redpanda 큐의 토픽에서 이미 생산되고 있는 스트림 데이터를 구독하는 방식으로 참조하여 계산 자원의 낭비를 방지한다. 이때 SDK는 해당 노드에 대한 처리 함수는 실행하지 않으며, 해당 큐의 오프셋 정보만을 추적하여 후속 노드로 데이터를 전달한다.
+3. **DAG Manager**는 DAG 내 신규 노드에 대해 큐가 필요한지를 판별하며, Kafka 또는 Redpanda를 사용해 idempotent 큐 생성을 수행한다.
 4. **Gateway**는 각 노드의 실행 여부(이미 큐가 생산 중인지 여부 포함)와 큐 매핑 정보를 SDK에 반환하며, SDK는 그에 따라 로컬에서 병렬 처리 가능한 노드만 실행한다.
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
@@ -170,7 +170,7 @@ TimeScaleDB의 Continuous Aggregates 원리를 연산 캐시 계층에 적용하
   ```
 * **큐 해석 규칙**
 
-  1. Gateway는 `(tags, interval)` 조합으로 DAG‑Manager에 질의하여 **전역 DAG에 존재하는 모든 토픽** 중 조건을 만족하는 큐 ID 집합을 가져온다.
+  1. Gateway는 `(tags, interval)` 조합으로 DAG Manager에 질의하여 **전역 DAG에 존재하는 모든 토픽** 중 조건을 만족하는 큐 ID 집합을 가져온다.
   2. SDK는 반환된 큐 리스트를 업스트림으로 등록하며, 필요 시 각 큐별로 독립된 CircularBuffer를 초기화한다.
   3. 노드 실행 시 여러 큐를 **concatenate / align** 처리하여 하나의 시계열 데이터프레임으로 전달하거나, 사용자 정의 집계 함수를 통해 병합한다.
 * **장점**: 전략 코드는 자산(sym) 추가 시 태그만 확장하면 되므로 **동형 전략의 대량 배치**에 용이하며, 큐 이름 변경·증가에 대한 민감도가 낮다.
@@ -381,7 +381,7 @@ Runner.dryrun(CrossMarketLagStrategy)
 | ----------- | ------------------------------------ | ------------------------------------- |
 | SDK         | DAG 생성, 전략 코드 실행, 로컬 연산 병렬 처리        | Python 3.11, Ray, Pydantic            |
 | Gateway     | 상태 FSM, 전략 전이 로직, DAG diff 수행, 콜백 전송 | FastAPI, Redis, PostgreSQL, xstate-py |
-| DAG-Manager | Neo4j 기반 전역 DAG 저장 및 증분 쿼리, 큐 생성 판단  | Neo4j 5.x, APOC, Kafka Admin Client   |
+| DAG Manager | Neo4j 기반 전역 DAG 저장 및 증분 쿼리, 큐 생성 판단  | Neo4j 5.x, APOC, Kafka Admin Client   |
 | Infra       | 메시지 중개 및 운영 관측 지표 수집                 | Redpanda, Prometheus, Grafana, MinIO  |
 
 ---

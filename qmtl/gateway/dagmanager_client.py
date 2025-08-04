@@ -11,7 +11,7 @@ from . import metrics as gw_metrics
 
 
 class DagManagerClient:
-    """gRPC client for DAG‑Manager services using a persistent channel."""
+    """gRPC client for DAG Manager services using a persistent channel."""
 
     def __init__(self, target: str, *, breaker_max_failures: int = 3) -> None:
         self._target = target
@@ -52,7 +52,7 @@ class DagManagerClient:
         return self._breaker
 
     async def status(self) -> bool:
-        """Return ``True`` if the remote DAG manager reports healthy status."""
+        """Return ``True`` if the remote DAG Manager reports healthy status."""
         @self._breaker
         async def _call() -> bool:
             reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
@@ -126,7 +126,7 @@ class DagManagerClient:
             ``"any"`` (기본값)일 때는 하나 이상의 태그가 일치하면 매칭하며,
             ``"all"`` 은 모든 태그가 존재하는 큐만 반환한다.
 
-        This delegates to DAG‑Manager which is expected to expose a
+        This delegates to DAG Manager which is expected to expose a
         ``TagQuery`` RPC. Retries with exponential backoff are applied
         similar to :meth:`diff`.
         """

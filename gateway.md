@@ -9,7 +9,7 @@
 
 ## S0 · System Context & Goals
 
-Gateway sits at the **operational boundary** between *ephemeral* strategy submissions and the *persistent* graph state curated by DAG‑Manager. Its design objectives are:
+Gateway sits at the **operational boundary** between *ephemeral* strategy submissions and the *persistent* graph state curated by DAG Manager. Its design objectives are:
 
 | ID     | Goal                                                         | Metric                    |
 | ------ | ------------------------------------------------------------ | ------------------------- |
@@ -38,7 +38,7 @@ graph LR
        WS["WebSocket Hub"]
     end
     subgraph Core Tier
-       DAGM["DAG‑Manager gRPC"]
+       DAGM["DAG Manager gRPC"]
        KAFKA[(Kafka/Redpanda)]
     end
     SDK --> Ingest --> FIFO --> Worker --> DAGM
@@ -122,7 +122,7 @@ Content‑Type: application/json
 
 ### S4 · Architecture Alignment
 
-The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG-Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.
+The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.
 
 Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. Operators may disable this step for small deployments.
 
@@ -130,11 +130,11 @@ Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in
 
 When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**
 invokes ``resolve_tags()`` which issues a ``/queues/by_tag`` request. Gateway
-consults DAG-Manager for queues matching `(tags, interval)` and returns the list
+consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 ### S5 · Reliability Checklist
 

@@ -15,7 +15,7 @@ def test_e2e_compose_services():
         "zookeeper",
         "kafka",
         "gateway",
-        "dag-manager",
+        "dagmanager",
     }
     assert expected.issubset(services.keys())
 

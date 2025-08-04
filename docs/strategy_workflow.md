@@ -49,7 +49,7 @@ extend the SDK by adding custom nodes.
 ## 2. Explore the Scaffold
 
 - `strategy.py` – a minimal example strategy using the SDK.
-- `qmtl.yml` – sample configuration for the Gateway and DAG manager.
+- `qmtl.yml` – sample configuration for the Gateway and DAG Manager.
 - `generators/`, `indicators/`, `transforms/` – extension packages where you can
   implement additional nodes.
 
@@ -61,7 +61,7 @@ Run the default strategy to verify that everything works:
 python strategy.py
 ```
 The scaffolded script invokes `Runner.backtest()` which expects a running
-Gateway and DAG manager. Provide a `--gateway-url` argument, or modify the
+Gateway and DAG Manager. Provide a `--gateway-url` argument, or modify the
 script to use `Runner.offline()` when testing without external services.
 
 ## 2a. Example Run Output
@@ -120,7 +120,7 @@ python -m qmtl.sdk mypkg.strategy:MyStrategy --mode backtest \
 ```
 
 Available modes are `backtest`, `dryrun`, `live` and `offline`. The first three
-require a running Gateway and DAG manager. Start them in separate terminals. The
+require a running Gateway and DAG Manager. Start them in separate terminals. The
 ``--config`` flag is optional:
 
 ```bash
@@ -180,7 +180,7 @@ wait
 
 Consult [architecture.md](../architecture.md) for a deep dive into the overall
 framework and `qmtl/examples/` for reference strategies. When ready, deploy the
-Gateway and DAG manager using your customized `qmtl.yml`.
+Gateway and DAG Manager using your customized `qmtl.yml`.
 
 > **운영/배포 체크리스트**
 > - 테스트 통과 및 커버리지 확인

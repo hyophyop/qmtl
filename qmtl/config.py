@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class UnifiedConfig:
-    """Configuration aggregating gateway and DAG manager settings."""
+    """Configuration aggregating gateway and DAG Manager settings."""
 
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     dagmanager: DagManagerConfig = field(default_factory=DagManagerConfig)

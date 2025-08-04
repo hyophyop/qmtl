@@ -1,8 +1,8 @@
 # qmtl
 
-QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](architecture.md) for full details.
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](architecture.md) for full details.
 
-Use the DAG manager CLI to preview DAG structures:
+Use the DAG Manager CLI to preview DAG structures:
 
 ```bash
 qmtl dagmanager diff --file dag.json --dry-run
@@ -100,7 +100,7 @@ For additional rules—such as adhering to architecture documents or managing di
 
 ## Coding Style
 
-Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dag_manager`.
+Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dagmanager`.
 
 ## Optional Modules
 
@@ -142,7 +142,7 @@ Load the sample alert definitions from `alert_rules.yml` into Prometheus to enab
 
 ## Running Services
 
-Start the Gateway and DAG manager using the combined configuration file or rely
+Start the Gateway and DAG Manager using the combined configuration file or rely
 on the built-in defaults. The ``--config`` flag is optional; without it both
 services start in a local mode that uses SQLite and in-memory repositories. The
 sample ``qmtl.yml`` file
@@ -152,7 +152,7 @@ demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 # start the gateway HTTP server with defaults
 qmtl gw
 
-# start the DAG manager with defaults
+# start the DAG Manager with defaults
 qmtl dagmanager-server
 
 # use a custom configuration file
