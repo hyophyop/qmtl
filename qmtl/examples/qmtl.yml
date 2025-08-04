@@ -11,15 +11,11 @@ gateway:
   # database_dsn: postgresql://user:pass@db/qmtl
 
 dagmanager:
-  repo_backend: memory
   memory_repo_path: memrepo.gpickle
-  queue_backend: memory
   # Example cluster configuration using Neo4j and Kafka
-  # repo_backend: neo4j
   # neo4j_dsn: bolt://localhost:7687
   # neo4j_user: neo4j
   # neo4j_password: neo4j
-  # queue_backend: kafka
   # kafka_dsn: localhost:9092
   grpc_host: 0.0.0.0
   grpc_port: 50051

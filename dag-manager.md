@@ -256,17 +256,15 @@ For canary deployment steps see
 예시:
 
 ```yaml
-repo_backend: neo4j
 neo4j_dsn: bolt://db:7687
 neo4j_user: neo4j
 neo4j_password: secret
-queue_backend: kafka
 kafka_dsn: localhost:9092
 ```
 
 The sample file installed by ``qmtl init`` instead defaults to in-memory
-repositories and queues for local development. Commented lines show the above
-cluster configuration ready to be enabled.
+repositories and queues for local development. Uncommenting the DSN lines above
+enables Neo4j and Kafka integrations respectively.
 
 ```
 # 기본값으로 실행
@@ -277,8 +275,8 @@ qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
-``--config`` 옵션을 생략하면 기본값으로 메모리 레포지토리와 큐가 사용된다. 샘플
-파일에는 모든 필드를 주석과 함께 설명한다.
+``--config`` 옵션을 생략하면 DSN이 제공되지 않으므로 메모리 레포지토리와 큐가
+사용된다. 샘플 파일에는 모든 필드를 주석과 함께 설명한다.
 
 Available flags:
 

@@ -3,11 +3,9 @@ from qmtl.dagmanager.config import DagManagerConfig
 
 def test_dagmanager_config_custom_values() -> None:
     cfg = DagManagerConfig(
-        repo_backend="neo4j",
         neo4j_dsn="bolt://db:7687",
         neo4j_user="neo4j",
         neo4j_password="pw",
-        queue_backend="kafka",
         kafka_dsn="localhost:9092",
         kafka_breaker_threshold=5,
         kafka_breaker_timeout=2.5,
@@ -24,8 +22,8 @@ def test_dagmanager_config_custom_values() -> None:
 
 def test_dagmanager_config_defaults() -> None:
     cfg = DagManagerConfig()
-    assert cfg.repo_backend == "memory"
-    assert cfg.queue_backend == "memory"
+    assert cfg.neo4j_dsn is None
+    assert cfg.kafka_dsn is None
     assert cfg.kafka_breaker_threshold == 3
     assert cfg.kafka_breaker_timeout == 60.0
     assert cfg.neo4j_breaker_threshold == 3
