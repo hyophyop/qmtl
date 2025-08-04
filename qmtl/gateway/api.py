@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
+import grpc
 
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
@@ -300,7 +301,10 @@ def create_app(
     ) -> dict:
         mode = match_mode or match
         tag_list = [t for t in tags.split(",") if t]
-        queues = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
+        try:
+            queues = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
+        except grpc.RpcError as e:
+            raise HTTPException(status_code=503, detail="dag manager unavailable") from e
         return {"queues": queues}
 
     @app.get("/queues/watch")

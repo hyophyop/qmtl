@@ -68,7 +68,7 @@ def make_health_stub(total_failures: int = 0):
 
 @pytest.mark.asyncio
 async def test_breaker_opens_and_resets(monkeypatch):
-    DiffStub = make_diff_stub(total_failures=10)
+    DiffStub = make_diff_stub(total_failures=2)
     TagStub = make_tag_stub()
     HealthStub = make_health_stub()
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", DiffStub)
