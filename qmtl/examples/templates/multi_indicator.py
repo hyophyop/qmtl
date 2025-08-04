@@ -32,7 +32,7 @@ class MultiIndicatorStrategy(Strategy):
         slow_ema = ema(price, period=20)
         # Relative strength index from the same price history
         rsi_node = rsi(price, period=14)
-        # Register all nodes so the DAG manager can schedule them
+        # Register all nodes so the DAG Manager can schedule them
         self.add_nodes([price, fast_ema, slow_ema, rsi_node])
 
 

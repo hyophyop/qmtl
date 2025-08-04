@@ -8,8 +8,8 @@ def main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("gw", help="Gateway CLI")
-    sub.add_parser("dagmanager", help="DAG manager admin CLI")
-    sub.add_parser("dagmanager-server", help="Run DAG manager servers")
+    sub.add_parser("dagmanager", help="DAG Manager admin CLI")
+    sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
     sub.add_parser("sdk", help="Run strategy via SDK")
     p_init = sub.add_parser(
         "init",

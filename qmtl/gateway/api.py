@@ -129,8 +129,8 @@ def create_app(
         else:
             raise ValueError(f"Unsupported database backend: {database_backend}")
     fsm = StrategyFSM(redis=redis_conn, database=database_obj)
-    dag_manager = dag_client or DagManagerClient("127.0.0.1:50051")
-    degradation = DegradationManager(redis_conn, database_obj, dag_manager)
+    dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
+    degradation = DegradationManager(redis_conn, database_obj, dagmanager)
     manager = StrategyManager(
         redis=redis_conn,
         database=database_obj,
@@ -144,8 +144,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
-        if hasattr(dag_manager, "close"):
-            await dag_manager.close()
+        if hasattr(dagmanager, "close"):
+            await dagmanager.close()
         db_obj = getattr(app.state, "database", None)
         if db_obj is not None and hasattr(db_obj, "close"):
             try:
@@ -172,14 +172,14 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        health_data = await gateway_health(redis_conn, database_obj, dag_manager)
+        health_data = await gateway_health(redis_conn, database_obj, dagmanager)
         health_data["degrade_level"] = degradation.level.name
         return health_data
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
-        return await gateway_health(redis_conn, database_obj, dag_manager)
+        return await gateway_health(redis_conn, database_obj, dagmanager)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
@@ -230,7 +230,7 @@ def create_app(
                 match_mode = node.get("match_mode", "any")
                 node_ids.append(node["node_id"])
                 queries.append(
-                    dag_manager.get_queues_by_tag(tags, interval, match_mode)
+                    dagmanager.get_queues_by_tag(tags, interval, match_mode)
                 )
 
         results = []
@@ -257,7 +257,7 @@ def create_app(
 
     @app.post("/callbacks/dag-event", status_code=status.HTTP_202_ACCEPTED)
     async def dag_event(event: dict) -> dict:
-        """Handle DAG manager callbacks."""
+        """Handle DAG Manager callbacks."""
         event_type = event.get("type")
         data = event.get("data", {}) if isinstance(event.get("data"), dict) else {}
         if event_type == "queue_update":
@@ -300,7 +300,7 @@ def create_app(
     ) -> dict:
         mode = match_mode or match
         tag_list = [t for t in tags.split(",") if t]
-        queues = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
+        queues = await dagmanager.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
 
     @app.get("/queues/watch")
@@ -316,7 +316,7 @@ def create_app(
 
         async def streamer():
             try:
-                initial = await dag_manager.get_queues_by_tag(tag_list, interval, mode.value)
+                initial = await dagmanager.get_queues_by_tag(tag_list, interval, mode.value)
             except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
                 # It's good practice to log this error for observability
                 # import logging

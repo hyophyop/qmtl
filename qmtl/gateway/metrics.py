@@ -24,19 +24,19 @@ lost_requests_total = Counter(
 
 dagclient_breaker_state = Gauge(
     "dagclient_breaker_state",
-    "DAG manager circuit breaker state (1=open, 0=closed)",
+    "DAG Manager circuit breaker state (1=open, 0=closed)",
     registry=global_registry,
 )
 
 dagclient_breaker_failures = Gauge(
     "dagclient_breaker_failures",
-    "Consecutive failures recorded by the DAG manager circuit breaker",
+    "Consecutive failures recorded by the DAG Manager circuit breaker",
     registry=global_registry,
 )
 
 dagclient_breaker_open_total = Gauge(
     "dagclient_breaker_open_total",
-    "Number of times the DAG manager client breaker opened",
+    "Number of times the DAG Manager client breaker opened",
     registry=global_registry,
 )
 

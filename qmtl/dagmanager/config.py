@@ -9,7 +9,7 @@ import yaml
 
 @dataclass
 class DagManagerConfig:
-    """Configuration for DAG manager server."""
+    """Configuration for DAG Manager server."""
     neo4j_dsn: Optional[str] = None
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
@@ -39,7 +39,7 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         logger.error("Unable to open configuration file %s: %s", path, exc)
         raise
     if not isinstance(data, dict):
-        raise TypeError("DagManager config must be a mapping")
+        raise TypeError("DAG Manager config must be a mapping")
     # Breaker timeouts are deprecated; reset breakers manually on success.
     data.pop("dagclient_breaker_timeout", None)
     data.pop("kafka_breaker_timeout", None)

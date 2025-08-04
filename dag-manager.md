@@ -1,4 +1,4 @@
-# QMTL DAG‑Manager — 상세 설계서 (Extended Edition)
+# QMTL DAG Manager — 상세 설계서 (Extended Edition)
 
 > **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
 
@@ -89,7 +89,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 ---
 
-### 2‑A. Gateway ↔ DAG‑Mgr Interface (확장)
+### 2‑A. Gateway ↔ DAG Manager Interface (확장)
 
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
@@ -135,7 +135,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 | # | 시나리오                       | 요약                                                                                     |
 | - | -------------------------- | -------------------------------------------------------------------------------------- |
-| 4 | **Sentinel Traffic Shift** | Ops → `/callbacks/sentinel-traffic` (weight=10→50). DAG‑Mgr 업데이트 & Gateway 라우팅 테이블 변경. |
+| 4 | **Sentinel Traffic Shift** | Ops → `/callbacks/sentinel-traffic` (weight=10→50). DAG Manager 업데이트 & Gateway 라우팅 테이블 변경. |
 | 5 | **RedoDiff for Hotfix**    | 버그 수정 코드 빠르게 패치 → `RedoDiff` gRPC 요청 → 새 큐 vX.Y.Z‑hotfix 생성 후 스왑                       |
 
 ---
@@ -143,7 +143,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ```mermaid
 sequenceDiagram
     participant G as Gateway
-    participant D as DAG‑Mgr
+    participant D as DAG Manager
     Note over G,D: Canary traffic 10% → 50%
     G->>D: /callbacks/sentinel-traffic weight=0.5
     D-->>G: 202 OK

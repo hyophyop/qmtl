@@ -7,7 +7,7 @@ if TYPE_CHECKING:  # pragma: no cover - optional import for typing
 
 
 def get_health(driver: "Driver" | None = None) -> dict[str, str]:
-    """Return health information about DAG manager and dependencies."""
+    """Return health information about DAG Manager and dependencies."""
     neo4j_status = "unknown"
     if driver is not None:
         try:
@@ -19,5 +19,5 @@ def get_health(driver: "Driver" | None = None) -> dict[str, str]:
     return {
         "status": "ok" if neo4j_status == "ok" else "degraded",
         "neo4j": neo4j_status,
-        "dag_manager": "running",
+        "dagmanager": "running",
     }
