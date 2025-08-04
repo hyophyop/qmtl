@@ -23,7 +23,7 @@ from qmtl.indicators import (
     supertrend,
     ichimoku_cloud,
     kalman_trend,
-    rough_bergami,
+    rough_bergomi,
     stoch_rsi,
     kdj,
 )
@@ -178,9 +178,9 @@ def test_kalman_trend_compute():
     assert isinstance(result, float)
 
 
-def test_rough_bergami_compute():
+def test_rough_bergomi_compute():
     src = SourceNode(interval="1s", period=4, config={"id": "src"})
-    node = rough_bergami(src, window=3)
+    node = rough_bergomi(src, window=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 1), (3, 2)]}}
     view = CacheView(data)
     assert round(node.compute_fn(view), 4) > 0
