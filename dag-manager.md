@@ -9,12 +9,12 @@
 | 핵심 책임                               | 세부 설명                                                | 관련 섹션        |
 | ----------------------------------- | ---------------------------------------------------- | ------------ |
 | **Graph DB Single Source of Truth** | Neo4j Property Graph → 모든 전략 노드·토픽·버전 메타가 단일 그래프에 영속 | §1 데이터 모델    |
-| **DAG Diff 엔진**                     | 제출 DAG와 Neo4j 그래프 간 구조·해시 비교 → 재사용/신규 노드 판정·큐 매핑     | §2 Diff 알고리즘 |
-| **큐 오케스트레이션**                       | Idempotent 토픽 생성·TTL·GC·버전 롤아웃, ref‑count 기반 제거      | §3, §4       |
+| **DAG Diff 엔진**                     | 제출 DAG와 Neo4j 그래프 간 구조·해시 비교 → 재사용/신규 노드 판정·토픽 매핑     | §2 Diff 알고리즘 |
+| **토픽 오케스트레이션**                       | Idempotent 토픽 생성·TTL·GC·버전 롤아웃, ref‑count 기반 제거      | §3, §4       |
 | **버전 관리·롤백**                        | Version Sentinel 노드로 그래프 버전 경계 표시 → 카나리아 트래픽 스플릿·롤백  | §2, §3‑A     |
 | **SRE Friendly**                    | gRPC/HTTP 인터페이스, 메트릭·로그·Alert 통합, Admin CLI          | §6, §10      |
 
-> **설계 철학:** “계산 그래프 + 메시징 큐”를 **불변 ID**로 연결해 재현성·롤백 가능성을 최우선. 모든 변형은 새 노드·큐로 분기하고, 레거시는 TTL+GC로 안전 제거.
+> **설계 철학:** “계산 그래프 + 메시징 큐”를 **불변 ID**로 연결해 재현성·롤백 가능성을 최우선. 모든 변형은 새 노드·토픽으로 분기하고, 레거시는 TTL+GC로 안전 제거.
 > SDK 측에서 실행되는 모든 `compute_fn`은 `NodeCache.view()`가 반환하는 read-only `CacheView` 한 개만을 인자로 받는다.
 
 ---
@@ -93,7 +93,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
-| G→D | gRPC  | `DiffService.DiffRequest`     | DAG             | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 큐 매핑      |
+| G→D | gRPC  | `DiffService.DiffRequest`     | DAG             | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 토픽 매핑      |
 | D→G | HTTP  | `/callbacks/dag-event`        | queue\_added/gc | 202                | backoff 1→8 s ×3   | 큐 이벤트            |
 | G→D | gRPC  | `AdminService.Cleanup`        | strategy\_id    | Ack                | 1 retry            | ref‑count decref |
 | G→D | gRPC  | `AdminService.GetQueueStats`  | filter          | Stats              | 300 ms             | 모니터링             |
@@ -108,7 +108,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 `/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmanager_active_version_weight{version="<id>"}`로 노출된다.
 ---
 
-## 3. 큐 생성 & 명명 규칙 (확장)
+## 3. 토픽 생성 & 명명 규칙 (확장)
 
 ### 3.1 토픽 이름 컨벤션
 
@@ -118,10 +118,11 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 * **dry‑run** 플래그가 붙으면 `*_sim` 접미사.
 * `short_hash = first 6 code_hash` → 충돌 시 길이+2.
+* 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
 
 ### 3.2 QoS & 레플리카 설정
 
-| 큐 타입        | partitions | rep\_factor | retention | compaction |
+| 토픽 타입        | partitions | rep\_factor | retention | compaction |
 | ----------- | ---------- | ----------- | --------- | ---------- |
 | Raw (price) | 3          | 3           | 7d        | none       |
 | Indicator   | 1          | 2           | 30d       | delete     |
@@ -136,7 +137,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | # | 시나리오                       | 요약                                                                                     |
 | - | -------------------------- | -------------------------------------------------------------------------------------- |
 | 4 | **Sentinel Traffic Shift** | Ops → `/callbacks/sentinel-traffic` (weight=10→50). DAG Manager 업데이트 & Gateway 라우팅 테이블 변경. |
-| 5 | **RedoDiff for Hotfix**    | 버그 수정 코드 빠르게 패치 → `RedoDiff` gRPC 요청 → 새 큐 vX.Y.Z‑hotfix 생성 후 스왑                       |
+| 5 | **RedoDiff for Hotfix**    | 버그 수정 코드 빠르게 패치 → `RedoDiff` gRPC 요청 → 새 토픽 vX.Y.Z‑hotfix 생성 후 스왑                       |
 
 ---
 
