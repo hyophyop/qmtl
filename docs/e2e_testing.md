@@ -33,13 +33,13 @@ This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and `qm
 Execute the end-to-end tests within the uv environment:
 
 ```bash
-uv run -- pytest tests/e2e
+uv run -m pytest tests/e2e
 ```
 
 To execute the entire test suite run:
 
 ```bash
-uv run pytest -q tests
+uv run -m pytest -q tests
 ```
 
 ## Backfills
