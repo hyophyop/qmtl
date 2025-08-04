@@ -15,14 +15,14 @@ def test_server_defaults(monkeypatch, tmp_path):
     captured = {}
 
     async def fake_run(config):
-        captured["repo"] = config.repo_backend
-        captured["queue"] = config.queue_backend
+        captured["neo4j"] = config.neo4j_dsn
+        captured["kafka"] = config.kafka_dsn
 
     monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
     monkeypatch.chdir(tmp_path)
     main([])
-    assert captured["repo"] == "memory"
-    assert captured["queue"] == "memory"
+    assert captured["neo4j"] is None
+    assert captured["kafka"] is None
 
 
 def test_server_config_file(monkeypatch, tmp_path):

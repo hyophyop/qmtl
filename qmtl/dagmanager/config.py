@@ -9,14 +9,11 @@ import yaml
 @dataclass
 class DagManagerConfig:
     """Configuration for DAG manager server."""
-
-    repo_backend: str = "memory"
-    neo4j_dsn: str = "bolt://localhost:7687"
+    neo4j_dsn: Optional[str] = None
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
     memory_repo_path: str = "memrepo.gpickle"
-    queue_backend: str = "memory"
-    kafka_dsn: str = "localhost:9092"
+    kafka_dsn: Optional[str] = None
     kafka_breaker_threshold: int = 3
     kafka_breaker_timeout: float = 60.0
     neo4j_breaker_threshold: int = 3
