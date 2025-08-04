@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from qmtl.kafka import Producer
@@ -25,7 +27,7 @@ class Pipeline:
                 node.kafka_topic, {"interval": interval, "timestamp": timestamp, "payload": payload}
             )
 
-    def _propagate(
+    async def _propagate(
         self,
         node: Node,
         interval: int,
@@ -34,26 +36,32 @@ class Pipeline:
         *,
         on_missing: str = "skip",
     ) -> None:
-        for child in self.downstream.get(node, []):
-            result = Runner.feed_queue_data(
-                child,
-                node.node_id,
-                interval,
-                timestamp,
-                payload,
-                on_missing=on_missing,
-            )
-            out = payload if not child.execute or child.compute_fn is None else result
-            if out is None:
+        queue: deque[tuple[Node, int, Any]] = deque([(node, interval, payload)])
+        while queue:
+            parent, cur_interval, cur_payload = queue.popleft()
+            children = self.downstream.get(parent, [])
+            if not children:
                 continue
-            self._publish(child, child.interval or interval, timestamp, out)
-            self._propagate(
-                child,
-                child.interval or interval,
-                timestamp,
-                out,
-                on_missing=on_missing,
-            )
+            tasks = [
+                asyncio.to_thread(
+                    Runner.feed_queue_data,
+                    child,
+                    parent.node_id,
+                    cur_interval,
+                    timestamp,
+                    cur_payload,
+                    on_missing=on_missing,
+                )
+                for child in children
+            ]
+            results = await asyncio.gather(*tasks)
+            for child, result in zip(children, results):
+                out = cur_payload if not child.execute or child.compute_fn is None else result
+                if out is None:
+                    continue
+                child_interval = child.interval or cur_interval
+                self._publish(child, child_interval, timestamp, out)
+                queue.append((child, child_interval, out))
 
     # ------------------------------------------------------------------
     def feed(
@@ -63,4 +71,6 @@ class Pipeline:
         interval = node.interval or 0
         node.feed(node.node_id, interval, timestamp, payload)
         self._publish(node, interval, timestamp, payload)
-        self._propagate(node, interval, timestamp, payload, on_missing=on_missing)
+        asyncio.run(
+            self._propagate(node, interval, timestamp, payload, on_missing=on_missing)
+        )
