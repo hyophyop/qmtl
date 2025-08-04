@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import logging
 import pytest
 import yaml
 
@@ -59,11 +60,26 @@ def test_load_unified_config_missing_file() -> None:
         load_config("missing.yml")
 
 
+def test_load_unified_config_directory(tmp_path: Path) -> None:
+    d = tmp_path / "dir"
+    d.mkdir()
+    with pytest.raises(OSError):
+        load_config(str(d))
+
+
 def test_load_unified_config_malformed(tmp_path: Path) -> None:
     config_file = tmp_path / "bad.yml"
     config_file.write_text("- 1")
     with pytest.raises(TypeError):
         load_config(str(config_file))
+
+
+def test_load_unified_config_yaml_error(tmp_path: Path, caplog) -> None:
+    config_file = tmp_path / "bad.yml"
+    config_file.write_text(":\n  -")
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(ValueError, match="Failed to parse configuration file"):
+            load_config(str(config_file))
 
 
 def test_load_unified_config_defaults(tmp_path: Path) -> None:

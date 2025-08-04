@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import logging
 import pytest
 import yaml
 
@@ -47,11 +48,26 @@ def test_load_gateway_config_missing_file():
         load_gateway_config("nope.yml")
 
 
+def test_load_gateway_config_directory(tmp_path: Path) -> None:
+    d = tmp_path / "dir"
+    d.mkdir()
+    with pytest.raises(OSError):
+        load_gateway_config(str(d))
+
+
 def test_load_gateway_config_malformed(tmp_path: Path):
     p = tmp_path / "bad.yml"
     p.write_text("- 1")
     with pytest.raises(TypeError):
         load_gateway_config(str(p))
+
+
+def test_load_gateway_config_yaml_error(tmp_path: Path, caplog):
+    p = tmp_path / "bad_syntax.yml"
+    p.write_text(":\n  -")
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(ValueError, match="Failed to parse configuration file"):
+            load_gateway_config(str(p))
 
 
 def test_gateway_config_defaults() -> None:
