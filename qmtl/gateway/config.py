@@ -15,7 +15,6 @@ class GatewayConfig:
     redis_dsn: Optional[str] = None
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
-    dagclient_breaker_threshold: int = 3
 
 
 def load_gateway_config(path: str) -> GatewayConfig:
@@ -33,9 +32,5 @@ def load_gateway_config(path: str) -> GatewayConfig:
         raise
     if not isinstance(data, dict):
         raise TypeError("Gateway config must be a mapping")
-    # Breaker timeouts are deprecated; reset breakers manually on success.
-    data.pop("dagclient_breaker_timeout", None)
-    data.pop("kafka_breaker_timeout", None)
-    data.pop("neo4j_breaker_timeout", None)
     cfg = GatewayConfig(**data)
     return cfg

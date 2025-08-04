@@ -1,5 +1,5 @@
-import json
 from pathlib import Path
+import json
 import logging
 import pytest
 import yaml
@@ -11,8 +11,6 @@ def test_load_unified_config_yaml(tmp_path: Path) -> None:
     data = {
         "gateway": {
             "redis_dsn": "redis://test:6379",
-            "dagclient_breaker_threshold": 4,
-            "dagclient_breaker_timeout": 1.0,
         },
         "dagmanager": {
             "neo4j_dsn": "bolt://db:7687",
@@ -22,8 +20,6 @@ def test_load_unified_config_yaml(tmp_path: Path) -> None:
     config_file.write_text(yaml.safe_dump(data))
     config = load_config(str(config_file))
     assert config.gateway.redis_dsn == data["gateway"]["redis_dsn"]
-    assert config.gateway.dagclient_breaker_threshold == 4
-    assert not hasattr(config.gateway, "dagclient_breaker_timeout")
     assert config.dagmanager.neo4j_dsn == data["dagmanager"]["neo4j_dsn"]
 
 
@@ -31,8 +27,6 @@ def test_load_unified_config_json(tmp_path: Path) -> None:
     data = {
         "gateway": {
             "host": "127.0.0.1",
-            "dagclient_breaker_threshold": 3,
-            "dagclient_breaker_timeout": 5.0,
         },
         "dagmanager": {
             "grpc_port": 1234,
