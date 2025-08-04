@@ -67,8 +67,13 @@ class DagManagerClient:
         except Exception:
             return False
 
-    async def diff(self, strategy_id: str, dag_json: str) -> dagmanager_pb2.DiffChunk:
-        """Call ``DiffService.Diff`` with retries and collect the stream."""
+    async def diff(
+        self, strategy_id: str, dag_json: str
+    ) -> dagmanager_pb2.DiffChunk | None:
+        """Call ``DiffService.Diff`` with retries and collect the stream.
+
+        Returns ``None`` when the request ultimately fails or the circuit is
+        open."""
         request = dagmanager_pb2.DiffRequest(strategy_id=strategy_id, dag_json=dag_json)
 
         @self._breaker
@@ -96,9 +101,15 @@ class DagManagerClient:
                     backoff = min(backoff * 2, 4)
             raise RuntimeError("unreachable")
 
-        result = await _call()
-        gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
-        return result
+        try:
+            result = await _call()
+        except Exception:
+            gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            return None
+        else:
+            self._breaker.reset()
+            gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            return result
 
     async def get_queues_by_tag(
         self, tags: list[str], interval: int, match_mode: str = "any"
@@ -138,9 +149,15 @@ class DagManagerClient:
                     backoff = min(backoff * 2, 4)
             return []
 
-        result = await _call()
-        gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
-        return result
+        try:
+            result = await _call()
+        except Exception:
+            gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            return []
+        else:
+            self._breaker.reset()
+            gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            return result
 
 
 __all__ = ["DagManagerClient"]
