@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Monitoring and recovery actions for DAG-Manager."""
+"""Monitoring and recovery actions for DAG Manager."""
 
 from dataclasses import dataclass
 from enum import Enum, auto

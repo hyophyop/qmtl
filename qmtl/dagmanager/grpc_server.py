@@ -240,7 +240,7 @@ class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
         info = get_health(self._driver)
         return dagmanager_pb2.StatusReply(
             neo4j=info.get("neo4j", "unknown"),
-            state=info.get("dag_manager", "unknown"),
+            state=info.get("dagmanager", "unknown"),
         )
 
 

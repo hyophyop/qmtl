@@ -53,7 +53,7 @@ def test_gateway_health(fake_redis):
         data = resp.json()
         assert data["redis"] == "ok"
         assert data["postgres"] == "ok"
-        assert data["dag_manager"] == "ok"
+        assert data["dagmanager"] == "ok"
 
 
 def test_dagmanager_http_health():

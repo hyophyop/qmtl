@@ -71,7 +71,7 @@ async def get_health(
             "status": overall,
             "redis": redis_status,
             "postgres": postgres_status,
-            "dag_manager": dag_status,
+            "dagmanager": dag_status,
         }
         _STATUS_CACHE = result
         _STATUS_CACHE_TS = now

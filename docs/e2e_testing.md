@@ -26,7 +26,7 @@ Start all services using Docker Compose:
 docker compose -f tests/docker-compose.e2e.yml up -d
 ```
 
-This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and `qmtl dagmanager` containers. The gateway exposes port `8000` and the DAG‑Manager gRPC endpoint is available on `50051`.
+This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and `qmtl dagmanager` containers. The gateway exposes port `8000` and the DAG Manager gRPC endpoint is available on `50051`.
 
 ## Running the tests
 
