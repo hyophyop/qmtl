@@ -135,6 +135,10 @@ Run all unit and integration tests with:
 uv run -- pytest
 ```
 
+## Monitoring
+
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
+
 ## Running Services
 
 Start the Gateway and DAG manager using the combined configuration file or rely
