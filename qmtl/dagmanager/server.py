@@ -76,6 +76,7 @@ async def _run(cfg: DagManagerConfig) -> None:
         from .diff_service import KafkaQueueManager
 
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
+        # Manual reset of the breaker is expected after successful operations
         breaker = AsyncCircuitBreaker(
             max_failures=cfg.kafka_breaker_threshold,
         )
@@ -85,6 +86,7 @@ async def _run(cfg: DagManagerConfig) -> None:
         from .diff_service import KafkaQueueManager
 
         admin_client = InMemoryAdminClient()
+        # Manual reset of the breaker is expected after successful operations
         breaker = AsyncCircuitBreaker(
             max_failures=cfg.kafka_breaker_threshold,
         )

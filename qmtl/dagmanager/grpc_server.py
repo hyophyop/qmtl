@@ -247,6 +247,7 @@ def serve(
 ) -> tuple[grpc.aio.Server, int]:
     admin = None
     if kafka_admin_client is not None:
+        # Breaker uses manual reset; callers must reset after successful ops
         breaker = AsyncCircuitBreaker(
             max_failures=breaker_threshold,
         )
