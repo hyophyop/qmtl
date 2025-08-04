@@ -67,7 +67,7 @@ async def test_completion_emits_event(monkeypatch):
         return httpx.Response(202)
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.completion.post_with_backoff",
+        "qmtl.dagmanager.completion.post",
         fake_post,
     )
 

@@ -8,7 +8,7 @@ from typing import Protocol
 import httpx
 
 from ..common import AsyncCircuitBreaker
-from .callbacks import post_with_backoff
+from .callbacks import post
 
 
 class PagerDutySender(Protocol):
@@ -32,7 +32,7 @@ class PagerDutyClient:
 
     async def send(self, message: str) -> None:  # pragma: no cover - simple wrapper
         async with httpx.AsyncClient() as client:
-            await post_with_backoff(
+            await post(
                 self.url,
                 {"text": message},
                 client=client,
@@ -47,7 +47,7 @@ class SlackClient:
 
     async def send(self, message: str) -> None:  # pragma: no cover - simple wrapper
         async with httpx.AsyncClient() as client:
-            await post_with_backoff(
+            await post(
                 self.url,
                 {"text": message},
                 client=client,

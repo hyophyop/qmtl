@@ -18,7 +18,7 @@ from .diff_service import (
 )
 from .kafka_admin import KafkaAdmin
 from qmtl.common import AsyncCircuitBreaker
-from .callbacks import post_with_backoff
+from .callbacks import post
 from ..common.cloudevents import format_event
 from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
@@ -100,7 +100,14 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                                     "match_mode": "any",
                                 },
                             )
-                            await post_with_backoff(self._callback_url, event)
+                            for attempt in range(3):
+                                try:
+                                    await post(self._callback_url, event)
+                                    break
+                                except Exception:
+                                    if attempt == 2:
+                                        raise
+                                    await asyncio.sleep(2**attempt)
                 yield pb
         finally:
             fut.cancel()
@@ -155,7 +162,14 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
                                 "match_mode": "any",
                             },
                         )
-                        await post_with_backoff(self._callback_url, event)
+                        for attempt in range(3):
+                            try:
+                                await post(self._callback_url, event)
+                                break
+                            except Exception:
+                                if attempt == 2:
+                                    raise
+                                await asyncio.sleep(2**attempt)
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(

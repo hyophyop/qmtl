@@ -5,7 +5,9 @@ from typing import Optional, TYPE_CHECKING
 from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 
-from .callbacks import post_with_backoff
+import asyncio
+
+from .callbacks import post
 from ..common.cloudevents import format_event
 from . import metrics
 from .dagmanager_health import get_health
@@ -53,7 +55,14 @@ def create_app(
                 "sentinel_weight",
                 {"sentinel_id": update.version, "weight": update.weight},
             )
-            await post_with_backoff(gateway_url, event)
+            for attempt in range(3):
+                try:
+                    await post(gateway_url, event)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(2**attempt)
         return {"version": update.version, "weight": update.weight}
 
     return app
