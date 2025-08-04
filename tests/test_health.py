@@ -40,7 +40,7 @@ class FakeDB(PostgresDatabase):
         return True
 
 
-def test_gateway_status(fake_redis):
+def test_gateway_health(fake_redis):
     redis_client = fake_redis
     db = FakeDB()
     with TestClient(
@@ -54,14 +54,14 @@ def test_gateway_status(fake_redis):
         assert data["dag_manager"] == "ok"
 
 
-def test_dagmanager_http_status():
+def test_dagmanager_http_health():
     with TestClient(dag_http_create_app()) as client:
         resp = client.get("/status")
         assert resp.status_code == 200
         assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
 
 
-def test_dagmanager_api_status():
+def test_dagmanager_api_health():
     with TestClient(dag_api_create_app(DummyGC())) as client:
         resp = client.get("/status")
         assert resp.status_code == 200
@@ -69,7 +69,7 @@ def test_dagmanager_api_status():
 
 
 @pytest.mark.asyncio
-async def test_grpc_status():
+async def test_grpc_health():
     from qmtl.dagmanager.grpc_server import serve
 
     class FakeDriver:

@@ -22,7 +22,7 @@ from . import metrics as gw_metrics
 from .degradation import DegradationManager, DegradationLevel
 from .watch import QueueWatchHub
 from .ws import WebSocketHub
-from .status import get_status as gateway_status
+from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 
 logger = logging.getLogger(__name__)
@@ -171,14 +171,14 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        status_data = await gateway_status(redis_conn, database_obj, dag_manager)
-        status_data["degrade_level"] = degradation.level.name
-        return status_data
+        health_data = await gateway_health(redis_conn, database_obj, dag_manager)
+        health_data["degrade_level"] = degradation.level.name
+        return health_data
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
-        return await gateway_status(redis_conn, database_obj, dag_manager)
+        return await gateway_health(redis_conn, database_obj, dag_manager)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
