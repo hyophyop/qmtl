@@ -19,6 +19,7 @@ from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .util import parse_interval, parse_period
 from . import arrow_cache
+from . import metrics as sdk_metrics
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -626,15 +627,46 @@ class StreamInput(SourceNode):
     def event_recorder(self, value: "EventRecorder" | None) -> None:
         raise AttributeError("event_recorder is read-only and must be provided via __init__")
 
-    async def load_history(self, start: int, end: int) -> None:
+    async def load_history(self, start: int, end: int, *, max_retries: int = 3) -> None:
         """Load historical data if a provider was configured."""
         if not self.history_provider or self.interval is None:
             return
         from .backfill_engine import BackfillEngine
 
-        engine = BackfillEngine(self.history_provider)
-        engine.submit(self, start, end)
-        await engine.wait()
+        attempts = 0
+        while True:
+            engine = BackfillEngine(self.history_provider)
+            engine.submit(self, start, end)
+            try:
+                await engine.wait()
+                return
+            except Exception:
+                attempts += 1
+                sdk_metrics.observe_backfill_retry(self.node_id, self.interval)
+                logger.info(
+                    "backfill.retry",
+                    extra={
+                        "node_id": self.node_id,
+                        "interval": self.interval,
+                        "attempt": attempts,
+                    },
+                )
+                if attempts > max_retries:
+                    sdk_metrics.observe_backfill_failure(self.node_id, self.interval)
+                    logger.error(
+                        "backfill.failed",
+                        extra={
+                            "node_id": self.node_id,
+                            "interval": self.interval,
+                            "attempts": attempts,
+                        },
+                    )
+                    raise
+                sdk_metrics.backfill_jobs_in_progress.dec()
+                sdk_metrics.backfill_jobs_in_progress._val = (
+                    sdk_metrics.backfill_jobs_in_progress._value.get()
+                )
+                await asyncio.sleep(0.1 * attempts)
 
 
 class TagQueryNode(SourceNode):

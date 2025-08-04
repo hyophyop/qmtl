@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 class BackfillEngine:
     """Run backfill jobs concurrently using ``asyncio`` tasks."""
 
-    def __init__(self, source: HistoryProvider, *, max_retries: int = 3) -> None:
+    def __init__(self, source: HistoryProvider) -> None:
         self.source = source
-        self.max_retries = max_retries
         self._tasks: set[asyncio.Task] = set()
 
     # --------------------------------------------------------------
@@ -33,32 +32,14 @@ class BackfillEngine:
             },
         )
 
-        attempts = 0
-        while True:
-            try:
-                df = await self.source.fetch(
-                    start,
-                    end,
-                    node_id=node.node_id,
-                    interval=node.interval,
-                )
-                if df is None:
-                    sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)
-                    logger.info(
-                        "backfill.complete",
-                        extra={
-                            "node_id": node.node_id,
-                            "interval": node.interval,
-                            "start": start,
-                            "end": end,
-                        },
-                    )
-                    return
-                items = [
-                    (int(row.get("ts", 0)), row.to_dict())
-                    for _, row in df.iterrows()
-                ]
-                node.cache.backfill_bulk(node.node_id, node.interval, items)
+        try:
+            df = await self.source.fetch(
+                start,
+                end,
+                node_id=node.node_id,
+                interval=node.interval,
+            )
+            if df is None:
                 sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)
                 logger.info(
                     "backfill.complete",
@@ -70,29 +51,24 @@ class BackfillEngine:
                     },
                 )
                 return
-            except Exception:
-                attempts += 1
-                sdk_metrics.observe_backfill_retry(node.node_id, node.interval)
-                logger.info(
-                    "backfill.retry",
-                    extra={
-                        "node_id": node.node_id,
-                        "interval": node.interval,
-                        "attempt": attempts,
-                    },
-                )
-                if attempts > self.max_retries:
-                    sdk_metrics.observe_backfill_failure(node.node_id, node.interval)
-                    logger.error(
-                        "backfill.failed",
-                        extra={
-                            "node_id": node.node_id,
-                            "interval": node.interval,
-                            "attempts": attempts,
-                        },
-                    )
-                    raise
-                await asyncio.sleep(0.1 * attempts)
+            items = [
+                (int(row.get("ts", 0)), row.to_dict())
+                for _, row in df.iterrows()
+            ]
+            node.cache.backfill_bulk(node.node_id, node.interval, items)
+            sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)
+            logger.info(
+                "backfill.complete",
+                extra={
+                    "node_id": node.node_id,
+                    "interval": node.interval,
+                    "start": start,
+                    "end": end,
+                },
+            )
+        except Exception:
+            # Caller is responsible for retrying and recording failure metrics.
+            raise
 
     # --------------------------------------------------------------
     def submit(self, node: Node, start: int, end: int) -> asyncio.Task:
