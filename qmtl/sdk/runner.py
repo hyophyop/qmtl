@@ -30,6 +30,7 @@ class Runner:
     _ray_available = False
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_cb: AsyncCircuitBreaker | None = None
+    _http_client: httpx.AsyncClient | None = None
 
     @classmethod
     def enable_ray(cls, enable: bool = True) -> None:
@@ -56,6 +57,30 @@ class Runner:
         if cls._gateway_cb is None:
             cls._gateway_cb = AsyncCircuitBreaker(max_failures=3)
         return cls._gateway_cb
+
+    @classmethod
+    def _get_http_client(cls) -> httpx.AsyncClient:
+        if cls._http_client is None:
+            cls._http_client = httpx.AsyncClient()
+        return cls._http_client
+
+    @classmethod
+    async def aclose_http_client(cls) -> None:
+        if cls._http_client is not None:
+            client = cls._http_client
+            cls._http_client = None
+            async_close = getattr(client, "aclose", None)
+            if async_close:
+                await async_close()
+            else:
+                sync_close = getattr(client, "close", None)
+                if sync_close:
+                    sync_close()
+                else:
+                    inner = getattr(client, "_client", None)
+                    inner_close = getattr(inner, "close", None)
+                    if inner_close:
+                        inner_close()
 
     # ------------------------------------------------------------------
 
@@ -89,11 +114,11 @@ class Runner:
         }
         if circuit_breaker is None:
             circuit_breaker = Runner._get_gateway_circuit_breaker()
-        async with httpx.AsyncClient() as client:
-            post_fn = client.post
-            if circuit_breaker is not None:
-                post_fn = circuit_breaker(post_fn)
-            resp = await post_fn(url, json=payload)
+        client = Runner._get_http_client()
+        post_fn = client.post
+        if circuit_breaker is not None:
+            post_fn = circuit_breaker(post_fn)
+        resp = await post_fn(url, json=payload)
         if resp.status_code == 202:
             return resp.json().get("queue_map", {})
         if resp.status_code == 409:

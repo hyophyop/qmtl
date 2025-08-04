@@ -21,17 +21,14 @@ async def test_resolve_and_update(monkeypatch):
         def __init__(self, *a, **k):
             self._client = httpx.Client(transport=transport)
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            self._client.close()
-
         async def get(self, url, params=None):
             request = httpx.Request("GET", url, params=params)
             resp = handler(request)
             resp.request = request
             return resp
+
+        async def aclose(self):
+            self._client.close()
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
@@ -70,17 +67,14 @@ async def test_resolve_handles_empty(monkeypatch):
         def __init__(self, *a, **k):
             self._client = httpx.Client(transport=transport)
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            self._client.close()
-
         async def get(self, url, params=None):
             request = httpx.Request("GET", url, params=params)
             resp = handler(request)
             resp.request = request
             return resp
+
+        async def aclose(self):
+            self._client.close()
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
@@ -89,6 +83,7 @@ async def test_resolve_handles_empty(monkeypatch):
     await manager.resolve_tags()
     assert node.upstreams == []
     assert not node.execute
+    await manager.stop()
 
 
 @pytest.mark.asyncio
