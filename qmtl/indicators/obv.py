@@ -4,15 +4,15 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def obv(close: Node, volume: Node, *, name: str | None = None, window: int | None = None) -> Node:
-    """Return a Node computing OBV over ``window`` entries if given."""
+def obv(close: Node, volume: Node, *, name: str | None = None, period: int | None = None) -> Node:
+    """Return a Node computing OBV over ``period`` entries if given."""
 
     def compute(view: CacheView):
         closes = list(view[close][close.interval])
         vols = list(view[volume][volume.interval])
-        if window is not None:
-            closes = closes[-(window + 1):]
-            vols = vols[-(window + 1):]
+        if period is not None:
+            closes = closes[-(period + 1):]
+            vols = vols[-(period + 1):]
         if len(closes) < 2 or len(vols) < 2:
             return None
         total = 0.0
@@ -31,5 +31,5 @@ def obv(close: Node, volume: Node, *, name: str | None = None, window: int | Non
         compute_fn=compute,
         name=name or "obv",
         interval=close.interval,
-        period=window or 2,
+        period=period or 2,
     )

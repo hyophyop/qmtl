@@ -4,14 +4,14 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def kdj(high: Node, low: Node, close: Node, window: int, *, name: str | None = None) -> Node:
+def kdj(high: Node, low: Node, close: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing a simplified KDJ oscillator."""
 
     def compute(view: CacheView):
-        highs = [v for _, v in view[high][high.interval][-window:]]
-        lows = [v for _, v in view[low][low.interval][-window:]]
+        highs = [v for _, v in view[high][high.interval][-period:]]
+        lows = [v for _, v in view[low][low.interval][-period:]]
         closes = [v for _, v in view[close][close.interval][-1:]]
-        if len(highs) < window or len(lows) < window or not closes:
+        if len(highs) < period or len(lows) < period or not closes:
             return None
         highest = max(highs)
         lowest = min(lows)
@@ -27,5 +27,5 @@ def kdj(high: Node, low: Node, close: Node, window: int, *, name: str | None = N
         compute_fn=compute,
         name=name or "kdj",
         interval=close.interval,
-        period=window,
+        period=period,
     )
