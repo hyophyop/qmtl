@@ -22,7 +22,7 @@ def test_load_gateway_config_yaml(tmp_path: Path) -> None:
     assert config.database_backend == "postgres"
     assert config.database_dsn == data["database_dsn"]
     assert config.dagclient_breaker_threshold == 5
-    assert config.dagclient_breaker_timeout == 2.5
+    assert not hasattr(config, "dagclient_breaker_timeout")
 
 
 def test_load_gateway_config_json(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_load_gateway_config_json(tmp_path: Path) -> None:
     assert config.database_backend == "memory"
     assert config.database_dsn == data["database_dsn"]
     assert config.dagclient_breaker_threshold == 4
-    assert config.dagclient_breaker_timeout == 1.0
+    assert not hasattr(config, "dagclient_breaker_timeout")
 
 
 def test_load_gateway_config_missing_file():
@@ -76,4 +76,4 @@ def test_gateway_config_defaults() -> None:
     assert cfg.database_backend == "sqlite"
     assert cfg.database_dsn == "./qmtl.db"
     assert cfg.dagclient_breaker_threshold == 3
-    assert cfg.dagclient_breaker_timeout == 60.0
+    assert not hasattr(cfg, "dagclient_breaker_timeout")

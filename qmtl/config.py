@@ -54,6 +54,10 @@ def load_config(path: str) -> UnifiedConfig:
     if not isinstance(dm_data, dict):
         raise TypeError("dagmanager section must be a mapping")
 
+    for key in ("dagclient_breaker_timeout", "kafka_breaker_timeout", "neo4j_breaker_timeout"):
+        gw_data.pop(key, None)
+        dm_data.pop(key, None)
+
     gateway_cfg = GatewayConfig(**gw_data)
     dagmanager_cfg = DagManagerConfig(**dm_data)
     return UnifiedConfig(gateway=gateway_cfg, dagmanager=dagmanager_cfg)
