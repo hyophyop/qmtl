@@ -8,15 +8,15 @@ from qmtl.sdk.cache_view import CacheView
 
 def angle(
     source: Node,
-    window: int,
+    period: int,
     *,
     radians: bool = False,
     name: str | None = None,
 ) -> Node:
-    """Return a Node computing the slope angle over ``window`` values."""
+    """Return a Node computing the slope angle over ``period`` values."""
 
     def compute(view: CacheView):
-        values = [v for _, v in view[source][source.interval][-window:]]
+        values = [v for _, v in view[source][source.interval][-period:]]
         if len(values) < 2:
             return None
         n = len(values)
@@ -39,5 +39,5 @@ def angle(
         compute_fn=compute,
         name=name or ("angle_rad" if radians else "angle"),
         interval=source.interval,
-        period=window,
+        period=period,
     )

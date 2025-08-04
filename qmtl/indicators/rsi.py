@@ -4,12 +4,12 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def rsi(source: Node, window: int, *, name: str | None = None) -> Node:
+def rsi(source: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing the RSI."""
 
     def compute(view: CacheView):
-        data = [v for _, v in view[source][source.interval][-(window + 1):]]
-        if len(data) < window + 1:
+        data = [v for _, v in view[source][source.interval][-(period + 1):]]
+        if len(data) < period + 1:
             return None
         gains = []
         losses = []
@@ -19,8 +19,8 @@ def rsi(source: Node, window: int, *, name: str | None = None) -> Node:
                 gains.append(diff)
             else:
                 losses.append(-diff)
-        avg_gain = sum(gains) / window
-        avg_loss = sum(losses) / window
+        avg_gain = sum(gains) / period
+        avg_loss = sum(losses) / period
         if avg_loss == 0:
             return 100.0
         rs = avg_gain / avg_loss
@@ -31,5 +31,5 @@ def rsi(source: Node, window: int, *, name: str | None = None) -> Node:
         compute_fn=compute,
         name=name or "rsi",
         interval=source.interval,
-        period=window + 1,
+        period=period + 1,
     )
