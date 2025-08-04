@@ -76,22 +76,23 @@ gc_last_run_timestamp = Gauge(
 
 # Expose the active traffic weight per version. Guard against duplicate
 # registration when this module is reloaded during tests.
-if "dagmgr_active_version_weight" in global_registry._names_to_collectors:
-    dagmgr_active_version_weight = global_registry._names_to_collectors[
-        "dagmgr_active_version_weight"
+if "dagmanager_active_version_weight" in global_registry._names_to_collectors:
+    dagmanager_active_version_weight = global_registry._names_to_collectors[
+        "dagmanager_active_version_weight"
     ]
 else:
-    dagmgr_active_version_weight = Gauge(
-        "dagmgr_active_version_weight",
+    dagmanager_active_version_weight = Gauge(
+        "dagmanager_active_version_weight",
         "Live traffic weight seen by Gateway for each model version",
         ["version"],
         registry=global_registry,
     )
-dagmgr_active_version_weight._vals = {}  # type: ignore[attr-defined]
+
+dagmanager_active_version_weight._vals = {}  # type: ignore[attr-defined]
 
 def set_active_version_weight(version: str, weight: float) -> None:
-    dagmgr_active_version_weight.labels(version=version).set(weight)
-    dagmgr_active_version_weight._vals[version] = weight  # type: ignore[attr-defined]
+    dagmanager_active_version_weight.labels(version=version).set(weight)
+    dagmanager_active_version_weight._vals[version] = weight  # type: ignore[attr-defined]
 
 
 def observe_diff_duration(duration_ms: float) -> None:
@@ -149,8 +150,8 @@ def reset_metrics() -> None:
     kafka_breaker_open_total._val = 0  # type: ignore[attr-defined]
     gc_last_run_timestamp.set(0)
     gc_last_run_timestamp._val = 0  # type: ignore[attr-defined]
-    if hasattr(dagmgr_active_version_weight, "clear"):
-        dagmgr_active_version_weight.clear()
-    dagmgr_active_version_weight._vals = {}  # type: ignore[attr-defined]
-    if hasattr(dagmgr_active_version_weight, "_metrics"):
-        dagmgr_active_version_weight._metrics.clear()
+    if hasattr(dagmanager_active_version_weight, "clear"):
+        dagmanager_active_version_weight.clear()
+    dagmanager_active_version_weight._vals = {}  # type: ignore[attr-defined]
+    if hasattr(dagmanager_active_version_weight, "_metrics"):
+        dagmanager_active_version_weight._metrics.clear()

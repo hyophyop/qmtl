@@ -8,8 +8,8 @@ def main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("gw", help="Gateway CLI")
-    sub.add_parser("dagm", help="Dag manager admin CLI")
-    sub.add_parser("dagmgr-server", help="Run DAG manager servers")
+    sub.add_parser("dagmanager", help="DAG manager admin CLI")
+    sub.add_parser("dagmanager-server", help="Run DAG manager servers")
     sub.add_parser("sdk", help="Run strategy via SDK")
     p_init = sub.add_parser(
         "init",
@@ -39,10 +39,10 @@ def main(argv: List[str] | None = None) -> None:
     if args.cmd == "gw":
         from .gateway.cli import main as gw_main
         gw_main(rest)
-    elif args.cmd == "dagm":
+    elif args.cmd == "dagmanager":
         from .dagmanager.cli import main as dagm_main
         dagm_main(rest)
-    elif args.cmd == "dagmgr-server":
+    elif args.cmd == "dagmanager-server":
         from .dagmanager.server import main as server_main
         server_main(rest)
     elif args.cmd == "sdk":

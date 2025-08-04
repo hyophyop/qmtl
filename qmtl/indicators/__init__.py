@@ -14,7 +14,7 @@ from .obv import obv
 from .vwap import vwap
 from .anchored_vwap import anchored_vwap
 from .kalman_trend import kalman_trend
-from .rough_bergami import rough_bergami
+from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
 
 __all__ = [
@@ -32,6 +32,6 @@ __all__ = [
     "vwap",
     "anchored_vwap",
     "kalman_trend",
-    "rough_bergami",
+    "rough_bergomi",
     "stoch_rsi",
 ]

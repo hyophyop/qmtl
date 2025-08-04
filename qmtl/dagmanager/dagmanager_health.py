@@ -6,8 +6,8 @@ if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
 
 
-def get_status(driver: "Driver" | None = None) -> dict[str, str]:
-    """Return status information about DAG manager and dependencies."""
+def get_health(driver: "Driver" | None = None) -> dict[str, str]:
+    """Return health information about DAG manager and dependencies."""
     neo4j_status = "unknown"
     if driver is not None:
         try:

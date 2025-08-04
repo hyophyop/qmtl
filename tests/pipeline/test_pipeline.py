@@ -31,8 +31,8 @@ def test_basic_flow():
     n2 = ProcessingNode(input=n1, compute_fn=add1, name="n2", interval="1s", period=1)
 
     prod = DummyProducer()
-    n1.queue_topic = "n1"
-    n2.queue_topic = "n2"
+    n1.kafka_topic = "n1"
+    n2.kafka_topic = "n2"
 
     pipe = Pipeline([src, n1, n2], producer=prod)
 

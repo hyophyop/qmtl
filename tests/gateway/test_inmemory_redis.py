@@ -1,7 +1,7 @@
 import pytest
 
 from qmtl.gateway.redis_client import InMemoryRedis
-from qmtl.gateway.queue import RedisFIFOQueue
+from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.api import Database
 
@@ -27,7 +27,7 @@ class FakeDB(Database):
 @pytest.mark.asyncio
 async def test_queue_push_pop_order():
     redis = InMemoryRedis()
-    queue = RedisFIFOQueue(redis, "q")
+    queue = RedisTaskQueue(redis, "q")
 
     await queue.push("a")
     await queue.push("b")

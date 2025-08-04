@@ -3,6 +3,8 @@ from __future__ import annotations
 import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
 
+from .node import MatchMode
+
 from .ws_client import WebSocketClient
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -29,7 +31,7 @@ class TagQueryManager:
             )
         else:
             self.client = None
-        self._nodes: Dict[Tuple[Tuple[str, ...], int, str], List[TagQueryNode]] = {}
+        self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -59,7 +61,7 @@ class TagQueryManager:
                 params = {
                     "tags": ",".join(tags),
                     "interval": interval,
-                    "match_mode": match_mode,
+                    "match_mode": match_mode.value,
                 }
                 try:
                     resp = await client.get(url, params=params)
@@ -79,7 +81,10 @@ class TagQueryManager:
             tags = payload.get("tags") or []
             interval = payload.get("interval")
             queues = payload.get("queues", [])
-            match_mode = payload.get("match_mode", "any")
+            try:
+                match_mode = MatchMode(payload.get("match_mode", "any"))
+            except ValueError:
+                return
             if isinstance(tags, str):
                 tags = [t for t in tags.split(",") if t]
             try:

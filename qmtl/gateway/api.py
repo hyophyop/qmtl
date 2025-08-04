@@ -21,8 +21,9 @@ from .fsm import StrategyFSM
 from . import metrics as gw_metrics
 from .degradation import DegradationManager, DegradationLevel
 from .watch import QueueWatchHub
+from qmtl.sdk.node import MatchMode
 from .ws import WebSocketHub
-from .status import get_status as gateway_status
+from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 
 logger = logging.getLogger(__name__)
@@ -171,14 +172,14 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        status_data = await gateway_status(redis_conn, database_obj, dag_manager)
-        status_data["degrade_level"] = degradation.level.name
-        return status_data
+        health_data = await gateway_health(redis_conn, database_obj, dag_manager)
+        health_data["degrade_level"] = degradation.level.name
+        return health_data
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
-        return await gateway_status(redis_conn, database_obj, dag_manager)
+        return await gateway_health(redis_conn, database_obj, dag_manager)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
@@ -272,12 +273,16 @@ def create_app(
                 except (TypeError, ValueError):
                     interval = None
             if tags and interval is not None:
+                try:
+                    mode = MatchMode(match_mode)
+                except ValueError:
+                    return {"ok": True}
                 await watch_hub_local.broadcast(
-                    tags, interval, list(queues), match_mode
+                    tags, interval, list(queues), mode
                 )
                 if ws_hub_local:
                     await ws_hub_local.send_queue_update(
-                        tags, interval, list(queues), match_mode
+                        tags, interval, list(queues), mode
                     )
         elif event_type == "sentinel_weight":
             gateway = getattr(app.state, "gateway", None)
@@ -303,11 +308,15 @@ def create_app(
         tags: str, interval: int, match: str = "any", match_mode: str | None = None
     ):
         tag_list = [t for t in tags.split(",") if t]
-        mode = match_mode or match
+        mode_str = match_mode or match
+        try:
+            mode = MatchMode(mode_str)
+        except ValueError:
+            mode = MatchMode.ANY
 
         async def streamer():
             try:
-                initial = await dag_manager.get_queues_by_tag(tag_list, interval, mode)
+                initial = await dag_manager.get_queues_by_tag(tag_list, interval, mode.value)
             except grpc.RpcError as e:  # Or grpc.aio.AioRpcError if using grpc.aio explicitly
                 # It's good practice to log this error for observability
                 # import logging

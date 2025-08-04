@@ -40,7 +40,7 @@ services:
 
   dag-manager:
     image: python:3
-    command: ["qmtl", "dagmgr-server"]
+    command: ["qmtl", "dagmanager-server"]
     depends_on:
       - kafka
       - neo4j

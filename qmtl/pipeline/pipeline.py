@@ -20,9 +20,9 @@ class Pipeline:
 
     # ------------------------------------------------------------------
     def _publish(self, node: Node, interval: int, timestamp: int, payload: Any) -> None:
-        if self.producer and node.queue_topic:
+        if self.producer and node.kafka_topic:
             self.producer.produce(
-                node.queue_topic, {"interval": interval, "timestamp": timestamp, "payload": payload}
+                node.kafka_topic, {"interval": interval, "timestamp": timestamp, "payload": payload}
             )
 
     def _propagate(

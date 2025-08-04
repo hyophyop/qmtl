@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from . import metrics
-from .status import get_status
+from .dagmanager_health import get_health
 
 
 class WeightUpdate(BaseModel):
@@ -30,8 +30,8 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        """Return system status including Neo4j connectivity."""
-        return get_status(driver)
+        """Return system health including Neo4j connectivity."""
+        return get_health(driver)
 
     store = weights if weights is not None else {}
 

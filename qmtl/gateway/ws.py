@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Optional
 
+from qmtl.sdk.node import MatchMode
+
 from ..common.cloudevents import format_event
 
 import websockets
@@ -113,9 +115,12 @@ class WebSocketHub:
         tags: list[str],
         interval: int,
         queues: list[str],
-        match_mode: str = "any",
+        match_mode: MatchMode = MatchMode.ANY,
     ) -> None:
-        """Broadcast queue update events."""
+        """Broadcast queue update events.
+
+        ``match_mode`` must be ``MatchMode.ANY`` or ``MatchMode.ALL``.
+        """
         event = format_event(
             "qmtl.gateway",
             "queue_update",
@@ -123,7 +128,7 @@ class WebSocketHub:
                 "tags": tags,
                 "interval": interval,
                 "queues": queues,
-                "match_mode": match_mode,
+                "match_mode": match_mode.value,
             },
         )
         await self.broadcast(event)
