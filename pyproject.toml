@@ -67,11 +67,8 @@ include = ["qmtl*"]
 "qmtl.examples" = [
     "*.py",
     "*.yml",
-    "README.md",
-    "data/*.csv",
-    "*.csv",
-    "notebooks/*.ipynb",
+"README.md",
+"data/*.csv",
+"*.csv",
+"notebooks/*.ipynb",
 ]
-
-[tool.pytest.ini_options]
-addopts = "-p pytest_asyncio"

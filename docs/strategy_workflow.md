@@ -177,7 +177,7 @@ End‑to‑end tests require Docker. Start the stack and execute the tests:
 
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up -d
-uv run -- pytest tests/e2e
+uv run -m pytest tests/e2e
 ```
 
 For details on the test environment refer to
