@@ -105,7 +105,7 @@ python -m qmtl.sdk --help
 
 PyArrow 기반 캐시를 사용하려면 환경 변수 `QMTL_ARROW_CACHE=1`을 설정합니다.
 만료 슬라이스 정리는 `QMTL_CACHE_EVICT_INTERVAL`(초) 값에 따라 주기적으로 실행되며
-Ray 실행을 `Runner.enable_ray()` 또는 CLI의 `--with-ray` 옵션으로 활성화한 경우 Ray Actor에서 동작합니다.
+Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray` 옵션으로 비활성화할 수 있습니다.
 
 ## Cache Backends
 

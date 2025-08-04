@@ -31,10 +31,10 @@ python -m qmtl.examples.strategies.general_strategy
 python -m qmtl.examples.parallel.questdb_parallel_example
 ```
 
-Ray 기반 병렬 실행을 사용하려면 다음과 같이 `--with-ray` 옵션을 추가하세요.
+Ray가 설치되어 있으면 자동으로 사용됩니다. 비활성화하려면 `--no-ray` 옵션을 추가하세요.
 
 ```bash
-python -m qmtl.examples.strategies.general_strategy --with-ray
+python -m qmtl.examples.strategies.general_strategy --no-ray
 ```
 
 백테스트가 필요한 경우 `Runner.backtest()`에 시작/종료 타임스탬프를 지정하세요.

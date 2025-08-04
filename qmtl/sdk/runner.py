@@ -26,21 +26,9 @@ except Exception:  # pragma: no cover - Ray not installed
 
 class Runner:
     """Execute strategies in various modes."""
-
-    _ray_available = False
+    _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_cb: AsyncCircuitBreaker | None = None
-
-    @classmethod
-    def enable_ray(cls, enable: bool = True) -> None:
-        """Toggle Ray-based execution explicitly."""
-        if enable and ray is None:
-            raise RuntimeError("Ray not installed")
-        cls._ray_available = enable
-
-    @classmethod
-    def disable_ray(cls) -> None:
-        cls.enable_ray(False)
 
     # ------------------------------------------------------------------
 

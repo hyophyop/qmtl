@@ -283,8 +283,7 @@ def test_feed_queue_data_with_ray(monkeypatch):
     import qmtl.sdk.runner as rmod
 
     monkeypatch.setattr(rmod, "ray", dummy_ray)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
-    rmod.Runner.enable_ray()
+    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
 
     calls = []
 
@@ -635,30 +634,52 @@ def test_backtest_on_missing_fail(monkeypatch):
         )
 
 
-def test_enable_ray_requires_module(monkeypatch):
-    import qmtl.sdk.runner as rmod
-    monkeypatch.setattr(rmod, "ray", None)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
-    with pytest.raises(RuntimeError):
-        rmod.Runner.enable_ray()
-
-
-def test_cli_with_ray(monkeypatch):
+def test_ray_flag_auto_set(monkeypatch):
     import sys
-    from qmtl.sdk.cli import main
+    import importlib
+    import qmtl.sdk.runner as rmod
+
+    original_ray = sys.modules.get("ray")
+
+    # simulate absence of ray
+    monkeypatch.delitem(sys.modules, "ray", raising=False)
+    importlib.reload(rmod)
+    assert not rmod.Runner._ray_available
+
+    # simulate presence of ray
+    class DummyModule:
+        pass
+
+    monkeypatch.setitem(sys.modules, "ray", DummyModule())
+    importlib.reload(rmod)
+    assert rmod.Runner._ray_available
+
+    # restore original state
+    if original_ray is None:
+        monkeypatch.delitem(sys.modules, "ray", raising=False)
+    else:
+        monkeypatch.setitem(sys.modules, "ray", original_ray)
+    importlib.reload(rmod)
+
+
+def test_cli_disable_ray(monkeypatch):
+    import sys
+    import importlib
+    import qmtl.sdk.cli as cli_mod
     import qmtl.sdk.runner as rmod
 
     dummy_ray = object()
     monkeypatch.setattr(rmod, "ray", dummy_ray)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", False)
+    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
+    importlib.reload(cli_mod)
 
     argv = [
         "qmtl.sdk",
         "tests.sample_strategy:SampleStrategy",
         "--mode",
         "offline",
-        "--with-ray",
+        "--no-ray",
     ]
     monkeypatch.setattr(sys, "argv", argv)
-    main()
-    assert rmod.Runner._ray_available
+    cli_mod.main()
+    assert not rmod.Runner._ray_available
