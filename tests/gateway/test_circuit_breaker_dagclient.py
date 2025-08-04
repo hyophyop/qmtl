@@ -94,15 +94,13 @@ async def test_breaker_opens_and_resets(monkeypatch):
     client = DagManagerClient("dummy", breaker_max_failures=2)
 
     for _ in range(2):
-        with pytest.raises(grpc.RpcError):
-            await client.diff("s", "{}")
+        assert await client.diff("s", "{}") is None
     assert client.breaker.is_open
     assert metrics.dagclient_breaker_state._value.get() == 1
     assert metrics.dagclient_breaker_failures._value.get() == 2
     assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
 
-    with pytest.raises(RuntimeError):
-        await client.diff("s", "{}")
+    assert await client.diff("s", "{}") is None
 
     client.breaker.reset()
     assert not client.breaker.is_open
@@ -127,10 +125,8 @@ async def test_get_queues_uses_breaker(monkeypatch):
     client = DagManagerClient("dummy", breaker_max_failures=2)
 
     for _ in range(2):
-        with pytest.raises(grpc.RpcError):
-            await client.get_queues_by_tag(["t"], 60)
-    with pytest.raises(RuntimeError):
-        await client.get_queues_by_tag(["t"], 60)
+        assert await client.get_queues_by_tag(["t"], 60) == []
+    assert await client.get_queues_by_tag(["t"], 60) == []
     assert metrics.dagclient_breaker_state._value.get() == 1
     assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
     await client.close()
