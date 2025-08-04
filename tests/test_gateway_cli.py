@@ -100,3 +100,88 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     assert captured["dsn"] == "redis://x:6379"
     assert captured["decode"] is True
 
+
+def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  database_backend: memory",
+                "  database_dsn: 'sqlite:///:memory:'",
+            ]
+        )
+    )
+
+    from types import SimpleNamespace
+    from qmtl.gateway import cli
+
+    class DummyDB:
+        async def connect(self):
+            raise RuntimeError("boom")
+
+        async def close(self):
+            pass
+
+    def fake_create_app(**kwargs):
+        return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
+
+    logged = {}
+
+    def fake_exception(msg):
+        logged["msg"] = msg
+
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setattr(cli.logging, "exception", fake_exception)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit):
+        cli.main([])
+
+    assert logged["msg"] == "Failed to connect to database"
+
+
+def test_gateway_cli_db_close_failure(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  database_backend: memory",
+                "  database_dsn: 'sqlite:///:memory:'",
+            ]
+        )
+    )
+
+    from types import SimpleNamespace
+    from qmtl.gateway import cli
+
+    class DummyDB:
+        async def connect(self):
+            pass
+
+        async def close(self):
+            raise RuntimeError("boom")
+
+    def fake_create_app(**kwargs):
+        return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
+
+    logged = {}
+
+    def fake_exception(msg):
+        logged["msg"] = msg
+
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setattr(cli.logging, "exception", fake_exception)
+    monkeypatch.chdir(tmp_path)
+
+    cli.main([])
+
+    assert logged["msg"] == "Failed to close database connection"
+
