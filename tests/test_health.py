@@ -5,7 +5,7 @@ from qmtl.gateway.api import create_app as gw_create_app
 from qmtl.dagmanager.http_server import create_app as dag_http_create_app
 from qmtl.dagmanager.api import create_app as dag_api_create_app
 from qmtl.dagmanager.gc import QueueInfo
-from qmtl.gateway.queue import RedisFIFOQueue
+from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway.worker import StrategyWorker
@@ -121,7 +121,7 @@ async def test_grpc_status():
 @pytest.mark.asyncio
 async def test_queue_healthy(fake_redis):
     redis = fake_redis
-    queue = RedisFIFOQueue(redis)
+    queue = RedisTaskQueue(redis)
     assert await queue.healthy() is True
 
 
@@ -150,7 +150,7 @@ async def test_worker_healthy(monkeypatch, fake_redis):
 
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
-    queue = RedisFIFOQueue(redis)
+    queue = RedisTaskQueue(redis)
     client = DagManagerClient("127.0.0.1:1")
     async def status():
         return True
