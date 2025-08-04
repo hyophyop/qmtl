@@ -11,24 +11,27 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagm", help="Dag manager admin CLI", add_help=False)
     sub.add_parser("dagmgr-server", help="Run DAG manager servers", add_help=False)
     sub.add_parser("sdk", help="Run strategy via SDK", add_help=False)
-    p_init = sub.add_parser("init", help="Initialize new project")
+    p_init = sub.add_parser(
+        "init",
+        help="Initialize new project (see docs/strategy_workflow.md)",
+    )
     p_init.add_argument(
         "--path", required=True, help="Project directory to create scaffolding"
     )
     p_init.add_argument(
         "--strategy",
         default="general",
-        help="Strategy template to use",
+        help="Strategy template to use (see docs/templates.md)",
     )
     p_init.add_argument(
         "--list-templates",
         action="store_true",
-        help="List available templates and exit",
+        help="List available templates and exit (see docs/templates.md)",
     )
     p_init.add_argument(
         "--with-sample-data",
         action="store_true",
-        help="Include sample OHLCV CSV in project",
+        help="Include sample OHLCV CSV and notebook (see docs/strategy_workflow.md)",
     )
 
     args, rest = parser.parse_known_args(argv)

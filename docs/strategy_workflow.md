@@ -41,18 +41,25 @@ uv pip install -e .[generators,indicators,transforms]
 
 ## 1. Initialize a Project
 
-Create a dedicated directory for your strategy and generate the scaffold:
+Create a dedicated directory for your strategy and generate the scaffold. List
+available templates, then initialize the project with a chosen template and
+optional sample data:
 
 ```bash
-qmtl init --path my_qmtl_project
+qmtl init --list-templates
+qmtl init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
-The command copies a sample `strategy.py`, a `qmtl.yml` configuration and empty
-packages for `generators`, `indicators` and `transforms`. These folders let you
-extend the SDK by adding custom nodes. Because the extras were installed in the
-previous step, no additional `pip install` commands are required inside the
-project directory.
+`--strategy` selects from the built-in templates (see
+[templates.md](templates.md)). `--with-sample-data` copies an example OHLCV CSV
+and a notebook into the new project.
+
+The command also copies a sample `strategy.py`, a `qmtl.yml` configuration and
+empty packages for `generators`, `indicators` and `transforms`. These folders
+let you extend the SDK by adding custom nodes. Because the extras were
+installed in the previous step, no additional `pip install` commands are
+required inside the project directory.
 
 ## 2. Explore the Scaffold
 
