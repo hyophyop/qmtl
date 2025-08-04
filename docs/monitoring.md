@@ -45,12 +45,9 @@ Configuration options control the breakers:
 ```yaml
 gateway:
   dagclient_breaker_threshold: 3  # failures before opening
-  dagclient_breaker_timeout: 60.0 # seconds before reset
 dagmanager:
   kafka_breaker_threshold: 3
-  kafka_breaker_timeout: 60.0
   neo4j_breaker_threshold: 3
-  neo4j_breaker_timeout: 60.0
 ```
 
 ## SDK Metrics

@@ -13,7 +13,7 @@ from . import metrics as gw_metrics
 class DagManagerClient:
     """gRPC client for DAG‑Manager services using a persistent channel."""
 
-    def __init__(self, target: str, *, breaker_max_failures: int = 3, breaker_reset_timeout: float = 60.0) -> None:
+    def __init__(self, target: str, *, breaker_max_failures: int = 3) -> None:
         self._target = target
         self._created_loop = None
         try:
@@ -27,7 +27,6 @@ class DagManagerClient:
         self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
         self._breaker = AsyncCircuitBreaker(
             max_failures=breaker_max_failures,
-            reset_timeout=breaker_reset_timeout,
             on_open=lambda: (
                 gw_metrics.dagclient_breaker_state.set(1),
                 gw_metrics.dagclient_breaker_open_total.inc(),
@@ -62,6 +61,8 @@ class DagManagerClient:
         try:
             result = await _call()
             gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            if result:
+                self._breaker.reset()
             return result
         except Exception:
             return False
