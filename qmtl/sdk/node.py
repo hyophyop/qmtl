@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import Any, TYPE_CHECKING
 import logging
+from enum import Enum
 
 import numpy as np
 import xarray as xr
@@ -25,6 +26,17 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
 from qmtl.dagmanager import compute_node_id
 
 logger = logging.getLogger(__name__)
+
+
+class MatchMode(str, Enum):
+    """Tag matching behaviour for :class:`TagQueryNode`.
+
+    ``MatchMode.ANY`` selects queues containing any of the requested tags,
+    while ``MatchMode.ALL`` requires every tag to be present.
+    """
+
+    ANY = "any"
+    ALL = "all"
 
 
 class _RingBuffer:
@@ -626,7 +638,20 @@ class StreamInput(SourceNode):
 
 
 class TagQueryNode(SourceNode):
-    """Node that selects upstream queues by tag and interval."""
+    """Node that selects upstream queues by tag and interval.
+
+    Parameters
+    ----------
+    query_tags:
+        Tags to subscribe to.
+    interval:
+        Bar interval in seconds or string shorthand.
+    period:
+        Number of bars to retain in the cache.
+    match_mode:
+        Tag matching mode. ``MatchMode.ANY`` subscribes to queues containing
+        any of ``query_tags`` while ``MatchMode.ALL`` requires every tag.
+    """
 
     def __init__(
         self,
@@ -634,7 +659,7 @@ class TagQueryNode(SourceNode):
         *,
         interval: int | str,
         period: int,
-        match_mode: str = "any",
+        match_mode: MatchMode = MatchMode.ANY,
         compute_fn=None,
         name: str | None = None,
     ) -> None:
