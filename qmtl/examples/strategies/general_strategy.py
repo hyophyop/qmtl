@@ -45,8 +45,6 @@ if __name__ == "__main__":
     start = args.start_time or defaults.get("start_time")
     end = args.end_time or defaults.get("end_time")
     on_missing = args.on_missing or defaults.get("on_missing", "skip")
-
-    Runner.enable_ray()
     if args.backtest:
         Runner.backtest(
             GeneralStrategy,
