@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Iterable
 
 import grpc
+import sys
 
 from .diff_service import (
     DiffRequest,
@@ -77,43 +78,68 @@ class _PrintStream(StreamSender):
         pass
 
 
+def _read_file(path: str) -> str:
+    try:
+        return Path(path).read_text()
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"Failed to read file '{path}': {e}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+async def _grpc_call(coro):
+    try:
+        return await coro
+    except grpc.RpcError as e:
+        print(f"gRPC error: {e}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 async def _cmd_diff(args: argparse.Namespace) -> None:
-    data = Path(args.file).read_text()
+    data = _read_file(args.file)
     if args.dry_run:
         service = DiffService(_MemRepo(), _MemQueue(), _PrintStream())
         chunk = service.diff(DiffRequest(strategy_id="cli", dag_json=data))
         print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
     else:
         client = DagManagerClient(args.target)
-        chunk = await client.diff("cli", data)
-        print(json.dumps({"queue_map": dict(chunk.queue_map), "sentinel_id": chunk.sentinel_id}))
+        try:
+            chunk = await _grpc_call(client.diff("cli", data))
+            print(json.dumps({"queue_map": dict(chunk.queue_map), "sentinel_id": chunk.sentinel_id}))
+        finally:
+            await client.close()
 
 
 async def _cmd_queue_stats(args: argparse.Namespace) -> None:
     channel = grpc.aio.insecure_channel(args.target)
-    stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-    req = dagmanager_pb2.QueueStatsRequest(filter=f"tag={args.tag};interval={args.interval}")
-    resp = await stub.GetQueueStats(req)
-    await channel.close()
-    print(json.dumps(dict(resp.sizes)))
+    try:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.QueueStatsRequest(filter=f"tag={args.tag};interval={args.interval}")
+        resp = await _grpc_call(stub.GetQueueStats(req))
+        print(json.dumps(dict(resp.sizes)))
+    finally:
+        await channel.close()
 
 
 async def _cmd_gc(args: argparse.Namespace) -> None:
     channel = grpc.aio.insecure_channel(args.target)
-    stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-    await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id=args.sentinel))
-    await channel.close()
-    print(f"GC triggered for sentinel: {args.sentinel}")
+    try:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        await _grpc_call(stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id=args.sentinel)))
+        print(f"GC triggered for sentinel: {args.sentinel}")
+    finally:
+        await channel.close()
 
 
 async def _cmd_redo_diff(args: argparse.Namespace) -> None:
-    data = Path(args.file).read_text()
+    data = _read_file(args.file)
     channel = grpc.aio.insecure_channel(args.target)
-    stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-    req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
-    resp = await stub.RedoDiff(req)
-    await channel.close()
-    print(json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id}))
+    try:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
+        resp = await _grpc_call(stub.RedoDiff(req))
+        print(json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id}))
+    finally:
+        await channel.close()
 
 
 def _cmd_export_schema(args: argparse.Namespace) -> None:
