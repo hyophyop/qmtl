@@ -35,7 +35,9 @@ uv pip install -e .[transforms]
 
 Create a new working directory with `qmtl init`. The command generates a
 project scaffold containing extension packages and a sample strategy.
-Use `--strategy` to select from the built-in templates:
+Use `--strategy` to select from the built-in templates, `--list-templates` to
+see the choices and `--with-sample-data` to copy an example OHLCV CSV and
+notebook:
 
 ```bash
 qmtl init --path my_qmtl_project
@@ -44,6 +46,8 @@ qmtl init --list-templates
 
 # create project with the branching template
 qmtl init --path my_qmtl_project --strategy branching
+# include sample data
+qmtl init --path my_qmtl_project --with-sample-data
 cd my_qmtl_project
 ```
 
