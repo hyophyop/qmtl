@@ -22,7 +22,7 @@ from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .gc import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
-from .status import get_status
+from .dagmanager_health import get_health
 
 
 class _GrpcStream(StreamSender):
@@ -225,7 +225,7 @@ class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
         request: dagmanager_pb2.StatusRequest,
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.StatusReply:
-        info = get_status(self._driver)
+        info = get_health(self._driver)
         return dagmanager_pb2.StatusReply(
             neo4j=info.get("neo4j", "unknown"),
             state=info.get("dag_manager", "unknown"),

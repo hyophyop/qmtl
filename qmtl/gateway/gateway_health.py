@@ -17,12 +17,12 @@ _STATUS_CACHE_TTL = 2.0  # seconds
 _STATUS_LOCK = asyncio.Lock()
 
 
-async def get_status(
+async def get_health(
     redis_client: Optional[redis.Redis] = None,
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
 ) -> dict[str, str]:
-    """Return status information for gateway and dependencies.
+    """Return health information for gateway and dependencies.
 
     Results are cached for a short time to avoid spamming external
     dependencies with health checks when multiple requests arrive
@@ -77,4 +77,4 @@ async def get_status(
         _STATUS_CACHE_TS = now
         return result
 
-__all__ = ["get_status"]
+__all__ = ["get_health"]

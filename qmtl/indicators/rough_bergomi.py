@@ -5,7 +5,7 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def rough_bergami(source: Node, period: int, *, name: str | None = None) -> Node:
+def rough_bergomi(source: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing a simple rough volatility estimate."""
 
     def compute(view: CacheView):
@@ -22,7 +22,7 @@ def rough_bergami(source: Node, period: int, *, name: str | None = None) -> Node
     return Node(
         input=source,
         compute_fn=compute,
-        name=name or "rough_bergami",
+        name=name or "rough_bergomi",
         interval=source.interval,
         period=period + 1,
     )

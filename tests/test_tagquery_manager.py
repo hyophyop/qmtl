@@ -2,7 +2,7 @@ import asyncio
 import httpx
 import pytest
 
-from qmtl.sdk import TagQueryNode
+from qmtl.sdk import TagQueryNode, MatchMode
 from qmtl.sdk.tagquery_manager import TagQueryManager
 
 
@@ -93,8 +93,8 @@ async def test_resolve_handles_empty(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_match_mode_routes_updates():
-    node_any = TagQueryNode(["t1"], interval="60s", period=1, match_mode="any")
-    node_all = TagQueryNode(["t1"], interval="60s", period=1, match_mode="all")
+    node_any = TagQueryNode(["t1"], interval="60s", period=1, match_mode=MatchMode.ANY)
+    node_all = TagQueryNode(["t1"], interval="60s", period=1, match_mode=MatchMode.ALL)
     manager = TagQueryManager()
     manager.register(node_any)
     manager.register(node_all)

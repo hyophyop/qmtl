@@ -126,10 +126,10 @@ class Runner:
             else:
                 if mapping:
                     node.execute = False
-                    node.queue_topic = mapping  # type: ignore[assignment]
+                    node.kafka_topic = mapping  # type: ignore[assignment]
                 else:
                     node.execute = True
-                    node.queue_topic = None
+                    node.kafka_topic = None
 
             if node.execute != old_execute:
                 logger.debug(
@@ -311,7 +311,7 @@ class Runner:
         if not Runner._kafka_available:
             raise RuntimeError("aiokafka not available")
         consumer = AIOKafkaConsumer(
-            node.queue_topic,
+            node.kafka_topic,
             bootstrap_servers=bootstrap_servers,
             enable_auto_commit=True,
         )
@@ -325,7 +325,7 @@ class Runner:
                 ts = int(msg.timestamp / 1000)
                 Runner.feed_queue_data(
                     node,
-                    node.queue_topic,
+                    node.kafka_topic,
                     node.interval,
                     ts,
                     payload,
@@ -342,10 +342,10 @@ class Runner:
         bootstrap_servers: str,
         stop_event: asyncio.Event,
     ) -> list[asyncio.Task]:
-        """Spawn Kafka consumer tasks for nodes with ``queue_topic``."""
+        """Spawn Kafka consumer tasks for nodes with a ``kafka_topic``."""
         tasks = []
         for n in strategy.nodes:
-            if n.queue_topic:
+            if n.kafka_topic:
                 tasks.append(
                     asyncio.create_task(
                         Runner._consume_node(

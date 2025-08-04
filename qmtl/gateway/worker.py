@@ -9,7 +9,7 @@ from .database import Database
 from .dagmanager_client import DagManagerClient
 from .ws import WebSocketHub
 from .fsm import StrategyFSM
-from .queue import RedisFIFOQueue
+from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
 
 
@@ -21,7 +21,7 @@ class StrategyWorker:
         redis_client: redis.Redis,
         database: Database,
         fsm: StrategyFSM,
-        queue: RedisFIFOQueue,
+        queue: RedisTaskQueue,
         dag_client: DagManagerClient,
         ws_hub: Optional[WebSocketHub] = None,
         worker_id: Optional[str] = None,

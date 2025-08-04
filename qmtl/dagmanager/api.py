@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 from .gc import GarbageCollector
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
-from .status import get_status
+from .dagmanager_health import get_health
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -34,8 +34,8 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        """Return system status including Neo4j connectivity."""
-        return get_status(driver)
+        """Return system health including Neo4j connectivity."""
+        return get_health(driver)
 
     @app.post("/admin/gc-trigger", status_code=status.HTTP_202_ACCEPTED)
     async def trigger_gc(payload: GcRequest) -> GcResponse:

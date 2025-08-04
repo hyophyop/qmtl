@@ -1,6 +1,6 @@
 SCHEMA_QUERIES = [
     "CREATE CONSTRAINT compute_pk IF NOT EXISTS ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE",
-    "CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic)",
+    "CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic)",
 ]
 
 

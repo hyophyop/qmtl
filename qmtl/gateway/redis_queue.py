@@ -5,8 +5,8 @@ from typing import Optional
 import redis.asyncio as redis
 
 
-class RedisFIFOQueue:
-    """Simple FIFO queue backed by Redis."""
+class RedisTaskQueue:
+    """Simple FIFO task queue backed by Redis."""
 
     def __init__(self, redis_client: redis.Redis, name: str = "strategy_queue") -> None:
         self.redis = redis_client
@@ -32,4 +32,4 @@ class RedisFIFOQueue:
             return False
 
 
-__all__ = ["RedisFIFOQueue"]
+__all__ = ["RedisTaskQueue"]
