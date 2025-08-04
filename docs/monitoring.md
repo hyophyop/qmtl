@@ -4,7 +4,20 @@ This document outlines sample Prometheus alerts and Grafana dashboards for QMTL 
 
 ## Alert Rules
 
-Prometheus can load `alert_rules.yml` to activate alerts for the DAG manager and gateway. Additional rules have been added for garbage collection. The file can be mounted into the Prometheus container via its configuration.
+Prometheus can load `alert_rules.yml` to activate alerts for the DAG manager and gateway. The repository ships a minimal example with a couple of core alerts. Mount the file into your Prometheus container and expand it as needed.
+
+### Additional Alert Reference
+
+The following alerts are available for inspiration when extending `alert_rules.yml`:
+
+- **DiffDurationHigh** – triggers when `diff_duration_ms_p95` exceeds 200 ms.
+- **NodeCacheMemoryHigh** – warns if `nodecache_resident_bytes` surpasses 5 GB.
+- **QueueCreateErrors** – fires when `queue_create_error_total` increases.
+- **SentinelGap** – indicates a missing diff sentinel via `sentinel_gap_count`.
+- **OrphanQueuesGrowing** – detects rises in `orphan_queue_total` over a three-hour window.
+- **GatewayLatencyHigh** – alerts when `gateway_e2e_latency_p95` exceeds 150 ms.
+- **LostRequests** – reports lost diff submissions based on `lost_requests_total`.
+- **GCSchedulerStall** – warns if `gc_last_run_timestamp` lags by more than ten minutes.
 
 ## Grafana Dashboards
 
