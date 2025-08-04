@@ -120,9 +120,15 @@ python -m qmtl.sdk mypkg.strategy:MyStrategy --mode backtest \
 ```
 
 Available modes are `backtest`, `dryrun`, `live` and `offline`. The first three
-require a running Gateway and DAG manager. Start them in separate terminals:
+require a running Gateway and DAG manager. Start them in separate terminals. The
+``--config`` flag is optional:
 
 ```bash
+# start with built-in defaults
+qmtl gw
+qmtl dagmgr-server
+
+# or load a custom configuration
 qmtl gw --config qmtl/examples/qmtl.yml
 qmtl dagmgr-server --config qmtl/examples/qmtl.yml
 ```

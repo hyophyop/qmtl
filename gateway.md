@@ -149,19 +149,24 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG‑Manager.
 
 ### Gateway CLI Options
 
-Run the Gateway service using the combined configuration file:
+Run the Gateway service. The ``--config`` flag is optional:
 
 ```bash
+# start with built-in defaults
+qmtl gw
+
+# specify a configuration file
 qmtl gw --config qmtl/examples/qmtl.yml
 ```
 
-The command reads the ``gateway`` section of ``qmtl/examples/qmtl.yml`` for all
-server parameters. Omitting ``--config`` starts the service with built-in
-defaults that use SQLite and ``queue_backend: memory`` for an in-memory Redis
-replacement. Commented lines in the sample file illustrate how to set
-``queue_backend: redis`` and point ``redis_dsn`` to a real cluster. See the file
-for a fully annotated configuration template.
+When provided, the command reads the ``gateway`` section of
+``qmtl/examples/qmtl.yml`` for all server parameters. Omitting ``--config``
+starts the service with built-in defaults that use SQLite and
+``queue_backend: memory`` for an in-memory Redis replacement. Commented lines in
+the sample file illustrate how to set ``queue_backend: redis`` and point
+``redis_dsn`` to a real cluster. See the file for a fully annotated configuration
+template.
 
 Available flags:
 
-- ``--config`` – path to configuration file.
+- ``--config`` – optional path to configuration file.
