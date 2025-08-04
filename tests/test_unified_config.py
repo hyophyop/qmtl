@@ -14,6 +14,8 @@ def test_load_unified_config_yaml(tmp_path: Path) -> None:
         },
         "dagmanager": {
             "neo4j_dsn": "bolt://db:7687",
+            "kafka_breaker_threshold": 4,
+            "kafka_breaker_timeout": 1.5,
         },
     }
     config_file = tmp_path / "cfg.yml"
@@ -21,6 +23,8 @@ def test_load_unified_config_yaml(tmp_path: Path) -> None:
     config = load_config(str(config_file))
     assert config.gateway.redis_dsn == data["gateway"]["redis_dsn"]
     assert config.dagmanager.neo4j_dsn == data["dagmanager"]["neo4j_dsn"]
+    assert not hasattr(config.dagmanager, "kafka_breaker_threshold")
+    assert not hasattr(config.dagmanager, "kafka_breaker_timeout")
 
 
 def test_load_unified_config_json(tmp_path: Path) -> None:
@@ -37,8 +41,6 @@ def test_load_unified_config_json(tmp_path: Path) -> None:
     config = load_config(str(config_file))
     assert config.gateway.host == "127.0.0.1"
     assert config.dagmanager.grpc_port == 1234
-    assert config.gateway.dagclient_breaker_threshold == 3
-    assert not hasattr(config.gateway, "dagclient_breaker_timeout")
 
 
 def test_load_unified_config_missing_file() -> None:
@@ -76,8 +78,6 @@ def test_load_unified_config_defaults(tmp_path: Path) -> None:
     assert isinstance(config, UnifiedConfig)
     assert config.gateway.redis_dsn is None
     assert config.dagmanager.grpc_port == 50051
-    assert config.gateway.dagclient_breaker_threshold == 3
-    assert not hasattr(config.gateway, "dagclient_breaker_timeout")
 
 
 def test_load_unified_config_bad_gateway(tmp_path: Path) -> None:

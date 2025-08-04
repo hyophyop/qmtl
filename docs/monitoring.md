@@ -40,16 +40,8 @@ Both services expose a Prometheus endpoint. Circuit breaker activity is tracked 
 - `dagclient_breaker_open_total` — increments each time the Gateway's gRPC client trips open.
 - `kafka_breaker_open_total` — increments each time the DAG Manager's Kafka admin breaker opens.
 
-The Gateway's DAG client breaker opens after three consecutive failures and
-is not configurable. The DAG Manager still allows configuring breaker thresholds:
-
-```yaml
-dagmanager:
-  kafka_breaker_threshold: 3
-```
-
-The DAG Manager's Neo4j breaker uses a fixed threshold of 3 and cannot be
-configured.
+Both breakers open after three consecutive failures and are not configurable.
+The DAG Manager's Neo4j breaker also uses a fixed threshold of 3.
 
 Unlike time-based breakers, QMTL requires an explicit success signal to
 close a tripped breaker. Calls that verify remote health should inspect

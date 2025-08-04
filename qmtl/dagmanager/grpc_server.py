@@ -255,14 +255,11 @@ def serve(
     gc: GarbageCollector | None = None,
     repo: NodeRepository | None = None,
     queue: QueueManager | None = None,
-    breaker_threshold: int = 3,
 ) -> tuple[grpc.aio.Server, int]:
     admin = None
     if kafka_admin_client is not None:
         # Breaker uses manual reset; callers must reset after successful ops
-        breaker = AsyncCircuitBreaker(
-            max_failures=breaker_threshold,
-        )
+        breaker = AsyncCircuitBreaker()
         admin = KafkaAdmin(kafka_admin_client, breaker=breaker)
     if repo is None:
         repo = Neo4jNodeRepository(neo4j_driver)
