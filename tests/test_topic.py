@@ -32,7 +32,7 @@ def test_topic_name_generation():
         "Indicator",
         "abcdef123456",
         "v1",
-        dryrun=True,
+        dry_run=True,
     )
     assert sim.endswith("_sim")
 

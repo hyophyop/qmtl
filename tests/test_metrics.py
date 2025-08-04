@@ -38,12 +38,12 @@ class FakeRepo(NodeRepository):
 
 
 class FakeQueue(QueueManager):
-    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
-        return topic_name(asset, node_type, code_hash, version, dryrun=dryrun)
+    def upsert(self, asset, node_type, code_hash, version, *, dry_run=False):
+        return topic_name(asset, node_type, code_hash, version, dry_run=dry_run)
 
 
 class FailingQueue(QueueManager):
-    def upsert(self, asset, node_type, code_hash, version, *, dryrun=False):
+    def upsert(self, asset, node_type, code_hash, version, *, dry_run=False):
         raise RuntimeError("fail")
 
 
