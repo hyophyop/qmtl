@@ -1,22 +1,18 @@
 import pytest
-from qmtl.dagmanager.monitor import Monitor, MetricsBackend, Neo4jCluster, KafkaSession, DiffStream
+from qmtl.dagmanager.monitor import Monitor, MetricsBackend, Neo4jCluster, KafkaSession
 from qmtl.dagmanager.alerts import AlertManager
 
 
 class FakeMetrics:
-    def __init__(self, leader=False, disconnects=0, stall=False):
+    def __init__(self, leader=False, disconnects=0):
         self.leader = leader
         self.disconnects = disconnects
-        self.stall = stall
 
     def neo4j_leader_is_null(self) -> bool:
         return self.leader
 
     def kafka_zookeeper_disconnects(self) -> int:
         return self.disconnects
-
-    def diff_chunk_ack_timeout(self) -> bool:
-        return self.stall
 
 
 class FakeCluster:
@@ -35,12 +31,6 @@ class FakeKafka:
         self.retried += 1
 
 
-class FakeStream:
-    def __init__(self):
-        self.resumed = 0
-
-    def resume_from_last_offset(self) -> None:
-        self.resumed += 1
 
 
 class FakePagerDuty:
@@ -61,20 +51,17 @@ class FakeSlack:
 
 @pytest.mark.asyncio
 async def test_monitor_triggers_recovery_and_alerts():
-    metrics = FakeMetrics(leader=True, disconnects=1, stall=True)
+    metrics = FakeMetrics(leader=True, disconnects=1)
     cluster = FakeCluster()
     kafka = FakeKafka()
-    stream = FakeStream()
     pd = FakePagerDuty()
     slack = FakeSlack()
     manager = AlertManager(pd, slack)
-    monitor = Monitor(metrics, cluster, kafka, stream, manager)
+    monitor = Monitor(metrics, cluster, kafka, manager)
 
     await monitor.check_once()
 
     assert cluster.elected == 1
     assert kafka.retried == 1
-    assert stream.resumed == 1
     assert pd.sent == ["Neo4j leader down"]
-    assert "Kafka session lost" in slack.sent
-    assert "Diff stream stalled" in slack.sent
+    assert slack.sent == ["Kafka session lost"]

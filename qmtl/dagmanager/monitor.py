@@ -18,9 +18,6 @@ class MetricsBackend(Protocol):
     def kafka_zookeeper_disconnects(self) -> int:
         ...
 
-    def diff_chunk_ack_timeout(self) -> bool:
-        ...
-
 
 class Neo4jCluster(Protocol):
     """Control interface for Neo4j cluster."""
@@ -36,19 +33,11 @@ class KafkaSession(Protocol):
         ...
 
 
-class DiffStream(Protocol):
-    """Interface to resume diff streams."""
-
-    def resume_from_last_offset(self) -> None:
-        ...
-
-
 @dataclass
 class Monitor:
     metrics: MetricsBackend
     neo4j: Neo4jCluster
     kafka: KafkaSession
-    stream: DiffStream
     alerts: AlertManager
 
     async def check_once(self) -> None:
@@ -61,9 +50,6 @@ class Monitor:
             self.kafka.retry()
             await self.alerts.send_slack("Kafka session lost")
 
-        if self.metrics.diff_chunk_ack_timeout():
-            self.stream.resume_from_last_offset()
-            await self.alerts.send_slack("Diff stream stalled")
 
 
 @dataclass
@@ -102,6 +88,5 @@ __all__ = [
     "MetricsBackend",
     "Neo4jCluster",
     "KafkaSession",
-    "DiffStream",
     "MonitorLoop",
 ]

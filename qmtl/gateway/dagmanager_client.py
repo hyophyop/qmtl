@@ -80,6 +80,11 @@ class DagManagerClient:
                 queue_map.update(dict(chunk.queue_map))
                 sentinel_id = chunk.sentinel_id
                 buffer_nodes.extend(chunk.buffer_nodes)
+                await self._diff_stub.AckChunk(
+                    dagmanager_pb2.ChunkAck(
+                        sentinel_id=chunk.sentinel_id, chunk_id=0
+                    )
+                )
             return dagmanager_pb2.DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,

@@ -53,10 +53,6 @@ class FakeAdmin:
 class FakeStream(StreamSender):
     def send(self, chunk):
         pass
-
-    def wait_for_ack(self):
-        pass
-
     def ack(self):
         pass
 
