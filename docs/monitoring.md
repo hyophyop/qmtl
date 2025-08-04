@@ -40,11 +40,10 @@ Both services expose a Prometheus endpoint. Circuit breaker activity is tracked 
 - `dagclient_breaker_open_total` — increments each time the Gateway's gRPC client trips open.
 - `kafka_breaker_open_total` — increments each time the DAG Manager's Kafka admin breaker opens.
 
-Configuration options control the breakers:
+The Gateway's DAG client breaker opens after three consecutive failures and
+is not configurable. The DAG Manager still allows configuring breaker thresholds:
 
 ```yaml
-gateway:
-  dagclient_breaker_threshold: 3  # failures before opening
 dagmanager:
   kafka_breaker_threshold: 3
   neo4j_breaker_threshold: 3
