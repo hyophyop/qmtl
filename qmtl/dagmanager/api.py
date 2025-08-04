@@ -4,7 +4,7 @@ from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 from typing import Optional, TYPE_CHECKING
 
-from .gc import GarbageCollector
+from .garbage_collector import GarbageCollector
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .dagmanager_health import get_health

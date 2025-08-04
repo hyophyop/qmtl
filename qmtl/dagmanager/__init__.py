@@ -33,7 +33,7 @@ def compute_node_id(
 
 from .topic import TopicConfig, topic_name, get_config
 from .kafka_admin import KafkaAdmin
-from .gc import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
+from .garbage_collector import GarbageCollector, DEFAULT_POLICY, S3ArchiveClient
 from .gc_scheduler import GCScheduler
 from .buffer_scheduler import BufferingScheduler
 from .alerts import PagerDutyClient, SlackClient, AlertManager

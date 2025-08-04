@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from .gc import GarbageCollector
+from .garbage_collector import GarbageCollector
 
 
 @dataclass

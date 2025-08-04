@@ -12,7 +12,7 @@ from .grpc_server import serve
 from .config import DagManagerConfig
 from ..config import load_config, find_config_file
 from .api import create_app
-from .gc import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
+from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
 from .monitor import AckStatus
 

@@ -21,7 +21,7 @@ from .kafka_admin import KafkaAdmin
 from qmtl.common import AsyncCircuitBreaker
 from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
-from .gc import GarbageCollector
+from .garbage_collector import GarbageCollector
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 from .dagmanager_health import get_health
 

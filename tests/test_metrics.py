@@ -10,7 +10,7 @@ from qmtl.dagmanager.diff_service import (
     StreamSender,
 )
 from qmtl.dagmanager.topic import topic_name
-from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
+from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 import httpx
 import time
 from qmtl.dagmanager import metrics
