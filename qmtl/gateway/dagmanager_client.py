@@ -25,6 +25,27 @@ class DagManagerClient:
         self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
         self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
         self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
+        # Wrap RPC calls so that ``timeout`` cannot be provided by callers.
+        self._status_call = (
+            dagmanager_pb2_grpc.call_without_timeout(self._health_stub.Status)
+            if self._health_stub is not None
+            else None
+        )
+        self._diff_call = (
+            dagmanager_pb2_grpc.call_without_timeout(self._diff_stub.Diff)
+            if self._diff_stub is not None
+            else None
+        )
+        self._ack_call = (
+            dagmanager_pb2_grpc.call_without_timeout(self._diff_stub.AckChunk)
+            if self._diff_stub is not None
+            else None
+        )
+        self._get_queues_call = (
+            dagmanager_pb2_grpc.call_without_timeout(self._tag_stub.GetQueues)
+            if self._tag_stub is not None
+            else None
+        )
         self._breaker = AsyncCircuitBreaker(
             max_failures=breaker_max_failures,
             on_open=lambda: (
@@ -55,7 +76,7 @@ class DagManagerClient:
         """Return ``True`` if the remote DAG manager reports healthy status."""
         @self._breaker
         async def _call() -> bool:
-            reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
+            reply = await self._status_call(dagmanager_pb2.StatusRequest())
             return reply.neo4j == "ok" and reply.state == "running"
 
         try:
@@ -76,11 +97,11 @@ class DagManagerClient:
             queue_map: Dict[str, str] = {}
             sentinel_id = ""
             buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
-            async for chunk in self._diff_stub.Diff(request):
+            async for chunk in self._diff_call(request):
                 queue_map.update(dict(chunk.queue_map))
                 sentinel_id = chunk.sentinel_id
                 buffer_nodes.extend(chunk.buffer_nodes)
-                await self._diff_stub.AckChunk(
+                await self._ack_call(
                     dagmanager_pb2.ChunkAck(
                         sentinel_id=chunk.sentinel_id, chunk_id=0
                     )
@@ -119,7 +140,7 @@ class DagManagerClient:
 
         @self._breaker
         async def _call() -> list[str]:
-            response = await self._tag_stub.GetQueues(request)
+            response = await self._get_queues_call(request)
             return list(response.queues)
 
         result = await _call()
