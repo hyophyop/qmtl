@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+import logging
 import yaml
 
 
@@ -28,8 +29,17 @@ class DagManagerConfig:
 
 def load_dagmanager_config(path: str) -> DagManagerConfig:
     """Load :class:`DagManagerConfig` from a YAML file."""
-    with open(path, "r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    logger = logging.getLogger(__name__)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            try:
+                data = yaml.safe_load(fh) or {}
+            except yaml.YAMLError as exc:
+                logger.error("Failed to parse configuration file %s: %s", path, exc)
+                raise ValueError(f"Failed to parse configuration file {path}") from exc
+    except (FileNotFoundError, OSError) as exc:
+        logger.error("Unable to open configuration file %s: %s", path, exc)
+        raise
     if not isinstance(data, dict):
         raise TypeError("DagManager config must be a mapping")
     return DagManagerConfig(**data)
