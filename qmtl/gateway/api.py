@@ -188,17 +188,18 @@ def create_app(
         async def _handle_sentinel_weight(self, payload: dict) -> None:
             sid: str = payload["sentinel_id"]
             weight: float = payload["weight"]
-            # Ignore out-of-range weights entirely
-            if 0.0 <= weight <= 1.0:
-                if self._sentinel_weights.get(sid) != weight and self.ws_hub:
-                    await self.ws_hub.send_sentinel_weight(sid, weight)
-                self._sentinel_weights[sid] = weight
-                from . import metrics as gw_metrics
-                gw_metrics.set_sentinel_traffic_ratio(sid, weight)
-            else:
+            if not 0.0 <= weight <= 1.0:
                 logger.warning(
                     "Ignoring out-of-range sentinel weight %s for %s", weight, sid
                 )
+                return
+            if self._sentinel_weights.get(sid) == weight:
+                return
+            if self.ws_hub:
+                await self.ws_hub.send_sentinel_weight(sid, weight)
+            self._sentinel_weights[sid] = weight
+            from . import metrics as gw_metrics
+            gw_metrics.set_sentinel_traffic_ratio(sid, weight)
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:

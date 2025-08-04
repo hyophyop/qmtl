@@ -38,6 +38,22 @@ def test_dag_event_sentinel_weight():
         assert hub.weights == [("v1", 0.7)]
         assert metrics.gateway_sentinel_traffic_ratio._vals["v1"] == 0.7
 
+        # Re-sending the same weight should not trigger another call
+        resp = client.post("/callbacks/dag-event", json=event)
+        assert resp.status_code == 202
+        assert hub.weights == [("v1", 0.7)]
+
+        # Sending a different weight should trigger an update
+        event2 = format_event(
+            "qmtl.dagmanager",
+            "sentinel_weight",
+            {"sentinel_id": "v1", "weight": 0.3},
+        )
+        resp = client.post("/callbacks/dag-event", json=event2)
+        assert resp.status_code == 202
+        assert hub.weights == [("v1", 0.7), ("v1", 0.3)]
+        assert metrics.gateway_sentinel_traffic_ratio._vals["v1"] == 0.3
+
 
 def test_dag_event_sentinel_weight_metric():
     class DummyHub:

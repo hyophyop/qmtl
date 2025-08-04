@@ -346,7 +346,7 @@ async def test_http_sentinel_traffic(monkeypatch):
     assert captured["type"] == "sentinel_weight"
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
-    assert metrics.active_version_weight._vals["v1"] == 0.7
+    assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.7
     assert captured["type"] == "sentinel_weight"
     assert captured["data"]["sentinel_id"] == "v1"
     assert captured["data"]["weight"] == 0.7
@@ -370,7 +370,7 @@ async def test_http_sentinel_traffic_overwrite():
             json={"version": "v1", "weight": 0.4},
         )
     assert weights["v1"] == 0.4
-    assert metrics.active_version_weight._vals["v1"] == 0.4
+    assert metrics.dagmgr_active_version_weight._vals["v1"] == 0.4
     query, params = driver.session_obj.run_calls[0]
     assert params["version"] == "v1"
     assert params["weight"] == 0.4
