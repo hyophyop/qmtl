@@ -12,6 +12,7 @@ from qmtl.dagmanager.http_server import create_app
 from qmtl.dagmanager import metrics
 from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.dagmanager.monitor import AckStatus
 
 
 class FakeSession:
@@ -54,10 +55,10 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
-    def wait_for_ack(self):
-        pass
+    def wait_for_ack(self) -> AckStatus:
+        return AckStatus.OK
 
-    def ack(self):
+    def ack(self, status: AckStatus = AckStatus.OK):
         pass
 
 

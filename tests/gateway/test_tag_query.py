@@ -14,6 +14,7 @@ from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
 import grpc
+from qmtl.dagmanager.monitor import AckStatus
 
 
 class _FakeSession:
@@ -53,10 +54,10 @@ class _FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
-    def wait_for_ack(self):
-        pass
+    def wait_for_ack(self) -> AckStatus:
+        return AckStatus.OK
 
-    def ack(self):
+    def ack(self, status: AckStatus = AckStatus.OK):
         pass
 
 

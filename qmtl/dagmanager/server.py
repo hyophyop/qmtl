@@ -14,16 +14,17 @@ from ..config import load_config, find_config_file
 from .api import create_app
 from .gc import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
+from .monitor import AckStatus
 
 
 class _NullStream(StreamSender):
     def send(self, chunk) -> None:  # pragma: no cover - simple no-op
         pass
 
-    def wait_for_ack(self) -> None:  # pragma: no cover - noop
-        pass
+    def wait_for_ack(self) -> AckStatus:  # pragma: no cover - noop
+        return AckStatus.OK
 
-    def ack(self) -> None:  # pragma: no cover - noop
+    def ack(self, status: AckStatus = AckStatus.OK) -> None:  # pragma: no cover - noop
         pass
 
 

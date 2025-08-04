@@ -14,6 +14,7 @@ from qmtl.dagmanager.gc import GarbageCollector, QueueInfo
 import httpx
 import time
 from qmtl.dagmanager import metrics
+from qmtl.dagmanager.monitor import AckStatus
 
 
 class FakeRepo(NodeRepository):
@@ -50,10 +51,10 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         pass
 
-    def wait_for_ack(self):
-        pass
+    def wait_for_ack(self) -> AckStatus:
+        return AckStatus.OK
 
-    def ack(self):
+    def ack(self, status: AckStatus = AckStatus.OK):
         pass
 
 

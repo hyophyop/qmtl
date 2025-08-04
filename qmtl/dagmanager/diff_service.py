@@ -20,6 +20,7 @@ from .metrics import (
 from .kafka_admin import KafkaAdmin
 from .topic import TopicConfig, topic_name
 from qmtl.common import AsyncCircuitBreaker
+from .monitor import AckStatus
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -156,11 +157,11 @@ class StreamSender:
     def send(self, chunk: DiffChunk) -> None:
         raise NotImplementedError
 
-    def wait_for_ack(self) -> None:
+    def wait_for_ack(self) -> AckStatus:
         """Block until the client acknowledges the last chunk."""
         raise NotImplementedError
 
-    def ack(self) -> None:
+    def ack(self, status: AckStatus = AckStatus.OK) -> None:
         """Signal that the last chunk was received."""
         raise NotImplementedError
 

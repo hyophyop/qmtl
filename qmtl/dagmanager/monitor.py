@@ -3,6 +3,7 @@ from __future__ import annotations
 """Monitoring and recovery actions for DAG-Manager."""
 
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Protocol, Optional
 import asyncio
 
@@ -18,8 +19,12 @@ class MetricsBackend(Protocol):
     def kafka_zookeeper_disconnects(self) -> int:
         ...
 
-    def diff_chunk_ack_timeout(self) -> bool:
-        ...
+
+class AckStatus(Enum):
+    """Result of waiting for a chunk ACK from the client."""
+
+    OK = auto()
+    TIMEOUT = auto()
 
 
 class Neo4jCluster(Protocol):
@@ -37,7 +42,10 @@ class KafkaSession(Protocol):
 
 
 class DiffStream(Protocol):
-    """Interface to resume diff streams."""
+    """Interface to inspect and resume diff streams."""
+
+    def ack_status(self) -> AckStatus:
+        ...
 
     def resume_from_last_offset(self) -> None:
         ...
@@ -61,7 +69,7 @@ class Monitor:
             self.kafka.retry()
             await self.alerts.send_slack("Kafka session lost")
 
-        if self.metrics.diff_chunk_ack_timeout():
+        if self.stream.ack_status() is AckStatus.TIMEOUT:
             self.stream.resume_from_last_offset()
             await self.alerts.send_slack("Diff stream stalled")
 
@@ -100,6 +108,7 @@ class MonitorLoop:
 __all__ = [
     "Monitor",
     "MetricsBackend",
+    "AckStatus",
     "Neo4jCluster",
     "KafkaSession",
     "DiffStream",

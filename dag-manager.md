@@ -174,7 +174,7 @@ sequenceDiagram
 | --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
 | Neo4j leader down     | Diff 거절         | `raft_leader_is_null`         | Automat. leader election               | PagerDuty  |
 | Kafka ZK session loss | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
-| Diff Stream stall     | Gateway timeout | `diff_chunk_ack_timeout`      | Resume from last ACK offset            | Opsgenie   |
+| Diff Stream stall     | Gateway timeout | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie   |
 
 ---
 

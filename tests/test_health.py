@@ -5,6 +5,8 @@ from qmtl.gateway.api import create_app as gw_create_app
 from qmtl.dagmanager.http_server import create_app as dag_http_create_app
 from qmtl.dagmanager.api import create_app as dag_api_create_app
 from qmtl.dagmanager.gc import QueueInfo
+from qmtl.dagmanager.diff_service import StreamSender
+from qmtl.dagmanager.monitor import AckStatus
 from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.gateway.ws import WebSocketHub
@@ -93,14 +95,14 @@ async def test_grpc_health():
         def create_topic(self, *a, **k):
             pass
 
-    class FakeStream:
+    class FakeStream(StreamSender):
         def send(self, chunk):
             pass
 
-        def wait_for_ack(self):
-            pass
+        def wait_for_ack(self) -> AckStatus:
+            return AckStatus.OK
 
-        def ack(self):
+        def ack(self, status: AckStatus = AckStatus.OK):
             pass
 
     driver = FakeDriver()
