@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 
 import redis.asyncio as redis
 
@@ -36,8 +37,9 @@ async def _main(argv: list[str] | None = None) -> None:
     if hasattr(db, "connect"):
         try:
             await db.connect()  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as exc:  # pragma: no cover - exception path tested separately
+            logging.exception("Failed to connect to database")
+            raise SystemExit("Failed to connect to database") from exc
 
     import uvicorn
 
@@ -47,8 +49,8 @@ async def _main(argv: list[str] | None = None) -> None:
         if hasattr(db, "close"):
             try:
                 await db.close()  # type: ignore[attr-defined]
-            except Exception:
-                pass
+            except Exception:  # pragma: no cover - exception path tested separately
+                logging.exception("Failed to close database connection")
 
 
 def main(argv: list[str] | None = None) -> None:
