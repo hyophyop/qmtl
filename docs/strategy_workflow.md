@@ -126,11 +126,11 @@ require a running Gateway and DAG manager. Start them in separate terminals. The
 ```bash
 # start with built-in defaults
 qmtl gw
-qmtl dagmgr-server
+qmtl dagmanager-server
 
 # or load a custom configuration
 qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmgr-server --config qmtl/examples/qmtl.yml
+qmtl dagmanager-server --config qmtl/examples/qmtl.yml
 ```
 
 Multiple strategies can be executed in parallel by launching separate processes

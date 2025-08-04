@@ -105,7 +105,7 @@ CREATE INDEX queue_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 ### 2-B. Sentinel Traffic API
 
-`/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmgr_active_version_weight{version="<id>"}`로 노출된다.
+`/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmanager_active_version_weight{version="<id>"}`로 노출된다.
 ---
 
 ## 3. 큐 생성 & 명명 규칙 (확장)
@@ -228,7 +228,7 @@ sequenceDiagram
 * **Integration:** Docker‑Compose (Kafka, Neo4j, Gateway stub) → Diff latency, GC batch.
 * **Chaos:** Toxiproxy split‑brain, network delay injection.
 * **CI/CD Gate:** SSA DAG Lint와 20종 백테스트 → 24h 카나리아 → 50% 프로모션
-  이후 자동 배포, `dagmgr redo-diff --sentinel <id> --rollback`으로 역방향 롤백.
+  이후 자동 배포, `dagmanager redo-diff --sentinel <id> --rollback`으로 역방향 롤백.
 
 ---
 
@@ -236,13 +236,13 @@ sequenceDiagram
 
 ```shell
 # diff dry‑run
-qmtl dagm diff --file dag.json --dry-run
+qmtl dagmanager diff --file dag.json --dry-run
 # queue stats
-qmtl dagm queue-stats --tag indicator --interval 1h
+qmtl dagmanager queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
-qmtl dagm gc --sentinel v1.2.3
+qmtl dagmanager gc --sentinel v1.2.3
 # export schema DDL
-qmtl dagm export-schema --out schema.cypher
+qmtl dagmanager export-schema --out schema.cypher
 ```
 
 For canary deployment steps see
@@ -250,7 +250,7 @@ For canary deployment steps see
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl dagmgr-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
+`qmtl dagmanager-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
 아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
 
 예시:
@@ -268,10 +268,10 @@ enables Neo4j and Kafka integrations respectively.
 
 ```
 # 기본값으로 실행
-qmtl dagmgr-server
+qmtl dagmanager-server
 
 # YAML 설정 파일로 실행
-qmtl dagmgr-server --config qmtl/examples/qmtl.yml
+qmtl dagmanager-server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.

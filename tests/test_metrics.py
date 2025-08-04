@@ -86,7 +86,7 @@ def test_metrics_exposed():
     assert "queue_create_error_total" in data
     assert "orphan_queue_total" in data
     assert "sentinel_gap_count" in data
-    assert "dagmgr_active_version_weight" in data
+    assert "dagmanager_active_version_weight" in data
 
 
 def test_diff_duration_and_error_metrics():

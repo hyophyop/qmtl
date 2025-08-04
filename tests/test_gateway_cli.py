@@ -3,7 +3,7 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize("cmd", ["gw", "dagm", "dagmgr-server", "sdk"])
+@pytest.mark.parametrize("cmd", ["gw", "dagmanager", "dagmanager-server", "sdk"])
 def test_cli_subcommand_help(cmd):
     result = subprocess.run([sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True)
     assert result.returncode == 0
