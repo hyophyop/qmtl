@@ -1,6 +1,5 @@
 import sys
 import types
-import time
 
 import pytest
 
@@ -63,7 +62,7 @@ def test_breaker_opens(monkeypatch):
 
     client = ReconnectingNeo4j('bolt://', 'u', 'p')
     repo = Neo4jNodeRepository(client)
-    breaker = AsyncCircuitBreaker(max_failures=1, reset_timeout=0.05)
+    breaker = AsyncCircuitBreaker(max_failures=1)
 
     with pytest.raises(RuntimeError):
         repo.get_nodes(['A'], breaker=breaker)
@@ -81,13 +80,13 @@ def test_breaker_resets(monkeypatch):
 
     client = ReconnectingNeo4j('bolt://', 'u', 'p')
     repo = Neo4jNodeRepository(client)
-    breaker = AsyncCircuitBreaker(max_failures=1, reset_timeout=0.05)
+    breaker = AsyncCircuitBreaker(max_failures=1)
 
     with pytest.raises(RuntimeError):
         repo.get_nodes(['A'], breaker=breaker)
 
     assert breaker.is_open
-    time.sleep(0.06)
+    breaker.reset()
 
     records = repo.get_nodes(['A'], breaker=breaker)
     assert records == {}

@@ -78,7 +78,6 @@ async def _run(cfg: DagManagerConfig) -> None:
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
         breaker = AsyncCircuitBreaker(
             max_failures=cfg.kafka_breaker_threshold,
-            reset_timeout=cfg.kafka_breaker_timeout,
         )
         queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
     else:
@@ -88,7 +87,6 @@ async def _run(cfg: DagManagerConfig) -> None:
         admin_client = InMemoryAdminClient()
         breaker = AsyncCircuitBreaker(
             max_failures=cfg.kafka_breaker_threshold,
-            reset_timeout=cfg.kafka_breaker_timeout,
         )
         queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
 
@@ -105,7 +103,6 @@ async def _run(cfg: DagManagerConfig) -> None:
         repo=repo,
         queue=queue,
         breaker_threshold=cfg.kafka_breaker_threshold,
-        breaker_timeout=cfg.kafka_breaker_timeout,
     )
     await grpc_server.start()
 

@@ -77,7 +77,7 @@ async def test_breaker_opens_and_resets(monkeypatch):
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     metrics.reset_metrics()
-    client = DagManagerClient("dummy", breaker_max_failures=2, breaker_reset_timeout=0.05)
+    client = DagManagerClient("dummy", breaker_max_failures=2)
 
     for _ in range(2):
         with pytest.raises(grpc.RpcError):
@@ -90,7 +90,7 @@ async def test_breaker_opens_and_resets(monkeypatch):
     with pytest.raises(RuntimeError):
         await client.diff("s", "{}")
 
-    await asyncio.sleep(0.06)
+    client.breaker.reset()
     assert not client.breaker.is_open
     result = await client.diff("s", "{}")
     assert isinstance(result, dagmanager_pb2.DiffChunk)
@@ -110,7 +110,7 @@ async def test_get_queues_uses_breaker(monkeypatch):
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     metrics.reset_metrics()
-    client = DagManagerClient("dummy", breaker_max_failures=2, breaker_reset_timeout=0.05)
+    client = DagManagerClient("dummy", breaker_max_failures=2)
 
     for _ in range(2):
         with pytest.raises(grpc.RpcError):
@@ -133,7 +133,7 @@ async def test_status_uses_breaker(monkeypatch):
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     metrics.reset_metrics()
-    client = DagManagerClient("dummy", breaker_max_failures=2, breaker_reset_timeout=0.05)
+    client = DagManagerClient("dummy", breaker_max_failures=2)
 
     assert await client.status() is False
     assert await client.status() is False
@@ -141,7 +141,7 @@ async def test_status_uses_breaker(monkeypatch):
     assert metrics.dagclient_breaker_state._value.get() == 1
     assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
     assert await client.status() is False
-    await asyncio.sleep(0.06)
+    client.breaker.reset()
     assert await client.status() is True
     assert metrics.dagclient_breaker_state._value.get() == 0
     assert metrics.dagclient_breaker_failures._value.get() == 0
