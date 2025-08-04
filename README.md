@@ -5,15 +5,15 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gate
 Use the DAG manager CLI to preview DAG structures:
 
 ```bash
-qmtl dagm diff --file dag.json --dry-run
+qmtl dagmanager diff --file dag.json --dry-run
 ```
 
 Every subcommand now exposes its own help message. For example:
 
 ```bash
 qmtl gw --help
-qmtl dagm --help
-qmtl dagmgr-server --help
+qmtl dagmanager --help
+qmtl dagmanager-server --help
 qmtl sdk --help
 ```
 
@@ -153,14 +153,14 @@ demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 qmtl gw
 
 # start the DAG manager with defaults
-qmtl dagmgr-server
+qmtl dagmanager-server
 
 # use a custom configuration file
 qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmgr-server --config qmtl/examples/qmtl.yml
+qmtl dagmanager-server --config qmtl/examples/qmtl.yml
 
 # submit a DAG diff
-qmtl dagm diff --file dag.json --target localhost:50051
+qmtl dagmanager diff --file dag.json --target localhost:50051
 ```
 
 Customize the sample YAML files in `qmtl/examples/` to match your environment.

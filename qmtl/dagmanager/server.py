@@ -118,7 +118,7 @@ async def _run(cfg: DagManagerConfig) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="qmtl dagmgr-server", description="Run DAG manager gRPC and HTTP servers"
+        prog="qmtl dagmanager-server", description="Run DAG manager gRPC and HTTP servers"
     )
     parser.add_argument("--config", help="Path to configuration file")
     args = parser.parse_args(argv)

@@ -14,13 +14,13 @@ Example:
 curl -X POST \ 
      -H 'Content-Type: application/json' \
      -d '{"version": "v1.2.1", "weight": 0.25}' \
-     http://dagmgr.internal/callbacks/sentinel-traffic
+     http://dagmanager.internal/callbacks/sentinel-traffic
 ```
 
 ## Monitoring Metrics
 
 * **Gateway metrics:** check `gateway_sentinel_traffic_ratio{version="v1.2.1"}` in Prometheus to confirm the live split. The metric is exposed via the Gateway's `/metrics` endpoint.
-* **DAG‑Mgr metrics:** monitor `dagmgr_active_version_weight` for each version to ensure the new weight is applied. This gauge is available from the DAG‑Mgr's `/metrics` endpoint.
+* **DAG manager metrics:** monitor `dagmanager_active_version_weight` for each version to ensure the new weight is applied. This gauge is available from the DAG manager's `/metrics` endpoint.
 * **Alerts:** alert rules under `alert_rules.yml` trigger if traffic weight deviates from the configured value for more than 5 minutes.
 
 Review Grafana dashboards to visualize canary success rates and error budgets while gradually increasing the traffic weight.
