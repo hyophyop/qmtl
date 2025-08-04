@@ -7,12 +7,12 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def bollinger_bands(source: Node, window: int, multiplier: float = 2.0, *, name: str | None = None) -> Node:
+def bollinger_bands(source: Node, period: int, multiplier: float = 2.0, *, name: str | None = None) -> Node:
     """Return a Node computing Bollinger Bands as (mid, upper, lower)."""
 
     def compute(view: CacheView):
-        data = [v for _, v in view[source][source.interval][-window:]]
-        if len(data) < window:
+        data = [v for _, v in view[source][source.interval][-period:]]
+        if len(data) < period:
             return None
         mid = mean(data)
         std = pstdev(data)
@@ -25,5 +25,5 @@ def bollinger_bands(source: Node, window: int, multiplier: float = 2.0, *, name:
         compute_fn=compute,
         name=name or "bollinger_bands",
         interval=source.interval,
-        period=window,
+        period=period,
     )

@@ -5,7 +5,7 @@ from qmtl.sdk.cache_view import CacheView
 
 def test_sma_compute():
     src = SourceNode(interval="1s", period=3)
-    node = sma(src, window=2)
+    node = sma(src, period=2)
     data = {src.node_id: {1: [(0, 1), (1, 3)]}}
     view = CacheView(data)
     assert node.compute_fn(view) == 2
@@ -31,7 +31,7 @@ from qmtl.indicators import (
 
 def test_ema_compute():
     src = SourceNode(interval="1s", period=3)
-    node = ema(src, window=3)
+    node = ema(src, period=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 3)]}}
     view = CacheView(data)
     assert node.compute_fn(view) == 2.25
@@ -39,7 +39,7 @@ def test_ema_compute():
 
 def test_rsi_compute():
     src = SourceNode(interval="1s", period=15)
-    node = rsi(src, window=14)
+    node = rsi(src, period=14)
     data = {src.node_id: {1: [(i, float(i)) for i in range(15)]}}
     view = CacheView(data)
     assert node.compute_fn(view) == 100.0
@@ -47,7 +47,7 @@ def test_rsi_compute():
 
 def test_bollinger_bands_compute():
     src = SourceNode(interval="1s", period=3)
-    node = bollinger_bands(src, window=3)
+    node = bollinger_bands(src, period=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 3)]}}
     view = CacheView(data)
     result = node.compute_fn(view)
@@ -60,7 +60,7 @@ def test_atr_compute():
     h = SourceNode(interval="1s", period=3, config={"id": "h"})
     l = SourceNode(interval="1s", period=3, config={"id": "l"})
     c = SourceNode(interval="1s", period=4, config={"id": "c"})
-    node = atr(h, l, c, window=3)
+    node = atr(h, l, c, period=3)
     data = {
         h.node_id: {1: [(0, 2), (1, 3), (2, 4)]},
         l.node_id: {1: [(0, 0), (1, 1), (2, 2)]},
@@ -74,7 +74,7 @@ def test_chandelier_exit_compute():
     h = SourceNode(interval="1s", period=3, config={"id": "h"})
     l = SourceNode(interval="1s", period=3, config={"id": "l"})
     c = SourceNode(interval="1s", period=4, config={"id": "c"})
-    node = chandelier_exit(h, l, c, window=3, multiplier=3)
+    node = chandelier_exit(h, l, c, period=3, multiplier=3)
     data = {
         h.node_id: {1: [(0, 2), (1, 3), (2, 4)]},
         l.node_id: {1: [(0, 0), (1, 1), (2, 2)]},
@@ -89,7 +89,7 @@ def test_chandelier_exit_compute():
 def test_vwap_compute():
     p = SourceNode(interval="1s", period=3, config={"id": "p"})
     v = SourceNode(interval="1s", period=3, config={"id": "v"})
-    node = vwap(p, v, window=3)
+    node = vwap(p, v, period=3)
     data = {
         p.node_id: {1: [(0, 1), (1, 2), (2, 3)]},
         v.node_id: {1: [(0, 1), (1, 1), (2, 2)]},
@@ -114,7 +114,7 @@ def test_keltner_channel_compute():
     h = SourceNode(interval="1s", period=3, config={"id": "h"})
     l = SourceNode(interval="1s", period=3, config={"id": "l"})
     c = SourceNode(interval="1s", period=4, config={"id": "c"})
-    node = keltner_channel(h, l, c, ema_window=3, atr_window=3, multiplier=2)
+    node = keltner_channel(h, l, c, ema_period=3, atr_period=3, multiplier=2)
     data = {
         h.node_id: {1: [(0, 2), (1, 3), (2, 4)]},
         l.node_id: {1: [(0, 0), (1, 1), (2, 2)]},
@@ -143,7 +143,7 @@ def test_supertrend_compute():
     h = SourceNode(interval="1s", period=3, config={"id": "h"})
     l = SourceNode(interval="1s", period=3, config={"id": "l"})
     c = SourceNode(interval="1s", period=4, config={"id": "c"})
-    node = supertrend(h, l, c, window=3, multiplier=2)
+    node = supertrend(h, l, c, period=3, multiplier=2)
     data = {
         h.node_id: {1: [(0, 2), (1, 3), (2, 4)]},
         l.node_id: {1: [(0, 0), (1, 1), (2, 2)]},
@@ -180,7 +180,7 @@ def test_kalman_trend_compute():
 
 def test_rough_bergami_compute():
     src = SourceNode(interval="1s", period=4, config={"id": "src"})
-    node = rough_bergami(src, window=3)
+    node = rough_bergami(src, period=3)
     data = {src.node_id: {1: [(0, 1), (1, 2), (2, 1), (3, 2)]}}
     view = CacheView(data)
     assert round(node.compute_fn(view), 4) > 0
@@ -188,7 +188,7 @@ def test_rough_bergami_compute():
 
 def test_stoch_rsi_compute():
     src = SourceNode(interval="1s", period=30, config={"id": "src"})
-    node = stoch_rsi(src, window=14)
+    node = stoch_rsi(src, period=14)
     values = [(i, float(i % 5)) for i in range(30)]
     data = {src.node_id: {1: values}}
     view = CacheView(data)
@@ -200,7 +200,7 @@ def test_kdj_compute():
     h = SourceNode(interval="1s", period=3, config={"id": "h"})
     l = SourceNode(interval="1s", period=3, config={"id": "l"})
     c = SourceNode(interval="1s", period=3, config={"id": "c"})
-    node = kdj(h, l, c, window=3)
+    node = kdj(h, l, c, period=3)
     data = {
         h.node_id: {1: [(0, 3), (1, 4), (2, 5)]},
         l.node_id: {1: [(0, 1), (1, 1), (2, 2)]},

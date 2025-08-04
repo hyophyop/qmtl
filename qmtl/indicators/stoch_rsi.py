@@ -5,7 +5,7 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def stoch_rsi(source: Node, window: int, *, name: str | None = None) -> Node:
+def stoch_rsi(source: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing Stochastic RSI."""
 
     def _rsi(values: list[float]) -> float:
@@ -25,11 +25,11 @@ def stoch_rsi(source: Node, window: int, *, name: str | None = None) -> Node:
         return 100 - (100 / (1 + rs))
 
     def compute(view: CacheView):
-        values = [v for _, v in view[source][source.interval][-(window * 2):]]
-        if len(values) < window * 2:
+        values = [v for _, v in view[source][source.interval][-(period * 2):]]
+        if len(values) < period * 2:
             return None
         rsi_vals = [
-            _rsi(values[i : i + window + 1]) for i in range(len(values) - window)
+            _rsi(values[i : i + period + 1]) for i in range(len(values) - period)
         ]
         current = rsi_vals[-1]
         lowest = min(rsi_vals)
@@ -43,5 +43,5 @@ def stoch_rsi(source: Node, window: int, *, name: str | None = None) -> Node:
         compute_fn=compute,
         name=name or "stoch_rsi",
         interval=source.interval,
-        period=window * 2,
+        period=period * 2,
     )

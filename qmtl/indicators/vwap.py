@@ -4,13 +4,13 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def vwap(price: Node, volume: Node, window: int, *, name: str | None = None) -> Node:
+def vwap(price: Node, volume: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing VWAP."""
 
     def compute(view: CacheView):
-        prices = view[price][price.interval][-window:]
-        vols = view[volume][volume.interval][-window:]
-        if len(prices) < window or len(vols) < window:
+        prices = view[price][price.interval][-period:]
+        vols = view[volume][volume.interval][-period:]
+        if len(prices) < period or len(vols) < period:
             return None
         num = sum(p[1] * v[1] for p, v in zip(prices, vols))
         den = sum(v[1] for v in vols)
@@ -23,5 +23,5 @@ def vwap(price: Node, volume: Node, window: int, *, name: str | None = None) -> 
         compute_fn=compute,
         name=name or "vwap",
         interval=price.interval,
-        period=window,
+        period=period,
     )

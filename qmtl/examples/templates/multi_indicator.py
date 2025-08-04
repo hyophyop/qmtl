@@ -28,10 +28,10 @@ class MultiIndicatorStrategy(Strategy):
         # Price stream feeding all downstream indicators
         price = StreamInput(interval="60s", period=50)
         # Short and long EMAs computed from the same source
-        fast_ema = ema(price, window=5)
-        slow_ema = ema(price, window=20)
+        fast_ema = ema(price, period=5)
+        slow_ema = ema(price, period=20)
         # Relative strength index from the same price history
-        rsi_node = rsi(price, window=14)
+        rsi_node = rsi(price, period=14)
         # Register all nodes so the DAG manager can schedule them
         self.add_nodes([price, fast_ema, slow_ema, rsi_node])
 
