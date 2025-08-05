@@ -1,8 +1,4 @@
-import importlib
-_module = None
+from my_strategy import MyStrategy
 
-def __getattr__(attr):
-    global _module
-    if _module is None:
-        _module = importlib.import_module('qmtl.examples.strategies.general_strategy')
-    return getattr(_module, attr)
+if __name__ == "__main__":
+    MyStrategy().run()
