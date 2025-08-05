@@ -29,7 +29,7 @@ qmtl init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
-생성된 디렉터리에는 `strategy.py`, `qmtl.yml`, 그리고 `generators/`, `indicators/`, `transforms/` 패키지가 포함되어 확장 노드를 추가할 수 있습니다.
+생성된 디렉터리에는 `strategy.py`, `qmtl.yml`, 그리고 노드와 DAG를 정의하는 `strategies/nodes/`와 `strategies/dags/` 패키지가 포함됩니다. 기존 `generators/`, `indicators/`, `transforms/` 패키지는 `strategies/nodes/` 하위로 재배치되었습니다.
 
 ## 전략 템플릿 작성 절차
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     MyStrategy().run()
 ```
 
-4. 환경 설정이 필요하면 `qmtl.yml`을 수정하고, 커스텀 노드를 `generators/`, `indicators/`, `transforms/`에 추가합니다.
+4. 환경 설정이 필요하면 `qmtl.yml`을 수정하고, 커스텀 노드를 `strategies/nodes/`에 추가한 뒤 DAG를 `strategies/dags/`에서 구성합니다. 기존 `generators/`, `indicators/`, `transforms/` 설명은 모두 `strategies/nodes/` 하위로 이동했습니다.
 5. 전략이 정상 동작하는지 확인합니다.
 
 ```bash
@@ -62,5 +62,9 @@ python strategy.py
 
 ## 노드와 DAG 구성
 
-노드 프로세서 정의와 DAG 조합 방식은 [strategies/README.md](strategies/README.md)를 참고하세요.
+노드 프로세서는 `strategies/nodes/`에, 전략 DAG는 `strategies/dags/`에 구성하며 자세한 방식은 [strategies/README.md](strategies/README.md)를 참고하세요.
+
+## 추가 학습 자료
+
+프로젝트 아키텍처 전반에 대한 설명은 [qmtl/architecture.md](qmtl/architecture.md) 문서를 참고하세요.
 
