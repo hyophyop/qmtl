@@ -1,8 +1,18 @@
 try:
-    from dags.my_strategy import MyStrategy
+    from dags.example_strategy import ExampleStrategy
 except ModuleNotFoundError:  # pragma: no cover
-    from strategies.dags.my_strategy import MyStrategy
+    from strategies.dags.example_strategy import ExampleStrategy
+
+
+def main():
+    """Run the example DAG strategy.
+
+    The same nodes (e.g., ``average_indicator_node``) can be reused in other DAGs
+    to build new strategies without modifying the node implementations.
+    """
+    result = ExampleStrategy().run()
+    print(result)
 
 
 if __name__ == "__main__":
-    MyStrategy().run()
+    main()
