@@ -60,3 +60,7 @@ if __name__ == "__main__":
 python strategy.py
 ```
 
+## 노드와 DAG 구성
+
+노드 프로세서 정의와 DAG 조합 방식은 [strategies/README.md](strategies/README.md)를 참고하세요.
+
