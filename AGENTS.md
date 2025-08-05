@@ -20,6 +20,7 @@ This repository hosts strategy experiments built on top of the [QMTL](qmtl/READM
 - Add reusable components under `strategies/`, `generators/`, `indicators/` or `transforms/`. Place tests in `qmtl/tests/` or a local `tests/` directory.
 - Manage node processors under `strategies/nodes/` and define strategy DAGs in `strategies/dags/`.
 - Refer to `qmtl/architecture.md`, `qmtl/gateway.md` and `qmtl/dag-manager.md` for design details before modifying core behavior.
+- See [strategies/README.md](strategies/README.md) for guidance on building and reusing node processors and DAGs.
 - Use descriptive names and the `*_dsn` suffix for connection strings.
 - When proposing task lists or improvements, highlight opportunities for parallel execution.
 - Ensure resources such as network or database connections are closed to avoid `ResourceWarning`.
