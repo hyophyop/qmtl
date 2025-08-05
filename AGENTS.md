@@ -31,6 +31,10 @@ This repository hosts strategy experiments built on top of the [QMTL](qmtl/READM
   ```bash
   uv run -m pytest -W error
   ```
+- Any change to node processors requires running their tests. Place tests under `strategies/tests/nodes/` and run them with:
+  ```bash
+  uv run -m pytest strategies/tests/nodes -W error
+  ```
 - Commit only after tests pass without warnings.
 
 ## Running Strategies
