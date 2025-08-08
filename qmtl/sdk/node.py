@@ -19,6 +19,7 @@ from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .util import parse_interval, parse_period
 from . import arrow_cache
+from . import metrics as sdk_metrics
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -518,6 +519,9 @@ class Node:
         ``compute_fn``. The function **never** triggers execution directly.
         """
         self.cache.append(upstream_id, interval, timestamp, payload)
+        sdk_metrics.observe_nodecache_resident_bytes(
+            self.node_id, self.cache.resident_bytes
+        )
 
         recorder = getattr(self, "event_recorder", None)
         if recorder is not None:

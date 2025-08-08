@@ -90,6 +90,21 @@ backfill_jobs_in_progress._val = 0  # type: ignore[attr-defined]
 backfill_failure_total._vals = {}  # type: ignore[attr-defined]
 backfill_retry_total._vals = {}  # type: ignore[attr-defined]
 
+# ---------------------------------------------------------------------------
+if "nodecache_resident_bytes" in global_registry._names_to_collectors:
+    nodecache_resident_bytes = global_registry._names_to_collectors[
+        "nodecache_resident_bytes"
+    ]
+else:
+    nodecache_resident_bytes = Gauge(
+        "nodecache_resident_bytes",
+        "Resident bytes held in node caches",
+        ["node_id", "scope"],
+        registry=global_registry,
+    )
+
+nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+
 
 def observe_cache_read(upstream_id: str, interval: int) -> None:
     """Increment read metrics for a given upstream/interval pair."""
@@ -134,6 +149,17 @@ def observe_backfill_failure(node_id: str, interval: int) -> None:
     backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()  # type: ignore[attr-defined]
 
 
+def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
+    n = str(node_id)
+    nodecache_resident_bytes.labels(node_id=n, scope="node").set(resident)
+    nodecache_resident_bytes._vals[(n, "node")] = resident  # type: ignore[attr-defined]
+    total = sum(
+        v for (nid, sc), v in nodecache_resident_bytes._vals.items() if sc == "node"
+    )
+    nodecache_resident_bytes.labels(node_id="all", scope="total").set(total)
+    nodecache_resident_bytes._vals[("all", "total")] = total  # type: ignore[attr-defined]
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Expose metrics via an HTTP server."""
     start_http_server(port, registry=global_registry)
@@ -158,3 +184,5 @@ def reset_metrics() -> None:
     backfill_failure_total._vals = {}  # type: ignore[attr-defined]
     backfill_retry_total.clear()
     backfill_retry_total._vals = {}  # type: ignore[attr-defined]
+    nodecache_resident_bytes.clear()
+    nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
