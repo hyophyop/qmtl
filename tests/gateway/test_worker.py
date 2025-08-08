@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import pytest
 
@@ -128,5 +129,64 @@ async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
     assert hub.maps == []
     assert hub.progress[0] == ("sid", "processing")
     assert hub.progress[-1] == ("sid", "failed")
+    assert db.records["sid"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_process_logs_diff_error(fake_redis, caplog):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+
+    await fsm.create("sid", None)
+    await redis.hset("strategy:sid", mapping={"dag": "{}"})
+
+    async def diff(sid: str, dag: str):
+        raise RuntimeError("fail")
+
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
+
+    caplog.set_level(logging.ERROR)
+    result = await worker._process("sid")
+
+    assert result is False
+    assert "gRPC diff failed for strategy sid" in caplog.text
+    assert db.records["sid"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_process_logs_unhandled_error(fake_redis, caplog):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+
+    await fsm.create("sid", None)
+    await redis.hset("strategy:sid", mapping={"dag": "{}"})
+
+    async def diff(sid: str, dag: str):
+        return SimpleNamespace(queue_map={}, sentinel_id="s")
+
+    async def handler(sid: str):
+        raise RuntimeError("boom")
+
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(
+        redis,
+        db,
+        fsm,
+        queue,
+        dag_client,
+        ws_hub=None,
+        handler=handler,
+    )
+
+    caplog.set_level(logging.ERROR)
+    result = await worker._process("sid")
+
+    assert result is False
+    assert "Unhandled error processing strategy sid" in caplog.text
     assert db.records["sid"] == "failed"
 
