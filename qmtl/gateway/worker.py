@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Awaitable, Callable, Optional
 
+import logging
 import redis.asyncio as redis
 
 from .database import Database
@@ -79,6 +80,7 @@ class StrategyWorker:
                 diff_result = await self.dag_client.diff(strategy_id, dag_json)
                 self._grpc_fail_count = 0
             except Exception:
+                logging.exception("gRPC diff failed for strategy %s", strategy_id)
                 self._grpc_fail_count += 1
                 if self._grpc_fail_count >= self._grpc_fail_thresh:
                     if self.alerts:
@@ -87,7 +89,7 @@ class StrategyWorker:
                 state = await self.fsm.transition(strategy_id, "FAIL")
                 if self.ws_hub:
                     await self.ws_hub.send_progress(strategy_id, state)
-                return True
+                return False
 
             if self.ws_hub:
                 await self.ws_hub.send_queue_map(strategy_id, dict(diff_result.queue_map))
@@ -100,10 +102,11 @@ class StrategyWorker:
                 await self.ws_hub.send_progress(strategy_id, state)
             return True
         except Exception:
+            logging.exception("Unhandled error processing strategy %s", strategy_id)
             state = await self.fsm.transition(strategy_id, "FAIL")
             if self.ws_hub:
                 await self.ws_hub.send_progress(strategy_id, state)
-            return True
+            return False
         finally:
             # The lock expires automatically; explicit deletion would allow
             # another worker to reprocess the same strategy immediately.
