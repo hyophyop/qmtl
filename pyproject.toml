@@ -1,0 +1,58 @@
+[project]
+name = "qmtl"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "prometheus-client",
+    "boto3",
+    "xarray",
+    "networkx",
+    "numpy",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+    "redis",
+    "asyncpg",
+    "aiosqlite",
+    "websockets",
+    "grpcio",
+    "PyYAML",
+    "psutil",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "fakeredis",
+    "grpcio-tools",
+    "pyarrow",
+    "xstate",
+]
+
+ray = ["ray"]
+io = ["pandas"]
+
+[project.scripts]
+qmtl = "qmtl.cli:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qmtl*"]
+
+[tool.setuptools.package-data]
+"qmtl.examples" = [
+    "*.py",
+    "*.yml",
+"README.md",
+"data/*.csv",
+"*.csv",
+"notebooks/*.ipynb",
+]
