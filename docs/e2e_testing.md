@@ -20,9 +20,10 @@ uv pip install -e .[dev]
 
 ## Bringing up the stack
 
-Start all services using Docker Compose. The DAG Manager and Gateway images
-are built from the repository's `Dockerfile`, which installs the local package
-so the `qmtl` entrypoint is available:
+Start all services using Docker Compose. Both the DAG Manager and Gateway
+services build from the repository's top-level `Dockerfile`, which installs
+QMTL via `uv pip install .` and mounts the project source so the `qmtl`
+entrypoint is available:
 
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up --build -d

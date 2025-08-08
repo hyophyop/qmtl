@@ -39,7 +39,11 @@ services:
       - "9092:9092"
 
   dagmanager:
-    build: ..
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/app
     command: ["qmtl", "dagmanager-server"]
     depends_on:
       - kafka
@@ -48,7 +52,11 @@ services:
       - "50051:50051"
 
   gateway:
-    build: ..
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/app
     command: ["qmtl", "gw"]
     depends_on:
       - dagmanager
