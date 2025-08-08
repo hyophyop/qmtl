@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from qmtl.dagmanager.monitor import (
     Monitor,
@@ -85,3 +86,40 @@ async def test_monitor_triggers_recovery_and_alerts():
     assert pd.sent == ["Neo4j leader down"]
     assert "Kafka session lost" in slack.sent
     assert "Diff stream stalled" in slack.sent
+
+
+@pytest.mark.asyncio
+async def test_monitor_gathers_alerts_concurrently():
+    metrics = FakeMetrics(leader=True, disconnects=1)
+    cluster = FakeCluster()
+    kafka = FakeKafka()
+    stream = FakeStream(status=AckStatus.TIMEOUT)
+
+    class SlowPagerDuty(FakePagerDuty):
+        async def send(self, msg: str) -> None:  # type: ignore[override]
+            assert cluster.elected == 1
+            await asyncio.sleep(0.05)
+            await super().send(msg)
+
+    class SlowSlack(FakeSlack):
+        async def send(self, msg: str) -> None:  # type: ignore[override]
+            if msg == "Kafka session lost":
+                assert kafka.retried == 1
+            elif msg == "Diff stream stalled":
+                assert stream.resumed == 1
+            await asyncio.sleep(0.05)
+            await super().send(msg)
+
+    pd = SlowPagerDuty()
+    slack = SlowSlack()
+    manager = AlertManager(pd, slack)
+    monitor = Monitor(metrics, cluster, kafka, stream, manager)
+
+    start = asyncio.get_running_loop().time()
+    await monitor.check_once()
+    elapsed = asyncio.get_running_loop().time() - start
+
+    assert elapsed < 0.1
+    assert pd.sent == ["Neo4j leader down"]
+    assert slack.sent.count("Kafka session lost") == 1
+    assert slack.sent.count("Diff stream stalled") == 1
