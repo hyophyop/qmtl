@@ -20,6 +20,11 @@ class WebSocketClient:
         url: str,
         *,
         on_message: Optional[Callable[[dict], Awaitable[None]]] = None,
+        max_retries: int | None = None,
+        max_total_time: float | None = None,
+        base_delay: float = 1.0,
+        backoff_factor: float = 2.0,
+        max_delay: float = 8.0,
     ) -> None:
         self.url = url
         self.on_message = on_message
@@ -28,6 +33,11 @@ class WebSocketClient:
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._ws: websockets.WebSocketClientProtocol | None = None
+        self.max_retries = max_retries
+        self.max_total_time = max_total_time
+        self._base_delay = base_delay
+        self._backoff_factor = backoff_factor
+        self._max_delay = max_delay
 
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -53,24 +63,42 @@ class WebSocketClient:
             await self.on_message(data)
 
     async def _listen(self) -> None:
-        async with websockets.connect(self.url) as ws:
-            self._ws = ws
-            while not self._stop_event.is_set():
-                try:
-                    msg = await ws.recv()
-                except websockets.ConnectionClosed:
-                    # Expected closure, break the loop
-                    break
-                except Exception as e:
-                    # Log unexpected errors and decide how to handle (e.g., log and break, log and continue, attempt reconnect)
-                    # logging.error(f"Unexpected error during WebSocket receive: {e}")
-                    break # Or continue, or implement retry logic
-                try:
-                    data = json.loads(msg)
-                except json.JSONDecodeError:
-                    continue
-                await self._handle(data)
-            self._ws = None
+        retries = 0
+        delay = self._base_delay
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        while not self._stop_event.is_set():
+            try:
+                async with websockets.connect(self.url) as ws:
+                    self._ws = ws
+                    delay = self._base_delay
+                    while not self._stop_event.is_set():
+                        try:
+                            msg = await ws.recv()
+                        except websockets.ConnectionClosed:
+                            break
+                        except Exception:
+                            break
+                        try:
+                            data = json.loads(msg)
+                        except json.JSONDecodeError:
+                            continue
+                        await self._handle(data)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            finally:
+                self._ws = None
+            if self._stop_event.is_set():
+                break
+            retries += 1
+            if self.max_retries is not None and retries > self.max_retries:
+                break
+            if self.max_total_time is not None and loop.time() - start > self.max_total_time:
+                break
+            await asyncio.sleep(delay)
+            delay = min(delay * self._backoff_factor, self._max_delay)
 
     async def start(self) -> None:
         """Start listening in the background."""
