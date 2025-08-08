@@ -107,11 +107,12 @@ Content‑Type: application/json
 }
 ```
 
-| HTTP Status         | Meaning                                 | Typical Cause      |
-| ------------------- | --------------------------------------- | ------------------ |
-|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
+| HTTP Status         | Meaning                                 | Typical Cause       |
+| ------------------- | --------------------------------------- | ------------------- |
+|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal             |
+|  400 Bad Request   |  CRC mismatch between SDK and Gateway  | NodeID CRC failure  |
 |  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re‑submit |
-|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid   |
+|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid    |
 
 ---
 
@@ -139,7 +140,7 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG Manager. U
 ### S5 · Reliability Checklist
 
 * **NodeID CRC 파이프라인** – SDK가 전송한 `node_id`와 Gateway가 재계산한 값이
-  diff 요청 및 응답의 `crc32` 필드로 상호 검증된다.
+  diff 요청 및 응답의 `crc32` 필드로 상호 검증된다. CRC 불일치가 발생하면 HTTP 400으로 반환된다.
 * **TagQueryNode 런타임 확장** – Gateway가 새 `(tags, interval)` 큐를 발견하면
   `tagquery.upsert` CloudEvent를 발행하고 Runner의 **TagQueryManager**가 이를
   수신해 노드 버퍼를 자동 초기화한다.
