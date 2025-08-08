@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import AsyncIterable, Dict
 import asyncio
 import threading
+from collections import deque
 
 import grpc
 
@@ -30,8 +31,10 @@ class _GrpcStream(StreamSender):
         self.queue: asyncio.Queue[DiffChunk | None] = asyncio.Queue()
         self._ack = threading.Event()
         self._last_ack = AckStatus.OK
+        self._pending: deque[DiffChunk] = deque()
 
     def send(self, chunk: DiffChunk) -> None:
+        self._pending.append(chunk)
         asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
 
     def wait_for_ack(self) -> AckStatus:
@@ -42,6 +45,8 @@ class _GrpcStream(StreamSender):
         return self._last_ack
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:
+        if self._pending:
+            self._pending.popleft()
         self._last_ack = status
         self._ack.set()
 
@@ -49,7 +54,12 @@ class _GrpcStream(StreamSender):
         return self._last_ack
 
     def resume_from_last_offset(self) -> None:
-        pass
+        if not self._pending:
+            self._last_ack = AckStatus.OK
+            return
+        for chunk in list(self._pending):
+            asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
+        self._last_ack = AckStatus.OK
 
 
 class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
