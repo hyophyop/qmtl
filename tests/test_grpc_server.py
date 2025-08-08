@@ -8,7 +8,7 @@ import json
 
 from qmtl.dagmanager.diff_service import StreamSender
 from qmtl.dagmanager.grpc_server import serve
-from qmtl.dagmanager.http_server import create_app
+from qmtl.dagmanager.api import create_app
 from qmtl.dagmanager import metrics
 from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
@@ -60,6 +60,11 @@ class FakeStream(StreamSender):
 
     def ack(self, status: AckStatus = AckStatus.OK):
         pass
+
+
+class DummyGC:
+    def collect(self):
+        return []
 
 
 @pytest.mark.asyncio
@@ -398,17 +403,23 @@ async def test_http_sentinel_traffic(monkeypatch):
         return httpx.Response(202)
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.http_server.post_with_backoff",
+        "qmtl.dagmanager.api.post_with_backoff",
         mock_post,
     )
 
-    app = create_app(weights=weights, gateway_url="http://gw", driver=driver)
+    app = create_app(
+        DummyGC(),
+        weights=weights,
+        gateway_url="http://gw",
+        driver=driver,
+    )
     transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/callbacks/sentinel-traffic",
             json={"version": "v1", "weight": 0.7},
         )
+    await transport.aclose()
 
     assert resp.status_code == 202
     assert weights["v1"] == 0.7
@@ -431,13 +442,14 @@ async def test_http_sentinel_traffic_overwrite():
     weights = {"v1": 0.1}
     driver = FakeDriver()
     metrics.reset_metrics()
-    app = create_app(weights=weights, driver=driver)
+    app = create_app(DummyGC(), weights=weights, driver=driver)
     transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         await client.post(
             "/callbacks/sentinel-traffic",
             json={"version": "v1", "weight": 0.4},
         )
+    await transport.aclose()
     assert weights["v1"] == 0.4
     assert metrics.dagmanager_active_version_weight._vals["v1"] == 0.4
     query, params = driver.session_obj.run_calls[0]

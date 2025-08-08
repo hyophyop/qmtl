@@ -104,7 +104,12 @@ async def _run(cfg: DagManagerConfig) -> None:
     )
     await grpc_server.start()
 
-    app = create_app(gc, callback_url=cfg.gc_callback, driver=driver)
+    app = create_app(
+        gc,
+        callback_url=cfg.gc_callback,
+        driver=driver,
+        gateway_url=cfg.diff_callback,
+    )
     config = uvicorn.Config(app, host=cfg.http_host, port=cfg.http_port, loop="asyncio", log_level="info")
     http_server = uvicorn.Server(config)
 

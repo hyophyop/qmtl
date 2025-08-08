@@ -2,7 +2,6 @@ from datetime import datetime, UTC
 from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app as gw_create_app
-from qmtl.dagmanager.http_server import create_app as dag_http_create_app
 from qmtl.dagmanager.api import create_app as dag_api_create_app
 from qmtl.dagmanager.garbage_collector import QueueInfo
 from qmtl.dagmanager.diff_service import StreamSender
@@ -57,17 +56,10 @@ def test_gateway_health(fake_redis):
 
 
 def test_dagmanager_http_health():
-    with TestClient(dag_http_create_app()) as client:
-        resp = client.get("/status")
-        assert resp.status_code == 200
-        assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
-
-
-def test_dagmanager_api_health():
     with TestClient(dag_api_create_app(DummyGC())) as client:
         resp = client.get("/status")
         assert resp.status_code == 200
-        assert "neo4j" in resp.json()
+        assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
 
 
 @pytest.mark.asyncio
