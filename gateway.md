@@ -80,6 +80,12 @@ paths:
         - in: query
           name: interval
           schema: { type: integer }
+        - in: query
+          name: match_mode
+          schema: { type: string, enum: [any, all] }
+          description: |
+            Preferred tag matching mode. ``match`` is accepted as a deprecated alias
+            for backwards compatibility.
       responses:
         '200':
           description: Queue list
@@ -92,6 +98,8 @@ paths:
                     type: array
                     items: { type: string }
 ```
+``match_mode`` should be used by new clients. ``match`` remains available for
+older integrations.
 
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 
@@ -105,6 +113,13 @@ Content‑Type: application/json
   "meta": { "user": "quant.alice", "desc": "BTC scalper" },
   "run_type": "dry-run"
 }
+```
+
+**Example Queue Lookup**
+
+```http
+GET /queues/by_tag?tags=t1,t2&interval=60&match_mode=any HTTP/1.1
+Authorization: Bearer <jwt>
 ```
 
 | HTTP Status         | Meaning                                 | Typical Cause      |

@@ -97,11 +97,22 @@ def client(fake_redis):
 def test_queues_by_tag_route(client):
     c, dag = client
     resp = c.get(
-        "/queues/by_tag", params={"tags": "t1,t2", "interval": "60", "match": "any"}
+        "/queues/by_tag",
+        params={"tags": "t1,t2", "interval": "60", "match_mode": "any"},
     )
     assert resp.status_code == 200
     assert resp.json()["queues"] == ["q1", "q2"]
     assert dag.called_with == (["t1", "t2"], 60, "any")
+
+
+def test_queues_by_tag_route_match_alias(client):
+    c, dag = client
+    resp = c.get(
+        "/queues/by_tag", params={"tags": "t1,t2", "interval": "60", "match": "all"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["queues"] == ["q1", "q2"]
+    assert dag.called_with == (["t1", "t2"], 60, "all")
 
 
 def test_submit_tag_query_node(client):
