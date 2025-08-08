@@ -20,13 +20,17 @@ uv pip install -e .[dev]
 
 ## Bringing up the stack
 
-Start all services using Docker Compose:
+Start all services using Docker Compose. The DAG Manager and Gateway images
+are built from the repository's `Dockerfile`, which installs the local package
+so the `qmtl` entrypoint is available:
 
 ```bash
-docker compose -f tests/docker-compose.e2e.yml up -d
+docker compose -f tests/docker-compose.e2e.yml up --build -d
 ```
 
-This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and `qmtl dagmanager` containers. The gateway exposes port `8000` and the DAG Manager gRPC endpoint is available on `50051`.
+This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and
+`qmtl dagmanager` containers. The gateway exposes port `8000` and the DAG
+Manager gRPC endpoint is available on `50051`.
 
 ## Running the tests
 

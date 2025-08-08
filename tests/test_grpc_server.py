@@ -217,6 +217,74 @@ async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
     assert captured["data"]["tags"] == ["x"]
 
 
+@pytest.mark.asyncio
+async def test_grpc_diff_callback_sends_all_cloudevents(monkeypatch):
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    events: list[dict] = []
+    started = 0
+    wait = asyncio.Event()
+
+    async def mock_post(url, json, **_):
+        nonlocal started
+        started += 1
+        if started == 2:
+            wait.set()
+        await asyncio.wait_for(wait.wait(), timeout=1)
+        events.append(json)
+        return httpx.Response(202)
+
+    monkeypatch.setattr(
+        "qmtl.dagmanager.grpc_server.post_with_backoff",
+        mock_post,
+    )
+
+    server, port = serve(
+        driver,
+        admin,
+        stream,
+        host="127.0.0.1",
+        port=0,
+        callback_url="http://gw/cb",
+    )
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+        dag_json = json.dumps(
+            {
+                "nodes": [
+                    {
+                        "node_id": "n1",
+                        "node_type": "N",
+                        "code_hash": "c",
+                        "schema_hash": "s",
+                        "interval": 60,
+                        "tags": ["x"],
+                    },
+                    {
+                        "node_id": "n2",
+                        "node_type": "N",
+                        "code_hash": "c",
+                        "schema_hash": "s",
+                        "interval": 60,
+                        "tags": ["y"],
+                    },
+                ]
+            }
+        )
+        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+        async for chunk in stub.Diff(request):
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
+            )
+    await server.stop(None)
+
+    assert len(events) == 2
+    tags = sorted(e["data"]["tags"][0] for e in events)
+    assert tags == ["x", "y"]
+
+
 class DummyStore:
     def __init__(self, queues):
         self.queues = queues

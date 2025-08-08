@@ -17,6 +17,13 @@ async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
     parser = argparse.ArgumentParser(prog="qmtl gw")
     parser.add_argument("--config", help="Path to configuration file")
+    parser.add_argument(
+        "--no-sentinel",
+        dest="insert_sentinel",
+        action="store_false",
+        help="Disable automatic VersionSentinel insertion",
+        default=None,
+    )
     args = parser.parse_args(argv)
 
     cfg_path = args.config or find_config_file()
@@ -28,10 +35,16 @@ async def _main(argv: list[str] | None = None) -> None:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
     else:
         redis_client = InMemoryRedis()
+    insert_sentinel = (
+        config.insert_sentinel
+        if args.insert_sentinel is None
+        else args.insert_sentinel
+    )
     app = create_app(
         redis_client=redis_client,
         database_backend=config.database_backend,
         database_dsn=config.database_dsn,
+        insert_sentinel=insert_sentinel,
     )
     db = app.state.database
     if hasattr(db, "connect"):
