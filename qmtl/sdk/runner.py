@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
 from qmtl.common import AsyncCircuitBreaker
+from . import runtime
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -50,7 +51,7 @@ class Runner:
     @staticmethod
     def _execute_compute_fn(fn, cache_view) -> None:
         """Run ``fn`` using Ray when available."""
-        if Runner._ray_available and ray is not None:
+        if Runner._ray_available and not runtime.NO_RAY and ray is not None:
             if not ray.is_initialized():  # type: ignore[attr-defined]
                 ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
             ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]

@@ -42,3 +42,19 @@ def test_drop_upstream_removes_data_and_is_idempotent():
 
     # second invocation should not raise
     cache.drop_upstream("u1", 60)
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_no_ray_forces_thread(monkeypatch):
+    monkeypatch.setattr(arrow_cache, "RAY_AVAILABLE", True)
+    called = {"flag": False}
+
+    def fake_start(self):
+        called["flag"] = True
+
+    monkeypatch.setattr(arrow_cache.NodeCacheArrow, "_start_thread_evictor", fake_start)
+    import qmtl.sdk.runtime as runtime
+    monkeypatch.setattr(runtime, "NO_RAY", True)
+
+    cache = arrow_cache.NodeCacheArrow(period=2)
+    assert called["flag"]
