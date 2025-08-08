@@ -49,6 +49,58 @@ async def test_ws_client_updates_state():
 
 
 @pytest.mark.asyncio
+async def test_ws_client_reconnects(monkeypatch):
+    """Client reconnects with backoff on connection loss."""
+
+    class DummyWS:
+        def __init__(self, messages: list[str]):
+            self._messages = messages
+            self.close_timeout = 0
+
+        async def recv(self) -> str:
+            if self._messages:
+                return self._messages.pop(0)
+            raise websockets.ConnectionClosed(1000, "")
+
+        async def close(self) -> None:  # pragma: no cover - no behavior
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    connects: list[str] = []
+
+    def fake_connect(url: str):
+        connects.append(url)
+        if len(connects) == 1:
+            return DummyWS([])
+        return DummyWS([json.dumps({"event": "queue_update"})])
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+
+    received: list[dict] = []
+
+    async def on_msg(data: dict) -> None:
+        received.append(data)
+
+    client = WebSocketClient(
+        "ws://dummy",
+        on_message=on_msg,
+        max_retries=1,
+        base_delay=0.01,
+    )
+    await client.start()
+    await asyncio.sleep(0.1)
+    await client.stop()
+
+    assert len(connects) == 2
+    assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
+
+
+@pytest.mark.asyncio
 async def test_ws_client_stop_closes_session():
     async def handler(websocket):
         await asyncio.sleep(1)
