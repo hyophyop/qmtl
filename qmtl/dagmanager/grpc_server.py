@@ -9,8 +9,6 @@ import grpc
 from .diff_service import (
     DiffService,
     DiffRequest,
-    Neo4jNodeRepository,
-    KafkaQueueManager,
     StreamSender,
     DiffChunk,
     NodeRepository,
@@ -55,10 +53,6 @@ class _GrpcStream(StreamSender):
 
 
 class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
-    def __init__(self, service: DiffService, callback_url: str | None = None) -> None:
-        self._service = service
-        self._callback_url = callback_url
-
     def __init__(self, service: DiffService, callback_url: str | None = None) -> None:
         self._service = service
         self._callback_url = callback_url
@@ -262,8 +256,12 @@ def serve(
         breaker = AsyncCircuitBreaker()
         admin = KafkaAdmin(kafka_admin_client, breaker=breaker)
     if repo is None:
+        from .diff_service import Neo4jNodeRepository
+
         repo = Neo4jNodeRepository(neo4j_driver)
     if queue is None and admin is not None:
+        from .diff_service import KafkaQueueManager
+
         queue = KafkaQueueManager(admin)
     diff_service = DiffService(repo, queue, stream_sender)
 
