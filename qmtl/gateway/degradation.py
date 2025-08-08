@@ -56,22 +56,32 @@ class DegradationManager:
             self._task = None
 
     async def _check_dependencies(self) -> None:
-        try:
-            self.redis_ok = await self.redis.ping()
-        except Exception:
-            self.redis_ok = False
-        self.db_ok = True
         healthy_attr = getattr(self.database, "healthy", None)
         func = getattr(healthy_attr, "__func__", None)
-        if healthy_attr is not None and func is not Database.healthy:
+
+        async def check_redis() -> bool:
             try:
-                self.db_ok = await healthy_attr()
+                return await self.redis.ping()
             except Exception:
-                self.db_ok = False
-        try:
-            self.dag_ok = await self.dag_client.status()
-        except Exception:
-            self.dag_ok = False
+                return False
+
+        async def check_db() -> bool:
+            if healthy_attr is not None and func is not Database.healthy:
+                try:
+                    return await healthy_attr()
+                except Exception:
+                    return False
+            return True
+
+        async def check_dag() -> bool:
+            try:
+                return await self.dag_client.status()
+            except Exception:
+                return False
+
+        self.redis_ok, self.db_ok, self.dag_ok = await asyncio.gather(
+            check_redis(), check_db(), check_dag()
+        )
 
     async def evaluate(self) -> DegradationLevel:
         await self._check_dependencies()

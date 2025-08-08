@@ -1,5 +1,7 @@
+import asyncio
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
 
 from qmtl.gateway.api import create_app, StrategySubmit
 from qmtl.gateway.database import Database
@@ -76,6 +78,45 @@ async def test_level_transitions(monkeypatch):
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 96)
     await mgr.update()
     assert mgr.level == DegradationLevel.STATIC
+
+
+@pytest.mark.asyncio
+async def test_check_dependencies_parallel(monkeypatch):
+    redis = DummyRedis()
+    db = FakeDB()
+    dag = DummyDag()
+    mgr = DegradationManager(redis, db, dag)
+    monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 0)
+
+    start_times: dict[str, float] = {}
+
+    async def record(name: str) -> bool:
+        start_times[name] = asyncio.get_running_loop().time()
+        await asyncio.sleep(0.1)
+        return True
+
+    async def record_redis() -> bool:
+        return await record("redis")
+
+    async def record_db() -> bool:
+        return await record("db")
+
+    async def record_dag() -> bool:
+        return await record("dag")
+
+    redis.ping = AsyncMock(side_effect=record_redis)
+    db.healthy = AsyncMock(side_effect=record_db)
+    dag.status = AsyncMock(side_effect=record_dag)
+
+    start = asyncio.get_running_loop().time()
+    await mgr.evaluate()
+    duration = asyncio.get_running_loop().time() - start
+
+    assert duration < 0.25
+    assert max(start_times.values()) - min(start_times.values()) < 0.05
+    redis.ping.assert_awaited_once()
+    db.healthy.assert_awaited_once()
+    dag.status.assert_awaited_once()
 
 
 def make_app(fake_redis):
