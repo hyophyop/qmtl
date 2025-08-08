@@ -35,10 +35,11 @@ def test_metrics_endpoint(app):
     metrics.set_sentinel_traffic_ratio("v1", 0.5)
     with TestClient(app) as client:
         resp = client.get("/metrics")
-    assert resp.status_code == 200
-    assert "lost_requests_total" in resp.text
-    assert "gateway_e2e_latency_p95" in resp.text
-    assert "gateway_sentinel_traffic_ratio" in resp.text
+        assert resp.status_code == 200
+        assert "lost_requests_total" in resp.text
+        assert "gateway_e2e_latency_p95" in resp.text
+        assert "gateway_sentinel_traffic_ratio" in resp.text
+        resp.close()
 
 
 def test_latency_metric_recorded(app):

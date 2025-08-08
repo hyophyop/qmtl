@@ -61,17 +61,22 @@ class Monitor:
 
     async def check_once(self) -> None:
         """Inspect metrics once and trigger recovery/alerts."""
+        alerts = []
+
         if self.metrics.neo4j_leader_is_null():
             self.neo4j.elect_leader()
-            await self.alerts.send_pagerduty("Neo4j leader down")
+            alerts.append(self.alerts.send_pagerduty("Neo4j leader down"))
 
         if self.metrics.kafka_zookeeper_disconnects() > 0:
             self.kafka.retry()
-            await self.alerts.send_slack("Kafka session lost")
+            alerts.append(self.alerts.send_slack("Kafka session lost"))
 
         if self.stream.ack_status() is AckStatus.TIMEOUT:
             self.stream.resume_from_last_offset()
-            await self.alerts.send_slack("Diff stream stalled")
+            alerts.append(self.alerts.send_slack("Diff stream stalled"))
+
+        if alerts:
+            await asyncio.gather(*alerts)
 
 
 @dataclass
