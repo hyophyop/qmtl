@@ -12,3 +12,4 @@ class GatewayConfig:
     redis_dsn: Optional[str] = None
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
+    insert_sentinel: bool = True
