@@ -154,3 +154,27 @@ def test_cache_view_metrics_increment():
         )._value.get()
         > 0
     )
+
+
+def test_dagmanager_nodecache_metric_aggregates():
+    metrics.reset_metrics()
+    metrics.observe_nodecache_resident_bytes("n1", 10)
+    metrics.observe_nodecache_resident_bytes("n2", 20)
+    assert metrics.nodecache_resident_bytes._vals[("n1", "node")] == 10
+    assert metrics.nodecache_resident_bytes._vals[("all", "total")] == 30
+
+
+def test_sdk_nodecache_metric_updates():
+    from qmtl.sdk import metrics as sdk_metrics
+    from qmtl.sdk.node import StreamInput, ProcessingNode
+    from qmtl.sdk.runner import Runner
+
+    sdk_metrics.reset_metrics()
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(
+        input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2
+    )
+    Runner.feed_queue_data(node, src.node_id, 60, 60, {"v": 1})
+    expected = node.cache.resident_bytes
+    assert sdk_metrics.nodecache_resident_bytes._vals[(node.node_id, "node")] == expected
+    assert sdk_metrics.nodecache_resident_bytes._vals[("all", "total")] == expected

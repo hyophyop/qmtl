@@ -11,7 +11,7 @@ Prometheus can load `alert_rules.yml` to activate alerts for the DAG Manager and
 The following alerts are available for inspiration when extending `alert_rules.yml`:
 
 - **DiffDurationHigh** – triggers when `diff_duration_ms_p95` exceeds 200 ms.
-- **NodeCacheMemoryHigh** – warns if `nodecache_resident_bytes` surpasses 5 GB.
+- **NodeCacheMemoryHigh** – warns if total `nodecache_resident_bytes` (scope="total") exceeds 5 GB.
 - **QueueCreateErrors** – fires when `queue_create_error_total` increases.
 - **SentinelGap** – indicates a missing diff sentinel via `sentinel_gap_count`.
 - **OrphanQueuesGrowing** – detects rises in `orphan_queue_total` over a three-hour window.

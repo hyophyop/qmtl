@@ -21,7 +21,7 @@ prometheus:
           annotations:
             summary: Diff processing slow
         - alert: NodeCacheMemoryHigh
-          expr: nodecache_resident_bytes > 5e9
+          expr: nodecache_resident_bytes{node_id="all",scope="total"} > 5e9
           for: 5m
           labels:
             severity: warning
