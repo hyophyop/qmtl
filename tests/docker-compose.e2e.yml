@@ -39,7 +39,7 @@ services:
       - "9092:9092"
 
   dagmanager:
-    image: python:3
+    build: ..
     command: ["qmtl", "dagmanager-server"]
     depends_on:
       - kafka
@@ -48,8 +48,8 @@ services:
       - "50051:50051"
 
   gateway:
-    image: python:3
-    command: ["qmtl", "gw", "serve"]
+    build: ..
+    command: ["qmtl", "gw"]
     depends_on:
       - dagmanager
       - redis
