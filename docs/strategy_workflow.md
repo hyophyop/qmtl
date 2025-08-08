@@ -55,14 +55,15 @@ extend the SDK by adding custom nodes.
 
 > **구조 설명:** 각 폴더/파일의 역할은 위 '실무 개발 가이드' 참고.
 
-Run the default strategy to verify that everything works:
+Run the default strategy to verify that everything works. Offline mode is used
+when no flags are supplied:
 
 ```bash
 python strategy.py
 ```
-The scaffolded script invokes `Runner.backtest()` which expects a running
-Gateway and DAG Manager. Provide a `--gateway-url` argument, or modify the
-script to use `Runner.offline()` when testing without external services.
+The scaffolded script uses `Runner.offline()` by default, so no external
+services are required. Add `--backtest` to run `Runner.backtest()`, which
+requires a running Gateway and DAG Manager and a `--gateway-url` argument.
 
 ## 2a. Example Run Output
 
@@ -80,14 +81,15 @@ transforms
 ...
 ```
 
-Running the default strategy without a Gateway URL produces an error:
+Running backtest mode without a Gateway URL produces an error:
 
 ```text
-$ python strategy.py
+$ python strategy.py --backtest
 RuntimeError: gateway_url is required for backtest mode
 ```
 
-Provide a `--gateway-url` argument or modify the script to use `Runner.offline()` when running locally.
+Backtesting requires a running Gateway and DAG Manager; provide a
+`--gateway-url` argument when using `--backtest`.
 
 > **자주 발생하는 문제**
 > - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.offline()` 사용
@@ -111,16 +113,18 @@ ready for local development but can be adjusted to point at production services.
 
 ## 4. Execute in Different Modes
 
-Run strategies via the CLI or programmatically with `Runner`.
+Run strategies via the CLI or programmatically with `Runner`. Offline mode is
+the default; pass `--backtest` to run a historical simulation:
 
 ```bash
-python -m qmtl.sdk mypkg.strategy:MyStrategy --mode backtest \
+python -m qmtl.sdk mypkg.strategy:MyStrategy --backtest \
     --start-time 2024-01-01 --end-time 2024-02-01 \
     --gateway-url http://localhost:8000
 ```
 
-Available modes are `backtest`, `dryrun`, `live` and `offline`. The first three
-require a running Gateway and DAG Manager. Start them in separate terminals. The
+Available modes are `offline` (default), `backtest`, `dryrun` and `live`.
+Backtest, dryrun and live require a running Gateway and DAG Manager. Start them
+in separate terminals. The
 ``--config`` flag is optional:
 
 ```bash
