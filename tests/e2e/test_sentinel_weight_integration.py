@@ -5,7 +5,7 @@ import httpx
 import pytest
 import websockets
 
-from qmtl.dagmanager.http_server import create_app as dag_create_app
+from qmtl.dagmanager.api import create_app as dag_create_app
 from qmtl.gateway.api import create_app as gw_create_app
 from qmtl.gateway.ws import WebSocketHub
 
@@ -23,9 +23,15 @@ async def test_sentinel_traffic_triggers_ws(monkeypatch):
             path = url.replace("http://gw", "")
             return await client.post(path, json=json)
 
-    monkeypatch.setattr("qmtl.dagmanager.http_server.post_with_backoff", post_to_gateway)
+    monkeypatch.setattr("qmtl.dagmanager.api.post_with_backoff", post_to_gateway)
 
-    dag_app = dag_create_app(gateway_url="http://gw/callbacks/dag-event")
+    class DummyGC:
+        def collect(self):
+            return []
+
+    dag_app = dag_create_app(
+        DummyGC(), gateway_url="http://gw/callbacks/dag-event"
+    )
     dag_transport = httpx.ASGITransport(dag_app)
 
     async with websockets.connect(f"ws://localhost:{port}") as ws:
@@ -42,6 +48,8 @@ async def test_sentinel_traffic_triggers_ws(monkeypatch):
     await asyncio.sleep(0)
     await hub.stop()
     await asyncio.sleep(0)
+    await dag_transport.aclose()
+    await gw_transport.aclose()
 
     assert event["type"] == "sentinel_weight"
     assert event["data"] == {"sentinel_id": "v1", "weight": 0.55}
