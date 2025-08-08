@@ -80,6 +80,12 @@ paths:
         - in: query
           name: interval
           schema: { type: integer }
+        - in: query
+          name: match_mode
+          schema: { type: string, enum: [any, all] }
+          description: |
+            Preferred tag matching mode. ``match`` is accepted as a deprecated alias
+            for backwards compatibility.
       responses:
         '200':
           description: Queue list
@@ -92,6 +98,8 @@ paths:
                     type: array
                     items: { type: string }
 ```
+``match_mode`` should be used by new clients. ``match`` remains available for
+older integrations.
 
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 
@@ -107,11 +115,19 @@ Content‑Type: application/json
 }
 ```
 
+**Example Queue Lookup**
+
+```http
+GET /queues/by_tag?tags=t1,t2&interval=60&match_mode=any HTTP/1.1
+Authorization: Bearer <jwt>
+```
+
 | HTTP Status         | Meaning                                 | Typical Cause      |
 | ------------------- | --------------------------------------- | ------------------ |
 |  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
+|  400 Bad Request   |  CRC mismatch between SDK and Gateway  | NodeID CRC failure  |
 |  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re‑submit |
-|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid   |
+|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid    |
 
 ---
 
@@ -124,7 +140,7 @@ Content‑Type: application/json
 
 The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.
 
-Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. Operators may disable this step for small deployments.
+Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
 
 Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
 
@@ -139,7 +155,7 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG Manager. U
 ### S5 · Reliability Checklist
 
 * **NodeID CRC 파이프라인** – SDK가 전송한 `node_id`와 Gateway가 재계산한 값이
-  diff 요청 및 응답의 `crc32` 필드로 상호 검증된다.
+  diff 요청 및 응답의 `crc32` 필드로 상호 검증된다. CRC 불일치가 발생하면 HTTP 400으로 반환된다.
 * **TagQueryNode 런타임 확장** – Gateway가 새 `(tags, interval)` 큐를 발견하면
   `tagquery.upsert` CloudEvent를 발행하고 Runner의 **TagQueryManager**가 이를
   수신해 노드 버퍼를 자동 초기화한다.
@@ -167,7 +183,9 @@ starts the service with built-in defaults that use SQLite and an in-memory
 Redis substitute. The sample file illustrates how to set ``redis_dsn`` to point
 to a real cluster. If ``redis_dsn`` is omitted, Gateway automatically uses the
 in-memory substitute. See the file for a fully annotated configuration template.
+Setting ``insert_sentinel: false`` disables automatic ``VersionSentinel`` insertion.
 
 Available flags:
 
 - ``--config`` – optional path to configuration file.
+- ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.

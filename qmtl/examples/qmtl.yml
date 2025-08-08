@@ -6,6 +6,8 @@ gateway:
   # Lightweight local store for quick testing
   database_backend: sqlite
   database_dsn: ./qmtl.db
+  # Insert a VersionSentinel node for each DAG; set to false to disable
+  insert_sentinel: true
   # To use Postgres in a production cluster uncomment below
   # database_backend: postgres
   # database_dsn: postgresql://user:pass@db/qmtl

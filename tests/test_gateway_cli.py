@@ -40,6 +40,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
         captured["db_backend"] = kwargs.get("database_backend")
         captured["db_dsn"] = kwargs.get("database_dsn")
         captured["redis"] = isinstance(kwargs.get("redis_client"), cli.InMemoryRedis)
+        captured["insert_sentinel"] = kwargs.get("insert_sentinel")
         return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
@@ -55,6 +56,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     assert captured["db_backend"] == "memory"
     assert captured["db_dsn"] == "sqlite:///:memory:"
     assert captured["redis"]
+    assert captured["insert_sentinel"] is True
 
 
 def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
@@ -87,6 +89,7 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
 
     def fake_create_app(**kwargs):
         captured["redis"] = kwargs.get("redis_client")
+        captured["insert_sentinel"] = kwargs.get("insert_sentinel")
         return SimpleNamespace(state=SimpleNamespace(database=None))
 
     monkeypatch.setattr(cli.redis, "from_url", fake_from_url)
@@ -99,6 +102,38 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     assert isinstance(captured["redis"], DummyRedis)
     assert captured["dsn"] == "redis://x:6379"
     assert captured["decode"] is True
+    assert captured["insert_sentinel"] is True
+
+
+def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  insert_sentinel: true",
+            ]
+        )
+    )
+
+    captured = {}
+
+    from types import SimpleNamespace
+    from qmtl.gateway import cli
+
+    def fake_create_app(**kwargs):
+        captured["insert_sentinel"] = kwargs.get("insert_sentinel")
+        return SimpleNamespace(state=SimpleNamespace(database=None))
+
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.chdir(tmp_path)
+
+    cli.main(["--no-sentinel"])
+
+    assert captured["insert_sentinel"] is False
 
 
 def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):

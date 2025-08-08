@@ -104,6 +104,7 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                     ],
                 )
                 if self._callback_url and getattr(chunk, 'new_nodes', None):
+                    callbacks = []
                     for node in chunk.new_nodes:
                         if node.tags and node.interval is not None:
                             event = format_event(
@@ -116,7 +117,11 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                                     "match_mode": "any",
                                 },
                             )
-                            await post_with_backoff(self._callback_url, event)
+                            callbacks.append(
+                                post_with_backoff(self._callback_url, event)
+                            )
+                    if callbacks:
+                        await asyncio.gather(*callbacks)
                 yield pb
         finally:
             fut.cancel()
