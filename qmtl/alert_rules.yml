@@ -1,0 +1,29 @@
+# Basic Alertmanager and Prometheus rules for QMTL metrics
+# For a complete list of suggested alerts see docs/monitoring.md
+alertmanager:
+  route:
+    receiver: 'slack'
+  receivers:
+    - name: 'slack'
+      slack_configs:
+        - channel: '#alerts'
+          send_resolved: true
+
+prometheus:
+  groups:
+    - name: qmtl
+      rules:
+        - alert: DiffDurationHigh
+          expr: diff_duration_ms_p95 > 200
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Diff processing slow
+        - alert: NodeCacheMemoryHigh
+          expr: nodecache_resident_bytes{node_id="all",scope="total"} > 5e9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: NodeCache memory usage high

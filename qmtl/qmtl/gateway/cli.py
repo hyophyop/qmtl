@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+
+import redis.asyncio as redis
+
+from .redis_client import InMemoryRedis
+
+from .api import create_app
+from .config import GatewayConfig
+from ..config import load_config, find_config_file
+
+
+async def _main(argv: list[str] | None = None) -> None:
+    """Run the Gateway HTTP server."""
+    parser = argparse.ArgumentParser(prog="qmtl gw")
+    parser.add_argument("--config", help="Path to configuration file")
+    parser.add_argument(
+        "--no-sentinel",
+        dest="insert_sentinel",
+        action="store_false",
+        help="Disable automatic VersionSentinel insertion",
+        default=None,
+    )
+    args = parser.parse_args(argv)
+
+    cfg_path = args.config or find_config_file()
+    config = GatewayConfig()
+    if cfg_path:
+        config = load_config(cfg_path).gateway
+
+    if config.redis_dsn:
+        redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
+    else:
+        redis_client = InMemoryRedis()
+    insert_sentinel = (
+        config.insert_sentinel
+        if args.insert_sentinel is None
+        else args.insert_sentinel
+    )
+    app = create_app(
+        redis_client=redis_client,
+        database_backend=config.database_backend,
+        database_dsn=config.database_dsn,
+        insert_sentinel=insert_sentinel,
+    )
+    db = app.state.database
+    if hasattr(db, "connect"):
+        try:
+            await db.connect()  # type: ignore[attr-defined]
+        except Exception as exc:  # pragma: no cover - exception path tested separately
+            logging.exception("Failed to connect to database")
+            raise SystemExit("Failed to connect to database") from exc
+
+    import uvicorn
+
+    try:
+        uvicorn.run(app, host=config.host, port=config.port)
+    finally:
+        if hasattr(db, "close"):
+            try:
+                await db.close()  # type: ignore[attr-defined]
+            except Exception:  # pragma: no cover - exception path tested separately
+                logging.exception("Failed to close database connection")
+
+
+def main(argv: list[str] | None = None) -> None:
+    asyncio.run(_main(argv))
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry
+    main()
+
