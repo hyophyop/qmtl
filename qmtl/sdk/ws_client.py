@@ -6,6 +6,7 @@ import contextlib
 from typing import Awaitable, Callable, Optional, TYPE_CHECKING
 
 import websockets
+import logging
 
 if TYPE_CHECKING:  # pragma: no cover - only for typing
     from .node import TagQueryNode
@@ -44,9 +45,10 @@ class WebSocketClient:
             if sid is not None and weight is not None:
                 try:
                     self.sentinel_weights[sid] = float(weight)
-                except (TypeError, ValueError) as e:
-                    # Log a warning or error here, e.g., logging.warning(f"Invalid weight received for sentinel {sid}: {weight} ({e})")
-                    pass
+                except (TypeError, ValueError):
+                    logging.warning(
+                        "Invalid weight received for sentinel %s: %r", sid, weight
+                    )
         if self.on_message:
             await self.on_message(data)
 
