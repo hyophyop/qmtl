@@ -5,6 +5,7 @@ import importlib
 import asyncio
 from typing import List
 from .runner import Runner
+from . import runtime
 
 
 async def _main(argv: List[str] | None = None) -> None:
@@ -32,12 +33,12 @@ async def _main(argv: List[str] | None = None) -> None:
     parser.add_argument(
         "--no-ray",
         action="store_true",
-        help="Disable Ray-based execution of compute functions",
+        help="Disable Ray-based features (compute functions and cache eviction)",
     )
     args = parser.parse_args(argv)
 
     if args.no_ray:
-        Runner._ray_available = False
+        runtime.NO_RAY = True
 
     module_name, class_name = args.strategy.split(":")
     module = importlib.import_module(module_name)

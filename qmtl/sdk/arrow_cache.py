@@ -14,6 +14,8 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     ray = None  # type: ignore
 
+from . import runtime
+
 ARROW_AVAILABLE = pa is not None
 RAY_AVAILABLE = ray is not None
 
@@ -116,7 +118,7 @@ class NodeCacheArrow:
         self._last_seen: Dict[tuple[str, int], int] = {}
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
-        if RAY_AVAILABLE:
+        if RAY_AVAILABLE and not runtime.NO_RAY:
             self._evictor = _Evictor.options(name=f"evictor_{id(self)}").remote(self._evict_interval)
             self_ref = self
             ray.get(self._evictor.start.remote(self_ref))

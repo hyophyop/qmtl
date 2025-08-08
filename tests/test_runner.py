@@ -667,10 +667,12 @@ def test_cli_disable_ray(monkeypatch):
     import importlib
     import qmtl.sdk.cli as cli_mod
     import qmtl.sdk.runner as rmod
+    from qmtl.sdk import runtime
 
     dummy_ray = object()
     monkeypatch.setattr(rmod, "ray", dummy_ray)
     monkeypatch.setattr(rmod.Runner, "_ray_available", True)
+    monkeypatch.setattr(runtime, "NO_RAY", False)
     importlib.reload(cli_mod)
 
     argv = [
@@ -682,4 +684,4 @@ def test_cli_disable_ray(monkeypatch):
     ]
     monkeypatch.setattr(sys, "argv", argv)
     cli_mod.main()
-    assert not rmod.Runner._ray_available
+    assert runtime.NO_RAY

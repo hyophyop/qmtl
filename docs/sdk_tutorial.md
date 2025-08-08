@@ -105,7 +105,8 @@ python -m qmtl.sdk --help
 
 PyArrow 기반 캐시를 사용하려면 환경 변수 `QMTL_ARROW_CACHE=1`을 설정합니다.
 만료 슬라이스 정리는 `QMTL_CACHE_EVICT_INTERVAL`(초) 값에 따라 주기적으로 실행되며
-Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray` 옵션으로 비활성화할 수 있습니다.
+Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray` 옵션을 사용하면 계산 함수 실행과
+캐시 정리가 모두 스레드 기반으로 전환됩니다.
 
 ## Cache Backends
 
@@ -116,7 +117,7 @@ Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray`
 
 PyArrow가 설치되어 있고 `QMTL_ARROW_CACHE=1`을 설정하면 `NodeCacheArrow` 백엔드가
 활성화됩니다. 만료된 슬라이스는 `QMTL_CACHE_EVICT_INTERVAL` 초 간격으로 제거되며
-Ray가 켜져 있으면 Actor에서, 그렇지 않으면 백그라운드 스레드에서 실행됩니다.
+Ray가 켜져 있고 `--no-ray`를 사용하지 않는 경우 Actor에서, 그렇지 않으면 백그라운드 스레드에서 실행됩니다.
 
 캐시 조회 수는 `qmtl.sdk.metrics` 모듈의 `cache_read_total` 및
 `cache_last_read_timestamp` 지표로 모니터링할 수 있습니다. 다음과 같이 메트릭 서버를
