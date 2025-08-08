@@ -1,0 +1,3 @@
+# AlphaDocs Path Change History
+# Fields: date | old_path | new_path | reason
+2025-08-08 | alphadocs/Kyle-Obizhaeva_non-linear_variation.md | docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md | relocate alphadocs under docs
