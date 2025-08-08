@@ -124,7 +124,7 @@ Content‑Type: application/json
 
 The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.
 
-Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. Operators may disable this step for small deployments.
+Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
 
 Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
 
@@ -167,8 +167,9 @@ starts the service with built-in defaults that use SQLite and
 ``queue_backend: memory`` for an in-memory Redis replacement. Commented lines in
 the sample file illustrate how to set ``queue_backend: redis`` and point
 ``redis_dsn`` to a real cluster. See the file for a fully annotated configuration
-template.
+template. Setting ``insert_sentinel: false`` disables automatic ``VersionSentinel`` insertion.
 
 Available flags:
 
 - ``--config`` – optional path to configuration file.
+- ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.

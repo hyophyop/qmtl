@@ -13,6 +13,7 @@ def test_load_config_gateway_yaml(tmp_path: Path) -> None:
         "redis_dsn": "redis://test:6379",
         "database_backend": "postgres",
         "database_dsn": "postgresql://db/test",
+        "insert_sentinel": False,
     }
     config_file = tmp_path / "gw.yaml"
     config_file.write_text(yaml.safe_dump({"gateway": data}))
@@ -20,6 +21,7 @@ def test_load_config_gateway_yaml(tmp_path: Path) -> None:
     assert config.gateway.redis_dsn == data["redis_dsn"]
     assert config.gateway.database_backend == "postgres"
     assert config.gateway.database_dsn == data["database_dsn"]
+    assert config.gateway.insert_sentinel is False
 
 
 def test_load_config_gateway_json(tmp_path: Path) -> None:
@@ -27,6 +29,7 @@ def test_load_config_gateway_json(tmp_path: Path) -> None:
         "redis_dsn": "redis://j:6379",
         "database_backend": "memory",
         "database_dsn": "sqlite:///:memory:",
+        "insert_sentinel": True,
     }
     config_file = tmp_path / "gw.json"
     config_file.write_text(json.dumps({"gateway": data}))
@@ -34,6 +37,7 @@ def test_load_config_gateway_json(tmp_path: Path) -> None:
     assert config.gateway.redis_dsn == data["redis_dsn"]
     assert config.gateway.database_backend == "memory"
     assert config.gateway.database_dsn == data["database_dsn"]
+    assert config.gateway.insert_sentinel is True
 
 
 def test_load_config_missing_file() -> None:
@@ -68,3 +72,4 @@ def test_gateway_config_defaults() -> None:
     assert cfg.redis_dsn is None
     assert cfg.database_backend == "sqlite"
     assert cfg.database_dsn == "./qmtl.db"
+    assert cfg.insert_sentinel is True
