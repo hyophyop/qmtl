@@ -1,3 +1,4 @@
+<!-- Path: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md -->
 📌 시장 미시 구조 이론: Kyle-Obizhaeva Market Impact Model의 비선형 확장
 
 🏛 이론 개요
