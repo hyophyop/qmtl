@@ -143,6 +143,8 @@ Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG Manager. U
 * **TagQueryNode 런타임 확장** – Gateway가 새 `(tags, interval)` 큐를 발견하면
   `tagquery.upsert` CloudEvent를 발행하고 Runner의 **TagQueryManager**가 이를
   수신해 노드 버퍼를 자동 초기화한다.
+* **Local DAG Fallback Queue** – DAG Manager가 응답하지 않을 때 제출된 전략 ID는
+  메모리에 임시 저장되며 서비스가 복구되면 Redis 큐로 플러시된다.
 * **Sentinel Traffic Δ 확인 루프** – `traffic_weight` 변경 후 Gateway 라우팅
   테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 `sentinel_skew_seconds`
   지표로 측정한다.

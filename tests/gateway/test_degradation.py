@@ -119,6 +119,27 @@ async def test_check_dependencies_parallel(monkeypatch):
     dag.status.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_flushes_local_queue(monkeypatch):
+    redis = DummyRedis()
+    redis.rpush = AsyncMock()
+    db = FakeDB()
+    dag = DummyDag(ok=False)
+    mgr = DegradationManager(redis, db, dag)
+    monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 0)
+
+    await mgr.update()
+    assert mgr.level == DegradationLevel.PARTIAL
+
+    mgr.local_queue.append("s1")
+    dag.ok = True
+    await mgr.update()
+
+    redis.rpush.assert_awaited_once_with("strategy_queue", "s1")
+    assert mgr.local_queue == []
+    assert mgr.level == DegradationLevel.NORMAL
+
+
 def make_app(fake_redis):
     db = FakeDB()
     app = create_app(redis_client=fake_redis, database=db, dag_client=DummyDag())

@@ -95,8 +95,18 @@ class DegradationManager:
             return DegradationLevel.PARTIAL
         return DegradationLevel.NORMAL
 
+    async def _flush_local_queue(self) -> None:
+        if not self.local_queue or not self.dag_ok or not self.redis_ok:
+            return
+        try:
+            await self.redis.rpush("strategy_queue", *self.local_queue)
+        except Exception:
+            return
+        self.local_queue.clear()
+
     async def update(self) -> None:
         new_level = await self.evaluate()
+        await self._flush_local_queue()
         if new_level != self.level:
             self.level = new_level
             self._gauge.set(new_level.value)
