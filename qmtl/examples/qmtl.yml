@@ -1,6 +1,7 @@
 gateway:
   host: 0.0.0.0
   port: 8000
+  # Omit redis_dsn to fall back to an in-memory Redis substitute
   redis_dsn: redis://localhost:6379
   # Lightweight local store for quick testing
   database_backend: sqlite

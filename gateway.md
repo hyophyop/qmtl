@@ -163,11 +163,10 @@ qmtl gw --config qmtl/examples/qmtl.yml
 
 When provided, the command reads the ``gateway`` section of
 ``qmtl/examples/qmtl.yml`` for all server parameters. Omitting ``--config``
-starts the service with built-in defaults that use SQLite and
-``queue_backend: memory`` for an in-memory Redis replacement. Commented lines in
-the sample file illustrate how to set ``queue_backend: redis`` and point
-``redis_dsn`` to a real cluster. See the file for a fully annotated configuration
-template.
+starts the service with built-in defaults that use SQLite and an in-memory
+Redis substitute. The sample file illustrates how to set ``redis_dsn`` to point
+to a real cluster. If ``redis_dsn`` is omitted, Gateway automatically uses the
+in-memory substitute. See the file for a fully annotated configuration template.
 
 Available flags:
 
