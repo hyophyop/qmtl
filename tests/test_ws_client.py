@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 import pytest
 import websockets
@@ -62,6 +63,31 @@ async def test_ws_client_stop_closes_session():
         start = asyncio.get_running_loop().time()
         await client.stop()
         assert asyncio.get_running_loop().time() - start < 0.5
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_ws_client_logs_invalid_weight(caplog):
+    events = [{"event": "sentinel_weight", "sentinel_id": "s1", "weight": "bad"}]
+
+    async def handler(websocket):
+        for e in events:
+            await websocket.send(json.dumps(e))
+        await asyncio.sleep(0.05)
+
+    server = await websockets.serve(handler, "localhost", 0)
+    port = server.sockets[0].getsockname()[1]
+    url = f"ws://localhost:{port}"
+    try:
+        client = WebSocketClient(url)
+        with caplog.at_level(logging.WARNING):
+            await client.start()
+            await asyncio.sleep(0.2)
+            await client.stop()
+        assert client.sentinel_weights == {}
+        assert any("s1" in r.getMessage() and "bad" in r.getMessage() for r in caplog.records)
     finally:
         server.close()
         await server.wait_closed()
