@@ -2,19 +2,15 @@
 
 이 저장소는 [QMTL](https://github.com/hyophyop/qmtl) 전략 실험을 위한 템플릿 프로젝트입니다.
 
-## 하위 모듈 추가
+## QMTL 서브트리 동기화
 
-프로젝트는 `qmtl` 서브모듈을 사용합니다. 저장소를 처음 클론했거나 최신 변경 사항을 받았을 때는 다음 명령으로 서브모듈을 초기화합니다.
-
-```bash
-git submodule update --init --recursive
-```
-
-새 프로젝트에 서브모듈을 추가하고 싶다면:
+프로젝트는 `qmtl` 서브트리를 포함합니다. 작업을 시작하기 전에 항상 최신 변경 사항을 가져오세요.
 
 ```bash
-git submodule add https://github.com/hyophyop/qmtl.git qmtl
+git fetch qmtl-subtree main
+git subtree pull --prefix=qmtl qmtl-subtree main --squash
 ```
+필요 시 `AGENTS.md`의 설정 절차를 참고해 `qmtl-subtree` 원격을 추가하세요.
 
 ## `qmtl init` 실행 방법
 
