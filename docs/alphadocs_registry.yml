@@ -1,6 +1,8 @@
 - doc: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
-  status: pending
-  modules: []
+  status: implemented
+  modules:
+    - strategies/nodes/indicators/impact.py
+    - strategies/nodes/indicators/non_linear_alpha.py
 - doc: docs/alphadocs/basic_sequence_pipeline.md
   status: implemented
   modules:
