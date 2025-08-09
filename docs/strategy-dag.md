@@ -4,9 +4,10 @@ This example demonstrates how to compose a strategy from reusable node processor
 
 ## Running the Example
 
-1. Initialize the environment (once):
+1. Sync the environment and subtree (once):
     ```bash
-    git submodule update --init --recursive
+    git fetch qmtl-subtree main
+    git subtree pull --prefix=qmtl qmtl-subtree main --squash
     uv venv
     uv pip install -e qmtl[dev]
     ```

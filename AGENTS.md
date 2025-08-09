@@ -4,53 +4,42 @@ This repository hosts strategy experiments built on top of the [QMTL](qmtl/READM
 
 ## QMTL 서브트리 최신화 정책 (필수)
 
-이 저장소는 전략 개발과 동시에 QMTL 자체의 문제/개선을 즉시 반영하기 위한 목적을 갖습니다. 따라서 `qmtl` 서브트리는 항상 원격 최신 상태를 기준으로 작업해야 합니다.
+`qmtl/` 서브트리는 항상 원격 최신을 기준으로 작업해야 합니다.
 
-- 작업(탐색, 코딩, 테스트) 시작 전 반드시 서브트리를 최신으로 동기화하세요.
+- 작업(탐색, 코딩, 테스트) 시작 전 반드시 서브트리를 동기화하세요.
   ```bash
-  # 서브트리 원격 저장소에서 최신 변경사항 가져오기
   git fetch qmtl-subtree main
-  # 서브트리 업데이트 (스쿼시 방식)
   git subtree pull --prefix=qmtl qmtl-subtree main --squash
   ```
-- 서브트리 갱신으로 변경사항이 있으면 루트 리포지토리에 커밋하세요.
+- 서브트리 갱신으로 변경사항이 생기면 루트 리포지토리에 커밋합니다.
   ```bash
   git add qmtl
   git commit -m "chore: bump qmtl subtree to latest"
   ```
-- 전략 개발 중 QMTL의 버그/개선이 확인되면, 우선 `qmtl/` 서브트리 내에 수정과 테스트를 추가하고, 루트 전략 테스트도 함께 갱신합니다. 변경 사항을 반영한 뒤 위 절차로 서브트리를 업데이트하세요.
-- PR 체크리스트에 다음을 포함하세요.
-  - [ ] `git log --oneline qmtl/ -n 3` 결과가 원격 최신과 일치함을 확인
+- 로컬 수정 내용을 원격 서브트리에 반영하려면:
+  ```bash
+  git subtree push --prefix=qmtl qmtl-subtree main
+  ```
+- 전략 개발 중 QMTL의 버그/개선을 발견하면 `qmtl/` 내부에서 우선 수정하고 테스트를 추가한 뒤, 위 절차로 서브트리를 업데이트하세요.
+- PR 체크리스트에 포함:
+  - [ ] `git log -n 3 --oneline qmtl/` 결과가 원격 최신과 일치함을 확인
   - [ ] QMTL 변경 시 `qmtl/tests`와 루트 `tests` 모두 통과
 
 ### 빠른 점검 명령어
 
 ```bash
-# 현재 서브트리 상태 확인
-git log --oneline qmtl/ -n 3
-
-# 원격 최신과 로컬 비교
-git fetch qmtl-subtree main
-git log --oneline qmtl-subtree/main -n 3
+git log -n 3 --oneline qmtl/
+git log -n 3 --oneline qmtl-subtree/main
 ```
 
 ## Setup
 
-- Initialize the subtree after cloning:
-  ```bash
-  git remote add qmtl-subtree https://github.com/hyophyop/qmtl.git
-  git fetch qmtl-subtree
-  git subtree add --prefix=qmtl qmtl-subtree main --squash
-  ```
-  그리고 항상 최신을 반영하려면(매 작업 시작 전 권장):
-  ```bash
-  git subtree pull --prefix=qmtl qmtl-subtree main --squash
-  ```
-- Manage dependencies with [uv](https://github.com/astral-sh/uv):
-  ```bash
-  uv pip install -e qmtl[dev]
-  ```
-  Install additional packages in the same environment when needed.
+```bash
+git remote add qmtl-subtree https://github.com/hyophyop/qmtl.git
+uv venv
+uv pip install -e qmtl[dev]
+```
+Install additional packages in the same environment when needed.
 
 ## Development Practices
 
@@ -90,30 +79,4 @@ git log --oneline qmtl-subtree/main -n 3
   ```bash
   python strategy.py
   ```
-
-## 서브트리 관리
-
-### 서브트리 업데이트
-```bash
-# 최신 변경사항 가져오기
-git fetch qmtl-subtree main
-
-# 서브트리 업데이트 (스쿼시 방식)
-git subtree pull --prefix=qmtl qmtl-subtree main --squash
-```
-
-### 서브트리 변경사항 푸시
-```bash
-# 로컬 변경사항을 서브트리 원격 저장소에 푸시
-git subtree push --prefix=qmtl qmtl-subtree main
-```
-
-### 서브트리 상태 확인
-```bash
-# 서브트리 커밋 히스토리 확인
-git log --oneline qmtl/ -n 5
-
-# 원격과 로컬 비교
-git log --oneline qmtl-subtree/main -n 3
-```
 
