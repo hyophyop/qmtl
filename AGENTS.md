@@ -40,6 +40,7 @@ uv venv
 uv pip install -e qmtl[dev]
 ```
 Install additional packages in the same environment when needed.
+- The AlphaDocs sync script requires PyYAML; run `uv pip install pyyaml` if it's missing before executing `uv run scripts/check_doc_sync.py`.
 
 ## Development Practices
 
