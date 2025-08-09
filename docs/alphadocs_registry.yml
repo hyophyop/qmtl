@@ -1,0 +1,9 @@
+- doc: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
+  status: pending
+  modules: []
+- doc: docs/alphadocs/basic_sequence_pipeline.md
+  status: implemented
+  modules:
+    - strategies/nodes/generators/sequence.py
+    - strategies/nodes/indicators/average.py
+    - strategies/nodes/transforms/scale.py

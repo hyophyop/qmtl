@@ -64,6 +64,14 @@ git log --oneline qmtl-subtree/main -n 3
 - Ensure resources such as network or database connections are closed to avoid `ResourceWarning`.
 - 전략 개발 중 QMTL 이슈가 발견되면, 서브트리를 최신으로 동기화한 뒤 `qmtl/` 내부에서 우선 수정하고 테스트하세요. qmtl은 서브트리이지만 별도 구성된 프로젝트이므로 `qmtl/AGENTS.md`의 가이드를 충실히 따라 수정/테스트/커밋/PR을 진행해야 합니다. 수정 후 루트 리포지토리에 서브트리 변경사항을 커밋하는 것을 잊지 마세요.
 
+## AlphaDocs Workflow
+
+1. 모든 연구 문서는 `docs/alphadocs/`에 저장하고 `docs/alphadocs_registry.yml`에 `doc`, `status`, `modules` 필드를 갖는 항목을 추가합니다.
+2. 문서를 근거로 코드를 작성할 때는 해당 모듈 상단에 `# Source: docs/alphadocs/<doc>.md` 주석을 포함합니다.
+3. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련 테스트를 추가합니다.
+4. 문서를 이동하거나 이름을 변경할 경우 `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고, 주석과 레지스트리 경로도 함께 수정합니다.
+5. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
+
 ## Testing
 
 - Run the full test suite and treat warnings as errors:
