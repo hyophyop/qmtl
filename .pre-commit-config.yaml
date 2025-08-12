@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: taglint
+        name: taglint
+        entry: python tools/taglint.py
+        language: system
+        files: ^strategies/nodes/.+\.py$

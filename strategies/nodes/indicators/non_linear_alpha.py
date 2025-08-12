@@ -2,6 +2,13 @@
 
 # Source: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
 
+TAGS = {
+    "scope": "signal",
+    "family": "alpha",
+    "interval": "1d",
+    "asset": "sample",
+}
+
 import math
 
 
