@@ -40,3 +40,13 @@ def test_taglint_fix(tmp_path):
     assert '"interval": "1m"' in text
     res = run(file)
     assert res.returncode == 0
+
+
+def test_taglint_directory(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "ok.py").write_text(
+        """TAGS = {\n    'scope': 'indicator',\n    'family': 'rsi',\n    'interval': '1m',\n    'asset': 'btc',\n}\n"""
+    )
+    res = run(pkg)
+    assert res.returncode == 0

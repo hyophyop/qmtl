@@ -136,20 +136,30 @@ def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
     return not errors, "\n".join(errors)
 
 
+def iter_py_files(path: str):
+    if os.path.isdir(path):
+        for root, _, files in os.walk(path):
+            for name in files:
+                if name.endswith(".py") and name != "__init__.py":
+                    yield os.path.join(root, name)
+    else:
+        if path.endswith(".py") and os.path.basename(path) != "__init__.py":
+            yield path
+
+
 def main():
     parser = argparse.ArgumentParser(description="Lint TAGS dictionaries")
-    parser.add_argument("files", nargs="+", help="Files to lint")
+    parser.add_argument("files", nargs="+", help="Files or directories to lint")
     parser.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     args = parser.parse_args()
 
     ok = True
-    for path in args.files:
-        if os.path.basename(path) == "__init__.py" or not path.endswith(".py"):
-            continue
-        valid, msg = lint_file(path, fix=args.fix)
-        if not valid:
-            ok = False
-            print(f"{path}: {msg}")
+    for target in args.files:
+        for file in iter_py_files(target):
+            valid, msg = lint_file(file, fix=args.fix)
+            if not valid:
+                ok = False
+                print(f"{file}: {msg}")
     raise SystemExit(0 if ok else 1)
 
 
