@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  lint-test-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install uv pre-commit
+          uv venv
+          uv pip install -e qmtl[dev]
+          uv pip install pyyaml
+      - name: Lint
+        run: uv run pre-commit run --files $(git ls-files '*.py')
+      - name: Pytest
+        run: uv run -m pytest -W error
+      - name: Doc sync
+        run: uv run scripts/check_doc_sync.py
