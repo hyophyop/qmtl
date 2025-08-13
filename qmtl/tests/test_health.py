@@ -16,6 +16,7 @@ from qmtl.gateway.database import PostgresDatabase
 import grpc
 import asyncio
 import gc
+import warnings
 import pytest
 
 
@@ -109,7 +110,9 @@ async def test_grpc_health():
         await client.close()
         await server.stop(None)
         await server.wait_for_termination()
-        gc.collect()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ResourceWarning)
+            gc.collect()
 
 
 @pytest.mark.asyncio

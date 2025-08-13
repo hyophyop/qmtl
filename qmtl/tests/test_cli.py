@@ -1,6 +1,8 @@
+import os
 import subprocess
 import sys
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -31,6 +33,7 @@ def test_cli_dry_run():
 
 
 def test_cli_offline():
+    env = {**os.environ, "PYTHONPATH": str(Path(".."))}
     result = subprocess.run([
         sys.executable,
         "-m",
@@ -39,7 +42,7 @@ def test_cli_offline():
         STRATEGY_PATH,
         "--mode",
         "offline",
-    ], capture_output=True, text=True)
+    ], capture_output=True, text=True, cwd="qmtl", env=env)
     assert result.returncode == 0
     assert "[OFFLINE] SampleStrategy" in result.stderr
 
