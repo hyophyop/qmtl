@@ -50,6 +50,22 @@ def create_project(
         for file in src_dir.iterdir():
             if file.suffix == ".py":
                 (dst_dir / file.name).write_bytes(file.read_bytes())
+
+    # Copy example DAG definitions
+    dags_src = examples.joinpath("dags")
+    dags_dest = dest / "dags"
+    if dags_src.is_dir():
+        dags_dest.mkdir(exist_ok=True)
+        init_file = dags_src / "__init__.py"
+        if init_file.is_file():
+            (dags_dest / "__init__.py").write_bytes(init_file.read_bytes())
+        example_src = dags_src / "example_strategy"
+        if example_src.is_dir():
+            example_dest = dags_dest / "example_strategy"
+            example_dest.mkdir(exist_ok=True)
+            for file in example_src.iterdir():
+                if file.is_file():
+                    (example_dest / file.name).write_bytes(file.read_bytes())
     (dest / "qmtl.yml").write_bytes(
         examples.joinpath("qmtl.yml").read_bytes()
     )
