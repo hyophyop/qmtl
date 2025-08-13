@@ -1,8 +1,8 @@
 name: CI
 
+# Disabled automatic triggers. This workflow can only be run manually.
 on:
-  pull_request:
-  push:
+  workflow_dispatch:
 
 jobs:
   lint-test-doc:
