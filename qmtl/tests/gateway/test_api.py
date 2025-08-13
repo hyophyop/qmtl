@@ -1,8 +1,5 @@
-import asyncio
-import json
-
 import pytest
-from fastapi.testclient import TestClient
+import httpx
 
 from qmtl.gateway.api import create_app, Database, StrategySubmit
 from qmtl.common import crc32_of_list
@@ -34,18 +31,20 @@ def app(fake_redis):
     return create_app(redis_client=fake_redis, database=db)
 
 
-def test_ingest_and_status(app):
-    with TestClient(app) as client:
+@pytest.mark.asyncio
+async def test_ingest_and_status(app):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         payload = StrategySubmit(
             dag_json="{}",
             meta={"user": "alice"},
             run_type="dry-run",
             node_ids_crc32=crc32_of_list([]),
         )
-        resp = client.post("/strategies", json=payload.model_dump())
+        resp = await client.post("/strategies", json=payload.model_dump())
         assert resp.status_code == 202
         sid = resp.json()["strategy_id"]
 
-        resp = client.get(f"/strategies/{sid}/status")
+        resp = await client.get(f"/strategies/{sid}/status")
         assert resp.status_code == 200
         assert resp.json()["status"] == "queued"
