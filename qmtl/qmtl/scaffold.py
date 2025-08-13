@@ -47,6 +47,9 @@ def create_project(
     (dest / "config.example.yml").write_bytes(
         examples.joinpath("config.example.yml").read_bytes()
     )
+    (dest / ".gitignore").write_bytes(
+        examples.joinpath("gitignore").read_bytes()
+    )
     try:
         template_file = TEMPLATES[template]
     except KeyError:

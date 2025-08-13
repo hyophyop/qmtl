@@ -61,7 +61,8 @@ cd my_qmtl_project
 See [docs/templates.md](docs/templates.md) for a description of each template.
 
 The scaffold includes empty `generators/`, `indicators/` and
-`transforms/` packages for adding your own extensions.
+`transforms/` packages for adding your own extensions, along with a
+preconfigured `.gitignore` to keep temporary files out of version control.
 
 Run the default strategy to verify everything is set up correctly:
 

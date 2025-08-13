@@ -25,7 +25,7 @@ qmtl init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
-생성된 디렉터리에는 `strategy.py`, `qmtl.yml`, 그리고 노드와 DAG를 정의하는 `strategies/nodes/`와 `strategies/dags/` 패키지가 포함됩니다. 기존 `generators/`, `indicators/`, `transforms/` 패키지는 `strategies/nodes/` 하위로 재배치되었습니다.
+생성된 디렉터리에는 `strategy.py`, `qmtl.yml`, `.gitignore`, 그리고 노드와 DAG를 정의하는 `strategies/nodes/`와 `strategies/dags/` 패키지가 포함됩니다. 기존 `generators/`, `indicators/`, `transforms/` 패키지는 `strategies/nodes/` 하위로 재배치되었습니다.
 
 ## 전략 템플릿 작성 절차
 
