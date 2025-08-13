@@ -2,6 +2,32 @@
 
 This project demonstrates how to build and test QMTL strategy packages.
 
+## 공지: GitHub CI 일시 비활성화 (2025-08-14)
+
+레포지토리의 GitHub Actions 자동 트리거(push/pull_request)가 임시로 비활성화되었습니다. 현재 워크플로우는 수동(workflow_dispatch)으로만 실행됩니다. PR 생성/업데이트 시 자동 검증이 수행되지 않으므로, 아래 로컬 체크를 직접 수행한 뒤 푸시/PR을 생성해 주세요.
+
+- 의존성/환경 준비:
+   ```bash
+   pip install uv pre-commit
+   uv venv
+   uv pip install -e qmtl[dev]
+   uv pip install pyyaml
+   ```
+- Lint:
+   ```bash
+   uv run pre-commit run --files $(git ls-files '*.py')
+   ```
+- 테스트:
+   ```bash
+   uv run -m pytest -W error
+   ```
+- 문서 동기화 체크:
+   ```bash
+   uv run scripts/check_doc_sync.py
+   ```
+
+CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
+
 ## QMTL 서브트리 최신화 및 변경 원칙 (필수)
 
 이 저장소는 전략 개발과 동시에 QMTL 개선을 병행합니다. 따라서 `qmtl` 서브트리는 항상 최신 상태를 유지해야 하며, 서브트리 내부 변경 시에는 별도 프로젝트로 간주하여 해당 프로젝트의 가이드를 엄격히 따라야 합니다.
