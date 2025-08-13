@@ -10,6 +10,7 @@ def test_create_project(tmp_path: Path):
     create_project(dest)
     assert (dest / "qmtl.yml").is_file()
     assert (dest / "strategy.py").is_file()
+    assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
 
 
@@ -18,6 +19,7 @@ def test_create_project_with_sample_data(tmp_path: Path):
     create_project(dest, with_sample_data=True)
     assert (dest / "config.example.yml").is_file()
     assert (dest / "data" / "sample_ohlcv.csv").is_file()
+    assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
 
 
@@ -34,6 +36,7 @@ def test_init_cli(tmp_path: Path):
     assert result.returncode == 0
     assert (dest / "qmtl.yml").is_file()
     assert (dest / "strategy.py").is_file()
+    assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
 
 
@@ -51,4 +54,5 @@ def test_init_cli_with_sample_data(tmp_path: Path):
     assert result.returncode == 0
     assert (dest / "config.example.yml").is_file()
     assert (dest / "data" / "sample_ohlcv.csv").is_file()
+    assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
