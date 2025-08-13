@@ -34,13 +34,22 @@ def create_project(
     dest = Path(path)
     dest.mkdir(parents=True, exist_ok=True)
 
-    # extension package directories
-    for sub in ["generators", "indicators", "transforms"]:
-        pkg = dest / sub
-        pkg.mkdir(exist_ok=True)
-        (pkg / "__init__.py").touch()
-
     examples = resources.files(_EXAMPLES_PKG)
+
+    # extension package directories
+    nodes_src = examples.joinpath("nodes")
+    nodes_dest = dest / "nodes"
+    nodes_dest.mkdir(exist_ok=True)
+    (nodes_dest / "__init__.py").write_bytes(
+        nodes_src.joinpath("__init__.py").read_bytes()
+    )
+    for sub in ["generators", "indicators", "transforms"]:
+        src_dir = nodes_src.joinpath(sub)
+        dst_dir = nodes_dest / sub
+        dst_dir.mkdir(exist_ok=True)
+        for file in src_dir.iterdir():
+            if file.suffix == ".py":
+                (dst_dir / file.name).write_bytes(file.read_bytes())
     (dest / "qmtl.yml").write_bytes(
         examples.joinpath("qmtl.yml").read_bytes()
     )
