@@ -17,8 +17,7 @@ def test_cli_init(tmp_path):
 def test_cli_init_with_template(tmp_path):
     tmp_dir = tmp_path / "proj"
     qmtl.cli.main(["init", "--path", str(tmp_dir), "--strategy", "branching"])
-
-    contents = (tmp_dir / "strategy.py").read_text()
+    contents = (tmp_dir / "dags" / "example_strategy.py").read_text()
     assert "BranchingStrategy" in contents
 
 
