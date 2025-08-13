@@ -6,7 +6,7 @@ from pathlib import Path
 def test_init_wheel(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", ".", "-o", str(wheel_dir)],
+        ["uv", "build", "--wheel", "qmtl", "-o", str(wheel_dir)],
         check=True,
     )
     wheel = next(wheel_dir.glob("qmtl-*.whl"))
