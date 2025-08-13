@@ -16,13 +16,15 @@ This repository hosts strategy experiments built on top of the [QMTL](qmtl/READM
   git add qmtl
   git commit -m "chore: bump qmtl subtree to latest"
   ```
-- 로컬 수정 내용을 원격 서브트리에 반영하려면:
+- 로컬 수정 내용을 원본 저장소에 반영하려면 (필수):
   ```bash
   git subtree push --prefix=qmtl qmtl-subtree main
   ```
+- 위 push 단계가 누락되면 원본 qmtl 저장소에 변경 사항이 남지 않습니다. 서브트리 작업 후 PR 전 반드시 실행하세요.
 - 전략 개발 중 QMTL의 버그/개선을 발견하면 `qmtl/` 내부에서 우선 수정하고 테스트를 추가한 뒤, 위 절차로 서브트리를 업데이트하세요.
 - PR 체크리스트에 포함:
   - [ ] `git log -n 3 --oneline qmtl/` 결과가 원격 최신과 일치함을 확인
+  - [ ] `git subtree push --prefix=qmtl qmtl-subtree main` 으로 원본 저장소에 변경 사항을 반영했는지 확인
   - [ ] QMTL 변경 시 `qmtl/tests`와 루트 `tests` 모두 통과
 
 ### 빠른 점검 명령어
