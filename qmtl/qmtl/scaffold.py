@@ -59,12 +59,21 @@ def create_project(
     (dest / ".gitignore").write_bytes(
         examples.joinpath("gitignore").read_bytes()
     )
+
+    # Copy strategy entry point
+    (dest / "strategy.py").write_bytes(
+        examples.joinpath("strategy.py").read_bytes()
+    )
+
     try:
         template_file = TEMPLATES[template]
     except KeyError:
         raise ValueError(f"unknown template: {template}")
 
-    (dest / "strategy.py").write_bytes(
+    # Copy example DAG under ``dags/example_strategy.py``
+    dags_dir = dest / "dags"
+    dags_dir.mkdir(exist_ok=True)
+    (dags_dir / "example_strategy.py").write_bytes(
         examples.joinpath(template_file).read_bytes()
     )
 
