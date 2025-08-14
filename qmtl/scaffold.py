@@ -17,7 +17,12 @@ TEMPLATES = {
 
 
 def create_project(
-    path: Path, template: str = "general", with_sample_data: bool = False
+    path: Path,
+    template: str = "general",
+    with_sample_data: bool = False,
+    with_docs: bool = False,
+    with_scripts: bool = False,
+    with_pyproject: bool = False,
 ) -> None:
     """Create a new project scaffold under *path* using the given *template*.
 
@@ -30,6 +35,12 @@ def create_project(
     with_sample_data:
         When ``True`` copy bundled example OHLCV data into ``data/`` of the
         new project.
+    with_docs:
+        When ``True`` include the ``docs/`` directory template.
+    with_scripts:
+        When ``True`` include the ``scripts/`` directory template.
+    with_pyproject:
+        When ``True`` include a ``pyproject.toml`` template.
     """
     dest = Path(path)
     dest.mkdir(parents=True, exist_ok=True)
@@ -75,6 +86,31 @@ def create_project(
     (dest / ".gitignore").write_bytes(
         examples.joinpath("gitignore").read_bytes()
     )
+
+    if with_docs:
+        docs_src = examples.joinpath("docs")
+        docs_dest = dest / "docs"
+        if docs_src.is_dir():
+            for file in docs_src.rglob("*"):
+                if file.is_file():
+                    dst_file = docs_dest / file.relative_to(docs_src)
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    dst_file.write_bytes(file.read_bytes())
+
+    if with_scripts:
+        scripts_src = examples.joinpath("scripts")
+        scripts_dest = dest / "scripts"
+        if scripts_src.is_dir():
+            for file in scripts_src.rglob("*"):
+                if file.is_file():
+                    dst_file = scripts_dest / file.relative_to(scripts_src)
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    dst_file.write_bytes(file.read_bytes())
+
+    if with_pyproject:
+        py_src = examples.joinpath("pyproject.toml")
+        if py_src.is_file():
+            (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
 
     # Documentation templates
     for fname in ["README.md", "AGENTS.md"]:

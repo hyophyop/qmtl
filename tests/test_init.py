@@ -32,6 +32,14 @@ def test_create_project_with_sample_data(tmp_path: Path):
     assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
 
 
+def test_create_project_with_optionals(tmp_path: Path):
+    dest = tmp_path / "proj_opts"
+    create_project(dest, with_docs=True, with_scripts=True, with_pyproject=True)
+    assert (dest / "docs" / "README.md").is_file()
+    assert (dest / "scripts" / "example.py").is_file()
+    assert (dest / "pyproject.toml").is_file()
+
+
 def test_init_cli(tmp_path: Path):
     dest = tmp_path / "cli_proj"
     result = subprocess.run([
@@ -53,6 +61,25 @@ def test_init_cli(tmp_path: Path):
     dag = dest / "dags" / "example_strategy"
     assert (dag / "__init__.py").is_file()
     assert (dag / "config.yaml").is_file()
+
+
+def test_init_cli_with_optionals(tmp_path: Path):
+    dest = tmp_path / "cli_proj_opts"
+    result = subprocess.run([
+        sys.executable,
+        "-m",
+        "qmtl",
+        "init",
+        "--path",
+        str(dest),
+        "--with-docs",
+        "--with-scripts",
+        "--with-pyproject",
+    ], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert (dest / "docs" / "README.md").is_file()
+    assert (dest / "scripts" / "example.py").is_file()
+    assert (dest / "pyproject.toml").is_file()
 
 
 def test_init_cli_with_sample_data(tmp_path: Path):
