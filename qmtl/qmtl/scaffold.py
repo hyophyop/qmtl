@@ -76,6 +76,22 @@ def create_project(
         examples.joinpath("gitignore").read_bytes()
     )
 
+    # Documentation templates
+    for fname in ["README.md", "AGENTS.md"]:
+        src = examples.joinpath(fname)
+        if src.is_file():
+            (dest / fname).write_bytes(src.read_bytes())
+
+    # Copy bundled example tests
+    tests_src = examples.joinpath("tests")
+    tests_dest = dest / "tests"
+    if tests_src.is_dir():
+        for file in tests_src.rglob("*"):
+            if file.is_file():
+                dst_file = tests_dest / file.relative_to(tests_src)
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                dst_file.write_bytes(file.read_bytes())
+
     # Copy strategy entry point
     (dest / "strategy.py").write_bytes(
         examples.joinpath("strategy.py").read_bytes()

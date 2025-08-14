@@ -12,6 +12,9 @@ def test_create_project(tmp_path: Path):
     assert (dest / "strategy.py").is_file()
     assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / "AGENTS.md").is_file()
+    assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
     dag = dest / "dags" / "example_strategy"
     assert (dag / "__init__.py").is_file()
     assert (dag / "config.yaml").is_file()
@@ -24,6 +27,9 @@ def test_create_project_with_sample_data(tmp_path: Path):
     assert (dest / "data" / "sample_ohlcv.csv").is_file()
     assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / "AGENTS.md").is_file()
+    assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
 
 
 def test_init_cli(tmp_path: Path):
@@ -41,6 +47,9 @@ def test_init_cli(tmp_path: Path):
     assert (dest / "strategy.py").is_file()
     assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / "AGENTS.md").is_file()
+    assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
     dag = dest / "dags" / "example_strategy"
     assert (dag / "__init__.py").is_file()
     assert (dag / "config.yaml").is_file()
@@ -62,3 +71,6 @@ def test_init_cli_with_sample_data(tmp_path: Path):
     assert (dest / "data" / "sample_ohlcv.csv").is_file()
     assert (dest / "dags" / "example_strategy.py").is_file()
     assert (dest / ".gitignore").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / "AGENTS.md").is_file()
+    assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
