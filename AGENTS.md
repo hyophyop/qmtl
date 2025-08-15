@@ -63,6 +63,7 @@ Install additional packages in the same environment when needed.
 3. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련 테스트를 추가합니다.
 4. 문서를 이동하거나 이름을 변경할 경우 `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고, 주석과 레지스트리 경로도 함께 수정합니다.
 5. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
+6. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill) 등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을 참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은 문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야 합니다.
 
 ## Testing
 
