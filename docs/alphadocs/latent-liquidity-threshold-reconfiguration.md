@@ -1,3 +1,4 @@
+# Idea
 📌 시장 미시 구조 이론: 잠재 유동성 임계 재구성 이론 (Latent Liquidity Threshold Reconfiguration Theory)
 
 ⸻
@@ -45,6 +46,7 @@ LLRTI_t = \sum_{p \in \text{LOB}} \left( \frac{\Delta \text{Order Depth}{p,t}}{\
 잠재 유동성 임계 재구성 이론은, 시장 구조가 안정적으로 보일 때조차 비가시적 유동성의 출현·붕괴에 따라 급격히 틱 기반 알파 기회가 생성될 수 있다는 사실을 정량화합니다.
 이 이론은 유동성 붕괴 감지, 체결 기반 리스크 관리, 옵션 헷지 전략 최적화에 실질적인 고정밀 퀀트 프레임워크를 제공합니다. 🚀
 
+# 개선 알파 제안
 아래는 **직전 제안(잠재 유동성 임계 재구성, LLRTI)**을 토대로, 비판적 점검 → 약점 보완 → 생산 배포까지 가능한 개선 알파를 한 번에 제시한 것입니다.
 핵심은 (1) ‘임계’ 탐지를 사건 위험도(hazard) 문제로 재정의, (2) 차원·레짐 정규화로 일반화 가능성 향상, (3) 방향 가이팅과 비용-인식(cost‑aware) 스케일링입니다.
 
@@ -171,3 +173,232 @@ g_t \;=\; \tanh\!\big(\eta_0 + \eta_1\,z_o + \eta_2\,z_m + \eta_3\,\text{sign}(\
 
 위 개선안은 **이론적 직관(잠재 유동성 임계 전이)**를 유지하되, **예측 문제 정의(위험도)**와 **실행 제약(비용·체결률)**을 수식에 내장해 현금흐름으로 연결되는 비선형 알파로 정제했습니다.
 원하시면 이 수식을 바로 적용 가능한 **특징량 산출 절차와 백테스트 체크리스트(파라미터 표 포함)**로 더 세분해 드릴게요.
+
+# 전체 설계·구현 패키지
+아래는 직전 개선안( Hazard 게이팅 + 방향 가이팅 + 비용·체결 내재화 )을 현업 적용 수준으로 세분화한 전체 설계·구현 패키지입니다.
+바로 구현·백테스트·운영까지 이어질 수 있도록 데이터→특징량→라벨링→모델링→시뮬레이션→리스크→모니터링 순서로 정리했고,
+초고빈도(LOB/L2, 50–500ms) 버전과 저빈도(1s~1m 캔들 프록시) 버전을 모두 제공합니다.
+
+⸻
+
+0) 핵심 수식(요약)
+
+\boxed{ \alpha_t \;=\; \Big(h_t^{\,\gamma} - \tau\Big)_+ \cdot g_t \cdot \pi_t \cdot e^{-\phi\,C_t} }
+	•	h_t: 점프/전이 Hazard(발생확률)
+	•	g_t: 방향 가이팅 (주문흐름/마이크로프라이스 기반)
+	•	\pi_t: 체결 가능성(충족률) 추정
+	•	C_t: 즉시 비용(스프레드/수수료/충격)
+	•	\gamma>1, 임계 \tau, 비용 패널티 \phi
+
+⸻
+
+1) 데이터 요건 & 샘플링
+
+(A) LOB/L2 HFT 버전 (권장)
+	•	스냅샷: 상·하단 N레벨(예: 10x10), 50–200ms 간격 또는 이벤트타임(LOB 변경 시)
+	•	체결 스트림: aggressor flag(매수/매도), 크기, 가격, 타임스탬프(ns~ms)
+	•	거래소 메타: 틱사이즈, 최소수량, taker/maker fee, 라운딩 규칙
+	•	선물/무기한: 펀딩, 오픈이자(OI), 강제청산 인근 데이터(가능시)
+
+(B) 1s–1m 프록시 버전 (데이터 제약 시)
+	•	캔들(OHLCV) + 스프레드 근사(베스트 bid/ask가 없으면 VWAP/체결가 변화로 근사)
+	•	OFI 프록시(EMO, tick rule), 마이크로프라이스 근사, 롤링 깊이 프록시(체결량 밀도)
+
+⸻
+
+2) 라벨링(사건 정의)
+
+점프/전이 라벨
+J_{t,\Delta} = \mathbb{1}\!\left\{ \frac{|P_{t+\Delta}-P_t|}{\widehat{\sigma}_{t,\Delta}} > \kappa \right\},\quad \kappa \in [1.5,2.5],\;\Delta \in \{0.25s,0.5s,1.0s\}
+
+방향 라벨
+D_{t,\Delta} = \text{sign}\!\big(P_{t+\Delta}-P_t\big)
+
+누수 방지: \widehat{\sigma}_{t,\Delta}는 t까지의 데이터만 EWMA로 추정.
+레짐 태깅: (변동성·스프레드·시간대)로 레짐 ID 추가 → 이후 파라미터를 레짐별로.
+
+⸻
+
+3) 특징량(무차원·레짐 정규화)
+
+모든 특징을 z-score(EWM 표준화) 또는 틱/스프레드 단위로 정규화합니다.
+	•	취소 강도 z_c: z\big(\tfrac{\#cancel}{\#(new+modify)+\epsilon}\big) @윈도우 \tau_c
+	•	Depth cliff z_d: z\big(\max_k \frac{\text{Depth}k-\text{Depth}{k+1}}{\Delta p}\big)
+	•	Requote 지연 z_r: 레벨별 호가 갱신 간격의 로그-중앙값 z-score
+	•	체결 압력 z_e: z\big(\tfrac{\text{AggressiveVol}_{\tau_e}}{\text{TopDepth}+ \epsilon}\big)
+	•	스프레드 상태 z_s: z\big(\tfrac{\text{Spread}}{\text{tick}}\big)
+	•	OFI/주문흐름 z_o: 표준 OFI 또는 EMO(Lee–Ready 변형) z-score
+	•	마이크로프라이스 기울기 z_m: z\big(\tfrac{w\_ask\cdot ask + w\_bid\cdot bid}{w\_ask+w\_bid}-mid\big) 변동률
+	•	|\dot{OBI}|: 주문서 기울기(imbalance)의 시간미분 절댓값
+	•	(선택) 큐 불균형 z_q: 레벨0 queue size 차이 z-score
+	•	(선택) LOB 엔트로피 z_\eta: 레벨별 확률분포의 Shannon entropy z-score
+
+추천 윈도우: \tau_c,\tau_e=1\sim3s, EWM half-life =2\sim5s.
+
+⸻
+
+4) Hazard 모델 h_t
+
+h_t = \sigma\!\Big(
+\beta_0 + \beta_1\,\text{softplus}(z_c) + \beta_2\,\text{softplus}(z_d)
+	•	\beta_3\,z_r + \beta_4\,\log(1+z_e^+) + \beta_5\,z_s + \beta_6\,|\dot{OBI}_t|
+\Big)
+
+	•	모형: 로지스틱 회귀(해석 용이) → 필요시 GBDT/XGBoost 또는 마크드 Hawkes(취소·체결·재호가를 마크로)로 대체
+	•	목표: J_{t,\Delta} (binary). 클래스 불균형은 가중치/포칼로스 사용
+	•	정규화: L2 + feature clipping(winsorize 1% 양끝)
+	•	레짐별 파라미터: \beta(\text{regime})
+
+검증: AUC/PR, calibration curve, 디사일 버킷팅에서 사건 빈도가 단조 증가해야 함.
+
+⸻
+
+5) 방향 가이팅 g_t
+
+g_t = \tanh\!\big(\eta_0 + \eta_1 z_o + \eta_2 z_m + \eta_3 \text{sign}(\text{OFI}_t)\cdot z_e \big)
+	•	모형: 로지스틱(상승/하락) 또는 회귀(다음 Δ 수익률)
+	•	특징량: OFI, 마이크로프라이스 기울기, 체결 압력(부호), 최근 미드모멘텀
+	•	검증: directional accuracy, 업사이드/다운사이드 분리 IC
+
+⸻
+
+6) 비용 C_t & 체결 가능성 \pi_t
+	•	C_t = \tfrac{\text{Spread}_t}{2} + \text{takerFee} + \widehat{\text{Impact}}_t
+	•	충격 \widehat{\text{Impact}}_t:
+	•	(간단) 제곱근 법칙: k \cdot \sigma \sqrt{q/V}
+	•	(고급) LOB 기울기 기반: \tfrac{q}{\sum_{k} \text{Depth}_k} + 비선형 보정
+	•	체결 가능성 \pi_t \in [0,1]: 최근 N회 시장가/지정가 충족률 EWMA.
+	•	지정가 사용 시 큐 포지션/대기열 추정(단순: 레벨0 잔량 대비 주문 비율).
+
+⸻
+
+7) 최종 알파 & 포지션
+
+\alpha_t = \big(h_t^{\gamma} - \tau\big)+ \cdot g_t \cdot \pi_t \cdot e^{-\phi C_t},\quad
+w_t = k{\text{risk}} \cdot \alpha_t
+	•	\gamma \in [1.5,3], \tau: trade gating(예: 상위 20% hazard만)
+	•	\phi: 비용 민감도(0.5~2.0)
+	•	사이징: 목표 포지션 w_t (달러/계약), max participation & max leverage 제한
+
+⸻
+
+8) 백테스트(미시구조 인지)
+
+시뮬레이션 엔진
+	•	레이지 실행 금지: 엔트리 시 현재 LOB로 체결/부분충족/슬리피지 계산
+	•	타임스탬프·지연: 의사결정→전송→수락까지 고정/랜덤 지연(예: 5–20ms)
+	•	수수료/리베이트: 거래소별 실측 적용, 펀딩비 포함(파생)
+	•	청산/리밸런스: triple‑barrier (목표/손절/타임아웃 Δ)
+	•	위험 관리: per‑trade·per‑minute VaR/Drawdown 제한, kill‑switch(스프레드 급증, 체결률 급락)
+
+검증 절차
+	•	Walk‑forward: 앵커드 또는 expanding 6분할 (훈련→검증→OOS)
+	•	어블레이션: z_c,z_d,z_r,\dots 제거 효과로 AUC/IC/PnL 변화
+	•	버킷팅: h_t decile 별 사건율·PnL after‑cost 단조성 확인
+	•	교차시장: 코인/거래소/시간대별 메타‑분석(랜덤효과 모델)
+	•	현실성 검사: 주문빈도·참여율·슬리피지 분포가 실제와 근사?
+
+리포트
+	•	After‑cost CAGR, Sharpe, Sortino, Turnover·Participation, cost decomposition(스프레드/수수료/충격), hit ratio vs hazard decile
+
+⸻
+
+9) 파라미터 권장(시작점)
+
+파라미터	제안	비고
+\Delta	0.5s	점프 라벨 지평
+\kappa	2.0σ	점프 임계
+\gamma	2.0	비선형 증폭
+\tau	hazard 0.7	게이팅 하한
+\phi	1.0	비용 패널티
+EWM HL	3s	표준화/평활
+Winsor	1%	테일 억제
+MaxPart	2–5%	참여율 상한
+Kill‑switch	spread z > 3	거래 일시 중지
+
+
+⸻
+
+10) 실전 운영(모니터링 & 드리프트)
+	•	모형 캘리브레이션: 주기적 리핏(일 1회/주 1회), calibration slope/Intercept 감시
+	•	데이터 품질: 타임스탬프 드리프트, 주문·체결 누락률, 스냅샷 지연
+	•	센터 리밸런스: 레짐 전환 감지(변동성/스프레드 체 regime) → 파라미터 테이블 전환
+	•	SLO: 알파→오더→체결까지 p95 지연 목표치(예: < 30ms)
+
+⸻
+
+11) 의사코드(핵심 파이프라인)
+
+# 1) 데이터 스트림에서 LOB/Trades 수집 → feature state 업데이트
+state.update_from_lob(lob_snapshot)
+state.update_from_trades(trade_batch)
+
+# 2) 특징량 무차원화 & 평활
+z = standardize_ewm(features=compute_features(state), hl=3.0, winsor=0.01)
+
+# 3) Hazard & Direction
+h = sigmoid(beta0 + beta1*softplus(z['cancel_int'])
+                    + beta2*softplus(z['depth_cliff'])
+                    + beta3*z['requote_delay']
+                    + beta4*np.log1p(max(0, z['exec_pressure']))
+                    + beta5*z['spread_state']
+                    + beta6*abs(z['dOBI_dt']))
+
+g = np.tanh(eta0 + eta1*z['ofi'] + eta2*z['micro_slope']
+                 + eta3*np.sign(z['ofi_raw'])*z['exec_pressure'])
+
+# 4) 비용/체결률
+impact_hat = k_impact * sigma * np.sqrt(order_size / max(daily_vol, eps))
+C = spread/2 + taker_fee + impact_hat
+pi = fill_rate_ewm  # 최근 충족률
+
+# 5) 알파 & 포지션
+alpha = max(h**gamma - tau, 0.0) * g * pi * np.exp(-phi * C)
+target_pos = k_risk * alpha
+order = sizing_and_routing(target_pos, current_pos, lob_snapshot, limits)
+
+
+⸻
+
+12) 1초~1분 프록시 버전(캔들만 있을 때)
+	•	OFI 프록시: tick rule로 매수/매도 플로우 근사
+	•	스프레드 프록시: 고가-저가 대비 분모로 근사 스프레드 상태
+	•	Depth proxy: 롤링 체결량/레인지로 유동성 대용량 지표
+	•	Hazard: 위와 동일 구조(softplus/로그 포화), 단 레짐을 더 보수적으로
+
+예시 특징(1m):
+	•	z_e = z\big( \text{Vol}{1m} / \text{ATR}{5m} \big), z_s = z\big( \text{High-Low}/\text{Mid} \big)
+	•	z_d = z\big( \text{Vol}{1m} / \text{Vol}{10m} \big) (유동성 급감 프록시)
+	•	나머지 동일. 실행은 제한(Market only, 참여율↓).
+
+⸻
+
+13) 진단 & 안정화 체크리스트
+	•	Information Coefficient(IC): Δ수익률과 \alpha_t 상관 (pre/post-cost)
+	•	PSR/White’s Reality Check: 우연 성과 배제
+	•	CSCV(Combinatorially Symmetric Cross‑Validation): 파라미터 튜닝 견고성
+	•	Permutation test: 라벨 무작위화 시 성과 붕괴?
+	•	Leakage test: 라벨 정의·표준화에서 미래정보 사용 여부 자동 검사
+
+⸻
+
+14) 실패 모드 & 가드레일
+	•	유동성 공백: h_t↑와 동시에 스프레드 폭주 → 시장가 금지, 지정가 only
+	•	피크 체결 폭주: 체결률 \pi_t 급락 시 알파=0로 게이팅
+	•	연속 손실: per‑regime drawdown 한도 초과 시 해당 레짐 파라미터 freeze
+	•	데이터 글리치: 스냅샷 중복/역타임스탬프 검출 → 그 구간 무거래
+
+⸻
+
+15) 확장 아이디어(암호화폐 특화)
+	•	강제청산 히트맵: 폐포(Liquidation) 근접 클러스터를 z_e·z_o에 마크 → h_t 가중
+	•	펀딩/베이시스 전이: 레짐 태깅에 추가(펀딩 급변 시 hazard threshold↑)
+	•	마크드 Hawkes: (cancel, market buy, market sell, requote)를 마크로 → h_t 대체
+	•	옵션 감마 피드백: 델타헤지 수요 추정량을 z_e에 가산
+
+⸻
+
+결론
+
+이 설계는 (1) 사건 발생확률(hazard)로 선행성 확보 → (2) 방향 가이팅으로 한쪽 tail만 활용 → (3) 비용·체결률 내재화로 실전 PnL 정합을 달성합니다.
+위 표준안을 그대로 구현하시면 거래소·자산·시간대가 달라도 재사용 가능한 비선형 알파 파이프라인이 됩니다.
