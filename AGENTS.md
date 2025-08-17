@@ -51,6 +51,7 @@ Install additional packages in the same environment when needed.
 
 - Follow the Single Responsibility Principle for every strategy, generator, indicator and transform.
 - Add reusable components under `strategies/`, `generators/`, `indicators/` or `transforms/`. Place tests in `qmtl/tests/` or a local `tests/` directory.
+- 캔들·체결·호가창 등 raw 데이터에서 직접 얻을 수 없는 특징(feature)을 사용할 경우, 해당 중간 단계 기능이 `qmtl` extension에 이미 구현되어 있는지 먼저 확인하세요. 존재하면 이를 참조해 알파를 구현하고, 없다면 `qmtl` extension에 기능을 추가한 뒤 그 기능을 참조해 알파를 구현합니다.
 - Manage node processors under `strategies/nodes/` and define strategy DAGs in `strategies/dags/`.
 - Refer to `qmtl/architecture.md`, `qmtl/gateway.md` and `qmtl/dag-manager.md` for design details before modifying core behavior.
 - See [strategies/README.md](strategies/README.md) for guidance on building and reusing node processors and DAGs.
