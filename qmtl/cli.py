@@ -33,6 +33,21 @@ def main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="Include sample OHLCV CSV and notebook (see docs/strategy_workflow.md)",
     )
+    p_init.add_argument(
+        "--with-docs",
+        action="store_true",
+        help="Include docs/ directory template",
+    )
+    p_init.add_argument(
+        "--with-scripts",
+        action="store_true",
+        help="Include scripts/ directory template",
+    )
+    p_init.add_argument(
+        "--with-pyproject",
+        action="store_true",
+        help="Include pyproject.toml template",
+    )
 
     args, rest = parser.parse_known_args(argv)
 
@@ -63,6 +78,9 @@ def main(argv: List[str] | None = None) -> None:
             Path(args.path),
             template=args.strategy,
             with_sample_data=args.with_sample_data,
+            with_docs=args.with_docs,
+            with_scripts=args.with_scripts,
+            with_pyproject=args.with_pyproject,
         )
     else:
         parser.print_help()

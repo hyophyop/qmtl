@@ -210,3 +210,10 @@ __marimo__/
 
 # Project data
 data/
+
+# QMTL project directories
+nodes/
+dags/
+tests/
+docs/
+scripts/
