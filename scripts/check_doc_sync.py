@@ -36,7 +36,9 @@ docs_not_registered = sorted(set(actual_docs) - registry_doc_paths)
 if docs_not_registered:
     errors.append("Docs not in registry: " + ", ".join(docs_not_registered))
 
-missing_doc_files = sorted(registry_doc_paths - set(actual_docs))
+missing_doc_files = sorted(
+    doc for doc in registry_doc_paths if not (ROOT / doc).exists()
+)
 if missing_doc_files:
     errors.append("Docs listed but missing: " + ", ".join(missing_doc_files))
 
