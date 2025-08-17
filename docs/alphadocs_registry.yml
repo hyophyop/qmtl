@@ -11,6 +11,10 @@
     - strategies/nodes/transforms/scale.py
 - doc: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
   status: implemented
+  modules: []
+- doc: docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
+  status: prioritized
+  source_model: gpt5pro
   modules:
     - strategies/nodes/indicators/llrti.py
     - strategies/nodes/indicators/latent_liquidity_alpha.py

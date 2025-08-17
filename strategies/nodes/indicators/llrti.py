@@ -1,6 +1,6 @@
-"""Compute Latent Liquidity Reconfiguration Threshold Index."""
-
-# Source: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
+"""Compute LLRTI baseline from GPT-5-Pro: sum depth change rate when |ΔP| > δ."""
+# Source: docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
+# Priority: gpt5pro
 
 TAGS = {
     "scope": "indicator",
@@ -31,6 +31,6 @@ def llrti_node(data: dict) -> dict:
     delta = data.get("delta", 0.0)
 
     index = 0.0
-    if abs(price_change) > delta and delta_t > 0:
+    if delta_t > 0 and abs(price_change) > delta:
         index = sum(depth_changes) / delta_t
     return {"llrti": index}
