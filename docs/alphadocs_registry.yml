@@ -15,6 +15,7 @@
     - strategies/nodes/indicators/llrti.py
     - strategies/nodes/indicators/latent_liquidity_alpha.py
 - doc: docs/alphadocs/ideas/gpt5pro/quantum-liquidity-echo-theory.md
-  status: prioritized
+  status: implemented
   source_model: gpt5pro
-  modules: []
+  modules:
+    - strategies/nodes/indicators/quantum_liquidity_echo.py
