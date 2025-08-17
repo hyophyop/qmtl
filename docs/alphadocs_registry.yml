@@ -18,3 +18,8 @@
   status: prioritized
   source_model: gpt5pro
   modules: []
+- doc: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
+  status: prioritized
+  source_model: gpt5pro
+  modules:
+    - strategies/nodes/indicators/acceptable_price_band.py
