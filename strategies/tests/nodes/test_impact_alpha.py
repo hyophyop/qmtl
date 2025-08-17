@@ -1,23 +1,25 @@
 import math
 import pytest
 
-from strategies.nodes.indicators.impact import impact_node
 from strategies.nodes.indicators.non_linear_alpha import non_linear_alpha_node
-from qmtl.indicators import volatility_node
+from qmtl.indicators import impact_node, volatility_node
 from qmtl.transforms import order_book_imbalance_node, rate_of_change
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import SourceNode
 
-
-def test_impact_node_computes_expected_value():
-    data = {"volume": 100, "avg_volume": 400, "depth": 10, "beta": 0.5}
-    result = impact_node(data)
-    expected = math.sqrt(100 / 400) / (10 ** 0.5)
-    assert result["impact"] == pytest.approx(expected)
-
-
 def test_non_linear_alpha_node_computes_expected_value():
-    impact_val = impact_node({"volume": 100, "avg_volume": 400, "depth": 10, "beta": 1.0})["impact"]
+    volume = SourceNode(interval="1s", period=1, config={"id": "volume"})
+    avg_volume = SourceNode(interval="1s", period=1, config={"id": "avg_volume"})
+    depth = SourceNode(interval="1s", period=1, config={"id": "depth"})
+    imp_node = impact_node(volume, avg_volume, depth, beta=1.0)
+    impact_view = CacheView(
+        {
+            volume.node_id: {1: [(0, 100.0)]},
+            avg_volume.node_id: {1: [(0, 400.0)]},
+            depth.node_id: {1: [(0, 10.0)]},
+        }
+    )
+    impact_val = imp_node.compute_fn(impact_view)
 
     price_src = SourceNode(interval="1s", period=5, config={"id": "price"})
     vol_node = volatility_node(price_src, window=2)
