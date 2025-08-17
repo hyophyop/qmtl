@@ -1,6 +1,6 @@
-"""Latent liquidity non-linear alpha."""
-
-# Source: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
+"""Non-linear alpha from GPT-5-Pro: log LLRTI^γ plus exec imbalance derivative."""
+# Source: docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
+# Priority: gpt5pro
 
 TAGS = {
     "scope": "signal",
