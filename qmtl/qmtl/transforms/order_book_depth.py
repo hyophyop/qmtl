@@ -4,6 +4,57 @@ from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
+def depth_node(source: Node, levels: int, *, name: str | None = None) -> Node:
+    """Return a node computing summed depth over ``levels`` order book tiers.
+
+    Parameters
+    ----------
+    source:
+        Node yielding order book snapshots containing ``"bids"`` and
+        ``"asks"`` sequences. Each level may be represented as a
+        ``(price, size)`` pair or as a raw size value.
+    levels:
+        Number of levels from each side to include in the depth sum.
+    name:
+        Optional node name. Defaults to ``"depth"``.
+
+    Returns
+    -------
+    Node
+        Node emitting a dictionary with summed ``bid`` and ``ask`` depths.
+    """
+
+    def _sum(levels_data: list) -> float:
+        total = 0.0
+        for level in levels_data[:levels]:
+            if isinstance(level, (list, tuple)):
+                if not level:
+                    continue
+                size = level[1] if len(level) > 1 else level[0]
+            else:
+                size = level
+            total += float(size)
+        return total
+
+    def compute(view: CacheView):
+        data = view[source][source.interval]
+        if not data:
+            return None
+        snapshot = data[-1][1]
+        return {
+            "bid_depth": _sum(snapshot.get("bids", [])),
+            "ask_depth": _sum(snapshot.get("asks", [])),
+        }
+
+    return Node(
+        input=source,
+        compute_fn=compute,
+        name=name or "depth",
+        interval=source.interval,
+        period=1,
+    )
+
+
 def depth_change_node(source: Node, *, name: str | None = None) -> Node:
     """Return a node computing total depth change between adjacent snapshots.
 
