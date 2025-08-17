@@ -1,5 +1,7 @@
 # Agent / Developer Instructions (synthesized)
 
+QMTL은 외부 서브트리이므로 변경은 드물고 신중해야 함.
+
 This document collects the actionable guidelines from `AGENTS.md` files across the repository and provides a single reference for contributors.
 
 ## Key policies
@@ -7,6 +9,8 @@ This document collects the actionable guidelines from `AGENTS.md` files across t
 - qmtl subtree:
   - Always sync `qmtl/` with the remote upstream before starting work. Use the subtree commands in the root `AGENTS.md`.
   - If you modify `qmtl/`, add tests in `qmtl/tests/` and run `git subtree push --prefix=qmtl qmtl-subtree main` to reflect changes upstream.
+  - QMTL 변경은 버그 수정 또는 여러 전략에서 재사용될 기능 추가에 한함
+  - 전략 특화 코드는 상위 레포에서 구현
 
 - Testing:
   - Run the full test suite without warnings:
