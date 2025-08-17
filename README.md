@@ -6,6 +6,8 @@
 
 프로젝트는 `qmtl` 서브트리를 포함합니다. 작업을 시작하기 전에 항상 최신 변경 사항을 가져오세요.
 
+QMTL은 별도 저장소에서 가져온 서브트리로, 수정은 최소화하고 upstream 저장소에 반영된 뒤에만 동기화해야 합니다. 전략 레벨 최적화와 실험은 `qmtl/` 내부가 아닌 루트 디렉토리에서 수행하세요.
+
 ```bash
 git fetch qmtl-subtree main
 git subtree pull --prefix=qmtl qmtl-subtree main --squash
