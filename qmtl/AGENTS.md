@@ -13,6 +13,21 @@
 - For any code changes, run `uv run -m pytest -W error` locally and ensure the command completes without warnings. CI must also run this command without warnings.
 - Ensure proper resource cleanup (e.g., closing Redis connections) to avoid `ResourceWarning`.
 
+# Subtree synchronization
+
+The `qmtl/` directory is maintained as a git subtree of the upstream
+[`hyophyop/qmtl`](https://github.com/hyophyop/qmtl) repository. After
+committing any change here, push the subtree to keep the upstream
+repository in sync:
+
+```bash
+git subtree push --prefix=qmtl qmtl-subtree main
+```
+
+Run this command from the repository root before submitting a PR that
+touches this subtree. Skipping it leaves the upstream repository
+outdated.
+
 # Prioritizing external alpha ideas
 
 - The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten by a stronger model (GPT-5-Pro). These files should be treated as higher-priority implementation targets by agents and maintainers working within the `qmtl` project.
