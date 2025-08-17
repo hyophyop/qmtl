@@ -41,6 +41,15 @@ CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
   ```bash
   git add qmtl && git commit -m "chore: bump qmtl subtree to latest"
   ```
+- QMTL 원본 저장소 반영 흐름:
+  1. 변경이 필요하면 [QMTL 원본 저장소](https://github.com/hyophyop/qmtl)에 이슈를 등록하거나 PR을 생성해 변경 계획을 공유합니다.
+  2. 로컬 수정 내용을 `git subtree push --prefix=qmtl qmtl-subtree main`으로 upstream에 푸시하고 해당 저장소에서 PR을 만듭니다.
+  3. PR이 병합되면 아래 명령으로 서브트리를 최신화하고 커밋합니다.
+     ```bash
+     git fetch qmtl-subtree main
+     git subtree pull --prefix=qmtl qmtl-subtree main --squash
+     git add qmtl && git commit -m "chore: bump qmtl subtree to latest"
+     ```
 - PR 체크리스트 권장 항목:
   - [ ] `git log -n 3 --oneline qmtl/` 결과 확인(원격 최신 반영)
   - [ ] `uv run -m pytest -W error` 실행 후 `qmtl/tests`와 루트 `tests` 모두 통과
