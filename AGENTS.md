@@ -68,6 +68,11 @@ Install additional packages in the same environment when needed.
 5. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
 6. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill) 등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을 참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은 문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야 합니다.
 
+### Idea directories
+
+- `docs/alphadocs/ideas/` 폴더는 아이디어 기록을 위한 버전 관리 대상일 뿐 직접 구현하지 않습니다.
+- 더 높은 성능의 모델로 정제된 아이디어(예: `docs/alphadocs/ideas/gpt5pro/`)만 구현 대상으로 간주합니다.
+
 ### Prioritizing GPT-5-Pro Generated Ideas
 
 - The `docs/alphadocs/ideas/gpt5pro/` directory contains alpha ideas rewritten and critiqued by a stronger model (GPT-5-Pro). Treat files in this directory as higher-priority implementation targets:
