@@ -65,6 +65,16 @@ Install additional packages in the same environment when needed.
 5. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
 6. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill) 등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을 참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은 문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야 합니다.
 
+### Prioritizing GPT-5-Pro Generated Ideas
+
+- The `docs/alphadocs/ideas/gpt5pro/` directory contains alpha ideas rewritten and critiqued by a stronger model (GPT-5-Pro). Treat files in this directory as higher-priority implementation targets:
+  - Mark these documents in `docs/alphadocs_registry.yml` with `status: prioritized` and include `source_model: gpt5pro` in the registry metadata.
+  - When creating code from these documents, include `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and add `# Priority: gpt5pro` to the top of the module.
+  - Agents and automated coding tools (Codex, Vibe, Copilot-style automation) should track history for these files in `docs/alphadocs_history.log`, create an implementation issue/branch automatically, and prefer them when selecting ideas to prototype or productionize.
+  - PRs implementing `gpt5pro` ideas must include a short agent-run log (tool name, model, timestamp, high-level actions performed) as part of the PR description.
+
+These measures ensure higher-fidelity ideas are visible to maintainers and to automated agents that can assist with implementation and history tracking.
+
 ## Testing
 
 - Run the full test suite and treat warnings as errors:

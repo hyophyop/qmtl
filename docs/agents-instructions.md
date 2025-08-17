@@ -24,6 +24,13 @@ This document collects the actionable guidelines from `AGENTS.md` files across t
   - Store research docs in `docs/alphadocs/` and update `docs/alphadocs_registry.yml` when adding or changing documents.
   - When code is implemented from a doc, add a comment at the module top: `# Source: docs/alphadocs/<doc>.md`.
 
+  - Prioritized GPT-5-Pro ideas:
+    - Files under `docs/alphadocs/ideas/gpt5pro/` are considered higher-priority. Tag them in the registry (`status: prioritized`, `source_model: gpt5pro`).
+    - Automated agents (Codex, Vibe, Copilot-style) should:
+      - Automatically create an implementation branch/issue when they select a `gpt5pro` idea.
+      - Append a short run log to PR descriptions: agent name, model, timestamp, and actions.
+      - Ensure history entries are recorded in `docs/alphadocs_history.log` when moving or renaming these documents.
+
 ## PR checklist (short)
 - Tests pass locally and in CI (`uv run -m pytest -W error`).
 - If `qmtl/` changed: subtree push performed and verification included in PR.
