@@ -1,6 +1,8 @@
 # Ideas — alpha docs
 
 This folder contains short-form ideas, experiments, and early-stage proposals related to strategy development, data transforms, and pipeline patterns.
+These files are version-controlled for historical record only; do not implement directly from them.
+Only ideas refined by stronger models in subdirectories (e.g., `gpt5pro/`) are intended for implementation.
 
 Purpose
 - Capture loosely-formed concepts and hypotheses that may later grow into full strategy design documents, implementation plans, or examples.
