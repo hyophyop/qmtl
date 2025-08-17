@@ -10,5 +10,8 @@ Transforms ship with the core package and do not require a separate install.
 Example:
 
 ```python
-from qmtl.transforms import rate_of_change, stochastic, angle
+from qmtl.transforms import rate_of_change, stochastic, angle, order_book_imbalance_node
+
+obi = order_book_imbalance_node(bid_volume_node, ask_volume_node)
+obi_derivative = rate_of_change(obi, period=2)
 ```
