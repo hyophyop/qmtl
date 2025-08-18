@@ -33,10 +33,14 @@ class DummyAlerts:
     def __init__(self):
         self.slack: list[str] = []
 
-    async def send_slack(self, msg: str) -> None:
+    async def send_slack(
+        self, msg: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         self.slack.append(msg)
 
-    async def send_pagerduty(self, msg: str) -> None:
+    async def send_pagerduty(
+        self, msg: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         self.slack.append(msg)
 
 
