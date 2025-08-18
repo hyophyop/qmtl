@@ -9,6 +9,11 @@ TL;DR — 무엇이 문제고, 무엇을 바꿔야 하나
 	4.	비선형 함수 포화: \alpha=\theta_1 GATI^\gamma+\theta_2 \frac{d\,\text{ExecFlow}}{dt}는 큰 값에서 과도한 포화/발산 위험. 게이팅(gating) + 기대점프 크기 × 고갈확률 구조로 바꾸세요.
 	5.	집행·조작 리스크: 얕은 레벨은 **짧은 수명(quoting churn)**이 많아 체결 전에 사라집니다. 체류시간(dwell time) 필터, 재호가(quote reappearance) 체크 없이는 조작에 취약합니다.
 
+QMTL 확장 기반 특징 계산 흐름:
+        1.      LOB 원시 스트림은 qmtl extension의 `gap_amplification` 모듈에 투입돼 GAS, 큐 고갈 해저드, 점프 기대값을 계산합니다.
+        2.      extension이 반환한 값은 feature 노드로 노출되고 `strategies/nodes/indicators/gap_amplification.py`가 이를 호출해 GATI를 구성합니다.
+        3.      알파 함수는 extension 출력만 사용하며 추가 인라인 계산을 금지합니다.
+
 ⸻
 
 1) 기초 정의 정정 (양/음 양측 분리)

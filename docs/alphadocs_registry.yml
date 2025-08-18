@@ -31,5 +31,6 @@
 - doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
   status: implemented
   source_model: gpt5pro
+  state: qmtl_extension_flow
   modules:
     - strategies/nodes/indicators/gap_amplification.py
