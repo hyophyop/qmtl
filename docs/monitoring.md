@@ -19,6 +19,8 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **GatewayLatencyHigh** – alerts when `gateway_e2e_latency_p95` exceeds 150 ms.
 - **LostRequests** – reports lost diff submissions based on `lost_requests_total`.
 - **GCSchedulerStall** – warns if `gc_last_run_timestamp` lags by more than ten minutes.
+- **NodeSlowProcessing** – triggers when `node_process_duration_ms` p95 exceeds 500 ms for a node.
+- **NodeFailures** – fires when `node_process_failure_total` increases.
 
 ## Grafana Dashboards
 
@@ -32,7 +34,7 @@ The script `qmtl/examples/questdb_parallel_example.py` runs two moving-average s
 python -m qmtl.examples.questdb_parallel_example
 ```
 
-Monitor `http://localhost:8000/metrics` during execution or check the printed output. Key counters include `node_processed_total` for processed events and `event_recorder_errors_total` when the recorder fails to persist rows.
+Monitor `http://localhost:8000/metrics` during execution or check the printed output. Key counters include `node_processed_total` for processed events, `node_process_failure_total` for compute errors and `event_recorder_errors_total` when the recorder fails to persist rows.
 
 ## Gateway & DAG Manager Metrics
 
@@ -70,6 +72,9 @@ expose these by calling `metrics.start_metrics_server()`.
 | `backfill_jobs_in_progress` | Gauge | Number of active backfill jobs | *(none)* |
 | `backfill_failure_total` | Counter | Total number of backfill jobs that ultimately failed | `node_id`, `interval` |
 | `backfill_retry_total` | Counter | Total number of backfill retry attempts | `node_id`, `interval` |
+| `node_processed_total` | Counter | Total number of node compute executions | `node_id` |
+| `node_process_duration_ms` | Histogram | Duration of node compute execution in milliseconds | `node_id` |
+| `node_process_failure_total` | Counter | Total number of node compute failures | `node_id` |
 
 Start the server as part of your application:
 

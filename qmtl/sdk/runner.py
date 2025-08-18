@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
 from qmtl.common import AsyncCircuitBreaker
-from . import runtime
+from . import runtime, metrics as sdk_metrics
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -286,10 +286,18 @@ class Runner:
 
         result = None
         if ready and node.execute and node.compute_fn:
-            if Runner._ray_available and ray is not None:
-                Runner._execute_compute_fn(node.compute_fn, node.cache.view())
-            else:
-                result = node.compute_fn(node.cache.view())
+            start = time.perf_counter()
+            try:
+                if Runner._ray_available and ray is not None:
+                    Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+                else:
+                    result = node.compute_fn(node.cache.view())
+            except Exception:
+                sdk_metrics.observe_node_process_failure(node.node_id)
+                raise
+            finally:
+                duration_ms = (time.perf_counter() - start) * 1000
+                sdk_metrics.observe_node_process(node.node_id, duration_ms)
         return result
 
     # ------------------------------------------------------------------
