@@ -8,7 +8,15 @@ from typing import Optional, Iterable
 import logging
 import httpx
 
+from opentelemetry import trace
+from opentelemetry.propagate import inject
+
+from qmtl.common.tracing import setup_tracing
+
 logger = logging.getLogger(__name__)
+
+setup_tracing("sdk")
+tracer = trace.get_tracer(__name__)
 
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
@@ -78,7 +86,17 @@ class Runner:
         }
         if circuit_breaker is None:
             circuit_breaker = Runner._get_gateway_circuit_breaker()
-        async with httpx.AsyncClient() as client:
+        headers: dict[str, str] = {}
+        inject(headers)
+        try:
+            client = httpx.AsyncClient(headers=headers)
+        except TypeError:
+            client = httpx.AsyncClient()
+        try:
+            client.headers.update(headers)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        async with client:
             post_fn = client.post
             if circuit_breaker is not None:
                 post_fn = circuit_breaker(post_fn)
@@ -288,10 +306,13 @@ class Runner:
         if ready and node.execute and node.compute_fn:
             start = time.perf_counter()
             try:
-                if Runner._ray_available and ray is not None:
-                    Runner._execute_compute_fn(node.compute_fn, node.cache.view())
-                else:
-                    result = node.compute_fn(node.cache.view())
+                with tracer.start_as_current_span(
+                    "node.process", attributes={"node.id": node.node_id}
+                ):
+                    if Runner._ray_available and ray is not None:
+                        Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+                    else:
+                        result = node.compute_fn(node.cache.view())
             except Exception:
                 sdk_metrics.observe_node_process_failure(node.node_id)
                 raise

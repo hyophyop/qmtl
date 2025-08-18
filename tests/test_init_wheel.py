@@ -6,8 +6,9 @@ from pathlib import Path
 def test_init_wheel(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
     subprocess.run(
-        ["uv", "build", "--wheel", "qmtl", "-o", str(wheel_dir)],
+        ["uv", "build", "--wheel", ".", "-o", str(wheel_dir)],
         check=True,
+        cwd=Path.cwd(),
     )
     wheel = next(wheel_dir.glob("qmtl-*.whl"))
     env_dir = tmp_path / "venv"

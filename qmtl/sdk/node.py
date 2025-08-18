@@ -10,6 +10,8 @@ from typing import Any, TYPE_CHECKING
 import logging
 from enum import Enum
 
+from opentelemetry import trace
+
 import numpy as np
 import xarray as xr
 import httpx
@@ -27,6 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
 from qmtl.dagmanager import compute_node_id
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class MatchMode(str, Enum):
@@ -518,10 +521,13 @@ class Node:
         Returns ``True`` when the node has collected enough data to execute its
         ``compute_fn``. The function **never** triggers execution directly.
         """
-        self.cache.append(upstream_id, interval, timestamp, payload)
-        sdk_metrics.observe_nodecache_resident_bytes(
-            self.node_id, self.cache.resident_bytes
-        )
+        with tracer.start_as_current_span(
+            "node.feed", attributes={"node.id": self.node_id}
+        ):
+            self.cache.append(upstream_id, interval, timestamp, payload)
+            sdk_metrics.observe_nodecache_resident_bytes(
+                self.node_id, self.cache.resident_bytes
+            )
 
         recorder = getattr(self, "event_recorder", None)
         if recorder is not None:
