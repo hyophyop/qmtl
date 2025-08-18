@@ -71,10 +71,25 @@ class _RingBuffer:
 
 
 class NodeCache:
-    """In-memory cache backed by per-pair ring buffers."""
+    """In-memory cache backed by per-``(upstream_id, interval)`` ring buffers.
 
-    def __init__(self, period: int) -> None:
-        self.period = period
+    Parameters
+    ----------
+    window_size:
+        Number of most recent buckets retained for each ``(upstream_id, interval)``
+        pair. The ``interval`` determines the spacing between consecutive
+        buckets, while ``window_size`` controls how many buckets are stored.
+    """
+
+    def __init__(self, window_size: int) -> None:
+        """Create a cache with the given ``window_size``.
+
+        ``window_size`` is independent of ``interval`` – the former defines how
+        many timestamp buckets to retain per pair, whereas ``interval`` is the
+        duration between buckets inserted via :meth:`append`.
+        """
+
+        self.window_size = window_size
         self._buffers: dict[tuple[str, int], _RingBuffer] = {}
         self._last_ts: dict[tuple[str, int], int | None] = {}
         self._missing: dict[tuple[str, int], bool] = {}
@@ -82,46 +97,48 @@ class NodeCache:
         self._offset: dict[tuple[str, int], int] = {}
         self.backfill_state = BackfillState()
 
-    def _ordered_array(self, u: str, interval: int) -> np.ndarray:
-        """Return internal array for ``(u, interval)`` ordered oldest->latest."""
-        buf = self._buffers[(u, interval)]
-        filled = self._filled.get((u, interval), 0)
-        offset = self._offset.get((u, interval), 0)
-        if filled < self.period:
+    def _ordered_array(self, upstream_id: str, interval: int) -> np.ndarray:
+        """Return internal array for ``(upstream_id, interval)`` ordered oldest->latest."""
+        buf = self._buffers[(upstream_id, interval)]
+        filled = self._filled.get((upstream_id, interval), 0)
+        offset = self._offset.get((upstream_id, interval), 0)
+        if filled < self.window_size:
             return np.concatenate((buf.data[filled:], buf.data[:filled]))
         return np.concatenate((buf.data[offset:], buf.data[:offset]))
 
     # ------------------------------------------------------------------
-    def _ensure_buffer(self, u: str, interval: int) -> _RingBuffer:
-        key = (u, interval)
+    def _ensure_buffer(self, upstream_id: str, interval: int) -> _RingBuffer:
+        key = (upstream_id, interval)
         if key not in self._buffers:
-            self._buffers[key] = _RingBuffer(self.period)
+            self._buffers[key] = _RingBuffer(self.window_size)
             self._last_ts[key] = None
             self._missing[key] = False
             self._filled[key] = 0
             self._offset[key] = 0
         return self._buffers[key]
 
-    def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
-        """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
-        buf = self._ensure_buffer(u, interval)
+    def append(
+        self, upstream_id: str, interval: int, timestamp: int, payload: Any
+    ) -> None:
+        """Insert ``payload`` with ``timestamp`` for ``(upstream_id, interval)``."""
+        buf = self._ensure_buffer(upstream_id, interval)
         timestamp_bucket = timestamp - (timestamp % interval)
-        prev = self._last_ts.get((u, interval))
+        prev = self._last_ts.get((upstream_id, interval))
         if prev is not None and prev + interval != timestamp_bucket:
-            self._missing[(u, interval)] = True
+            self._missing[(upstream_id, interval)] = True
         else:
-            self._missing[(u, interval)] = False
-        self._last_ts[(u, interval)] = timestamp_bucket
-        off = self._offset.get((u, interval), 0)
+            self._missing[(upstream_id, interval)] = False
+        self._last_ts[(upstream_id, interval)] = timestamp_bucket
+        off = self._offset.get((upstream_id, interval), 0)
         buf.data[off, 0] = timestamp_bucket
         buf.data[off, 1] = payload
-        off = (off + 1) % self.period
-        self._offset[(u, interval)] = off
+        off = (off + 1) % self.window_size
+        self._offset[(upstream_id, interval)] = off
         buf.offset = off
-        filled = self._filled.get((u, interval), 0)
-        if filled < self.period:
+        filled = self._filled.get((upstream_id, interval), 0)
+        if filled < self.window_size:
             filled += 1
-        self._filled[(u, interval)] = filled
+        self._filled[(upstream_id, interval)] = filled
         buf.filled = filled
 
     # ------------------------------------------------------------------
@@ -129,7 +146,7 @@ class NodeCache:
         if not self._buffers:
             return False
         for count in self._filled.values():
-            if count < self.period:
+            if count < self.window_size:
                 return False
         return True
 
@@ -141,9 +158,11 @@ class NodeCache:
         the recommended read-only access to the cache.
         """
         result: dict[str, dict[int, list[tuple[int, Any]]]] = {}
-        for (u, i), buf in self._buffers.items():
-            result.setdefault(u, {})[i] = [
-                (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
+        for (upstream_id, interval), buf in self._buffers.items():
+            result.setdefault(upstream_id, {})[interval] = [
+                (int(t), v)
+                for t, v in self._ordered_array(upstream_id, interval)
+                if t is not None
             ]
         return result
 
@@ -155,26 +174,30 @@ class NodeCache:
         ``track_access`` is ``True`` every accessed ``(upstream_id, interval)``
         pair is recorded and can be retrieved via
         :meth:`CacheView.access_log`.
+        Each pair retains at most ``window_size`` buckets regardless of the
+        ``interval`` value.
         """
         data: dict[str, dict[int, list[tuple[int, Any]]]] = {}
-        for (u, i), buf in self._buffers.items():
-            data.setdefault(u, {})[i] = [
-                (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
+        for (upstream_id, interval), buf in self._buffers.items():
+            data.setdefault(upstream_id, {})[interval] = [
+                (int(t), v)
+                for t, v in self._ordered_array(upstream_id, interval)
+                if t is not None
             ]
         return CacheView(data, track_access=track_access)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
-        """Return gap flags for all ``(u, interval)`` pairs."""
+        """Return gap flags for all ``(upstream_id, interval)`` pairs."""
         result: dict[str, dict[int, bool]] = {}
-        for (u, i), flag in self._missing.items():
-            result.setdefault(u, {})[i] = flag
+        for (upstream_id, interval), flag in self._missing.items():
+            result.setdefault(upstream_id, {})[interval] = flag
         return result
 
     def last_timestamps(self) -> dict[str, dict[int, int | None]]:
-        """Return last timestamps for all ``(u, interval)`` pairs."""
+        """Return last timestamps for all ``(upstream_id, interval)`` pairs."""
         result: dict[str, dict[int, int | None]] = {}
-        for (u, i), ts in self._last_ts.items():
-            result.setdefault(u, {})[i] = ts
+        for (upstream_id, interval), ts in self._last_ts.items():
+            result.setdefault(upstream_id, {})[interval] = ts
         return result
 
     def as_xarray(self) -> xr.DataArray:
@@ -182,18 +205,23 @@ class NodeCache:
 
         Callers must **not** mutate the returned :class:`xarray.DataArray`.
         """
-        u_vals = sorted({u for u, _ in self._buffers.keys()})
-        i_vals = sorted({i for _, i in self._buffers.keys()})
-        data = np.empty((len(u_vals), len(i_vals), self.period, 2), dtype=object)
+        upstream_ids = sorted({u for u, _ in self._buffers.keys()})
+        intervals = sorted({i for _, i in self._buffers.keys()})
+        data = np.empty((len(upstream_ids), len(intervals), self.window_size, 2), dtype=object)
         data[:] = None
-        for u_idx, u in enumerate(u_vals):
-            for i_idx, i in enumerate(i_vals):
-                if (u, i) in self._buffers:
-                    data[u_idx, i_idx] = self._ordered_array(u, i)
+        for u_idx, upstream_id in enumerate(upstream_ids):
+            for i_idx, interval in enumerate(intervals):
+                if (upstream_id, interval) in self._buffers:
+                    data[u_idx, i_idx] = self._ordered_array(upstream_id, interval)
         da = xr.DataArray(
             data,
             dims=("u", "i", "p", "f"),
-            coords={"u": u_vals, "i": i_vals, "p": list(range(self.period)), "f": ["t", "v"]},
+            coords={
+                "u": upstream_ids,
+                "i": intervals,
+                "p": list(range(self.window_size)),
+                "f": ["t", "v"],
+            },
         )
         da.data = da.data.view()
         da.data.setflags(write=False)
@@ -205,9 +233,9 @@ class NodeCache:
         return sum(buf.data.nbytes for buf in self._buffers.values())
 
     # ------------------------------------------------------------------
-    def drop(self, u: str, interval: int) -> None:
-        """Remove cached data for ``(u, interval)``."""
-        key = (u, interval)
+    def drop(self, upstream_id: str, interval: int) -> None:
+        """Remove cached data for ``(upstream_id, interval)``."""
+        key = (upstream_id, interval)
         self._buffers.pop(key, None)
         self._last_ts.pop(key, None)
         self._missing.pop(key, None)
@@ -226,31 +254,31 @@ class NodeCache:
         self.backfill_state._ranges.pop(key, None)
 
     # ------------------------------------------------------------------
-    def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
+    def latest(self, upstream_id: str, interval: int) -> tuple[int, Any] | None:
         """Return the most recent ``(timestamp, payload)`` for a pair."""
-        buf = self._buffers.get((u, interval))
+        buf = self._buffers.get((upstream_id, interval))
         if not buf:
             return None
         return buf.latest()
 
     def get_slice(
         self,
-        u: str,
+        upstream_id: str,
         interval: int,
         *,
         count: int | None = None,
         start: int | None = None,
         end: int | None = None,
     ):
-        """Return a windowed slice for ``(u, interval)``.
+        """Return a windowed slice for ``(upstream_id, interval)``.
 
         If ``count`` is given a ``list`` of the latest ``count`` items is
         returned. Otherwise an ``xarray.DataArray`` slice from ``start`` to
-        ``end`` along the period dimension is provided. Unknown upstreams or
-        intervals yield an empty result.
+        ``end`` along the window dimension (size ``window_size``) is provided.
+        Unknown upstreams or intervals yield an empty result.
         """
 
-        buf = self._buffers.get((u, interval))
+        buf = self._buffers.get((upstream_id, interval))
         if buf is None:
             if count is not None:
                 return []
@@ -260,41 +288,41 @@ class NodeCache:
                 coords={"p": [], "f": ["t", "v"]},
             )
 
-        filled = self._filled.get((u, interval), 0)
-        off = self._offset.get((u, interval), 0)
+        filled = self._filled.get((upstream_id, interval), 0)
+        off = self._offset.get((upstream_id, interval), 0)
         arr = buf.data
 
         if count is not None:
             if count <= 0:
                 return []
             n = min(count, filled)
-            if filled < self.period:
+            if filled < self.window_size:
                 data = arr[:filled]
             else:
                 data = np.concatenate((arr[off:], arr[:off]))
             subset = data[-n:]
             return [(int(t), v) for t, v in subset if t is not None]
 
-        ordered = self._ordered_array(u, interval)
+        ordered = self._ordered_array(upstream_id, interval)
 
         slice_start = start if start is not None else 0
-        slice_end = end if end is not None else self.period
+        slice_end = end if end is not None else self.window_size
 
-        slice_start = max(0, slice_start + self.period if slice_start < 0 else slice_start)
-        slice_end = max(0, slice_end + self.period if slice_end < 0 else slice_end)
-        slice_start = min(self.period, slice_start)
-        slice_end = min(self.period, slice_end)
+        slice_start = max(0, slice_start + self.window_size if slice_start < 0 else slice_start)
+        slice_end = max(0, slice_end + self.window_size if slice_end < 0 else slice_end)
+        slice_start = min(self.window_size, slice_start)
+        slice_end = min(self.window_size, slice_end)
 
         da = xr.DataArray(
             ordered,
             dims=("p", "f"),
-            coords={"p": list(range(self.period)), "f": ["t", "v"]},
+            coords={"p": list(range(self.window_size)), "f": ["t", "v"]},
         )
         return da.isel(p=slice(slice_start, slice_end))
 
     def backfill_bulk(
         self,
-        u: str,
+        upstream_id: str,
         interval: int,
         items: Iterable[tuple[int, Any]],
     ) -> None:
@@ -305,7 +333,7 @@ class NodeCache:
         calls that happen during a backfill take precedence.
         """
 
-        self._ensure_buffer(u, interval)
+        self._ensure_buffer(upstream_id, interval)
 
         backfill_items: list[tuple[int, Any]] = []
         for ts, payload in items:
@@ -324,40 +352,40 @@ class NodeCache:
                     start_range = ts
                     prev = ts
             ranges.append((start_range, prev))
-            self.backfill_state.mark_ranges(u, interval, ranges)
+            self.backfill_state.mark_ranges(upstream_id, interval, ranges)
 
         # Capture latest data after collecting items so concurrent ``append``
         # operations are taken into account during the merge.
-        arr = self._buffers[(u, interval)].data
+        arr = self._buffers[(upstream_id, interval)].data
         existing: dict[int, Any] = {int(t): v for t, v in arr if t is not None}
 
         ts_payload: dict[int, Any] = dict(existing)
         for ts, payload in backfill_items:
             ts_payload.setdefault(ts, payload)
 
-        merged = sorted(ts_payload.items())[-self.period :]
+        merged = sorted(ts_payload.items())[-self.window_size :]
 
-        new_arr = np.empty((self.period, 2), dtype=object)
+        new_arr = np.empty((self.window_size, 2), dtype=object)
         new_arr[:] = None
         for idx, (ts, payload) in enumerate(merged):
-            new_arr[idx % self.period, 0] = ts
-            new_arr[idx % self.period, 1] = payload
+            new_arr[idx % self.window_size, 0] = ts
+            new_arr[idx % self.window_size, 1] = payload
 
-        self._buffers[(u, interval)].data = new_arr
-        filled = min(len(merged), self.period)
-        self._filled[(u, interval)] = filled
-        self._offset[(u, interval)] = len(merged) % self.period
-        self._buffers[(u, interval)].filled = filled
-        self._buffers[(u, interval)].offset = len(merged) % self.period
+        self._buffers[(upstream_id, interval)].data = new_arr
+        filled = min(len(merged), self.window_size)
+        self._filled[(upstream_id, interval)] = filled
+        self._offset[(upstream_id, interval)] = len(merged) % self.window_size
+        self._buffers[(upstream_id, interval)].filled = filled
+        self._buffers[(upstream_id, interval)].offset = len(merged) % self.window_size
 
-        prev_last = self._last_ts.get((u, interval))
+        prev_last = self._last_ts.get((upstream_id, interval))
         if merged:
             last_ts = merged[-1][0]
             if prev_last is None:
-                self._missing[(u, interval)] = False
+                self._missing[(upstream_id, interval)] = False
             elif last_ts != prev_last:
-                self._missing[(u, interval)] = prev_last + interval != last_ts
-            self._last_ts[(u, interval)] = last_ts
+                self._missing[(upstream_id, interval)] = prev_last + interval != last_ts
+            self._last_ts[(upstream_id, interval)] = last_ts
 
 
 class Node:
@@ -433,7 +461,7 @@ class Node:
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:
-            self.cache = NodeCache(period_val or 0)
+            self.cache = NodeCache(window_size=period_val or 0)
         self.pre_warmup = True
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
