@@ -10,7 +10,7 @@
     - qmtl/qmtl/examples/nodes/indicators/average.py
     - strategies/nodes/transforms/scale.py
 - doc: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
-  status: implemented
+  status: draft
   modules: []
 - doc: docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
   status: prioritized
