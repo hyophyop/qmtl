@@ -53,3 +53,10 @@ def build_dag():
 ```
 
 This reuse minimizes duplication and keeps strategies consistent.
+
+## Binance History Strategy
+
+The `dags/binance_history_dag.py` module demonstrates wiring a `StreamInput`
+with `QuestDBLoader` and `QuestDBRecorder` so Binance kline data is
+persisted to QuestDB and missing ranges can be backfilled via
+`BinanceFetcher`.
