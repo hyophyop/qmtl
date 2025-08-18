@@ -30,11 +30,12 @@ class Strategy:
                 node.period = self.default_period
             node.period = parse_period(node.period)
 
-            if getattr(node.cache, "period", None) != node.period:
+            current_size = getattr(node.cache, "window_size", getattr(node.cache, "period", None))
+            if current_size != node.period:
                 if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
                     node.cache = arrow_cache.NodeCacheArrow(node.period)
                 else:
-                    node.cache = NodeCache(node.period)
+                    node.cache = NodeCache(window_size=node.period)
 
         self.nodes.extend(nodes)
 

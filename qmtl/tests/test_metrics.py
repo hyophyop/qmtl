@@ -139,7 +139,7 @@ def test_cache_view_metrics_increment():
     from qmtl.sdk.node import NodeCache
 
     sdk_metrics.reset_metrics()
-    cache = NodeCache(period=2)
+    cache = NodeCache(window_size=2)
     cache.append("u1", 60, 1, {"v": 1})
 
     view = cache.view(track_access=True)
