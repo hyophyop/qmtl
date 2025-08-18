@@ -191,6 +191,11 @@ sequenceDiagram
 | `sentinel_gap_count`       | <1     | `>=1 → WARN`             |
 | `nodecache_resident_bytes` | stable | `>5e9 for 5m → WARN`     |
 | `orphan_queue_total`       | ↓      | trend up 3h → GC inspect |
+| `compute_nodes_total`      | <50k   | `>50k for 10m → WARN`    |
+| `queues_total`             | <100k  | `>100k for 10m → WARN`   |
+
+Clusters should scale before approaching these limits: expand Neo4j memory or
+add Kafka brokers to sustain ingest throughput.
 
 ---
 

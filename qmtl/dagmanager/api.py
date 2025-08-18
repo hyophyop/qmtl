@@ -9,6 +9,7 @@ from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .dagmanager_health import get_health
 from . import metrics
+from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -43,6 +44,19 @@ def create_app(
 ) -> FastAPI:
     """Return a FastAPI app exposing admin routes."""
     app = FastAPI()
+
+    node_count_scheduler: GraphCountScheduler | None = None
+    if driver is not None:
+        collector = GraphCountCollector(driver)
+        node_count_scheduler = GraphCountScheduler(collector)
+
+        @app.on_event("startup")
+        async def _start_node_count_scheduler() -> None:
+            await node_count_scheduler.start()
+
+        @app.on_event("shutdown")
+        async def _stop_node_count_scheduler() -> None:
+            await node_count_scheduler.stop()
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:

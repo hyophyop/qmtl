@@ -88,6 +88,21 @@ gc_last_run_timestamp = Gauge(
     registry=global_registry,
 )
 
+# Current graph size
+compute_nodes_total = Gauge(
+    "compute_nodes_total",
+    "Total number of ComputeNode nodes in Neo4j",
+    registry=global_registry,
+)
+compute_nodes_total._val = 0  # type: ignore[attr-defined]
+
+queues_total = Gauge(
+    "queues_total",
+    "Total number of Queue nodes in Neo4j",
+    registry=global_registry,
+)
+queues_total._val = 0  # type: ignore[attr-defined]
+
 # Per-topic Kafka consumer lag in seconds and configured alert thresholds.
 queue_lag_seconds = Gauge(
     "queue_lag_seconds",
@@ -200,6 +215,10 @@ def reset_metrics() -> None:
     kafka_breaker_open_total._val = 0  # type: ignore[attr-defined]
     gc_last_run_timestamp.set(0)
     gc_last_run_timestamp._val = 0  # type: ignore[attr-defined]
+    compute_nodes_total.set(0)
+    compute_nodes_total._val = 0  # type: ignore[attr-defined]
+    queues_total.set(0)
+    queues_total._val = 0  # type: ignore[attr-defined]
     nodecache_resident_bytes.clear()
     nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
     queue_lag_seconds.clear()
