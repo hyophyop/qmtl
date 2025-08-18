@@ -3,7 +3,7 @@
 Refer to docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md for market impact background.
 """
 
-from qmtl.examples.dags.example_strategy import ExampleStrategy
+from strategies.dags.example_strategy import ExampleStrategy
 
 
 def main():

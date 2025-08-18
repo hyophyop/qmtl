@@ -2,6 +2,15 @@
 
 이 저장소는 [QMTL](https://github.com/hyophyop/qmtl) 전략 실험을 위한 템플릿 프로젝트입니다.
 
+## 환경 설정
+
+프로젝트 의존성은 QMTL 서브트리에서 제공되므로 로컬 패키지는 최소화되어 있습니다. 다음 명령으로 개발 환경을 준비하세요.
+
+```bash
+uv venv
+uv pip install -e qmtl[dev]
+```
+
 ## QMTL 서브트리 동기화
 
 프로젝트는 `qmtl` 서브트리를 포함합니다. 작업을 시작하기 전에 항상 최신 변경 사항을 가져오세요.
@@ -42,7 +51,7 @@ class MyStrategy(Strategy):
         pass
 ```
 
-3. 루트의 `strategy.py`를 수정하여 원하는 전략을 가져오고 실행합니다.
+3. `strategies/strategy.py`를 수정하여 원하는 전략을 가져오고 실행합니다.
 
 ```python
 from strategies.my_strategy import MyStrategy
@@ -55,7 +64,7 @@ if __name__ == "__main__":
 5. 전략이 정상 동작하는지 확인합니다.
 
 ```bash
-python strategy.py
+python strategies/strategy.py
 ```
 
 ## 노드와 DAG 구성
