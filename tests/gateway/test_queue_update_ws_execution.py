@@ -59,7 +59,7 @@ async def test_node_unpauses_on_queue_update():
     assert node.execute
     assert node.upstreams == ["q1"]
 
-    Runner.feed_topic_data(node, "q1", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
     assert calls
 
     await manager.stop()

@@ -20,8 +20,8 @@ def test_defaults_applied():
     assert src.period == 2
     assert node.interval == 60
     assert node.period == 2
-    assert src.cache.window_size == 2
-    assert node.cache.window_size == 2
+    assert src.cache.period == 2
+    assert node.cache.period == 2
 
 
 class OverrideStrategy(Strategy):

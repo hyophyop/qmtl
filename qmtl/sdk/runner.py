@@ -8,12 +8,20 @@ from typing import Optional, Iterable
 import logging
 import httpx
 
+from opentelemetry import trace
+from opentelemetry.propagate import inject
+
+from qmtl.common.tracing import setup_tracing
+
 logger = logging.getLogger(__name__)
+
+setup_tracing("sdk")
+tracer = trace.get_tracer(__name__)
 
 from .strategy import Strategy
 from .tagquery_manager import TagQueryManager
 from qmtl.common import AsyncCircuitBreaker
-from . import runtime
+from . import runtime, metrics as sdk_metrics
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -78,7 +86,17 @@ class Runner:
         }
         if circuit_breaker is None:
             circuit_breaker = Runner._get_gateway_circuit_breaker()
-        async with httpx.AsyncClient() as client:
+        headers: dict[str, str] = {}
+        inject(headers)
+        try:
+            client = httpx.AsyncClient(headers=headers)
+        except TypeError:
+            client = httpx.AsyncClient()
+        try:
+            client.headers.update(headers)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        async with client:
             post_fn = client.post
             if circuit_breaker is not None:
                 post_fn = circuit_breaker(post_fn)
@@ -89,8 +107,6 @@ class Runner:
         if resp.status_code == 202:
             if circuit_breaker is not None:
                 circuit_breaker.reset()
-            # Gateway responses still use the legacy "queue_map" key; treat it as a
-            # topic mapping for Kafka destinations.
             return resp.json().get("queue_map", {})
         if resp.status_code == 409:
             return {"error": "duplicate strategy"}
@@ -105,11 +121,11 @@ class Runner:
         return strategy
 
     @staticmethod
-    def _apply_topic_map(strategy: Strategy, topic_map: dict[str, str | list[str]]) -> None:
+    def _apply_queue_map(strategy: Strategy, queue_map: dict[str, str | list[str]]) -> None:
         from .node import TagQueryNode
 
         for node in strategy.nodes:
-            mapping = topic_map.get(node.node_id)
+            mapping = queue_map.get(node.node_id)
             old_execute = node.execute
             if isinstance(node, TagQueryNode):
                 if isinstance(mapping, list):
@@ -264,22 +280,22 @@ class Runner:
 
     # ------------------------------------------------------------------
     @staticmethod
-    def feed_topic_data(
+    def feed_queue_data(
         node,
-        topic_id: str,
+        queue_id: str,
         interval: int,
         timestamp: int,
         payload,
         *,
         on_missing: str = "skip",
     ):
-        """Insert topic data into ``node`` and trigger its ``compute_fn``.
+        """Insert queue data into ``node`` and trigger its ``compute_fn``.
 
         Returns the compute function result when executed locally. ``None`` is
         returned if the node did not run or Ray was used for execution.
         """
         ready = node.feed(
-            topic_id,
+            queue_id,
             interval,
             timestamp,
             payload,
@@ -288,10 +304,21 @@ class Runner:
 
         result = None
         if ready and node.execute and node.compute_fn:
-            if Runner._ray_available and ray is not None:
-                Runner._execute_compute_fn(node.compute_fn, node.cache.view())
-            else:
-                result = node.compute_fn(node.cache.view())
+            start = time.perf_counter()
+            try:
+                with tracer.start_as_current_span(
+                    "node.process", attributes={"node.id": node.node_id}
+                ):
+                    if Runner._ray_available and ray is not None:
+                        Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+                    else:
+                        result = node.compute_fn(node.cache.view())
+            except Exception:
+                sdk_metrics.observe_node_process_failure(node.node_id)
+                raise
+            finally:
+                duration_ms = (time.perf_counter() - start) * 1000
+                sdk_metrics.observe_node_process(node.node_id, duration_ms)
         return result
 
     # ------------------------------------------------------------------
@@ -318,7 +345,7 @@ class Runner:
                 except Exception:
                     payload = msg.value
                 ts = int(msg.timestamp / 1000)
-                Runner.feed_topic_data(
+                Runner.feed_queue_data(
                     node,
                     node.kafka_topic,
                     node.interval,
@@ -442,7 +469,7 @@ class Runner:
         for ts, src, payload in events:
             for node in strategy.nodes:
                 if src in node.inputs:
-                    Runner.feed_topic_data(
+                    Runner.feed_queue_data(
                         node,
                         src.node_id,
                         src.interval,
@@ -474,17 +501,17 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for backtest mode")
 
-        topic_map = await Runner._post_gateway_async(
+        queue_map = await Runner._post_gateway_async(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="backtest",
             circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
-        if isinstance(topic_map, dict) and "error" in topic_map:
-            raise RuntimeError(topic_map["error"])
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
-        Runner._apply_topic_map(strategy, topic_map)
+        Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, start_time, end_time)
         start = Runner._maybe_int(start_time)
@@ -531,17 +558,17 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for dry-run mode")
 
-        topic_map = await Runner._post_gateway_async(
+        queue_map = await Runner._post_gateway_async(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="dry-run",
             circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
-        if isinstance(topic_map, dict) and "error" in topic_map:
-            raise RuntimeError(topic_map["error"])
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
-        Runner._apply_topic_map(strategy, topic_map)
+        Runner._apply_queue_map(strategy, queue_map)
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
@@ -584,17 +611,17 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for live mode")
 
-        topic_map = await Runner._post_gateway_async(
+        queue_map = await Runner._post_gateway_async(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="live",
             circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
-        if isinstance(topic_map, dict) and "error" in topic_map:
-            raise RuntimeError(topic_map["error"])
+        if isinstance(queue_map, dict) and "error" in queue_map:
+            raise RuntimeError(queue_map["error"])
 
-        Runner._apply_topic_map(strategy, topic_map)
+        Runner._apply_queue_map(strategy, queue_map)
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
@@ -633,7 +660,7 @@ class Runner:
         strategy = Runner._prepare(strategy_cls)
         manager = Runner._init_tag_manager(strategy, None)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
-        Runner._apply_topic_map(strategy, {})
+        Runner._apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         await Runner._load_history(strategy, None, None)
         await Runner._replay_history(strategy, None, None)

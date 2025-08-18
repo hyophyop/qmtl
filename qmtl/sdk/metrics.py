@@ -6,6 +6,7 @@ import time
 from prometheus_client import (
     Counter,
     Gauge,
+    Histogram,
     generate_latest,
     start_http_server,
     REGISTRY as global_registry,
@@ -105,6 +106,47 @@ else:
 
 nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
 
+# ---------------------------------------------------------------------------
+if "node_processed_total" in global_registry._names_to_collectors:
+    node_processed_total = global_registry._names_to_collectors[
+        "node_processed_total"
+    ]
+else:
+    node_processed_total = Counter(
+        "node_processed_total",
+        "Total number of node compute executions",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+if "node_process_duration_ms" in global_registry._names_to_collectors:
+    node_process_duration_ms = global_registry._names_to_collectors[
+        "node_process_duration_ms"
+    ]
+else:
+    node_process_duration_ms = Histogram(
+        "node_process_duration_ms",
+        "Duration of node compute execution in milliseconds",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+if "node_process_failure_total" in global_registry._names_to_collectors:
+    node_process_failure_total = global_registry._names_to_collectors[
+        "node_process_failure_total"
+    ]
+else:
+    node_process_failure_total = Counter(
+        "node_process_failure_total",
+        "Total number of node compute failures",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+node_processed_total._vals = {}  # type: ignore[attr-defined]
+node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
+node_process_failure_total._vals = {}  # type: ignore[attr-defined]
+
 
 def observe_cache_read(upstream_id: str, interval: int) -> None:
     """Increment read metrics for a given upstream/interval pair."""
@@ -160,6 +202,22 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     nodecache_resident_bytes._vals[("all", "total")] = total  # type: ignore[attr-defined]
 
 
+def observe_node_process(node_id: str, duration_ms: float) -> None:
+    """Record execution duration and increment counter for ``node_id``."""
+    n = str(node_id)
+    node_processed_total.labels(node_id=n).inc()
+    node_processed_total._vals[n] = node_processed_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
+    node_process_duration_ms.labels(node_id=n).observe(duration_ms)
+    node_process_duration_ms._vals.setdefault(n, []).append(duration_ms)  # type: ignore[attr-defined]
+
+
+def observe_node_process_failure(node_id: str) -> None:
+    """Increment failure counter for ``node_id``."""
+    n = str(node_id)
+    node_process_failure_total.labels(node_id=n).inc()
+    node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Expose metrics via an HTTP server."""
     start_http_server(port, registry=global_registry)
@@ -186,3 +244,9 @@ def reset_metrics() -> None:
     backfill_retry_total._vals = {}  # type: ignore[attr-defined]
     nodecache_resident_bytes.clear()
     nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+    node_processed_total.clear()
+    node_processed_total._vals = {}  # type: ignore[attr-defined]
+    node_process_duration_ms.clear()
+    node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
+    node_process_failure_total.clear()
+    node_process_failure_total._vals = {}  # type: ignore[attr-defined]

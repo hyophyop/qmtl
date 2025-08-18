@@ -18,6 +18,11 @@ dependencies = [
     "grpcio",
     "PyYAML",
     "psutil",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-httpx",
+    "opentelemetry-instrumentation-grpc",
 ]
 
 [project.optional-dependencies]
