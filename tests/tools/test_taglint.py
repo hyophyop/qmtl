@@ -20,6 +20,15 @@ def test_taglint_valid(tmp_path):
     assert res.returncode == 0, res.stdout + res.stderr
 
 
+def test_taglint_valid_transform(tmp_path):
+    file = tmp_path / "ok_transform.py"
+    file.write_text(
+        """TAGS = {\n    'scope': 'transform',\n    'family': 'scale',\n    'interval': '1m',\n    'asset': 'btc',\n}\n""",
+    )
+    res = run(file)
+    assert res.returncode == 0, res.stdout + res.stderr
+
+
 def test_taglint_missing(tmp_path):
     file = tmp_path / "missing.py"
     file.write_text("""def foo():\n    pass\n""")
