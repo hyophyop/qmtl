@@ -14,14 +14,18 @@ from .callbacks import post_with_backoff
 class PagerDutySender(Protocol):
     """Protocol for sending PagerDuty events."""
 
-    async def send(self, message: str) -> None:
+    async def send(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         ...
 
 
 class SlackSender(Protocol):
     """Protocol for sending Slack messages."""
 
-    async def send(self, message: str) -> None:
+    async def send(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         ...
 
 
@@ -30,11 +34,18 @@ class PagerDutyClient:
     url: str
     breaker: AsyncCircuitBreaker | None = None
 
-    async def send(self, message: str) -> None:  # pragma: no cover - simple wrapper
+    async def send(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:  # pragma: no cover - simple wrapper
         async with httpx.AsyncClient() as client:
+            payload = {"text": message}
+            if topic is not None:
+                payload["topic"] = topic
+            if node is not None:
+                payload["node"] = node
             await post_with_backoff(
                 self.url,
-                {"text": message},
+                payload,
                 client=client,
                 circuit_breaker=self.breaker,
             )
@@ -45,11 +56,18 @@ class SlackClient:
     url: str
     breaker: AsyncCircuitBreaker | None = None
 
-    async def send(self, message: str) -> None:  # pragma: no cover - simple wrapper
+    async def send(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:  # pragma: no cover - simple wrapper
         async with httpx.AsyncClient() as client:
+            payload = {"text": message}
+            if topic is not None:
+                payload["topic"] = topic
+            if node is not None:
+                payload["node"] = node
             await post_with_backoff(
                 self.url,
-                {"text": message},
+                payload,
                 client=client,
                 circuit_breaker=self.breaker,
             )
@@ -62,15 +80,19 @@ class AlertManager:
     pagerduty_breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
     slack_breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
 
-    async def send_pagerduty(self, message: str) -> None:
+    async def send_pagerduty(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         if isinstance(self.pagerduty, PagerDutyClient):
             self.pagerduty.breaker = self.pagerduty_breaker
-        await self.pagerduty.send(message)
+        await self.pagerduty.send(message, topic=topic, node=node)
 
-    async def send_slack(self, message: str) -> None:
+    async def send_slack(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
         if isinstance(self.slack, SlackClient):
             self.slack.breaker = self.slack_breaker
-        await self.slack.send(message)
+        await self.slack.send(message, topic=topic, node=node)
 
 
 __all__ = ["PagerDutyClient", "SlackClient", "AlertManager"]
