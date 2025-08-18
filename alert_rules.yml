@@ -27,3 +27,10 @@ prometheus:
             severity: warning
           annotations:
             summary: NodeCache memory usage high
+        - alert: QueueLagHigh
+          expr: queue_lag_seconds > queue_lag_threshold_seconds
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Kafka consumer lag above threshold

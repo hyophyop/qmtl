@@ -88,6 +88,23 @@ gc_last_run_timestamp = Gauge(
     registry=global_registry,
 )
 
+# Per-topic Kafka consumer lag in seconds and configured alert thresholds.
+queue_lag_seconds = Gauge(
+    "queue_lag_seconds",
+    "Estimated consumer lag for each topic in seconds",
+    ["topic"],
+    registry=global_registry,
+)
+queue_lag_seconds._vals = {}  # type: ignore[attr-defined]
+
+queue_lag_threshold_seconds = Gauge(
+    "queue_lag_threshold_seconds",
+    "Lag alert threshold configured for each topic",
+    ["topic"],
+    registry=global_registry,
+)
+queue_lag_threshold_seconds._vals = {}  # type: ignore[attr-defined]
+
 # Expose the active traffic weight per version. Guard against duplicate
 # registration when this module is reloaded during tests.
 if "dagmanager_active_version_weight" in global_registry._names_to_collectors:
@@ -130,6 +147,14 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     )
     nodecache_resident_bytes.labels(node_id="all", scope="total").set(total)
     nodecache_resident_bytes._vals[("all", "total")] = total  # type: ignore[attr-defined]
+
+
+def observe_queue_lag(topic: str, lag_seconds: float, threshold_seconds: float) -> None:
+    """Record current lag and configured threshold for ``topic``."""
+    queue_lag_seconds.labels(topic=topic).set(lag_seconds)
+    queue_lag_seconds._vals[topic] = lag_seconds  # type: ignore[attr-defined]
+    queue_lag_threshold_seconds.labels(topic=topic).set(threshold_seconds)
+    queue_lag_threshold_seconds._vals[topic] = threshold_seconds  # type: ignore[attr-defined]
 
 
 def start_metrics_server(port: int = 8000) -> None:
@@ -177,6 +202,10 @@ def reset_metrics() -> None:
     gc_last_run_timestamp._val = 0  # type: ignore[attr-defined]
     nodecache_resident_bytes.clear()
     nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+    queue_lag_seconds.clear()
+    queue_lag_seconds._vals = {}  # type: ignore[attr-defined]
+    queue_lag_threshold_seconds.clear()
+    queue_lag_threshold_seconds._vals = {}  # type: ignore[attr-defined]
     if hasattr(dagmanager_active_version_weight, "clear"):
         dagmanager_active_version_weight.clear()
     dagmanager_active_version_weight._vals = {}  # type: ignore[attr-defined]
