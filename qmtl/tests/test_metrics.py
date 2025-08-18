@@ -139,7 +139,7 @@ def test_cache_view_metrics_increment():
     from qmtl.sdk.node import NodeCache
 
     sdk_metrics.reset_metrics()
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("u1", 60, 1, {"v": 1})
 
     view = cache.view(track_access=True)
@@ -174,7 +174,7 @@ def test_sdk_nodecache_metric_updates():
     node = ProcessingNode(
         input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2
     )
-    Runner.feed_topic_data(node, src.node_id, 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, src.node_id, 60, 60, {"v": 1})
     expected = node.cache.resident_bytes
     assert sdk_metrics.nodecache_resident_bytes._vals[(node.node_id, "node")] == expected
     assert sdk_metrics.nodecache_resident_bytes._vals[("all", "total")] == expected

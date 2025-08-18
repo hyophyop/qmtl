@@ -35,7 +35,7 @@ class Pipeline:
         on_missing: str = "skip",
     ) -> None:
         for child in self.downstream.get(node, []):
-            result = Runner.feed_topic_data(
+            result = Runner.feed_queue_data(
                 child,
                 node.node_id,
                 interval,

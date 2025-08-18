@@ -57,7 +57,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ### 2.1 입력·출력 정의
 
 * **Input:** `DiffReq{strategy_id, dag_json}` (\~10‑500 KiB)
-* **Output:** stream `DiffChunk{topic_map[], sentinel_id}`
+* **Output:** stream `DiffChunk{queue_map[], sentinel_id}`
 
 ### 2.2 단계별 상세 로직
 
@@ -191,6 +191,11 @@ sequenceDiagram
 | `sentinel_gap_count`       | <1     | `>=1 → WARN`             |
 | `nodecache_resident_bytes` | stable | `>5e9 for 5m → WARN`     |
 | `orphan_queue_total`       | ↓      | trend up 3h → GC inspect |
+| `compute_nodes_total`      | <50k   | `>50k for 10m → WARN`    |
+| `queues_total`             | <100k  | `>100k for 10m → WARN`   |
+
+Clusters should scale before approaching these limits: expand Neo4j memory or
+add Kafka brokers to sustain ingest throughput.
 
 ---
 

@@ -15,8 +15,8 @@ EXPECTED = {
 }
 
 def test_required_dependencies_present():
-    project_root = Path(__file__).resolve().parents[1]
-    with open(project_root / "pyproject.toml", "rb") as fh:
+    qmtl_root = Path(__file__).resolve().parents[1]
+    with open(qmtl_root / "pyproject.toml", "rb") as fh:
         data = tomllib.load(fh)
     deps = set(dep.split("[")[0] for dep in data["project"]["dependencies"])
     missing = EXPECTED - deps

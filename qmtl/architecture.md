@@ -393,7 +393,7 @@ Runner.dryrun(CrossMarketLagStrategy)
 
 1. **Gateway ↔ SDK CRC 검증** — Gateway가 계산한 `node_id`와 SDK가 사전 계산한
    값이 `crc32` 필드로 상호 검증된다.
-2. **NodeCache 가드레일 & GC** — window_size × interval 초과 슬라이스를 즉시 evict하고
+2. **NodeCache 가드레일 & GC** — period × interval 초과 슬라이스를 즉시 evict하고
    Arrow chunk 기반 zero‑copy 전달을 보장한다.
 3. **Kafka Topic Create 재시도** — `CREATE_TOPICS→VERIFY→WAIT→BACKOFF` 5단계로
    재시도하며, VERIFY 단계에서 broker metadata를 조회해 유사 이름 충돌을 제거한다.

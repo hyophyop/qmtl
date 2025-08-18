@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Monitoring and recovery actions for DAG Manager."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Protocol, Optional
 import asyncio
@@ -17,6 +17,14 @@ class MetricsBackend(Protocol):
         ...
 
     def kafka_zookeeper_disconnects(self) -> int:
+        ...
+
+    def queue_lag_seconds(self, topic: str) -> tuple[float, float]:
+        """Return current lag and alert threshold for ``topic``."""
+
+        ...
+
+    def diff_duration_ms_p95(self) -> float:
         ...
 
 
@@ -58,6 +66,8 @@ class Monitor:
     kafka: KafkaSession
     stream: DiffStream
     alerts: AlertManager
+    lag_topics: list[str] = field(default_factory=list)
+    diff_duration_threshold_ms: float = 200.0
 
     async def check_once(self) -> None:
         """Inspect metrics once and trigger recovery/alerts."""
@@ -74,6 +84,16 @@ class Monitor:
         if self.stream.ack_status() is AckStatus.TIMEOUT:
             self.stream.resume_from_last_offset()
             alerts.append(self.alerts.send_slack("Diff stream stalled"))
+
+        for topic in self.lag_topics:
+            lag, threshold = self.metrics.queue_lag_seconds(topic)
+            if lag > threshold:
+                alerts.append(
+                    self.alerts.send_slack("Queue lag high", topic=topic)
+                )
+
+        if self.metrics.diff_duration_ms_p95() > self.diff_duration_threshold_ms:
+            alerts.append(self.alerts.send_slack("Diff duration high"))
 
         if alerts:
             await asyncio.gather(*alerts)
