@@ -9,6 +9,12 @@ from .order_book_imbalance import order_book_imbalance_node
 from .volume_features import volume_features, avg_volume_node
 from .execution_imbalance import execution_imbalance_node
 from .alpha_history import alpha_history_node
+from .microstructure import (
+    gap_depth_weighted_sum_node,
+    order_flow_imbalance_node,
+    spread_zscore_node,
+    hazard_node,
+)
 
 __all__ = [
     "rate_of_change",
@@ -22,4 +28,8 @@ __all__ = [
     "alpha_history_node",
     "volume_features",
     "avg_volume_node",
+    "gap_depth_weighted_sum_node",
+    "order_flow_imbalance_node",
+    "spread_zscore_node",
+    "hazard_node",
 ]
