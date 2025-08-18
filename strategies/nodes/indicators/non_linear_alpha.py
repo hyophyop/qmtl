@@ -4,7 +4,7 @@
 
 TAGS = {
     "scope": "indicator",
-    "family": "alpha",
+    "family": "non_linear_alpha",
     "interval": "1d",
     "asset": "sample",
 }
