@@ -28,7 +28,7 @@ registry_docs = {entry["doc"]: entry.get("modules", []) for entry in registry}
 
 # Check docs present in registry
 actual_docs = sorted(
-    p.relative_to(ROOT).as_posix() for p in DOC_DIR.glob("*.md") if p.name != "README.md"
+    p.relative_to(ROOT).as_posix() for p in DOC_DIR.rglob("*.md") if p.name != "README.md"
 )
 registry_doc_paths = set(registry_docs.keys())
 
