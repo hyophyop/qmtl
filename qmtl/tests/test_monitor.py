@@ -22,6 +22,12 @@ class FakeMetrics:
     def kafka_zookeeper_disconnects(self) -> int:
         return self.disconnects
 
+    def queue_lag_seconds(self, topic: str) -> tuple[float, float]:
+        return (0.0, 1.0)
+
+    def diff_duration_ms_p95(self) -> float:
+        return 0.0
+
 
 class FakeCluster:
     def __init__(self):
@@ -55,16 +61,20 @@ class FakePagerDuty:
     def __init__(self):
         self.sent = []
 
-    async def send(self, msg: str) -> None:
-        self.sent.append(msg)
+    async def send(
+        self, msg: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
+        self.sent.append((msg, topic, node))
 
 
 class FakeSlack:
     def __init__(self):
         self.sent = []
 
-    async def send(self, msg: str) -> None:
-        self.sent.append(msg)
+    async def send(
+        self, msg: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
+        self.sent.append((msg, topic, node))
 
 
 @pytest.mark.asyncio
@@ -83,9 +93,9 @@ async def test_monitor_triggers_recovery_and_alerts():
     assert cluster.elected == 1
     assert kafka.retried == 1
     assert stream.resumed == 1
-    assert pd.sent == ["Neo4j leader down"]
-    assert "Kafka session lost" in slack.sent
-    assert "Diff stream stalled" in slack.sent
+    assert pd.sent == [("Neo4j leader down", None, None)]
+    assert ("Kafka session lost", None, None) in slack.sent
+    assert ("Diff stream stalled", None, None) in slack.sent
 
 
 @pytest.mark.asyncio
@@ -96,19 +106,23 @@ async def test_monitor_gathers_alerts_concurrently():
     stream = FakeStream(status=AckStatus.TIMEOUT)
 
     class SlowPagerDuty(FakePagerDuty):
-        async def send(self, msg: str) -> None:  # type: ignore[override]
+        async def send(
+            self, msg: str, *, topic: str | None = None, node: str | None = None
+        ) -> None:  # type: ignore[override]
             assert cluster.elected == 1
             await asyncio.sleep(0.05)
-            await super().send(msg)
+            await super().send(msg, topic=topic, node=node)
 
     class SlowSlack(FakeSlack):
-        async def send(self, msg: str) -> None:  # type: ignore[override]
+        async def send(
+            self, msg: str, *, topic: str | None = None, node: str | None = None
+        ) -> None:  # type: ignore[override]
             if msg == "Kafka session lost":
                 assert kafka.retried == 1
             elif msg == "Diff stream stalled":
                 assert stream.resumed == 1
             await asyncio.sleep(0.05)
-            await super().send(msg)
+            await super().send(msg, topic=topic, node=node)
 
     pd = SlowPagerDuty()
     slack = SlowSlack()
@@ -120,6 +134,6 @@ async def test_monitor_gathers_alerts_concurrently():
     elapsed = asyncio.get_running_loop().time() - start
 
     assert elapsed < 0.1
-    assert pd.sent == ["Neo4j leader down"]
-    assert slack.sent.count("Kafka session lost") == 1
-    assert slack.sent.count("Diff stream stalled") == 1
+    assert pd.sent == [("Neo4j leader down", None, None)]
+    assert slack.sent.count(("Kafka session lost", None, None)) == 1
+    assert slack.sent.count(("Diff stream stalled", None, None)) == 1

@@ -10,7 +10,7 @@ def test_node_vs_arrow_cache_append_performance():
     """Benchmark append throughput of NodeCache vs Arrow cache."""
     n = 10000
 
-    node = NodeCache(window_size=1024)
+    node = NodeCache(period=1024)
     start = time.perf_counter()
     for i in range(n):
         node.append("u1", 60, i * 60, {"v": i})

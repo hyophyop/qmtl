@@ -12,12 +12,12 @@ def test_cache_warmup_and_compute():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_topic_data(node, "q1", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
     assert node.cache.get_slice("q1", 60, count=2) == [(60, {"v": 1})]
     assert not calls
 
-    Runner.feed_topic_data(node, "q1", 60, 120, {"v": 2})
+    Runner.feed_queue_data(node, "q1", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert node.cache.get_slice("q1", 60, count=2) == [
         (60, {"v": 1}),
@@ -25,7 +25,7 @@ def test_cache_warmup_and_compute():
     ]
     assert len(calls) == 1
 
-    Runner.feed_topic_data(node, "q1", 60, 180, {"v": 3})
+    Runner.feed_queue_data(node, "q1", 60, 180, {"v": 3})
     assert node.cache.get_slice("q1", 60, count=2) == [
         (120, {"v": 2}),
         (180, {"v": 3}),
@@ -62,12 +62,12 @@ def test_multiple_upstreams():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_topic_data(node, "u1", 60, 60, {"v": 1})
-    Runner.feed_topic_data(node, "u2", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "u2", 60, 60, {"v": 1})
     assert node.pre_warmup
-    Runner.feed_topic_data(node, "u1", 60, 120, {"v": 2})
+    Runner.feed_queue_data(node, "u1", 60, 120, {"v": 2})
     assert node.pre_warmup
-    Runner.feed_topic_data(node, "u2", 60, 120, {"v": 2})
+    Runner.feed_queue_data(node, "u2", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert len(calls) == 1
     view = node.cache.view()
@@ -76,14 +76,14 @@ def test_multiple_upstreams():
 
 
 def test_tensor_memory():
-    cache = NodeCache(window_size=4)
+    cache = NodeCache(period=4)
     cache.append("u1", 60, 60, {"v": 1})
     expected = 4 * 2 * 8
     assert cache.resident_bytes == expected
 
 
 def test_gap_detection():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("u1", 60, 1, {"v": 1})
     assert not cache.missing_flags()["u1"][60]
     cache.append("u1", 60, 3, {"v": 2})
@@ -91,7 +91,7 @@ def test_gap_detection():
 
 
 def test_timestamp_bucket_and_gap_handling():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("u1", 60, 102, {"v": 1})
     assert cache.get_slice("u1", 60, count=1) == [(60, {"v": 1})]
     cache.append("u1", 60, 170, {"v": 2})
@@ -111,20 +111,20 @@ def test_on_missing_policy_skip_and_fail():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_topic_data(node, "q1", 60, 1, {"v": 1})
+    Runner.feed_queue_data(node, "q1", 60, 1, {"v": 1})
     # Gap -> should skip
-    Runner.feed_topic_data(node, "q1", 60, 3, {"v": 2}, on_missing="skip")
+    Runner.feed_queue_data(node, "q1", 60, 3, {"v": 2}, on_missing="skip")
     assert node.cache.missing_flags()["q1"][60]
     assert len(calls) == 0
 
     node2 = ProcessingNode(input=src, compute_fn=fn, name="n2", interval="60s", period=2)
-    Runner.feed_topic_data(node2, "q1", 60, 1, {"v": 1})
+    Runner.feed_queue_data(node2, "q1", 60, 1, {"v": 1})
     with pytest.raises(RuntimeError):
-        Runner.feed_topic_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
+        Runner.feed_queue_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
 
 
 def test_latest_and_get_slice_list():
-    cache = NodeCache(window_size=3)
+    cache = NodeCache(period=3)
     cache.append("u1", 1, 1, {"v": 1})
     assert cache.latest("u1", 1) == (1, {"v": 1})
     cache.append("u1", 1, 2, {"v": 2})
@@ -142,7 +142,7 @@ def test_latest_and_get_slice_list():
 
 
 def test_get_slice_xarray():
-    cache = NodeCache(window_size=4)
+    cache = NodeCache(period=4)
     for ts in range(1, 5):
         cache.append("u1", 1, ts, {"v": ts})
 
@@ -153,7 +153,7 @@ def test_get_slice_xarray():
 
 
 def test_as_xarray_view_is_read_only_and_matches_get_slice():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("u1", 1, 1, {"v": 1})
     cache.append("u1", 1, 2, {"v": 2})
 
@@ -165,18 +165,18 @@ def test_as_xarray_view_is_read_only_and_matches_get_slice():
             arr = da.sel(u=u, i=i).data
             arr_list = [(int(t), v) for t, v in arr if t is not None]
             expected[u][i] = arr_list
-            assert arr_list == cache.get_slice(u, i, count=cache.window_size)
+            assert arr_list == cache.get_slice(u, i, count=cache.period)
 
     with pytest.raises(ValueError):
         da.data[0, 0, 0, 0] = 99
 
     for u, mp in expected.items():
         for i, arr_list in mp.items():
-            assert cache.get_slice(u, i, count=cache.window_size) == arr_list
+            assert cache.get_slice(u, i, count=cache.period) == arr_list
 
 
 def test_ring_buffer_wraparound():
-    cache = NodeCache(window_size=3)
+    cache = NodeCache(period=3)
     cache.append("u1", 1, 1, {"v": 1})
     cache.append("u1", 1, 2, {"v": 2})
     cache.append("u1", 1, 3, {"v": 3})
@@ -200,7 +200,7 @@ def test_ring_buffer_wraparound():
 
 
 def test_cache_view_access():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("btc_price", 1, 1, {"v": 1})
     cache.append("btc_price", 1, 2, {"v": 2})
 
@@ -217,7 +217,7 @@ def test_cache_view_access():
 
 def test_cache_view_accepts_node_instance():
     stream = StreamInput(interval="60s", period=2)
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append(stream.node_id, 60, 60, {"v": 1})
 
     view = cache.view()
@@ -226,7 +226,7 @@ def test_cache_view_accepts_node_instance():
 
 
 def test_cache_view_access_logging_and_reset():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("btc_price", 60, 1, {"v": 1})
 
     view = cache.view(track_access=True)
@@ -240,7 +240,7 @@ def test_cache_view_access_logging_and_reset():
 
 
 def test_backfill_bulk_merge_and_last_timestamp_update():
-    cache = NodeCache(window_size=4)
+    cache = NodeCache(period=4)
     cache.append("u1", 60, 120, {"v": 2})
     cache.append("u1", 60, 180, {"v": 3})
 
@@ -265,7 +265,7 @@ def test_backfill_bulk_merge_and_last_timestamp_update():
 
 
 def test_backfill_bulk_respects_live_append():
-    cache = NodeCache(window_size=3)
+    cache = NodeCache(period=3)
 
     def gen():
         yield (60, {"v": 1})
@@ -283,7 +283,7 @@ def test_backfill_bulk_respects_live_append():
 
 
 def test_backfill_state_ranges():
-    cache = NodeCache(window_size=5)
+    cache = NodeCache(period=5)
     cache.backfill_bulk(
         "u1",
         60,
@@ -297,14 +297,14 @@ def test_backfill_state_ranges():
 
 
 def test_backfill_state_merge_multiple_calls():
-    cache = NodeCache(window_size=5)
+    cache = NodeCache(period=5)
     cache.backfill_bulk("u1", 60, [(60, {}), (120, {}), (240, {})])
     cache.backfill_bulk("u1", 60, [(180, {}), (300, {})])
     assert cache.backfill_state.ranges("u1", 60) == [(60, 300)]
 
 
 def test_drop_upstream_removes_data_and_is_idempotent():
-    cache = NodeCache(window_size=2)
+    cache = NodeCache(period=2)
     cache.append("u1", 60, 60, {"v": 1})
     assert cache.get_slice("u1", 60, count=1) == [(60, {"v": 1})]
 

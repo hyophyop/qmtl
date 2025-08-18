@@ -41,6 +41,7 @@ from .monitor import Monitor, MonitorLoop
 from .completion import QueueCompletionMonitor
 from .metrics import start_metrics_server
 from .api import create_app
+from .lag_monitor import LagMonitor, LagMonitorLoop, QueueLagInfo
 
 __all__ = [
     "compute_node_id",
@@ -59,6 +60,9 @@ __all__ = [
     "Monitor",
     "MonitorLoop",
     "QueueCompletionMonitor",
+    "LagMonitor",
+    "LagMonitorLoop",
+    "QueueLagInfo",
     "start_metrics_server",
     "create_app",
 ]
