@@ -174,7 +174,7 @@ def test_sdk_nodecache_metric_updates():
     node = ProcessingNode(
         input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2
     )
-    Runner.feed_queue_data(node, src.node_id, 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, src.node_id, 60, 60, {"v": 1})
     expected = node.cache.resident_bytes
     assert sdk_metrics.nodecache_resident_bytes._vals[(node.node_id, "node")] == expected
     assert sdk_metrics.nodecache_resident_bytes._vals[("all", "total")] == expected
