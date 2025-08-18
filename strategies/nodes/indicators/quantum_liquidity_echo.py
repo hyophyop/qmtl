@@ -5,7 +5,7 @@
 
 TAGS = {
     "scope": "indicator",
-    "family": "alpha",
+    "family": "quantum_liquidity_echo",
     "interval": "1d",
     "asset": "sample",
 }

@@ -4,7 +4,7 @@
 
 TAGS = {
     "scope": "indicator",
-    "family": "alpha",
+    "family": "latent_liquidity_alpha",
     "interval": "1d",
     "asset": "sample",
 }
