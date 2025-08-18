@@ -34,3 +34,17 @@ prometheus:
             severity: warning
           annotations:
             summary: Kafka consumer lag above threshold
+        - alert: ComputeNodeCountHigh
+          expr: compute_nodes_total > 50000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: ComputeNode count growth is abnormal
+        - alert: QueueCountHigh
+          expr: queues_total > 100000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Queue count growth is abnormal
