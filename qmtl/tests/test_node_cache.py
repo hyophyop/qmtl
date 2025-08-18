@@ -12,12 +12,12 @@ def test_cache_warmup_and_compute():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
     assert node.cache.get_slice("q1", 60, count=2) == [(60, {"v": 1})]
     assert not calls
 
-    Runner.feed_queue_data(node, "q1", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "q1", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert node.cache.get_slice("q1", 60, count=2) == [
         (60, {"v": 1}),
@@ -25,7 +25,7 @@ def test_cache_warmup_and_compute():
     ]
     assert len(calls) == 1
 
-    Runner.feed_queue_data(node, "q1", 60, 180, {"v": 3})
+    Runner.feed_topic_data(node, "q1", 60, 180, {"v": 3})
     assert node.cache.get_slice("q1", 60, count=2) == [
         (120, {"v": 2}),
         (180, {"v": 3}),
@@ -62,12 +62,12 @@ def test_multiple_upstreams():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
-    Runner.feed_queue_data(node, "u2", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "u1", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "u2", 60, 60, {"v": 1})
     assert node.pre_warmup
-    Runner.feed_queue_data(node, "u1", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "u1", 60, 120, {"v": 2})
     assert node.pre_warmup
-    Runner.feed_queue_data(node, "u2", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "u2", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert len(calls) == 1
     view = node.cache.view()
@@ -111,16 +111,16 @@ def test_on_missing_policy_skip_and_fail():
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
 
-    Runner.feed_queue_data(node, "q1", 60, 1, {"v": 1})
+    Runner.feed_topic_data(node, "q1", 60, 1, {"v": 1})
     # Gap -> should skip
-    Runner.feed_queue_data(node, "q1", 60, 3, {"v": 2}, on_missing="skip")
+    Runner.feed_topic_data(node, "q1", 60, 3, {"v": 2}, on_missing="skip")
     assert node.cache.missing_flags()["q1"][60]
     assert len(calls) == 0
 
     node2 = ProcessingNode(input=src, compute_fn=fn, name="n2", interval="60s", period=2)
-    Runner.feed_queue_data(node2, "q1", 60, 1, {"v": 1})
+    Runner.feed_topic_data(node2, "q1", 60, 1, {"v": 1})
     with pytest.raises(RuntimeError):
-        Runner.feed_queue_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
+        Runner.feed_topic_data(node2, "q1", 60, 3, {"v": 2}, on_missing="fail")
 
 
 def test_latest_and_get_slice_list():

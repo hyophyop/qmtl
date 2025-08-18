@@ -20,9 +20,9 @@ async def test_update_warmup_and_removal():
     assert node.pre_warmup
 
     # Warm up node
-    Runner.feed_queue_data(node, "q1", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "q1", 60, 60, {"v": 1})
     assert node.pre_warmup
-    Runner.feed_queue_data(node, "q1", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "q1", 60, 120, {"v": 2})
     assert not node.pre_warmup
     assert len(calls) == 1
 
@@ -34,9 +34,9 @@ async def test_update_warmup_and_removal():
     assert set(node.upstreams) == {"q1", "q2"}
     assert node.pre_warmup
 
-    Runner.feed_queue_data(node, "q2", 60, 180, {"v": 3})
+    Runner.feed_topic_data(node, "q2", 60, 180, {"v": 3})
     assert node.pre_warmup
-    Runner.feed_queue_data(node, "q2", 60, 240, {"v": 4})
+    Runner.feed_topic_data(node, "q2", 60, 240, {"v": 4})
     assert not node.pre_warmup
     assert len(calls) == 2
 
