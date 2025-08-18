@@ -12,7 +12,7 @@ from typing import Any, Dict, Tuple
 
 REQUIRED_KEYS = ["scope", "family", "interval", "asset"]
 RECOMMENDED_KEYS = ["window", "price", "side", "target_horizon", "label"]
-VALID_SCOPES = {"indicator", "signal", "transform", "performance", "portfolio"}
+VALID_SCOPES = {"indicator", "signal", "performance", "portfolio", "generator"}
 INTERVAL_NORMALIZATION = {
     "60s": "1m",
     "60": "1m",
