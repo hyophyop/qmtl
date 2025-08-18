@@ -86,3 +86,31 @@ metrics.start_metrics_server(port=8000)
 
 Metrics will then be available at `http://localhost:8000/metrics`.
 
+## Tracing
+
+QMTL emits OpenTelemetry spans for the Gateway, DAG Manager and SDK. Traces can
+be exported to any OTLP-compatible backend such as Jaeger or Tempo.
+
+### Configuration
+
+Set the ``QMTL_OTEL_EXPORTER_ENDPOINT`` environment variable to the OTLP HTTP
+collector endpoint before starting services:
+
+```bash
+export QMTL_OTEL_EXPORTER_ENDPOINT="http://localhost:4318/v1/traces"
+```
+
+When unset, spans are logged to the console which is useful for development.
+
+### Sample Jaeger query
+
+After running a strategy, view traces in Jaeger by filtering for the service
+name:
+
+```txt
+service="gateway"
+```
+
+Selecting a trace shows the relationship between the SDK's HTTP request, the
+Gateway submission and downstream gRPC calls to the DAG Manager.
+

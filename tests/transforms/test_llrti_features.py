@@ -1,6 +1,10 @@
+import pytest
+
 from qmtl.transforms import depth_change_node, price_change
 from qmtl.sdk.node import SourceNode
 from qmtl.sdk.cache_view import CacheView
+
+llrti_mod = pytest.importorskip("strategies.nodes.indicators.llrti")
 from strategies.nodes.indicators.llrti import llrti_node
 
 

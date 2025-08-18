@@ -16,6 +16,10 @@ import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
 
+from opentelemetry import trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+from qmtl.common.tracing import setup_tracing
 from .dagmanager_client import DagManagerClient
 from .fsm import StrategyFSM
 from . import metrics as gw_metrics
@@ -27,6 +31,7 @@ from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class StrategySubmit(BaseModel):
@@ -56,46 +61,47 @@ class StrategyManager:
     insert_sentinel: bool = True
 
     async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
-        try:
-            dag_bytes = base64.b64decode(payload.dag_json)
-            dag_dict = json.loads(dag_bytes.decode())
-        except Exception:
-            dag_dict = json.loads(payload.dag_json)
+        with tracer.start_as_current_span("gateway.submit"):
+            try:
+                dag_bytes = base64.b64decode(payload.dag_json)
+                dag_dict = json.loads(dag_bytes.decode())
+            except Exception:
+                dag_dict = json.loads(payload.dag_json)
 
-        dag_hash = hashlib.sha256(
-            json.dumps(dag_dict, sort_keys=True).encode()
-        ).hexdigest()
-        existing = await self.redis.get(f"dag_hash:{dag_hash}")
-        if existing:
-            existing_id = existing.decode() if isinstance(existing, bytes) else existing
-            return existing_id, True
+            dag_hash = hashlib.sha256(
+                json.dumps(dag_dict, sort_keys=True).encode()
+            ).hexdigest()
+            existing = await self.redis.get(f"dag_hash:{dag_hash}")
+            if existing:
+                existing_id = existing.decode() if isinstance(existing, bytes) else existing
+                return existing_id, True
 
-        strategy_id = str(uuid.uuid4())
-        dag_for_storage = dag_dict.copy()
-        if self.insert_sentinel:
-            sentinel = {
-                "node_type": "VersionSentinel",
-                "node_id": f"{strategy_id}-sentinel",
-            }
-            dag_for_storage.setdefault("nodes", []).append(sentinel)
-        encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
+            strategy_id = str(uuid.uuid4())
+            dag_for_storage = dag_dict.copy()
+            if self.insert_sentinel:
+                sentinel = {
+                    "node_type": "VersionSentinel",
+                    "node_id": f"{strategy_id}-sentinel",
+                }
+                dag_for_storage.setdefault("nodes", []).append(sentinel)
+            encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
 
-        try:
-            if self.degrade and self.degrade.level == DegradationLevel.PARTIAL and not self.degrade.dag_ok:
-                self.degrade.local_queue.append(strategy_id)
-            else:
-                await self.redis.rpush("strategy_queue", strategy_id)
-            await self.redis.hset(
-                f"strategy:{strategy_id}",
-                mapping={"dag": encoded_dag, "hash": dag_hash},
-            )
-            await self.redis.set(f"dag_hash:{dag_hash}", strategy_id)
-        except Exception:
-            gw_metrics.lost_requests_total.inc()
-            gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
-            raise
-        await self.fsm.create(strategy_id, payload.meta)
-        return strategy_id, False
+            try:
+                if self.degrade and self.degrade.level == DegradationLevel.PARTIAL and not self.degrade.dag_ok:
+                    self.degrade.local_queue.append(strategy_id)
+                else:
+                    await self.redis.rpush("strategy_queue", strategy_id)
+                await self.redis.hset(
+                    f"strategy:{strategy_id}",
+                    mapping={"dag": encoded_dag, "hash": dag_hash},
+                )
+                await self.redis.set(f"dag_hash:{dag_hash}", strategy_id)
+            except Exception:
+                gw_metrics.lost_requests_total.inc()
+                gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
+                raise
+            await self.fsm.create(strategy_id, payload.meta)
+            return strategy_id, False
 
     async def status(self, strategy_id: str) -> Optional[str]:
         return await self.fsm.get(strategy_id)
@@ -112,6 +118,7 @@ def create_app(
     database_backend: str = "postgres",
     database_dsn: str | None = None,
 ) -> FastAPI:
+    setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(
         host="localhost", port=6379, decode_responses=True
     )
@@ -154,6 +161,7 @@ def create_app(
                 logger.exception("Failed to close database connection")
 
     app = FastAPI(lifespan=lifespan)
+    FastAPIInstrumentor().instrument_app(app)
     app.state.database = database_obj
     app.state.degradation = degradation
 

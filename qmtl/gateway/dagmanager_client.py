@@ -5,6 +5,8 @@ from typing import Dict
 
 import grpc
 
+from opentelemetry.instrumentation.grpc import aio_client_interceptors
+
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 from ..common import AsyncCircuitBreaker
 from . import metrics as gw_metrics
@@ -21,7 +23,12 @@ class DagManagerClient:
         except RuntimeError:
             self._created_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._created_loop)
-        self._channel = grpc.aio.insecure_channel(self._target)
+        try:
+            self._channel = grpc.aio.insecure_channel(
+                self._target, interceptors=aio_client_interceptors()
+            )
+        except TypeError:
+            self._channel = grpc.aio.insecure_channel(self._target)
         self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
         self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
         self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)

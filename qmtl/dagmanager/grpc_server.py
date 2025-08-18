@@ -7,6 +7,8 @@ from collections import deque
 
 import grpc
 
+from opentelemetry.instrumentation.grpc import aio_server_interceptor
+
 from .diff_service import (
     DiffService,
     DiffRequest,
@@ -280,7 +282,10 @@ def serve(
         queue = KafkaQueueManager(admin)
     diff_service = DiffService(repo, queue, stream_sender)
 
-    server = grpc.aio.server()
+    try:
+        server = grpc.aio.server(interceptors=(aio_server_interceptor(),))
+    except TypeError:
+        server = grpc.aio.server()
     dagmanager_pb2_grpc.add_DiffServiceServicer_to_server(
         DiffServiceServicer(diff_service, callback_url), server
     )
