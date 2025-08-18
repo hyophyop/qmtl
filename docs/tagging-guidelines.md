@@ -4,7 +4,7 @@ To ensure consistent metadata across strategy components, every node module must
 
 ## Required Keys
 
-- `scope`: one of `indicator`, `signal`, `performance`, or `portfolio`.
+- `scope`: one of `indicator`, `signal`, `transform`, `performance`, or `portfolio`.
 - `family`: identifier for the underlying method or concept (e.g. `rsi`, `ema`, `volatility`).
 - `interval`: sampling interval expressed as `1m`, `5m`, `1h`, or `1d`.
 - `asset`: target ticker or universe name.
