@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.indicators import impact_node
+from qmtl.indicators.impact import impact_node
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import SourceNode
 

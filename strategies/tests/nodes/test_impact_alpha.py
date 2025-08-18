@@ -2,7 +2,8 @@ import math
 import pytest
 
 from strategies.nodes.indicators.non_linear_alpha import non_linear_alpha_node
-from qmtl.indicators import impact_node, volatility_node
+from qmtl.indicators.impact import impact_node
+from qmtl.indicators import volatility_node
 from qmtl.transforms import order_book_imbalance_node, rate_of_change
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import SourceNode

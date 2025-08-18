@@ -1,6 +1,6 @@
 """Strategy execution entry point."""
 
-from dags.example_strategy import ExampleStrategy
+from qmtl.examples.dags.example_strategy import ExampleStrategy
 
 
 def main() -> None:
