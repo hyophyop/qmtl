@@ -53,7 +53,8 @@ Install additional packages in the same environment when needed.
 
 - Follow the Single Responsibility Principle for every strategy, generator, indicator and transform.
 - Add reusable components under `strategies/`, `generators/`, `indicators/` or `transforms/`. Place tests in `qmtl/tests/` or a local `tests/` directory.
-- 캔들·체결·호가창 등 raw 데이터에서 직접 얻을 수 없는 특징(feature)을 사용할 경우, 해당 중간 단계 기능이 `qmtl` extension에 이미 구현되어 있는지 먼저 확인하세요. 존재하면 이를 참조해 알파를 구현하고, 없다면 `qmtl` extension에 기능을 추가한 뒤 그 기능을 참조해 알파를 구현합니다.
+- 캔들·체결·호가창 등 raw 데이터에서 직접 얻을 수 없는 특징(feature)은 반드시 `qmtl` extension에 구현한 뒤 이를 참조해 알파를 만듭니다. 인라인 계산으로 특징을 만들거나 바로 사용하지 마세요.
+  - 예: 갭 앰플리피케이션 계산이 필요하면 `qmtl` extension에 `gap_amplification` 기능을 추가하고 호출합니다. 전략 코드에서 `(next_open - prev_close)/prev_close` 같은 인라인 계산은 금지됩니다.
 - Manage node processors under `strategies/nodes/` and define strategy DAGs in `strategies/dags/`.
 - Refer to `qmtl/architecture.md`, `qmtl/gateway.md` and `qmtl/dag-manager.md` for design details before modifying core behavior.
 - See [strategies/README.md](strategies/README.md) for guidance on building and reusing node processors and DAGs.
@@ -61,6 +62,14 @@ Install additional packages in the same environment when needed.
 - When proposing task lists or improvements, highlight opportunities for parallel execution.
 - Ensure resources such as network or database connections are closed to avoid `ResourceWarning`.
 - 전략 개발 중 QMTL 이슈가 발견되면, 서브트리를 최신으로 동기화한 뒤 `qmtl/` 내부에서 우선 수정하고 테스트하세요. qmtl은 서브트리이지만 별도 구성된 프로젝트이므로 `qmtl/AGENTS.md`의 가이드를 충실히 따라 수정/테스트/커밋/PR을 진행해야 합니다. 수정 후 루트 리포지토리에 서브트리 변경사항을 커밋하는 것을 잊지 마세요.
+
+### Developer Checklist
+
+항상 `qmtl` extension → 테스트 → 알파 모듈 순서를 따릅니다.
+
+1. 필요한 기능을 `qmtl` extension에 구현한다.
+2. 기능을 검증하는 테스트를 추가하고 실행한다.
+3. 알파 모듈에서 `qmtl` extension을 참조해 기능을 사용한다.
 
 ## AlphaDocs Workflow
 
