@@ -12,8 +12,8 @@ def test_node_with_string_interval_behaves_like_int():
     src_int = StreamInput(interval=60, period=2)
     node_int = ProcessingNode(input=src_int, compute_fn=_compute, name="n", interval=60, period=2)
 
-    Runner.feed_queue_data(node_str, "q", 60, 60, {"v": 1})
-    Runner.feed_queue_data(node_int, "q", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node_str, "q", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node_int, "q", 60, 60, {"v": 1})
 
     assert src_str.interval == src_int.interval == 60
     assert node_str.interval == node_int.interval == 60
