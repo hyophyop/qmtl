@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Protocol, Mapping, Dict
+from typing import Protocol, Mapping, Dict, Iterable
 
 from qmtl.common import AsyncCircuitBreaker
 from . import metrics
@@ -62,6 +62,10 @@ class InMemoryAdminClient:
     def get_size(self, name: str) -> int:
         return int(self.topics.get(name, {}).get("size", 0))
 
+    def set_offsets(self, name: str, *, high: int, low: int = 0) -> None:
+        if name in self.topics:
+            self.topics[name]["offsets"] = {"high": high, "low": low}
+
 
 @dataclass
 class KafkaAdmin:
@@ -112,6 +116,31 @@ class KafkaAdmin:
             if size is not None:
                 stats[name] = int(size)
         return stats
+
+    def get_end_offsets(self, topics: Iterable[str]) -> Dict[str, int]:
+        """Return high watermark offsets for ``topics``."""
+        end: Dict[str, int] = {}
+        meta = self.client.list_topics()
+        for t in topics:
+            info = meta.get(t)
+            if not info:
+                continue
+            offsets = info.get("offsets")
+            if isinstance(offsets, Mapping):
+                end[t] = int(offsets.get("high", 0))
+            else:
+                size = info.get("size")
+                if size is not None:
+                    end[t] = int(size)
+        return end
+
+    def topic_lag(self, committed: Mapping[str, int]) -> Dict[str, int]:
+        """Compute lag for each topic given committed offsets."""
+        end = self.get_end_offsets(committed.keys())
+        lags: Dict[str, int] = {}
+        for topic, offset in committed.items():
+            lags[topic] = max(0, end.get(topic, offset) - offset)
+        return lags
 
 
 __all__ = [

@@ -15,6 +15,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **QueueCreateErrors** – fires when `queue_create_error_total` increases.
 - **SentinelGap** – indicates a missing diff sentinel via `sentinel_gap_count`.
 - **OrphanQueuesGrowing** – detects rises in `orphan_queue_total` over a three-hour window.
+- **QueueLagHigh** – triggers when `queue_lag_seconds` exceeds `queue_lag_threshold_seconds` for a topic.
 - **GatewayLatencyHigh** – alerts when `gateway_e2e_latency_p95` exceeds 150 ms.
 - **LostRequests** – reports lost diff submissions based on `lost_requests_total`.
 - **GCSchedulerStall** – warns if `gc_last_run_timestamp` lags by more than ten minutes.
@@ -42,6 +43,8 @@ Both services expose a Prometheus endpoint. Circuit breaker activity is tracked 
 
 Both breakers open after three consecutive failures and are not configurable.
 The DAG Manager's Neo4j breaker also uses a fixed threshold of 3.
+
+Kafka consumer lag per topic is exported via `queue_lag_seconds{topic}` along with `queue_lag_threshold_seconds{topic}` to express the configured alert boundary.
 
 Unlike time-based breakers, QMTL requires an explicit success signal to
 close a tripped breaker. Calls that verify remote health should inspect
