@@ -10,24 +10,7 @@ TAGS = {
     "asset": "sample",
 }
 
-import math
-from typing import Iterable
-
-
-def _gas(gaps: Iterable[float], depths: Iterable[float], lam: float, eps: float = 1e-9) -> float:
-    """Return weighted gap-over-depth sum with exponential decay."""
-    gas = 0.0
-    for k, (gap, depth) in enumerate(zip(gaps, depths)):
-        if depth > 0:
-            weight = math.exp(-lam * k)
-            gas += weight * (gap / (depth + eps))
-    return gas
-
-
-def _hazard(ofi: float, spread_z: float, eta0: float, eta1: float, eta2: float) -> float:
-    """Logistic hazard combining order flow and spread state."""
-    x = eta0 + eta1 * ofi + eta2 * spread_z
-    return 1.0 / (1.0 + math.exp(-x))
+from qmtl.transforms.gap_amplification import gati_side
 
 
 def gap_amplification_node(data: dict) -> dict:
@@ -37,14 +20,9 @@ def gap_amplification_node(data: dict) -> dict:
     ----------
     data:
         Mapping containing:
-            ``ask_gaps``: sequence of ask-side gaps.
-            ``ask_depths``: sequence of ask-side depths.
-            ``bid_gaps``: sequence of bid-side gaps.
-            ``bid_depths``: sequence of bid-side depths.
-            ``lambda``: exponential decay for gap weights.
-            ``ofi``: order flow imbalance.
-            ``spread_z``: spread z-score.
-            ``eta``: logistic parameters ``(eta0, eta1, eta2)``.
+            ``gas_ask``: ask-side gap amplification score.
+            ``gas_bid``: bid-side gap amplification score.
+            ``hazard``: hazard probability.
 
     Returns
     -------
@@ -52,21 +30,12 @@ def gap_amplification_node(data: dict) -> dict:
         Mapping with ``gati_ask``, ``gati_bid`` and directional ``alpha``.
     """
 
-    ask_gaps = data.get("ask_gaps", [])
-    ask_depths = data.get("ask_depths", [])
-    bid_gaps = data.get("bid_gaps", [])
-    bid_depths = data.get("bid_depths", [])
-    lam = data.get("lambda", 0.5)
-    ofi = data.get("ofi", 0.0)
-    spread_z = data.get("spread_z", 0.0)
-    eta0, eta1, eta2 = data.get("eta", (0.0, 0.0, 0.0))
+    gas_ask = data.get("gas_ask", 0.0)
+    gas_bid = data.get("gas_bid", 0.0)
+    hazard = data.get("hazard", 0.0)
 
-    gas_ask = _gas(ask_gaps, ask_depths, lam)
-    gas_bid = _gas(bid_gaps, bid_depths, lam)
-    hazard = _hazard(ofi, spread_z, eta0, eta1, eta2)
-
-    gati_ask = gas_ask * hazard
-    gati_bid = gas_bid * hazard
+    gati_ask = gati_side(gas_ask, hazard)
+    gati_bid = gati_side(gas_bid, hazard)
     alpha = gati_bid - gati_ask
 
     return {
