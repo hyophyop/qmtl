@@ -39,6 +39,8 @@ git log -n 3 --oneline qmtl-subtree/main
 
 ## Setup
 
+The root project depends on the local `qmtl` subtree. Create a virtual environment and install `qmtl` with its development extras:
+
 ```bash
 git remote add qmtl-subtree https://github.com/hyophyop/qmtl.git
 uv venv
