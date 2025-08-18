@@ -1,5 +1,6 @@
 import pytest
 
+import strategies.nodes.indicators.gap_amplification as gap_amplification
 from qmtl.transforms.gap_amplification import gap_over_depth_sum, hazard_probability
 from strategies.nodes.indicators.gap_amplification import gap_amplification_node
 
