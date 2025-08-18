@@ -4,7 +4,7 @@
 # Priority: gpt5pro
 
 TAGS = {
-    "scope": "signal",
+    "scope": "indicator",
     "family": "alpha",
     "interval": "1d",
     "asset": "sample",
