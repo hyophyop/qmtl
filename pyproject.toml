@@ -2,23 +2,7 @@
 name = "qmtl-strategies"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = [
-  "prometheus-client",
-  "boto3",
-  "xarray",
-  "networkx",
-  "numpy",
-  "httpx",
-  "fastapi",
-  "uvicorn",
-  "redis",
-  "asyncpg",
-  "aiosqlite",
-  "websockets",
-  "grpcio",
-  "PyYAML",
-  "psutil",
-]
+dependencies = ["qmtl"]
 
 [build-system]
 requires = ["setuptools"]
@@ -32,15 +16,7 @@ default-groups = ["dev"]
 qmtl = { path = "qmtl", editable = true }
 
 [dependency-groups]
-dev = [
-    "fakeredis>=2.31.0",
-    "grpcio-tools>=1.74.0",
-    "pyarrow>=21.0.0",
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
-    "qmtl[dev]",
-    "xstate>=0.0.1",
-]
+dev = ["qmtl[dev]"]
 
 [tool.setuptools]
 packages = []

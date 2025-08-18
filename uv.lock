@@ -1201,63 +1201,19 @@ name = "qmtl-strategies"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "aiosqlite" },
-    { name = "asyncpg" },
-    { name = "boto3" },
-    { name = "fastapi" },
-    { name = "grpcio" },
-    { name = "httpx" },
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "prometheus-client" },
-    { name = "psutil" },
-    { name = "pyyaml" },
-    { name = "redis" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-    { name = "xarray" },
+    { name = "qmtl" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "fakeredis" },
-    { name = "grpcio-tools" },
-    { name = "pyarrow" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
     { name = "qmtl", extra = ["dev"] },
-    { name = "xstate" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiosqlite" },
-    { name = "asyncpg" },
-    { name = "boto3" },
-    { name = "fastapi" },
-    { name = "grpcio" },
-    { name = "httpx" },
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "prometheus-client" },
-    { name = "psutil" },
-    { name = "pyyaml" },
-    { name = "redis" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-    { name = "xarray" },
-]
+requires-dist = [{ name = "qmtl", editable = "qmtl" }]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "fakeredis", specifier = ">=2.31.0" },
-    { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "pyarrow", specifier = ">=21.0.0" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "pytest-asyncio", specifier = ">=1.1.0" },
-    { name = "qmtl", extras = ["dev"], editable = "qmtl" },
-    { name = "xstate", specifier = ">=0.0.1" },
-]
+dev = [{ name = "qmtl", extras = ["dev"], editable = "qmtl" }]
 
 [[package]]
 name = "redis"
