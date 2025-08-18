@@ -129,7 +129,7 @@ def test_live(caplog, monkeypatch):
     assert isinstance(strategy, SampleStrategy)
 
 
-def test_gateway_queue_mapping(monkeypatch):
+def test_gateway_topic_mapping(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content.decode())
         dag = json.loads(base64.b64decode(payload["dag_json"]).decode())
@@ -256,7 +256,7 @@ def test_no_gateway_same_ids(monkeypatch):
         Runner.dryrun(SampleStrategy)
 
 
-def test_feed_queue_data_with_ray(monkeypatch):
+def test_feed_topic_data_with_ray(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
     class DummyRay:
@@ -293,14 +293,14 @@ def test_feed_queue_data_with_ray(monkeypatch):
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
 
-    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
-    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "q", 60, 120, {"v": 2})
 
     assert len(dummy_ray.calls) == 1
     assert not calls
 
 
-def test_feed_queue_data_without_ray(monkeypatch):
+def test_feed_topic_data_without_ray(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
     monkeypatch.setattr(Runner, "_ray_available", False)
@@ -313,13 +313,13 @@ def test_feed_queue_data_without_ray(monkeypatch):
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
 
-    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
-    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "q", 60, 120, {"v": 2})
 
     assert len(calls) == 1
 
 
-def test_feed_queue_data_respects_execute_flag(monkeypatch):
+def test_feed_topic_data_respects_execute_flag(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
     monkeypatch.setattr(Runner, "_ray_available", False)
@@ -333,8 +333,8 @@ def test_feed_queue_data_respects_execute_flag(monkeypatch):
     node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
     node.execute = False
 
-    Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
-    Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
+    Runner.feed_topic_data(node, "q", 60, 60, {"v": 1})
+    Runner.feed_topic_data(node, "q", 60, 120, {"v": 2})
 
     assert not calls
 

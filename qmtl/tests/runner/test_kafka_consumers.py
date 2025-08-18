@@ -26,8 +26,8 @@ async def test_single_node_consumption(monkeypatch):
     stop_event = asyncio.Event()
 
     async def fake_consume(n, *, bootstrap_servers, stop_event):
-        Runner.feed_queue_data(n, n.kafka_topic, 60, 60, {"v": 1})
-        Runner.feed_queue_data(n, n.kafka_topic, 60, 120, {"v": 2})
+        Runner.feed_topic_data(n, n.kafka_topic, 60, 60, {"v": 1})
+        Runner.feed_topic_data(n, n.kafka_topic, 60, 120, {"v": 2})
         stop_event.set()
 
     monkeypatch.setattr(Runner, "_consume_node", fake_consume)
@@ -63,8 +63,8 @@ async def test_multi_node_consumption(monkeypatch):
     counter = {"c": 0}
 
     async def fake_consume(n, *, bootstrap_servers, stop_event):
-        Runner.feed_queue_data(n, n.kafka_topic, 60, 60, {"v": 1})
-        Runner.feed_queue_data(n, n.kafka_topic, 60, 120, {"v": 2})
+        Runner.feed_topic_data(n, n.kafka_topic, 60, 60, {"v": 1})
+        Runner.feed_topic_data(n, n.kafka_topic, 60, 120, {"v": 2})
         counter["c"] += 1
         if counter["c"] == 2:
             stop_event.set()
