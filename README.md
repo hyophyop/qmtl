@@ -42,7 +42,7 @@ class MyStrategy(Strategy):
         pass
 ```
 
-3. 루트의 `strategy.py`를 수정하여 원하는 전략을 가져오고 실행합니다.
+3. `strategies/strategy.py`를 수정하여 원하는 전략을 가져오고 실행합니다.
 
 ```python
 from strategies.my_strategy import MyStrategy
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 5. 전략이 정상 동작하는지 확인합니다.
 
 ```bash
-python strategy.py
+python strategies/strategy.py
 ```
 
 ## 노드와 DAG 구성
