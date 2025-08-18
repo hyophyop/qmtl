@@ -17,7 +17,6 @@ from .kalman_trend import kalman_trend
 from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
 from .volatility import volatility_node
-from .impact import impact_node
 
 __all__ = [
     "sma",
@@ -37,5 +36,4 @@ __all__ = [
     "rough_bergomi",
     "stoch_rsi",
     "volatility_node",
-    "impact_node",
 ]

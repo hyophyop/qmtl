@@ -3,10 +3,7 @@
 Refer to docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md for market impact background.
 """
 
-try:
-    from dags.example_strategy import ExampleStrategy
-except ModuleNotFoundError:  # pragma: no cover
-    from strategies.dags.example_strategy import ExampleStrategy
+from qmtl.examples.dags.example_strategy import ExampleStrategy
 
 
 def main():

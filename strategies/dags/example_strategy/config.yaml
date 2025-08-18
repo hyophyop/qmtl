@@ -1,4 +1,0 @@
-name: example_strategy
-description: Example strategy configuration
-parameters:
-  example_param: 42
