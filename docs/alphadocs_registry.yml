@@ -13,7 +13,7 @@
   status: draft
   modules: []
 - doc: docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
-  status: prioritized
+  status: implemented
   source_model: gpt5pro
   modules:
     - strategies/nodes/indicators/llrti.py
@@ -24,7 +24,12 @@
   modules:
     - strategies/nodes/indicators/quantum_liquidity_echo.py
 - doc: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
-  status: prioritized
+  status: implemented
   source_model: gpt5pro
   modules:
     - strategies/nodes/indicators/acceptable_price_band.py
+- doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+    - strategies/nodes/indicators/gap_amplification.py
