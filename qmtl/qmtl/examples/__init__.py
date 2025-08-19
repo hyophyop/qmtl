@@ -1,3 +1,3 @@
-from .binance_fetcher import BinanceFetcher
+"""Example modules for QMTL."""
 
-__all__ = ["BinanceFetcher"]
+__all__: list[str] = []

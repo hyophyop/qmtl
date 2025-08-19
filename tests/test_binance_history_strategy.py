@@ -6,7 +6,7 @@ from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 from strategies.config import load_config
 from strategies.dags.binance_history_dag import BinanceHistoryStrategy
-from strategies.utils.binance_fetcher import BinanceFetcher
+from qmtl.io import BinanceFetcher
 
 
 def test_stream_binding() -> None:
@@ -47,6 +47,6 @@ def test_fetcher_returns_dataframe(monkeypatch) -> None:
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
     fetcher = BinanceFetcher()
-    df = asyncio.run(fetcher.fetch(0, 60, node_id="n", interval=60))
+    df = asyncio.run(fetcher.fetch(0, 60, node_id="n", interval="1m"))
     assert not df.empty
     assert list(df.columns) == ["ts", "open", "high", "low", "close", "volume"]

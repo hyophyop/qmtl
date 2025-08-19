@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pandas as pd
 
-from qmtl.sdk import DataFetcher
+from qmtl.sdk.data_io import DataFetcher
 
 
 class BinanceFetcher(DataFetcher):
@@ -13,12 +13,16 @@ class BinanceFetcher(DataFetcher):
 
     base_url = "https://api.binance.com/api/v3/klines"
 
+    def __init__(self, *, symbol: str | None = None, interval: str | None = None) -> None:
+        self.symbol = symbol
+        self.interval = interval
+
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: str
     ) -> pd.DataFrame:
         params = {
-            "symbol": node_id,
-            "interval": interval,
+            "symbol": self.symbol or node_id,
+            "interval": self.interval or interval,
             "startTime": start * 1000,
             "endTime": end * 1000,
             "limit": 1000,
