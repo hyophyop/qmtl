@@ -4,7 +4,7 @@ import base64
 import json
 import asyncio
 import time
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Any
 import logging
 import httpx
 
@@ -38,6 +38,7 @@ class Runner:
     _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_cb: AsyncCircuitBreaker | None = None
+    _kafka_producer: Any | None = None
 
     # ------------------------------------------------------------------
 
@@ -47,6 +48,11 @@ class Runner:
     ) -> None:
         """Configure circuit breaker for Gateway communication."""
         cls._gateway_cb = cb
+
+    @classmethod
+    def set_kafka_producer(cls, producer: Any | None) -> None:
+        """Configure Kafka producer used for publishing node outputs."""
+        cls._kafka_producer = producer
 
     @classmethod
     def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
@@ -319,7 +325,31 @@ class Runner:
             finally:
                 duration_ms = (time.perf_counter() - start) * 1000
                 sdk_metrics.observe_node_process(node.node_id, duration_ms)
+        Runner._publish_result(result)
         return result
+
+    @staticmethod
+    def _publish_result(result: Any) -> None:
+        """Publish ``result`` to Kafka when configured."""
+        producer = Runner._kafka_producer
+        if producer is None:
+            return
+        topic: Any | None = None
+        payload: Any | None = None
+        if isinstance(result, tuple) and len(result) == 2:
+            topic, payload = result
+        elif isinstance(result, dict):
+            topic = result.get("topic")
+            payload = result.get("payload")
+        if topic is None:
+            return
+        try:
+            if hasattr(producer, "send"):
+                producer.send(topic, payload)
+            elif hasattr(producer, "produce"):
+                producer.produce(topic, payload)
+        except Exception:
+            logger.exception("failed to publish to Kafka topic %s", topic)
 
     # ------------------------------------------------------------------
     @staticmethod
