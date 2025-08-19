@@ -32,3 +32,17 @@ def rate_of_change(
         interval=interval,
         period=period,
     )
+
+
+def rate_of_change_series(values: list[float]) -> float:
+    """Return percentage change between first and last value."""
+    if len(values) < 2:
+        return 0.0
+    start = values[0]
+    end = values[-1]
+    if start == 0:
+        return 0.0
+    return (end - start) / start
+
+
+__all__ = ["rate_of_change", "rate_of_change_series"]

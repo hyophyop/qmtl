@@ -30,3 +30,11 @@ def price_change(
         interval=interval,
         period=period,
     )
+
+
+def price_delta(start: float, end: float) -> float:
+    """Return absolute price change from ``start`` to ``end``."""
+    return end - start
+
+
+__all__ = ["price_change", "price_delta"]

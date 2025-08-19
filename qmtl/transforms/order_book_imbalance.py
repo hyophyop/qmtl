@@ -36,3 +36,14 @@ def order_book_imbalance_node(
         name=name or "order_book_imbalance",
         interval=interval,
     )
+
+
+def order_book_imbalance(bid_volume: float, ask_volume: float) -> float:
+    """Return order book imbalance from raw volumes."""
+    total = bid_volume + ask_volume
+    if total == 0:
+        return 0.0
+    return (bid_volume - ask_volume) / total
+
+
+__all__ = ["order_book_imbalance_node", "order_book_imbalance"]

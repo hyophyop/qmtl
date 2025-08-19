@@ -1,6 +1,7 @@
 """Volatility indicator based on return standard deviation."""
 
 from statistics import stdev
+from typing import Sequence
 
 from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
@@ -30,3 +31,16 @@ def volatility_node(source: Node, window: int, *, name: str | None = None) -> No
         interval=source.interval,
         period=window + 1,
     )
+
+
+def volatility(values: Sequence[float]) -> float:
+    """Return standard deviation of percentage returns for ``values``."""
+    if len(values) < 2:
+        return 0.0
+    returns = [(values[i] / values[i - 1]) - 1 for i in range(1, len(values))]
+    if len(returns) < 2:
+        return 0.0
+    return stdev(returns)
+
+
+__all__ = ["volatility_node", "volatility"]
