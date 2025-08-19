@@ -12,6 +12,12 @@ TAGS = {
 
 import math
 
+from qmtl.transforms.acceptable_price_band import (
+    estimate_band,
+    overshoot,
+    volume_surprise,
+)
+
 
 def acceptable_price_band_node(data: dict) -> dict:
     """Estimate price bands and nonlinear alpha.
@@ -41,33 +47,25 @@ def acceptable_price_band_node(data: dict) -> dict:
     lambda_sigma = data.get("lambda_sigma", 0.1)
     k = data.get("k", 1.0)
 
-    # Band estimation via exponential smoothing
-    mu = (1 - lambda_mu) * mu_prev + lambda_mu * price
-    resid = price - mu
-    sigma = math.sqrt((1 - lambda_sigma) * (sigma_prev ** 2) + lambda_sigma * (resid ** 2))
-
-    # Normalized deviation and overshoot beyond the band
-    denom = k * sigma if sigma else 0.0
-    pbx = resid / denom if denom else 0.0
-    overshoot = max(0.0, abs(resid) - k * sigma) / sigma if sigma else 0.0
-
-    # Volume surprise normalized by seasonal forecast
-    volume_surprise = (volume - volume_hat) / volume_std if volume_std else 0.0
+    band = estimate_band(
+        price, mu_prev, sigma_prev, lambda_mu, lambda_sigma, k
+    )
+    resid = band["resid"]
+    sigma = band["sigma"]
+    o = overshoot(resid, sigma, k)
+    vs = volume_surprise(volume, volume_hat, volume_std)
 
     sign = 1.0 if resid >= 0 else -1.0
-    gate = 1.0 / (1.0 + math.exp(-(overshoot + volume_surprise)))
-    alpha_mom = math.log1p(math.exp(overshoot)) * (1.0 + volume_surprise) * sign
+    gate = 1.0 / (1.0 + math.exp(-(o + vs)))
+    alpha_mom = math.log1p(math.exp(o)) * (1.0 + vs) * sign
     inner = (k * sigma - abs(resid)) / sigma if sigma else 0.0
     alpha_rev = -math.log1p(math.exp(inner)) * sign
     alpha = gate * alpha_mom + (1.0 - gate) * alpha_rev
 
+    band.pop("resid")
     return {
-        "mu": mu,
-        "sigma": sigma,
-        "band_lower": mu - k * sigma,
-        "band_upper": mu + k * sigma,
-        "pbx": pbx,
+        **band,
         "alpha": alpha,
-        "volume_surprise": volume_surprise,
+        "volume_surprise": vs,
     }
 

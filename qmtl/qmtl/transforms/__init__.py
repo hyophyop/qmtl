@@ -15,6 +15,7 @@ from .microstructure import (
     spread_zscore_node,
     hazard_node,
 )
+from .acceptable_price_band import estimate_band, overshoot, volume_surprise
 
 __all__ = [
     "rate_of_change",
@@ -32,4 +33,7 @@ __all__ = [
     "order_flow_imbalance_node",
     "spread_zscore_node",
     "hazard_node",
+    "estimate_band",
+    "overshoot",
+    "volume_surprise",
 ]
