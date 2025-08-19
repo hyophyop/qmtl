@@ -16,6 +16,10 @@ def main(argv: List[str] | None = None) -> None:
         "doc-sync",
         help="Verify alignment between docs, registry, and module annotations",
     )
+    sub.add_parser(
+        "check-imports",
+        help="Fail if qmtl imports local strategies package",
+    )
     p_taglint = sub.add_parser("taglint", help="Lint TAGS dictionaries")
     p_taglint.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     p_init = sub.add_parser(
@@ -78,6 +82,14 @@ def main(argv: List[str] | None = None) -> None:
     elif args.cmd == "doc-sync":
         from qmtl.scripts.check_doc_sync import main as doc_sync_main
         raise SystemExit(doc_sync_main())
+    elif args.cmd == "check-imports":
+        import sys
+        from pathlib import Path
+
+        sys.path.append(str(Path(__file__).resolve().parents[2]))
+        from scripts.check_no_strategies_import import main as check_imports_main
+
+        raise SystemExit(check_imports_main())
     elif args.cmd == "taglint":
         from qmtl.tools.taglint import main as taglint_main
         if getattr(args, "fix", False):

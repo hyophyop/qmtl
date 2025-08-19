@@ -17,6 +17,10 @@ This document collects the actionable guidelines from `AGENTS.md` files across t
     ```bash
     uv run -m pytest -W error
     ```
+  - Fail if `qmtl` imports the local strategies package:
+    ```bash
+    uv run qmtl check-imports
+    ```
   - Add tests for any new feature under the `tests/` directory near the code (e.g., `qmtl/tests/` or `strategies/tests/`).
 
 - Coding conventions (strategies):
