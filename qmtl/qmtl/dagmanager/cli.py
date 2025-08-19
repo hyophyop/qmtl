@@ -20,6 +20,7 @@ from .diff_service import (
 from .monitor import AckStatus
 from .topic import topic_name
 from .neo4j_export import export_schema, connect
+from .neo4j_init import apply_schema
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -156,6 +157,14 @@ def _cmd_export_schema(args: argparse.Namespace) -> None:
         print(text, end="")
 
 
+def _cmd_neo4j_init(args: argparse.Namespace) -> None:
+    driver = connect(args.uri, args.user, args.password)
+    try:
+        apply_schema(driver)
+    finally:
+        driver.close()
+
+
 async def _main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="qmtl dagmanager")
     parser.add_argument("--target", help="gRPC service target", default="localhost:50051")
@@ -182,6 +191,11 @@ async def _main(argv: list[str] | None = None) -> None:
     p_exp.add_argument("--password", default="neo4j")
     p_exp.add_argument("--out")
 
+    p_init = sub.add_parser("neo4j-init", help="Initialize Neo4j schema")
+    p_init.add_argument("--uri", default="bolt://localhost:7687")
+    p_init.add_argument("--user", default="neo4j")
+    p_init.add_argument("--password", default="neo4j")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "diff":
@@ -194,6 +208,8 @@ async def _main(argv: list[str] | None = None) -> None:
         await _cmd_redo_diff(args)
     elif args.cmd == "export-schema":
         _cmd_export_schema(args)
+    elif args.cmd == "neo4j-init":
+        _cmd_neo4j_init(args)
 
 
 def main(argv: list[str] | None = None) -> None:
