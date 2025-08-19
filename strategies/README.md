@@ -54,6 +54,19 @@ def build_dag():
 
 This reuse minimizes duplication and keeps strategies consistent.
 
+## Configuration
+
+`config.example.yml` contains optional settings that influence node behavior. The
+`load_config` helper parses these sections and supplies them when building
+strategy nodes:
+
+- `performance_metrics`: currently supports `risk_free_rate` for
+  `alpha_performance_node`.
+- `signal_thresholds`: `long` and `short` thresholds used by
+  `trade_signal_node`.
+- `risk_limits`: trade sizing and protections (`size`, `stop_loss`,
+  `take_profit`) forwarded to `trade_signal_node`.
+
 ## Binance History Strategy
 
 The `dags/binance_history_dag.py` module demonstrates wiring a `StreamInput`
