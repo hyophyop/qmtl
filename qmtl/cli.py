@@ -12,6 +12,10 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
     sub.add_parser("dagmanager-metrics", help="Expose DAG Manager metrics")
     sub.add_parser("sdk", help="Run strategy via SDK")
+    sub.add_parser(
+        "doc-sync",
+        help="Verify alignment between docs, registry, and module annotations",
+    )
     p_taglint = sub.add_parser("taglint", help="Lint TAGS dictionaries")
     p_taglint.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     p_init = sub.add_parser(
@@ -71,6 +75,9 @@ def main(argv: List[str] | None = None) -> None:
         from .sdk.cli import main as sdk_main
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
+    elif args.cmd == "doc-sync":
+        from qmtl.scripts.check_doc_sync import main as doc_sync_main
+        raise SystemExit(doc_sync_main())
     elif args.cmd == "taglint":
         from qmtl.tools.taglint import main as taglint_main
         if getattr(args, "fix", False):
