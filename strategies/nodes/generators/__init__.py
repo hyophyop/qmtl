@@ -1,6 +1,7 @@
 """Generator node processors."""
 
 from .sequence import sequence_generator_node
+from .all_alpha import all_alpha_generator_node
 
 
 def sample_generator():
@@ -8,4 +9,8 @@ def sample_generator():
     return {"value": 42}
 
 
-__all__ = ["sequence_generator_node", "sample_generator"]
+__all__ = [
+    "sequence_generator_node",
+    "all_alpha_generator_node",
+    "sample_generator",
+]

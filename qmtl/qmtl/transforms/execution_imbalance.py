@@ -38,3 +38,14 @@ def execution_imbalance_node(
         interval=interval,
         period=2,
     )
+
+
+def execution_imbalance(buy: float, sell: float) -> float:
+    """Return normalized execution imbalance."""
+    total = buy + sell
+    if total == 0:
+        return 0.0
+    return (buy - sell) / total
+
+
+__all__ = ["execution_imbalance_node", "execution_imbalance"]
