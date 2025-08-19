@@ -63,9 +63,9 @@ strategy nodes:
 - `performance_metrics`: currently supports `risk_free_rate` for
   `alpha_performance_node`.
 - `signal_thresholds`: `long` and `short` thresholds used by
-  `trade_signal_node`.
+  `TradeSignalGeneratorNode`.
 - `risk_limits`: trade sizing and protections (`size`, `stop_loss`,
-  `take_profit`) forwarded to `trade_signal_node`.
+  `take_profit`) forwarded to `TradeSignalGeneratorNode`.
 
 ## Binance History Strategy
 
