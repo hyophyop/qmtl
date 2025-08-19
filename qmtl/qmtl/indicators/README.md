@@ -13,3 +13,20 @@ Use with:
 from qmtl.indicators import sma
 ```
 
+## Custom indicators with history
+
+Wrap any function returning an ``{"alpha": value}`` mapping with
+``alpha_indicator_with_history`` to keep a sliding window of recent alpha
+values:
+
+```python
+from qmtl.indicators import alpha_indicator_with_history
+
+def my_alpha(view):
+    return {"alpha": 42}
+
+node = alpha_indicator_with_history(my_alpha, window=30)
+```
+
+The resulting node emits a list of the latest ``window`` alpha values.
+
