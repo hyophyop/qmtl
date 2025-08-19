@@ -86,3 +86,27 @@ psql < strategies/binance_history_strategy/create_table.sql
 The script defines `node_id VARCHAR`, `interval INT`, `ts TIMESTAMP`, and
 price/volume columns (`open`, `high`, `low`, `close`, `volume`). Running it
 ensures the recorder can persist data when the strategy starts.
+
+### Metrics and Monitoring
+
+Start the QMTL metrics server so Prometheus can scrape backfill progress and
+other runtime statistics:
+
+```python
+from qmtl.sdk import metrics
+
+metrics.start_metrics_server(port=8000)
+```
+
+Add the endpoint to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: "qmtl"
+    static_configs:
+      - targets: ["localhost:8000"]
+```
+
+Configure Grafana with this Prometheus data source and create panels using
+metrics such as `backfill_jobs_in_progress` or
+`backfill_last_timestamp` to visualize backfill activity.
