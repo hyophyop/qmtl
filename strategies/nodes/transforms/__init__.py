@@ -1,6 +1,8 @@
 """Transform node processors."""
 
-__all__ = ["sample_transform"]
+from .publisher import publisher_node
+
+__all__ = ["sample_transform", "publisher_node"]
 
 
 def sample_transform(value: int) -> int:
