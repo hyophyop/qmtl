@@ -1,15 +1,20 @@
 try:
     from nodes.generators import sample_generator
     from nodes.indicators import sample_indicator
-    from nodes.transforms.alpha_performance import alpha_performance_node
+    from nodes.transforms.alpha_performance import AlphaPerformanceNode
     from nodes.transforms.trade_signal import trade_signal_node
+    from nodes.transforms.publisher import TradeOrderPublisherNode
 except ModuleNotFoundError:  # pragma: no cover
     from strategies.nodes.generators import sample_generator
     from strategies.nodes.indicators import sample_indicator
-    from strategies.nodes.transforms.alpha_performance import alpha_performance_node
+    from strategies.nodes.transforms.alpha_performance import AlphaPerformanceNode
     from strategies.nodes.transforms.trade_signal import trade_signal_node
+    from strategies.nodes.transforms.publisher import TradeOrderPublisherNode
 
 from strategies.config import load_config
+from qmtl.sdk.node import Node
+from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk.runner import Runner
 
 
 class MyStrategy:
@@ -28,9 +33,14 @@ class MyStrategy:
         thresh_cfg = self.config.get("signal_thresholds", {})
         risk_cfg = self.config.get("risk_limits", {})
 
-        performance = alpha_performance_node(
-            returns, risk_free_rate=perf_cfg.get("risk_free_rate", 0.0)
+        history = Node(name="alpha_hist", interval="1s", period=len(returns))
+        perf_node = AlphaPerformanceNode(
+            history, risk_free_rate=perf_cfg.get("risk_free_rate", 0.0)
         )
+        perf_view = CacheView({history.node_id: {history.interval: [(0, returns)]}})
+        performance = perf_node.compute_fn(perf_view)
+        Runner._postprocess_result(perf_node, performance)
+
         signal = trade_signal_node(
             returns,
             long_threshold=thresh_cfg.get("long", 0.0),
@@ -39,6 +49,11 @@ class MyStrategy:
             stop_loss=risk_cfg.get("stop_loss"),
             take_profit=risk_cfg.get("take_profit"),
         )
+        sig_node = Node(name="trade_signal", interval="1s", period=1)
+        pub_node = TradeOrderPublisherNode(sig_node, topic="orders")
+        sig_view = CacheView({sig_node.node_id: {sig_node.interval: [(0, signal)]}})
+        order = pub_node.compute_fn(sig_view)
+        Runner._postprocess_result(pub_node, order)
 
         print(performance)
-        print(signal)
+        print(order)
