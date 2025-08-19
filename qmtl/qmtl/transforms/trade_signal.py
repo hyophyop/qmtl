@@ -1,16 +1,9 @@
-"""Generate basic trade signals from alpha values."""
+"""Generate trade signals from alpha values."""
 
 from collections.abc import Sequence
 
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
-
-TAGS = {
-    "scope": "transform",
-    "family": "trade_signal",
-    "interval": "1d",
-    "asset": "sample",
-}
 
 
 def threshold_signal_node(
@@ -64,23 +57,7 @@ def trade_signal_node(
     stop_loss: float | None = None,
     take_profit: float | None = None,
 ) -> dict:
-    """Return a trade signal using the latest value from an alpha history.
-
-    Parameters
-    ----------
-    alpha_history:
-        Sequence of historical alpha values with the most recent last.
-    long_threshold:
-        Minimum alpha required to issue a ``BUY`` signal.
-    short_threshold:
-        Maximum alpha allowed to issue a ``SELL`` signal.
-    size:
-        Absolute trade size for ``BUY`` or ``SELL`` actions.
-    stop_loss:
-        Optional stop-loss level to include in the signal.
-    take_profit:
-        Optional take-profit level to include in the signal.
-    """
+    """Return a trade signal using the latest value from an alpha history."""
 
     latest_alpha = alpha_history[-1] if alpha_history else 0.0
     return threshold_signal_node(

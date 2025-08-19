@@ -142,6 +142,23 @@ history = alpha_history_node(alpha, window=30)
 perf = alpha_performance_from_history_node(history)
 ```
 
+## Alpha-to-Signal Pipeline
+
+`TradeSignalGeneratorNode` converts an alpha history into actionable trade
+signals. Combine it with `alpha_history_node` to produce orders based on the
+latest alpha value:
+
+```python
+from qmtl.transforms import TradeSignalGeneratorNode
+
+history = alpha_history_node(alpha, window=30)
+signal = TradeSignalGeneratorNode(
+    history,
+    long_threshold=0.5,
+    short_threshold=-0.5,
+)
+```
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은

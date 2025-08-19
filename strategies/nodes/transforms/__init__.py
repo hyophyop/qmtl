@@ -2,7 +2,7 @@
 
 from .alpha_performance import AlphaPerformanceNode, alpha_performance_node
 from .publisher import TradeOrderPublisherNode, publisher_node
-from .trade_signal import (
+from qmtl.transforms import (
     TradeSignalGeneratorNode,
     threshold_signal_node,
     trade_signal_node,

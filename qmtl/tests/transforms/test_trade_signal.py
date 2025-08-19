@@ -1,9 +1,10 @@
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
 
-from strategies.nodes.transforms.trade_signal import (
+from qmtl.transforms import (
     TradeSignalGeneratorNode,
     threshold_signal_node,
+    trade_signal_node,
 )
 
 
@@ -13,11 +14,16 @@ def test_threshold_signal_node():
     assert threshold_signal_node(0.0, long_threshold=0.5, short_threshold=-0.5)["action"] == "HOLD"
 
 
+def test_trade_signal_node():
+    history = [0.2, 0.7]
+    assert trade_signal_node(history, long_threshold=0.5, short_threshold=-0.5)["action"] == "BUY"
+    history = [0.2, -0.6]
+    assert trade_signal_node(history, long_threshold=0.5, short_threshold=-0.5)["action"] == "SELL"
+
+
 def test_trade_signal_generator_node():
     history = Node(name="alpha_hist", interval="1s", period=2)
-    node = TradeSignalGeneratorNode(
-        history, long_threshold=0.5, short_threshold=-0.5
-    )
+    node = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
     view_buy = CacheView({history.node_id: {history.interval: [(0, [0.2, 0.7])]}})
     assert node.compute_fn(view_buy)["action"] == "BUY"
     view_sell = CacheView({history.node_id: {history.interval: [(0, [0.2, -0.6])]}})
