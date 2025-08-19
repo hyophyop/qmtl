@@ -4,10 +4,10 @@ import httpx
 import pytest
 
 import importlib
+import time
 
-from strategies.utils import trade_execution_service as tes
-from strategies.utils.trade_execution_service import TradeExecutionService
 import qmtl.sdk.runner as runner_module
+from qmtl.sdk import TradeExecutionService
 
 
 class DummyResponse:
@@ -27,7 +27,7 @@ def test_service_retries_on_failure(monkeypatch):
         return DummyResponse()
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    monkeypatch.setattr(tes.time, "sleep", lambda s: None)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     service = TradeExecutionService("http://broker", max_retries=2)
     service.post_order({"id": 1})
     assert calls["count"] == 2
@@ -38,7 +38,7 @@ def test_service_raises_after_retries(monkeypatch):
         raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    monkeypatch.setattr(tes.time, "sleep", lambda s: None)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     service = TradeExecutionService("http://broker", max_retries=1)
     with pytest.raises(httpx.HTTPError):
         service.post_order({"id": 1})

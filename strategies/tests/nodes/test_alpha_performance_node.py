@@ -1,4 +1,4 @@
-from strategies.nodes.transforms.alpha_performance import alpha_performance_node
+from qmtl.transforms import alpha_performance_node
 import math
 import pytest
 

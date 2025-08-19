@@ -7,7 +7,7 @@ from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 from strategies.config import load_config
 from qmtl.io import BinanceFetcher
-from strategies.nodes.transforms.identity import identity_transform_node
+from qmtl.transforms import identity_transform_node
 
 
 class BinanceHistoryStrategy(Strategy):

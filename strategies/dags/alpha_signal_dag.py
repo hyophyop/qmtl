@@ -3,16 +3,16 @@ from __future__ import annotations
 """Strategy DAG that derives trade orders from an alpha signal."""
 
 from qmtl.sdk import Strategy, Node
-from qmtl.transforms import alpha_history_node
+from qmtl.transforms import (
+    AlphaPerformanceNode,
+    TradeOrderPublisherNode,
+    TradeSignalGeneratorNode,
+    alpha_history_node,
+)
 
 from strategies.config import load_config
 from strategies.nodes.generators import sample_generator
 from strategies.nodes.indicators import sample_indicator
-from strategies.nodes.transforms import (
-    AlphaPerformanceNode,
-    TradeSignalGeneratorNode,
-    TradeOrderPublisherNode,
-)
 
 
 class AlphaSignalStrategy(Strategy):
