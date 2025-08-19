@@ -111,10 +111,10 @@ persisted to QuestDB and missing ranges can be backfilled via
 ### Initialization
 
 Before executing `BinanceHistoryStrategy`, create the QuestDB table using the
-SQL script in `binance_history_strategy/`:
+SQL script in `dags/binance_history_strategy/`:
 
 ```bash
-psql < strategies/binance_history_strategy/create_table.sql
+psql < strategies/dags/binance_history_strategy/create_table.sql
 ```
 
 The script defines `node_id VARCHAR`, `interval INT`, `ts TIMESTAMP`, and

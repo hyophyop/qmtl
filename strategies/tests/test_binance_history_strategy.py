@@ -7,7 +7,7 @@ import pandas as pd
 
 from qmtl import Pipeline
 
-from strategies.dags.binance_history_dag import BinanceHistoryStrategy
+from strategies.binance_history_strategy import BinanceHistoryStrategy
 
 
 def test_strategy_records_and_loads(monkeypatch) -> None:

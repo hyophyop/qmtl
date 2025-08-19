@@ -1,7 +1,7 @@
 """Run configured strategies and expose Prometheus metrics."""
 
 from strategies.config import load_config
-from strategies.dags.binance_history_dag import BinanceHistoryStrategy
+from strategies.binance_history_strategy import BinanceHistoryStrategy
 from strategies.dags.alpha_signal_dag import AlphaSignalStrategy
 from qmtl.sdk import Runner, metrics
 
