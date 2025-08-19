@@ -139,7 +139,7 @@ uv run -m pytest
 
 ## Monitoring
 
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
 
 ## Running Services
 
