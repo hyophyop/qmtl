@@ -28,7 +28,7 @@ def publisher_node(signal: Any, *, topic: str) -> Tuple[str, Any]:
 
 
 class TradeOrderPublisherNode(Node):
-    """Node wrapper that forwards trade orders for publishing."""
+    """Convert trade signals into order payloads."""
 
     def __init__(
         self,
@@ -38,6 +38,8 @@ class TradeOrderPublisherNode(Node):
         name: str | None = None,
     ) -> None:
         self.signal = signal
+        # ``topic`` is kept for API compatibility though the Runner's hooks
+        # ultimately decide the publication destination.
         self.topic = topic
         super().__init__(
             input=signal,
@@ -47,10 +49,21 @@ class TradeOrderPublisherNode(Node):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> Any | None:
+    def _compute(self, view: CacheView) -> dict | None:
         data = view[self.signal][self.signal.interval]
         if not data:
             return None
-        _, payload = data[-1]
-        _, order = publisher_node(payload, topic=self.topic)
+        ts, signal = data[-1]
+        action = signal.get("action")
+        if action not in {"BUY", "SELL"}:
+            return None
+        order: dict[str, Any] = {
+            "side": action,
+            "quantity": signal.get("size", 1.0),
+            "timestamp": ts,
+        }
+        if "stop_loss" in signal:
+            order["stop_loss"] = signal["stop_loss"]
+        if "take_profit" in signal:
+            order["take_profit"] = signal["take_profit"]
         return order

@@ -23,8 +23,17 @@ def test_trade_order_publisher_node_publishes_via_runner():
 
     signal_node = Node(name="signal", interval="1s", period=1)
     pub_node = TradeOrderPublisherNode(signal_node, topic="orders")
-    view = CacheView({signal_node.node_id: {1: [(0, {"action": "BUY"})]}})
+    view = CacheView({signal_node.node_id: {1: [(0, {"action": "BUY", "size": 2})]}})
     order = pub_node.compute_fn(view)
     runner._postprocess_result(pub_node, order)
 
-    assert producer.messages == [("orders", {"action": "BUY"})]
+    expected = {"side": "BUY", "quantity": 2, "timestamp": 0}
+    assert producer.messages == [("orders", expected)]
+
+
+def test_trade_order_publisher_node_returns_none_for_hold():
+    signal_node = Node(name="signal", interval="1s", period=1)
+    pub_node = TradeOrderPublisherNode(signal_node, topic="orders")
+    view = CacheView({signal_node.node_id: {1: [(0, {"action": "HOLD", "size": 2})]}})
+    order = pub_node.compute_fn(view)
+    assert order is None
