@@ -1,24 +1,30 @@
-import pandas as pd
 import httpx
+import pandas as pd
 import pytest
 
 from qmtl.io import BinanceFetcher
+from qmtl.io import binance_fetcher as bf_mod
 
 
 class DummyClient:
     def __init__(self, transport):
         self._client = httpx.Client(transport=transport)
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        self._client.close()
-
     async def get(self, url, params=None, timeout=None):
         request = httpx.Request("GET", url, params=params)
-        resp = self._client.send(request)
-        return resp
+        return self._client.send(request)
+
+    async def aclose(self):
+        self._client.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_client():
+    bf_mod._close_client_sync()
+    bf_mod._CLIENT = None
+    yield
+    bf_mod._close_client_sync()
+    bf_mod._CLIENT = None
 
 
 @pytest.mark.asyncio
@@ -71,3 +77,25 @@ async def test_binance_fetcher_defaults(monkeypatch):
         [{"ts": 2, "open": 1.0, "high": 2.0, "low": 0.5, "close": 3.0, "volume": 4.0}]
     )
     pd.testing.assert_frame_equal(df, expected)
+
+
+@pytest.mark.asyncio
+async def test_reuses_client(monkeypatch):
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[[0, "1", "1", "1", "1", "1", 0, 0, 0, 0, 0, 0]], request=request)
+
+    transport = httpx.MockTransport(handler)
+
+    def factory(*a, **k):
+        nonlocal calls
+        calls += 1
+        return DummyClient(transport)
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+
+    fetcher = BinanceFetcher()
+    await fetcher.fetch(1, 2, node_id="BTCUSDT", interval="1m")
+    await fetcher.fetch(1, 2, node_id="BTCUSDT", interval="1m")
+    assert calls == 1
