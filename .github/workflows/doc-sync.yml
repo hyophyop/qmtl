@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'docs/**'
+      - 'qmtl/**'
 
 jobs:
   doc-sync:
@@ -20,3 +21,5 @@ jobs:
           uv pip install pyyaml
       - name: Check doc sync
         run: uv run scripts/check_doc_sync.py
+      - name: QMTL doc sync
+        run: uv run qmtl/scripts/check_doc_sync.py
