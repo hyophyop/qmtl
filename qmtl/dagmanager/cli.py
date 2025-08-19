@@ -20,7 +20,7 @@ from .diff_service import (
 from .monitor import AckStatus
 from .topic import topic_name
 from .neo4j_export import export_schema, connect
-from .neo4j_init import apply_schema
+from .neo4j_init import init_schema
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -158,11 +158,7 @@ def _cmd_export_schema(args: argparse.Namespace) -> None:
 
 
 def _cmd_neo4j_init(args: argparse.Namespace) -> None:
-    driver = connect(args.uri, args.user, args.password)
-    try:
-        apply_schema(driver)
-    finally:
-        driver.close()
+    init_schema(args.uri, args.user, args.password)
 
 
 async def _main(argv: list[str] | None = None) -> None:
@@ -192,9 +188,9 @@ async def _main(argv: list[str] | None = None) -> None:
     p_exp.add_argument("--out")
 
     p_init = sub.add_parser("neo4j-init", help="Initialize Neo4j schema")
-    p_init.add_argument("--uri", default="bolt://localhost:7687")
-    p_init.add_argument("--user", default="neo4j")
-    p_init.add_argument("--password", default="neo4j")
+    p_init.add_argument("--uri", default="bolt://localhost:7687", help="Neo4j connection URI")
+    p_init.add_argument("--user", default="neo4j", help="Neo4j username")
+    p_init.add_argument("--password", default="neo4j", help="Neo4j password")
 
     args = parser.parse_args(argv)
 
