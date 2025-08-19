@@ -1,4 +1,4 @@
-from qmtl.examples.nodes.transforms import scale_transform_node
+from qmtl.transforms import scale_transform_node
 
 
 def test_scale_transform_node_scales_metric():
