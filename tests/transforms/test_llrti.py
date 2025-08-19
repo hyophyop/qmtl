@@ -1,11 +1,6 @@
-import pytest
-
-from qmtl.transforms import depth_change_node, price_change
+from qmtl.transforms import depth_change_node, price_change, llrti
 from qmtl.sdk.node import SourceNode
 from qmtl.sdk.cache_view import CacheView
-
-llrti_mod = pytest.importorskip("strategies.nodes.indicators.llrti")
-from strategies.nodes.indicators.llrti import llrti_node
 
 
 def test_llrti_features_combine_for_expected_value():
@@ -31,12 +26,5 @@ def test_llrti_features_combine_for_expected_value():
     assert depth_change == 1.0
     assert price_delta == 1.0
 
-    features = llrti_node(
-        {
-            "depth_changes": [depth_change],
-            "price_change": price_delta,
-            "delta_t": 1,
-            "delta": 0.5,
-        }
-    )
-    assert features["llrti"] == 1.0
+    index = llrti([depth_change], price_delta, 1, 0.5)
+    assert index == 1.0
