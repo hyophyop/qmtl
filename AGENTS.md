@@ -55,6 +55,7 @@ Install additional packages in the same environment when needed.
 - Add reusable components under `strategies/`, `generators/`, `indicators/` or `transforms/`. Place tests in `qmtl/tests/` or a local `tests/` directory.
 - 캔들·체결·호가창 등 raw 데이터에서 직접 얻을 수 없는 특징(feature)은 반드시 `qmtl` extension에 구현한 뒤 이를 참조해 알파를 만듭니다. 인라인 계산으로 특징을 만들거나 바로 사용하지 마세요.
   - 예: 갭 앰플리피케이션 계산이 필요하면 `qmtl` extension에 `gap_amplification` 기능을 추가하고 호출합니다. 전략 코드에서 `(next_open - prev_close)/prev_close` 같은 인라인 계산은 금지됩니다.
+  - 각 알파 문서는 필요한 transform 이름을 명시하고, 레지스트리 `modules`에는 해당 transform과 전략 노드 경로를 모두 포함합니다.
 - Manage node processors under `strategies/nodes/` and define strategy DAGs in `strategies/dags/`.
 - Refer to `qmtl/architecture.md`, `qmtl/gateway.md` and `qmtl/dag-manager.md` for design details before modifying core behavior.
 - See [strategies/README.md](strategies/README.md) for guidance on building and reusing node processors and DAGs.
@@ -70,15 +71,17 @@ Install additional packages in the same environment when needed.
 1. 필요한 기능을 `qmtl` extension에 구현한다.
 2. 기능을 검증하는 테스트를 추가하고 실행한다.
 3. 알파 모듈에서 `qmtl` extension을 참조해 기능을 사용한다.
+4. `docs/alphadocs_registry.yml`의 `modules` 필드에 transform과 전략 노드 경로를 모두 명시한다.
 
 ## AlphaDocs Workflow
 
 1. 모든 연구 문서는 `docs/alphadocs/`에 저장하고 `docs/alphadocs_registry.yml`에 `doc`, `status`, `modules` 필드를 갖는 항목을 추가합니다.
 2. 문서를 근거로 코드를 작성할 때는 해당 모듈 상단에 `# Source: docs/alphadocs/<doc>.md` 주석을 포함합니다.
-3. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련 테스트를 추가합니다.
-4. 문서를 이동하거나 이름을 변경할 경우 `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고, 주석과 레지스트리 경로도 함께 수정합니다.
-5. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
-6. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill) 등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을 참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은 문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야 합니다.
+3. 각 문서는 필요한 transform 이름과 테스트 범위를 정리한 `QMTL Integration` 섹션을 포함합니다.
+4. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련 테스트를 추가합니다.
+5. 문서를 이동하거나 이름을 변경할 경우 `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고, 주석과 레지스트리 경로도 함께 수정합니다.
+6. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과 `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
+7. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill) 등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을 참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은 문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야 합니다.
 
 ### Idea directories
 

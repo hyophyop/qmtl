@@ -9,6 +9,10 @@ TL;DR (핵심 개선 포인트)
 	4.	거래량 스파이크의 착시: 개장/마감·리밸런싱·경고장치 이벤트로 허위 신호 빈발. ⇒ **시계열·시계내 계절성 반영한 “볼륨 놀람(Volume Surprise)”**로 표준화.
 	5.	검증 절차의 과최적화 위험: 겹침수익, 레짐 전이, 다중가설 문제 필수 보정. ⇒ Purged K-fold + Embargo, Newey–West/cluster-robust, Deflated SR.
 	6.	집행 현실성: 돌파 추종은 슬리피지·충격비용 급증. ⇒ Almgren–Chriss형 사이징/스케줄링, 이벤트 바(imbalance bars), 디바운스(CUSUM).
+## QMTL Integration
+- PBX, overshoot(O), Volume Surprise 계산은 `qmtl/transforms/acceptable_price_band.py`에 구현하고 테스트합니다.
+- 전략 노드(`strategies/nodes/indicators/acceptable_price_band.py`)는 transform 출력만 사용하며 인라인 계산을 금지합니다.
+- 구현 후 `docs/alphadocs_registry.yml`의 `modules` 필드에 transform 경로와 노드 경로를 모두 추가합니다.
 
 ⸻
 

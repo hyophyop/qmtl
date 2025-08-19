@@ -21,6 +21,11 @@ LLRTI_t = \sum_{p \in \text{LOB}} \left( \frac{\Delta \text{Order Depth}{p,t}}{\
 	•	\gamma > 1: 재구성이 임계 수준을 초과하면 알파는 기하급수적으로 증가
 	•	실시간 체결 불균형은 방향성 필터 역할
 
+## QMTL Integration
+- LLRTI 계산과 지표 파생 로직은 `qmtl/transforms/llrti.py`에 구현하고 테스트합니다.
+- 전략 노드(`strategies/nodes/indicators/llrti.py`, `strategies/nodes/indicators/latent_liquidity_alpha.py`)는 transform 결과만 사용합니다.
+- 구현 후 `docs/alphadocs_registry.yml`의 `modules` 필드에 transform 경로와 두 전략 노드 경로를 모두 추가합니다.
+
 ⸻
 
 🔬 관련 이론 및 확장

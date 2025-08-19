@@ -1,3 +1,4 @@
+# `modules` 항목에는 qmtl transform과 이를 호출하는 전략 노드 경로를 모두 나열합니다.
 - doc: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
   status: implemented
   modules:

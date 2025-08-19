@@ -29,6 +29,7 @@ This document collects the actionable guidelines from `AGENTS.md` files across t
   - When code is implemented from a doc, add a comment at the module top: `# Source: docs/alphadocs/<doc>.md`.
   - The `docs/alphadocs/ideas/` directory is version-controlled for history but is not an implementation target.
   - Only ideas refined by stronger models (e.g., `docs/alphadocs/ideas/gpt5pro/`) should proceed to implementation.
+  - Each AlphaDoc must include a **QMTL Integration** section that lists required transforms and expected tests. The registry's `modules` field should enumerate both the `qmtl/transforms` modules and the strategy nodes that consume them.
 
   - Prioritized GPT-5-Pro ideas:
     - Files under `docs/alphadocs/ideas/gpt5pro/` are considered higher-priority. Tag them in the registry (`status: prioritized`, `source_model: gpt5pro`).
