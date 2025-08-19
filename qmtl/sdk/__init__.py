@@ -26,7 +26,16 @@ from qmtl.sdk.data_io import (
     QuestDBRecorder,
 )
 from .backfill_engine import BackfillEngine
-from .util import parse_interval, parse_period
+from .util import parse_interval, parse_period, validate_tag, validate_name
+from .exceptions import (
+    QMTLValidationError,
+    NodeValidationError,
+    InvalidParameterError,
+    InvalidTagError,
+    InvalidIntervalError,
+    InvalidPeriodError,
+    InvalidNameError,
+)
 from . import metrics
 from .trade_execution_service import TradeExecutionService
 
@@ -55,5 +64,14 @@ __all__ = [
     "TradeExecutionService",
     "parse_interval",
     "parse_period",
+    "validate_tag",
+    "validate_name",
+    "QMTLValidationError",
+    "NodeValidationError",
+    "InvalidParameterError",
+    "InvalidTagError",
+    "InvalidIntervalError",
+    "InvalidPeriodError",
+    "InvalidNameError",
     "_cli",
 ]
