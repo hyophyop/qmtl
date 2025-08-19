@@ -60,3 +60,16 @@ The `dags/binance_history_dag.py` module demonstrates wiring a `StreamInput`
 with `QuestDBLoader` and `QuestDBRecorder` so Binance kline data is
 persisted to QuestDB and missing ranges can be backfilled via
 `BinanceFetcher`.
+
+### Initialization
+
+Before executing `BinanceHistoryStrategy`, create the QuestDB table using the
+SQL script in `binance_history_strategy/`:
+
+```bash
+psql < strategies/binance_history_strategy/create_table.sql
+```
+
+The script defines `node_id VARCHAR`, `interval INT`, `ts TIMESTAMP`, and
+price/volume columns (`open`, `high`, `low`, `close`, `volume`). Running it
+ensures the recorder can persist data when the strategy starts.
