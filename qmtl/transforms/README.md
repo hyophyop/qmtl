@@ -4,6 +4,7 @@ Derived transformation nodes for the QMTL SDK.
 
 - Each transform stays focused on a single calculation.
 - Add tests for new transforms under `tests/`.
+- Use `identity_transform_node` to collect payloads into a DataFrame for quick inspection.
 
 Transforms ship with the core package and do not require a separate install.
 
