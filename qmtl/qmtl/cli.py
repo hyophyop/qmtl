@@ -11,6 +11,7 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagmanager", help="DAG Manager admin CLI")
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
     sub.add_parser("sdk", help="Run strategy via SDK")
+    sub.add_parser("taglint", help="Validate TAGS metadata")
     p_init = sub.add_parser(
         "init",
         help="Initialize new project (see docs/strategy_workflow.md)",
@@ -65,6 +66,9 @@ def main(argv: List[str] | None = None) -> None:
         from .sdk.cli import main as sdk_main
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
+    elif args.cmd == "taglint":
+        from qmtl.tools.taglint import main as taglint_main
+        taglint_main(rest)
     elif args.cmd == "init":
         from pathlib import Path
         from .scaffold import create_project, TEMPLATES

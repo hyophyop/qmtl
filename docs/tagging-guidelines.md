@@ -35,15 +35,15 @@ TAGS = {
 }
 ```
 
-Use the `taglint` tool (`qmtl/tools/taglint.py` or the `taglint` script) or the
-pre-commit hook to validate and auto-fix tags.
+Use `qmtl taglint` or `python -m qmtl.tools.taglint`, or the pre-commit hook,
+to validate and auto-fix tags.
 
 ## CI Alignment
 
 Run the same checks locally that GitHub CI executes to catch errors early:
 
 ```bash
-uv run -m qmtl.tools.taglint strategies
+uv run qmtl taglint strategies
 uv run -m pytest qmtl/tests/tools/test_taglint.py -W error
 ```
 
