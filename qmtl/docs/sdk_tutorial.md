@@ -129,6 +129,19 @@ from qmtl.sdk import metrics
 metrics.start_metrics_server(port=8000)
 ```
 
+## Performance Metrics
+
+`alpha_performance_node`는 Sharpe, 최대 낙폭, CAR/MDD 등의 성과 지표를 계산합니다.
+`alpha_history_node`와 조합하면 수익률 누적과 성과 계산을 분리하여 로직과 테스트를
+병렬로 개발할 수 있습니다.
+
+```python
+from qmtl.transforms import alpha_history_node, alpha_performance_from_history_node
+
+history = alpha_history_node(alpha, window=30)
+perf = alpha_performance_from_history_node(history)
+```
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은
