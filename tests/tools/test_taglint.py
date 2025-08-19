@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def run(path: Path, fix: bool = False):
-    args = [sys.executable, "-m", "qmtl.tools.taglint"]
+    args = [sys.executable, "-m", "qmtl", "taglint"]
     if fix:
         args.append("--fix")
     args.append(str(path))

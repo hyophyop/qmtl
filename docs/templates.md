@@ -96,12 +96,12 @@ fields such as `window`, `price`, `side`, `target_horizon` and `label` help
 classify the node further. Use lowercase strings and canonical intervals such as
 `1m`, `5m`, `1h` or `1d`.
 
-Lint TAGS with the `taglint` tool:
+Lint TAGS with `qmtl taglint`:
 
 ```bash
-taglint path/to/module.py
+qmtl taglint path/to/module.py
 ```
 
 Add `--fix` to normalize intervals and scaffold missing keys. Linting can run in
-parallel with documentation tasks, so teams can update docs while `taglint`
+parallel with documentation tasks, so teams can update docs while `qmtl taglint`
 checks the code.
