@@ -42,6 +42,7 @@ class Runner:
     _alpha_perf_cb: Callable[[Any], None] | None = None
     _trade_order_http_url: str | None = None
     _trade_order_kafka_topic: str | None = None
+    _trade_execution_service: Any | None = None
 
     # ------------------------------------------------------------------
 
@@ -73,6 +74,11 @@ class Runner:
     def set_trade_order_kafka_topic(cls, topic: str | None) -> None:
         """Configure Kafka topic for trade order publishing."""
         cls._trade_order_kafka_topic = topic
+
+    @classmethod
+    def set_trade_execution_service(cls, service: Any | None) -> None:
+        """Register external service for executing trade orders."""
+        cls._trade_execution_service = service
 
     @classmethod
     def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
@@ -370,6 +376,13 @@ class Runner:
 
     @staticmethod
     def _handle_trade_order(order: Any) -> None:
+        service = Runner._trade_execution_service
+        if service:
+            try:
+                service.post_order(order)
+            except Exception:
+                logger.exception("trade execution service failed")
+            return
         url = Runner._trade_order_http_url
         if url:
             try:
