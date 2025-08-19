@@ -27,6 +27,7 @@ from .microstructure import (
     hazard_node,
 )
 from .acceptable_price_band import estimate_band, overshoot, volume_surprise
+from .identity import identity_transform_node
 from .llrti import llrti
 
 __all__ = [
@@ -56,5 +57,6 @@ __all__ = [
     "estimate_band",
     "overshoot",
     "volume_surprise",
+    "identity_transform_node",
     "llrti",
 ]
