@@ -67,6 +67,12 @@ if __name__ == "__main__":
 python strategies/strategy.py
 ```
 
+또는 QMTL CLI 서브커맨드를 통해 실행할 수도 있습니다:
+
+```bash
+qmtl strategies
+```
+
 ## 노드와 DAG 구성
 
 노드 프로세서는 `strategies/nodes/`에, 전략 DAG는 `strategies/dags/`에 구성하며 자세한 방식은 [strategies/README.md](strategies/README.md)를 참고하세요.

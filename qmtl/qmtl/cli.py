@@ -12,6 +12,7 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
     sub.add_parser("dagmanager-metrics", help="Expose DAG Manager metrics")
     sub.add_parser("sdk", help="Run strategy via SDK")
+    sub.add_parser("strategies", help="Run local strategies")
     sub.add_parser(
         "doc-sync",
         help="Verify alignment between docs, registry, and module annotations",
@@ -79,6 +80,9 @@ def main(argv: List[str] | None = None) -> None:
         from .sdk.cli import main as sdk_main
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
+    elif args.cmd == "strategies":
+        from strategies.strategy import main as strategy_main
+        strategy_main()
     elif args.cmd == "doc-sync":
         from qmtl.scripts.check_doc_sync import main as doc_sync_main
         raise SystemExit(doc_sync_main())
