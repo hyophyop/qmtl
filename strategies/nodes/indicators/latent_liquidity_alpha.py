@@ -18,8 +18,9 @@ def latent_liquidity_alpha_node(data: dict) -> dict:
     Parameters
     ----------
     data:
-        Mapping with ``llrti`` value, ``gamma`` exponent, ``theta1`` and ``theta2``
-        coefficients, and ``exec_imbalance_deriv`` derivative term.
+        Mapping with precomputed ``llrti`` value, ``gamma`` exponent,
+        ``theta1`` and ``theta2`` coefficients, and
+        ``exec_imbalance_deriv`` derivative term.
 
     Returns
     -------
@@ -27,7 +28,7 @@ def latent_liquidity_alpha_node(data: dict) -> dict:
         Mapping with ``"alpha"`` key for the computed signal.
     """
 
-    llrti = data.get("llrti", 0.0)
+    llrti = data["llrti"]
     gamma = data.get("gamma", 1.0)
     theta1 = data.get("theta1", 1.0)
     theta2 = data.get("theta2", 1.0)

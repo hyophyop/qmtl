@@ -9,6 +9,8 @@ TAGS = {
     "asset": "sample",
 }
 
+from qmtl.transforms import llrti
+
 
 def llrti_node(data: dict) -> dict:
     """Calculate LLRTI from depth changes when price moves beyond a threshold.
@@ -25,12 +27,10 @@ def llrti_node(data: dict) -> dict:
         Mapping with a single key ``"llrti"`` holding the index value.
     """
 
-    price_change = data.get("price_change", 0.0)
-    depth_changes = data.get("depth_changes", [])
-    delta_t = data.get("delta_t", 1.0)
-    delta = data.get("delta", 0.0)
-
-    index = 0.0
-    if delta_t > 0 and abs(price_change) > delta:
-        index = sum(depth_changes) / delta_t
+    index = llrti(
+        data.get("depth_changes", []),
+        data.get("price_change", 0.0),
+        data.get("delta_t", 1.0),
+        data.get("delta", 0.0),
+    )
     return {"llrti": index}
