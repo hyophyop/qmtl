@@ -2,6 +2,17 @@
 
 This guide explains how to define node processors, combine them into DAGs, and reuse components across strategies.
 
+## Running Strategies
+
+Execute the DAGs defined in this package through the QMTL CLI:
+
+```bash
+qmtl strategies
+```
+
+The command forwards to `strategies.strategy.main`, which loads configuration
+and runs any enabled DAGs.
+
 ## Node Processor Definition
 
 Node processors are pure functions located under the `nodes/` package. Name each function with the `_node` suffix so it can be easily identified and reused.
