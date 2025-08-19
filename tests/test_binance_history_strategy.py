@@ -6,10 +6,11 @@ import httpx
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 from strategies.config import load_config
-from strategies.dags.binance_history_dag import BinanceHistoryStrategy
+from strategies.binance_history_strategy import BinanceHistoryStrategy
 from qmtl.io import BinanceFetcher
 from qmtl.sdk.runner import Runner
 from qmtl.sdk import StreamInput
+from qmtl.io import binance_fetcher as bf_mod
 
 
 def test_stream_binding() -> None:
@@ -36,19 +37,14 @@ def test_fetcher_returns_dataframe(monkeypatch) -> None:
             return None
 
     class DummyClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
         async def get(self, url, params=None, timeout=None):
             return DummyResponse()
 
+        async def aclose(self):
+            return None
+
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+    bf_mod._close_client_sync()
     fetcher = BinanceFetcher()
     df = asyncio.run(fetcher.fetch(0, 60, node_id="n", interval="1m"))
     assert not df.empty

@@ -1,8 +1,11 @@
 from qmtl.sdk import StreamInput
 from qmtl.io import QuestDBLoader, QuestDBRecorder, BinanceFetcher
+from qmtl.io import binance_fetcher as bf_mod
 
 
-def test_binance_stream_components() -> None:
+def test_binance_stream_components(monkeypatch) -> None:
+    bf_mod._close_client_sync()
+    monkeypatch.setattr(bf_mod, "_CLIENT", None)
     fetcher = BinanceFetcher()
     stream = StreamInput(
         interval="1m",
@@ -13,3 +16,4 @@ def test_binance_stream_components() -> None:
     assert isinstance(stream.history_provider.fetcher, BinanceFetcher)
     assert stream.history_provider.dsn == "db"
     assert stream.event_recorder.dsn == "db"
+    bf_mod._close_client_sync()
