@@ -58,3 +58,15 @@ def avg_volume_node(source: Node, period: int, *, name: str | None = None) -> No
         interval=source.interval,
         period=period,
     )
+
+
+def volume_stats(values: list[float]) -> tuple[float, float]:
+    """Return moving average and standard deviation from ``values``."""
+    if not values:
+        return 0.0, 0.0
+    mean = sum(values) / len(values)
+    variance = sum((v - mean) ** 2 for v in values) / len(values)
+    return mean, math.sqrt(variance)
+
+
+__all__ = ["volume_features", "avg_volume_node", "volume_stats"]

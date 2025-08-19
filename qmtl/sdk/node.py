@@ -19,7 +19,8 @@ import asyncio
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
-from .util import parse_interval, parse_period
+from .util import parse_interval, parse_period, validate_tag, validate_name
+from .exceptions import NodeValidationError, InvalidParameterError
 from . import arrow_cache
 from . import metrics as sdk_metrics
 
@@ -399,8 +400,36 @@ class Node:
         config: dict | None = None,
         schema: dict | None = None,
     ) -> None:
+        # Validate and parse parameters
         interval_val = parse_interval(interval) if interval is not None else None
         period_val = parse_period(period) if period is not None else None
+        
+        # Validate name
+        validated_name = validate_name(name)
+        
+        # Validate tags
+        validated_tags = []
+        if tags is not None:
+            if not isinstance(tags, list):
+                raise InvalidParameterError("tags must be a list")
+            seen_tags = set()
+            for tag in tags:
+                validated_tag = validate_tag(tag)
+                if validated_tag in seen_tags:
+                    raise InvalidParameterError(f"duplicate tag: {validated_tag!r}")
+                seen_tags.add(validated_tag)
+                validated_tags.append(validated_tag)
+        
+        # Validate config and schema
+        if config is not None and not isinstance(config, dict):
+            raise InvalidParameterError("config must be a dictionary")
+        if schema is not None and not isinstance(schema, dict):
+            raise InvalidParameterError("schema must be a dictionary")
+        
+        # Validate compatibility between interval and period
+        if interval_val is not None and period_val is not None:
+            if period_val < 1:
+                raise InvalidParameterError("period must be at least 1 when interval is specified")
 
         if compute_fn is not None:
             sig = inspect.signature(compute_fn)
@@ -425,10 +454,10 @@ class Node:
         self.input = input
         self.inputs = self._normalize_inputs(input)
         self.compute_fn = compute_fn
-        self.name = name
+        self.name = validated_name
         self.interval = interval_val
         self.period = period_val
-        self.tags = tags or []
+        self.tags = validated_tags
         self.config = config or {}
         self.schema = schema or {}
         self.execute = True
@@ -446,8 +475,9 @@ class Node:
 
     def add_tag(self, tag: str) -> "Node":
         """Append ``tag`` to :attr:`tags` if missing and return ``self``."""
-        if tag not in self.tags:
-            self.tags.append(tag)
+        validated_tag = validate_tag(tag)
+        if validated_tag not in self.tags:
+            self.tags.append(validated_tag)
         return self
 
     # --- hashing helpers -------------------------------------------------
@@ -521,6 +551,25 @@ class Node:
         Returns ``True`` when the node has collected enough data to execute its
         ``compute_fn``. The function **never** triggers execution directly.
         """
+        # Validate parameters
+        if not isinstance(upstream_id, str):
+            raise InvalidParameterError("upstream_id must be a string")
+        if not upstream_id.strip():
+            raise InvalidParameterError("upstream_id must not be empty")
+        
+        if not isinstance(interval, int):
+            raise InvalidParameterError("interval must be an integer")
+        if interval <= 0:
+            raise InvalidParameterError("interval must be positive")
+        
+        if not isinstance(timestamp, int):
+            raise InvalidParameterError("timestamp must be an integer")
+        if timestamp < 0:
+            raise InvalidParameterError("timestamp must not be negative")
+        
+        if on_missing not in ("skip", "fail"):
+            raise InvalidParameterError("on_missing must be 'skip' or 'fail'")
+        
         with tracer.start_as_current_span(
             "node.feed", attributes={"node.id": self.node_id}
         ):
@@ -581,7 +630,7 @@ class ProcessingNode(Node):
     def __init__(self, input: Node | Iterable[Node], *args, **kwargs) -> None:
         super().__init__(input=input, *args, **kwargs)
         if not self.inputs:
-            raise ValueError(
+            raise NodeValidationError(
                 "processing node requires at least one upstream (node.input에 올바른 업스트림 노드를 지정했는지 확인하세요)"
             )
 
@@ -673,15 +722,30 @@ class TagQueryNode(SourceNode):
         compute_fn=None,
         name: str | None = None,
     ) -> None:
+        # Validate query_tags
+        if not isinstance(query_tags, list):
+            raise InvalidParameterError("query_tags must be a list")
+        if not query_tags:
+            raise InvalidParameterError("query_tags must not be empty")
+        
+        validated_query_tags = []
+        seen_tags = set()
+        for tag in query_tags:
+            validated_tag = validate_tag(tag)
+            if validated_tag in seen_tags:
+                raise InvalidParameterError(f"duplicate query tag: {validated_tag!r}")
+            seen_tags.add(validated_tag)
+            validated_query_tags.append(validated_tag)
+        
         super().__init__(
             input=None,
             compute_fn=compute_fn,
             name=name or "tag_query",
             interval=interval,
             period=period,
-            tags=list(query_tags),
+            tags=list(validated_query_tags),
         )
-        self.query_tags = list(query_tags)
+        self.query_tags = validated_query_tags
         self.match_mode = match_mode
         self.upstreams: list[str] = []
         self.execute = False
