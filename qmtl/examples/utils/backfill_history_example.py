@@ -3,8 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from qmtl.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.io import QuestDBLoader
-from qmtl.examples import BinanceFetcher
+from qmtl.io import QuestDBLoader, BinanceFetcher
 
 
 fetcher = BinanceFetcher()
