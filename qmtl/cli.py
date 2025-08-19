@@ -12,7 +12,8 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
     sub.add_parser("dagmanager-metrics", help="Expose DAG Manager metrics")
     sub.add_parser("sdk", help="Run strategy via SDK")
-    sub.add_parser("taglint", help="Validate TAGS metadata")
+    p_taglint = sub.add_parser("taglint", help="Lint TAGS dictionaries")
+    p_taglint.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     p_init = sub.add_parser(
         "init",
         help="Initialize new project (see docs/strategy_workflow.md)",
@@ -72,6 +73,8 @@ def main(argv: List[str] | None = None) -> None:
         sdk_main(rest)
     elif args.cmd == "taglint":
         from qmtl.tools.taglint import main as taglint_main
+        if getattr(args, "fix", False):
+            rest = ["--fix", *rest]
         taglint_main(rest)
     elif args.cmd == "init":
         from pathlib import Path
