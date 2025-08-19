@@ -4,6 +4,10 @@
 그 결과를 반영해 **실전형 비선형 알파(위험도–방향–실행 3단 설계)**로 정식 개선한 안입니다.
 
 ⸻
+## QMTL Integration
+- 클러스터링 붕괴 지표와 위험도 계산은 `qmtl/transforms/order_book_clustering_collapse.py`에 구현하고 테스트합니다.
+- 전략 노드(`strategies/nodes/indicators/order_book_clustering_collapse.py`)는 transform 결과만 사용하며 인라인 계산을 금지합니다.
+- 구현 후 `docs/alphadocs_registry.yml`의 `modules` 필드에 transform 경로와 노드 경로를 모두 추가합니다.
 
 1) 비판적 분석(핵심 리스크 8가지)
 	1.	식별성 취약
