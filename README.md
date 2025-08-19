@@ -8,6 +8,12 @@ Use the DAG Manager CLI to preview DAG structures:
 qmtl dagmanager diff --file dag.json --dry_run
 ```
 
+Initialize a Neo4j database with the required constraints and indexes:
+
+```bash
+qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+```
+
 Every subcommand now exposes its own help message. For example:
 
 ```bash
