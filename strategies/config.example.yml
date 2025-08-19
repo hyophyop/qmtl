@@ -18,6 +18,10 @@ risk_limits:
 questdb_dsn: "postgresql://localhost:8812/qdb"
 gateway_url: "http://localhost:8080"
 
+dags:
+  binance_history: false
+  alpha_signal: true
+
 streams:
   - symbol: BTCUSDT
     interval: "60s"

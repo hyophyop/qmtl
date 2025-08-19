@@ -68,6 +68,7 @@ strategy nodes:
   `take_profit`) forwarded to `TradeSignalGeneratorNode`.
 - `questdb_dsn`: connection string for `QuestDBRecorder` and `QuestDBLoader`.
 - `gateway_url`: URL for posting DAGs when running live or dry-run sessions.
+- `dags`: mapping of strategy names to booleans for enabling each DAG.
 - `streams`: list of `{symbol, interval}` pairs to backfill in parallel.
 
 Example YAML with a custom QuestDB DSN and multiple symbols:
@@ -84,6 +85,21 @@ backtest:
   start_time: "2024-01-01T00:00:00Z"
   end_time: "2024-02-01T00:00:00Z"
 ```
+
+## Alpha Signal Strategy
+
+`dags/alpha_signal_dag.py` chains a data stream, alpha calculation,
+`alpha_history_node`, `AlphaPerformanceNode`, `TradeSignalGeneratorNode`
+and `TradeOrderPublisherNode` into a full alpha-to-order pipeline.
+
+Enable it via the `dags` section in `config.example.yml`:
+
+```yaml
+dags:
+  alpha_signal: true
+```
+
+`strategy.py` reads these toggles so multiple DAGs can run concurrently.
 
 ## Binance History Strategy
 
