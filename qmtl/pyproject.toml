@@ -40,6 +40,7 @@ io = ["pandas"]
 
 [project.scripts]
 qmtl = "qmtl.cli:main"
+taglint = "qmtl.tools.taglint:main"
 
 [build-system]
 requires = ["setuptools"]

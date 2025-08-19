@@ -87,3 +87,21 @@ state inside a strategy.
 ```bash
 qmtl init --path my_proj --strategy state_machine
 ```
+
+## Tagging guidelines
+
+Modules can include a `TAGS` dictionary describing scope, family and other
+metadata. Required keys are `scope`, `family`, `interval` and `asset`; optional
+fields such as `window`, `price`, `side`, `target_horizon` and `label` help
+classify the node further. Use lowercase strings and canonical intervals such as
+`1m`, `5m`, `1h` or `1d`.
+
+Lint TAGS with the `taglint` tool:
+
+```bash
+taglint path/to/module.py
+```
+
+Add `--fix` to normalize intervals and scaffold missing keys. Linting can run in
+parallel with documentation tasks, so teams can update docs while `taglint`
+checks the code.
