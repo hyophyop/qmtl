@@ -2,14 +2,14 @@
 - doc: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
   status: implemented
   modules:
-    - strategies/nodes/indicators/non_linear_alpha.py
+  - strategies/nodes/indicators/non_linear_alpha.py
 - doc: docs/alphadocs/basic_sequence_pipeline.md
   status: implemented
   modules:
-    - qmtl/qmtl/examples/nodes/generators/sequence.py
-    - strategies/nodes/generators/sequence.py
-    - qmtl/qmtl/examples/nodes/indicators/average.py
-    - strategies/nodes/transforms/scale.py
+  - qmtl/qmtl/examples/nodes/generators/sequence.py
+  - strategies/nodes/generators/sequence.py
+  - qmtl/qmtl/examples/nodes/indicators/average.py
+  - strategies/nodes/transforms/scale.py
 - doc: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
   status: draft
   modules: []
@@ -17,28 +17,515 @@
   status: implemented
   source_model: gpt5pro
   modules:
-    - strategies/nodes/indicators/llrti.py
-    - strategies/nodes/indicators/latent_liquidity_alpha.py
-    - qmtl/qmtl/transforms/llrti.py
+  - strategies/nodes/indicators/llrti.py
+  - strategies/nodes/indicators/latent_liquidity_alpha.py
+  - qmtl/qmtl/transforms/llrti.py
 - doc: docs/alphadocs/ideas/gpt5pro/quantum-liquidity-echo-theory.md
   status: implemented
   source_model: gpt5pro
   modules:
-    - strategies/nodes/indicators/quantum_liquidity_echo.py
+  - strategies/nodes/indicators/quantum_liquidity_echo.py
 - doc: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
   status: implemented
   source_model: gpt5pro
   modules:
-    - strategies/nodes/indicators/acceptable_price_band.py
-    - qmtl/transforms/acceptable_price_band.py
+  - strategies/nodes/indicators/acceptable_price_band.py
+  - qmtl/qmtl/transforms/acceptable_price_band.py
 - doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
   status: implemented
   source_model: gpt5pro
   state: qmtl_extension_flow
   modules:
-    - strategies/nodes/indicators/gap_amplification.py
+  - strategies/nodes/indicators/gap_amplification.py
 - doc: docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
   status: implemented
   source_model: gpt5pro
   modules:
-    - strategies/nodes/indicators/order_book_clustering_collapse.py
+  - strategies/nodes/indicators/order_book_clustering_collapse.py
+- doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Agent-Based Market Model.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Asymmetric Execution Latency Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Capital Flow Sensitivity Threshold Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Convexity of Risk Sensitivity Reversal.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Credit-Asset Feedback Loop Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Cross-Asset Risk Propagation Network Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Dual Quote Collision Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Dynamic Price Elasticity Threshold Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Endogenous Liquidity Spike Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Event-Driven Sensitivity Nonlinearity Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Execution Materialization Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Flow-Based Price Formation Model.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Geometric Expectation Bias of Monetary Policy.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Global Financial Imbalance Cycle Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Global Liquidity Cycle Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Information Asymmetry & Market Frictions.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Information-Propagation-and-Market-Response-Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Leverage Cycle Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Liquidity Clustering Threshold Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Liquidity Compression Threshold Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Liquidity Resilience Breakdown Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Market Depth and Price Formation.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Market Frictional Energy Accumulation Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Market Response Damping–Resonance Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Microstructure Reflexive Expectation Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Monetary Regime Shift Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Nonlinear Execution Sensitivity Diffusion Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Order Motivation Differentiation Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Order Tension Transition Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Overconfidence & Positive Feedback Loop in Behavioral
+    Finance.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Price Fluctuation Clustering Diffusion Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Price Limit Feedback Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Quote Layer Density Transition Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Relative Liquidity Reflexivity Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Repetitive Execution Fatigue Threshold Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Residual Liquidity Absorption Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Routledge-Clark Auction Model.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Selective Execution Asymmetry Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Temporal Liquidity Modularity Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/Tick Fragment Transition Theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/adaptive-liquidity-threshold-crossover-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/adaptive-market-hypothesis.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/assymetric-information-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/asymmetric-shock-accumulation-transmission-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/asynchronous-liquidity-withdrawal-induced-execution-surge-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/asynchronous-quote-update-threshold-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/autocorrelated-execution-clustering-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/bidirectional-sensitivity-threshold-theory-of-price-and-execution.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/complex-liquidity-wave-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/continuous-order-feedback-induced-execution-amplitude-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/credit-cycle-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/delayed-information-absorption-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/diffusion-jump-process.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/discontinuous-fill-point-propagation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/dominant-execution-path-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/dominant-range-discontinuity-reaction-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/dynamic-execution-velocity-resonance-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/dynamic-liquidity-avoidance-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/dynamic-liquidity-based-execution-skew-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/endogenous-temporal-distortion-from-market-conformity-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/excess-execution-adaptive-boundary-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-avoidance-threshold-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-diffusion-path-distortion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-diffusion-threshold-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-discontinuity-threshold-lag-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-elasticity-and-nonlinear-threshold-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-flow-asymmetry-induced-adaptive-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-flow-damping-amplification-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-order-dependent-information-lag-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-predictive-divergence-nonlinearity-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-probability-induced-microstructure-discontinuity-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-sensitivity-with-delayed-feedback-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-sentiment-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/execution-synchronization-induced-tick-echo-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/financial-accelerator-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/forecast-disalignment-induced-liquidity-desynchronization-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/friction-induced-reflexivity-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/gap-amplification-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/heterogeneous-execution-clustering-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/heterogeneous-response-sensitivity-threshold-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/impact-persistence-branching-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/impact-weighted-liquidity-collapse-probability-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/impulse-reflection-execution-propagation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/information-based-trading-model.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/information-entropy-liquidity-feedback-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/information-hierarchy-induced-liquidity-segmentation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/information-search-cost-driven-execution-flow-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/initial-price-expectation-driven-execution-synchronization-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/inter-reactive-quoting-strategy-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/inter-tick-execution-interval-expectation-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/intra-informational-structural-execution-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/latent-execution-pressure-leakage-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/latent-liquidity-queuing-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/latent-liquidity-threshold-reconfiguration-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/layered-information-execution-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/linear-threshold-avoidance-induced-tick-jump-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/liquidity-boundary-multi-reflection-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/liquidity-critical-mass-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/liquidity-snap-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/local-collapse-from-execution-velocity-imbalance-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/market-boundary-detection-and-alpha-threshold-reaction-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/market-impact-mode.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/market-response-threshold-drift-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/market-sentiment-reconfiguration-trigger-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/micro-execution-probability-structure-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/micro-price-rigidity-and-nonlinear-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/microgap-liquidity-rupture-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/multifractal-market-hypothesis.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/mutual-inhibition-driven-order-collision-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/network-effect.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/nonlinear-price-sensitive-order-flow-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/nonstationary-execution-equilibrium-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-book-clustering-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-book-discontinuity-driven-price-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-book-elasticity-dynamics-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-flow-diffusion-boundary-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-induced-expectation-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/order-withdrawal-critical-branching-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/policy-execution-asynchronous-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/policy-sensitivity-wave-transmission-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/position-based-residual-tension-in-spread-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/price-impact-accumulation-release-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/price-impact-function.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/price-information-reflexive-distortion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/price-sensitivity-threshold-liquidity-boundary-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/priority-execution-distortion-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/progressive-trust-decay-liquidity-response-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/psychological-threshold-induced-quote-acceleration-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quantified-expectation-collision-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-clustering-sparsity-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-compression-relaxation-cycle-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-cycle-distortion-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-density-nonlinear-accumulation-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-flow-echo-distortion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-friction-induced-execution-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-repositioning-wave-propagation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-response-lag-induced-critical-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/quote-response-lag-induced-critical-transition.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/reflexive-execution-information-distortion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/repeated-execution-signal-saturation-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/residual-execution-flow-distortion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/residual-execution-sensitivity-and-slippage-nonlinear-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/resiliency.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/response-saturation-boundary-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/risk-aversion-liquidity-collapse-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/self-organized-criticality.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/spatial-diffusion-asynchrony-response-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/spatial-intentional-decoupling-execution-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/spatiotemporal-execution-clustering-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/spontaneous-execution-clustering-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tactical-execution-patience-driven-nonlinear-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tactical-liquidity-bifurcation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tactical-liquidity-freezing-and-nonlinear-ignition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tactical-liquidity-lag-threshold-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tactical-resting-order-threshold-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/temporal-sensitivity-lagged-execution-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/threshold-triggered-response-flow-accumulation-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tick-level-execution-collision-diffusion-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/tick-pressure-based-equilibrium-transition-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/time-structured-liquidity-rhythm-theory.md
+  status: idea
+  modules: []
+- doc: docs/alphadocs/ideas/transitional-adaptive-micro-response-theory.md
+  status: idea
+  modules: []
