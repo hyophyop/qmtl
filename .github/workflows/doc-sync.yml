@@ -1,0 +1,22 @@
+name: Doc Sync
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+
+jobs:
+  doc-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv venv
+          uv pip install pyyaml
+      - name: Check doc sync
+        run: uv run scripts/check_doc_sync.py
