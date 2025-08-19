@@ -3,8 +3,9 @@ from __future__ import annotations
 """Prometheus metrics for DAG Manager."""
 
 from collections import deque
-from typing import Deque
+from typing import Deque, List
 import time
+import argparse
 
 from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
 
@@ -186,8 +187,16 @@ def _run_forever() -> None:
         pass
 
 
-def main() -> None:  # pragma: no cover - thin wrapper
-    start_metrics_server()
+def main(argv: List[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="qmtl dagmanager-metrics",
+        description="Expose DAG Manager metrics",
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Port to expose metrics on"
+    )
+    args = parser.parse_args(argv)
+    start_metrics_server(args.port)
     _run_forever()
 
 

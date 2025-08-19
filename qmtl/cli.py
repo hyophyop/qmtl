@@ -10,6 +10,7 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("gw", help="Gateway CLI")
     sub.add_parser("dagmanager", help="DAG Manager admin CLI")
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
+    sub.add_parser("dagmanager-metrics", help="Expose DAG Manager metrics")
     sub.add_parser("sdk", help="Run strategy via SDK")
     sub.add_parser("taglint", help="Validate TAGS metadata")
     p_init = sub.add_parser(
@@ -61,6 +62,9 @@ def main(argv: List[str] | None = None) -> None:
     elif args.cmd == "dagmanager-server":
         from .dagmanager.server import main as server_main
         server_main(rest)
+    elif args.cmd == "dagmanager-metrics":
+        from .dagmanager.metrics import main as metrics_main
+        metrics_main(rest)
     elif args.cmd == "sdk":
         import logging
         from .sdk.cli import main as sdk_main
