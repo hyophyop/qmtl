@@ -4,7 +4,7 @@ import base64
 import json
 import asyncio
 import time
-from typing import Optional, Iterable, Any
+from typing import Optional, Iterable, Any, Callable
 import logging
 import httpx
 
@@ -39,6 +39,9 @@ class Runner:
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_cb: AsyncCircuitBreaker | None = None
     _kafka_producer: Any | None = None
+    _alpha_perf_cb: Callable[[Any], None] | None = None
+    _trade_order_http_url: str | None = None
+    _trade_order_kafka_topic: str | None = None
 
     # ------------------------------------------------------------------
 
@@ -53,6 +56,23 @@ class Runner:
     def set_kafka_producer(cls, producer: Any | None) -> None:
         """Configure Kafka producer used for publishing node outputs."""
         cls._kafka_producer = producer
+
+    @classmethod
+    def set_alpha_performance_callback(
+        cls, cb: Callable[[Any], None] | None
+    ) -> None:
+        """Register callback for AlphaPerformanceNode results."""
+        cls._alpha_perf_cb = cb
+
+    @classmethod
+    def set_trade_order_http_url(cls, url: str | None) -> None:
+        """Configure HTTP endpoint for trade order publishing."""
+        cls._trade_order_http_url = url
+
+    @classmethod
+    def set_trade_order_kafka_topic(cls, topic: str | None) -> None:
+        """Configure Kafka topic for trade order publishing."""
+        cls._trade_order_kafka_topic = topic
 
     @classmethod
     def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
@@ -325,8 +345,40 @@ class Runner:
             finally:
                 duration_ms = (time.perf_counter() - start) * 1000
                 sdk_metrics.observe_node_process(node.node_id, duration_ms)
-        Runner._publish_result(result)
+        Runner._postprocess_result(node, result)
         return result
+
+    @staticmethod
+    def _postprocess_result(node, result: Any) -> None:
+        cls_name = node.__class__.__name__
+        if cls_name == "AlphaPerformanceNode":
+            Runner._handle_alpha_performance(result)
+        elif cls_name == "TradeOrderPublisherNode" and result:
+            Runner._handle_trade_order(result)
+        else:
+            Runner._publish_result(result)
+
+    @staticmethod
+    def _handle_alpha_performance(result: Any) -> None:
+        logger.info("alpha performance result: %s", result)
+        cb = Runner._alpha_perf_cb
+        if cb:
+            try:
+                cb(result)
+            except Exception:
+                logger.exception("alpha performance callback failed")
+
+    @staticmethod
+    def _handle_trade_order(order: Any) -> None:
+        url = Runner._trade_order_http_url
+        if url:
+            try:
+                httpx.post(url, json=order)
+            except Exception:
+                logger.exception("failed to post trade order to %s", url)
+        topic = Runner._trade_order_kafka_topic
+        if topic:
+            Runner._publish_result((topic, order))
 
     @staticmethod
     def _publish_result(result: Any) -> None:
