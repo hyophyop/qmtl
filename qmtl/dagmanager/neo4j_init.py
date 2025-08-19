@@ -9,18 +9,8 @@ def get_schema_queries() -> list[str]:
     return SCHEMA_QUERIES.copy()
 
 
-if __name__ == "__main__":  # pragma: no cover - manual execution
-    from neo4j import GraphDatabase
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Initialize Neo4j schema")
-    parser.add_argument("uri")
-    parser.add_argument("user")
-    parser.add_argument("password")
-    args = parser.parse_args()
-
-    driver = GraphDatabase.driver(args.uri, auth=(args.user, args.password))
+def apply_schema(driver) -> None:
+    """Execute initialization statements using *driver*."""
     with driver.session() as session:
-        for stmt in SCHEMA_QUERIES:
+        for stmt in get_schema_queries():
             session.run(stmt)
-    driver.close()
