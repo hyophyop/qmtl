@@ -5,7 +5,7 @@ import httpx
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 from strategies.config import load_config
-from strategies.dags.binance_history_dag import BinanceHistoryStrategy
+from strategies.binance_history_strategy import BinanceHistoryStrategy
 from qmtl.io import BinanceFetcher
 
 
