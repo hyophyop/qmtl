@@ -15,14 +15,9 @@ except ModuleNotFoundError:  # pragma: no cover
                 results[name] = func(**kwargs)
             return results
 
-try:
-    from nodes.generators.sequence import sequence_generator_node
-    from nodes.indicators.average import average_indicator_node
-    from nodes.transforms.scale import scale_transform_node
-except ModuleNotFoundError:  # pragma: no cover
-    from strategies.nodes.generators.sequence import sequence_generator_node
-    from strategies.nodes.indicators.average import average_indicator_node
-    from strategies.nodes.transforms.scale import scale_transform_node
+from nodes.generators.sequence import sequence_generator_node
+from nodes.indicators.average import average_indicator_node
+from nodes.transforms.scale import scale_transform_node
 
 
 def build_dag():

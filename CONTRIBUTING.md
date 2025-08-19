@@ -16,6 +16,7 @@ This project demonstrates how to build and test QMTL strategy packages.
 - Lint:
    ```bash
    uv run pre-commit run --files $(git ls-files '*.py')
+   uv run qmtl check-imports
    ```
 - 테스트:
    ```bash
