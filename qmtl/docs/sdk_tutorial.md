@@ -159,6 +159,22 @@ signal = TradeSignalGeneratorNode(
 )
 ```
 
+## Order Results and External Executors
+
+`TradeOrderPublisherNode` turns trade signals into standardized order
+payloads. The `Runner` examines node results and delivers these orders to
+external systems through a series of hooks:
+
+1. `Runner.set_trade_execution_service(service)` forwards the order to a
+   custom object exposing ``post_order``.
+2. `Runner.set_trade_order_http_url(url)` posts the order to an HTTP
+   endpoint as JSON.
+3. `Runner.set_trade_order_kafka_topic(topic)` publishes the order to a
+   Kafka topic using the configured producer.
+
+If none of these targets are configured the order is ignored, allowing
+strategies to remain agnostic about the actual execution backend.
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은
