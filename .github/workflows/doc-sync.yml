@@ -20,6 +20,8 @@ jobs:
           uv venv
           uv pip install pyyaml
       - name: Check doc sync
+        if: ${{ hashFiles('scripts/check_doc_sync.py') != '' }}
         run: uv run scripts/check_doc_sync.py
       - name: QMTL doc sync
+        if: ${{ hashFiles('docs/alphadocs_registry.yml') != '' }}
         run: uv run qmtl/scripts/check_doc_sync.py
