@@ -1,3 +1,5 @@
+from typing import Any
+
 from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import Node
 from qmtl.sdk.strategy import Strategy
@@ -64,6 +66,44 @@ def test_backtest_hooks(monkeypatch):
 
     assert collected == [{"metric": 1}]
     assert orders == [{"order": "BUY"}]
+
+
+class FakeKafkaProducer:
+    def __init__(self):
+        self.messages = []
+
+    def send(self, topic, payload):  # pragma: no cover - simple holder
+        self.messages.append((topic, payload))
+
+
+def test_handle_trade_order_http_and_kafka(monkeypatch):
+    posted: dict[str, Any] = {}
+
+    def fake_post(url, json):  # pragma: no cover - minimal stub
+        posted["url"] = url
+        posted["json"] = json
+
+    import importlib
+    import qmtl.sdk.runner as runner_module
+    runner_module = importlib.reload(runner_module)
+    monkeypatch.setattr(runner_module.httpx, "post", fake_post)
+    assert runner_module.httpx.post is fake_post
+
+    runner = runner_module.Runner
+    producer = FakeKafkaProducer()
+    runner.set_kafka_producer(producer)
+    runner.set_trade_order_http_url("http://endpoint")
+    runner.set_trade_order_kafka_topic("orders")
+
+    order = {"side": "BUY", "quantity": 1}
+    runner._handle_trade_order(order)
+
+    assert posted == {"url": "http://endpoint", "json": order}
+    assert producer.messages == [("orders", order)]
+
+    runner.set_trade_order_http_url(None)
+    runner.set_trade_order_kafka_topic(None)
+    runner.set_kafka_producer(None)
 
 
 def test_live_hooks(monkeypatch):
