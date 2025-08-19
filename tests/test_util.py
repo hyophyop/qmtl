@@ -1,5 +1,6 @@
 import pytest
 from qmtl.sdk.util import parse_interval, parse_period
+from qmtl.sdk.exceptions import InvalidIntervalError, InvalidPeriodError
 
 
 @pytest.mark.parametrize(
@@ -16,7 +17,7 @@ def test_parse_interval(value, expected):
 
 
 def test_parse_interval_invalid():
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidIntervalError):
         parse_interval("bad")
 
 
@@ -30,5 +31,5 @@ def test_parse_period(value, expected):
     assert parse_period(value) == expected
 
 def test_parse_period_invalid():
-    with pytest.raises(TypeError):
+    with pytest.raises(InvalidPeriodError):
         parse_period("30m")
