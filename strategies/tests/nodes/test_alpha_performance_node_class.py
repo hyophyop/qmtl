@@ -26,5 +26,7 @@ def test_alpha_performance_node_triggers_postprocess(monkeypatch):
     assert metrics["win_ratio"] == 0.5
     assert metrics["profit_factor"] == 2.0
     assert metrics["sharpe"] == pytest.approx(0.31448545, rel=1e-6)
+    assert metrics["car_mdd"] == pytest.approx(1.286, rel=1e-6)
+    assert metrics["rar_mdd"] == pytest.approx(3.14485451, rel=1e-6)
     assert captured["result"] == metrics
 
