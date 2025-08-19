@@ -9,6 +9,11 @@ from .order_book_imbalance import order_book_imbalance_node
 from .volume_features import volume_features, avg_volume_node
 from .execution_imbalance import execution_imbalance_node
 from .alpha_history import alpha_history_node
+from .alpha_performance import (
+    alpha_performance_node,
+    alpha_performance_from_history_node,
+    AlphaPerformanceNode,
+)
 from .microstructure import (
     gap_depth_weighted_sum_node,
     order_flow_imbalance_node,
@@ -28,6 +33,9 @@ __all__ = [
     "order_book_imbalance_node",
     "execution_imbalance_node",
     "alpha_history_node",
+    "alpha_performance_node",
+    "alpha_performance_from_history_node",
+    "AlphaPerformanceNode",
     "volume_features",
     "avg_volume_node",
     "gap_depth_weighted_sum_node",
