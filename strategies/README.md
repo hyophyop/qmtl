@@ -66,6 +66,24 @@ strategy nodes:
   `TradeSignalGeneratorNode`.
 - `risk_limits`: trade sizing and protections (`size`, `stop_loss`,
   `take_profit`) forwarded to `TradeSignalGeneratorNode`.
+- `questdb_dsn`: connection string for `QuestDBRecorder` and `QuestDBLoader`.
+- `gateway_url`: URL for posting DAGs when running live or dry-run sessions.
+- `streams`: list of `{symbol, interval}` pairs to backfill in parallel.
+
+Example YAML with a custom QuestDB DSN and multiple symbols:
+
+```yaml
+questdb_dsn: "postgresql://user:pass@questdb:8812/qdb"
+gateway_url: "http://localhost:8080"
+streams:
+  - symbol: BTCUSDT
+    interval: "60s"
+  - symbol: ETHUSDT
+    interval: "5m"
+backtest:
+  start_time: "2024-01-01T00:00:00Z"
+  end_time: "2024-02-01T00:00:00Z"
+```
 
 ## Binance History Strategy
 

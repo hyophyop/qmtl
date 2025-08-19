@@ -4,17 +4,24 @@ import asyncio
 import httpx
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 
+from strategies.config import load_config
 from strategies.dags.binance_history_dag import BinanceHistoryStrategy
 from strategies.utils.binance_fetcher import BinanceFetcher
 
 
 def test_stream_binding() -> None:
+    cfg = load_config()
     strat = BinanceHistoryStrategy()
     strat.setup()
-    price = strat.nodes[0]
-    assert isinstance(price.history_provider, QuestDBLoader)
-    assert isinstance(price.event_recorder, QuestDBRecorder)
-    assert isinstance(price.history_provider.fetcher, BinanceFetcher)
+    stream_count = len(cfg.get("streams", []))
+    assert len(strat.nodes) == stream_count * 2
+    price_nodes = strat.nodes[::2]
+    for node in price_nodes:
+        assert isinstance(node.history_provider, QuestDBLoader)
+        assert isinstance(node.event_recorder, QuestDBRecorder)
+        assert node.history_provider.dsn == cfg["questdb_dsn"]
+        assert node.event_recorder.dsn == cfg["questdb_dsn"]
+        assert isinstance(node.history_provider.fetcher, BinanceFetcher)
 
 
 def test_fetcher_returns_dataframe(monkeypatch) -> None:

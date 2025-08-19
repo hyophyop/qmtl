@@ -14,3 +14,12 @@ risk_limits:
   size: 1.0
   stop_loss: 0.1
   take_profit: 0.3
+
+questdb_dsn: "postgresql://localhost:8812/qdb"
+gateway_url: "http://localhost:8080"
+
+streams:
+  - symbol: BTCUSDT
+    interval: "60s"
+  - symbol: ETHUSDT
+    interval: "60s"

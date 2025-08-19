@@ -1,13 +1,16 @@
 """Run ``BinanceHistoryStrategy`` and expose Prometheus metrics."""
 
+from strategies.config import load_config
 from strategies.dags.binance_history_dag import BinanceHistoryStrategy
 from qmtl.sdk import Runner, metrics
 
 
 def main() -> None:
-    start_time = 0
-    end_time = 1
-    gateway_url = "http://localhost:8080"
+    cfg = load_config()
+    backtest_cfg = cfg.get("backtest", {})
+    start_time = backtest_cfg.get("start_time")
+    end_time = backtest_cfg.get("end_time")
+    gateway_url = cfg.get("gateway_url")
 
     # Start the metrics server so Prometheus can scrape backfill statistics
     metrics.start_metrics_server(port=8000)
