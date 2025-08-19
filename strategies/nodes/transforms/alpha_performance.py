@@ -36,6 +36,10 @@ def alpha_performance_node(
 ) -> dict:
     """Return key performance metrics from a return series.
 
+    NaN values in ``returns`` are ignored. If all entries are NaN (or the
+    sequence is empty), all metrics are ``0.0``. The Sharpe ratio is reported
+    as ``0.0`` when the standard deviation of returns is zero.
+
     Parameters
     ----------
     returns:
@@ -52,7 +56,9 @@ def alpha_performance_node(
         ``profit_factor``, ``car_mdd`` and ``rar_mdd`` values.
     """
 
-    if not returns:
+    # Drop NaN values
+    clean_returns = [r for r in returns if not math.isnan(r)]
+    if not clean_returns:
         return {
             "sharpe": 0.0,
             "max_drawdown": 0.0,
@@ -63,7 +69,7 @@ def alpha_performance_node(
         }
 
     # Apply transaction cost
-    net_returns = [r - transaction_cost for r in returns]
+    net_returns = [r - transaction_cost for r in clean_returns]
 
     # Sharpe ratio
     excess = [r - risk_free_rate for r in net_returns]
