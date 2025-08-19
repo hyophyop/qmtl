@@ -11,10 +11,10 @@ except Exception as exc:  # pragma: no cover - dependency error
     print(f"PyYAML required: {exc}")
     sys.exit(1)
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs" / "alphadocs_registry.yml"
 DOC_DIR = ROOT / "docs" / "alphadocs"
-MODULE_ROOT = ROOT / "qmtl" / "qmtl"
+MODULE_ROOT = ROOT / "qmtl"
 
 
 def check_doc_sync(
