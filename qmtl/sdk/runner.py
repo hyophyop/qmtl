@@ -367,6 +367,8 @@ class Runner:
     @staticmethod
     def _handle_alpha_performance(result: Any) -> None:
         logger.info("alpha performance result: %s", result)
+        if isinstance(result, dict):
+            sdk_metrics.observe_alpha_performance(result)
         cb = Runner._alpha_perf_cb
         if cb:
             try:

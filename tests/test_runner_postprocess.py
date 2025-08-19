@@ -137,3 +137,12 @@ def test_live_hooks(monkeypatch):
 
     assert collected == [{"metric": 1}]
     assert orders == [{"order": "BUY"}]
+
+
+def test_handle_alpha_performance_updates_metrics():
+    from qmtl.sdk import metrics as sdk_metrics
+
+    sdk_metrics.reset_metrics()
+    Runner._handle_alpha_performance({"sharpe": 1.23, "max_drawdown": -0.5})
+    assert sdk_metrics.alpha_sharpe._val == 1.23
+    assert sdk_metrics.alpha_max_drawdown._val == -0.5
