@@ -29,6 +29,7 @@ from .microstructure import (
 from .acceptable_price_band import estimate_band, overshoot, volume_surprise
 from .identity import identity_transform_node
 from .llrti import llrti
+from .scale import scale_transform_node
 
 __all__ = [
     "rate_of_change",
@@ -59,4 +60,5 @@ __all__ = [
     "volume_surprise",
     "identity_transform_node",
     "llrti",
+    "scale_transform_node",
 ]
