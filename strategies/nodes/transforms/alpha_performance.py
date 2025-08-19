@@ -107,3 +107,31 @@ def alpha_performance_from_history_node(
         interval=history.interval,
         period=1,
     )
+
+
+class AlphaPerformanceNode(Node):
+    """Node wrapper computing performance metrics from alpha history."""
+
+    def __init__(
+        self,
+        history: Node,
+        *,
+        risk_free_rate: float = 0.0,
+        name: str | None = None,
+    ) -> None:
+        self.history = history
+        self.risk_free_rate = risk_free_rate
+        super().__init__(
+            input=history,
+            compute_fn=self._compute,
+            name=name or f"{history.name}_performance",
+            interval=history.interval,
+            period=1,
+        )
+
+    def _compute(self, view: CacheView) -> dict | None:
+        data = view[self.history][self.history.interval]
+        if not data:
+            return None
+        series = data[-1][1]
+        return alpha_performance_node(series, risk_free_rate=self.risk_free_rate)
