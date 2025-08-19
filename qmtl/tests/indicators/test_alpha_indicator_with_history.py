@@ -1,9 +1,9 @@
-from strategies.nodes.indicators import alpha_indicator_with_history
+from qmtl.indicators import alpha_indicator_with_history
 from qmtl.sdk.node import SourceNode
 from qmtl.sdk.cache_view import CacheView
 
 
-def test_alpha_indicator_with_history_wraps_node():
+def test_alpha_indicator_history_window():
     src = SourceNode(interval="1s", period=1, config={"id": "val"})
 
     def dummy_alpha(view: CacheView):
@@ -26,3 +26,8 @@ def test_alpha_indicator_with_history_wraps_node():
     alpha2 = history.input.compute_fn(src_view2)
     view2 = CacheView({history.input.node_id: {1: [(1, alpha2)]}})
     assert history.compute_fn(view2) == [alpha1, alpha2]
+
+    src_view3 = CacheView({src.node_id: {1: [(2, 3.0)]}})
+    alpha3 = history.input.compute_fn(src_view3)
+    view3 = CacheView({history.input.node_id: {1: [(2, alpha3)]}})
+    assert history.compute_fn(view3) == [alpha2, alpha3]
