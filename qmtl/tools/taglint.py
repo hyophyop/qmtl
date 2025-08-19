@@ -147,11 +147,11 @@ def iter_py_files(path: str):
             yield path
 
 
-def main():
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Lint TAGS dictionaries")
     parser.add_argument("files", nargs="+", help="Files or directories to lint")
     parser.add_argument("--fix", action="store_true", help="Attempt to fix issues")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     ok = True
     for target in args.files:
