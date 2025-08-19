@@ -184,6 +184,15 @@ external systems through a series of hooks:
 3. `Runner.set_trade_order_kafka_topic(topic)` publishes the order to a
    Kafka topic using the configured producer.
 
+The SDK ships with a simple HTTP client:
+
+```python
+from qmtl.sdk import TradeExecutionService, Runner
+
+service = TradeExecutionService("http://broker")
+Runner.set_trade_execution_service(service)
+```
+
 If none of these targets are configured the order is ignored, allowing
 strategies to remain agnostic about the actual execution backend.
 
