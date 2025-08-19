@@ -1,19 +1,19 @@
-"""Strategy execution entry point.
+"""Run BinanceHistoryStrategy backtest."""
 
-Refer to docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md for market impact background.
-"""
-
-from strategies.dags.example_strategy import ExampleStrategy
+from strategies.dags.binance_history_dag import BinanceHistoryStrategy
+from qmtl.sdk import Runner
 
 
-def main():
-    """Run the example DAG strategy.
-
-    The same nodes (e.g., ``average_indicator_node``) can be reused in other DAGs
-    to build new strategies without modifying the node implementations.
-    """
-    result = ExampleStrategy().run()
-    print(result)
+def main() -> None:
+    start_time = 0
+    end_time = 1
+    gateway_url = "http://localhost:8080"
+    Runner.backtest(
+        BinanceHistoryStrategy,
+        start_time=start_time,
+        end_time=end_time,
+        gateway_url=gateway_url,
+    )
 
 
 if __name__ == "__main__":
