@@ -2,6 +2,11 @@
 
 from .alpha_performance import AlphaPerformanceNode, alpha_performance_node
 from .publisher import TradeOrderPublisherNode, publisher_node
+from .trade_signal import (
+    TradeSignalGeneratorNode,
+    threshold_signal_node,
+    trade_signal_node,
+)
 
 __all__ = [
     "sample_transform",
@@ -9,6 +14,9 @@ __all__ = [
     "AlphaPerformanceNode",
     "publisher_node",
     "TradeOrderPublisherNode",
+    "threshold_signal_node",
+    "trade_signal_node",
+    "TradeSignalGeneratorNode",
 ]
 
 

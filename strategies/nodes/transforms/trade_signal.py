@@ -2,6 +2,9 @@
 
 from collections.abc import Sequence
 
+from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk.node import Node
+
 TAGS = {
     "scope": "transform",
     "family": "trade_signal",
@@ -88,3 +91,46 @@ def trade_signal_node(
         stop_loss=stop_loss,
         take_profit=take_profit,
     )
+
+
+class TradeSignalGeneratorNode(Node):
+    """Node wrapper generating trade signals from alpha history."""
+
+    def __init__(
+        self,
+        history: Node,
+        *,
+        long_threshold: float,
+        short_threshold: float,
+        size: float = 1.0,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        name: str | None = None,
+    ) -> None:
+        self.history = history
+        self.long_threshold = long_threshold
+        self.short_threshold = short_threshold
+        self.size = size
+        self.stop_loss = stop_loss
+        self.take_profit = take_profit
+        super().__init__(
+            input=history,
+            compute_fn=self._compute,
+            name=name or f"{history.name}_trade_signal",
+            interval=history.interval,
+            period=1,
+        )
+
+    def _compute(self, view: CacheView) -> dict | None:
+        data = view[self.history][self.history.interval]
+        if not data:
+            return None
+        series = data[-1][1]
+        return trade_signal_node(
+            series,
+            long_threshold=self.long_threshold,
+            short_threshold=self.short_threshold,
+            size=self.size,
+            stop_loss=self.stop_loss,
+            take_profit=self.take_profit,
+        )
