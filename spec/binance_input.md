@@ -21,7 +21,7 @@
 1. **DataFetcher 구현**
 
    * `qmtl.docs/backfill.md`의 예제처럼, Binance REST API를 호출하여 지정 구간의 캔들(klines) 데이터를 `pandas.DataFrame`으로 반환하는 비동기형 `BinanceFetcher` 클래스를 구현한다.
-   * 이미 `qmtl/examples/utils/binance_fetcher.py`에 간단한 구현이 있으므로 재사용하거나 확장한다.
+   * 이미 `qmtl/io/binance_fetcher.py`에 간단한 구현이 있으므로 재사용하거나 확장한다.
    * DataFrame에는 `ts`(초 단위 timestamp)와 필요한 시세 열(`open`, `close`, `high`, `low`, `volume`)을 포함하도록 확장할 수 있다.
 
 2. **HistoryProvider 구성**
@@ -131,7 +131,7 @@
 | 단계                        | 내용                                                                                                                                                                                                               | 참고     |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | **1. 환경 준비**              | `git subtree pull --prefix=qmtl qmtl-subtree main`로 QMTL 서브트리를 최신화한다. QuestDB 로컬 인스턴스를 설치/실행하고 DSN을 확인한다. `uv pip install -e qmtl[dev]`로 의존성을 설치한다.                                                              | 개발 가이드 |
-| **2. DataFetcher 작성**     | `strategies/utils/binance_fetcher.py`에 비동기 `BinanceFetcher` 클래스를 구현하거나 기존 예제를 가져와 필요한 속성(심볼, interval 등)을 일반화한다.                                                                                                 |        |
+| **2. DataFetcher 작성**     | `qmtl/io/binance_fetcher.py`에 비동기 `BinanceFetcher` 클래스를 구현하거나 기존 예제를 가져와 필요한 속성(심볼, interval 등)을 일반화한다.                                                                                                 |        |
 | **3. 전략 패키지 생성**          | `strategies/binance_history_strategy/__init__.py`에 `BinanceHistoryStrategy` 클래스를 정의한다. `setup()`에서 StreamInput과 노드를 구성한다.                                                                                        |        |
 | **4. StreamInput 구성**     | 심볼마다 `StreamInput`을 생성하고, `history_provider=QuestDBLoader(dsn, fetcher=BinanceFetcher())`, `event_recorder=QuestDBRecorder(dsn)`을 지정한다. period와 interval은 요구에 맞게 설정한다.                                           |        |
 | **5. 노드 및 DAG 구성**        | identity 노드 또는 간단한 지표 노드를 정의하고 모든 노드를 `self.add_nodes()`로 등록하여 DAG를 완성한다.                                                                                                                                        |        |

@@ -6,7 +6,7 @@ from qmtl.sdk import Strategy, StreamInput, Node
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 from strategies.config import load_config
-from strategies.utils.binance_fetcher import BinanceFetcher
+from qmtl.io import BinanceFetcher
 from strategies.nodes.transforms.identity import identity_transform_node
 
 
