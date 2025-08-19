@@ -178,3 +178,16 @@ def test_sdk_nodecache_metric_updates():
     expected = node.cache.resident_bytes
     assert sdk_metrics.nodecache_resident_bytes._vals[(node.node_id, "node")] == expected
     assert sdk_metrics.nodecache_resident_bytes._vals[("all", "total")] == expected
+
+
+def test_metrics_cli_parses_port(monkeypatch):
+    metrics.reset_metrics()
+    captured = {}
+
+    def fake_start(port):
+        captured["port"] = port
+
+    monkeypatch.setattr(metrics, "start_metrics_server", fake_start)
+    monkeypatch.setattr(metrics, "_run_forever", lambda: None)
+    metrics.main(["--port", "9100"])
+    assert captured["port"] == 9100

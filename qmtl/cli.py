@@ -10,7 +10,18 @@ def main(argv: List[str] | None = None) -> None:
     sub.add_parser("gw", help="Gateway CLI")
     sub.add_parser("dagmanager", help="DAG Manager admin CLI")
     sub.add_parser("dagmanager-server", help="Run DAG Manager servers")
+    sub.add_parser("dagmanager-metrics", help="Expose DAG Manager metrics")
     sub.add_parser("sdk", help="Run strategy via SDK")
+    sub.add_parser(
+        "doc-sync",
+        help="Verify alignment between docs, registry, and module annotations",
+    )
+    sub.add_parser(
+        "check-imports",
+        help="Fail if qmtl imports local strategies package",
+    )
+    p_taglint = sub.add_parser("taglint", help="Lint TAGS dictionaries")
+    p_taglint.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     p_init = sub.add_parser(
         "init",
         help="Initialize new project (see docs/strategy_workflow.md)",
@@ -33,6 +44,21 @@ def main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="Include sample OHLCV CSV and notebook (see docs/strategy_workflow.md)",
     )
+    p_init.add_argument(
+        "--with-docs",
+        action="store_true",
+        help="Include docs/ directory template",
+    )
+    p_init.add_argument(
+        "--with-scripts",
+        action="store_true",
+        help="Include scripts/ directory template",
+    )
+    p_init.add_argument(
+        "--with-pyproject",
+        action="store_true",
+        help="Include pyproject.toml template",
+    )
 
     args, rest = parser.parse_known_args(argv)
 
@@ -45,11 +71,30 @@ def main(argv: List[str] | None = None) -> None:
     elif args.cmd == "dagmanager-server":
         from .dagmanager.server import main as server_main
         server_main(rest)
+    elif args.cmd == "dagmanager-metrics":
+        from .dagmanager.metrics import main as metrics_main
+        metrics_main(rest)
     elif args.cmd == "sdk":
         import logging
         from .sdk.cli import main as sdk_main
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
+    elif args.cmd == "doc-sync":
+        from qmtl.scripts.check_doc_sync import main as doc_sync_main
+        raise SystemExit(doc_sync_main())
+    elif args.cmd == "check-imports":
+        import sys
+        from pathlib import Path
+
+        sys.path.append(str(Path(__file__).resolve().parents[2]))
+        from scripts.check_no_strategies_import import main as check_imports_main
+
+        raise SystemExit(check_imports_main())
+    elif args.cmd == "taglint":
+        from qmtl.tools.taglint import main as taglint_main
+        if getattr(args, "fix", False):
+            rest = ["--fix", *rest]
+        taglint_main(rest)
     elif args.cmd == "init":
         from pathlib import Path
         from .scaffold import create_project, TEMPLATES
@@ -63,6 +108,9 @@ def main(argv: List[str] | None = None) -> None:
             Path(args.path),
             template=args.strategy,
             with_sample_data=args.with_sample_data,
+            with_docs=args.with_docs,
+            with_scripts=args.with_scripts,
+            with_pyproject=args.with_pyproject,
         )
     else:
         parser.print_help()

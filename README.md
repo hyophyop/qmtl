@@ -8,6 +8,12 @@ Use the DAG Manager CLI to preview DAG structures:
 qmtl dagmanager diff --file dag.json --dry_run
 ```
 
+Initialize a Neo4j database with the required constraints and indexes:
+
+```bash
+qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+```
+
 Every subcommand now exposes its own help message. For example:
 
 ```bash
@@ -61,7 +67,8 @@ cd my_qmtl_project
 See [docs/templates.md](docs/templates.md) for a description of each template.
 
 The scaffold includes empty `generators/`, `indicators/` and
-`transforms/` packages for adding your own extensions.
+`transforms/` packages for adding your own extensions, along with a
+preconfigured `.gitignore` to keep temporary files out of version control.
 
 Run the default strategy to verify everything is set up correctly:
 
@@ -138,7 +145,7 @@ uv run -m pytest
 
 ## Monitoring
 
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
 
 ## Running Services
 

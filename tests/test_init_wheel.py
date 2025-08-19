@@ -8,6 +8,7 @@ def test_init_wheel(tmp_path: Path) -> None:
     subprocess.run(
         ["uv", "build", "--wheel", ".", "-o", str(wheel_dir)],
         check=True,
+        cwd=Path.cwd(),
     )
     wheel = next(wheel_dir.glob("qmtl-*.whl"))
     env_dir = tmp_path / "venv"

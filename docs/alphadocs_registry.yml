@@ -1,0 +1,6 @@
+# Registry for QMTL AlphaDocs.
+# Entries should include:
+# - doc: path/to/doc.md
+#   status: draft|implemented
+#   modules: []
+[]

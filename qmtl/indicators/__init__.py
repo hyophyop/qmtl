@@ -16,6 +16,8 @@ from .anchored_vwap import anchored_vwap
 from .kalman_trend import kalman_trend
 from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
+from .volatility import volatility_node
+from .helpers import alpha_indicator_with_history
 
 __all__ = [
     "sma",
@@ -34,4 +36,6 @@ __all__ = [
     "kalman_trend",
     "rough_bergomi",
     "stoch_rsi",
+    "volatility_node",
+    "alpha_indicator_with_history",
 ]

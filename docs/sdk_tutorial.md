@@ -129,6 +129,73 @@ from qmtl.sdk import metrics
 metrics.start_metrics_server(port=8000)
 ```
 
+## Performance Metrics
+
+`alpha_performance_node`는 Sharpe, 최대 낙폭, CAR/MDD 등의 성과 지표를 계산합니다.
+`alpha_history_node`와 조합하면 수익률 누적과 성과 계산을 분리하여 로직과 테스트를
+병렬로 개발할 수 있습니다.
+
+```python
+from qmtl.transforms import alpha_history_node, alpha_performance_from_history_node
+
+history = alpha_history_node(alpha, window=30)
+perf = alpha_performance_from_history_node(history)
+```
+
+## Custom Alpha Indicators with History
+
+`alpha_indicator_with_history` wraps a function that returns an
+``{"alpha": value}`` mapping and automatically maintains a sliding
+window of recent alpha values:
+
+```python
+from qmtl.indicators import alpha_indicator_with_history
+
+history = alpha_indicator_with_history(my_alpha_fn, inputs=[src], window=30)
+```
+
+## Alpha-to-Signal Pipeline
+
+`TradeSignalGeneratorNode` converts an alpha history into actionable trade
+signals. Combine it with `alpha_history_node` to produce orders based on the
+latest alpha value:
+
+```python
+from qmtl.transforms import TradeSignalGeneratorNode
+
+history = alpha_history_node(alpha, window=30)
+signal = TradeSignalGeneratorNode(
+    history,
+    long_threshold=0.5,
+    short_threshold=-0.5,
+)
+```
+
+## Order Results and External Executors
+
+`TradeOrderPublisherNode` turns trade signals into standardized order
+payloads. The `Runner` examines node results and delivers these orders to
+external systems through a series of hooks:
+
+1. `Runner.set_trade_execution_service(service)` forwards the order to a
+   custom object exposing ``post_order``.
+2. `Runner.set_trade_order_http_url(url)` posts the order to an HTTP
+   endpoint as JSON.
+3. `Runner.set_trade_order_kafka_topic(topic)` publishes the order to a
+   Kafka topic using the configured producer.
+
+The SDK ships with a simple HTTP client:
+
+```python
+from qmtl.sdk import TradeExecutionService, Runner
+
+service = TradeExecutionService("http://broker")
+Runner.set_trade_execution_service(service)
+```
+
+If none of these targets are configured the order is ignored, allowing
+strategies to remain agnostic about the actual execution backend.
+
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은

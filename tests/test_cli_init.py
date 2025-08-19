@@ -7,8 +7,9 @@ def test_cli_init(tmp_path):
 
     assert (tmp_dir / "qmtl.yml").is_file()
     assert (tmp_dir / "strategy.py").is_file()
+    nodes_dir = tmp_dir / "nodes"
     for pkg in ["generators", "indicators", "transforms"]:
-        pkg_path = tmp_dir / pkg
+        pkg_path = nodes_dir / pkg
         assert pkg_path.is_dir()
         assert (pkg_path / "__init__.py").is_file()
 
@@ -16,8 +17,7 @@ def test_cli_init(tmp_path):
 def test_cli_init_with_template(tmp_path):
     tmp_dir = tmp_path / "proj"
     qmtl.cli.main(["init", "--path", str(tmp_dir), "--strategy", "branching"])
-
-    contents = (tmp_dir / "strategy.py").read_text()
+    contents = (tmp_dir / "dags" / "example_strategy.py").read_text()
     assert "BranchingStrategy" in contents
 
 
