@@ -28,6 +28,7 @@ from qmtl.sdk.data_io import (
 from .backfill_engine import BackfillEngine
 from .util import parse_interval, parse_period
 from . import metrics
+from .trade_execution_service import TradeExecutionService
 
 __all__ = [
     "Node",
@@ -51,6 +52,7 @@ __all__ = [
     "QuestDBRecorder",
     "BackfillEngine",
     "metrics",
+    "TradeExecutionService",
     "parse_interval",
     "parse_period",
     "_cli",
