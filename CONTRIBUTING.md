@@ -25,6 +25,7 @@ This project demonstrates how to build and test QMTL strategy packages.
    ```bash
    uv run scripts/check_doc_sync.py
    ```
+   PR에서 `docs/` 경로를 수정하면 GitHub Actions가 이 스크립트를 자동 실행하며 실패 시 워크플로우가 실패합니다.
 
 CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
 
