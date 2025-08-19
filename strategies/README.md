@@ -144,3 +144,11 @@ scrape_configs:
 Configure Grafana with this Prometheus data source and create panels using
 metrics such as `backfill_jobs_in_progress` or
 `backfill_last_timestamp` to visualize backfill activity.
+
+When `AlphaPerformanceNode` executes it updates gauges like
+`alpha_sharpe` and `alpha_max_drawdown`. Scrape the metrics endpoint to
+inspect their latest values:
+
+```bash
+curl localhost:8000
+```
