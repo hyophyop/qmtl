@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 import importlib.util
 
@@ -11,31 +13,35 @@ def load_check_doc_sync() -> callable:
     return module.check_doc_sync
 
 
-def test_check_doc_sync(tmp_path: Path) -> None:
+def test_idea_files_are_ignored(tmp_path: Path) -> None:
     check_doc_sync = load_check_doc_sync()
 
     root = tmp_path
     doc_dir = root / "docs" / "alphadocs"
-    doc_dir.mkdir(parents=True)
+    idea_file = doc_dir / "ideas" / "ignored_test.md"
+    idea_file.parent.mkdir(parents=True)
+    idea_file.write_text("test")
     registry = root / "docs" / "alphadocs_registry.yml"
-    registry.write_text(
-        "- doc: docs/alphadocs/sample.md\n"
-        "  status: implemented\n"
-        "  modules:\n"
-        "  - qmtl/qmtl/sample.py\n"
-    )
-    (doc_dir / "sample.md").write_text("# Sample\n")
+    registry.write_text("[]\n")
+    module_root = root / "qmtl"
+    module_root.mkdir()
 
-    module_root = root / "qmtl" / "qmtl"
-    module_root.mkdir(parents=True)
-    (module_root / "sample.py").write_text("# Source: docs/alphadocs/sample.md\n")
-
-    assert check_doc_sync(root, registry, doc_dir, module_root) == []
-
-    registry.write_text(
-        "- doc: docs/alphadocs/sample.md\n"
-        "  status: implemented\n"
-        "  modules: []\n"
-    )
     errors = check_doc_sync(root, registry, doc_dir, module_root)
-    assert any("annotation not registered" in e for e in errors)
+    assert errors == []
+
+
+def test_non_idea_files_trigger_error(tmp_path: Path) -> None:
+    check_doc_sync = load_check_doc_sync()
+
+    root = tmp_path
+    doc_dir = root / "docs" / "alphadocs"
+    doc_file = doc_dir / "unregistered_test.md"
+    doc_file.parent.mkdir(parents=True)
+    doc_file.write_text("test")
+    registry = root / "docs" / "alphadocs_registry.yml"
+    registry.write_text("[]\n")
+    module_root = root / "qmtl"
+    module_root.mkdir()
+
+    errors = check_doc_sync(root, registry, doc_dir, module_root)
+    assert any("Docs not in registry" in e for e in errors)
