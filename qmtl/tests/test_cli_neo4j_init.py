@@ -36,10 +36,25 @@ def test_neo4j_init_executes_queries(monkeypatch):
     def fake_connect(uri, user, password):
         return driver
 
-    monkeypatch.setattr(cli, "connect", fake_connect)
+    monkeypatch.setattr(neo4j_init, "connect", fake_connect)
     monkeypatch.setattr(neo4j_init, "get_schema_queries", lambda: ["A", "B"])
 
     cli.main(["neo4j-init", "--uri", "bolt://x", "--user", "u", "--password", "p"])
+
+    assert driver.session_obj.run_calls == ["A", "B"]
+    assert driver.closed
+
+
+def test_init_schema_executes_queries(monkeypatch):
+    driver = _FakeDriver()
+
+    def fake_connect(uri, user, password):
+        return driver
+
+    monkeypatch.setattr(neo4j_init, "connect", fake_connect)
+    monkeypatch.setattr(neo4j_init, "get_schema_queries", lambda: ["A", "B"])
+
+    neo4j_init.init_schema("bolt://x", "u", "p")
 
     assert driver.session_obj.run_calls == ["A", "B"]
     assert driver.closed
