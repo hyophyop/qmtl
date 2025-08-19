@@ -30,6 +30,7 @@
   source_model: gpt5pro
   modules:
     - strategies/nodes/indicators/acceptable_price_band.py
+    - qmtl/transforms/acceptable_price_band.py
 - doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
   status: implemented
   source_model: gpt5pro
