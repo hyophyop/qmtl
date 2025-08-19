@@ -9,6 +9,8 @@ TAGS = {
 
 import math
 from collections.abc import Sequence
+from qmtl.sdk.node import Node
+from qmtl.sdk.cache_view import CacheView
 
 
 def alpha_performance_node(returns: Sequence[float], *, risk_free_rate: float = 0.0) -> dict:
@@ -69,3 +71,39 @@ def alpha_performance_node(returns: Sequence[float], *, risk_free_rate: float = 
         "win_ratio": win_ratio,
         "profit_factor": profit_factor,
     }
+
+
+def alpha_performance_from_history_node(
+    history: Node, *, risk_free_rate: float = 0.0, name: str | None = None
+) -> Node:
+    """Wrap :func:`alpha_performance_node` for a history-producing node.
+
+    Parameters
+    ----------
+    history:
+        Node emitting a sequence of alpha returns (e.g. from ``alpha_history_node``).
+    risk_free_rate:
+        Optional risk-free rate used when computing the Sharpe ratio.
+    name:
+        Optional name for the resulting node.
+
+    Returns
+    -------
+    Node
+        Node producing performance metrics for the latest alpha history.
+    """
+
+    def compute(view: CacheView):
+        data = view[history][history.interval]
+        if not data:
+            return None
+        series = data[-1][1]
+        return alpha_performance_node(series, risk_free_rate=risk_free_rate)
+
+    return Node(
+        input=history,
+        compute_fn=compute,
+        name=name or f"{history.name}_performance",
+        interval=history.interval,
+        period=1,
+    )
