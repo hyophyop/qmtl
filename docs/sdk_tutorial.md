@@ -142,6 +142,18 @@ history = alpha_history_node(alpha, window=30)
 perf = alpha_performance_from_history_node(history)
 ```
 
+## Custom Alpha Indicators with History
+
+`alpha_indicator_with_history` wraps a function that returns an
+``{"alpha": value}`` mapping and automatically maintains a sliding
+window of recent alpha values:
+
+```python
+from qmtl.indicators import alpha_indicator_with_history
+
+history = alpha_indicator_with_history(my_alpha_fn, inputs=[src], window=30)
+```
+
 ## Alpha-to-Signal Pipeline
 
 `TradeSignalGeneratorNode` converts an alpha history into actionable trade
