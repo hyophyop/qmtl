@@ -34,3 +34,8 @@
   state: qmtl_extension_flow
   modules:
     - strategies/nodes/indicators/gap_amplification.py
+- doc: docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+    - strategies/nodes/indicators/order_book_clustering_collapse.py
