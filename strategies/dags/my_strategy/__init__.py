@@ -1,13 +1,19 @@
 try:
     from nodes.generators import sample_generator
     from nodes.indicators import sample_indicator
-    from nodes.transforms.alpha_performance import AlphaPerformanceNode
-    from qmtl.transforms import TradeOrderPublisherNode, TradeSignalGeneratorNode
+    from qmtl.transforms import (
+        AlphaPerformanceNode,
+        TradeOrderPublisherNode,
+        TradeSignalGeneratorNode,
+    )
 except ModuleNotFoundError:  # pragma: no cover
     from strategies.nodes.generators import sample_generator
     from strategies.nodes.indicators import sample_indicator
-    from strategies.nodes.transforms.alpha_performance import AlphaPerformanceNode
-    from qmtl.transforms import TradeOrderPublisherNode, TradeSignalGeneratorNode
+    from qmtl.transforms import (
+        AlphaPerformanceNode,
+        TradeOrderPublisherNode,
+        TradeSignalGeneratorNode,
+    )
 
 from strategies.config import load_config
 from qmtl.sdk.node import Node

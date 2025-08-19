@@ -1,9 +1,10 @@
 """Transform node processors."""
 
-from .alpha_performance import AlphaPerformanceNode, alpha_performance_node
 from qmtl.transforms import (
+    AlphaPerformanceNode,
     TradeOrderPublisherNode,
     TradeSignalGeneratorNode,
+    alpha_performance_node,
     publisher_node,
     threshold_signal_node,
     trade_signal_node,

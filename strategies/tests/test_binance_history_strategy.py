@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from qmtl import Pipeline
+from qmtl.pipeline import Pipeline
 
 from strategies.binance_history_strategy import BinanceHistoryStrategy
 

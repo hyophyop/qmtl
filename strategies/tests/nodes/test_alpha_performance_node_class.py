@@ -3,7 +3,7 @@ from qmtl.sdk.node import Node
 import pytest
 import qmtl.sdk.runner as runner_module
 
-from strategies.nodes.transforms.alpha_performance import AlphaPerformanceNode
+from qmtl.transforms import AlphaPerformanceNode
 
 
 def test_alpha_performance_node_triggers_postprocess(monkeypatch):
