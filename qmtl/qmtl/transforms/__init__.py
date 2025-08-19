@@ -14,6 +14,11 @@ from .alpha_performance import (
     alpha_performance_from_history_node,
     AlphaPerformanceNode,
 )
+from .trade_signal import (
+    threshold_signal_node,
+    trade_signal_node,
+    TradeSignalGeneratorNode,
+)
 from .microstructure import (
     gap_depth_weighted_sum_node,
     order_flow_imbalance_node,
@@ -36,6 +41,9 @@ __all__ = [
     "alpha_performance_node",
     "alpha_performance_from_history_node",
     "AlphaPerformanceNode",
+    "threshold_signal_node",
+    "trade_signal_node",
+    "TradeSignalGeneratorNode",
     "volume_features",
     "avg_volume_node",
     "gap_depth_weighted_sum_node",
