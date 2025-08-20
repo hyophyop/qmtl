@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -229,77 +228,11 @@ class ExecutionModel:
         # Check if limit orders are reasonable relative to market
         if side == OrderSide.BUY and price > market_data.ask * 1.1:
             return False, "Buy limit price too far above market"
-        
+
         if side == OrderSide.SELL and price < market_data.bid * 0.9:
             return False, "Sell limit price too far below market"
-        
+
         return True, "Valid"
-
-
-class EnhancedAlphaPerformance:
-    """Enhanced performance calculation with realistic execution costs."""
-    
-    def __init__(self, execution_model: Optional[ExecutionModel] = None):
-        """Initialize with optional execution model."""
-        self.execution_model = execution_model or ExecutionModel()
-        self.execution_history: list[ExecutionFill] = []
-    
-    def add_execution(self, fill: ExecutionFill) -> None:
-        """Add an execution fill to the history."""
-        self.execution_history.append(fill)
-    
-    def calculate_execution_metrics(self) -> Dict[str, float]:
-        """Calculate execution quality metrics."""
-        if not self.execution_history:
-            return {}
-        
-        total_commission = sum(fill.commission for fill in self.execution_history)
-        total_slippage = sum(abs(fill.slippage * fill.quantity) for fill in self.execution_history)
-        total_market_impact = sum(fill.market_impact * fill.quantity for fill in self.execution_history)
-        total_volume = sum(fill.quantity for fill in self.execution_history)
-        
-        avg_commission_bps = (total_commission / total_volume) * 10000 if total_volume > 0 else 0
-        avg_slippage_bps = (total_slippage / total_volume) * 10000 if total_volume > 0 else 0
-        avg_market_impact_bps = (total_market_impact / total_volume) * 10000 if total_volume > 0 else 0
-        
-        # Execution shortfall analysis
-        total_shortfall = sum(fill.execution_shortfall * fill.quantity for fill in self.execution_history)
-        avg_shortfall_bps = (total_shortfall / total_volume) * 10000 if total_volume > 0 else 0
-        
-        return {
-            "total_trades": len(self.execution_history),
-            "total_volume": total_volume,
-            "total_commission": total_commission,
-            "total_slippage": total_slippage,
-            "total_market_impact": total_market_impact,
-            "avg_commission_bps": avg_commission_bps,
-            "avg_slippage_bps": avg_slippage_bps,
-            "avg_market_impact_bps": avg_market_impact_bps,
-            "avg_execution_shortfall_bps": avg_shortfall_bps,
-            "total_execution_cost": total_commission + total_slippage + total_market_impact,
-        }
-    
-    def adjust_returns_for_costs(self, raw_returns: list[float]) -> list[float]:
-        """Adjust raw returns for realistic execution costs."""
-        if not self.execution_history or not raw_returns:
-            return raw_returns
-        
-        # Calculate per-period execution costs
-        execution_metrics = self.calculate_execution_metrics()
-        avg_cost_per_trade = execution_metrics.get("total_execution_cost", 0) / len(self.execution_history)
-        
-        # Distribute costs across return periods
-        cost_per_period = avg_cost_per_trade / len(raw_returns) if raw_returns else 0
-        
-        # Adjust returns by subtracting execution costs
-        adjusted_returns = []
-        for ret in raw_returns:
-            # Convert cost to return impact (approximate)
-            cost_impact = cost_per_period / 10000.0  # Convert to fraction
-            adjusted_return = ret - cost_impact
-            adjusted_returns.append(adjusted_return)
-        
-        return adjusted_returns
 
 
 def create_market_data_from_ohlcv(
@@ -323,5 +256,5 @@ def create_market_data_from_ohlcv(
         bid=bid,
         ask=ask,
         last=close,
-        volume=volume
+        volume=volume,
     )
