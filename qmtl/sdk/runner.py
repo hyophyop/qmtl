@@ -38,6 +38,10 @@ class Runner:
     _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_cb: AsyncCircuitBreaker | None = None
+    _trade_execution_service = None
+    _kafka_producer = None
+    _trade_order_http_url = None
+    _trade_order_kafka_topic = None
 
     # ------------------------------------------------------------------
 
@@ -313,6 +317,8 @@ class Runner:
                         Runner._execute_compute_fn(node.compute_fn, node.cache.view())
                     else:
                         result = node.compute_fn(node.cache.view())
+                        # Postprocess the result
+                        Runner._postprocess_result(node, result)
             except Exception:
                 sdk_metrics.observe_node_process_failure(node.node_id)
                 raise
@@ -487,6 +493,8 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        validate_data: bool = False,
+        validation_config: Optional[dict] = None,
     ) -> Strategy:
         """Run strategy in backtest mode. Requires ``gateway_url``."""
         if start_time is None or end_time is None:
@@ -514,6 +522,17 @@ class Runner:
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, start_time, end_time)
+        
+        # Enhanced data validation before replay
+        if validate_data:
+            from .backtest_validation import validate_backtest_data
+            logger.info("Validating backtest data quality...")
+            validation_reports = validate_backtest_data(
+                strategy, 
+                validation_config=validation_config
+            )
+            logger.info(f"Data validation completed for {len(validation_reports)} nodes")
+        
         start = Runner._maybe_int(start_time)
         end = Runner._maybe_int(end_time)
         await Runner._replay_history(strategy, start, end, on_missing=on_missing)
@@ -528,6 +547,8 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        validate_data: bool = False,
+        validation_config: Optional[dict] = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.backtest_async(
@@ -537,6 +558,8 @@ class Runner:
                 on_missing=on_missing,
                 gateway_url=gateway_url,
                 meta=meta,
+                validate_data=validate_data,
+                validation_config=validation_config,
             )
         )
 
@@ -665,3 +688,74 @@ class Runner:
         await Runner._load_history(strategy, None, None)
         await Runner._replay_history(strategy, None, None)
         return strategy
+
+    # ------------------------------------------------------------------
+    # Trade execution and postprocessing methods
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def set_trade_execution_service(cls, service) -> None:
+        """Set the trade execution service."""
+        cls._trade_execution_service = service
+
+    @classmethod
+    def set_kafka_producer(cls, producer) -> None:
+        """Set the Kafka producer for trade orders."""
+        cls._kafka_producer = producer
+
+    @classmethod
+    def set_trade_order_http_url(cls, url: str | None) -> None:
+        """Set HTTP URL for trade order submission."""
+        cls._trade_order_http_url = url
+
+    @classmethod
+    def set_trade_order_kafka_topic(cls, topic: str | None) -> None:
+        """Set Kafka topic for trade order submission."""
+        cls._trade_order_kafka_topic = topic
+
+    @staticmethod
+    def _handle_alpha_performance(result: dict) -> None:
+        """Handle alpha performance metrics."""
+        from . import metrics as sdk_metrics
+        
+        if isinstance(result, dict):
+            if "sharpe" in result:
+                sdk_metrics.alpha_sharpe.set(result["sharpe"])
+                sdk_metrics.alpha_sharpe._val = result["sharpe"]  # type: ignore[attr-defined]
+            if "max_drawdown" in result:
+                sdk_metrics.alpha_max_drawdown.set(result["max_drawdown"])
+                sdk_metrics.alpha_max_drawdown._val = result["max_drawdown"]  # type: ignore[attr-defined]
+
+    @staticmethod
+    def _handle_trade_order(order: dict) -> None:
+        """Handle trade order submission via HTTP and/or Kafka."""
+        # Submit via trade execution service if available
+        if Runner._trade_execution_service is not None:
+            Runner._trade_execution_service.post_order(order)
+            return
+            
+        # Submit via HTTP if URL is configured
+        if Runner._trade_order_http_url is not None:
+            httpx.post(Runner._trade_order_http_url, json=order)
+            
+        # Submit via Kafka if producer and topic are configured
+        if (Runner._kafka_producer is not None and 
+            Runner._trade_order_kafka_topic is not None):
+            Runner._kafka_producer.send(Runner._trade_order_kafka_topic, order)
+
+    @staticmethod
+    def _postprocess_result(node, result) -> None:
+        """Postprocess computation results from nodes."""
+        if result is None:
+            return
+            
+        # Handle different node types
+        node_class_name = node.__class__.__name__
+        
+        # Check if this is an alpha performance node
+        if 'AlphaPerformance' in node_class_name:
+            Runner._handle_alpha_performance(result)
+            
+        # Check if this is a trade order publisher node  
+        if 'TradeOrderPublisher' in node_class_name:
+            Runner._handle_trade_order(result)
