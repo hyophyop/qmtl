@@ -348,3 +348,32 @@ def test_validate_backtest_timing_clean_data():
     # Should have no issues
     issues = validate_backtest_timing(strategy)
     assert len(issues) == 0
+
+
+def test_validate_backtest_timing_flags_pre_market():
+    """Ensure pre-market data is reported as invalid."""
+    from qmtl.sdk import Strategy, StreamInput
+
+    class TestStrategy(Strategy):
+        def setup(self):
+            stream = StreamInput(interval="3600s", period=10)
+            self.add_nodes([stream])
+
+    strategy = TestStrategy()
+    strategy.setup()
+
+    for node in strategy.nodes:
+        if isinstance(node, StreamInput):
+            pre_market_ts = int(
+                datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc).timestamp() * 1000
+            )
+            node.cache.append("test_queue", 3600, pre_market_ts, {"close": 100.0})
+
+    issues = validate_backtest_timing(strategy)
+
+    assert len(issues) >= 1
+    for node_name, node_issues in issues.items():
+        assert any(
+            "Pre/post market trading not allowed" in issue["reason"]
+            for issue in node_issues
+        )
