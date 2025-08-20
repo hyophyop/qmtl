@@ -1,7 +1,7 @@
 """Execution imbalance transform normalizing buy/sell volume difference."""
 
 from qmtl.sdk.node import Node
-from qmtl.sdk.cache_view import CacheView
+from .utils import normalized_difference, create_imbalance_node
 
 
 def execution_imbalance_node(
@@ -16,36 +16,18 @@ def execution_imbalance_node(
     The imbalance is defined as ``(buy - sell) / (buy + sell)`` using the
     latest volumes from ``buy_volume`` and ``sell_volume`` nodes.
     """
-
-    interval = interval or buy_volume.interval
-
-    def compute(view: CacheView):
-        buy_data = view[buy_volume][interval]
-        sell_data = view[sell_volume][interval]
-        if not buy_data or not sell_data:
-            return None
-        buy = buy_data[-1][1]
-        sell = sell_data[-1][1]
-        total = buy + sell
-        if total == 0:
-            return None
-        return (buy - sell) / total
-
-    return Node(
-        input=(buy_volume, sell_volume),
-        compute_fn=compute,
-        name=name or "execution_imbalance",
+    return create_imbalance_node(
+        buy_volume,
+        sell_volume,
         interval=interval,
-        period=2,
+        name=name or "execution_imbalance",
     )
 
 
 def execution_imbalance(buy: float, sell: float) -> float:
     """Return normalized execution imbalance."""
-    total = buy + sell
-    if total == 0:
-        return 0.0
-    return (buy - sell) / total
+    result = normalized_difference(buy, sell)
+    return result if result is not None else 0.0
 
 
 __all__ = ["execution_imbalance_node", "execution_imbalance"]
