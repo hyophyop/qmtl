@@ -3,6 +3,8 @@ from __future__ import annotations
 """Prometheus metrics for the SDK cache layer."""
 
 import time
+from typing import Mapping
+
 from prometheus_client import (
     Counter,
     Gauge,
@@ -147,6 +149,29 @@ node_processed_total._vals = {}  # type: ignore[attr-defined]
 node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
 node_process_failure_total._vals = {}  # type: ignore[attr-defined]
 
+# ---------------------------------------------------------------------------
+# Alpha performance metrics
+if "alpha_sharpe" in global_registry._names_to_collectors:
+    alpha_sharpe = global_registry._names_to_collectors["alpha_sharpe"]
+else:
+    alpha_sharpe = Gauge(
+        "alpha_sharpe",
+        "Latest alpha Sharpe ratio",
+        registry=global_registry,
+    )
+
+if "alpha_max_drawdown" in global_registry._names_to_collectors:
+    alpha_max_drawdown = global_registry._names_to_collectors["alpha_max_drawdown"]
+else:
+    alpha_max_drawdown = Gauge(
+        "alpha_max_drawdown",
+        "Latest alpha max drawdown",
+        registry=global_registry,
+    )
+
+alpha_sharpe._val = 0  # type: ignore[attr-defined]
+alpha_max_drawdown._val = 0  # type: ignore[attr-defined]
+
 
 def observe_cache_read(upstream_id: str, interval: int) -> None:
     """Increment read metrics for a given upstream/interval pair."""
@@ -218,6 +243,18 @@ def observe_node_process_failure(node_id: str) -> None:
     node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
 
 
+def observe_alpha_performance(metrics: Mapping[str, float]) -> None:
+    """Record alpha performance statistics."""
+    sharpe = metrics.get("sharpe")
+    if sharpe is not None:
+        alpha_sharpe.set(sharpe)
+        alpha_sharpe._val = sharpe  # type: ignore[attr-defined]
+    mdd = metrics.get("max_drawdown")
+    if mdd is not None:
+        alpha_max_drawdown.set(mdd)
+        alpha_max_drawdown._val = mdd  # type: ignore[attr-defined]
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Expose metrics via an HTTP server."""
     start_http_server(port, registry=global_registry)
@@ -250,3 +287,7 @@ def reset_metrics() -> None:
     node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
     node_process_failure_total.clear()
     node_process_failure_total._vals = {}  # type: ignore[attr-defined]
+    alpha_sharpe.set(0)
+    alpha_sharpe._val = 0  # type: ignore[attr-defined]
+    alpha_max_drawdown.set(0)
+    alpha_max_drawdown._val = 0  # type: ignore[attr-defined]

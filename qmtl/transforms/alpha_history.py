@@ -50,5 +50,5 @@ def alpha_history_node(
         compute_fn=compute,
         name=name or "alpha_history",
         interval=source.interval,
-        period=window,
+        period=1,
     )
