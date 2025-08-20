@@ -90,7 +90,7 @@ cd my_strategy
 
 # Install QMTL dependencies in the new project
 uv venv
-uv pip install -e /path/to/qmtl-strategies/qmtl[dev]
+uv pip install -e ../qmtl[dev]
 
 # Run the strategy
 python strategy.py
