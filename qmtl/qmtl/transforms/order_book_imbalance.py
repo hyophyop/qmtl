@@ -1,7 +1,7 @@
 """Order book imbalance transformation node."""
 
 from qmtl.sdk.node import Node
-from qmtl.sdk.cache_view import CacheView
+from .utils import normalized_difference, create_imbalance_node
 
 
 def order_book_imbalance_node(
@@ -15,35 +15,18 @@ def order_book_imbalance_node(
 
     The imbalance is ``(bid_volume - ask_volume) / (bid_volume + ask_volume)``.
     """
-
-    interval = interval or bid_volume.interval
-
-    def compute(view: CacheView):
-        bid_data = view[bid_volume][interval]
-        ask_data = view[ask_volume][interval]
-        if not bid_data or not ask_data:
-            return None
-        b = bid_data[-1][1]
-        a = ask_data[-1][1]
-        total = b + a
-        if total == 0:
-            return None
-        return (b - a) / total
-
-    return Node(
-        input=[bid_volume, ask_volume],
-        compute_fn=compute,
-        name=name or "order_book_imbalance",
+    return create_imbalance_node(
+        bid_volume,
+        ask_volume,
         interval=interval,
+        name=name or "order_book_imbalance",
     )
 
 
 def order_book_imbalance(bid_volume: float, ask_volume: float) -> float:
     """Return order book imbalance from raw volumes."""
-    total = bid_volume + ask_volume
-    if total == 0:
-        return 0.0
-    return (bid_volume - ask_volume) / total
+    result = normalized_difference(bid_volume, ask_volume)
+    return result if result is not None else 0.0
 
 
 __all__ = ["order_book_imbalance_node", "order_book_imbalance"]
