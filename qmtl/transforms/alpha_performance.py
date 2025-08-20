@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Optional
 from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk.execution_modeling import ExecutionFill
 
 
 def _car_mdd(returns: Sequence[float], max_drawdown: float) -> float:
@@ -25,12 +26,59 @@ def _rar_mdd(
     return rar / abs(max_drawdown) if max_drawdown else float("inf")
 
 
+def calculate_execution_metrics(fills: Sequence[ExecutionFill]) -> dict[str, float]:
+    """Calculate aggregate execution quality metrics from fills."""
+    if not fills:
+        return {}
+
+    total_commission = sum(f.commission for f in fills)
+    total_slippage = sum(abs(f.slippage * f.quantity) for f in fills)
+    total_market_impact = sum(f.market_impact * f.quantity for f in fills)
+    total_volume = sum(f.quantity for f in fills)
+
+    avg_commission_bps = (total_commission / total_volume) * 10000 if total_volume else 0
+    avg_slippage_bps = (total_slippage / total_volume) * 10000 if total_volume else 0
+    avg_market_impact_bps = (total_market_impact / total_volume) * 10000 if total_volume else 0
+
+    total_shortfall = sum(f.execution_shortfall * f.quantity for f in fills)
+    avg_shortfall_bps = (total_shortfall / total_volume) * 10000 if total_volume else 0
+
+    return {
+        "total_trades": len(fills),
+        "total_volume": total_volume,
+        "total_commission": total_commission,
+        "total_slippage": total_slippage,
+        "total_market_impact": total_market_impact,
+        "avg_commission_bps": avg_commission_bps,
+        "avg_slippage_bps": avg_slippage_bps,
+        "avg_market_impact_bps": avg_market_impact_bps,
+        "avg_execution_shortfall_bps": avg_shortfall_bps,
+        "total_execution_cost": total_commission + total_slippage + total_market_impact,
+    }
+
+
+def adjust_returns_for_costs(raw_returns: Sequence[float], fills: Sequence[ExecutionFill]) -> list[float]:
+    """Adjust returns for execution costs estimated from fills."""
+    if not fills or not raw_returns:
+        return list(raw_returns)
+
+    metrics = calculate_execution_metrics(fills)
+    avg_cost_per_trade = metrics.get("total_execution_cost", 0) / len(fills)
+    cost_per_period = avg_cost_per_trade / len(raw_returns)
+
+    adjusted = []
+    for ret in raw_returns:
+        cost_impact = cost_per_period / 10000.0
+        adjusted.append(ret - cost_impact)
+    return adjusted
+
+
 def alpha_performance_node(
-    returns: Sequence[float], 
-    *, 
-    risk_free_rate: float = 0.0, 
+    returns: Sequence[float],
+    *,
+    risk_free_rate: float = 0.0,
     transaction_cost: float = 0.0,
-    execution_fills: Optional[list] = None,
+    execution_fills: Optional[Sequence[ExecutionFill]] = None,
     use_realistic_costs: bool = False
 ) -> dict:
     """Return key performance metrics from a return series.
@@ -73,20 +121,8 @@ def alpha_performance_node(
 
     # Apply transaction costs
     if use_realistic_costs and execution_fills:
-        # Use realistic execution modeling
-        try:
-            from qmtl.sdk.execution_modeling import EnhancedAlphaPerformance
-            performance_calc = EnhancedAlphaPerformance()
-            for fill in execution_fills:
-                performance_calc.add_execution(fill)
-            net_returns = performance_calc.adjust_returns_for_costs(clean_returns)
-            
-            # Get execution metrics
-            execution_metrics = performance_calc.calculate_execution_metrics()
-        except ImportError:
-            # Fallback to simple transaction cost if execution modeling unavailable
-            net_returns = [r - transaction_cost for r in clean_returns]
-            execution_metrics = {}
+        net_returns = adjust_returns_for_costs(clean_returns, execution_fills)
+        execution_metrics = calculate_execution_metrics(execution_fills)
     else:
         # Simple transaction cost model
         net_returns = [r - transaction_cost for r in clean_returns]

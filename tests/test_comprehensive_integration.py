@@ -195,7 +195,11 @@ def test_strategy_integration_with_validation():
 def test_performance_with_realistic_costs():
     """Test performance calculation with realistic execution costs."""
     
-    from qmtl.sdk.execution_modeling import EnhancedAlphaPerformance, ExecutionFill, OrderSide
+    from qmtl.sdk.execution_modeling import ExecutionFill, OrderSide
+    from qmtl.transforms.alpha_performance import (
+        calculate_execution_metrics,
+        adjust_returns_for_costs,
+    )
     
     # Create sample execution fills
     fills = [
@@ -204,12 +208,7 @@ def test_performance_with_realistic_costs():
         ExecutionFill("3", "TSLA", OrderSide.BUY, 50, 200.0, 200.1, 3000, 1.5, 0.08, 0.02),
     ]
     
-    performance_calc = EnhancedAlphaPerformance()
-    for fill in fills:
-        performance_calc.add_execution(fill)
-    
-    # Test execution metrics
-    metrics = performance_calc.calculate_execution_metrics()
+    metrics = calculate_execution_metrics(fills)
     
     assert metrics["total_trades"] == 3
     assert metrics["total_volume"] == 250  # 100 + 100 + 50
@@ -219,7 +218,7 @@ def test_performance_with_realistic_costs():
     
     # Test return adjustment
     raw_returns = [0.02, 0.01, -0.01, 0.03]
-    adjusted_returns = performance_calc.adjust_returns_for_costs(raw_returns)
+    adjusted_returns = adjust_returns_for_costs(raw_returns, fills)
     
     # Adjusted returns should be lower due to costs
     for raw, adj in zip(raw_returns, adjusted_returns):
@@ -286,3 +285,4 @@ if __name__ == "__main__":
     test_risk_aware_position_sizing()
     print("\n🎉 All comprehensive integration tests passed!")
     print("✅ Enhanced backtest execution accuracy features are working correctly!")
+

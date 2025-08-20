@@ -4,7 +4,11 @@ import pytest
 import math
 from qmtl.sdk.execution_modeling import (
     ExecutionModel, MarketData, OrderType, OrderSide, ExecutionFill,
-    EnhancedAlphaPerformance, create_market_data_from_ohlcv
+    create_market_data_from_ohlcv,
+)
+from qmtl.transforms.alpha_performance import (
+    calculate_execution_metrics,
+    adjust_returns_for_costs,
 )
 
 
@@ -240,58 +244,46 @@ class TestExecutionFill:
         assert abs(fill.execution_shortfall - 0.1) < 1e-6  # abs(fill_price - requested_price)
 
 
-class TestEnhancedAlphaPerformance:
-    """Test enhanced performance calculations."""
-    
+class TestExecutionCostFunctions:
+    """Test execution cost analysis helpers."""
+
     def test_execution_metrics_calculation(self):
         """Test calculation of execution quality metrics."""
-        performance = EnhancedAlphaPerformance()
-        
-        # Add some sample executions
         fills = [
             ExecutionFill("1", "AAPL", OrderSide.BUY, 100, 100.0, 100.05, 1000, 2.0, 0.03, 0.02),
             ExecutionFill("2", "AAPL", OrderSide.SELL, 100, 99.0, 98.97, 1100, 2.0, -0.02, 0.01),
             ExecutionFill("3", "MSFT", OrderSide.BUY, 50, 200.0, 200.1, 1200, 1.5, 0.08, 0.02),
         ]
-        
-        for fill in fills:
-            performance.add_execution(fill)
-        
-        metrics = performance.calculate_execution_metrics()
-        
+
+        metrics = calculate_execution_metrics(fills)
+
         assert metrics["total_trades"] == 3
         assert metrics["total_volume"] == 250  # 100 + 100 + 50
         assert metrics["total_commission"] == 5.5  # 2.0 + 2.0 + 1.5
         assert metrics["avg_commission_bps"] > 0
         assert metrics["avg_slippage_bps"] > 0
         assert metrics["total_execution_cost"] > 0
-    
+
     def test_return_adjustment_for_costs(self):
         """Test adjustment of returns for execution costs."""
-        performance = EnhancedAlphaPerformance()
-        
-        # Add some executions with costs
         fill = ExecutionFill("1", "AAPL", OrderSide.BUY, 100, 100.0, 100.1, 1000, 5.0, 0.05, 0.02)
-        performance.add_execution(fill)
-        
+
         raw_returns = [0.02, 0.01, -0.01, 0.03]  # 2%, 1%, -1%, 3%
-        adjusted_returns = performance.adjust_returns_for_costs(raw_returns)
-        
+        adjusted_returns = adjust_returns_for_costs(raw_returns, [fill])
+
         # Adjusted returns should be lower due to execution costs
         for raw, adj in zip(raw_returns, adjusted_returns):
             assert adj < raw
-        
+
         assert len(adjusted_returns) == len(raw_returns)
-    
+
     def test_empty_execution_history(self):
         """Test behavior with no execution history."""
-        performance = EnhancedAlphaPerformance()
-        
-        metrics = performance.calculate_execution_metrics()
+        metrics = calculate_execution_metrics([])
         assert metrics == {}
-        
+
         raw_returns = [0.02, 0.01, -0.01]
-        adjusted_returns = performance.adjust_returns_for_costs(raw_returns)
+        adjusted_returns = adjust_returns_for_costs(raw_returns, [])
         assert adjusted_returns == raw_returns  # No adjustment if no executions
 
 
@@ -361,10 +353,7 @@ def test_integration_execution_workflow():
     assert fill.total_cost > 0
     
     # Add to performance tracker
-    performance = EnhancedAlphaPerformance(model)
-    performance.add_execution(fill)
-    
-    metrics = performance.calculate_execution_metrics()
+    metrics = calculate_execution_metrics([fill])
     assert metrics["total_trades"] == 1
     assert metrics["total_volume"] == 1000
     assert metrics["total_execution_cost"] > 0
