@@ -65,3 +65,9 @@ This document collects the actionable guidelines from `AGENTS.md` files across t
   uv run -m pytest -W error
   ```
 
+- Select candidate AlphaDocs (prioritizing GPT-5-Pro ideas):
+  ```bash
+  uv run scripts/select_alpha.py --random
+  uv run scripts/select_alpha.py --top 3
+  ```
+
