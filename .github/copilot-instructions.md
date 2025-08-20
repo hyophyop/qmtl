@@ -194,7 +194,7 @@ git log -n 3 --oneline qmtl-subtree/main
 
 ### Strategy Import Errors
 **Problem**: `ModuleNotFoundError: No module named 'strategies'`
-**Solution**: Set `PYTHONPATH=/path/to/repo` before running strategy commands
+**Solution**: Set `PYTHONPATH=$(pwd)` before running strategy commands (run this from the repository root directory). If your working directory is not the repo root, set `PYTHONPATH` to the absolute path of the repository root.
 
 ### Test Failures
 **Expected**: Some tests may fail due to missing dependencies (rg command, specific features)
