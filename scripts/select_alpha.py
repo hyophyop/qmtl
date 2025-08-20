@@ -26,11 +26,13 @@ def load_entries(registry: Path = REGISTRY) -> list[dict]:
 
 
 def candidate_entries() -> list[dict]:
-    """Return entries with status idea or draft, prioritized by source model."""
+    """Return entries with status idea or draft, prioritized by priority field."""
     status_map = load_registry()
-    target_docs = set(status_map.get("idea", []) + status_map.get("draft", []))
+    target_docs = {
+        e["doc"] for e in status_map.get("idea", []) + status_map.get("draft", [])
+    }
     entries = [e for e in load_entries() if e.get("doc") in target_docs]
-    entries.sort(key=lambda e: e.get("source_model") != "gpt5pro")
+    entries.sort(key=lambda e: e.get("priority") != "gpt5pro")
     return entries
 
 
@@ -57,9 +59,12 @@ def main() -> int:
     if args.format == "json":
         print(json.dumps(selected, indent=2))
     else:
-        lines = ["DOC\tSTATUS\tSOURCE_MODEL"]
+        lines = ["DOC\tSTATUS\tPRIORITY\tTAGS"]
         for e in selected:
-            lines.append(f"{e['doc']}\t{e.get('status','')}\t{e.get('source_model','')}")
+            tags = ",".join(e.get("tags", []))
+            lines.append(
+                f"{e['doc']}\t{e.get('status','')}\t{e.get('priority','')}\t{tags}"
+            )
         print("\n".join(lines))
     return 0
 

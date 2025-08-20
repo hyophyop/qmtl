@@ -7,3 +7,5 @@
 문서 수정이나 이동 시에는 `docs/alphadocs_history.log`를 업데이트하세요.
 필요한 QMTL transform과 테스트 범위를 명시한 `QMTL Integration` 섹션을 각 문서에 추가하고,
 레지스트리의 `modules` 필드에는 해당 transform과 이를 사용하는 전략 노드 경로를 모두 포함하세요.
+레지스트리 항목에는 우선순위를 나타내는 `priority`(예: `normal` 또는 `gpt5pro`)와
+주제를 분류하기 위한 `tags` 목록을 포함해야 합니다.

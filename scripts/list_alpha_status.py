@@ -17,23 +17,31 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs" / "alphadocs_registry.yml"
 
 
-def load_registry(registry: Path = REGISTRY) -> dict[str, list[str]]:
-    """Return mapping of status to sorted list of docs."""
+def load_registry(registry: Path = REGISTRY) -> dict[str, list[dict]]:
+    """Return mapping of status to sorted list of registry entries."""
     data = yaml.safe_load(registry.read_text())
-    status_map: dict[str, list[str]] = {}
+    status_map: dict[str, list[dict]] = {}
     for entry in data or []:
         status = entry.get("status", "unknown")
-        status_map.setdefault(status, []).append(entry["doc"])
-    for docs in status_map.values():
-        docs.sort()
+        item = {
+            "doc": entry["doc"],
+            "priority": entry.get("priority", "normal"),
+            "tags": entry.get("tags", []),
+        }
+        status_map.setdefault(status, []).append(item)
+    for entries in status_map.values():
+        entries.sort(key=lambda e: e["doc"])
     return dict(sorted(status_map.items()))
 
 
-def format_table(status_map: dict[str, list[str]]) -> str:
-    lines = ["STATUS\tDOC"]
+def format_table(status_map: dict[str, list[dict]]) -> str:
+    lines = ["STATUS\tDOC\tPRIORITY\tTAGS"]
     for status in sorted(status_map):
-        for doc in status_map[status]:
-            lines.append(f"{status}\t{doc}")
+        for entry in status_map[status]:
+            tags = ",".join(entry["tags"])
+            lines.append(
+                f"{status}\t{entry['doc']}\t{entry['priority']}\t{tags}"
+            )
     return "\n".join(lines)
 
 
