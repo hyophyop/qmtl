@@ -126,7 +126,9 @@ cd test_project && ls -la
 
 # Set up environment in new project
 uv venv
-uv pip install -e /path/to/repo/qmtl[dev]
+# If your QMTL repo is in the parent directory, use:
+uv pip install -e ../qmtl[dev]
+# Otherwise, replace '../qmtl[dev]' with the correct relative or absolute path to your QMTL repo.
 
 # Test strategy execution
 python strategy.py
