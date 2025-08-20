@@ -14,4 +14,9 @@ def test_list_alpha_status_json() -> None:
     )
     data = json.loads(result.stdout)
     assert "implemented" in data
-    assert "docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md" in data["implemented"]
+    implemented_docs = {e["doc"] for e in data["implemented"]}
+    target = "docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md"
+    assert target in implemented_docs
+    entry = next(e for e in data["implemented"] if e["doc"] == target)
+    assert entry.get("priority")
+    assert isinstance(entry.get("tags"), list)
