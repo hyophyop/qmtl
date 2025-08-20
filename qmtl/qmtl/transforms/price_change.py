@@ -1,7 +1,7 @@
 """Price change transformation node."""
 
 from qmtl.sdk.node import Node
-from qmtl.sdk.cache_view import CacheView
+from .utils import create_period_delta_node
 
 
 def price_change(
@@ -12,23 +12,16 @@ def price_change(
     name: str | None = None,
 ) -> Node:
     """Return a node computing absolute price change over ``period`` values."""
-
-    interval = interval or source.interval
-
-    def compute(view: CacheView):
-        data = view[source][interval][-period:]
-        if len(data) < 2:
-            return None
-        start = data[0][1]
-        end = data[-1][1]
+    
+    def absolute_change(start, end):
         return end - start
-
-    return Node(
-        input=source,
-        compute_fn=compute,
-        name=name or "price_change",
+    
+    return create_period_delta_node(
+        source,
+        absolute_change,
         interval=interval,
         period=period,
+        name=name or "price_change",
     )
 
 
