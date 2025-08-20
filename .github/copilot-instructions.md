@@ -100,7 +100,7 @@ python strategy.py
 **Note: Strategy execution requires proper Python path setup.**
 ```bash
 # Set PYTHONPATH and run strategy
-PYTHONPATH=/home/runner/work/qmtl-strategies/qmtl-strategies uv run python strategies/strategy.py
+PYTHONPATH=$(pwd) uv run python strategies/strategy.py
 
 # Or use the QMTL CLI (may have module import issues)
 uv run qmtl strategies
