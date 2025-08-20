@@ -61,6 +61,14 @@
   - qmtl/qmtl/transforms/order_book_clustering_collapse.py
   priority: gpt5pro
   tags: []
+- doc: docs/alphadocs/ideas/gpt5pro/tactical-liquidity-bifurcation-theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+  - strategies/nodes/indicators/tactical_liquidity_bifurcation.py
+  - qmtl/qmtl/transforms/tactical_liquidity_bifurcation.py
+  priority: gpt5pro
+  tags: []
 - doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
   status: idea
   modules: []
