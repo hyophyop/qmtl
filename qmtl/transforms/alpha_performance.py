@@ -2,6 +2,7 @@
 
 import math
 from collections.abc import Sequence
+from typing import Optional
 from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
@@ -25,7 +26,12 @@ def _rar_mdd(
 
 
 def alpha_performance_node(
-    returns: Sequence[float], *, risk_free_rate: float = 0.0, transaction_cost: float = 0.0
+    returns: Sequence[float], 
+    *, 
+    risk_free_rate: float = 0.0, 
+    transaction_cost: float = 0.0,
+    execution_fills: Optional[list] = None,
+    use_realistic_costs: bool = False
 ) -> dict:
     """Return key performance metrics from a return series.
 
@@ -40,13 +46,17 @@ def alpha_performance_node(
     risk_free_rate:
         Optional risk-free rate used when computing the Sharpe ratio.
     transaction_cost:
-        Optional transaction cost subtracted from each return.
+        Optional transaction cost subtracted from each return (simple model).
+    execution_fills:
+        Optional list of ExecutionFill objects for realistic cost modeling.
+    use_realistic_costs:
+        If True and execution_fills provided, use realistic execution costs.
 
     Returns
     -------
     dict
         Mapping containing ``sharpe``, ``max_drawdown``, ``win_ratio``,
-        ``profit_factor``, ``car_mdd`` and ``rar_mdd`` values.
+        ``profit_factor``, ``car_mdd``, ``rar_mdd`` and execution quality metrics.
     """
 
     # Drop NaN values
@@ -61,8 +71,26 @@ def alpha_performance_node(
             "rar_mdd": 0.0,
         }
 
-    # Apply transaction cost
-    net_returns = [r - transaction_cost for r in clean_returns]
+    # Apply transaction costs
+    if use_realistic_costs and execution_fills:
+        # Use realistic execution modeling
+        try:
+            from qmtl.sdk.execution_modeling import EnhancedAlphaPerformance
+            performance_calc = EnhancedAlphaPerformance()
+            for fill in execution_fills:
+                performance_calc.add_execution(fill)
+            net_returns = performance_calc.adjust_returns_for_costs(clean_returns)
+            
+            # Get execution metrics
+            execution_metrics = performance_calc.calculate_execution_metrics()
+        except ImportError:
+            # Fallback to simple transaction cost if execution modeling unavailable
+            net_returns = [r - transaction_cost for r in clean_returns]
+            execution_metrics = {}
+    else:
+        # Simple transaction cost model
+        net_returns = [r - transaction_cost for r in clean_returns]
+        execution_metrics = {}
 
     # Sharpe ratio
     excess = [r - risk_free_rate for r in net_returns]
@@ -95,7 +123,7 @@ def alpha_performance_node(
     car_mdd = _car_mdd(net_returns, max_dd)
     rar_mdd = _rar_mdd(net_returns, max_dd, risk_free_rate)
 
-    return {
+    result = {
         "sharpe": sharpe,
         "max_drawdown": max_dd,
         "win_ratio": win_ratio,
@@ -103,6 +131,14 @@ def alpha_performance_node(
         "car_mdd": car_mdd,
         "rar_mdd": rar_mdd,
     }
+    
+    # Add execution metrics if available
+    if execution_metrics:
+        result.update({
+            f"execution_{k}": v for k, v in execution_metrics.items()
+        })
+    
+    return result
 
 
 def alpha_performance_from_history_node(
