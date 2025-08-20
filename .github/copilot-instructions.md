@@ -121,7 +121,7 @@ uv run qmtl --help
 
 # Test template creation and execution
 cd /tmp
-uv run /path/to/repo/.venv/bin/qmtl init --path test_project --strategy general
+uv run qmtl init --path test_project --strategy general
 cd test_project && ls -la
 
 # Set up environment in new project
