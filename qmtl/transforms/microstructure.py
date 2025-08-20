@@ -88,30 +88,13 @@ def order_flow_imbalance_node(
     name: str | None = None,
 ) -> Node:
     """Return node computing order-flow imbalance."""
-
-    interval = interval or buy_volume.interval
-
-    def compute(view: CacheView):
-        b_data = view[buy_volume][interval]
-        s_data = view[sell_volume][interval]
-        if not b_data or not s_data:
-            return None
-        b = b_data[-1][1]
-        s = s_data[-1][1]
-        if not isinstance(b, (int, float)) or math.isnan(b):
-            return None
-        if not isinstance(s, (int, float)) or math.isnan(s):
-            return None
-        total = b + s
-        if total == 0:
-            return None
-        return (b - s) / total
-
-    return Node(
-        input=[buy_volume, sell_volume],
-        compute_fn=compute,
-        name=name or "order_flow_imbalance",
+    from .utils import create_imbalance_node
+    
+    return create_imbalance_node(
+        buy_volume,
+        sell_volume,
         interval=interval,
+        name=name or "order_flow_imbalance",
     )
 
 

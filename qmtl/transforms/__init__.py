@@ -31,6 +31,12 @@ from .order_book_clustering_collapse import hazard_probability, direction_gating
 from .identity import identity_transform_node
 from .llrti import llrti
 from .scale import scale_transform_node
+from .utils import (
+    normalized_difference,
+    create_imbalance_node,
+    compute_statistics,
+    create_period_statistics_node,
+)
 
 __all__ = [
     "rate_of_change",
@@ -69,4 +75,8 @@ __all__ = [
     "identity_transform_node",
     "llrti",
     "scale_transform_node",
+    "normalized_difference",
+    "create_imbalance_node",
+    "compute_statistics",
+    "create_period_statistics_node",
 ]
