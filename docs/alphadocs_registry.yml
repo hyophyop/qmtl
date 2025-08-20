@@ -12,6 +12,7 @@
   - strategies/nodes/generators/sequence.py
   - qmtl/qmtl/examples/nodes/indicators/average.py
   - qmtl/qmtl/examples/nodes/transforms/scale.py
+  - qmtl/qmtl/transforms/scale.py
   - strategies/nodes/transforms/scale.py
   priority: normal
   tags: []
