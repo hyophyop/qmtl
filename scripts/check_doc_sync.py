@@ -33,6 +33,7 @@ def check_doc_sync(
         registry_data = []
 
     registry_docs = {entry["doc"]: entry.get("modules", []) for entry in registry_data}
+    registry_status = {entry["doc"]: entry.get("status") for entry in registry_data}
 
     actual_docs = sorted(
         rel
@@ -53,6 +54,12 @@ def check_doc_sync(
 
     source_pattern = re.compile(r"^# Source: (?P<path>.+)$", re.MULTILINE)
     for doc_path, modules in registry_docs.items():
+        status = registry_status.get(doc_path)
+        if status == "implemented" and not modules:
+            errors.append(f"{doc_path} status 'implemented' but modules list empty")
+        if modules and status != "implemented":
+            errors.append(f"{doc_path} has modules but status {status}")
+
         for module in modules or []:
             mod_file = root / module
             if not mod_file.exists():
