@@ -65,7 +65,9 @@
   - strategies/nodes/indicators/gap_amplification.py
   priority: gpt5pro
   tags: []
-  usage_status: unused
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
   status: implemented
   source_model: gpt5pro
@@ -85,7 +87,9 @@
   - qmtl/qmtl/transforms/tactical_liquidity_bifurcation.py
   priority: gpt5pro
   tags: []
-  usage_status: unused
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
   status: idea
   modules: []
