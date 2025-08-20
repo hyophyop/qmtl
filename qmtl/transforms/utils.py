@@ -154,6 +154,45 @@ def create_period_statistics_node(
     )
 
 
+def create_period_delta_node(
+    source: Node,
+    transform_fn,
+    *,
+    interval: int | None = None,
+    period: int = 2,
+    name: str | None = None,
+) -> Node:
+    """Create a node that computes a transformation between first and last values over a period.
+    
+    Args:
+        source: Input node
+        transform_fn: Function that takes (start, end) and returns the transformed value
+        interval: Optional interval override
+        period: Number of values to include
+        name: Optional node name
+        
+    Returns:
+        Node computing transform_fn(first_value, last_value) over the period
+    """
+    interval = interval or source.interval
+
+    def compute(view: CacheView):
+        data = view[source][interval][-period:]
+        if len(data) < 2:
+            return None
+        start = data[0][1]
+        end = data[-1][1]
+        return transform_fn(start, end)
+
+    return Node(
+        input=source,
+        compute_fn=compute,
+        name=name or "period_delta",
+        interval=interval,
+        period=period,
+    )
+
+
 __all__ = [
     "validate_numeric",
     "validate_numeric_sequence", 
@@ -161,4 +200,5 @@ __all__ = [
     "create_imbalance_node",
     "compute_statistics",
     "create_period_statistics_node",
+    "create_period_delta_node",
 ]

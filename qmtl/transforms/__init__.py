@@ -36,6 +36,7 @@ from .utils import (
     create_imbalance_node,
     compute_statistics,
     create_period_statistics_node,
+    create_period_delta_node,
 )
 
 __all__ = [
@@ -79,4 +80,5 @@ __all__ = [
     "create_imbalance_node",
     "compute_statistics",
     "create_period_statistics_node",
+    "create_period_delta_node",
 ]

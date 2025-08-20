@@ -10,6 +10,7 @@ from qmtl.transforms.utils import (
     create_imbalance_node,
     compute_statistics,
     create_period_statistics_node,
+    create_period_delta_node,
 )
 from qmtl.sdk.node import SourceNode
 from qmtl.sdk.cache_view import CacheView
@@ -116,4 +117,35 @@ def test_create_period_statistics_node():
     short_data = {source.node_id: {1: [(0, 1), (1, 2)]}}
     short_view = CacheView(short_data)
     result = both_node.compute_fn(short_view)
+    assert result is None
+
+
+def test_create_period_delta_node():
+    """Test period delta node creation."""
+    source = SourceNode(interval="1s", period=3, config={"id": "source"})
+    
+    # Test rate of change style transformation
+    def percentage_change(start, end):
+        if start == 0:
+            return None
+        return (end - start) / start
+    
+    roc_node = create_period_delta_node(source, percentage_change, period=2)
+    data = {source.node_id: {1: [(0, 1), (1, 3)]}}
+    view = CacheView(data)
+    result = roc_node.compute_fn(view)
+    assert result == 2.0
+    
+    # Test absolute change style transformation
+    def absolute_change(start, end):
+        return end - start
+    
+    abs_node = create_period_delta_node(source, absolute_change, period=2)
+    result = abs_node.compute_fn(view)
+    assert result == 2
+    
+    # Test insufficient data
+    short_data = {source.node_id: {1: [(0, 1)]}}
+    short_view = CacheView(short_data)
+    result = roc_node.compute_fn(short_view)
     assert result is None
