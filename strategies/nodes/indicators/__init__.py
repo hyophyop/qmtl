@@ -1,20 +1,27 @@
 """Indicator node processors."""
 
+from qmtl.sdk.cache_view import CacheView
+
 __all__ = ["sample_indicator"]
 
 
-def sample_indicator(data: dict) -> int | float:
-    """Double the ``value`` entry of the input mapping.
+def sample_indicator(data: CacheView | dict) -> int | float:
+    """Double the ``value`` entry of the input.
 
-    Parameters
-    ----------
-    data:
-        Mapping that may include a ``"value"`` key with a numeric value.
-
-    Returns
-    -------
-    int | float
-        Twice the numeric ``value`` if provided, otherwise ``0".
+    Accepts either a plain mapping or a :class:`CacheView`. When a
+    ``CacheView`` is provided, the latest payload from the first upstream node
+    is used.
     """
+
+    if isinstance(data, CacheView):
+        try:
+            node_view = next(iter(data._data.values()))  # type: ignore[attr-defined]
+            interval_view = next(iter(node_view.values()))
+            _, payload = interval_view[-1]
+        except Exception:
+            return 0
+        if isinstance(payload, dict):
+            return payload.get("value", 0) * 2
+        return 0
 
     return data.get("value", 0) * 2

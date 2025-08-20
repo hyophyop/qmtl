@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
+
 from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
 
 
 class TradeOrderPublisherNode(Node):
@@ -8,6 +8,12 @@ class TradeOrderPublisherNode(Node):
 
 
 def test_runner_trade_execution_service_invoked():
+    import importlib
+    import qmtl.sdk.runner as runner_module
+
+    runner_module = importlib.reload(runner_module)
+    Runner = runner_module.Runner
+
     service = MagicMock()
     Runner.set_trade_execution_service(service)
     try:
@@ -22,3 +28,4 @@ def test_runner_trade_execution_service_invoked():
         service.post_order.assert_called_once_with({"side": "BUY"})
     finally:
         Runner.set_trade_execution_service(None)
+
