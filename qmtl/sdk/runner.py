@@ -487,6 +487,8 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        validate_data: bool = True,
+        validation_config: Optional[dict] = None,
     ) -> Strategy:
         """Run strategy in backtest mode. Requires ``gateway_url``."""
         if start_time is None or end_time is None:
@@ -514,6 +516,17 @@ class Runner:
         Runner._apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, start_time, end_time)
+        
+        # Enhanced data validation before replay
+        if validate_data:
+            from .backtest_validation import validate_backtest_data
+            logger.info("Validating backtest data quality...")
+            validation_reports = validate_backtest_data(
+                strategy, 
+                validation_config=validation_config
+            )
+            logger.info(f"Data validation completed for {len(validation_reports)} nodes")
+        
         start = Runner._maybe_int(start_time)
         end = Runner._maybe_int(end_time)
         await Runner._replay_history(strategy, start, end, on_missing=on_missing)
@@ -528,6 +541,8 @@ class Runner:
         on_missing="skip",
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        validate_data: bool = True,
+        validation_config: Optional[dict] = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.backtest_async(
@@ -537,6 +552,8 @@ class Runner:
                 on_missing=on_missing,
                 gateway_url=gateway_url,
                 meta=meta,
+                validate_data=validate_data,
+                validation_config=validation_config,
             )
         )
 
