@@ -39,3 +39,40 @@ def test_non_idea_files_trigger_error(tmp_path: Path) -> None:
 
     errors = check_doc_sync(root, registry, doc_dir)
     assert any("Docs not in registry" in e for e in errors)
+
+
+def test_implemented_status_requires_modules(tmp_path: Path) -> None:
+    check_doc_sync = load_check_doc_sync()
+    root = tmp_path
+    doc_dir = root / "docs" / "alphadocs"
+    doc = doc_dir / "sample.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("test")
+    registry = root / "docs" / "alphadocs_registry.yml"
+    registry.write_text(
+        "- doc: docs/alphadocs/sample.md\n  status: implemented\n  modules: []\n"
+    )
+
+    errors = check_doc_sync(root, registry, doc_dir)
+    assert any("status 'implemented' but modules list empty" in e for e in errors)
+
+
+def test_modules_require_implemented_status(tmp_path: Path) -> None:
+    check_doc_sync = load_check_doc_sync()
+    root = tmp_path
+    doc_dir = root / "docs" / "alphadocs"
+    doc = doc_dir / "sample.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("test")
+
+    mod_file = root / "strategies" / "nodes" / "sample.py"
+    mod_file.parent.mkdir(parents=True)
+    mod_file.write_text("# Source: docs/alphadocs/sample.md\n")
+
+    registry = root / "docs" / "alphadocs_registry.yml"
+    registry.write_text(
+        "- doc: docs/alphadocs/sample.md\n  status: draft\n  modules:\n  - strategies/nodes/sample.py\n"
+    )
+
+    errors = check_doc_sync(root, registry, doc_dir)
+    assert any("has modules but status draft" in e for e in errors)
