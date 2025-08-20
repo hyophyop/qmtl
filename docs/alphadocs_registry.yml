@@ -1,10 +1,12 @@
-# `modules` 항목에는 qmtl transform과 이를 호출하는 전략 노드 경로를 모두 나열합니다.
 - doc: docs/alphadocs/Kyle-Obizhaeva_non-linear_variation.md
   status: implemented
   modules:
   - strategies/nodes/indicators/non_linear_alpha.py
   priority: normal
   tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/basic_sequence_pipeline.md
   status: implemented
   modules:
@@ -16,6 +18,7 @@
   - strategies/nodes/transforms/scale.py
   priority: normal
   tags: []
+  usage_status: unused
 - doc: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
   status: draft
   modules: []
@@ -30,6 +33,9 @@
   - qmtl/qmtl/transforms/llrti.py
   priority: gpt5pro
   tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/quantum-liquidity-echo-theory.md
   status: implemented
   source_model: gpt5pro
@@ -37,6 +43,9 @@
   - strategies/nodes/indicators/quantum_liquidity_echo.py
   priority: gpt5pro
   tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
   status: implemented
   source_model: gpt5pro
@@ -45,6 +54,9 @@
   - qmtl/qmtl/transforms/acceptable_price_band.py
   priority: gpt5pro
   tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
   status: implemented
   source_model: gpt5pro
@@ -53,6 +65,7 @@
   - strategies/nodes/indicators/gap_amplification.py
   priority: gpt5pro
   tags: []
+  usage_status: unused
 - doc: docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
   status: implemented
   source_model: gpt5pro
@@ -61,6 +74,9 @@
   - qmtl/qmtl/transforms/order_book_clustering_collapse.py
   priority: gpt5pro
   tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/tactical-liquidity-bifurcation-theory.md
   status: implemented
   source_model: gpt5pro
@@ -69,6 +85,7 @@
   - qmtl/qmtl/transforms/tactical_liquidity_bifurcation.py
   priority: gpt5pro
   tags: []
+  usage_status: unused
 - doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
   status: idea
   modules: []
@@ -189,7 +206,7 @@
   modules: []
   priority: normal
   tags: []
-- doc: docs/alphadocs/ideas/Market Response Damping–Resonance Theory.md
+- doc: "docs/alphadocs/ideas/Market Response Damping\u2013Resonance Theory.md"
   status: idea
   modules: []
   priority: normal
