@@ -2,6 +2,7 @@
 
 This repository hosts strategy experiments built on top of the [QMTL](qmtl/README.md) subtree. Use this document to keep workflows consistent and to leverage QMTL effectively.
 
+- 작업을 시작하기 전에 항상 `qmtl` 서브트리를 최신 상태로 업데이트하세요.
 - QMTL 수정은 버그 수정이나 QMTL 본체로 환원할 수 있는 범용 기능 추가에 한정합니다.
 - 전략 전용 코드는 `strategies/`에 두고, QMTL 서브트리에 넣지 마세요.
 
