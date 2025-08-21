@@ -1,3 +1,10 @@
+---
+title: "Backtest Data Validation"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 {{ nav_links() }}
 
 # Backtest Data Validation

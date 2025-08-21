@@ -1,8 +1,14 @@
+---
+title: "QMTL 고급 아키텍처 및 시스템 구현 계획서"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 {{ nav_links() }}
 
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
-> *최종 수정일: 2025년 6월 4일*
 
 ---
 
