@@ -1,6 +1,6 @@
 """Resiliency transform utilities."""
 
-# Source: docs/alphadocs/ideas/resiliency.md
+# Source: ../docs/alphadocs/ideas/resiliency.md
 
 from __future__ import annotations
 

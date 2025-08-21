@@ -1,6 +1,6 @@
 """Numeric sequence generator node."""
 
-# Source: docs/alphadocs/basic_sequence_pipeline.md
+# Source: ../docs/alphadocs/basic_sequence_pipeline.md
 
 TAGS = {
     "scope": "indicator",
