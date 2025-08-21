@@ -53,6 +53,7 @@ def all_alpha_generator_node() -> dict:
     obi = order_book_imbalance(bid_vol, ask_vol)
     _append("obi", obi, window=2)
     obi_deriv = rate_of_change_series(_history["obi"])
+    depth = bid_vol + ask_vol
 
     buy = raw["buy_volume"]
     sell = raw["sell_volume"]
@@ -148,5 +149,14 @@ def all_alpha_generator_node() -> dict:
             "tau": 1.0,
             "sigma": 0.1,
             "threshold": 0.0,
+        },
+        "resiliency": {
+            "volume": volume,
+            "avg_volume": volume_hat,
+            "depth": depth,
+            "volatility": vol,
+            "obi_derivative": obi_deriv,
+            "beta": 1.0,
+            "gamma": 1.0,
         },
     }

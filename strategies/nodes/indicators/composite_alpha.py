@@ -20,6 +20,7 @@ from .order_book_clustering_collapse import (
 from .quantum_liquidity_echo import quantum_liquidity_echo_node
 from .tactical_liquidity_bifurcation import tactical_liquidity_bifurcation_node
 from .execution_diffusion_contraction import execution_diffusion_contraction_node
+from .resiliency_alpha import resiliency_alpha_node
 
 
 def composite_alpha_node(data: dict) -> dict:
@@ -33,7 +34,8 @@ def composite_alpha_node(data: dict) -> dict:
     qle = quantum_liquidity_echo_node(data.get("qle", {}))
     tlb = tactical_liquidity_bifurcation_node(data.get("tactical_liquidity", {}))
     edch = execution_diffusion_contraction_node(data.get("edch", {}))
-    
+    resil = resiliency_alpha_node(data.get("resiliency", {}))
+
     components = [
         apb.get("alpha", 0.0),
         gap_amp.get("alpha", 0.0),
@@ -43,6 +45,7 @@ def composite_alpha_node(data: dict) -> dict:
         qle.get("echo_amplitude", 0.0),
         tlb.get("alpha", 0.0),
         edch.get("alpha", 0.0),
+        resil.get("alpha", 0.0),
     ]
     alpha = sum(components) / len(components) if components else 0.0
     return {
@@ -56,5 +59,6 @@ def composite_alpha_node(data: dict) -> dict:
             "quantum_echo": components[5],
             "tactical_liquidity_bifurcation": components[6],
             "execution_diffusion_contraction": components[7],
+            "resiliency": components[8],
         },
     }

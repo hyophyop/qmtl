@@ -62,11 +62,12 @@ def test_alpha_usage_tracker_detects_usage():
     used_alpha_names = tracker.used_alphas.keys()
     expected_alphas = [
         "acceptable_price_band",
-        "llrti", 
+        "llrti",
         "latent_liquidity_alpha",
         "non_linear_alpha",
         "order_book_clustering_collapse",
-        "quantum_liquidity_echo"
+        "quantum_liquidity_echo",
+        "resiliency_alpha",
     ]
     
     for alpha in expected_alphas:
