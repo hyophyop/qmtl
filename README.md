@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD012 MD013 MD025 -->
+
 # qmtl
 
 QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](docs/architecture/architecture.md) for full details.
@@ -135,7 +137,6 @@ Install additional functionality on demand:
 - [IO](qmtl/io) &mdash; `pip install qmtl[io]`
 - [Generators](qmtl/generators/README.md)
 - [Transforms](qmtl/transforms/README.md)
-
 
 ## End-to-End Testing
 
