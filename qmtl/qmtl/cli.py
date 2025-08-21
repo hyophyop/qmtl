@@ -26,7 +26,7 @@ def main(argv: List[str] | None = None) -> None:
     p_taglint.add_argument("--fix", action="store_true", help="Attempt to fix issues")
     p_init = sub.add_parser(
         "init",
-        help="Initialize new project (see docs/strategy_workflow.md)",
+        help="Initialize new project (see docs/guides/strategy_workflow.md)",
     )
     p_init.add_argument(
         "--path", required=True, help="Project directory to create scaffolding"
@@ -34,17 +34,17 @@ def main(argv: List[str] | None = None) -> None:
     p_init.add_argument(
         "--strategy",
         default="general",
-        help="Strategy template to use (see docs/templates.md)",
+        help="Strategy template to use (see docs/reference/templates.md)",
     )
     p_init.add_argument(
         "--list-templates",
         action="store_true",
-        help="List available templates and exit (see docs/templates.md)",
+        help="List available templates and exit (see docs/reference/templates.md)",
     )
     p_init.add_argument(
         "--with-sample-data",
         action="store_true",
-        help="Include sample OHLCV CSV and notebook (see docs/strategy_workflow.md)",
+        help="Include sample OHLCV CSV and notebook (see docs/guides/strategy_workflow.md)",
     )
     p_init.add_argument(
         "--with-docs",

@@ -1,3 +1,12 @@
+---
+title: "Monitoring and Alerting"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Monitoring and Alerting
 
 This document outlines sample Prometheus alerts and Grafana dashboards for QMTL services.
@@ -24,7 +33,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 
 ## Grafana Dashboards
 
-Example Grafana dashboards are provided in `docs/dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
+Example Grafana dashboards are provided in `dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
 
 ## QuestDB Recorder Demo
 
@@ -114,4 +123,7 @@ service="gateway"
 
 Selecting a trace shows the relationship between the SDK's HTTP request, the
 Gateway submission and downstream gRPC calls to the DAG Manager.
+
+
+{{ nav_links() }}
 
