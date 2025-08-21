@@ -57,6 +57,17 @@
   usage_status: used
   used_in_strategies:
   - indicator:composite_alpha
+- doc: docs/alphadocs/ideas/gpt5pro/Dynamic Execution Diffusion-Contraction Theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+  - strategies/nodes/indicators/execution_diffusion_contraction.py
+  - qmtl/qmtl/transforms/execution_diffusion_contraction.py
+  priority: gpt5pro
+  tags: []
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
   status: implemented
   source_model: gpt5pro
