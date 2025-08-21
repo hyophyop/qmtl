@@ -1,6 +1,8 @@
 ---
 title: "Architecture"
-tags: []
+tags:
+  - architecture
+  - overview
 author: "QMTL Team"
 last_modified: 2025-08-21
 ---
@@ -9,8 +11,12 @@ last_modified: 2025-08-21
 
 # Architecture
 
+!!! abstract "TL;DR"
+    High-level hub for QMTL's architectural components. Use the links below to explore each module.
+
 Design documents describing core QMTL components.
 
+## 관련 문서
 - [Architecture Overview](architecture.md): High-level system design.
 - [Gateway](gateway.md): Gateway component specification.
 - [DAG Manager](dag-manager.md): DAG Manager design.

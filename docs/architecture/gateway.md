@@ -11,6 +11,12 @@ last_modified: 2025-08-21
 
 *Research‑Driven Draft v1.2 — 2025‑06‑10*
 
+## 관련 문서
+- [Architecture Overview](README.md)
+- [QMTL Architecture](architecture.md)
+- [DAG Manager](dag-manager.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
+
 > This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
 > Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
 
