@@ -184,6 +184,44 @@ class TestExecutionModel:
         assert abs(fill.fill_price - 99.0) < abs(fill.fill_price - market_data.bid)
         assert fill.side == OrderSide.SELL
         assert fill.slippage < 0  # Sell order should have negative slippage
+
+    def test_commission_and_slippage_values(self):
+        """Validate numeric commission and slippage calculations."""
+        model = ExecutionModel(
+            commission_rate=0.001,
+            commission_minimum=0.0,
+            base_slippage_bps=1.0,
+            market_impact_coeff=0.0,
+        )
+
+        market_data = MarketData(
+            timestamp=0,
+            bid=99.0,
+            ask=101.0,
+            last=100.0,
+            volume=10000,
+        )
+
+        slippage = model.calculate_slippage(
+            market_data, OrderType.MARKET, OrderSide.BUY, 100
+        )
+        expected_slippage = market_data.mid_price * 0.0001 + market_data.spread / 2.0
+        assert slippage == pytest.approx(expected_slippage)
+
+        fill = model.simulate_execution(
+            order_id="t1",
+            symbol="XYZ",
+            side=OrderSide.BUY,
+            quantity=100,
+            order_type=OrderType.MARKET,
+            requested_price=100.0,
+            market_data=market_data,
+            timestamp=0,
+        )
+        expected_price = market_data.ask + expected_slippage
+        expected_commission = expected_price * 100 * 0.001
+        assert fill.fill_price == pytest.approx(expected_price)
+        assert fill.commission == pytest.approx(expected_commission)
     
     def test_order_validation(self):
         """Test order validation logic."""
