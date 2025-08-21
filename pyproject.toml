@@ -33,6 +33,7 @@ dev = [
     "grpcio-tools",
     "pyarrow",
     "xstate",
+    "mkdocs-material",
 ]
 
 ray = ["ray"]
