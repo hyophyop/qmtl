@@ -1,3 +1,12 @@
+---
+title: ""
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 Enhancing Backtest Execution Accuracy: Lean Features & QMTL Integration
 Introduction
 Improving the realism of backtest trade execution requires modeling various market mechanics. QuantConnect’s Lean engine provides a rich set of “reality modeling” features that enhance fill accuracy, including diverse order types/policies, slippage and fee models, liquidity constraints, proper timing of fills, and robust position tracking. QMTL – a DAG-based strategy execution framework – currently focuses on signal generation and lacks these detailed execution simulations. This report analyzes how Lean implements each key feature and proposes a design to transplant similar functionality into QMTL. Where possible, we suggest purely DAG-based solutions; if a direct DAG integration is impractical, we outline hybrid approaches (e.g. an external order-matching layer or portfolio state machine) and explain their pros and cons. The goal is to incorporate the following features into QMTL’s architecture to yield more realistic backtest outcomes:
@@ -154,5 +163,7 @@ https://github.com/QuantConnect/Lean/blob/93d58d5cdfac666f2d5207ba1901b2c2217292
 https://www.quantconnect.com/forum/discussion/17157/how-to-make-set-slippagemodel-and-feemodel-work/
 [23] [24] [31] Market Order Backtesting Behavior - QuantConnect.com
 https://www.quantconnect.com/forum/discussion/10369/market-order-backtesting-behavior/
-[32] [35] architecture.md
-https://github.com/hyophyop/qmtl/blob/b2e92819d56427c96cc85ff9df53a6332ee89b33/architecture.md
+[32] [35] [architecture.md](../architecture/architecture.md)
+
+{{ nav_links() }}
+

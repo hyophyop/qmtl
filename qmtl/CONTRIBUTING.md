@@ -7,3 +7,7 @@ uv run scripts/check_doc_sync.py
 ```
 
 Run the script from the repository root and fix any reported issues.
+
+## Documentation
+
+When adding new markdown files under `docs/`, copy `docs/templates/template.md` and update the front matter fields (`title`, `tags`, `author`, `last_modified`).

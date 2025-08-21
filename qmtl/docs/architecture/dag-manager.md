@@ -1,3 +1,12 @@
+---
+title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # QMTL DAG Manager — 상세 설계서 (Extended Edition)
 
 > **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
@@ -101,7 +110,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
 | G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
 | D→G | HTTP  | `/callbacks/sentinel-traffic` | version, weight | 202                | 3×                 | 카나리아 비율 변경       |
-|     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](docs/canary_rollout.md) 참조 |
+|     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](../operations/canary_rollout.md) 참조 |
 
 ### 2-B. Sentinel Traffic API
 
@@ -252,7 +261,7 @@ qmtl dagmanager export-schema --out schema.cypher
 ```
 
 For canary deployment steps see
-[`docs/canary_rollout.md`](docs/canary_rollout.md).
+[`docs/canary_rollout.md`](../operations/canary_rollout.md).
 
 ## 12. 서버 설정 파일 사용법
 
@@ -287,3 +296,6 @@ qmtl dagmanager-server --config qmtl/examples/qmtl.yml
 Available flags:
 
 - ``--config`` – optional path to configuration file.
+
+{{ nav_links() }}
+

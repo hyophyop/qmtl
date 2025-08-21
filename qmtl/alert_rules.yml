@@ -1,5 +1,5 @@
 # Basic Alertmanager and Prometheus rules for QMTL metrics
-# For a complete list of suggested alerts see docs/monitoring.md
+# For a complete list of suggested alerts see docs/operations/monitoring.md
 alertmanager:
   route:
     receiver: 'slack'
