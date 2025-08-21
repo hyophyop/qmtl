@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 from typing import List
 
 
@@ -82,7 +81,7 @@ def main(argv: List[str] | None = None) -> None:
         logging.basicConfig(level=logging.INFO)
         sdk_main(rest)
     elif args.cmd == "strategies":
-        strategy_main = importlib.import_module("strategies.strategy").main
+        from strategies.strategy import main as strategy_main
         strategy_main()
     elif args.cmd == "doc-sync":
         from qmtl.scripts.check_doc_sync import main as doc_sync_main
