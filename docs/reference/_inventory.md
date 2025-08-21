@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Documentation Inventory
 
 Below is a categorized list of Markdown files located in the repository root and `docs/` directory. Each category includes an owner responsible for maintaining the documents.
@@ -40,3 +42,6 @@ Below is a categorized list of Markdown files located in the repository root and
 - `docs/reference/lean_like_features.md`
 - `docs/reference/templates.md`
 - `docs/reference/_inventory.md`
+
+{{ nav_links() }}
+

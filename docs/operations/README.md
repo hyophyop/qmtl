@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Operations
 
 Guidelines for running and maintaining QMTL in production.
@@ -9,3 +11,6 @@ Guidelines for running and maintaining QMTL in production.
 - [Risk Management](risk_management.md): Operational risk controls.
 - [Timing Controls](timing_controls.md): Scheduling safeguards.
 - [Grafana Dashboard](dashboards/gc_dashboard.json): Sample metrics dashboard.
+
+{{ nav_links() }}
+

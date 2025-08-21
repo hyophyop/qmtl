@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Backtest Data Validation
 
 `validate_backtest_data` inspects cached history before replay to catch common quality issues. It generates a `DataQualityReport` for each `StreamInput` and can halt execution when data falls below a required threshold.
@@ -25,3 +27,6 @@ Use `validate_backtest_data(strategy, fail_on_quality_threshold=0.8)` to enforce
 ## Example
 
 The script at `qmtl/examples/backtest_validation_example.py` shows how to enable validation before running a backtest. A sample CSV with deliberate gaps is provided at `qmtl/examples/data/backtest_validation_sample.csv` for experimentation.
+
+{{ nav_links() }}
+

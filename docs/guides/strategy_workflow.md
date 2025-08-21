@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Strategy Development and Testing Workflow
 
 > **실무 개발 가이드 및 체크리스트**
@@ -200,3 +202,6 @@ Gateway and DAG Manager using your customized `qmtl.yml`.
 > - [monitoring.md](monitoring.md): 모니터링 및 운영
 > - [canary_rollout.md](canary_rollout.md): 점진적 배포 전략
 > - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
+
+{{ nav_links() }}
+

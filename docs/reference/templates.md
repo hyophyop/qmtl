@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Strategy Templates
 
 QMTL ships with starter strategies that can be used when running `qmtl init`.
@@ -105,3 +107,6 @@ qmtl taglint path/to/module.py
 Add `--fix` to normalize intervals and scaffold missing keys. Linting can run in
 parallel with documentation tasks, so teams can update docs while `qmtl taglint`
 checks the code.
+
+{{ nav_links() }}
+

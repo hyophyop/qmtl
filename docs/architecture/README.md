@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Architecture
 
 Design documents describing core QMTL components.
@@ -6,3 +8,6 @@ Design documents describing core QMTL components.
 - [Gateway](gateway.md): Gateway component specification.
 - [DAG Manager](dag-manager.md): DAG Manager design.
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
+
+{{ nav_links() }}
+

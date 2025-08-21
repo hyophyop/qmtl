@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Reference
 
 Reference materials and inventories for QMTL.
@@ -9,3 +11,6 @@ Reference materials and inventories for QMTL.
 - [Lean-like Features](lean_like_features.md): Proposed feature alignment with Lean.
 - [Templates](templates.md): Document templates.
 - [Inventory](\_inventory.md): Documentation index.
+
+{{ nav_links() }}
+

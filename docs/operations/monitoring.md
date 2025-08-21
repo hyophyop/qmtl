@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Monitoring and Alerting
 
 This document outlines sample Prometheus alerts and Grafana dashboards for QMTL services.
@@ -114,4 +116,7 @@ service="gateway"
 
 Selecting a trace shows the relationship between the SDK's HTTP request, the
 Gateway submission and downstream gRPC calls to the DAG Manager.
+
+
+{{ nav_links() }}
 

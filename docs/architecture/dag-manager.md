@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # QMTL DAG Manager — 상세 설계서 (Extended Edition)
 
 > **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
@@ -287,3 +289,6 @@ qmtl dagmanager-server --config qmtl/examples/qmtl.yml
 Available flags:
 
 - ``--config`` – optional path to configuration file.
+
+{{ nav_links() }}
+

@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
 > *최종 수정일: 2025년 6월 4일*
@@ -414,4 +416,7 @@ Runner.dryrun(CrossMarketLagStrategy)
     50% 프로모션, 한 줄 롤백 명령으로 이어지는 파이프라인을 구축한다.
 
 위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
+
+
+{{ nav_links() }}
 
