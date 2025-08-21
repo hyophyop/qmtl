@@ -7,6 +7,12 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
+## 관련 문서
+- [Architecture Overview](README.md)
+- [QMTL Architecture](architecture.md)
+- [Gateway](gateway.md)
+- [DAG Manager](dag-manager.md)
+
 아래는 \*\*Lean의 ‘브로커리지 모델(Brokerage Model)’\*\*을 구현할 때 필요한 핵심 기술과, 이를 **조합**해 “현실적인 체결·거래 제약”을 한 번에 모델링하는 설계 가이드입니다. 마지막에 **QMTL**로 옮겨 담는 방법(모듈 배치/파이프라인)도 제안합니다.
 
 ---
