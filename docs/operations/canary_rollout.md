@@ -1,6 +1,15 @@
+---
+title: "Canary Rollout Guide"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Canary Rollout Guide
 
-This document explains how to gradually shift traffic between strategy versions using the `DAG Manager` callback endpoint `/callbacks/sentinel-traffic`. See [../dag-manager.md](../dag-manager.md) for the full API specification and [../gateway.md](../gateway.md) for how Gateway processes `sentinel_weight` events.
+This document explains how to gradually shift traffic between strategy versions using the `DAG Manager` callback endpoint `/callbacks/sentinel-traffic`. See [dag-manager.md](../architecture/dag-manager.md) for the full API specification and [gateway.md](../architecture/gateway.md) for how Gateway processes `sentinel_weight` events.
 
 ## Adjusting Weights
 
@@ -24,3 +33,6 @@ curl -X POST \
 * **Alerts:** alert rules under `alert_rules.yml` trigger if traffic weight deviates from the configured value for more than 5 minutes.
 
 Review Grafana dashboards to visualize canary success rates and error budgets while gradually increasing the traffic weight.
+
+{{ nav_links() }}
+

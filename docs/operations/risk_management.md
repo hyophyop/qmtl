@@ -1,3 +1,12 @@
+---
+title: "Risk Management Guide"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Risk Management Guide
 
 This guide explains how to configure and use the `RiskManager` to enforce portfolio limits during backtests and simulations.
@@ -35,3 +44,6 @@ is_valid, violation, adjusted_qty = enforce_position_limit(
 ```
 
 If the trade exceeds the configured limits, `is_valid` is `False` and `adjusted_qty` reflects the maximum safe quantity.
+
+{{ nav_links() }}
+

@@ -1,12 +1,21 @@
+---
+title: "Strategy Development and Testing Workflow"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Strategy Development and Testing Workflow
 
 > **실무 개발 가이드 및 체크리스트**
 >
-> - **관심사 분리(SoC)**: 각 모듈은 단일 책임 원칙을 지키고, 인터페이스로 의존성을 최소화하세요. (자세한 내용은 [architecture.md](../architecture.md) 참고)
+> - **관심사 분리(SoC)**: 각 모듈은 단일 책임 원칙을 지키고, 인터페이스로 의존성을 최소화하세요. (자세한 내용은 [architecture.md](../architecture/architecture.md) 참고)
 > - **테스트 독립성**: 테스트는 서로 의존하지 않게 작성하고, 실패 시 원인을 쉽게 파악할 수 있도록 명확한 assert와 메시지를 사용하세요.
 > - **코딩 규칙**: 전략/노드 구현 시 모듈화, 함수 분리, 주석 및 docstring 작성 등 기본 원칙을 지켜주세요.
-> - **트러블슈팅**: 설치/실행/연결 오류 발생 시 [docs/faq.md](faq.md)와 아래 '자주 발생하는 문제'를 참고하세요.
-> - **운영/배포**: 배포 전 테스트, 설정 백업, 롤백 플랜, 모니터링 설정을 반드시 확인하세요. (자세한 내용은 [docs/monitoring.md](monitoring.md), [docs/canary_rollout.md](canary_rollout.md) 참고)
+> - **트러블슈팅**: 설치/실행/연결 오류 발생 시 [docs/reference/faq.md](../reference/faq.md)와 아래 '자주 발생하는 문제'를 참고하세요.
+> - **운영/배포**: 배포 전 테스트, 설정 백업, 롤백 플랜, 모니터링 설정을 반드시 확인하세요. (자세한 내용은 [docs/operations/monitoring.md](../operations/monitoring.md), [docs/operations/canary_rollout.md](../operations/canary_rollout.md) 참고)
 > - **폴더/파일 역할 요약**:
 >   - `strategy.py`: 전략 진입점, Strategy 클래스 구현
 >   - `qmtl.yml`: 환경 및 서비스 연결 설정
@@ -22,7 +31,7 @@ concludes with running the test suite.
 ## 0. Install QMTL
 
 Create a virtual environment and install the package in editable mode. The
-[README](../README.md) describes the details, but the basic steps are:
+[README](../../README.md) describes the details, but the basic steps are:
 
 ```bash
 uv venv
@@ -164,7 +173,7 @@ uv run -m pytest tests/e2e
 ```
 
 For details on the test environment refer to
-[docs/e2e_testing.md](e2e_testing.md). Building wheels can run concurrently with
+[docs/operations/e2e_testing.md](../operations/e2e_testing.md). Building wheels can run concurrently with
 tests if desired:
 
 ```bash
@@ -182,21 +191,24 @@ wait
 
 ## 6. Next Steps
 
-Consult [architecture.md](../architecture.md) for a deep dive into the overall
+Consult [architecture.md](../architecture/architecture.md) for a deep dive into the overall
 framework and `qmtl/examples/` for reference strategies. When ready, deploy the
 Gateway and DAG Manager using your customized `qmtl.yml`.
 
 > **운영/배포 체크리스트**
 > - 테스트 통과 및 커버리지 확인
 > - 설정 파일 백업 및 버전 관리
-> - 모니터링/알림 설정 ([docs/monitoring.md](monitoring.md))
-> - 점진적 배포/롤백 플랜 ([docs/canary_rollout.md](canary_rollout.md))
+> - 모니터링/알림 설정 ([docs/operations/monitoring.md](../operations/monitoring.md))
+> - 점진적 배포/롤백 플랜 ([docs/operations/canary_rollout.md](../operations/canary_rollout.md))
 > - 배포 후 주요 로그/지표 확인
 
 > **참고자료**
-> - [architecture.md](../architecture.md): 전체 시스템 구조
+> - [architecture.md](../architecture/architecture.md): 전체 시스템 구조
 > - [sdk_tutorial.md](sdk_tutorial.md): SDK 및 전략 개발 예제
-> - [faq.md](faq.md): 자주 묻는 질문
+> - [faq.md](../reference/faq.md): 자주 묻는 질문
 > - [monitoring.md](monitoring.md): 모니터링 및 운영
 > - [canary_rollout.md](canary_rollout.md): 점진적 배포 전략
 > - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
+
+{{ nav_links() }}
+

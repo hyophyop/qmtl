@@ -1,3 +1,12 @@
+---
+title: "Timing Controls"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Timing Controls
 
 This document outlines the timing utilities available in QMTL for managing market sessions and validating timestamp data.
@@ -54,3 +63,6 @@ for node, node_issues in issues.items():
     for issue in node_issues:
         print(issue["reason"], issue["datetime"])
 ```
+
+{{ nav_links() }}
+

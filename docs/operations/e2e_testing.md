@@ -1,3 +1,12 @@
+---
+title: "End-to-End Testing"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # End-to-End Testing
 
 This guide explains how to spin up the required services and execute the end-to-end test suite.
@@ -60,4 +69,7 @@ python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
 ```
 
 See [backfill.md](backfill.md) for a full overview of the workflow.
+
+
+{{ nav_links() }}
 

@@ -1,3 +1,12 @@
+---
+title: "Enhanced Error Handling and Input Validation"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # Enhanced Error Handling and Input Validation
 
 This document describes the improvements made to error handling and input validation in the QMTL SDK.
@@ -165,3 +174,6 @@ Run validation tests:
 ```bash
 pytest tests/test_enhanced_validation.py -v
 ```
+
+{{ nav_links() }}
+
