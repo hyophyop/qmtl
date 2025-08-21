@@ -11,6 +11,12 @@ last_modified: 2025-08-21
 
 > **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
 
+## 관련 문서
+- [Architecture Overview](README.md)
+- [QMTL Architecture](architecture.md)
+- [Gateway](gateway.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
+
 ---
 
 ## 0. 역할 요약 & 설계 철학

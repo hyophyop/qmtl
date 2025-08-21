@@ -3,8 +3,6 @@ from __future__ import annotations
 """Prometheus metrics for the SDK cache layer."""
 
 import time
-from typing import Mapping
-
 from prometheus_client import (
     Counter,
     Gauge,
@@ -173,7 +171,6 @@ alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
 alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]
 
 
-
 def observe_cache_read(upstream_id: str, interval: int) -> None:
     """Increment read metrics for a given upstream/interval pair."""
     u = str(upstream_id)
@@ -242,18 +239,6 @@ def observe_node_process_failure(node_id: str) -> None:
     n = str(node_id)
     node_process_failure_total.labels(node_id=n).inc()
     node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
-
-
-def observe_alpha_performance(metrics: Mapping[str, float]) -> None:
-    """Record alpha performance statistics."""
-    sharpe = metrics.get("sharpe")
-    if sharpe is not None:
-        alpha_sharpe.set(sharpe)
-        alpha_sharpe._val = sharpe  # type: ignore[attr-defined]
-    mdd = metrics.get("max_drawdown")
-    if mdd is not None:
-        alpha_max_drawdown.set(mdd)
-        alpha_max_drawdown._val = mdd  # type: ignore[attr-defined]
 
 
 def start_metrics_server(port: int = 8000) -> None:

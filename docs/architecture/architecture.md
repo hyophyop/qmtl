@@ -1,6 +1,8 @@
 ---
 title: "QMTL 고급 아키텍처 및 시스템 구현 계획서"
-tags: []
+tags:
+  - architecture
+  - design
 author: "QMTL Team"
 last_modified: 2025-08-21
 ---
@@ -9,6 +11,11 @@ last_modified: 2025-08-21
 
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
+## 관련 문서
+- [Architecture Overview](README.md)
+- [Gateway](gateway.md)
+- [DAG Manager](dag-manager.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
 
 ---
 

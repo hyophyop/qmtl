@@ -7,6 +7,8 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
+<!-- markdownlint-disable MD013 MD025 MD012 -->
+
 # Strategy Templates
 
 QMTL ships with starter strategies that can be used when running `qmtl init`.

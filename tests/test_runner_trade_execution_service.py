@@ -1,5 +1,6 @@
 import importlib
 from unittest.mock import MagicMock
+
 import qmtl.sdk.runner as runner_module
 from qmtl.sdk.node import Node
 
