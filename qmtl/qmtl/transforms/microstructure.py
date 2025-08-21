@@ -27,26 +27,31 @@ def gap_depth_weighted_sum_node(
     name: str | None = None,
 ) -> Node:
     """Return node computing depth-weighted ask/bid gap sum."""
-    from .utils import validate_numeric_sequence
 
     interval = interval or bid_prices.interval
+
+    def _validate(seq: Iterable[float]) -> bool:
+        try:
+            return all(isinstance(v, (int, float)) and not math.isnan(v) for v in seq)
+        except TypeError:
+            return False
 
     def compute(view: CacheView):
         bids = view[bid_prices][interval]
         asks = view[ask_prices][interval]
         bid_vols = view[bid_sizes][interval]
         ask_vols = view[ask_sizes][interval]
-        if not bids._data or not asks._data or not bid_vols._data or not ask_vols._data:
+        if not bids or not asks or not bid_vols or not ask_vols:
             return None
         b_list = bids[-1][1]
         a_list = asks[-1][1]
         bv_list = bid_vols[-1][1]
         av_list = ask_vols[-1][1]
         if not (
-            validate_numeric_sequence(b_list)
-            and validate_numeric_sequence(a_list)
-            and validate_numeric_sequence(bv_list)
-            and validate_numeric_sequence(av_list)
+            _validate(b_list)
+            and _validate(a_list)
+            and _validate(bv_list)
+            and _validate(av_list)
         ):
             return None
         n = min(len(b_list), len(a_list), len(bv_list), len(av_list))
@@ -83,13 +88,30 @@ def order_flow_imbalance_node(
     name: str | None = None,
 ) -> Node:
     """Return node computing order-flow imbalance."""
-    from .utils import create_imbalance_node
-    
-    return create_imbalance_node(
-        buy_volume,
-        sell_volume,
-        interval=interval,
+
+    interval = interval or buy_volume.interval
+
+    def compute(view: CacheView):
+        b_data = view[buy_volume][interval]
+        s_data = view[sell_volume][interval]
+        if not b_data or not s_data:
+            return None
+        b = b_data[-1][1]
+        s = s_data[-1][1]
+        if not isinstance(b, (int, float)) or math.isnan(b):
+            return None
+        if not isinstance(s, (int, float)) or math.isnan(s):
+            return None
+        total = b + s
+        if total == 0:
+            return None
+        return (b - s) / total
+
+    return Node(
+        input=[buy_volume, sell_volume],
+        compute_fn=compute,
         name=name or "order_flow_imbalance",
+        interval=interval,
     )
 
 
@@ -105,7 +127,6 @@ def spread_zscore_node(
     name: str | None = None,
 ) -> Node:
     """Return node computing z-score of bid-ask spread."""
-    from .utils import validate_numeric, compute_statistics
 
     interval = bid_price.interval
 
@@ -120,14 +141,14 @@ def spread_zscore_node(
         for i in range(-period, 0):
             b = bids[i][1]
             a = asks[i][1]
-            if not validate_numeric(b) or not validate_numeric(a):
+            if not isinstance(b, (int, float)) or math.isnan(b):
+                return None
+            if not isinstance(a, (int, float)) or math.isnan(a):
                 return None
             spreads.append(a - b)
-        
-        stats = compute_statistics(spreads)
-        if stats is None:
-            return None
-        mean, std = stats
+        mean = sum(spreads) / period
+        var = sum((s - mean) ** 2 for s in spreads) / period
+        std = math.sqrt(var)
         if std == 0:
             return None
         return (spreads[-1] - mean) / std
@@ -153,18 +174,19 @@ def hazard_node(
     name: str | None = None,
 ) -> Node:
     """Return node computing discrete-time hazard rate."""
-    from .utils import validate_numeric
 
     interval = interval or event_count.interval
 
     def compute(view: CacheView):
         e_data = view[event_count][interval]
         p_data = view[population][interval]
-        if not e_data._data or not p_data._data:
+        if not e_data or not p_data:
             return None
         e = e_data[-1][1]
         p = p_data[-1][1]
-        if not validate_numeric(e) or not validate_numeric(p) or p <= 0:
+        if not isinstance(e, (int, float)) or math.isnan(e):
+            return None
+        if not isinstance(p, (int, float)) or math.isnan(p) or p <= 0:
             return None
         return e / p
 

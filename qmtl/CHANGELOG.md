@@ -1,14 +1,3 @@
----
-title: "Changelog"
-tags: []
-author: "QMTL Team"
-last_modified: 2025-08-21
----
-
-<!-- Generated from ../CHANGELOG.md; do not edit manually -->
-
-{{ nav_links() }}
-
 # Changelog
 
 ## Unreleased
@@ -35,5 +24,3 @@ PR 본문:
 - 로컬에서 lint/테스트/문서 동기화 체크 후 PR 생성 바랍니다.
 - CI 복구 시 본문/문서에서 안내 예정
 ```
-
-{{ nav_links() }}
