@@ -10,11 +10,7 @@
 - doc: docs/alphadocs/basic_sequence_pipeline.md
   status: implemented
   modules:
-  - qmtl/qmtl/examples/nodes/generators/sequence.py
   - strategies/nodes/generators/sequence.py
-  - qmtl/qmtl/examples/nodes/indicators/average.py
-  - qmtl/qmtl/examples/nodes/transforms/scale.py
-  - qmtl/qmtl/transforms/scale.py
   - strategies/nodes/transforms/scale.py
   priority: normal
   tags: []
@@ -32,7 +28,6 @@
   modules:
   - strategies/nodes/indicators/llrti.py
   - strategies/nodes/indicators/latent_liquidity_alpha.py
-  - qmtl/qmtl/transforms/llrti.py
   priority: gpt5pro
   tags: []
   usage_status: used
@@ -53,7 +48,6 @@
   source_model: gpt5pro
   modules:
   - strategies/nodes/indicators/acceptable_price_band.py
-  - qmtl/qmtl/transforms/acceptable_price_band.py
   priority: gpt5pro
   tags: []
   usage_status: used
@@ -64,7 +58,6 @@
   source_model: gpt5pro
   modules:
   - strategies/nodes/indicators/execution_diffusion_contraction.py
-  - qmtl/qmtl/transforms/execution_diffusion_contraction.py
   priority: gpt5pro
   tags: []
   usage_status: used
@@ -86,7 +79,6 @@
   source_model: gpt5pro
   modules:
   - strategies/nodes/indicators/order_book_clustering_collapse.py
-  - qmtl/qmtl/transforms/order_book_clustering_collapse.py
   priority: gpt5pro
   tags: []
   usage_status: used
@@ -97,7 +89,6 @@
   source_model: gpt5pro
   modules:
   - strategies/nodes/indicators/tactical_liquidity_bifurcation.py
-  - qmtl/qmtl/transforms/tactical_liquidity_bifurcation.py
   priority: gpt5pro
   tags: []
   usage_status: used
@@ -822,7 +813,6 @@
 - doc: docs/alphadocs/ideas/resiliency.md
   status: implemented
   modules:
-  - qmtl/qmtl/transforms/resiliency.py
   - strategies/nodes/indicators/resiliency_alpha.py
   priority: normal
   tags: []
