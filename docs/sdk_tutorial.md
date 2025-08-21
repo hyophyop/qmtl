@@ -227,17 +227,32 @@ external systems through a series of hooks:
 3. `Runner.set_trade_order_kafka_topic(topic)` publishes the order to a
    Kafka topic using the configured producer.
 
-The SDK ships with a simple HTTP client:
+Combine these hooks with a simple pipeline to convert alpha values into
+standardized orders:
 
 ```python
-from qmtl.sdk import TradeExecutionService, Runner
+from qmtl.transforms import (
+    alpha_history_node,
+    TradeSignalGeneratorNode,
+    TradeOrderPublisherNode,
+)
+
+history = alpha_history_node(alpha, window=30)
+signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
+orders = TradeOrderPublisherNode(signal, topic="orders")
+
+from qmtl.sdk import Runner, TradeExecutionService
 
 service = TradeExecutionService("http://broker")
 Runner.set_trade_execution_service(service)
+Runner.set_trade_order_http_url("http://endpoint")
+Runner.set_trade_order_kafka_topic("orders")
 ```
 
-If none of these targets are configured the order is ignored, allowing
-strategies to remain agnostic about the actual execution backend.
+See [`order_pipeline_strategy.py`](../qmtl/examples/strategies/order_pipeline_strategy.py)
+for a complete runnable example. If none of these targets are configured the
+order is ignored, allowing strategies to remain agnostic about the actual
+execution backend.
 
 ## 백필 작업
 
