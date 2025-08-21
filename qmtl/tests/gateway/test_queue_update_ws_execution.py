@@ -63,3 +63,4 @@ async def test_node_unpauses_on_queue_update():
     assert calls
 
     await manager.stop()
+    await transport.aclose()
