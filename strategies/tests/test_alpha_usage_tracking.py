@@ -1,11 +1,15 @@
 """Tests for alpha usage tracking functionality."""
 
+import ast
+import inspect
+import json
 import tempfile
 from pathlib import Path
+
 import yaml
-import json
 
 from scripts.track_alpha_usage import AlphaUsageTracker
+from strategies.nodes.indicators import composite_alpha as composite_alpha_module
 
 
 def test_alpha_usage_tracker_basic():
@@ -57,19 +61,20 @@ def test_alpha_usage_tracker_detects_usage():
     
     # Should detect composite_alpha usage in DAG
     assert "composite_alpha" in tracker.used_alphas
-    
-    # Should detect various alphas used by composite_alpha
+
+    # Derive expected alphas used within composite_alpha dynamically
+    source = Path(inspect.getfile(composite_alpha_module)).read_text()
+    tree = ast.parse(source)
+    expected_alphas = {
+        node.func.id.replace("_node", "")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id.endswith("_node")
+        and node.func.id != "composite_alpha_node"
+    }
+
     used_alpha_names = tracker.used_alphas.keys()
-    expected_alphas = [
-        "acceptable_price_band",
-        "llrti",
-        "latent_liquidity_alpha",
-        "non_linear_alpha",
-        "order_book_clustering_collapse",
-        "quantum_liquidity_echo",
-        "resiliency_alpha",
-    ]
-    
     for alpha in expected_alphas:
         assert alpha in used_alpha_names, f"Expected {alpha} to be detected as used"
 
