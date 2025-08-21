@@ -1,3 +1,10 @@
+---
+title: "QMTL Gateway — Comprehensive Technical Specification"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 {{ nav_links() }}
 
 # QMTL Gateway — Comprehensive Technical Specification
