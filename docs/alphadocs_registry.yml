@@ -807,10 +807,13 @@
   priority: normal
   tags: []
 - doc: docs/alphadocs/ideas/resiliency.md
-  status: idea
-  modules: []
+  status: implemented
+  modules:
+  - qmtl/qmtl/transforms/resiliency.py
+  - strategies/nodes/indicators/resiliency_alpha.py
   priority: normal
   tags: []
+  usage_status: unused
 - doc: docs/alphadocs/ideas/response-saturation-boundary-theory.md
   status: idea
   modules: []
