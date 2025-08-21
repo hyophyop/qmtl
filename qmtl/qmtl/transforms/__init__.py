@@ -28,6 +28,11 @@ from .microstructure import (
 )
 from .acceptable_price_band import estimate_band, overshoot, volume_surprise
 from .order_book_clustering_collapse import hazard_probability, direction_gating, execution_cost
+from .tactical_liquidity_bifurcation import (
+    bifurcation_hazard,
+    direction_signal,
+    tlbh_alpha,
+)
 from .identity import identity_transform_node
 from .llrti import llrti
 from .scale import scale_transform_node
@@ -63,6 +68,9 @@ __all__ = [
     "hazard_probability",
     "direction_gating",
     "execution_cost",
+    "bifurcation_hazard",
+    "direction_signal",
+    "tlbh_alpha",
     "estimate_band",
     "overshoot",
     "volume_surprise",
