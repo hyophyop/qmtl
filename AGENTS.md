@@ -5,8 +5,8 @@
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and run tests in the uv environment. Build
   distributable wheels via `uv pip wheel .`.
-- Implementations must adhere to the specifications in `architecture.md`,
-  `gateway.md` and `dag-manager.md`.
+- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
+  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
 - When providing task lists or suggestions, highlight opportunities for
   parallel execution where feasible.
 - Pure review or suggestion tasks that do not modify code may skip running tests.

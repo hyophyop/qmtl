@@ -154,5 +154,4 @@ https://github.com/QuantConnect/Lean/blob/93d58d5cdfac666f2d5207ba1901b2c2217292
 https://www.quantconnect.com/forum/discussion/17157/how-to-make-set-slippagemodel-and-feemodel-work/
 [23] [24] [31] Market Order Backtesting Behavior - QuantConnect.com
 https://www.quantconnect.com/forum/discussion/10369/market-order-backtesting-behavior/
-[32] [35] architecture.md
-https://github.com/hyophyop/qmtl/blob/b2e92819d56427c96cc85ff9df53a6332ee89b33/architecture.md
+[32] [35] [architecture.md](../architecture/architecture.md)

@@ -34,5 +34,5 @@ def test_cli_help_contains_doc_links(capsys):
     except SystemExit:
         pass
     out = capsys.readouterr().out
-    assert "docs/templates.md" in out
-    assert "docs/strategy_workflow.md" in out
+    assert "docs/reference/templates.md" in out
+    assert "docs/guides/strategy_workflow.md" in out
