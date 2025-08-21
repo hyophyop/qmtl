@@ -5,13 +5,20 @@
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and run tests in the uv environment. Build
   distributable wheels via `uv pip wheel .`.
-- Implementations must adhere to the specifications in `architecture.md`,
-  `gateway.md` and `dag-manager.md`.
+- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
+  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
 - When providing task lists or suggestions, highlight opportunities for
   parallel execution where feasible.
 - Pure review or suggestion tasks that do not modify code may skip running tests.
 - For any code changes, run `uv run -m pytest -W error` locally and ensure the command completes without warnings. CI must also run this command without warnings.
 - Ensure proper resource cleanup (e.g., closing Redis connections) to avoid `ResourceWarning`.
+
+# Documentation Management
+
+- Store documentation in the `docs/` directory with descriptive filenames.
+- Each Markdown file should start with a single `#` heading and use relative links to other docs.
+- Update `mkdocs.yml` navigation when adding or moving files.
+- Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin` and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
 
 # Prioritizing external alpha ideas
 

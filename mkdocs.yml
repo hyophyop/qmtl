@@ -1,0 +1,44 @@
+site_name: QMTL Documentation
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture/README.md
+      - Architecture: architecture/architecture.md
+      - DAG Manager: architecture/dag-manager.md
+      - Gateway: architecture/gateway.md
+      - Lean Brokerage Model: architecture/lean_brokerage_model.md
+  - Guides:
+      - Overview: guides/README.md
+      - SDK Tutorial: guides/sdk_tutorial.md
+      - Strategy Workflow: guides/strategy_workflow.md
+  - Operations:
+      - Overview: operations/README.md
+      - Backfill: operations/backfill.md
+      - Canary Rollout: operations/canary_rollout.md
+      - E2E Testing: operations/e2e_testing.md
+      - Monitoring: operations/monitoring.md
+      - Risk Management: operations/risk_management.md
+      - Timing Controls: operations/timing_controls.md
+      - Release: operations/release.md
+  - Reference:
+      - Overview: reference/README.md
+      - FAQ: reference/faq.md
+      - Templates: reference/templates.md
+      - Enhanced Validation: reference/enhanced_validation.md
+      - Backtest Validation: reference/backtest_validation.md
+      - Lean-like Features: reference/lean_like_features.md
+      - Inventory: reference/_inventory.md
+      - Changelog: reference/CHANGELOG.md
+  - Tags: tags.md
+plugins:
+  - search
+  - macros
+  - mkdocs-breadcrumbs-plugin
+  - tags:
+      tags_file: tags.md
+theme:
+  name: material
+  features:
+    - navigation.top
+    - navigation.expand
+    - navigation.path

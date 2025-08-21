@@ -33,6 +33,9 @@ dev = [
     "grpcio-tools",
     "pyarrow",
     "xstate",
+    "mkdocs-material",
+    "mkdocs-macros-plugin",
+    "mkdocs-breadcrumbs-plugin",
 ]
 
 ray = ["ray"]

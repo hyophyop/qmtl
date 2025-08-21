@@ -1,6 +1,21 @@
+---
+title: "QMTL Gateway — Comprehensive Technical Specification"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # QMTL Gateway — Comprehensive Technical Specification
 
 *Research‑Driven Draft v1.2 — 2025‑06‑10*
+
+## 관련 문서
+- [Architecture Overview](README.md)
+- [QMTL Architecture](architecture.md)
+- [DAG Manager](dag-manager.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
 
 > This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
 > Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
@@ -189,3 +204,6 @@ Available flags:
 
 - ``--config`` – optional path to configuration file.
 - ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.
+
+{{ nav_links() }}
+

@@ -1,6 +1,8 @@
+<!-- markdownlint-disable MD012 MD013 MD025 -->
+
 # qmtl
 
-QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](architecture.md) for full details.
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](docs/architecture/architecture.md) for full details.
 
 Use the DAG Manager CLI to preview DAG structures:
 
@@ -23,7 +25,7 @@ qmtl dagmanager-server --help
 qmtl sdk --help
 ```
 
-The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/templates.md](docs/templates.md) for diagrams of the built-in strategy templates.
+The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
 
 ## Installation
 
@@ -36,7 +38,7 @@ uv pip install -e .[dev]
 ```
 
 These commands match the steps in the SDK tutorial
-([docs/sdk_tutorial.md](docs/sdk_tutorial.md)).
+([docs/guides/sdk_tutorial.md](docs/guides/sdk_tutorial.md)).
 
 Install the `io` extra if you need additional data modules:
 
@@ -64,7 +66,7 @@ qmtl init --path my_qmtl_project --with-sample-data
 cd my_qmtl_project
 ```
 
-See [docs/templates.md](docs/templates.md) for a description of each template.
+See [docs/reference/templates.md](docs/reference/templates.md) for a description of each template.
 
 The scaffold includes empty `generators/`, `indicators/` and
 `transforms/` packages for adding your own extensions, along with a
@@ -78,16 +80,16 @@ python -m qmtl.examples.strategy
 
 See `qmtl/examples/README.md` for additional strategies that can be executed
 in the same way. A more detailed walkthrough from project creation to
-testing is available in [docs/strategy_workflow.md](docs/strategy_workflow.md).
+testing is available in [docs/guides/strategy_workflow.md](docs/guides/strategy_workflow.md).
 
 ## Trading Node Enhancements
 
 Recent releases introduce several nodes for building realistic trading pipelines:
 
-- **RiskManager** enforces position and portfolio limits. [Guide](docs/risk_management.md) · [Example](qmtl/examples/strategies/risk_managed_strategy.py)
-- **TimingController** validates market sessions and execution delays. [Guide](docs/timing_controls.md) · [Example](qmtl/examples/strategies/timing_control_strategy.py)
-- **Execution modeling** simulates fills and costs for backtests. [Design](docs/lean_like_features.md) · [Example](qmtl/examples/strategies/execution_model_strategy.py)
-- **Order publishing** turns signals into standardized orders for external services. [Docs](docs/sdk_tutorial.md) · [Example](qmtl/examples/strategy.py)
+- **RiskManager** enforces position and portfolio limits. [Guide](docs/operations/risk_management.md) · [Example](qmtl/examples/strategies/risk_managed_strategy.py)
+- **TimingController** validates market sessions and execution delays. [Guide](docs/operations/timing_controls.md) · [Example](qmtl/examples/strategies/timing_control_strategy.py)
+- **Execution modeling** simulates fills and costs for backtests. [Design](docs/reference/lean_like_features.md) · [Example](qmtl/examples/strategies/execution_model_strategy.py)
+- **Order publishing** turns signals into standardized orders for external services. [Docs](docs/guides/sdk_tutorial.md) · [Example](qmtl/examples/strategy.py)
 
 ## Development Workflow
 
@@ -113,6 +115,16 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
 For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
 
+## Documentation Dashboard
+
+Document progress is tracked in [`docs/dashboard.json`](docs/dashboard.json). Each entry records the document's status (`draft`, `review`, or `complete`) and the responsible owner. The file's `last_updated` and `generated` timestamps are refreshed automatically by a scheduled workflow (`.github/workflows/docs-dashboard.yml`). Run the update script manually if needed:
+
+```bash
+python scripts/update_dashboard.py
+```
+
+Open the JSON directly or import it into a spreadsheet to review documentation status.
+
 ## Coding Style
 
 Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dagmanager`.
@@ -125,7 +137,6 @@ Install additional functionality on demand:
 - [IO](qmtl/io) &mdash; `pip install qmtl[io]`
 - [Generators](qmtl/generators/README.md)
 - [Transforms](qmtl/transforms/README.md)
-
 
 ## End-to-End Testing
 
@@ -141,7 +152,7 @@ Run the tests using uv:
 uv run -m pytest tests/e2e
 ```
 
-See [docs/e2e_testing.md](docs/e2e_testing.md) for the full guide.
+See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide.
 
 ## Running the Test Suite
 
@@ -153,7 +164,7 @@ uv run -m pytest
 
 ## Monitoring
 
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/monitoring.md](docs/monitoring.md).
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
 
 ## Running Services
 
@@ -180,13 +191,13 @@ qmtl dagmanager diff --file dag.json --target localhost:50051
 
 Customize the sample YAML files in `qmtl/examples/` to match your environment.
 
-See [gateway.md](gateway.md) and [dag-manager.md](dag-manager.md) for more
+See [gateway.md](docs/architecture/gateway.md) and [dag-manager.md](docs/architecture/dag-manager.md) for more
 information on configuration and advanced usage.
 
 ## SDK Tutorial
 
 For instructions on implementing strategies with the SDK, see
-[docs/sdk_tutorial.md](docs/sdk_tutorial.md).
+[docs/guides/sdk_tutorial.md](docs/guides/sdk_tutorial.md).
 
 ## Example Strategies
 
@@ -217,11 +228,11 @@ invokes this method in every mode, so manual calls are rarely needed.
 
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
-See [docs/faq.md](docs/faq.md) for common questions such as using `TagQueryNode` during backtesting.
+See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.
 
 ## Backfills
 
-[docs/backfill.md](docs/backfill.md) explains how to preload historical data by
+[docs/operations/backfill.md](docs/operations/backfill.md) explains how to preload historical data by
 injecting `HistoryProvider` instances
 into `StreamInput` nodes. These dependencies must be provided at creation time
 and cannot be reassigned later. The same guide covers persisting data via
@@ -242,7 +253,7 @@ stream = StreamInput(
 ``QuestDBLoader`` and ``QuestDBRecorder`` will default to using
 ``stream.node_id`` as the table name if ``table`` is not provided.
 
-[docs/backfill.md](docs/backfill.md).
+[docs/operations/backfill.md](docs/operations/backfill.md).
 
 ### QuestDBLoader with a custom fetcher
 

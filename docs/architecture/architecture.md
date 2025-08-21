@@ -1,6 +1,21 @@
+---
+title: "QMTL 고급 아키텍처 및 시스템 구현 계획서"
+tags:
+  - architecture
+  - design
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
-> *최종 수정일: 2025년 6월 4일*
+## 관련 문서
+- [Architecture Overview](README.md)
+- [Gateway](gateway.md)
+- [DAG Manager](dag-manager.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
 
 ---
 
@@ -48,7 +63,7 @@ Strategy SDK ──▶ Gateway ──▶ DAG Manager ──▶ Graph DB (Neo4j)
    * 구성: `(node_type, code_hash, config_hash, schema_hash)`
    * 해시 알고리즘: SHA-256 → 충돌 감지 시 SHA-3 fallback
 2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
-   자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](docs/canary_rollout.md)에서 설명한다.
+   자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](../operations/canary_rollout.md)에서 설명한다.
 3. **CloudEvents 기반 이벤트 스펙 도입** : 표준 이벤트 정의를 통해 시스템 확장성과 언어 독립성을 확보
 4. **상태 머신 기반 실행 제어(xState)** : 전략 상태 흐름을 Finite-State-Machine으로 모델링하여 이론 검증 가능성과 시각화 용이성 확보
 5. **Ray 기반 병렬 처리** : 병렬 실행 시 Python multiprocessing을 Ray로 대체하여 메모리 격리성과 클러스터 확장성을 보장
@@ -414,4 +429,7 @@ Runner.dryrun(CrossMarketLagStrategy)
     50% 프로모션, 한 줄 롤백 명령으로 이어지는 파이프라인을 구축한다.
 
 위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
+
+
+{{ nav_links() }}
 
