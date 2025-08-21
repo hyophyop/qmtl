@@ -113,6 +113,16 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
 For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
 
+## Documentation Dashboard
+
+Document progress is tracked in [`docs/dashboard.json`](docs/dashboard.json). Each entry records the document's status (`draft`, `review`, or `complete`) and the responsible owner. The file's `last_updated` and `generated` timestamps are refreshed automatically by a scheduled workflow (`.github/workflows/docs-dashboard.yml`). Run the update script manually if needed:
+
+```bash
+python scripts/update_dashboard.py
+```
+
+Open the JSON directly or import it into a spreadsheet to review documentation status.
+
 ## Coding Style
 
 Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dagmanager`.
