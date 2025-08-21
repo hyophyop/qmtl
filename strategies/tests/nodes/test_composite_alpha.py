@@ -9,9 +9,9 @@ def test_composite_alpha_returns_mean_alpha():
     components = result["components"]
     expected = sum(components.values()) / len(components)
     assert result["alpha"] == expected
-    
-    # Verify we now have 8 components (including the previously unused alphas)
-    assert len(components) == 8
+
+    # Verify we now have 9 components (including the previously unused alphas)
+    assert len(components) == 9
     assert "acceptable_price_band" in components
     assert "gap_amplification" in components
     assert "latent_liquidity" in components
@@ -20,6 +20,7 @@ def test_composite_alpha_returns_mean_alpha():
     assert "quantum_echo" in components
     assert "tactical_liquidity_bifurcation" in components
     assert "execution_diffusion_contraction" in components
+    assert "resiliency" in components
 
 
 def test_composite_alpha_with_sample_data():
@@ -32,10 +33,11 @@ def test_composite_alpha_with_sample_data():
         'order_book': {},
         'qle': {},
         'tactical_liquidity': {},
-        'edch': {}
+        'edch': {},
+        'resiliency': {},
     }
     result = composite_alpha_node(data)
     components = result["components"]
     expected = sum(components.values()) / len(components)
     assert result["alpha"] == expected
-    assert len(components) == 8
+    assert len(components) == 9

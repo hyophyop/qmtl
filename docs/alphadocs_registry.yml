@@ -18,7 +18,9 @@
   - strategies/nodes/transforms/scale.py
   priority: normal
   tags: []
-  usage_status: unused
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/latent-liquidity-threshold-reconfiguration.md
   status: draft
   modules: []
@@ -824,7 +826,9 @@
   - strategies/nodes/indicators/resiliency_alpha.py
   priority: normal
   tags: []
-  usage_status: unused
+  usage_status: used
+  used_in_strategies:
+  - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/response-saturation-boundary-theory.md
   status: idea
   modules: []
