@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Backfilling Historical Data
 
 This guide explains how to populate node caches with past values before a strategy starts processing live data.
@@ -199,4 +201,7 @@ are retried up to ``max_retries`` times with a short delay. During execution the
 engine emits metrics such as ``backfill_jobs_in_progress``,
 ``backfill_last_timestamp``, ``backfill_retry_total`` and
 ``backfill_failure_total``.
+
+
+{{ nav_links() }}
 
