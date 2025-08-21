@@ -13,6 +13,13 @@
 - For any code changes, run `uv run -m pytest -W error` locally and ensure the command completes without warnings. CI must also run this command without warnings.
 - Ensure proper resource cleanup (e.g., closing Redis connections) to avoid `ResourceWarning`.
 
+# Documentation Management
+
+- Store documentation in the `docs/` directory with descriptive filenames.
+- Each Markdown file should start with a single `#` heading and use relative links to other docs.
+- Update `mkdocs.yml` navigation when adding or moving files.
+- Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin` and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
+
 # Prioritizing external alpha ideas
 
 - The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten by a stronger model (GPT-5-Pro). These files should be treated as higher-priority implementation targets by agents and maintainers working within the `qmtl` project.
