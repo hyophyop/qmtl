@@ -28,10 +28,13 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
+  - Tags: tags.md
 plugins:
   - search
   - macros
   - mkdocs-breadcrumbs-plugin
+  - tags:
+      tags_file: tags.md
 theme:
   name: material
   features:

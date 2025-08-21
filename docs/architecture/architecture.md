@@ -1,6 +1,8 @@
 ---
 title: "QMTL 고급 아키텍처 및 시스템 구현 계획서"
-tags: []
+tags:
+  - architecture
+  - design
 author: "QMTL Team"
 last_modified: 2025-08-21
 ---
