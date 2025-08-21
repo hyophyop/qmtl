@@ -31,6 +31,7 @@ from .order_book_clustering_collapse import hazard_probability, direction_gating
 from .identity import identity_transform_node
 from .llrti import llrti
 from .scale import scale_transform_node
+from .resiliency import impact, resiliency_alpha
 from .utils import (
     normalized_difference,
     create_imbalance_node,
@@ -81,4 +82,6 @@ __all__ = [
     "compute_statistics",
     "create_period_statistics_node",
     "create_period_delta_node",
+    "impact",
+    "resiliency_alpha",
 ]
