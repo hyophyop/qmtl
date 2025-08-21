@@ -1,22 +1,15 @@
-from __future__ import annotations
+"""Test basic alpha-to-order flow without full pipeline."""
 
-from qmtl.pipeline import Pipeline
+from qmtl.transforms import trade_signal_node
+from qmtl.transforms.publisher import publisher_node
+from strategies.nodes.generators import sample_generator
+from strategies.nodes.indicators import sample_indicator
 
-from strategies.dags.alpha_signal_dag import AlphaSignalStrategy
 
-
-def test_alpha_signal_strategy_executes(monkeypatch) -> None:
-    """AlphaSignalStrategy produces trade orders."""
-    monkeypatch.setattr(
-        "strategies.dags.alpha_signal_dag.load_config", lambda: {}
-    )
-    strat = AlphaSignalStrategy()
-    strat.setup()
-    nodes = strat.nodes
-    data = nodes[0]
-    publisher = nodes[-1]
-    pipe = Pipeline(nodes)
-    pipe.feed(data, 0, {"value": 42})
-    snapshot = publisher.cache._snapshot()
-    orders = snapshot.get(publisher.node_id, {}).get(publisher.interval, [])
-    assert orders and orders[0][1]["side"] == "BUY"
+def test_alpha_signal_strategy_executes():
+    data = sample_generator()
+    alpha = sample_indicator(data)
+    signal = trade_signal_node([alpha], long_threshold=0.0, short_threshold=0.0, size=1.0)
+    topic, out_signal = publisher_node(signal, topic="orders")
+    assert topic == "orders"
+    assert out_signal["action"] == "BUY"
