@@ -345,8 +345,6 @@ class Runner:
                         Runner._execute_compute_fn(node.compute_fn, node.cache.view())
                     else:
                         result = node.compute_fn(node.cache.view())
-                        # Postprocess the result
-                        Runner._postprocess_result(node, result)
             except Exception:
                 sdk_metrics.observe_node_process_failure(node.node_id)
                 raise
