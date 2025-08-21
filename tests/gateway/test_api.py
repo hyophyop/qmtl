@@ -48,3 +48,4 @@ async def test_ingest_and_status(app):
         resp = await client.get(f"/strategies/{sid}/status")
         assert resp.status_code == 200
         assert resp.json()["status"] == "queued"
+    await transport.aclose()

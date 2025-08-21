@@ -119,3 +119,4 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     assert node.execute
     assert hasattr(strat, "tag_query_manager")
     await strat.tag_query_manager.stop()
+    await transport.aclose()
