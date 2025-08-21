@@ -70,16 +70,24 @@ The scaffold includes empty `generators/`, `indicators/` and
 `transforms/` packages for adding your own extensions, along with a
 preconfigured `.gitignore` to keep temporary files out of version control.
 
-Run the default strategy to verify everything is set up correctly:
+Run the trade pipeline example to verify everything is set up correctly:
 
 ```bash
-python strategy.py
+python -m qmtl.examples.strategy
 ```
 
 See `qmtl/examples/README.md` for additional strategies that can be executed
 in the same way. A more detailed walkthrough from project creation to
 testing is available in [docs/strategy_workflow.md](docs/strategy_workflow.md).
 
+## Trading Node Enhancements
+
+Recent releases introduce several nodes for building realistic trading pipelines:
+
+- **RiskManager** enforces position and portfolio limits. [Guide](docs/risk_management.md) · [Example](qmtl/examples/strategies/risk_managed_strategy.py)
+- **TimingController** validates market sessions and execution delays. [Guide](docs/timing_controls.md) · [Example](qmtl/examples/strategies/timing_control_strategy.py)
+- **Execution modeling** simulates fills and costs for backtests. [Design](docs/lean_like_features.md) · [Example](qmtl/examples/strategies/execution_model_strategy.py)
+- **Order publishing** turns signals into standardized orders for external services. [Docs](docs/sdk_tutorial.md) · [Example](qmtl/examples/strategy.py)
 
 ## Development Workflow
 

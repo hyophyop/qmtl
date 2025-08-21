@@ -171,6 +171,49 @@ signal = TradeSignalGeneratorNode(
 )
 ```
 
+## ExecutionModel과 비용 조정 성과 지표
+
+`ExecutionModel`은 커미션, 슬리피지, 시장 임팩트 등 현실적인 체결 비용을 추정합니다.
+생성된 `ExecutionFill` 목록을 `alpha_performance_node`에 전달하면 비용을 반영한 성과 지표를 계산할 수 있습니다.
+
+```python
+from qmtl.sdk.execution_modeling import (
+    ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv,
+)
+from qmtl.transforms import TradeSignalGeneratorNode, alpha_history_node
+from qmtl.transforms.alpha_performance import alpha_performance_node
+
+history = alpha_history_node(alpha, window=30)
+signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
+
+model = ExecutionModel(commission_rate=0.0005, base_slippage_bps=2.0)
+market = create_market_data_from_ohlcv(
+    timestamp=0,
+    open_price=100,
+    high=101,
+    low=99,
+    close=100,
+    volume=10_000,
+)
+
+fill = model.simulate_execution(
+    order_id="demo",
+    symbol="TEST",
+    side=OrderSide.BUY,
+    quantity=100,
+    order_type=OrderType.MARKET,
+    requested_price=100.0,
+    market_data=market,
+    timestamp=0,
+)
+
+metrics = alpha_performance_node(
+    returns,
+    execution_fills=[fill],
+    use_realistic_costs=True,
+)
+```
+
 ## Order Results and External Executors
 
 `TradeOrderPublisherNode` turns trade signals into standardized order
@@ -184,17 +227,32 @@ external systems through a series of hooks:
 3. `Runner.set_trade_order_kafka_topic(topic)` publishes the order to a
    Kafka topic using the configured producer.
 
-The SDK ships with a simple HTTP client:
+Combine these hooks with a simple pipeline to convert alpha values into
+standardized orders:
 
 ```python
-from qmtl.sdk import TradeExecutionService, Runner
+from qmtl.transforms import (
+    alpha_history_node,
+    TradeSignalGeneratorNode,
+    TradeOrderPublisherNode,
+)
+
+history = alpha_history_node(alpha, window=30)
+signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
+orders = TradeOrderPublisherNode(signal, topic="orders")
+
+from qmtl.sdk import Runner, TradeExecutionService
 
 service = TradeExecutionService("http://broker")
 Runner.set_trade_execution_service(service)
+Runner.set_trade_order_http_url("http://endpoint")
+Runner.set_trade_order_kafka_topic("orders")
 ```
 
-If none of these targets are configured the order is ignored, allowing
-strategies to remain agnostic about the actual execution backend.
+See [`order_pipeline_strategy.py`](../qmtl/examples/strategies/order_pipeline_strategy.py)
+for a complete runnable example. If none of these targets are configured the
+order is ignored, allowing strategies to remain agnostic about the actual
+execution backend.
 
 ## 백필 작업
 
