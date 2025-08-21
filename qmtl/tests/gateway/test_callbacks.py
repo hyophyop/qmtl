@@ -29,6 +29,7 @@ async def test_dag_event_route(fake_redis):
         resp = await client.post("/callbacks/dag-event", json=event)
         assert resp.status_code == 202
         assert resp.json()["ok"] is True
+    await transport.aclose()
 
 
 @pytest.mark.asyncio
@@ -76,6 +77,7 @@ async def test_dag_event_sentinel_weight(fake_redis):
         assert resp.status_code == 202
         assert hub.weights == [("v1", 0.7), ("v1", 0.3)]
         assert metrics.gateway_sentinel_traffic_ratio._vals["v1"] == 0.3
+    await transport.aclose()
 
 
 @pytest.mark.asyncio
@@ -109,6 +111,7 @@ async def test_dag_event_sentinel_weight_metric(fake_redis):
         assert (
             metrics.gateway_sentinel_traffic_ratio.labels(sentinel_id="v2")._value.get() == 0.5
         )
+    await transport.aclose()
 
 
 @pytest.mark.asyncio
@@ -141,3 +144,4 @@ async def test_dag_event_sentinel_weight_invalid(fake_redis):
         # Invalid weights should be ignored entirely
         assert hub.weights == []
         assert "v3" not in metrics.gateway_sentinel_traffic_ratio._vals
+    await transport.aclose()
