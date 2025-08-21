@@ -156,7 +156,7 @@ if "alpha_sharpe" in global_registry._names_to_collectors:
 else:
     alpha_sharpe = Gauge(
         "alpha_sharpe",
-        "Latest alpha Sharpe ratio",
+        "Alpha strategy Sharpe ratio",
         registry=global_registry,
     )
 
@@ -165,12 +165,13 @@ if "alpha_max_drawdown" in global_registry._names_to_collectors:
 else:
     alpha_max_drawdown = Gauge(
         "alpha_max_drawdown",
-        "Latest alpha max drawdown",
+        "Alpha strategy maximum drawdown",
         registry=global_registry,
     )
 
-alpha_sharpe._val = 0  # type: ignore[attr-defined]
-alpha_max_drawdown._val = 0  # type: ignore[attr-defined]
+alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
+alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]
+
 
 
 def observe_cache_read(upstream_id: str, interval: int) -> None:
@@ -287,7 +288,7 @@ def reset_metrics() -> None:
     node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
     node_process_failure_total.clear()
     node_process_failure_total._vals = {}  # type: ignore[attr-defined]
-    alpha_sharpe.set(0)
-    alpha_sharpe._val = 0  # type: ignore[attr-defined]
-    alpha_max_drawdown.set(0)
-    alpha_max_drawdown._val = 0  # type: ignore[attr-defined]
+    alpha_sharpe.set(0.0)
+    alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
+    alpha_max_drawdown.set(0.0)
+    alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]

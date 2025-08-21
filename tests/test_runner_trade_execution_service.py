@@ -1,5 +1,6 @@
+import importlib
 from unittest.mock import MagicMock
-
+import qmtl.sdk.runner as runner_module
 from qmtl.sdk.node import Node
 
 
@@ -8,14 +9,9 @@ class TradeOrderPublisherNode(Node):
 
 
 def test_runner_trade_execution_service_invoked():
-    import importlib
-    import qmtl.sdk.runner as runner_module
-
-    runner_module = importlib.reload(runner_module)
-    Runner = runner_module.Runner
-
+    runner_mod = importlib.reload(runner_module)
     service = MagicMock()
-    Runner.set_trade_execution_service(service)
+    runner_mod.Runner.set_trade_execution_service(service)
     try:
         src = Node(name="src", interval=1, period=1)
         trade = TradeOrderPublisherNode(
@@ -24,8 +20,7 @@ def test_runner_trade_execution_service_invoked():
             interval=1,
             period=1,
         )
-        Runner.feed_queue_data(trade, src.node_id, 1, 0, {})
+        runner_mod.Runner.feed_queue_data(trade, src.node_id, 1, 0, {})
         service.post_order.assert_called_once_with({"side": "BUY"})
     finally:
-        Runner.set_trade_execution_service(None)
-
+        runner_mod.Runner.set_trade_execution_service(None)
