@@ -1,6 +1,6 @@
 # SDK 사용 가이드
 
-본 문서는 QMTL SDK를 이용해 전략을 구현하고 실행하는 기본 절차를 소개합니다. 보다 상세한 아키텍처 설명과 예시는 `architecture.md`와 `qmtl/examples/` 디렉터리를 참고하세요.
+본 문서는 QMTL SDK를 이용해 전략을 구현하고 실행하는 기본 절차를 소개합니다. 보다 상세한 아키텍처 설명과 예시는 [architecture.md](../architecture/architecture.md)와 `qmtl/examples/` 디렉터리를 참고하세요.
 
 ## 설치
 

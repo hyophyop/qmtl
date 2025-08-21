@@ -24,7 +24,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 
 ## Grafana Dashboards
 
-Example Grafana dashboards are provided in `docs/dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
+Example Grafana dashboards are provided in `dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
 
 ## QuestDB Recorder Demo
 
