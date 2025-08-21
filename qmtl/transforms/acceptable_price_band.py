@@ -1,6 +1,6 @@
 """Acceptable price band transform utilities."""
 
-# Source: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
+# Source: ../docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
 # Priority: gpt5pro
 
 from __future__ import annotations
