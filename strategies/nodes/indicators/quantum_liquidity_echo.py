@@ -11,11 +11,31 @@ TAGS = {
 }
 
 from qmtl.transforms.quantum_liquidity_echo import quantum_liquidity_echo
+from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk.node import Node
 
 
-def quantum_liquidity_echo_node(data: dict) -> dict:
-    """Estimate echo amplitude and amplification index with threshold logic."""
-    alphas = data.get("alphas", [])
+def quantum_liquidity_echo_node(data: dict, view: CacheView | None = None) -> dict:
+    """Estimate echo amplitude and amplification index with threshold logic.
+
+    Parameters
+    ----------
+    data:
+        Mapping of parameters. Provide ``alphas`` explicitly or pass a ``source``
+        :class:`~qmtl.sdk.node.Node` along with a ``CacheView`` to pull the
+        sequence from cached history.
+    view:
+        Optional :class:`~qmtl.sdk.cache_view.CacheView` supplying cached data
+        for ``source`` when ``alphas`` are not precomputed.
+    """
+
+    alphas = data.get("alphas")
+    if alphas is None and view is not None and isinstance(data.get("source"), Node):
+        src: Node = data["source"]
+        entries = view[src][src.interval]
+        alphas = [payload for _, payload in entries]
+
+    alphas = alphas or []
     delta_t = data.get("delta_t", 1.0)
     tau = data.get("tau", 1.0)
     sigma = data.get("sigma", 1.0)
