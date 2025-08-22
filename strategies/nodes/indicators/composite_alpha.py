@@ -21,6 +21,7 @@ from .quantum_liquidity_echo import quantum_liquidity_echo_node
 from .tactical_liquidity_bifurcation import tactical_liquidity_bifurcation_node
 from .execution_diffusion_contraction import execution_diffusion_contraction_node
 from .resiliency_alpha import resiliency_alpha_node
+from .execution_velocity_hazard import execution_velocity_hazard_node
 
 
 def composite_alpha_node(data: dict) -> dict:
@@ -35,6 +36,7 @@ def composite_alpha_node(data: dict) -> dict:
     tlb = tactical_liquidity_bifurcation_node(data.get("tactical_liquidity", {}))
     edch = execution_diffusion_contraction_node(data.get("edch", {}))
     resil = resiliency_alpha_node(data.get("resiliency", {}))
+    evh = execution_velocity_hazard_node(data.get("edvh", {}))
 
     components = [
         apb.get("alpha", 0.0),
@@ -46,6 +48,7 @@ def composite_alpha_node(data: dict) -> dict:
         tlb.get("alpha", 0.0),
         edch.get("alpha", 0.0),
         resil.get("alpha", 0.0),
+        evh.get("alpha", 0.0),
     ]
     alpha = sum(components) / len(components) if components else 0.0
     return {
@@ -60,5 +63,6 @@ def composite_alpha_node(data: dict) -> dict:
             "tactical_liquidity_bifurcation": components[6],
             "execution_diffusion_contraction": components[7],
             "resiliency": components[8],
+            "execution_velocity_hazard": components[9],
         },
     }

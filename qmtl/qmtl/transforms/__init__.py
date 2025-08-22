@@ -37,6 +37,11 @@ from .identity import identity_transform_node
 from .llrti import llrti
 from .scale import scale_transform_node
 from .resiliency import impact, resiliency_alpha
+from .execution_velocity_hazard import (
+    edvh_hazard,
+    expected_jump as edvh_expected_jump,
+    execution_velocity_hazard,
+)
 
 __all__ = [
     "rate_of_change",
@@ -80,4 +85,7 @@ __all__ = [
     "scale_transform_node",
     "impact",
     "resiliency_alpha",
+    "edvh_hazard",
+    "edvh_expected_jump",
+    "execution_velocity_hazard",
 ]
