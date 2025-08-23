@@ -11,7 +11,15 @@ Use with:
 
 ```python
 from qmtl.indicators import sma
+from qmtl.indicators import acceptable_price_band_node
 ```
+
+## Acceptable price band alpha
+
+`acceptable_price_band_node` adapts a dynamic mean and volatility band using
+`FourDimCache` for historical averages. It returns updated band statistics and a
+nonlinear alpha value combining momentum and mean-reversion effects driven by
+price overshoots and volume surprises.
 
 ## Custom indicators with history
 
