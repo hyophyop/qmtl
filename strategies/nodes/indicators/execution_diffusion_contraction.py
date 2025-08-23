@@ -3,7 +3,7 @@
 Cache Key Scheme
 ----------------
 All cached metrics share the ``(timestamp, side, level, metric)`` key scheme
-implemented by :class:`~strategies.utils.four_dim_cache.FourDimCache`.
+implemented by :class:`~qmtl.common.FourDimCache`.
 
 """
 
@@ -23,7 +23,7 @@ from qmtl.transforms.execution_diffusion_contraction import (
     edch_side,
 )
 
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 
 CACHE = FourDimCache()

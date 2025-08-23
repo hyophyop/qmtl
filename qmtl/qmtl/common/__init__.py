@@ -12,10 +12,12 @@ def crc32_of_list(items: Iterable[str]) -> int:
 
 from .reconnect import ReconnectingRedis, ReconnectingNeo4j
 from .circuit_breaker import AsyncCircuitBreaker
+from .four_dim_cache import FourDimCache
 
 __all__ = [
     "crc32_of_list",
     "ReconnectingRedis",
     "ReconnectingNeo4j",
     "AsyncCircuitBreaker",
+    "FourDimCache",
 ]

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "qmtl"))
 from strategies.nodes.indicators.acceptable_price_band import (
     acceptable_price_band_node,
 )
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 
 def test_band_calculation():
