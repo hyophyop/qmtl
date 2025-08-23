@@ -1,8 +1,10 @@
 """Indicator node processors."""
 
 # ``CacheView`` is optional for consumers outside the core ``qmtl`` package.
-try:  # pragma: no cover - soft dependency for tests
+try:  # pragma: no cover - fallback when qmtl is not installed
     from qmtl.sdk.cache_view import CacheView
+except ModuleNotFoundError:  # pragma: no cover - for tests without qmtl
+    CacheView = dict  # type: ignore[misc,assignment]
 except Exception:  # pragma: no cover - fallback when qmtl isn't installed
     class CacheView(dict):
         """Lightweight stub used when :mod:`qmtl` is unavailable."""
