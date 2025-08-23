@@ -9,28 +9,42 @@ TAGS = {
     "asset": "sample",
 }
 
+from collections.abc import Mapping
 from qmtl.transforms import llrti
 
+CACHE_NS = "latent_liquidity"
 
-def llrti_node(data: dict) -> dict:
-    """Calculate LLRTI from depth changes when price moves beyond a threshold.
 
-    Parameters
-    ----------
-    data:
-        Mapping containing ``depth_changes`` sequence, ``price_change`` value,
-        ``delta_t`` interval, and ``delta`` threshold.
+def _cache_category(cache: Mapping, name: str) -> dict:
+    ns = cache.setdefault(CACHE_NS, {})  # type: ignore[arg-type]
+    return ns.setdefault(name, {})  # type: ignore[return-value]
 
-    Returns
-    -------
-    dict
-        Mapping with a single key ``"llrti"`` holding the index value.
-    """
+
+def llrti_node(data: dict, cache: dict | None = None) -> dict:
+    """Calculate LLRTI and store depth change and index in a shared cache."""
+
+    cache = cache if cache is not None else {}
+    time = data.get("time", 0)
+    side = data.get("side", "buy")
+    level = data.get("level", 0)
+    depth_change = data.get("depth_change", 0.0)
+
+    depth_cat = _cache_category(cache, "depth_changes")
+    seq = [
+        val
+        for (t, s, l), val in sorted(depth_cat.items())
+        if s == side and l == level and t < time
+    ]
+    seq.append(depth_change)
 
     index = llrti(
-        data.get("depth_changes", []),
+        seq,
         data.get("price_change", 0.0),
         data.get("delta_t", 1.0),
         data.get("delta", 0.0),
     )
+
+    depth_cat[(time, side, level)] = depth_change
+    llrti_cat = _cache_category(cache, "llrti")
+    llrti_cat[(time, side, level)] = index
     return {"llrti": index}
