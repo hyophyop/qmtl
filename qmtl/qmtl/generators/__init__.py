@@ -5,7 +5,6 @@ from .garch import GarchInput
 from .heston import HestonInput
 from .rough_bergomi import RoughBergomiInput
 from .raw_market import RawMarketInput
-from .all_alpha import all_alpha_generator_node
 
 __all__ = [
     "SyntheticInput",
@@ -13,5 +12,4 @@ __all__ = [
     "HestonInput",
     "RoughBergomiInput",
     "RawMarketInput",
-    "all_alpha_generator_node",
 ]
