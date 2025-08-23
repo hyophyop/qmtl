@@ -18,7 +18,6 @@ from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
 from .volatility import volatility_node, volatility
 from .gap_amplification_alpha import gap_amplification_node
-from .composite_alpha import composite_alpha_node
 from .helpers import alpha_indicator_with_history
 
 __all__ = [
@@ -41,6 +40,5 @@ __all__ = [
     "volatility_node",
     "volatility",
     "gap_amplification_node",
-    "composite_alpha_node",
     "alpha_indicator_with_history",
 ]
