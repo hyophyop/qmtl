@@ -1,39 +1,13 @@
-import importlib.util
 import math
-from pathlib import Path
 import pytest
 
-import sys
-import types
+import strategies.nodes.indicators.tactical_liquidity_bifurcation as tlb
+from qmtl.transforms.tactical_liquidity_bifurcation import (
+    bifurcation_hazard,
+    direction_signal as tlb_direction_signal,
+)
+from qmtl.transforms.order_book_clustering_collapse import execution_cost as occ_execution_cost
 
-fake_tlb = types.SimpleNamespace(
-    bifurcation_hazard=lambda z, beta: 0.0,
-    direction_signal=lambda side, z, eta: 0.0,
-    tlbh_alpha=lambda h, g, pi, cost, gamma, tau, phi: max(h**gamma - cost, 0.0)
-    * g
-    * pi
-    * math.exp(-tau),
-)
-fake_occ = types.SimpleNamespace(
-    execution_cost=lambda spread, taker_fee, impact: spread + taker_fee + impact,
-)
-sys.modules[
-    "qmtl.transforms.tactical_liquidity_bifurcation"
-] = fake_tlb
-sys.modules[
-    "qmtl.transforms.order_book_clustering_collapse"
-] = fake_occ
-
-MODULE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "nodes"
-    / "indicators"
-    / "tactical_liquidity_bifurcation.py"
-)
-spec = importlib.util.spec_from_file_location("tlb", MODULE_PATH)
-tlb = importlib.util.module_from_spec(spec)
-assert spec and spec.loader
-spec.loader.exec_module(tlb)
 tactical_liquidity_bifurcation_node = tlb.tactical_liquidity_bifurcation_node
 
 
@@ -88,3 +62,79 @@ def test_tactical_liquidity_bifurcation_cache_toggle():
     assert result["hazard_ask"] == 0.0
     assert result["g_ask"] == 0.0
     assert result["cost"] == 0.0
+
+
+def test_tlb_node_computes_features_when_missing():
+    beta = (0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    eta = (0.0, 1.0, 0.0, 0.0)
+    data = {
+        "beta": beta,
+        "eta": eta,
+        "ask_z_SkewDot": 0.0,
+        "ask_z_CancelDot": 0.0,
+        "ask_z_Gap": 0.0,
+        "ask_z_Cliff": 0.0,
+        "ask_z_Shield": 0.0,
+        "ask_z_QDT_inv": 0.0,
+        "ask_z_RequoteLag": 0.0,
+        "bid_z_SkewDot": -1.0,
+        "bid_z_CancelDot": 0.0,
+        "bid_z_Gap": 0.0,
+        "bid_z_Cliff": 0.0,
+        "bid_z_Shield": 0.0,
+        "bid_z_QDT_inv": 0.0,
+        "bid_z_RequoteLag": 0.0,
+        "ask_z_OFI": 1.0,
+        "ask_z_MicroSlope": 0.0,
+        "ask_z_AggFlow": 0.0,
+        "bid_z_OFI": 0.0,
+        "bid_z_MicroSlope": 0.0,
+        "bid_z_AggFlow": 0.0,
+        "gamma": 1.0,
+        "tau": 0.0,
+    }
+    result = tactical_liquidity_bifurcation_node(data)
+
+    hazard_ask = bifurcation_hazard(
+        {
+            "SkewDot": 0.0,
+            "CancelDot": 0.0,
+            "Gap": 0.0,
+            "Cliff": 0.0,
+            "Shield": 0.0,
+            "QDT_inv": 0.0,
+            "RequoteLag": 0.0,
+        },
+        beta,
+    )
+    hazard_bid = bifurcation_hazard(
+        {
+            "SkewDot": -1.0,
+            "CancelDot": 0.0,
+            "Gap": 0.0,
+            "Cliff": 0.0,
+            "Shield": 0.0,
+            "QDT_inv": 0.0,
+            "RequoteLag": 0.0,
+        },
+        beta,
+    )
+    g_ask = tlb_direction_signal(
+        +1,
+        {"OFI": 1.0, "MicroSlope": 0.0, "AggFlow": 0.0},
+        eta,
+    )
+    g_bid = tlb_direction_signal(
+        -1,
+        {"OFI": 0.0, "MicroSlope": 0.0, "AggFlow": 0.0},
+        eta,
+    )
+    expected_cost = occ_execution_cost(0.0, 0.0, 0.0)
+
+    assert result["hazard_ask"] == pytest.approx(hazard_ask)
+    assert result["hazard_bid"] == pytest.approx(hazard_bid)
+    assert result["g_ask"] == pytest.approx(g_ask)
+    assert result["g_bid"] == pytest.approx(g_bid)
+    assert result["cost"] == pytest.approx(expected_cost)
+    expected = hazard_ask * g_ask + hazard_bid * g_bid
+    assert result["alpha"] == pytest.approx(expected)

@@ -11,9 +11,9 @@ from strategies.nodes.indicators.order_book_clustering_collapse import (
     order_book_clustering_collapse_node,
 )
 from qmtl.transforms.order_book_clustering_collapse import (
-    hazard_probability,
-    direction_gating,
-    execution_cost,
+    hazard_probability as occ_hazard_probability,
+    direction_gating as occ_direction_gating,
+    execution_cost as occ_execution_cost,
 )
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
@@ -70,20 +70,20 @@ def test_obcc_node_computes_features_when_missing():
     }
     result = obcc.order_book_clustering_collapse_node(data)
 
-    hazard_ask = hazard_probability(
+    hazard_ask = occ_hazard_probability(
         {"C": 0.0, "Cliff": 0.0, "Gap": 0.0, "CH": 0.0, "RL": 0.0, "Shield": 0.0, "QDT_inv": 0.0},
         beta,
     )
-    hazard_bid = hazard_probability(
+    hazard_bid = occ_hazard_probability(
         {"C": -1.0, "Cliff": 0.0, "Gap": 0.0, "CH": 0.0, "RL": 0.0, "Shield": 0.0, "QDT_inv": 0.0},
         beta,
     )
-    g_ask = direction_gating(
+    g_ask = occ_direction_gating(
         +1,
         {"OFI": 1.0, "MicroSlope": 0.0, "AggFlow": 0.0},
         eta,
     )
-    g_bid = direction_gating(
+    g_bid = occ_direction_gating(
         -1,
         {"OFI": 0.0, "MicroSlope": 0.0, "AggFlow": 0.0},
         eta,
@@ -93,30 +93,30 @@ def test_obcc_node_computes_features_when_missing():
     assert result["hazard_bid"] == pytest.approx(hazard_bid)
     assert result["g_ask"] == pytest.approx(g_ask)
     assert result["g_bid"] == pytest.approx(g_bid)
-    expected_cost = execution_cost(0.0, 0.0, 0.0)
+    expected_cost = occ_execution_cost(0.0, 0.0, 0.0)
     assert result["cost"] == pytest.approx(expected_cost)
     expected = (hazard_ask * g_ask + hazard_bid * g_bid)
     assert result["alpha"] == pytest.approx(expected)
 
 
-def test_obcc_node_calls_qmtl_functions(monkeypatch):
+def test_obcc_node_calls_helpers(monkeypatch):
     calls = {"hazard": 0, "direction": 0, "cost": 0}
 
-    def fake_hazard(z, beta):
+    def fake_hazard(*args, **kwargs):
         calls["hazard"] += 1
         return 0.0
 
-    def fake_direction(side, z, eta):
+    def fake_direction(*args, **kwargs):
         calls["direction"] += 1
         return 0.0
 
-    def fake_cost(spread, taker_fee, impact):
+    def fake_cost(*args, **kwargs):
         calls["cost"] += 1
         return 0.0
 
-    monkeypatch.setattr(obcc, "_hazard", fake_hazard)
-    monkeypatch.setattr(obcc, "_direction", fake_direction)
-    monkeypatch.setattr(obcc, "_cost", fake_cost)
+    monkeypatch.setattr(obcc, "hazard_probability", fake_hazard)
+    monkeypatch.setattr(obcc, "direction_signal", fake_direction)
+    monkeypatch.setattr(obcc, "execution_cost", fake_cost)
 
     data = {
         "ask_z_C": 0.0,
@@ -153,16 +153,16 @@ def test_obcc_node_calls_qmtl_functions(monkeypatch):
 def test_obcc_uses_cached_values(monkeypatch):
     calls = {"hazard": 0, "direction": 0}
 
-    def fake_hazard(z, beta):
+    def fake_hazard(*args, **kwargs):
         calls["hazard"] += 1
         return 0.1
 
-    def fake_direction(side, z, eta):
+    def fake_direction(*args, **kwargs):
         calls["direction"] += 1
         return 0.05
 
-    monkeypatch.setattr(obcc, "_hazard", fake_hazard)
-    monkeypatch.setattr(obcc, "_direction", fake_direction)
+    monkeypatch.setattr(obcc, "hazard_probability", fake_hazard)
+    monkeypatch.setattr(obcc, "direction_signal", fake_direction)
 
     node = Node(name="cache", interval=1, compute_fn=lambda v: None)
     view = CacheView(
@@ -188,16 +188,16 @@ def test_obcc_uses_cached_values(monkeypatch):
 def test_obcc_cache_miss_triggers_recompute(monkeypatch):
     calls = {"hazard": 0, "direction": 0}
 
-    def fake_hazard(z, beta):
+    def fake_hazard(*args, **kwargs):
         calls["hazard"] += 1
         return 0.1
 
-    def fake_direction(side, z, eta):
+    def fake_direction(*args, **kwargs):
         calls["direction"] += 1
-        return 0.05 if side == 1 else -0.05
+        return 0.05 if args[0] == 1 else -0.05
 
-    monkeypatch.setattr(obcc, "_hazard", fake_hazard)
-    monkeypatch.setattr(obcc, "_direction", fake_direction)
+    monkeypatch.setattr(obcc, "hazard_probability", fake_hazard)
+    monkeypatch.setattr(obcc, "direction_signal", fake_direction)
 
     node = Node(name="cache", interval=1, compute_fn=lambda v: None)
     view = CacheView({node.node_id: {node.interval: []}})

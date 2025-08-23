@@ -16,26 +16,11 @@ from math import exp
 
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
-from qmtl.transforms.order_book_clustering_collapse import (
+from strategies.utils.hazard_direction_cost import (
     hazard_probability,
-    direction_gating,
+    direction_signal,
     execution_cost,
 )
-
-
-def _hazard(z: dict[str, float], beta: tuple[float, ...]) -> float:
-    """Wrapper for hazard probability."""
-    return hazard_probability(z, beta)
-
-
-def _direction(side: int, z: dict[str, float], eta: tuple[float, ...]) -> float:
-    """Wrapper for direction gating."""
-    return direction_gating(side, z, eta)
-
-
-def _cost(spread: float, taker_fee: float, impact: float) -> float:
-    """Wrapper for execution cost."""
-    return execution_cost(spread, taker_fee, impact)
 
 
 def order_book_clustering_collapse_node(
@@ -113,17 +98,29 @@ def order_book_clustering_collapse_node(
 
     if hazard_ask is None and all(f"ask_z_{k}" in data for k in required_hazard_keys):
         z = {k: data[f"ask_z_{k}"] for k in required_hazard_keys}
-        hazard_ask = _hazard(z, beta)
+        hazard_ask = hazard_probability(
+            z,
+            beta,
+            required_hazard_keys,
+            softplus_keys=("C",),
+            negative_keys=("Shield",),
+        )
     if hazard_bid is None and all(f"bid_z_{k}" in data for k in required_hazard_keys):
         z = {k: data[f"bid_z_{k}"] for k in required_hazard_keys}
-        hazard_bid = _hazard(z, beta)
+        hazard_bid = hazard_probability(
+            z,
+            beta,
+            required_hazard_keys,
+            softplus_keys=("C",),
+            negative_keys=("Shield",),
+        )
 
     if g_ask is None and all(f"ask_z_{k}" in data for k in required_direction_keys):
         z = {k: data[f"ask_z_{k}"] for k in required_direction_keys}
-        g_ask = _direction(+1, z, eta)
+        g_ask = direction_signal(+1, z, eta)
     if g_bid is None and all(f"bid_z_{k}" in data for k in required_direction_keys):
         z = {k: data[f"bid_z_{k}"] for k in required_direction_keys}
-        g_bid = _direction(-1, z, eta)
+        g_bid = direction_signal(-1, z, eta)
 
     hazard_ask = hazard_ask or 0.0
     hazard_bid = hazard_bid or 0.0
@@ -136,7 +133,7 @@ def order_book_clustering_collapse_node(
         spread = data.get("spread", 0.0)
         taker_fee = data.get("taker_fee", 0.0)
         impact = data.get("impact", 0.0)
-        cost = _cost(spread, taker_fee, impact)
+        cost = execution_cost(spread, taker_fee, impact)
 
     gamma = data.get("gamma", 2.0)
     tau = data.get("tau", 0.7)
