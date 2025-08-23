@@ -1,6 +1,10 @@
 """Indicator node processors."""
 
-from qmtl.sdk.cache_view import CacheView
+try:  # pragma: no cover - optional dependency during tests
+    from qmtl.sdk.cache_view import CacheView
+except ModuleNotFoundError:  # pragma: no cover - fallback for docs/tests
+    class CacheView:  # type: ignore
+        pass
 
 __all__ = ["sample_indicator"]
 

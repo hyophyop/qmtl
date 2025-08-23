@@ -11,6 +11,7 @@ TAGS = {
 }
 
 import math
+from collections import deque
 
 from qmtl.transforms.acceptable_price_band import (
     estimate_band,
@@ -29,7 +30,11 @@ def acceptable_price_band_node(data: dict) -> dict:
         ``mu_prev`` and ``sigma_prev`` for previous estimates, ``volume_hat``
         and ``volume_std`` for seasonal volume expectation and deviation, and
         smoothing factors ``lambda_mu`` and ``lambda_sigma``. ``k`` controls
-        the band width.
+        the band width. ``cache`` holds historical statistics keyed by
+        ``(time, price_level, feature)`` and ``cache_window`` defines the
+        maximum history length. If ``mu_prev``/``sigma_prev``/``volume_hat``/
+        ``volume_std`` are omitted they are inferred from the cache using a
+        simple average.
 
     Returns
     -------
@@ -39,10 +44,27 @@ def acceptable_price_band_node(data: dict) -> dict:
 
     price = data.get("price", 0.0)
     volume = data.get("volume", 0.0)
-    volume_hat = data.get("volume_hat", 0.0)
-    volume_std = data.get("volume_std", 1.0)
-    mu_prev = data.get("mu_prev", price)
-    sigma_prev = data.get("sigma_prev", 1.0)
+    time_key = data.get("time")
+    price_level = data.get("price_level", price)
+    cache = data.get("cache", {})
+    cache_window = data.get("cache_window", 20)
+
+    def _cached_avg(feature: str, default: float) -> float:
+        key = (time_key, price_level, feature)
+        values = cache.get(key)
+        if values:
+            return sum(values) / len(values)
+        return default
+
+    volume_hat = data.get(
+        "volume_hat", _cached_avg("volume_hat", 0.0)
+    )
+    volume_std = data.get(
+        "volume_std", _cached_avg("volume_std", 1.0)
+    )
+    mu_prev = data.get("mu_prev", _cached_avg("mu", price))
+    sigma_prev = data.get("sigma_prev", _cached_avg("sigma", 1.0))
+
     lambda_mu = data.get("lambda_mu", 0.1)
     lambda_sigma = data.get("lambda_sigma", 0.1)
     k = data.get("k", 1.0)
@@ -63,9 +85,27 @@ def acceptable_price_band_node(data: dict) -> dict:
     alpha = gate * alpha_mom + (1.0 - gate) * alpha_rev
 
     band.pop("resid")
+
+    # update cache
+    for feature, value in [
+        ("mu", band["mu"]),
+        ("sigma", band["sigma"]),
+        ("volume_hat", volume_hat),
+        ("volume_std", volume_std),
+    ]:
+        key = (time_key, price_level, feature)
+        values = cache.get(key)
+        if values is None or values.maxlen != cache_window:
+            values = deque(values, maxlen=cache_window) if values else deque(
+                maxlen=cache_window
+            )
+            cache[key] = values
+        values.append(value)
+
     return {
         **band,
         "alpha": alpha,
         "volume_surprise": vs,
+        "cache": cache,
     }
 
