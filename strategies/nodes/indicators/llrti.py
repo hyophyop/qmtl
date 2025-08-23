@@ -9,15 +9,15 @@ TAGS = {
     "asset": "sample",
 }
 
-from collections.abc import Mapping
-from qmtl.transforms import llrti
+try:  # pragma: no cover - fallback when qmtl is unavailable
+    from qmtl.transforms import llrti
+except ModuleNotFoundError:  # pragma: no cover - simple local implementation
+    def llrti(depth_changes, price_change, delta_t, delta):  # type: ignore[override]
+        if delta_t <= 0 or abs(price_change) <= delta:
+            return 0.0
+        return sum(depth_changes) / delta_t
 
-CACHE_NS = "latent_liquidity"
-
-
-def _cache_category(cache: Mapping, name: str) -> dict:
-    ns = cache.setdefault(CACHE_NS, {})  # type: ignore[arg-type]
-    return ns.setdefault(name, {})  # type: ignore[return-value]
+from .latent_liquidity_cache import CACHE_NS, _cache_category  # noqa: F401
 
 
 def llrti_node(data: dict, cache: dict | None = None) -> dict:

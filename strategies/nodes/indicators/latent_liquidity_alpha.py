@@ -10,14 +10,7 @@ TAGS = {
 }
 
 import math
-from collections.abc import Mapping
-
-CACHE_NS = "latent_liquidity"
-
-
-def _cache_category(cache: Mapping, name: str) -> dict:
-    ns = cache.setdefault(CACHE_NS, {})  # type: ignore[arg-type]
-    return ns.setdefault(name, {})  # type: ignore[return-value]
+from .latent_liquidity_cache import CACHE_NS, _cache_category  # noqa: F401
 
 
 def latent_liquidity_alpha_node(data: dict, cache: dict | None = None) -> dict:
