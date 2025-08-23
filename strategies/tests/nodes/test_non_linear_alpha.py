@@ -4,6 +4,7 @@ from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import SourceNode
 
 from strategies.nodes.indicators.non_linear_alpha import non_linear_alpha_node
+from strategies.utils.cacheview_helpers import fetch_series, latest_value
 
 
 def test_cache_assisted_execution():
@@ -33,10 +34,13 @@ def test_cache_assisted_execution():
         view,
     )
 
-    expected_obi_deriv = (obi_hist[-1][1] - obi_hist[-2][1]) / obi_hist[-2][1]
-    expected_alpha = math.tanh(impact_val * vol_val) * expected_obi_deriv
+    impact_val_resolved = latest_value(view, impact_src)
+    vol_val_resolved = latest_value(view, vol_src)
+    obi_series = fetch_series(view, obi_src)
+    expected_obi_deriv = (obi_series[-1] - obi_series[-2]) / obi_series[-2]
+    expected_alpha = math.tanh(impact_val_resolved * vol_val_resolved) * expected_obi_deriv
 
-    assert math.isclose(out["impact"], impact_val)
-    assert math.isclose(out["volatility"], vol_val)
+    assert math.isclose(out["impact"], impact_val_resolved)
+    assert math.isclose(out["volatility"], vol_val_resolved)
     assert math.isclose(out["obi_derivative"], expected_obi_deriv)
     assert math.isclose(out["alpha"], expected_alpha)

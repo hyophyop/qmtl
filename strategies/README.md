@@ -65,6 +65,15 @@ def build_dag():
 
 This reuse minimizes duplication and keeps strategies consistent.
 
+## CacheView Helpers
+
+Utility functions under `strategies/utils/cacheview_helpers.py` simplify
+interacting with `CacheView` snapshots. Use `fetch_series` to collect
+time-ordered data from cached histories and `latest_value` to grab the most
+recent payload for a node. Additional helpers like `level_series` and
+`value_at` provide convenient access to order-book snapshots. Strategies and
+tests should rely on these helpers instead of manual cache traversal loops.
+
 ## Configuration
 
 `config.example.yml` contains optional settings that influence node behavior. The

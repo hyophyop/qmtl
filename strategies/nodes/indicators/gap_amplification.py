@@ -17,6 +17,8 @@ from qmtl.transforms.gap_amplification import (
 )
 from qmtl.sdk.cache_view import CacheView
 
+from strategies.utils.cacheview_helpers import level_series, value_at
+
 
 def _gas(gaps: list[float], depths: list[float], lam: float) -> float:
     """Wrapper for gap amplification score."""
@@ -71,50 +73,24 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
     time_idx = data.get("time", 0)
 
     if view is not None:
-        cache = view._data  # underlying mapping for mutation and iteration
         try:
-            if ask_gaps is None or ask_depths is None:
-                ask_levels = cache[time_idx]["ask"]
-                gaps: list[float] = []
-                depths: list[float] = []
-                for lvl in sorted(ask_levels):
-                    feats = ask_levels[lvl]
-                    if "gap" in feats and "depth" in feats:
-                        gaps.append(feats["gap"])
-                        depths.append(feats["depth"])
-                if ask_gaps is None:
-                    ask_gaps = gaps
-                if ask_depths is None:
-                    ask_depths = depths
-        except Exception:  # pragma: no cover - defensive
-            pass
-        try:
-            if bid_gaps is None or bid_depths is None:
-                bid_levels = cache[time_idx]["bid"]
-                gaps = []
-                depths = []
-                for lvl in sorted(bid_levels):
-                    feats = bid_levels[lvl]
-                    if "gap" in feats and "depth" in feats:
-                        gaps.append(feats["gap"])
-                        depths.append(feats["depth"])
-                if bid_gaps is None:
-                    bid_gaps = gaps
-                if bid_depths is None:
-                    bid_depths = depths
-        except Exception:  # pragma: no cover - defensive
-            pass
-        try:
+            if ask_gaps is None:
+                ask_gaps = level_series(view, time_idx, "ask", "gap")
+            if ask_depths is None:
+                ask_depths = level_series(view, time_idx, "ask", "depth")
+            if bid_gaps is None:
+                bid_gaps = level_series(view, time_idx, "bid", "gap")
+            if bid_depths is None:
+                bid_depths = level_series(view, time_idx, "bid", "depth")
             if hazard is None:
-                haz_feats = cache[time_idx]["hazard"][0]
-                ofi = haz_feats.get("ofi", ofi)
-                spread_z = haz_feats.get("spread_z", spread_z)
+                ofi = value_at(view, time_idx, "hazard", 0, "ofi", ofi)
+                spread_z = value_at(view, time_idx, "hazard", 0, "spread_z", spread_z)
                 if eta is None:
-                    eta = (
-                        haz_feats.get("eta0"),
-                        haz_feats.get("eta1"),
-                        haz_feats.get("eta2"),
-                    )
+                    eta0 = value_at(view, time_idx, "hazard", 0, "eta0")
+                    eta1 = value_at(view, time_idx, "hazard", 0, "eta1")
+                    eta2 = value_at(view, time_idx, "hazard", 0, "eta2")
+                    if None not in (eta0, eta1, eta2):
+                        eta = (eta0, eta1, eta2)
         except Exception:  # pragma: no cover - defensive
             pass
 
