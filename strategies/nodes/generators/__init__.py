@@ -1,7 +1,7 @@
 """Generator node processors."""
 
 from .sequence import sequence_generator_node
-from .all_alpha import all_alpha_generator_node
+from qmtl.generators.all_alpha import all_alpha_generator_node
 
 
 def sample_generator():

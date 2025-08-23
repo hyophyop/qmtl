@@ -1,11 +1,31 @@
-"""Generate features for all alpha indicators from raw market data."""
+from __future__ import annotations
 
-TAGS = {
-    "scope": "generator",
-    "family": "all_alpha",
-    "interval": "1s",
-    "asset": "sample",
-}
+"""Feature generator consolidating data for multiple alpha modules.
+
+The generator wraps :class:`qmtl.generators.raw_market.RawMarketInput` and
+produces a dictionary with the following top-level keys expected by downstream
+alpha indicators:
+
+``apb``
+    ``price``, ``volume``, ``volume_hat``, ``volume_std``
+``llrti``
+    ``depth_changes``, ``price_change``, ``delta_t``, ``delta``
+``non_linear``
+    ``impact``, ``volatility``, ``obi_derivative``
+``order_book``
+    ``hazard_ask``, ``hazard_bid``, ``g_ask``, ``g_bid``, ``pi``, ``cost``
+``qle``
+    ``alphas``, ``delta_t``, ``tau``, ``sigma``, ``threshold``
+``resiliency``
+    ``volume``, ``avg_volume``, ``depth``, ``volatility``, ``obi_derivative``,
+    ``beta``, ``gamma``
+
+History is maintained internally so that moving statistics are calculated over
+recent observations without leaking unbounded memory.
+"""
+
+from statistics import stdev
+from typing import Sequence
 
 from qmtl.generators.raw_market import RawMarketInput
 from qmtl.transforms import (
@@ -19,8 +39,14 @@ from qmtl.transforms import (
     execution_cost,
     llrti,
 )
-from qmtl.indicators import volatility
 from qmtl.transforms.quantum_liquidity_echo import quantum_liquidity_echo
+
+TAGS = {
+    "scope": "generator",
+    "family": "all_alpha",
+    "interval": "1s",
+    "asset": "sample",
+}
 
 _raw = RawMarketInput(interval=1, period=1, seed=0)
 _history = {
@@ -40,8 +66,18 @@ def _append(key: str, value: float, window: int = 5) -> None:
         del hist[0]
 
 
+def _volatility(values: Sequence[float]) -> float:
+    """Return standard deviation of percentage returns for ``values``."""
+    if len(values) < 2:
+        return 0.0
+    returns = [(values[i] / values[i - 1]) - 1 for i in range(1, len(values))]
+    if len(returns) < 2:
+        return 0.0
+    return stdev(returns)
+
+
 def all_alpha_generator_node() -> dict:
-    """Return feature dictionary for composite alpha."""
+    """Return feature dictionary for composite alpha modules."""
     _, raw = _raw.step()
     price = raw["price"]
     volume = raw["volume"]
@@ -69,7 +105,7 @@ def all_alpha_generator_node() -> dict:
     llrti_val = llrti(_history["depth_changes"], price_change, 1.0, 0.01)
     _append("llrti", llrti_val, window=3)
 
-    vol = volatility(_history["price"])
+    vol = _volatility(_history["price"])
 
     hazard_ask = hazard_probability(
         {
@@ -160,3 +196,6 @@ def all_alpha_generator_node() -> dict:
             "gamma": 1.0,
         },
     }
+
+
+__all__ = ["all_alpha_generator_node"]
