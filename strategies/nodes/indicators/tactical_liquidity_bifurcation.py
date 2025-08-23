@@ -12,12 +12,12 @@ TAGS = {
 
 from typing import Any, Dict, Tuple
 
-from qmtl.transforms.tactical_liquidity_bifurcation import (
-    bifurcation_hazard,
+from qmtl.transforms.tactical_liquidity_bifurcation import tlbh_alpha
+from strategies.utils.hazard_direction_cost import (
+    hazard_probability,
     direction_signal,
-    tlbh_alpha,
+    execution_cost,
 )
-from qmtl.transforms.order_book_clustering_collapse import execution_cost
 
 
 _ComponentKey = Tuple[Any, str, str, str]
@@ -81,17 +81,29 @@ def tactical_liquidity_bifurcation_node(data: dict, *, use_cache: bool = True) -
 
     if hazard_ask is None and all(f"ask_z_{k}" in data for k in h_keys):
         z = {k: data[f"ask_z_{k}"] for k in h_keys}
-        hazard_ask = bifurcation_hazard(z, beta)
+        hazard_ask = hazard_probability(
+            z,
+            beta,
+            h_keys,
+            softplus_keys=("SkewDot", "CancelDot"),
+            negative_keys=("Shield",),
+        )
     if hazard_bid is None and all(f"bid_z_{k}" in data for k in h_keys):
         z = {k: data[f"bid_z_{k}"] for k in h_keys}
-        hazard_bid = bifurcation_hazard(z, beta)
+        hazard_bid = hazard_probability(
+            z,
+            beta,
+            h_keys,
+            softplus_keys=("SkewDot", "CancelDot"),
+            negative_keys=("Shield",),
+        )
 
     if g_ask is None and all(f"ask_z_{k}" in data for k in d_keys):
         z = {k: data[f"ask_z_{k}"] for k in d_keys}
-        g_ask = direction_signal(+1, z, eta)
+        g_ask = direction_signal(+1, z, eta, weight_aggflow_by_ofi=True)
     if g_bid is None and all(f"bid_z_{k}" in data for k in d_keys):
         z = {k: data[f"bid_z_{k}"] for k in d_keys}
-        g_bid = direction_signal(-1, z, eta)
+        g_bid = direction_signal(-1, z, eta, weight_aggflow_by_ofi=True)
 
     if use_cache and timestamp is not None:
         _cache_set((timestamp, "ask", "risk", "hazard"), hazard_ask or 0.0)
