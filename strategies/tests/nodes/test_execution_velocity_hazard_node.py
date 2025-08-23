@@ -2,9 +2,13 @@ from strategies.nodes.indicators.execution_velocity_hazard import (
     execution_velocity_hazard_node,
 )
 
+from strategies.utils.four_dim_cache import FourDimCache
+
 
 def test_execution_velocity_hazard_node_outputs():
+    cache = FourDimCache()
     data = {
+        "timestamp": 1,
         "aevx_ex": 0.5,
         "tension_a": 0.2,
         "tension_b": 0.1,
@@ -21,14 +25,15 @@ def test_execution_velocity_hazard_node_outputs():
         "eta_S": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "Qq": 1.0,
     }
-    out = execution_velocity_hazard_node(data, {})
+    out = execution_velocity_hazard_node(data, cache)
     assert "alpha" in out
     assert isinstance(out["alpha"], float)
 
 
 def test_execution_velocity_hazard_cached_retrieval():
-    cache: dict = {}
+    cache = FourDimCache()
     base = {
+        "timestamp": 1,
         "aevx_ex": 0.5,
         "tension_a": 0.2,
         "tension_b": 0.1,
@@ -51,6 +56,7 @@ def test_execution_velocity_hazard_cached_retrieval():
     follow_up = {
         key: base[key]
         for key in (
+            "timestamp",
             "aevx_ex",
             "tension_a",
             "tension_b",
@@ -68,5 +74,5 @@ def test_execution_velocity_hazard_cached_retrieval():
     second = execution_velocity_hazard_node(follow_up, cache)
     assert first == second
     # Ensure cache now holds hazard and intermediate metrics
-    assert cache["ofi"] == base["ofi"]
-    assert cache["edvh_up"] == first["edvh_up"]
+    assert cache.get(1, "both", 0, "ofi") == base["ofi"]
+    assert cache.get(1, "ask", 0, "edvh_up") == first["edvh_up"]

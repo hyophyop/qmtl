@@ -16,11 +16,11 @@ ra = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(ra)  # type: ignore[attr-defined]
 resiliency_alpha_node = ra.resiliency_alpha_node
-_INPUT_CACHE = ra._INPUT_CACHE
+CACHE = ra.CACHE
 
 
 def test_input_cache_reuse():
-    _INPUT_CACHE.clear()
+    CACHE.invalidate()
     base = {
         "timestamp": 1,
         "side": "bid",
@@ -47,4 +47,4 @@ def test_input_cache_reuse():
 
     assert out1 == out2
     for metric in ("volume", "avg_volume", "depth", "volatility"):
-        assert (1, "bid", 0, metric) in _INPUT_CACHE
+        assert CACHE.get(1, "bid", 0, metric) is not None

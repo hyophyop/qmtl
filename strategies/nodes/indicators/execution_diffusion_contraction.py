@@ -1,4 +1,11 @@
-"""Execution diffusion–contraction hazard indicator."""
+"""Execution diffusion–contraction hazard indicator.
+
+Cache Key Scheme
+----------------
+All cached metrics share the ``(timestamp, side, level, metric)`` key scheme
+implemented by :class:`~strategies.utils.four_dim_cache.FourDimCache`.
+
+"""
 
 # Source: docs/alphadocs/ideas/gpt5pro/Dynamic Execution Diffusion-Contraction Theory.md
 # Priority: gpt5pro
@@ -16,13 +23,14 @@ from qmtl.transforms.execution_diffusion_contraction import (
     edch_side,
 )
 
+from strategies.utils.four_dim_cache import FourDimCache
 
-_JUMP_CACHE: dict[tuple[str, int], float] = {}
-_CUM_DEPTH_CACHE: dict[tuple[str, int], list[float]] = {}
-_GAP_CACHE: dict[tuple[str, int], list[float]] = {}
+
+CACHE = FourDimCache()
 
 
 def invalidate_edch_cache(
+    time: object | None = None,
     side: str | None = None,
     level: int | None = None,
     *,
@@ -30,66 +38,50 @@ def invalidate_edch_cache(
     cum_depth: bool = True,
     gaps: bool = True,
 ) -> None:
-    """Invalidate caches for specified ``side`` and ``level``.
+    """Invalidate cached metrics.
 
-    When ``side`` or ``level`` are ``None`` the respective dimension is
-    treated as a wildcard.
+    Parameters default to wildcards when ``None``. ``time`` aligns the interface
+    with the shared cache key scheme of :class:`FourDimCache`.
     """
 
-    def _match(key: tuple[str, int]) -> bool:
-        s, lvl = key
-        if side is not None and s != side:
-            return False
-        if level is not None and lvl != level:
-            return False
-        return True
-
     if jumps:
-        for key in list(_JUMP_CACHE):
-            if _match(key):
-                del _JUMP_CACHE[key]
+        CACHE.invalidate(time=time, side=side, level=level, metric="jump")
     if cum_depth:
-        for key in list(_CUM_DEPTH_CACHE):
-            if _match(key):
-                del _CUM_DEPTH_CACHE[key]
+        CACHE.invalidate(time=time, side=side, level=level, metric="cum_depth")
     if gaps:
-        for key in list(_GAP_CACHE):
-            if _match(key):
-                del _GAP_CACHE[key]
+        CACHE.invalidate(time=time, side=side, level=level, metric="gaps")
 
 
 def _edch(data: dict, side: str) -> float:
+    ts = data.get("timestamp")
     level = data.get(f"{side}_level", data.get("level", 0))
-    key = (side, level)
 
     prob_key = f"{side}_prob"
-    jump_key = f"{side}_jump"
     prob = data.get(prob_key)
-    jump = data.get(jump_key)
-
     if prob is None and f"{side}_inputs" in data and f"{side}_eta" in data:
         prob = hazard_probability(data[f"{side}_inputs"], data[f"{side}_eta"])
 
+    jump = data.get(f"{side}_jump")
     if jump is None:
-        jump = _JUMP_CACHE.get(key)
+        jump = CACHE.get(ts, side, level, "jump")
 
     if jump is None:
-        gaps = _GAP_CACHE.get(key)
+        gaps = CACHE.get(ts, side, level, "gaps")
         if gaps is None:
             gaps = data.get(f"{side}_gaps")
             if gaps is not None:
-                _GAP_CACHE[key] = list(gaps)
+                CACHE.set(ts, side, level, "gaps", list(gaps))
 
-        cum_depth = _CUM_DEPTH_CACHE.get(key)
+        cum_depth = CACHE.get(ts, side, level, "cum_depth")
         if cum_depth is None:
             cum_depth = data.get(f"{side}_cum_depth")
             if cum_depth is not None:
-                _CUM_DEPTH_CACHE[key] = list(cum_depth)
+                CACHE.set(ts, side, level, "cum_depth", list(cum_depth))
 
         q = data.get(f"{side}_Q")
         if gaps is not None and cum_depth is not None and q is not None:
             jump = expected_jump(gaps, cum_depth, q)
-            _JUMP_CACHE[key] = jump
+            CACHE.set(ts, side, level, "jump", jump)
 
     prob = prob or 0.0
     jump = jump or 0.0
