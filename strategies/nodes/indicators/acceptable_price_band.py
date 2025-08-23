@@ -1,4 +1,11 @@
-"""Acceptable Price Band indicator with nonlinear alpha response."""
+"""Acceptable Price Band indicator with nonlinear alpha response.
+
+Cache Key Scheme
+----------------
+Historical features are stored in a
+``FourDimCache`` keyed by ``(time, side, level, metric)`` with a constant
+``side`` of ``"mid"`` and ``level`` representing the ``price_level``.
+"""
 
 # Source: docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md
 # Priority: gpt5pro
@@ -19,8 +26,15 @@ from qmtl.transforms.acceptable_price_band import (
     volume_surprise,
 )
 
+from strategies.utils.four_dim_cache import FourDimCache
 
-def acceptable_price_band_node(data: dict) -> dict:
+
+CACHE = FourDimCache()
+
+
+def acceptable_price_band_node(
+    data: dict, cache: FourDimCache | None = None
+) -> dict:
     """Estimate price bands and nonlinear alpha.
 
     Parameters
@@ -30,11 +44,11 @@ def acceptable_price_band_node(data: dict) -> dict:
         ``mu_prev`` and ``sigma_prev`` for previous estimates, ``volume_hat``
         and ``volume_std`` for seasonal volume expectation and deviation, and
         smoothing factors ``lambda_mu`` and ``lambda_sigma``. ``k`` controls
-        the band width. ``cache`` holds historical statistics keyed by
-        ``(time, price_level, feature)`` and ``cache_window`` defines the
-        maximum history length. If ``mu_prev``/``sigma_prev``/``volume_hat``/
-        ``volume_std`` are omitted they are inferred from the cache using a
-        simple average.
+        the band width. ``cache_window`` defines the maximum history length. If
+        ``mu_prev``/``sigma_prev``/``volume_hat``/``volume_std`` are omitted they
+        are inferred from the cache using a simple average.
+    cache:
+        Optional cache instance. Defaults to a module level cache.
 
     Returns
     -------
@@ -42,17 +56,16 @@ def acceptable_price_band_node(data: dict) -> dict:
         Mapping containing updated band estimates and ``alpha``.
     """
 
+    cache = cache or CACHE
     price = data.get("price", 0.0)
     volume = data.get("volume", 0.0)
     time_key = data.get("time")
     price_level = data.get("price_level", price)
-    cache = data.get("cache", {})
     cache_window = data.get("cache_window", 20)
 
     def _cached_avg(feature: str, default: float) -> float:
-        key = (time_key, price_level, feature)
-        values = cache.get(key)
-        if values:
+        values = cache.get(time_key, "mid", price_level, feature)
+        if isinstance(values, deque) and len(values):
             return sum(values) / len(values)
         return default
 
@@ -93,14 +106,13 @@ def acceptable_price_band_node(data: dict) -> dict:
         ("volume_hat", volume_hat),
         ("volume_std", volume_std),
     ]:
-        key = (time_key, price_level, feature)
-        values = cache.get(key)
-        if values is None or values.maxlen != cache_window:
-            values = deque(values, maxlen=cache_window) if values else deque(
+        values = cache.get(time_key, "mid", price_level, feature)
+        if not isinstance(values, deque) or values.maxlen != cache_window:
+            values = deque(values, maxlen=cache_window) if isinstance(values, deque) else deque(
                 maxlen=cache_window
             )
-            cache[key] = values
         values.append(value)
+        cache.set(time_key, "mid", price_level, feature, values)
 
     return {
         **band,

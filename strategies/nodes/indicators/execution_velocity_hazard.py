@@ -1,21 +1,11 @@
 """Execution-Driven Velocity Hazard indicator module.
 
-Cached keys
------------
-``ofi``
-    Order-flow imbalance.
-``spread_z``
-    Spread z-score.
-``cum_depth_a``
-    Cumulative depth on the ask side.
-``cum_depth_b``
-    Cumulative depth on the bid side.
-``edvh_up``
-    Hazard score for the ask side.
-``edvh_down``
-    Hazard score for the bid side.
-``alpha``
-    Difference between ``edvh_up`` and ``edvh_down``.
+Cache Key Scheme
+----------------
+Metrics are stored in a :class:`~strategies.utils.four_dim_cache.FourDimCache`
+using ``(timestamp, side, level, metric)`` keys. ``side`` is ``"ask"`` or
+``"bid"`` for depth and hazard values and ``"both"`` for shared quantities
+such as ``ofi`` or ``alpha``.
 """
 
 # Source: docs/alphadocs/ideas/gpt5pro/Execution-Driven Velocity Hazard.md
@@ -70,7 +60,15 @@ except ModuleNotFoundError:  # pragma: no cover - simplified fallback
         return hazard * jump
 
 
-def execution_velocity_hazard_node(data: dict, cache: dict | None = None) -> dict:
+from strategies.utils.four_dim_cache import FourDimCache
+
+
+CACHE = FourDimCache()
+
+
+def execution_velocity_hazard_node(
+    data: dict, cache: FourDimCache | None = None
+) -> dict:
     """Compute EDVH for both sides and derive a simple alpha.
 
     Parameters
@@ -78,31 +76,46 @@ def execution_velocity_hazard_node(data: dict, cache: dict | None = None) -> dic
     data:
         Mapping of parameters.
     cache:
-        Optional mutable dictionary for storing and retrieving intermediate
-        metrics.
+        Optional cache instance. Defaults to a module level cache.
     """
 
-    cache = cache if cache is not None else {}
+    cache = cache or CACHE
+    ts = data.get("timestamp")
 
-    ofi = data.get("ofi") if "ofi" in data else cache.get("ofi")
-    spread_z = data.get("spread_z") if "spread_z" in data else cache.get("spread_z")
-    depth_cum_a = (
-        data.get("cum_depth_a") if "cum_depth_a" in data else cache.get("cum_depth_a")
-    )
-    depth_cum_b = (
-        data.get("cum_depth_b") if "cum_depth_b" in data else cache.get("cum_depth_b")
-    )
+    ofi = data.get("ofi")
+    if ofi is None:
+        ofi = cache.get(ts, "both", 0, "ofi")
+    else:
+        cache.set(ts, "both", 0, "ofi", ofi)
 
-    # If required inputs are cached and hazard already computed, reuse result.
+    spread_z = data.get("spread_z")
+    if spread_z is None:
+        spread_z = cache.get(ts, "both", 0, "spread_z")
+    else:
+        cache.set(ts, "both", 0, "spread_z", spread_z)
+
+    depth_cum_a = data.get("cum_depth_a")
+    if depth_cum_a is None:
+        depth_cum_a = cache.get(ts, "ask", 0, "cum_depth")
+    else:
+        cache.set(ts, "ask", 0, "cum_depth", depth_cum_a)
+
+    depth_cum_b = data.get("cum_depth_b")
+    if depth_cum_b is None:
+        depth_cum_b = cache.get(ts, "bid", 0, "cum_depth")
+    else:
+        cache.set(ts, "bid", 0, "cum_depth", depth_cum_b)
+
+    cached_up = cache.get(ts, "ask", 0, "edvh_up")
+    cached_down = cache.get(ts, "bid", 0, "edvh_down")
+    cached_alpha = cache.get(ts, "both", 0, "alpha")
     if (
-        ofi is not None
-        and spread_z is not None
-        and depth_cum_a is not None
-        and depth_cum_b is not None
-        and all(k in cache for k in ("edvh_up", "edvh_down", "alpha"))
+        cached_up is not None
+        and cached_down is not None
+        and cached_alpha is not None
         and not any(k in data for k in ("ofi", "spread_z", "cum_depth_a", "cum_depth_b"))
     ):
-        return {"edvh_up": cache["edvh_up"], "edvh_down": cache["edvh_down"], "alpha": cache["alpha"]}
+        return {"edvh_up": cached_up, "edvh_down": cached_down, "alpha": cached_alpha}
 
     aevx_ex = data.get("aevx_ex", 0.0)
     t_a = data.get("tension_a", 0.0)
@@ -151,16 +164,12 @@ def execution_velocity_hazard_node(data: dict, cache: dict | None = None) -> dic
     )
     alpha = up - down
 
-    cache.update(
-        {
-            "ofi": ofi,
-            "spread_z": spread_z,
-            "cum_depth_a": depth_cum_a,
-            "cum_depth_b": depth_cum_b,
-            "edvh_up": up,
-            "edvh_down": down,
-            "alpha": alpha,
-        }
-    )
+    cache.set(ts, "both", 0, "ofi", ofi)
+    cache.set(ts, "both", 0, "spread_z", spread_z)
+    cache.set(ts, "ask", 0, "cum_depth", depth_cum_a)
+    cache.set(ts, "bid", 0, "cum_depth", depth_cum_b)
+    cache.set(ts, "ask", 0, "edvh_up", up)
+    cache.set(ts, "bid", 0, "edvh_down", down)
+    cache.set(ts, "both", 0, "alpha", alpha)
 
     return {"edvh_up": up, "edvh_down": down, "alpha": alpha}

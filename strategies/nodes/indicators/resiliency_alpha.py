@@ -12,9 +12,9 @@ subsequent invocations.
 
 from __future__ import annotations
 
-from typing import Hashable
-
 from qmtl.transforms.resiliency import impact, resiliency_alpha
+
+from strategies.utils.four_dim_cache import FourDimCache
 
 TAGS = {
     "scope": "indicator",
@@ -24,9 +24,8 @@ TAGS = {
 }
 
 
-# Cache for time-series inputs. Keys are ``(timestamp, side, level, metric)``
-# tuples as documented above.
-_INPUT_CACHE: dict[tuple[Hashable, str, int, str], float] = {}
+# Cache for time-series inputs shared across invocations.
+CACHE = FourDimCache()
 
 
 def resiliency_alpha_node(data: dict) -> dict:
@@ -44,12 +43,11 @@ def resiliency_alpha_node(data: dict) -> dict:
     level = int(data.get("level", 0))
 
     def _metric(name: str, default: float) -> float:
-        key = (ts, side, level, name)
-        if name in data and data[name] is not None:
-            val = float(data[name])
-        else:
-            val = _INPUT_CACHE.get(key, default)
-        _INPUT_CACHE[key] = val
+        val = data.get(name)
+        if val is None:
+            val = CACHE.get(ts, side, level, name, default)
+        val = float(val)
+        CACHE.set(ts, side, level, name, val)
         return val
 
     volume = _metric("volume", 0.0)

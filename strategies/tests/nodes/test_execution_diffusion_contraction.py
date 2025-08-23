@@ -38,6 +38,8 @@ from strategies.nodes.indicators.execution_diffusion_contraction import (
     invalidate_edch_cache,
 )
 
+CACHE = edch.CACHE
+
 
 def test_execution_diffusion_contraction_node():
     invalidate_edch_cache()
@@ -66,6 +68,7 @@ def test_execution_diffusion_contraction_cache(monkeypatch):
     monkeypatch.setattr(edch, "expected_jump", spy)
 
     base = {
+        "timestamp": 1,
         "up_inputs": [0.1],
         "up_eta": [0.0, 1.0],
         "up_gaps": [1.0, 0.5],
@@ -80,8 +83,10 @@ def test_execution_diffusion_contraction_cache(monkeypatch):
 
     out1 = execution_diffusion_contraction_node(base)
     assert calls["count"] == 2
+    assert CACHE.get(1, "up", 0, "jump") is not None
 
     second = {
+        "timestamp": 1,
         "up_inputs": [0.1],
         "up_eta": [0.0, 1.0],
         "up_Q": 0.6,
@@ -95,7 +100,9 @@ def test_execution_diffusion_contraction_cache(monkeypatch):
     assert out1 == out2
 
     invalidate_edch_cache(jumps=True, cum_depth=False, gaps=False)
+    assert CACHE.get(1, "up", 0, "jump") is None
 
     out3 = execution_diffusion_contraction_node(second)
     assert calls["count"] == 4
     assert out3 == out1
+    assert CACHE.get(1, "up", 0, "jump") is not None
