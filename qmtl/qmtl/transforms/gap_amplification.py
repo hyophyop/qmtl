@@ -1,5 +1,8 @@
 """Gap amplification helper transforms."""
 
+# Source: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
+# Priority: gpt5pro
+
 from __future__ import annotations
 
 from typing import Iterable
