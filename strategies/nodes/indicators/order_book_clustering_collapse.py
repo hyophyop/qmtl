@@ -14,6 +14,8 @@ TAGS = {
 
 from math import exp
 
+from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk.node import Node
 from qmtl.transforms.order_book_clustering_collapse import (
     hazard_probability,
     direction_gating,
@@ -36,7 +38,9 @@ def _cost(spread: float, taker_fee: float, impact: float) -> float:
     return execution_cost(spread, taker_fee, impact)
 
 
-def order_book_clustering_collapse_node(data: dict) -> dict:
+def order_book_clustering_collapse_node(
+    data: dict, view: CacheView | None = None
+) -> dict:
     """Compute order book clustering collapse alpha.
 
     Parameters
@@ -71,11 +75,41 @@ def order_book_clustering_collapse_node(data: dict) -> dict:
     g_ask = data.get("g_ask")
     g_bid = data.get("g_bid")
 
-    beta = data.get("beta", (0.0,) * 8)
-    eta = data.get("eta", (0.0,) * 4)
+    time = data.get("time")
+    cache_node: Node | None = data.get("cache_node")
+    zscore_src: Node | None = data.get("zscore_src")
+
+    if view is not None and time is not None and cache_node is not None:
+        try:
+            entries = view[cache_node][cache_node.interval]
+            cached = next((p for ts, p in entries if ts == time), None)
+        except Exception:
+            cached = None
+        if isinstance(cached, dict):
+            hazard_ask = hazard_ask or cached.get("hazard_ask")
+            hazard_bid = hazard_bid or cached.get("hazard_bid")
+            g_ask = g_ask or cached.get("g_ask")
+            g_bid = g_bid or cached.get("g_bid")
 
     required_hazard_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv"]
     required_direction_keys = ["OFI", "MicroSlope", "AggFlow"]
+
+    if view is not None and time is not None and zscore_src is not None:
+        try:
+            entries = view[zscore_src][zscore_src.interval]
+            z_payload = next((p for ts, p in entries if ts == time), {})
+        except Exception:
+            z_payload = {}
+        if isinstance(z_payload, dict):
+            for k in required_hazard_keys + required_direction_keys:
+                ask_key = f"ask_z_{k}"
+                bid_key = f"bid_z_{k}"
+                if ask_key not in data:
+                    data[ask_key] = z_payload.get("ask", {}).get(k)
+                if bid_key not in data:
+                    data[bid_key] = z_payload.get("bid", {}).get(k)
+    beta = data.get("beta", (0.0,) * 8)
+    eta = data.get("eta", (0.0,) * 4)
 
     if hazard_ask is None and all(f"ask_z_{k}" in data for k in required_hazard_keys):
         z = {k: data[f"ask_z_{k}"] for k in required_hazard_keys}
