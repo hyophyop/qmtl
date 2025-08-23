@@ -10,11 +10,11 @@ TAGS = {
     "asset": "sample",
 }
 
-from collections.abc import Mapping
-
 from qmtl.transforms.quantum_liquidity_echo import quantum_liquidity_echo
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
+
+from strategies.utils.cacheview_helpers import fetch_series
 
 
 def quantum_liquidity_echo_node(data: dict, view: CacheView | None = None) -> dict:
@@ -41,16 +41,7 @@ def quantum_liquidity_echo_node(data: dict, view: CacheView | None = None) -> di
         level = data.get("level")
         feature = data.get("feature")
         if side is not None and level is not None and feature is not None:
-            history = view[src]
-            alphas = []
-            if isinstance(history._data, Mapping):
-                for t in sorted(history._data):
-                    try:
-                        alpha_view = history[t][side][level][feature]
-                    except (KeyError, TypeError):
-                        continue
-                    alpha = getattr(alpha_view, "_data", alpha_view)
-                    alphas.append(alpha)
+            alphas = fetch_series(view, src, side, level, feature)
 
     alphas = alphas or []
     delta_t = data.get("delta_t", 1.0)

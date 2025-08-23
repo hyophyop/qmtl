@@ -5,14 +5,17 @@ import types
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Minimal qmtl stubs
+# Minimal qmtl stubs only if real modules unavailable
 # ---------------------------------------------------------------------------
-qmtl_pkg = sys.modules.get("qmtl")
-if qmtl_pkg is None:
-    qmtl_pkg = types.ModuleType("qmtl")
-    sys.modules["qmtl"] = qmtl_pkg
+try:  # pragma: no cover - use real modules when available
+    from qmtl.sdk.cache_view import CacheView
+    from qmtl.transforms.gap_amplification import gap_over_depth_sum, hazard_probability
+except Exception:  # pragma: no cover - fallback to local sources
+    qmtl_pkg = sys.modules.get("qmtl")
+    if qmtl_pkg is None:
+        qmtl_pkg = types.ModuleType("qmtl")
+        sys.modules["qmtl"] = qmtl_pkg
 
-if "qmtl.sdk.cache_view" not in sys.modules:  # pragma: no cover - import helper
     sdk_module = types.ModuleType("qmtl.sdk")
     metrics_path = Path(__file__).resolve().parents[3] / "qmtl" / "qmtl" / "sdk" / "metrics.py"
     m_spec = importlib.util.spec_from_file_location("qmtl.sdk.metrics", metrics_path)
@@ -32,7 +35,6 @@ if "qmtl.sdk.cache_view" not in sys.modules:  # pragma: no cover - import helper
     sys.modules["qmtl.sdk.cache_view"] = cv_module
     qmtl_pkg.sdk = sdk_module
 
-if "qmtl.transforms.gap_amplification" not in sys.modules:
     ga_path = Path(__file__).resolve().parents[3] / "qmtl" / "qmtl" / "transforms" / "gap_amplification.py"
     spec = importlib.util.spec_from_file_location("qmtl.transforms.gap_amplification", ga_path)
     ga_module = importlib.util.module_from_spec(spec)
@@ -44,10 +46,10 @@ if "qmtl.transforms.gap_amplification" not in sys.modules:
     sys.modules["qmtl.transforms.gap_amplification"] = ga_module
     qmtl_pkg.transforms = transforms_pkg
 
-from qmtl.sdk.cache_view import CacheView
-from qmtl.transforms.gap_amplification import gap_over_depth_sum, hazard_probability
+# ensure real modules imported above
 import strategies.nodes.indicators.gap_amplification as gap_amplification
 from strategies.nodes.indicators.gap_amplification import gap_amplification_node
+from strategies.utils.cacheview_helpers import level_series, value_at
 
 
 def test_gap_amplification_node_computes_alpha():
@@ -163,8 +165,9 @@ def test_gap_amplification_node_cache_hit():
     assert result["gas_ask"] == pytest.approx(gas_ask)
     assert result["gas_bid"] == pytest.approx(gas_bid)
     assert result["hazard"] == pytest.approx(hazard)
-    assert cache_data[time_idx]["ask"][0]["gas"] == pytest.approx(gas_ask)
-    assert cache_data[time_idx]["hazard"][0]["hazard"] == pytest.approx(hazard)
+    assert level_series(view, time_idx, "ask", "gap") == [1.0, 2.0]
+    assert value_at(view, time_idx, "ask", 0, "gas") == pytest.approx(gas_ask)
+    assert value_at(view, time_idx, "hazard", 0, "hazard") == pytest.approx(hazard)
 
 
 def test_gap_amplification_node_cache_miss_fallback():
@@ -189,5 +192,5 @@ def test_gap_amplification_node_cache_miss_fallback():
     hazard = hazard_probability(0.0, 0.0, 0.0, 0.0, 0.0)
 
     assert result["alpha"] == pytest.approx((gas_bid - gas_ask) * hazard)
-    assert view._data[0]["bid"][0]["gas"] == pytest.approx(gas_bid)
-    assert view._data[0]["hazard"][0]["hazard"] == pytest.approx(hazard)
+    assert value_at(view, 0, "bid", 0, "gas") == pytest.approx(gas_bid)
+    assert value_at(view, 0, "hazard", 0, "hazard") == pytest.approx(hazard)

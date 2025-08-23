@@ -27,15 +27,21 @@ def llrti_node(data: dict, cache: dict | None = None) -> dict:
     time = data.get("time", 0)
     side = data.get("side", "buy")
     level = data.get("level", 0)
-    depth_change = data.get("depth_change", 0.0)
 
-    depth_cat = _cache_category(cache, "depth_changes")
-    seq = [
-        val
-        for (t, s, l), val in sorted(depth_cat.items())
-        if s == side and l == level and t < time
-    ]
-    seq.append(depth_change)
+    depth_changes = data.get("depth_changes")
+    if depth_changes is not None:
+        seq = list(depth_changes)
+        depth_change = seq[-1] if seq else 0.0
+    else:
+        depth_change = data.get("depth_change", 0.0)
+        depth_cat = _cache_category(cache, "depth_changes")
+        seq = [
+            val
+            for (t, s, l), val in sorted(depth_cat.items())
+            if s == side and l == level and t < time
+        ]
+        seq.append(depth_change)
+        depth_cat[(time, side, level)] = depth_change
 
     index = llrti(
         seq,
@@ -44,7 +50,6 @@ def llrti_node(data: dict, cache: dict | None = None) -> dict:
         data.get("delta", 0.0),
     )
 
-    depth_cat[(time, side, level)] = depth_change
     llrti_cat = _cache_category(cache, "llrti")
     llrti_cat[(time, side, level)] = index
     return {"llrti": index}

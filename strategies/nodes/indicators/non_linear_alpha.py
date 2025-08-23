@@ -15,16 +15,7 @@ from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
 from qmtl.transforms import rate_of_change_series
 
-
-def _resolve(value, view: CacheView | None) -> float:
-    """Return latest numeric ``value`` from cache if ``value`` is a Node."""
-
-    if isinstance(value, Node):
-        if view is None:
-            return 0.0
-        entries = view[value][value.interval]
-        return entries[-1][1] if entries else 0.0
-    return float(value or 0.0)
+from strategies.utils.cacheview_helpers import fetch_series, latest_value
 
 
 def non_linear_alpha_node(data: dict, view: CacheView | None = None) -> dict:
@@ -40,18 +31,29 @@ def non_linear_alpha_node(data: dict, view: CacheView | None = None) -> dict:
         Optional cache view supplying historical values for any ``Node`` inputs.
     """
 
-    impact_val = _resolve(data.get("impact"), view)
-    vol_val = _resolve(data.get("volatility"), view)
+    impact_val = (
+        latest_value(view, data.get("impact"))
+        if isinstance(data.get("impact"), Node)
+        else float(data.get("impact") or 0.0)
+    )
+    vol_val = (
+        latest_value(view, data.get("volatility"))
+        if isinstance(data.get("volatility"), Node)
+        else float(data.get("volatility") or 0.0)
+    )
 
     obi_deriv = data.get("obi_derivative")
-    obi_deriv_val = _resolve(obi_deriv, view) if obi_deriv is not None else None
+    if isinstance(obi_deriv, Node):
+        obi_deriv_val = latest_value(view, obi_deriv)
+    else:
+        obi_deriv_val = float(obi_deriv) if obi_deriv is not None else None
 
     if obi_deriv_val is None:
         obi_src = data.get("obi")
-        if isinstance(obi_src, Node) and view is not None:
-            hist = view[obi_src][obi_src.interval][-2:]
-            values = [payload for _, payload in hist]
-            obi_deriv_val = rate_of_change_series(values)
+        if isinstance(obi_src, Node):
+            series = fetch_series(view, obi_src)
+            values = series[-2:]
+            obi_deriv_val = rate_of_change_series(values) if len(values) == 2 else 0.0
         else:
             obi_deriv_val = 0.0
 
