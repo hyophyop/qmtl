@@ -12,6 +12,7 @@
 - Pure review or suggestion tasks that do not modify code may skip running tests.
 - For any code changes, run `uv run -m pytest -W error` locally and ensure the command completes without warnings. CI must also run this command without warnings.
 - Ensure proper resource cleanup (e.g., closing Redis connections) to avoid `ResourceWarning`.
+- Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or data-processing utilities belong here. All alpha logic should live in the root project's `strategies/` directory.
 
 # Documentation Management
 

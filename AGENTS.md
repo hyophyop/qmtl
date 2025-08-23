@@ -5,6 +5,7 @@ This repository hosts strategy experiments built on top of the [QMTL](qmtl/READM
 - 작업을 시작하기 전에 항상 `qmtl` 서브트리를 최신 상태로 업데이트하세요.
 - QMTL 수정은 버그 수정이나 QMTL 본체로 환원할 수 있는 범용 기능 추가에 한정합니다.
 - 전략 전용 코드는 `strategies/`에 두고, QMTL 서브트리에 넣지 마세요.
+- `qmtl/` 디렉터리에는 알파/전략 모듈을 절대 두지 말고, 재사용 가능한 특징 추출 또는 데이터 가공 유틸리티만 포함하세요. 모든 알파 로직은 루트 프로젝트의 `strategies/` 아래에 위치해야 합니다.
 
 ## QMTL 서브트리 최신화 정책 (필수)
 
