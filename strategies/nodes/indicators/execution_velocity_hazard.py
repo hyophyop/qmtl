@@ -2,7 +2,7 @@
 
 Cache Key Scheme
 ----------------
-Metrics are stored in a :class:`~strategies.utils.four_dim_cache.FourDimCache`
+Metrics are stored in a :class:`~qmtl.common.FourDimCache`
 using ``(timestamp, side, level, metric)`` keys. ``side`` is ``"ask"`` or
 ``"bid"`` for depth and hazard values and ``"both"`` for shared quantities
 such as ``ofi`` or ``alpha``.
@@ -60,7 +60,7 @@ except ModuleNotFoundError:  # pragma: no cover - simplified fallback
         return hazard * jump
 
 
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 
 CACHE = FourDimCache()

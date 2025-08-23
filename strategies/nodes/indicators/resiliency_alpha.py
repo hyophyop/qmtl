@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from qmtl.transforms.resiliency import impact, resiliency_alpha
 
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 TAGS = {
     "scope": "indicator",

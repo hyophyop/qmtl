@@ -2,7 +2,7 @@ from strategies.nodes.indicators.execution_velocity_hazard import (
     execution_velocity_hazard_node,
 )
 
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 
 def test_execution_velocity_hazard_node_outputs():

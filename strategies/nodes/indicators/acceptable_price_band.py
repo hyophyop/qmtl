@@ -26,7 +26,7 @@ from qmtl.transforms.acceptable_price_band import (
     volume_surprise,
 )
 
-from strategies.utils.four_dim_cache import FourDimCache
+from qmtl.common import FourDimCache
 
 
 CACHE = FourDimCache()
