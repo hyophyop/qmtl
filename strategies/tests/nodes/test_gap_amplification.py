@@ -64,7 +64,7 @@ def test_gap_amplification_node_computes_alpha():
     lam = 0.0
     ofi = 0.0
     spread_z = 0.0
-    eta = (0.0, 0.0, 0.0)
+    eta = (0.0, 0.0, 0.0, 0.0, 0.0)
 
     gas_ask = gap_over_depth_sum(ask_gaps, ask_depths, lam)
     gas_bid = gap_over_depth_sum(bid_gaps, bid_depths, lam)
@@ -103,12 +103,12 @@ def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
             return 0.4
         return 0.0
 
-    def fake_hazard(ofi, spread_z, eta0, eta1, eta2):  # pragma: no cover - simple spy
-        calls["hazard"].append((ofi, spread_z, eta0, eta1, eta2))
+    def fake_hazard(ofi, spread_z, vol_surprise, clr, eta0, eta1, eta2, eta3, eta4):  # pragma: no cover - simple spy
+        calls["hazard"].append((ofi, spread_z, vol_surprise, clr, eta0, eta1, eta2, eta3, eta4))
         return 0.25
 
-    def fake_jump(gaps, depths, zeta):  # pragma: no cover - simple spy
-        calls["jump"].append((gaps, depths, zeta))
+    def fake_jump(gaps, depths, zeta, microprice_slope):  # pragma: no cover - simple spy
+        calls["jump"].append((gaps, depths, zeta, microprice_slope))
         return 1.0
 
     monkeypatch.setattr(gap_amplification, "_gas", fake_gas)
@@ -123,7 +123,9 @@ def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
         "lambda": 0.3,
         "ofi": 1.0,
         "spread_z": -1.0,
-        "eta": (0.1, 0.2, 0.3),
+        "eta": (0.1, 0.2, 0.3, 0.4, 0.5),
+        "vol_surprise": 0.6,
+        "cancel_limit_ratio": 0.7,
     }
 
     result = gap_amplification.gap_amplification_node(data)
@@ -132,10 +134,12 @@ def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
         ([1.0, 2.0], [10.0, 20.0], 0.3),
         ([1.0, 2.0], [5.0, 20.0], 0.3),
     ]
-    assert calls["hazard"] == [(1.0, -1.0, 0.1, 0.2, 0.3)]
+    assert calls["hazard"] == [
+        (1.0, -1.0, 0.6, 0.7, 0.1, 0.2, 0.3, 0.4, 0.5)
+    ]
     assert calls["jump"] == [
-        ([1.0, 2.0], [10.0, 20.0], 0.0),
-        ([1.0, 2.0], [5.0, 20.0], 0.0),
+        ([1.0, 2.0], [10.0, 20.0], 0.0, 0.0),
+        ([1.0, 2.0], [5.0, 20.0], 0.0, 0.0),
     ]
     assert result["gas_ask"] == 0.3
     assert result["gas_bid"] == 0.4
@@ -162,9 +166,13 @@ def test_gap_amplification_node_cache_hit():
                 0: {
                     "ofi": 0.0,
                     "spread_z": 0.0,
+                    "vol_surprise": 0.0,
+                    "cancel_limit_ratio": 0.0,
                     "eta0": 0.0,
                     "eta1": 0.0,
                     "eta2": 0.0,
+                    "eta3": 0.0,
+                    "eta4": 0.0,
                 }
             },
         }
@@ -196,7 +204,9 @@ def test_gap_amplification_node_cache_miss_fallback():
         "lambda": lam,
         "ofi": 0.0,
         "spread_z": 0.0,
-        "eta": (0.0, 0.0, 0.0),
+        "eta": (0.0, 0.0, 0.0, 0.0, 0.0),
+        "vol_surprise": 0.0,
+        "cancel_limit_ratio": 0.0,
         "time": 0,
     }
     view = CacheView({})
@@ -220,7 +230,7 @@ def test_gap_amplification_node_uses_jump_expectation():
     zeta = 0.1
     ofi = 0.0
     spread_z = 0.0
-    eta = (0.0, 0.0, 0.0)
+    eta = (0.0, 0.0, 0.0, 0.0, 0.0)
 
     gas = gap_over_depth_sum(gaps, depths, lam)
     hazard = hazard_probability(ofi, spread_z, *eta)
@@ -240,3 +250,72 @@ def test_gap_amplification_node_uses_jump_expectation():
 
     result = gap_amplification_node(data)
     assert result["gati_ask"] == pytest.approx(gas * hazard * jump)
+
+
+def test_gap_amplification_node_filters_short_dwell():
+    ask_gaps = [1.0, 2.0]
+    ask_depths = [10.0, 20.0]
+    ask_dwell = [0.5, 1.5]
+    bid_gaps = [1.0, 2.0]
+    bid_depths = [5.0, 20.0]
+    bid_dwell = [1.2, 1.5]
+    lam = 0.0
+    tau = 1.0
+    ofi = 0.0
+    spread_z = 0.0
+    eta = (0.0, 0.0, 0.0, 0.0, 0.0)
+
+    data = {
+        "ask_gaps": ask_gaps,
+        "ask_depths": ask_depths,
+        "ask_dwell": ask_dwell,
+        "bid_gaps": bid_gaps,
+        "bid_depths": bid_depths,
+        "bid_dwell": bid_dwell,
+        "lambda": lam,
+        "ofi": ofi,
+        "spread_z": spread_z,
+        "eta": eta,
+        "tau_min": tau,
+        "vol_surprise": 0.0,
+        "cancel_limit_ratio": 0.0,
+    }
+
+    result = gap_amplification_node(data)
+
+    filt_ask_gaps = [2.0]
+    filt_ask_depths = [20.0]
+    gas_ask = gap_over_depth_sum(filt_ask_gaps, filt_ask_depths, lam)
+    gas_bid = gap_over_depth_sum(bid_gaps, bid_depths, lam)
+    hazard = hazard_probability(ofi, spread_z, *eta)
+
+    assert result["gas_ask"] == pytest.approx(gas_ask)
+    assert result["gas_bid"] == pytest.approx(gas_bid)
+    assert result["gati_ask"] == pytest.approx(gas_ask * hazard)
+    assert result["gati_bid"] == pytest.approx(gas_bid * hazard)
+
+
+def test_gap_amplification_node_passes_new_hazard_inputs(monkeypatch):
+    calls = []
+
+    def fake_hazard(ofi, spread_z, vol_surprise, clr, eta0, eta1, eta2, eta3, eta4):  # pragma: no cover - simple spy
+        calls.append((ofi, spread_z, vol_surprise, clr, eta0, eta1, eta2, eta3, eta4))
+        return 0.5
+
+    monkeypatch.setattr(gap_amplification, "_hazard", fake_hazard)
+
+    data = {
+        "ask_gaps": [1.0],
+        "ask_depths": [10.0],
+        "bid_gaps": [1.0],
+        "bid_depths": [10.0],
+        "lambda": 0.0,
+        "ofi": 1.0,
+        "spread_z": -1.0,
+        "vol_surprise": 0.2,
+        "cancel_limit_ratio": 0.3,
+        "eta": (0.1, 0.2, 0.3, 0.4, 0.5),
+    }
+
+    gap_amplification_node(data)
+    assert calls == [(1.0, -1.0, 0.2, 0.3, 0.1, 0.2, 0.3, 0.4, 0.5)]

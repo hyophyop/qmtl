@@ -15,6 +15,7 @@ from qmtl.transforms.gap_amplification import (
     gati_side,
     hazard_probability,
     jump_expectation,
+    filter_ghost_quotes,
 )
 from qmtl.sdk.cache_view import CacheView
 
@@ -27,15 +28,38 @@ def _gas(gaps: list[float], depths: list[float], lam: float) -> float:
 
 
 def _hazard(
-    ofi: float, spread_z: float, eta0: float, eta1: float, eta2: float
+    ofi: float,
+    spread_z: float,
+    vol_surprise: float,
+    clr: float,
+    eta0: float,
+    eta1: float,
+    eta2: float,
+    eta3: float,
+    eta4: float,
 ) -> float:
     """Wrapper for hazard probability."""
-    return hazard_probability(ofi, spread_z, eta0, eta1, eta2)
+    return hazard_probability(
+        ofi,
+        spread_z,
+        eta0,
+        eta1,
+        eta2,
+        vol_surprise,
+        clr,
+        eta3,
+        eta4,
+    )
 
 
-def _jump(gaps: list[float], depths: list[float], zeta: float) -> float:
+def _jump(
+    gaps: list[float],
+    depths: list[float],
+    zeta: float,
+    microprice_slope: float,
+) -> float:
     """Wrapper for jump expectation."""
-    return jump_expectation(gaps, depths, zeta)
+    return jump_expectation(gaps, depths, zeta, microprice_slope)
 
 
 def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
@@ -73,10 +97,16 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
     ask_depths = data.get("ask_depths")
     bid_gaps = data.get("bid_gaps")
     bid_depths = data.get("bid_depths")
+    ask_dwell = data.get("ask_dwell")
+    bid_dwell = data.get("bid_dwell")
+    tau_min = data.get("tau_min")
     ofi = data.get("ofi")
     spread_z = data.get("spread_z")
+    vol_surprise = data.get("vol_surprise")
+    cancel_limit_ratio = data.get("cancel_limit_ratio")
     eta = data.get("eta")
     zeta = data.get("zeta", 0.0)
+    microprice_slope = data.get("microprice_slope", 0.0)
 
     lam = data.get("lambda", 0.0)
     time_idx = data.get("time", 0)
@@ -94,14 +124,37 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
             if hazard is None:
                 ofi = value_at(view, time_idx, "hazard", 0, "ofi", ofi)
                 spread_z = value_at(view, time_idx, "hazard", 0, "spread_z", spread_z)
+                vol_surprise = value_at(
+                    view, time_idx, "hazard", 0, "vol_surprise", vol_surprise
+                )
+                cancel_limit_ratio = value_at(
+                    view, time_idx, "hazard", 0, "cancel_limit_ratio", cancel_limit_ratio
+                )
                 if eta is None:
                     eta0 = value_at(view, time_idx, "hazard", 0, "eta0")
                     eta1 = value_at(view, time_idx, "hazard", 0, "eta1")
                     eta2 = value_at(view, time_idx, "hazard", 0, "eta2")
-                    if None not in (eta0, eta1, eta2):
-                        eta = (eta0, eta1, eta2)
+                    eta3 = value_at(view, time_idx, "hazard", 0, "eta3")
+                    eta4 = value_at(view, time_idx, "hazard", 0, "eta4")
+                    if None not in (eta0, eta1, eta2, eta3, eta4):
+                        eta = (eta0, eta1, eta2, eta3, eta4)
         except Exception:  # pragma: no cover - defensive
             pass
+
+    if (
+        tau_min is not None
+        and ask_gaps is not None
+        and ask_depths is not None
+        and ask_dwell is not None
+    ):
+        ask_gaps, ask_depths = filter_ghost_quotes(ask_gaps, ask_depths, ask_dwell, tau_min)
+    if (
+        tau_min is not None
+        and bid_gaps is not None
+        and bid_depths is not None
+        and bid_dwell is not None
+    ):
+        bid_gaps, bid_depths = filter_ghost_quotes(bid_gaps, bid_depths, bid_dwell, tau_min)
 
     if gas_ask is None and ask_gaps is not None and ask_depths is not None:
         gas_ask = _gas(ask_gaps, ask_depths, lam)
@@ -109,12 +162,27 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
         gas_bid = _gas(bid_gaps, bid_depths, lam)
 
     if jump_ask is None and ask_gaps is not None and ask_depths is not None:
-        jump_ask = _jump(ask_gaps, ask_depths, zeta)
+        jump_ask = _jump(ask_gaps, ask_depths, zeta, microprice_slope)
     if jump_bid is None and bid_gaps is not None and bid_depths is not None:
-        jump_bid = _jump(bid_gaps, bid_depths, zeta)
+        jump_bid = _jump(bid_gaps, bid_depths, zeta, microprice_slope)
 
-    if hazard is None and ofi is not None and spread_z is not None and eta is not None and None not in eta:
-        hazard = _hazard(ofi, spread_z, *eta)
+    if (
+        hazard is None
+        and ofi is not None
+        and spread_z is not None
+        and vol_surprise is not None
+        and cancel_limit_ratio is not None
+        and eta is not None
+        and len(eta) == 5
+        and None not in eta
+    ):
+        hazard = _hazard(
+            ofi,
+            spread_z,
+            vol_surprise,
+            cancel_limit_ratio,
+            *eta,
+        )
 
     gas_ask = gas_ask or 0.0
     gas_bid = gas_bid or 0.0
@@ -138,6 +206,12 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
         bid_cache["gati"] = gati_bid
         bid_cache["jump"] = jump_bid
         haz_cache["hazard"] = hazard
+        haz_cache["ofi"] = ofi
+        haz_cache["spread_z"] = spread_z
+        haz_cache["vol_surprise"] = vol_surprise
+        haz_cache["cancel_limit_ratio"] = cancel_limit_ratio
+        if eta is not None and len(eta) == 5:
+            haz_cache["eta0"], haz_cache["eta1"], haz_cache["eta2"], haz_cache["eta3"], haz_cache["eta4"] = eta
 
     return {
         "gas_ask": gas_ask,
