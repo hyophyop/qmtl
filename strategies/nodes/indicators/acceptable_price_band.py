@@ -24,6 +24,10 @@ from qmtl.transforms.acceptable_price_band import (
     estimate_band,
     overshoot,
     volume_surprise,
+    pbx_delta,
+    ofi_liquidity_gap,
+    volatility_squeeze,
+    iv_hv_spread,
 )
 
 from qmtl.common import FourDimCache
@@ -69,6 +73,12 @@ def acceptable_price_band_node(
             return sum(values) / len(values)
         return default
 
+    def _cached_last(feature: str, default: float) -> float:
+        values = cache.get(time_key, "mid", price_level, feature)
+        if isinstance(values, deque) and len(values):
+            return values[-1]
+        return default
+
     volume_hat = data.get(
         "volume_hat", _cached_avg("volume_hat", 0.0)
     )
@@ -77,6 +87,7 @@ def acceptable_price_band_node(
     )
     mu_prev = data.get("mu_prev", _cached_avg("mu", price))
     sigma_prev = data.get("sigma_prev", _cached_avg("sigma", 1.0))
+    pbx_prev = data.get("pbx_prev", _cached_last("pbx", 0.0))
 
     lambda_mu = data.get("lambda_mu", 0.1)
     lambda_sigma = data.get("lambda_sigma", 0.1)
@@ -89,9 +100,34 @@ def acceptable_price_band_node(
     sigma = band["sigma"]
     o = overshoot(resid, sigma, k)
     vs = volume_surprise(volume, volume_hat, volume_std)
+    dpbx = pbx_delta(band["pbx"], pbx_prev)
+    ofi_gap = ofi_liquidity_gap(
+        data.get("bid_ofi", 0.0), data.get("ask_ofi", 0.0)
+    )
+    vol_sq = volatility_squeeze(
+        data.get("sigma_short", 0.0), data.get("sigma_long", 1.0)
+    )
+    ivhv = iv_hv_spread(data.get("iv", 0.0), data.get("hv", 0.0))
 
+    coef_o = data.get("coef_overshoot", 1.0)
+    coef_vs = data.get("coef_volume_surprise", 1.0)
+    coef_dpbx = data.get("coef_dpbx", 0.0)
+    coef_ofi = data.get("coef_ofi_gap", 0.0)
+    coef_vsqueeze = data.get("coef_vol_squeeze", 0.0)
+    coef_ivhv = data.get("coef_iv_hv", 0.0)
+    intercept = data.get("coef_intercept", 0.0)
+
+    gate_input = (
+        intercept
+        + coef_o * o
+        + coef_vs * vs
+        + coef_dpbx * dpbx
+        + coef_ofi * ofi_gap
+        + coef_vsqueeze * vol_sq
+        + coef_ivhv * ivhv
+    )
     sign = 1.0 if resid >= 0 else -1.0
-    gate = 1.0 / (1.0 + math.exp(-(o + vs)))
+    gate = 1.0 / (1.0 + math.exp(-gate_input))
     alpha_mom = math.log1p(math.exp(o)) * (1.0 + vs) * sign
     inner = (k * sigma - abs(resid)) / sigma if sigma else 0.0
     alpha_rev = -math.log1p(math.exp(inner)) * sign
@@ -105,6 +141,7 @@ def acceptable_price_band_node(
         ("sigma", band["sigma"]),
         ("volume_hat", volume_hat),
         ("volume_std", volume_std),
+        ("pbx", band["pbx"]),
     ]:
         values = cache.get(time_key, "mid", price_level, feature)
         if not isinstance(values, deque) or values.maxlen != cache_window:
@@ -118,6 +155,10 @@ def acceptable_price_band_node(
         **band,
         "alpha": alpha,
         "volume_surprise": vs,
+        "pbx_delta": dpbx,
+        "ofi_gap": ofi_gap,
+        "volatility_squeeze": vol_sq,
+        "iv_hv_spread": ivhv,
         "cache": cache,
     }
 
