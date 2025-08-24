@@ -28,8 +28,11 @@ def composite_alpha_node(data: dict) -> dict:
     """Compute mean alpha across all available signals."""
     apb = acceptable_price_band_node(data.get("apb", {}))
     gap_amp = gap_amplification_node(data.get("gap_amplification", {}))
-    llrti_val = llrti_node(data.get("llrti", {})).get("llrti", 0.0)
-    lla = latent_liquidity_alpha_node({"llrti": llrti_val})
+    llrti_res = llrti_node(data.get("llrti", {}))
+    llrti_val = llrti_res.get("llrti", 0.0)
+    hazard = llrti_res.get("hazard", 0.0)
+    cost = llrti_res.get("cost", 0.0)
+    lla = latent_liquidity_alpha_node({"llrti": llrti_val, "hazard": hazard, "cost": cost})
     nla = non_linear_alpha_node(data.get("non_linear", {}))
     occ = order_book_clustering_collapse_node(data.get("order_book", {}))
     qle = quantum_liquidity_echo_node(data.get("qle", {}))
