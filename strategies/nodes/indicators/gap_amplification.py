@@ -14,6 +14,7 @@ from qmtl.transforms.gap_amplification import (
     gap_over_depth_sum,
     gati_side,
     hazard_probability,
+    jump_expectation,
 )
 from qmtl.sdk.cache_view import CacheView
 
@@ -30,6 +31,11 @@ def _hazard(
 ) -> float:
     """Wrapper for hazard probability."""
     return hazard_probability(ofi, spread_z, eta0, eta1, eta2)
+
+
+def _jump(gaps: list[float], depths: list[float], zeta: float) -> float:
+    """Wrapper for jump expectation."""
+    return jump_expectation(gaps, depths, zeta)
 
 
 def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
@@ -60,6 +66,8 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
     gas_ask = data.get("gas_ask")
     gas_bid = data.get("gas_bid")
     hazard = data.get("hazard")
+    jump_ask = data.get("jump_ask")
+    jump_bid = data.get("jump_bid")
 
     ask_gaps = data.get("ask_gaps")
     ask_depths = data.get("ask_depths")
@@ -68,6 +76,7 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
     ofi = data.get("ofi")
     spread_z = data.get("spread_z")
     eta = data.get("eta")
+    zeta = data.get("zeta", 0.0)
 
     lam = data.get("lambda", 0.0)
     time_idx = data.get("time", 0)
@@ -99,15 +108,22 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
     if gas_bid is None and bid_gaps is not None and bid_depths is not None:
         gas_bid = _gas(bid_gaps, bid_depths, lam)
 
+    if jump_ask is None and ask_gaps is not None and ask_depths is not None:
+        jump_ask = _jump(ask_gaps, ask_depths, zeta)
+    if jump_bid is None and bid_gaps is not None and bid_depths is not None:
+        jump_bid = _jump(bid_gaps, bid_depths, zeta)
+
     if hazard is None and ofi is not None and spread_z is not None and eta is not None and None not in eta:
         hazard = _hazard(ofi, spread_z, *eta)
 
     gas_ask = gas_ask or 0.0
     gas_bid = gas_bid or 0.0
     hazard = hazard or 0.0
+    jump_ask = jump_ask or 1.0
+    jump_bid = jump_bid or 1.0
 
-    gati_ask = gati_side(gas_ask, hazard)
-    gati_bid = gati_side(gas_bid, hazard)
+    gati_ask = gati_side(gas_ask, hazard, jump_ask)
+    gati_bid = gati_side(gas_bid, hazard, jump_bid)
     alpha = gati_bid - gati_ask
 
     if view is not None:
@@ -117,8 +133,10 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
         haz_cache = cache_time.setdefault("hazard", {}).setdefault(0, {})
         ask_cache["gas"] = gas_ask
         ask_cache["gati"] = gati_ask
+        ask_cache["jump"] = jump_ask
         bid_cache["gas"] = gas_bid
         bid_cache["gati"] = gati_bid
+        bid_cache["jump"] = jump_bid
         haz_cache["hazard"] = hazard
 
     return {
@@ -127,6 +145,8 @@ def gap_amplification_node(data: dict, view: CacheView | None = None) -> dict:
         "gati_ask": gati_ask,
         "gati_bid": gati_bid,
         "hazard": hazard,
+        "jump_ask": jump_ask,
+        "jump_bid": jump_bid,
         "alpha": alpha,
     }
 

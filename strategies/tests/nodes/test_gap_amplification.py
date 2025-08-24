@@ -9,7 +9,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 try:  # pragma: no cover - use real modules when available
     from qmtl.sdk.cache_view import CacheView
-    from qmtl.transforms.gap_amplification import gap_over_depth_sum, hazard_probability
+    from qmtl.transforms.gap_amplification import (
+        gap_over_depth_sum,
+        hazard_probability,
+        jump_expectation,
+    )
 except Exception:  # pragma: no cover - fallback to local sources
     qmtl_pkg = sys.modules.get("qmtl")
     if qmtl_pkg is None:
@@ -74,6 +78,8 @@ def test_gap_amplification_node_computes_alpha():
     assert result["gati_ask"] == pytest.approx(gas_ask * hazard)
     assert result["gati_bid"] == pytest.approx(gas_bid * hazard)
     assert result["alpha"] == pytest.approx((gas_bid - gas_ask) * hazard)
+    assert result["jump_ask"] == pytest.approx(1.0)
+    assert result["jump_bid"] == pytest.approx(1.0)
 
 
 def test_gap_amplification_node_handles_zero_depth():
@@ -87,7 +93,7 @@ def test_gap_amplification_node_handles_zero_depth():
 
 
 def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
-    calls = {"gas": [], "hazard": []}
+    calls = {"gas": [], "hazard": [], "jump": []}
 
     def fake_gas(gaps, depths, lam, eps=1e-9):  # pragma: no cover - simple spy
         calls["gas"].append((gaps, depths, lam))
@@ -101,8 +107,13 @@ def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
         calls["hazard"].append((ofi, spread_z, eta0, eta1, eta2))
         return 0.25
 
+    def fake_jump(gaps, depths, zeta):  # pragma: no cover - simple spy
+        calls["jump"].append((gaps, depths, zeta))
+        return 1.0
+
     monkeypatch.setattr(gap_amplification, "_gas", fake_gas)
     monkeypatch.setattr(gap_amplification, "_hazard", fake_hazard)
+    monkeypatch.setattr(gap_amplification, "_jump", fake_jump)
 
     data = {
         "ask_gaps": [1.0, 2.0],
@@ -122,11 +133,15 @@ def test_gap_amplification_node_calls_qmtl_functions(monkeypatch):
         ([1.0, 2.0], [5.0, 20.0], 0.3),
     ]
     assert calls["hazard"] == [(1.0, -1.0, 0.1, 0.2, 0.3)]
+    assert calls["jump"] == [
+        ([1.0, 2.0], [10.0, 20.0], 0.0),
+        ([1.0, 2.0], [5.0, 20.0], 0.0),
+    ]
     assert result["gas_ask"] == 0.3
     assert result["gas_bid"] == 0.4
     assert result["hazard"] == 0.25
-    assert result["gati_ask"] == pytest.approx(0.3 * 0.25)
-    assert result["gati_bid"] == pytest.approx(0.4 * 0.25)
+    assert result["gati_ask"] == pytest.approx(0.3 * 0.25 * 1.0)
+    assert result["gati_bid"] == pytest.approx(0.4 * 0.25 * 1.0)
     assert result["alpha"] == pytest.approx((0.4 - 0.3) * 0.25)
 
 
@@ -167,6 +182,7 @@ def test_gap_amplification_node_cache_hit():
     assert result["hazard"] == pytest.approx(hazard)
     assert level_series(view, time_idx, "ask", "gap") == [1.0, 2.0]
     assert value_at(view, time_idx, "ask", 0, "gas") == pytest.approx(gas_ask)
+    assert value_at(view, time_idx, "ask", 0, "jump") == pytest.approx(1.0)
     assert value_at(view, time_idx, "hazard", 0, "hazard") == pytest.approx(hazard)
 
 
@@ -193,4 +209,34 @@ def test_gap_amplification_node_cache_miss_fallback():
 
     assert result["alpha"] == pytest.approx((gas_bid - gas_ask) * hazard)
     assert value_at(view, 0, "bid", 0, "gas") == pytest.approx(gas_bid)
+    assert value_at(view, 0, "bid", 0, "jump") == pytest.approx(1.0)
     assert value_at(view, 0, "hazard", 0, "hazard") == pytest.approx(hazard)
+
+
+def test_gap_amplification_node_uses_jump_expectation():
+    gaps = [1.0, 2.0, 3.0]
+    depths = [10.0, 5.0, 5.0]
+    lam = 0.0
+    zeta = 0.1
+    ofi = 0.0
+    spread_z = 0.0
+    eta = (0.0, 0.0, 0.0)
+
+    gas = gap_over_depth_sum(gaps, depths, lam)
+    hazard = hazard_probability(ofi, spread_z, *eta)
+    jump = jump_expectation(gaps, depths, zeta)
+
+    data = {
+        "ask_gaps": gaps,
+        "ask_depths": depths,
+        "bid_gaps": gaps,
+        "bid_depths": depths,
+        "lambda": lam,
+        "ofi": ofi,
+        "spread_z": spread_z,
+        "eta": eta,
+        "zeta": zeta,
+    }
+
+    result = gap_amplification_node(data)
+    assert result["gati_ask"] == pytest.approx(gas * hazard * jump)
