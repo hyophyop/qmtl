@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 TAGS = {
     "scope": "indicator",
     "family": "composite_alpha",
@@ -24,15 +26,19 @@ from .resiliency_alpha import resiliency_alpha_node
 from .execution_velocity_hazard import execution_velocity_hazard_node
 
 
-def composite_alpha_node(data: dict) -> dict:
-    """Compute mean alpha across all available signals."""
+def composite_alpha_node(
+    data: dict, weights: Mapping[str, float] | None = None
+) -> dict:
+    """Compute weighted mean alpha across all available signals."""
     apb = acceptable_price_band_node(data.get("apb", {}))
     gap_amp = gap_amplification_node(data.get("gap_amplification", {}))
     llrti_res = llrti_node(data.get("llrti", {}))
     llrti_val = llrti_res.get("llrti", 0.0)
     hazard_jump = llrti_res.get("hazard_jump", 0.0)
     cost = llrti_res.get("cost", 0.0)
-    lla = latent_liquidity_alpha_node({"llrti": llrti_val, "hazard_jump": hazard_jump, "cost": cost})
+    lla = latent_liquidity_alpha_node(
+        {"llrti": llrti_val, "hazard_jump": hazard_jump, "cost": cost}
+    )
     nla = non_linear_alpha_node(data.get("non_linear", {}))
     occ = order_book_clustering_collapse_node(data.get("order_book", {}))
     qle = quantum_liquidity_echo_node(data.get("qle", {}))
@@ -41,31 +47,23 @@ def composite_alpha_node(data: dict) -> dict:
     resil = resiliency_alpha_node(data.get("resiliency", {}))
     evh = execution_velocity_hazard_node(data.get("edvh", {}))
 
-    components = [
-        apb.get("alpha", 0.0),
-        gap_amp.get("alpha", 0.0),
-        lla.get("alpha", 0.0),
-        nla.get("alpha", 0.0),
-        occ.get("alpha", 0.0),
-        qle.get("echo_amplitude", 0.0),
-        tlb.get("alpha", 0.0),
-        edch.get("alpha", 0.0),
-        resil.get("alpha", 0.0),
-        evh.get("alpha", 0.0),
-    ]
-    alpha = sum(components) / len(components) if components else 0.0
-    return {
-        "alpha": alpha,
-        "components": {
-            "acceptable_price_band": components[0],
-            "gap_amplification": components[1],
-            "latent_liquidity": components[2],
-            "non_linear": components[3],
-            "order_book_clustering": components[4],
-            "quantum_echo": components[5],
-            "tactical_liquidity_bifurcation": components[6],
-            "execution_diffusion_contraction": components[7],
-            "resiliency": components[8],
-            "execution_velocity_hazard": components[9],
-        },
+    components = {
+        "acceptable_price_band": apb.get("alpha", 0.0),
+        "gap_amplification": gap_amp.get("alpha", 0.0),
+        "latent_liquidity": lla.get("alpha", 0.0),
+        "non_linear": nla.get("alpha", 0.0),
+        "order_book_clustering": occ.get("alpha", 0.0),
+        "quantum_echo": qle.get("echo_amplitude", 0.0),
+        "tactical_liquidity_bifurcation": tlb.get("alpha", 0.0),
+        "execution_diffusion_contraction": edch.get("alpha", 0.0),
+        "resiliency": resil.get("alpha", 0.0),
+        "execution_velocity_hazard": evh.get("alpha", 0.0),
     }
+    weight_map = {**{k: 1.0 for k in components}, **(weights or {})}
+    total_weight = sum(weight_map[k] for k in components)
+    alpha = (
+        sum(components[k] * weight_map[k] for k in components) / total_weight
+        if components
+        else 0.0
+    )
+    return {"alpha": alpha, "components": components}
