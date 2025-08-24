@@ -30,6 +30,7 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
+  - Archive: archive/README.md
   - Tags: tags.md
 plugins:
   - search
