@@ -45,6 +45,7 @@ class RawMarketInput(SyntheticInput):
                 "RL",
                 "Shield",
                 "QDT_inv",
+                "Pers",
                 "OFI",
                 "MicroSlope",
                 "AggFlow",
