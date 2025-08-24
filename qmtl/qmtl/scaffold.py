@@ -112,11 +112,10 @@ def create_project(
         if py_src.is_file():
             (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
 
-    # Documentation templates
-    for fname in ["README.md", "AGENTS.md"]:
-        src = examples.joinpath(fname)
-        if src.is_file():
-            (dest / fname).write_bytes(src.read_bytes())
+    # Documentation template
+    readme_src = examples.joinpath("README.md")
+    if readme_src.is_file():
+        (dest / "README.md").write_bytes(readme_src.read_bytes())
 
     # Copy bundled example tests
     tests_src = examples.joinpath("tests")

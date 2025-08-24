@@ -25,6 +25,15 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
   and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
 
+## Example Projects
+
+Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
+project:
+
+- Run tests with `uv run -m pytest -W error`.
+- Place node processors under `nodes/` and tests under `tests/`.
+- Keep functions pure and free of side effects.
+
 ## Prioritizing external alpha ideas
 
 - The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten
