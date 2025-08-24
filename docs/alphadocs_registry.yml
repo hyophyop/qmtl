@@ -106,6 +106,24 @@
   usage_status: used
   used_in_strategies:
   - indicator:composite_alpha
+- doc: docs/alphadocs/ideas/gpt5pro/Band-conditioned Hazard Mixture-of-Experts(original).md
+  status: idea
+  source_model: gpt5pro
+  modules: []
+  priority: gpt5pro
+  tags: []
+- doc: docs/alphadocs/ideas/gpt5pro/Dynamic Price Elasticity Threshold Theory.md
+  status: idea
+  source_model: gpt5pro
+  modules: []
+  priority: gpt5pro
+  tags: []
+- doc: docs/alphadocs/ideas/gpt5pro/Order Book Inertia Theory.md
+  status: idea
+  source_model: gpt5pro
+  modules: []
+  priority: gpt5pro
+  tags: []
 - doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
   status: idea
   modules: []
