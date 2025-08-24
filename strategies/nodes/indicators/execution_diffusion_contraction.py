@@ -18,7 +18,10 @@ TAGS = {
 }
 
 from qmtl.transforms.execution_diffusion_contraction import (
+    concentration_scores,
+    depth_wedge,
     hazard_probability,
+    path_resistance,
     expected_jump,
     edch_side,
 )
@@ -58,8 +61,56 @@ def _edch(data: dict, side: str) -> float:
 
     prob_key = f"{side}_prob"
     prob = data.get(prob_key)
-    if prob is None and f"{side}_inputs" in data and f"{side}_eta" in data:
-        prob = hazard_probability(data[f"{side}_inputs"], data[f"{side}_eta"])
+    eta_key = f"{side}_eta"
+    if prob is None and f"{side}_inputs" in data and eta_key in data:
+        prob = hazard_probability(data[f"{side}_inputs"], data[eta_key])
+    elif prob is None and eta_key in data:
+        # Build features from raw inputs
+        side_sign = 1.0 if side == "up" else -1.0
+        bins = data.get("bins", 10)
+        prices = data.get(f"{side}_exec_prices_ticks")
+        sizes = data.get(f"{side}_exec_sizes")
+        if prices is not None and sizes is not None:
+            ent, hhi, fano = concentration_scores(prices, sizes, bins)
+            conc = ent + hhi - fano - data.get(f"{side}_conc_baseline", 0.0)
+        else:
+            conc = 0.0
+
+        lam_series = data.get(f"{side}_lambda")
+        if lam_series and len(lam_series) >= 2:
+            lam_grad = (lam_series[-1] - lam_series[0]) * side_sign
+        else:
+            lam_grad = 0.0
+
+        up_depth = data.get("up_depth")
+        down_depth = data.get("down_depth")
+        resistance = path_resistance(data.get(f"{side}_depth"))
+        wedge = depth_wedge(up_depth, down_depth) * side_sign
+
+        bid_prev = data.get("bid_vol_prev", 0.0)
+        bid_curr = data.get("bid_vol_curr", 0.0)
+        ask_prev = data.get("ask_vol_prev", 0.0)
+        ask_curr = data.get("ask_vol_curr", 0.0)
+        ofi = ((bid_curr - bid_prev) - (ask_curr - ask_prev)) * side_sign
+
+        spread = data.get("spread")
+        if spread is not None:
+            mean = data.get("spread_mean", 0.0)
+            std = data.get("spread_std", 1.0) or 1.0
+            spread_z = (spread - mean) / std
+        else:
+            spread_z = 0.0
+
+        micro_prev = data.get("microprice_prev")
+        micro_curr = data.get("microprice_curr")
+        micro_slope = (
+            (micro_curr - micro_prev) * side_sign
+            if micro_prev is not None and micro_curr is not None
+            else 0.0
+        )
+
+        inputs = [conc, lam_grad, resistance, ofi, spread_z, micro_slope, wedge]
+        prob = hazard_probability(inputs, data[eta_key])
 
     jump = data.get(f"{side}_jump")
     if jump is None:
