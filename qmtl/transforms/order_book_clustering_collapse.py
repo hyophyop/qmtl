@@ -1,7 +1,6 @@
 """Order book clustering collapse transforms."""
 
-# Source: ../docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
-# Priority: gpt5pro
+# Source: ../docs/alphadocs/ideas/order-book-clustering-collapse-theory.md
 
 from __future__ import annotations
 

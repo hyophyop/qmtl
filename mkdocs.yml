@@ -30,6 +30,13 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
+  - AlphaDocs:
+      - Tactical Liquidity Bifurcation Theory: alphadocs/ideas/tactical-liquidity-bifurcation-theory.md
+      - Latent Liquidity Threshold Reconfiguration: alphadocs/ideas/latent-liquidity-threshold-reconfiguration.md
+      - Resiliency: alphadocs/ideas/resiliency.md
+      - Acceptable Price Band Theory: alphadocs/ideas/acceptable-price-band-theory.md
+      - Dynamic Execution Diffusion-Contraction Theory: alphadocs/ideas/dynamic-execution-diffusion-contraction-theory.md
+      - Order Book Clustering Collapse Theory: alphadocs/ideas/order-book-clustering-collapse-theory.md
   - Archive: archive/README.md
   - Tags: tags.md
   - Template: templates/template.md

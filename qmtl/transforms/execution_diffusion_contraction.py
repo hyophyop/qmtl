@@ -1,7 +1,6 @@
 """Execution diffusion–contraction hazard transforms."""
 
-# Source: ../docs/alphadocs/ideas/gpt5pro/Dynamic Execution Diffusion-Contraction Theory.md
-# Priority: gpt5pro
+# Source: ../docs/alphadocs/ideas/dynamic-execution-diffusion-contraction-theory.md
 
 from __future__ import annotations
 

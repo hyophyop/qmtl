@@ -1,6 +1,5 @@
 """LLRTI transform computing liquidity loss rate triggered by price movement."""
-# Source: ../docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
-# Priority: gpt5pro
+# Source: ../docs/alphadocs/ideas/latent-liquidity-threshold-reconfiguration.md
 
 from __future__ import annotations
 

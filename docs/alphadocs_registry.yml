@@ -4,11 +4,11 @@
 #   status: draft|implemented
 #   modules: []
 
-- doc: ../docs/alphadocs/ideas/gpt5pro/tactical-liquidity-bifurcation-theory.md
+- doc: ../docs/alphadocs/ideas/tactical-liquidity-bifurcation-theory.md
   status: implemented
   modules:
     - qmtl/transforms/tactical_liquidity_bifurcation.py
-- doc: ../docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
+- doc: ../docs/alphadocs/ideas/latent-liquidity-threshold-reconfiguration.md
   status: implemented
   modules:
     - qmtl/transforms/llrti.py
@@ -16,11 +16,11 @@
   status: implemented
   modules:
     - qmtl/transforms/resiliency.py
-- doc: "../docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md"
+- doc: ../docs/alphadocs/ideas/acceptable-price-band-theory.md
   status: implemented
   modules:
     - qmtl/transforms/acceptable_price_band.py
-- doc: "../docs/alphadocs/ideas/gpt5pro/Dynamic Execution Diffusion-Contraction Theory.md"
+- doc: ../docs/alphadocs/ideas/dynamic-execution-diffusion-contraction-theory.md
   status: implemented
   modules:
     - qmtl/transforms/execution_diffusion_contraction.py
@@ -31,7 +31,7 @@
     - qmtl/examples/nodes/generators/sequence.py
     - qmtl/examples/nodes/transforms/scale.py
     - qmtl/examples/nodes/indicators/average.py
-- doc: ../docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
+- doc: ../docs/alphadocs/ideas/order-book-clustering-collapse-theory.md
   status: implemented
   modules:
     - qmtl/transforms/order_book_clustering_collapse.py

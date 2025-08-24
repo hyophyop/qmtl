@@ -1,7 +1,6 @@
 """Tactical Liquidity Bifurcation transforms."""
 
-# Source: ../docs/alphadocs/ideas/gpt5pro/tactical-liquidity-bifurcation-theory.md
-# Priority: gpt5pro
+# Source: ../docs/alphadocs/ideas/tactical-liquidity-bifurcation-theory.md
 
 from __future__ import annotations
 
