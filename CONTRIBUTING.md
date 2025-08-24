@@ -1,6 +1,8 @@
 # Contributing Guide
 
-This project demonstrates how to build and test QMTL strategy packages.
+This project demonstrates how to build and test QMTL strategy packages. It also
+serves as the canonical reference for shared policies—including the QMTL
+subtree workflow, testing commands, and the AlphaDocs process.
 
 ## 공지: GitHub CI 일시 비활성화 (2025-08-14)
 
@@ -56,6 +58,60 @@ CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
 - PR 체크리스트 권장 항목:
   - [ ] `git log -n 3 --oneline qmtl/` 결과 확인(원격 최신 반영)
   - [ ] `uv run -m pytest -W error` 실행 후 `qmtl/tests`와 루트 `tests` 모두 통과
+
+## Testing
+
+- Run the full test suite and treat warnings as errors:
+  ```bash
+  uv run -m pytest -W error
+  ```
+- Any change to node processors requires running their tests. Place tests under
+  `strategies/tests/nodes/` and run them with:
+  ```bash
+  uv run -m pytest strategies/tests/nodes -W error
+  ```
+- Commit only after tests pass without warnings.
+
+## AlphaDocs Workflow
+
+1. 모든 연구 문서는 `docs/alphadocs/`에 저장하고
+   `docs/alphadocs_registry.yml`에 `doc`, `status`, `modules` 필드를 갖는 항목을
+   추가합니다.
+2. 문서를 근거로 코드를 작성할 때는 해당 모듈 상단에
+   `# Source: docs/alphadocs/<doc>.md` 주석을 포함합니다.
+3. 각 문서는 필요한 transform 이름과 테스트 범위를 정리한 `QMTL Integration`
+   섹션을 포함합니다.
+4. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련
+   테스트를 추가합니다.
+5. 문서를 이동하거나 이름을 변경할 경우
+   `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고,
+   주석과 레지스트리 경로도 함께 수정합니다.
+6. PR에는 레지스트리와 소스 주석 동기화를 확인했다는 체크 항목과
+   `uv run scripts/check_doc_sync.py` 실행 결과를 포함합니다.
+7. 알파 문서는 구현에 사용된 위험(hazard), 방향(direction), 비용/체결(cost/fill)
+   등 모든 수학적 공식을 빠짐없이 포함해야 하며, 코드 노드는 이러한 공식을
+   참조하여 외부 데이터 입력에만 의존하지 말고 직접 구현해야 합니다. PR은
+   문서와 코드의 일치성을 보여주고 공식 구성요소를 다루는 테스트를 포함해야
+   합니다.
+
+### Idea directories
+
+- `docs/alphadocs/ideas/` 폴더는 아이디어 기록을 위한 버전 관리 대상일 뿐
+  직접 구현하지 않습니다.
+- 더 높은 성능의 모델로 정제된 아이디어(예:
+  `docs/alphadocs/ideas/gpt5pro/`)만 구현 대상으로 간주합니다.
+
+### Prioritizing GPT-5-Pro Generated Ideas
+
+- `docs/alphadocs/ideas/gpt5pro/` 디렉터리에는 강한 모델(GPT-5-Pro)이 검토한
+  알파 아이디어가 들어 있습니다. 다음 원칙을 따릅니다:
+  - 레지스트리에 `status: prioritized`와 `source_model: gpt5pro`를 설정합니다.
+  - 코드에 `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md`와
+    `# Priority: gpt5pro` 주석을 추가합니다.
+  - 에이전트는 `docs/alphadocs_history.log`에 이동/이름 변경 이력을 기록하고
+    구현 이슈나 브랜치를 자동으로 생성합니다.
+  - 이러한 아이디어를 구현한 PR에는 에이전트 실행 로그(도구 이름, 모델,
+    타임스탬프, 수행한 작업 요약)를 포함합니다.
 
 ## Setting up the QMTL CLI
 

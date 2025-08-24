@@ -20,4 +20,4 @@ This file provides concise instructions for automated coding agents (Copilot-sty
 - Safety and review:
   - Do not directly merge large or high-risk code changes without human review. Create PRs and add `review-required: true` in the PR body for `gpt5pro` implementations.
 
-These instructions are additive to the repository `AGENTS.md` and `docs/agents-instructions.md` guidance; follow both sets of guidelines when operating as an automated agent.
+These instructions supplement the shared policies in `CONTRIBUTING.md` and the brief summaries in `AGENTS.md` and `docs/agents-instructions.md`.
