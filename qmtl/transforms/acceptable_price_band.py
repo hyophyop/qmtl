@@ -59,3 +59,25 @@ def volume_surprise(volume: float, volume_hat: float, volume_std: float) -> floa
     if volume_std == 0:
         return 0.0
     return (volume - volume_hat) / volume_std
+
+
+def pbx_delta(pbx: float, pbx_prev: float) -> float:
+    """Return change in normalized price band excursion (PBX)."""
+    return pbx - pbx_prev
+
+
+def ofi_liquidity_gap(bid_ofi: float, ask_ofi: float) -> float:
+    """Return liquidity gap derived from order flow imbalance."""
+    return bid_ofi - ask_ofi
+
+
+def volatility_squeeze(sigma_short: float, sigma_long: float) -> float:
+    """Return relative contraction of short- vs long-horizon volatility."""
+    if sigma_long == 0:
+        return 0.0
+    return sigma_short / sigma_long - 1.0
+
+
+def iv_hv_spread(iv: float, hv: float) -> float:
+    """Return difference between implied and historical volatility."""
+    return iv - hv
