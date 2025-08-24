@@ -1,3 +1,9 @@
+---
+scope: qmtl subtree
+last-reviewed: 2025-08-24
+canonical-guidelines: ../CONTRIBUTING.md
+---
+
 # Development Guidelines
 
 **Applies to files under `qmtl/`.**

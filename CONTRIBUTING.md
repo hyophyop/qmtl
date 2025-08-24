@@ -4,6 +4,22 @@ This project demonstrates how to build and test QMTL strategy packages. It also
 serves as the canonical reference for shared policies—including the QMTL
 subtree workflow, testing commands, and the AlphaDocs process.
 
+## AGENTS front-matter template
+
+All `AGENTS.md` files must begin with a front-matter block that captures their
+scope and review metadata:
+
+```
+---
+scope: <directory or project scope>
+last-reviewed: YYYY-MM-DD
+canonical-guidelines: <relative link to CONTRIBUTING.md>
+---
+```
+
+Include this block at the top of new or modified `AGENTS.md` files to keep
+instructions consistent across the repository.
+
 ## 공지: GitHub CI 일시 비활성화 (2025-08-14)
 
 레포지토리의 GitHub Actions 자동 트리거(push/pull_request)가 임시로 비활성화되었습니다. 현재 워크플로우는 수동(workflow_dispatch)으로만 실행됩니다. PR 생성/업데이트 시 자동 검증이 수행되지 않으므로, 아래 로컬 체크를 직접 수행한 뒤 푸시/PR을 생성해 주세요.

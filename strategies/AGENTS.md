@@ -1,3 +1,9 @@
+---
+scope: strategies directory
+last-reviewed: 2025-08-24
+canonical-guidelines: ../CONTRIBUTING.md
+---
+
 # Strategy Guidelines
 
 These guidelines apply to all files under the `strategies/` directory. General repository setup and testing rules are described in the root [AGENTS.md](../AGENTS.md).

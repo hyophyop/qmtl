@@ -1,3 +1,9 @@
+---
+scope: repository root
+last-reviewed: 2025-08-24
+canonical-guidelines: CONTRIBUTING.md
+---
+
 # Development Guidelines
 
 This repository hosts strategy experiments built on top of the [QMTL](qmtl/README.md) subtree. For comprehensive policies—such as the QMTL subtree workflow, testing commands, and the AlphaDocs process—see [CONTRIBUTING.md](CONTRIBUTING.md).
