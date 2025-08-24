@@ -68,15 +68,20 @@ def llrti_node(data: dict, cache: dict | None = None) -> dict:
         data.get("delta_t", 1.0),
         data.get("delta", 0.0),
         data.get("beta", (0.0, 1.0)),
+        data.get("feature_keys", ("LLRTI",)),
+        state_z=data.get("state_z"),
         spread=data.get("spread"),
         taker_fee=data.get("taker_fee"),
         impact=data.get("impact"),
+        jump_sizes=data.get("jump_sizes"),
     )
 
     llrti_cat = _cache_category(cache, "llrti")
     llrti_cat[(time, side, level)] = result["llrti"]
     hazard_cat = _cache_category(cache, "llrti_hazard")
     hazard_cat[(time, side, level)] = result["hazard"]
+    hazard_jump_cat = _cache_category(cache, "llrti_hazard_jump")
+    hazard_jump_cat[(time, side, level)] = result["hazard_jump"]
     if "cost" in result:
         cost_cat = _cache_category(cache, "llrti_cost")
         cost_cat[(time, side, level)] = result["cost"]

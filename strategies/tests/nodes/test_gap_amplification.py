@@ -246,6 +246,8 @@ def test_gap_amplification_node_uses_jump_expectation():
         "spread_z": spread_z,
         "eta": eta,
         "zeta": zeta,
+        "vol_surprise": 0.0,
+        "cancel_limit_ratio": 0.0,
     }
 
     result = gap_amplification_node(data)
@@ -287,12 +289,14 @@ def test_gap_amplification_node_filters_short_dwell():
     filt_ask_depths = [20.0]
     gas_ask = gap_over_depth_sum(filt_ask_gaps, filt_ask_depths, lam)
     gas_bid = gap_over_depth_sum(bid_gaps, bid_depths, lam)
+    jump_ask = jump_expectation(filt_ask_gaps, filt_ask_depths, 0.0, 0.0)
+    jump_bid = jump_expectation(bid_gaps, bid_depths, 0.0, 0.0)
     hazard = hazard_probability(ofi, spread_z, *eta)
 
     assert result["gas_ask"] == pytest.approx(gas_ask)
     assert result["gas_bid"] == pytest.approx(gas_bid)
-    assert result["gati_ask"] == pytest.approx(gas_ask * hazard)
-    assert result["gati_bid"] == pytest.approx(gas_bid * hazard)
+    assert result["gati_ask"] == pytest.approx(gas_ask * hazard * jump_ask)
+    assert result["gati_bid"] == pytest.approx(gas_bid * hazard * jump_bid)
 
 
 def test_gap_amplification_node_passes_new_hazard_inputs(monkeypatch):
