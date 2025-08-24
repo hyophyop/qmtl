@@ -10,18 +10,37 @@ TAGS = {
 }
 
 try:  # pragma: no cover - fallback when qmtl is unavailable
-    from qmtl.transforms import llrti
+    from qmtl.transforms import llrti_hazard
 except ModuleNotFoundError:  # pragma: no cover - simple local implementation
-    def llrti(depth_changes, price_change, delta_t, delta):  # type: ignore[override]
+    import math
+
+    def llrti_hazard(
+        depth_changes,
+        price_change,
+        delta_t,
+        delta,
+        beta,
+        *,
+        spread=None,
+        taker_fee=None,
+        impact=None,
+    ):  # type: ignore[override]
         if delta_t <= 0 or abs(price_change) <= delta:
-            return 0.0
-        return sum(depth_changes) / delta_t
+            index = 0.0
+        else:
+            index = sum(depth_changes) / delta_t
+        b0, b1 = beta
+        hazard = 1.0 / (1.0 + math.exp(-(b0 + b1 * index)))
+        result = {"llrti": index, "hazard": hazard}
+        if spread is not None and taker_fee is not None and impact is not None:
+            result["cost"] = spread / 2 + taker_fee + impact
+        return result
 
 from .latent_liquidity_cache import CACHE_NS, _cache_category  # noqa: F401
 
 
 def llrti_node(data: dict, cache: dict | None = None) -> dict:
-    """Calculate LLRTI and store depth change and index in a shared cache."""
+    """Calculate LLRTI hazard metrics and store them in a shared cache."""
 
     cache = cache if cache is not None else {}
     time = data.get("time", 0)
@@ -43,13 +62,22 @@ def llrti_node(data: dict, cache: dict | None = None) -> dict:
         seq.append(depth_change)
         depth_cat[(time, side, level)] = depth_change
 
-    index = llrti(
+    result = llrti_hazard(
         seq,
         data.get("price_change", 0.0),
         data.get("delta_t", 1.0),
         data.get("delta", 0.0),
+        data.get("beta", (0.0, 1.0)),
+        spread=data.get("spread"),
+        taker_fee=data.get("taker_fee"),
+        impact=data.get("impact"),
     )
 
     llrti_cat = _cache_category(cache, "llrti")
-    llrti_cat[(time, side, level)] = index
-    return {"llrti": index}
+    llrti_cat[(time, side, level)] = result["llrti"]
+    hazard_cat = _cache_category(cache, "llrti_hazard")
+    hazard_cat[(time, side, level)] = result["hazard"]
+    if "cost" in result:
+        cost_cat = _cache_category(cache, "llrti_cost")
+        cost_cat[(time, side, level)] = result["cost"]
+    return result
