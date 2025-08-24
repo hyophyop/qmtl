@@ -182,7 +182,8 @@ git log -n 3 --oneline qmtl-subtree/main
 ### Documentation
 - `docs/alphadocs/` - Research documents and alpha ideas
 - `docs/alphadocs_registry.yml` - Documentation registry
-- `AGENTS.md` - Development guidelines for the root project
+- `CONTRIBUTING.md` - Canonical development policies (subtree workflow, testing, AlphaDocs)
+- `AGENTS.md` - Brief summary pointing to the canonical `CONTRIBUTING.md`
 - `qmtl/AGENTS.md` - Development guidelines for QMTL subtree
 
 ### Key Scripts

@@ -1,11 +1,11 @@
 ## Contributing to qmtl-strategies
 
-This repository contains strategy experiments that depend on the `qmtl/` subtree. Follow these guidelines to keep contributions consistent and reviewable.
+This repository contains strategy experiments that depend on the `qmtl/` subtree. Follow these guidelines to keep contributions consistent and reviewable. Repository-wide policies—such as the subtree workflow, testing, and AlphaDocs—are documented in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 Key points
-- Keep the `qmtl/` subtree in sync with the remote upstream before starting work. See `AGENTS.md` at the repository root for exact subtree commands.
+- Keep the `qmtl/` subtree in sync with the remote upstream before starting work. See [CONTRIBUTING.md](../CONTRIBUTING.md) for exact subtree commands.
 - Run tests locally in the `uv` environment and ensure no warnings: `uv run -m pytest -W error`.
-- When changing `qmtl/`, run and add tests under `qmtl/tests` and push subtree updates upstream as required by the root `AGENTS.md` policy.
+- When changing `qmtl/`, run and add tests under `qmtl/tests` and push subtree updates upstream as required by the policies in `CONTRIBUTING.md` and `qmtl/AGENTS.md`.
 
 PR checklist (add to every PR description)
 - [ ] Tests added or updated, and `uv run -m pytest -W error` passes locally
@@ -16,4 +16,4 @@ PR checklist (add to every PR description)
 Where to put project-level GitHub files
 - `.github/` is the canonical place for templates and workflows. This repository provides example templates in this folder.
 
-If you're unsure about the qmtl subtree workflow, read the root `AGENTS.md` and `qmtl/AGENTS.md` for detailed procedures.
+If you're unsure about the qmtl subtree workflow, read `CONTRIBUTING.md` and `qmtl/AGENTS.md` for detailed procedures.

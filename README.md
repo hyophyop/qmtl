@@ -21,7 +21,7 @@ QMTL은 별도 저장소에서 가져온 서브트리로, 수정은 최소화하
 git fetch qmtl-subtree main
 git subtree pull --prefix=qmtl qmtl-subtree main --squash
 ```
-필요 시 `AGENTS.md`의 설정 절차를 참고해 `qmtl-subtree` 원격을 추가하세요.
+필요 시 [CONTRIBUTING.md](CONTRIBUTING.md)의 설정 절차를 참고해 `qmtl-subtree` 원격을 추가하세요.
 
 ## `qmtl init` 실행 방법
 
