@@ -32,6 +32,7 @@ from .order_book_clustering_collapse import hazard_probability, direction_gating
 from .tactical_liquidity_bifurcation import bifurcation_hazard, tlbh_alpha
 from .identity import identity_transform_node
 from .llrti import llrti
+from .llrti_hazard import llrti_hazard, fit_llrti_jump_model
 from .scale import scale_transform_node
 from .resiliency import impact, resiliency_alpha
 from .execution_velocity_hazard import (
@@ -79,6 +80,8 @@ __all__ = [
     "volume_surprise",
     "identity_transform_node",
     "llrti",
+    "llrti_hazard",
+    "fit_llrti_jump_model",
     "scale_transform_node",
     "impact",
     "resiliency_alpha",

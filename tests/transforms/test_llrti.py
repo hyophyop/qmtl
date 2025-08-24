@@ -1,3 +1,4 @@
+import math
 import pytest
 
 from qmtl.transforms import depth_change_node, price_change
@@ -37,6 +38,8 @@ def test_llrti_features_combine_for_expected_value():
             "price_change": price_delta,
             "delta_t": 1,
             "delta": 0.5,
+            "beta": (0.0, 1.0),
         }
     )
     assert features["llrti"] == 1.0
+    assert features["hazard"] == pytest.approx(1.0 / (1.0 + math.exp(-1.0)))
