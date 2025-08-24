@@ -2,6 +2,7 @@ import pytest
 from collections import deque
 import sys
 from pathlib import Path
+import math
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "qmtl"))
 
@@ -173,7 +174,69 @@ def test_cache_retrieval_and_window():
         },
         auto["cache"],
     )
-    assert (
+    assert ( 
         len(third["cache"].get("t0", "mid", 100, "mu")) == 2
     )
+
+
+def test_extended_gating_features():
+    cache = FourDimCache()
+    # seed previous pbx
+    acceptable_price_band_node(
+        {
+            "price": 100.0,
+            "volume": 100.0,
+            "volume_hat": 100.0,
+            "volume_std": 10.0,
+            "lambda_mu": 0.5,
+            "lambda_sigma": 0.5,
+            "k": 1.0,
+            "time": "t0",
+            "price_level": 100,
+        },
+        cache,
+    )
+
+    result = acceptable_price_band_node(
+        {
+            "price": 101.0,
+            "volume": 100.0,
+            "volume_hat": 100.0,
+            "volume_std": 10.0,
+            "lambda_mu": 0.5,
+            "lambda_sigma": 0.5,
+            "k": 1.0,
+            "time": "t0",
+            "price_level": 100,
+            "bid_ofi": 4.0,
+            "ask_ofi": 1.0,
+            "sigma_short": 1.0,
+            "sigma_long": 0.5,
+            "iv": 0.3,
+            "hv": 0.2,
+            "coef_dpbx": 1.0,
+            "coef_ofi_gap": 1.0,
+            "coef_vol_squeeze": 1.0,
+            "coef_iv_hv": 1.0,
+            "coef_overshoot": 0.0,
+            "coef_volume_surprise": 0.0,
+        },
+        cache,
+    )
+
+    dpbx = result["pbx_delta"]
+    ofi_gap = result["ofi_gap"]
+    vol_sq = result["volatility_squeeze"]
+    ivhv = result["iv_hv_spread"]
+    gate_expected = 1.0 / (1.0 + math.exp(-(dpbx + ofi_gap + vol_sq + ivhv)))
+
+    sigma = result["sigma"]
+    pbx = result["pbx"]
+    resid = pbx * 1.0 * sigma
+    alpha_mom = math.log1p(math.exp(0.0))
+    inner = (1.0 * sigma - abs(resid)) / sigma if sigma else 0.0
+    alpha_rev = -math.log1p(math.exp(inner))
+    alpha_expected = gate_expected * alpha_mom + (1.0 - gate_expected) * alpha_rev
+
+    assert result["alpha"] == pytest.approx(alpha_expected)
 
