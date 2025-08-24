@@ -172,4 +172,4 @@ CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
 
 ## 추가 안내
 
-에이전트/개발자 대상 요약 지침을 `docs/agents-instructions.md`에 수록했습니다. GitHub 템플릿과 PR/Issue 지침은 `.github/` 디렉터리를 확인하세요.
+에이전트/개발자 대상 요약 지침을 `docs/agents-instructions.md`에 수록했습니다. `AGENTS.md` 파일을 수정했다면 `uv run python scripts/build_agent_instructions.py`로 이 문서를 갱신한 뒤 커밋하세요. GitHub 템플릿과 PR/Issue 지침은 `.github/` 디렉터리를 확인하세요.
