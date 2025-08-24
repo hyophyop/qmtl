@@ -12,7 +12,7 @@ from .hazard_utils import execution_cost
 
 def hazard_probability(z: dict[str, float], beta: tuple[float, ...]) -> float:
     """Return hazard probability from z-scores using :mod:`hazard_utils`."""
-    feature_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv"]
+    feature_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv", "Pers"]
     return _hazard_probability(
         z,
         beta,
