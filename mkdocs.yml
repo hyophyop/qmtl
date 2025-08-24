@@ -30,6 +30,7 @@ nav:
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
   - Tags: tags.md
+  - Template: templates/template.md
 plugins:
   - search
   - macros
