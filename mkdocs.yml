@@ -32,6 +32,7 @@ nav:
       - Changelog: reference/CHANGELOG.md
   - Archive: archive/README.md
   - Tags: tags.md
+  - Template: templates/template.md
 plugins:
   - search
   - macros
