@@ -39,6 +39,7 @@ from .execution_velocity_hazard import (
     expected_jump as edvh_expected_jump,
     execution_velocity_hazard,
 )
+from .order_book_inertia import obii_from_survival, order_book_inertia
 
 __all__ = [
     "rate_of_change",
@@ -85,4 +86,6 @@ __all__ = [
     "edvh_hazard",
     "edvh_expected_jump",
     "execution_velocity_hazard",
+    "obii_from_survival",
+    "order_book_inertia",
 ]
