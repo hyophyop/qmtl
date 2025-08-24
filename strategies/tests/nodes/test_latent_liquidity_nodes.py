@@ -45,18 +45,26 @@ def test_llrti_node_triggers_on_price_move_and_updates_cache():
             "spread": 0.02,
             "taker_fee": 0.001,
             "impact": 0.0,
+            "jump_sizes": [0.01, -0.03],
         },
         cache,
     )
     expected = _llrti([1.0, -0.5], 0.02, 2.0, 0.01)
     assert result["llrti"] == pytest.approx(expected)
     expected_hazard = 1.0 / (1.0 + math.exp(-expected))
+    expected_jump = (abs(0.01) + abs(-0.03)) / 2
+    expected_hazard_jump = expected_hazard * expected_jump
     assert result["hazard"] == pytest.approx(expected_hazard)
+    assert result["expected_jump"] == pytest.approx(expected_jump)
+    assert result["hazard_jump"] == pytest.approx(expected_hazard_jump)
     assert result["cost"] == pytest.approx(0.011)
     ns = cache[CACHE_NS]
     assert ns["depth_changes"][(0, "buy", 0)] == 1.0
     assert ns["depth_changes"][(1, "buy", 0)] == -0.5
     assert ns["llrti_hazard"][(1, "buy", 0)] == pytest.approx(expected_hazard)
+    assert ns["llrti_hazard_jump"][(1, "buy", 0)] == pytest.approx(
+        expected_hazard_jump
+    )
 
 
 def test_llrti_node_zero_when_below_threshold():
@@ -75,6 +83,7 @@ def test_llrti_node_zero_when_below_threshold():
     result = llrti_node(data, cache)
     assert result["llrti"] == expected
     assert result["hazard"] == pytest.approx(0.5)
+    assert result["hazard_jump"] == pytest.approx(0.0)
 
 
 def test_llrti_node_zero_at_threshold():
@@ -93,6 +102,7 @@ def test_llrti_node_zero_at_threshold():
     result = llrti_node(data, cache)
     assert result["llrti"] == expected
     assert result["hazard"] == pytest.approx(0.5)
+    assert result["hazard_jump"] == pytest.approx(0.0)
 
 
 def test_latent_liquidity_alpha_node_computes_value_and_updates_cache():
@@ -126,11 +136,12 @@ def test_latent_liquidity_alpha_node_computes_value_and_updates_cache():
             "spread": 0.02,
             "taker_fee": 0.001,
             "impact": 0.0,
+            "jump_sizes": [0.02, -0.04],
         },
         cache,
     )
     llrti_val = llrti_res["llrti"]
-    hazard = llrti_res["hazard"]
+    hazard_jump = llrti_res["hazard_jump"]
     cost = llrti_res["cost"]
 
     imb_deriv = 0.25
@@ -144,17 +155,22 @@ def test_latent_liquidity_alpha_node_computes_value_and_updates_cache():
             "theta1": 1.0,
             "theta2": 2.0,
             "exec_imbalance_deriv": imb_deriv,
-            "hazard": hazard,
+            "hazard_jump": hazard_jump,
             "cost": cost,
         },
         cache,
     )
-    expected_alpha = 1.0 * math.log(1 + abs(llrti_val) ** 2.0) + 2.0 * imb_deriv
-    expected_scaled = hazard * expected_alpha / (1.0 + cost)
+    expected_alpha = 1.0 * math.log(1 + abs(llrti_val) ** 2.0) + 2.0 * abs(
+        imb_deriv
+    )
+    direction = 1.0
+    expected_scaled = direction * hazard_jump * expected_alpha / (1.0 + cost)
     assert result["alpha"] == pytest.approx(expected_scaled)
     ns = cache[CACHE_NS]
     assert ns["exec_delta"][(1, "buy", 0)] == imb_deriv
-    assert ns["llrti_hazard"][(1, "buy", 0)] == pytest.approx(hazard)
+    assert ns["llrti_hazard_jump"][(1, "buy", 0)] == pytest.approx(
+        hazard_jump
+    )
 
 
 def test_latent_liquidity_alpha_node_negative_derivative():
@@ -188,11 +204,12 @@ def test_latent_liquidity_alpha_node_negative_derivative():
             "spread": 0.02,
             "taker_fee": 0.001,
             "impact": 0.0,
+            "jump_sizes": [0.02, -0.04],
         },
         cache,
     )
     llrti_val = llrti_res["llrti"]
-    hazard = llrti_res["hazard"]
+    hazard_jump = llrti_res["hazard_jump"]
     cost = llrti_res["cost"]
 
     imb_deriv = -0.25
@@ -206,11 +223,38 @@ def test_latent_liquidity_alpha_node_negative_derivative():
             "theta1": 1.0,
             "theta2": 2.0,
             "exec_imbalance_deriv": imb_deriv,
-            "hazard": hazard,
+            "hazard_jump": hazard_jump,
             "cost": cost,
         },
         cache,
     )
-    expected_alpha = 1.0 * math.log(1 + abs(llrti_val) ** 2.0) + 2.0 * imb_deriv
-    expected_scaled = hazard * expected_alpha / (1.0 + cost)
+    expected_alpha = 1.0 * math.log(1 + abs(llrti_val) ** 2.0) + 2.0 * abs(
+        imb_deriv
+    )
+    direction = -1.0
+    expected_scaled = direction * hazard_jump * expected_alpha / (1.0 + cost)
     assert result["alpha"] == pytest.approx(expected_scaled)
+
+
+def test_latent_liquidity_alpha_node_cost_penalty():
+    no_cost = latent_liquidity_alpha_node(
+        {
+            "llrti": 0.0,
+            "hazard_jump": 1.0,
+            "exec_imbalance_deriv": 1.0,
+            "theta1": 0.0,
+            "theta2": 1.0,
+            "cost": 0.0,
+        }
+    )["alpha"]
+    with_cost = latent_liquidity_alpha_node(
+        {
+            "llrti": 0.0,
+            "hazard_jump": 1.0,
+            "exec_imbalance_deriv": 1.0,
+            "theta1": 0.0,
+            "theta2": 1.0,
+            "cost": 1.0,
+        }
+    )["alpha"]
+    assert with_cost == pytest.approx(no_cost / 2)
