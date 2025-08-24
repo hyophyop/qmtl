@@ -4,6 +4,8 @@ tags:
   - reference
 ---
 
+{{ nav_links() }}
+
 # Tag Usage
 
 This page outlines how to use tags within the documentation and lists common examples.
@@ -19,3 +21,6 @@ This page outlines how to use tags within the documentation and lists common exa
 - `docs/operations/README.md` → `tags: [operations, overview]`
 
 When the documentation is built, this page will also display a tag index for quick filtering.
+
+{{ nav_links() }}
+
