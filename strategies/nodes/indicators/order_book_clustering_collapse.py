@@ -76,7 +76,16 @@ def order_book_clustering_collapse_node(
             g_ask = g_ask or cached.get("g_ask")
             g_bid = g_bid or cached.get("g_bid")
 
-    required_hazard_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv"]
+    required_hazard_keys = [
+        "C",
+        "Cliff",
+        "Gap",
+        "CH",
+        "RL",
+        "Shield",
+        "QDT_inv",
+        "Pers",
+    ]
     required_direction_keys = ["OFI", "MicroSlope", "AggFlow"]
 
     if view is not None and time is not None and zscore_src is not None:
@@ -93,7 +102,7 @@ def order_book_clustering_collapse_node(
                     data[ask_key] = z_payload.get("ask", {}).get(k)
                 if bid_key not in data:
                     data[bid_key] = z_payload.get("bid", {}).get(k)
-    beta = data.get("beta", (0.0,) * 8)
+    beta = data.get("beta", (0.0,) * 9)
     eta = data.get("eta", (0.0,) * 4)
 
     if hazard_ask is None and all(f"ask_z_{k}" in data for k in required_hazard_keys):

@@ -40,7 +40,7 @@ def test_obcc_node_computes_alpha():
 
 
 def test_obcc_node_computes_features_when_missing():
-    beta = (0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    beta = (0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     eta = (0.0, 1.0, 0.0, 0.0)
     data = {
         "beta": beta,
@@ -52,6 +52,7 @@ def test_obcc_node_computes_features_when_missing():
         "ask_z_RL": 0.0,
         "ask_z_Shield": 0.0,
         "ask_z_QDT_inv": 0.0,
+        "ask_z_Pers": 0.0,
         "bid_z_C": -1.0,
         "bid_z_Cliff": 0.0,
         "bid_z_Gap": 0.0,
@@ -59,6 +60,7 @@ def test_obcc_node_computes_features_when_missing():
         "bid_z_RL": 0.0,
         "bid_z_Shield": 0.0,
         "bid_z_QDT_inv": 0.0,
+        "bid_z_Pers": 0.0,
         "ask_z_OFI": 1.0,
         "ask_z_MicroSlope": 0.0,
         "ask_z_AggFlow": 0.0,
@@ -71,11 +73,29 @@ def test_obcc_node_computes_features_when_missing():
     result = obcc.order_book_clustering_collapse_node(data)
 
     hazard_ask = occ_hazard_probability(
-        {"C": 0.0, "Cliff": 0.0, "Gap": 0.0, "CH": 0.0, "RL": 0.0, "Shield": 0.0, "QDT_inv": 0.0},
+        {
+            "C": 0.0,
+            "Cliff": 0.0,
+            "Gap": 0.0,
+            "CH": 0.0,
+            "RL": 0.0,
+            "Shield": 0.0,
+            "QDT_inv": 0.0,
+            "Pers": 0.0,
+        },
         beta,
     )
     hazard_bid = occ_hazard_probability(
-        {"C": -1.0, "Cliff": 0.0, "Gap": 0.0, "CH": 0.0, "RL": 0.0, "Shield": 0.0, "QDT_inv": 0.0},
+        {
+            "C": -1.0,
+            "Cliff": 0.0,
+            "Gap": 0.0,
+            "CH": 0.0,
+            "RL": 0.0,
+            "Shield": 0.0,
+            "QDT_inv": 0.0,
+            "Pers": 0.0,
+        },
         beta,
     )
     g_ask = occ_direction_gating(
@@ -126,6 +146,7 @@ def test_obcc_node_calls_helpers(monkeypatch):
         "ask_z_RL": 0.0,
         "ask_z_Shield": 0.0,
         "ask_z_QDT_inv": 0.0,
+        "ask_z_Pers": 0.0,
         "bid_z_C": 0.0,
         "bid_z_Cliff": 0.0,
         "bid_z_Gap": 0.0,
@@ -133,6 +154,7 @@ def test_obcc_node_calls_helpers(monkeypatch):
         "bid_z_RL": 0.0,
         "bid_z_Shield": 0.0,
         "bid_z_QDT_inv": 0.0,
+        "bid_z_Pers": 0.0,
         "ask_z_OFI": 0.0,
         "ask_z_MicroSlope": 0.0,
         "ask_z_AggFlow": 0.0,
@@ -205,7 +227,7 @@ def test_obcc_cache_miss_triggers_recompute(monkeypatch):
     data = {
         "cache_node": node,
         "time": 1,
-        "beta": (0.0,) * 8,
+        "beta": (0.0,) * 9,
         "eta": (0.0,) * 4,
         "ask_z_C": 0.0,
         "ask_z_Cliff": 0.0,
@@ -214,6 +236,7 @@ def test_obcc_cache_miss_triggers_recompute(monkeypatch):
         "ask_z_RL": 0.0,
         "ask_z_Shield": 0.0,
         "ask_z_QDT_inv": 0.0,
+        "ask_z_Pers": 0.0,
         "bid_z_C": 0.0,
         "bid_z_Cliff": 0.0,
         "bid_z_Gap": 0.0,
@@ -221,6 +244,7 @@ def test_obcc_cache_miss_triggers_recompute(monkeypatch):
         "bid_z_RL": 0.0,
         "bid_z_Shield": 0.0,
         "bid_z_QDT_inv": 0.0,
+        "bid_z_Pers": 0.0,
         "ask_z_OFI": 0.0,
         "ask_z_MicroSlope": 0.0,
         "ask_z_AggFlow": 0.0,
