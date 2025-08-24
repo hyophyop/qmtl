@@ -1,3 +1,5 @@
+{{ nav_links() }}
+
 # Documentation Maintenance Schedule
 
 The QMTL documentation structure is reviewed each quarter to keep content organized and up to date.
@@ -9,3 +11,4 @@ The QMTL documentation structure is reviewed each quarter to keep content organi
 | Q3      | July         | Mid-year review of architecture and guides. |
 | Q4      | October      | Year-end cleanup and planning for next year's docs. |
 
+{{ nav_links() }}
