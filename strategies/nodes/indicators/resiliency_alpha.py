@@ -36,6 +36,11 @@ def resiliency_alpha_node(data: dict) -> dict:
     data:
         Mapping of input parameters. ``timestamp``, ``side`` and ``level``
         identify cache entries. Metrics may be omitted to reuse cached values.
+
+    Notes
+    -----
+    The alpha is bounded by the ``obi_derivative`` magnitude via a ``tanh``
+    transform applied to ``impact`` and ``volatility``.
     """
 
     ts = data.get("timestamp")
@@ -58,6 +63,6 @@ def resiliency_alpha_node(data: dict) -> dict:
     beta = data.get("beta", 1.0)
     gamma = data.get("gamma", 1.0)
 
-    imp = impact(volume, avg_volume, depth, beta)
-    alpha = resiliency_alpha(imp, volatility, obi_derivative, gamma)
-    return {"impact": imp, "alpha": alpha}
+    impact_val = impact(volume, avg_volume, depth, beta)
+    alpha = resiliency_alpha(impact_val, volatility, obi_derivative, gamma)
+    return {"impact": impact_val, "alpha": alpha}
