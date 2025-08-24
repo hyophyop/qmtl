@@ -107,11 +107,13 @@
   used_in_strategies:
   - indicator:composite_alpha
 - doc: docs/alphadocs/ideas/gpt5pro/Band-conditioned Hazard Mixture-of-Experts(original).md
-  status: idea
+  status: implemented
   source_model: gpt5pro
-  modules: []
+  modules:
+  - strategies/nodes/indicators/band_conditioned_hazard_moe.py
   priority: gpt5pro
   tags: []
+  usage_status: unused
 - doc: docs/alphadocs/ideas/gpt5pro/Dynamic Price Elasticity Threshold Theory.md
   status: idea
   source_model: gpt5pro
@@ -167,10 +169,13 @@
   priority: normal
   tags: []
 - doc: docs/alphadocs/ideas/Dynamic Price Elasticity Threshold Theory.md
-  status: idea
-  modules: []
+  status: implemented
+  modules:
+  - strategies/nodes/indicators/dynamic_price_elasticity_threshold.py
   priority: normal
   tags: []
+  usage_status: unused
+  used_in_strategies: []
 - doc: docs/alphadocs/ideas/Endogenous Liquidity Spike Theory.md
   status: idea
   modules: []
