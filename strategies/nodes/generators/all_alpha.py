@@ -116,8 +116,9 @@ def all_alpha_generator_node() -> dict:
             "RL": raw["ask_z_RL"],
             "Shield": raw["ask_z_Shield"],
             "QDT_inv": raw["ask_z_QDT_inv"],
+            "Pers": raw["ask_z_Pers"],
         },
-        (0.0,) * 8,
+        (0.0,) * 9,
     )
     hazard_bid = hazard_probability(
         {
@@ -128,8 +129,9 @@ def all_alpha_generator_node() -> dict:
             "RL": raw["bid_z_RL"],
             "Shield": raw["bid_z_Shield"],
             "QDT_inv": raw["bid_z_QDT_inv"],
+            "Pers": raw["bid_z_Pers"],
         },
-        (0.0,) * 8,
+        (0.0,) * 9,
     )
     g_ask = direction_gating(
         +1,

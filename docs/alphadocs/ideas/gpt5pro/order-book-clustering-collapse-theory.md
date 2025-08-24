@@ -192,6 +192,7 @@ z = compute_zscores({
     'RL': requote_latency(side),
     'Shield': shield_depth(side),
     'QDT_inv': 1.0 / qdt(side),
+    'Pers': persistence_metric(side),
     'OFI': ofi(),
     'MicroSlope': micro_price_slope(),
     'AggFlow': aggressive_flow(side_opposite)
@@ -201,7 +202,8 @@ z = compute_zscores({
 h = sigmoid(beta0 + beta1*softplus(z['C'])
                     + beta2*z['Cliff'] + beta3*z['Gap']
                     + beta4*z['CH'] + beta5*z['RL']
-                    - beta6*z['Shield'] + beta7*z['QDT_inv'])
+                    - beta6*z['Shield'] + beta7*z['QDT_inv']
+                    + beta8*z['Pers'])
 
 # direction (side-aware)
 g = side_sign * np.tanh(eta0 + eta1*z['OFI'] + eta2*z['MicroSlope'] + eta3*z['AggFlow'])

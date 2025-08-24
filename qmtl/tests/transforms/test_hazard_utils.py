@@ -18,9 +18,18 @@ from qmtl.transforms.gap_amplification import hazard_probability as gap_hazard_p
 
 
 def test_hazard_probability_matches_occ():
-    z = {"C": 0.5, "Cliff": -0.1, "Gap": 0.2, "CH": 0.3, "RL": -0.4, "Shield": 0.1, "QDT_inv": 0.0}
-    beta = (0.1, 0.2, -0.3, 0.4, 0.5, -0.6, 0.7, -0.8)
-    feature_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv"]
+    z = {
+        "C": 0.5,
+        "Cliff": -0.1,
+        "Gap": 0.2,
+        "CH": 0.3,
+        "RL": -0.4,
+        "Shield": 0.1,
+        "QDT_inv": 0.0,
+        "Pers": -0.2,
+    }
+    beta = (0.1, 0.2, -0.3, 0.4, 0.5, -0.6, 0.7, -0.8, 0.9)
+    feature_keys = ["C", "Cliff", "Gap", "CH", "RL", "Shield", "QDT_inv", "Pers"]
     expected = occ_hazard_probability(z, beta)
     result = hazard_probability(
         z,

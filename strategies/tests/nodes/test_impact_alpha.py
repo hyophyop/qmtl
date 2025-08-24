@@ -2,30 +2,12 @@ import math
 import pytest
 
 from strategies.nodes.indicators.non_linear_alpha import non_linear_alpha_node
-
-# ``impact_node`` was removed from recent qmtl versions; skip this suite if the
-# module is absent to keep subtree updates compatible.
-impact_mod = pytest.importorskip("qmtl.indicators.impact")
-from qmtl.indicators.impact import impact_node
 from qmtl.indicators import volatility_node
 from qmtl.transforms import order_book_imbalance_node, rate_of_change
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import SourceNode
 
 def test_non_linear_alpha_node_computes_expected_value():
-    volume = SourceNode(interval="1s", period=1, config={"id": "volume"})
-    avg_volume = SourceNode(interval="1s", period=1, config={"id": "avg_volume"})
-    depth = SourceNode(interval="1s", period=1, config={"id": "depth"})
-    imp_node = impact_node(volume, avg_volume, depth, beta=1.0)
-    impact_view = CacheView(
-        {
-            volume.node_id: {1: [(0, 100.0)]},
-            avg_volume.node_id: {1: [(0, 400.0)]},
-            depth.node_id: {1: [(0, 10.0)]},
-        }
-    )
-    impact_val = imp_node.compute_fn(impact_view)
-
     price_src = SourceNode(interval="1s", period=5, config={"id": "price"})
     vol_node = volatility_node(price_src, window=2)
     price_data = {price_src.node_id: {1: [(0, 1.0), (1, 2.0), (2, 1.0)]}}
@@ -42,13 +24,19 @@ def test_non_linear_alpha_node_computes_expected_value():
     view = CacheView({obi_node.node_id: {1: [(0, val0), (1, val1)]}})
     obi_deriv = roc_node.compute_fn(view)
 
+    Q, V, depth, beta = 100.0, 400.0, 10.0, 1.0
     result = non_linear_alpha_node(
         {
-            "impact": impact_val,
+            "Q": Q,
+            "V": V,
+            "depth": depth,
+            "beta": beta,
             "volatility": volatility_val,
             "obi_derivative": obi_deriv,
             "gamma": 1.0,
         }
     )
-    expected = math.tanh(1.0 * impact_val * volatility_val) * obi_deriv
+    impact_val = math.sqrt(Q / V) / depth**beta
+    expected = math.tanh(impact_val * volatility_val) * obi_deriv
+    assert result["impact"] == impact_val
     assert result["alpha"] == pytest.approx(expected)

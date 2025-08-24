@@ -15,30 +15,43 @@ from strategies.nodes.indicators.order_book_inertia import order_book_inertia_no
 def test_order_book_inertia_basic():
     data = {
         "timestamp": 1,
-        "stale_quotes": 5.0,
-        "total_quotes": 20.0,
-        "requote_speed": 2.0,
-        "qi": 0.1,
+        "hazard_z": [0.0, 0.0],
+        "spread": 1.0,
+        "depth": 5.0,
+        "ofi": 1.0,
+        "bid_volume": 70.0,
+        "ask_volume": 30.0,
     }
-    result = order_book_inertia_node(data)
-    expected_obii = (5.0 / 20.0) * (1.0 / (2.0 + 1e-9))
-    expected_alpha = expected_obii * 0.1
+    baseline = [0.6, 0.6]
+    weights = [0.5, 0.5]
+    result = order_book_inertia_node(data, baseline_hazard=baseline, weights=weights)
+    expected_obii = 0.03125
+    expected_qi = 0.4
+    expected_alpha = expected_obii * expected_qi
     assert result["obii"] == pytest.approx(expected_obii)
+    assert result["qi"] == pytest.approx(expected_qi)
     assert result["alpha"] == pytest.approx(expected_alpha)
 
 
 def test_order_book_inertia_uses_cache():
     cache = FourDimCache()
+    baseline = [0.6, 0.6]
+    weights = [0.5, 0.5]
     first = order_book_inertia_node(
         {
             "timestamp": 1,
-            "stale_quotes": 10.0,
-            "total_quotes": 40.0,
-            "requote_speed": 4.0,
-            "qi": 0.2,
+            "hazard_z": [0.0, 0.0],
+            "spread": 1.0,
+            "depth": 5.0,
+            "ofi": 1.0,
+            "bid_volume": 70.0,
+            "ask_volume": 30.0,
         },
-        cache,
+        baseline_hazard=baseline,
+        weights=weights,
+        cache=cache,
     )
-    second = order_book_inertia_node({"timestamp": 1}, cache)
+    second = order_book_inertia_node({"timestamp": 1}, baseline_hazard=baseline, weights=weights, cache=cache)
     assert second["obii"] == pytest.approx(first["obii"])
+    assert second["qi"] == pytest.approx(first["qi"])
     assert second["alpha"] == pytest.approx(first["alpha"])
