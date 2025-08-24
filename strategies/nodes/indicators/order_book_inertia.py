@@ -62,15 +62,21 @@ def order_book_inertia_node(
                 cache.set(ts, "both", 0, name, val)
         return val
 
-    stale = float(_metric("stale_quotes") or 0.0)
-    total = float(_metric("total_quotes") or 1.0)
+    stale_val = _metric("stale_quotes")
+    total_val = _metric("total_quotes")
     speed = float(_metric("requote_speed") or 0.0)
     qi = float(_metric("qi") or 0.0)
     eps = float(data.get("epsilon", 1e-9))
 
-    obii = order_book_inertia(stale, total, speed, eps)
-    alpha = obii * qi
+    stale = float(stale_val) if stale_val is not None else None
+    total = float(total_val) if total_val is not None else None
 
+    if stale is None or total is None:
+        obii = None
+        alpha = None
+    else:
+        obii = order_book_inertia(stale, total, speed, eps)
+        alpha = obii * qi
     if ts is not None:
         cache.set(ts, "both", 0, "obii", obii)
         cache.set(ts, "both", 0, "alpha", alpha)
