@@ -1,9 +1,14 @@
 """Gap amplification helper transforms."""
 
+# Source: docs/alphadocs/ideas/gpt5pro/gap-amplification-transition-theory.md
+# Priority: gpt5pro
+
 from __future__ import annotations
 
 from typing import Iterable
 import math
+
+from .hazard_utils import hazard_probability as _hazard_probability
 
 
 def gap_over_depth_sum(
@@ -29,8 +34,9 @@ def hazard_probability(
     eta2: float,
 ) -> float:
     """Logistic hazard combining order flow and spread state."""
-    x = eta0 + eta1 * ofi + eta2 * spread_z
-    return 1.0 / (1.0 + math.exp(-x))
+    z = {"OFI": ofi, "SpreadZ": spread_z}
+    beta = (eta0, eta1, eta2)
+    return _hazard_probability(z, beta, ["OFI", "SpreadZ"])
 
 
 def gati_side(gas: float, hazard: float, jump_expect: float = 1.0) -> float:
