@@ -2,6 +2,8 @@
 
 이 저장소는 [QMTL](https://github.com/hyophyop/qmtl) 전략 실험을 위한 템플릿 프로젝트입니다.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hyophyop/qmtl)
+
 ## 환경 설정
 
 프로젝트 의존성은 QMTL 서브트리에서 제공되므로 로컬 패키지는 최소화되어 있습니다. 다음 명령으로 개발 환경을 준비하세요.
