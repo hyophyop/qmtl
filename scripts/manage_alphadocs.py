@@ -117,7 +117,7 @@ class AlphaDocsManager:
         for doc in high_priority:
             report_lines.append(f"- {{doc['doc']}} ({{doc.get('status', 'unknown')}})")
 
-        return "\\n".join(report_lines)
+        return "\n".join(report_lines)
 
 
 def main():
