@@ -138,6 +138,15 @@
   priority: gpt5pro
   tags: []
   usage_status: unused
+- doc: docs/alphadocs/ideas/gpt5pro/Latent Liquidity Cascade Theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+  - strategies/nodes/indicators/latent_liquidity_cascade.py
+  priority: gpt5pro
+  tags: []
+  usage_status: unused
+  used_in_strategies: []
 - doc: docs/alphadocs/ideas/Acceptable Price Band Theory.md
   status: idea
   modules: []
