@@ -1,6 +1,6 @@
 """Dynamic Price Elasticity Threshold indicator."""
 
-# Source: docs/alphadocs/ideas/Dynamic Price Elasticity Threshold Theory.md
+# Source: docs/alphadocs/ideas/gpt5pro/Dynamic Price Elasticity Threshold Theory.md
 
 TAGS = {
     "scope": "indicator",

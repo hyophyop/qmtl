@@ -123,9 +123,10 @@
   tags: []
   usage_status: unused
 - doc: docs/alphadocs/ideas/gpt5pro/Dynamic Price Elasticity Threshold Theory.md
-  status: idea
+  status: implemented
   source_model: gpt5pro
-  modules: []
+  modules:
+  - strategies/nodes/indicators/dynamic_price_elasticity_threshold.py
   priority: gpt5pro
   tags: []
 - doc: docs/alphadocs/ideas/gpt5pro/Order Book Inertia Theory.md
@@ -260,7 +261,7 @@
   modules: []
   priority: normal
   tags: []
-- doc: "docs/alphadocs/ideas/Market Response Damping\u2013Resonance Theory.md"
+- doc: docs/alphadocs/ideas/Market Response Damping–Resonance Theory.md
   status: idea
   modules: []
   priority: normal
