@@ -9,3 +9,18 @@
 레지스트리의 `modules` 필드에는 해당 transform과 이를 사용하는 전략 노드 경로를 모두 포함하세요.
 레지스트리 항목에는 우선순위를 나타내는 `priority`(예: `normal` 또는 `gpt5pro`)와
 주제를 분류하기 위한 `tags` 목록을 포함해야 합니다.
+
+## 구현 후 워크플로
+
+구현이 완료된 알파는 아래 명령으로 레지스트리와 이력 로그를 갱신하세요:
+
+```bash
+python scripts/manage_alphadocs.py register-module --doc <DOC_PATH> --module <MODULE_PATH>
+uv run scripts/check_doc_sync.py
+```
+
+문서를 이동하거나 이름 변경한 경우:
+
+```bash
+python scripts/manage_alphadocs.py record-history --old <OLD_PATH> --new <NEW_PATH> --reason "이유"
+```

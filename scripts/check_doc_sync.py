@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import re
+import os
 import sys
 
 try:
@@ -32,8 +33,12 @@ def check_doc_sync(
         errors.append(f"Registry file missing: {registry}")
         registry_data = []
 
-    registry_docs = {entry["doc"]: entry.get("modules", []) for entry in registry_data}
-    registry_status = {entry["doc"]: entry.get("status") for entry in registry_data}
+    # normalize registry doc paths to posix relative paths
+    def _norm(p: str) -> str:
+        return Path(p).as_posix()
+
+    registry_docs = {_norm(entry["doc"]): entry.get("modules", []) for entry in registry_data}
+    registry_status = {_norm(entry["doc"]): entry.get("status") for entry in registry_data}
 
     actual_docs = sorted(
         rel
@@ -65,25 +70,28 @@ def check_doc_sync(
             if not mod_file.exists():
                 errors.append(f"Module listed but missing: {module}")
                 continue
-            head = mod_file.read_text().splitlines()[:5]
+            head = mod_file.read_text().splitlines()[:8]
             match = None
             for line in head:
                 m = source_pattern.match(line.strip())
                 if m:
-                    match = m.group("path")
+                    # normalize the matched path
+                    match = _norm(os.path.normpath(m.group("path")))
                     break
             if match != doc_path:
-                errors.append(f"{module} missing Source comment for {doc_path}")
+                suggestion = f"Suggestion: update module {module} Source to '{doc_path}' or update registry to match '{match or '<none>'}'"
+                errors.append(f"{module} missing Source comment for {doc_path} -- {suggestion}")
 
     for mod_file in root.glob(module_glob):
-        text = mod_file.read_text().splitlines()[:5]
+        text = mod_file.read_text().splitlines()[:8]
         rel_mod = mod_file.relative_to(root).as_posix()
         for line in text:
             m = source_pattern.match(line.strip())
             if m:
-                doc = m.group("path")
+                doc = _norm(os.path.normpath(m.group("path")))
                 if doc not in registry_docs or rel_mod not in registry_docs.get(doc, []):
-                    errors.append(f"{rel_mod} annotation not registered")
+                    suggestion = f"Suggestion: add '{rel_mod}' to registry entry for '{doc}' using manage_alphadocs.register_module"
+                    errors.append(f"{rel_mod} annotation not registered -- {suggestion}")
                 break
 
     return errors

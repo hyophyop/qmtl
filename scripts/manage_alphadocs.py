@@ -14,8 +14,10 @@ class AlphaDocsManager:
     """AlphaDocs 문서 관리 클래스"""
 
     def __init__(self, docs_dir=None):
-        self.docs_dir = docs_dir or Path(__file__).parent / "alphadocs"
-        self.registry_file = self.docs_dir.parent / "alphadocs_registry.yml"
+        # default to repository docs/alphadocs
+        repo_root = Path(__file__).resolve().parents[1]
+        self.docs_dir = Path(docs_dir) if docs_dir is not None else repo_root / "docs" / "alphadocs"
+        self.registry_file = repo_root / "docs" / "alphadocs_registry.yml"
 
     def load_registry(self):
         """레지스트리 파일을 로드합니다."""
@@ -73,7 +75,7 @@ class AlphaDocsManager:
 
         # 레지스트리에 추가
         registry = self.load_registry()
-        new_entry = {{
+        new_entry = {
             "doc": f"docs/alphadocs/{filename}",
             "status": "draft",
             "modules": [],
@@ -81,12 +83,55 @@ class AlphaDocsManager:
             "tags": tags,
             "created": datetime.now().isoformat(),
             "version": "v1.0.0"
-        }}
+        }
         registry.append(new_entry)
         self.save_registry(registry)
 
-        print(f"✅ 새로운 AlphaDocs 문서가 생성되었습니다: {{doc_path}}")
+        print(f"✅ 새로운 AlphaDocs 문서가 생성되었습니다: {doc_path}")
         return doc_path
+
+    def register_module(self, doc: str, module: str) -> bool:
+        """레지스트리에 모듈을 추가하고 문서 상태를 implemented로 변경합니다.
+
+        Returns True if registry was modified.
+        """
+        registry = self.load_registry()
+        if not registry:
+            print("Registry not available")
+            return False
+
+        # normalize doc path to registry style
+        doc_path = doc
+        found = None
+        for entry in registry:
+            if entry.get("doc") == doc_path:
+                found = entry
+                break
+        if not found:
+            print(f"Doc not found in registry: {doc_path}")
+            return False
+
+        modules = found.get("modules") or []
+        if module not in modules:
+            modules.append(module)
+            found["modules"] = modules
+        found["status"] = "implemented"
+        self.save_registry(registry)
+
+        # record history
+        hist = self.docs_dir.parent / "alphadocs_history.log"
+        entry = f"{datetime.now().strftime('%Y-%m-%d')} | N/A | {doc_path} | implemented via {module}\n"
+        hist.write_text(hist.read_text(encoding='utf-8') + entry, encoding='utf-8')
+        print(f"Registered module {module} for {doc_path}")
+        return True
+
+    def record_history(self, old: str, new: str, reason: str) -> None:
+        """docs/alphadocs_history.log에 경로 변경/이력 항목을 쓴다."""
+        hist = self.docs_dir.parent / "alphadocs_history.log"
+        line = f"{datetime.now().strftime('%Y-%m-%d')} | {old or '-'} | {new or '-'} | {reason}\n"
+        # append
+        hist.write_text(hist.read_text(encoding='utf-8') + line, encoding='utf-8')
+        print(f"Recorded history: {line.strip()}")
 
     def generate_review_report(self):
         """검토 리포트를 생성합니다."""
@@ -137,6 +182,17 @@ def main():
     # 검토 리포트 생성
     subparsers.add_parser("review", help="검토 리포트 생성")
 
+    # register module
+    reg_parser = subparsers.add_parser("register-module", help="레지스트리에 모듈을 등록하고 상태를 implemented로 변경")
+    reg_parser.add_argument("--doc", required=True, help="레지스트리의 doc 경로(예: docs/alphadocs/ideas/xxx.md)")
+    reg_parser.add_argument("--module", required=True, help="모듈 경로(예: strategies/nodes/indicators/xxx.py)")
+
+    # record history
+    hist_parser = subparsers.add_parser("record-history", help="이력 로그에 항목 추가")
+    hist_parser.add_argument("--old", default="-", help="이전 경로")
+    hist_parser.add_argument("--new", default="-", help="새 경로")
+    hist_parser.add_argument("--reason", default="", help="변경 사유")
+
     args = parser.parse_args()
 
     manager = AlphaDocsManager()
@@ -146,6 +202,12 @@ def main():
     elif args.command == "review":
         report = manager.generate_review_report()
         print(report)
+    elif args.command == "register-module":
+        success = manager.register_module(args.doc, args.module)
+        if not success:
+            raise SystemExit(1)
+    elif args.command == "record-history":
+        manager.record_history(args.old, args.new, args.reason)
     else:
         parser.print_help()
 

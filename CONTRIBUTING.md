@@ -99,6 +99,27 @@ CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
    섹션을 포함합니다.
 4. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련
    테스트를 추가합니다.
+   
+   개발자 워크플로 (구현 후 필수)
+   --------------------------------
+   - 구현이 완료된 모듈을 레지스트리에 등록하고 상태와 이력 로그를 자동으로 갱신하려면 아래 명령을 사용하세요:
+
+   ```bash
+   # 예시: 모듈 등록 및 상태 변경, 이력 로그 추가
+   python scripts/manage_alphadocs.py register-module --doc <DOC_PATH> --module <MODULE_PATH>
+
+   # 문서 동기화 검사 실행
+   uv run scripts/check_doc_sync.py
+   ```
+
+   - 문서를 이동/이름 변경한 경우:
+
+   ```bash
+   python scripts/manage_alphadocs.py record-history --old <OLD_PATH> --new <NEW_PATH> --reason "이유"
+   ```
+
+   위 단계를 PR에 포함시키면 리뷰어가 레지스트리·이력 동기화가 완료되었음을 쉽게 확인할 수 있습니다.
+
 5. 문서를 이동하거나 이름을 변경할 경우
    `docs/alphadocs_history.log`에 날짜, 이전 경로, 새 경로, 사유를 기록하고,
    주석과 레지스트리 경로도 함께 수정합니다.
