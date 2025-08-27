@@ -162,6 +162,48 @@ def test_gateway_queue_mapping(monkeypatch):
     assert not first_node.execute
 
 
+def test_dry_run_exits_when_all_nodes_mapped(monkeypatch, caplog):
+    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type, circuit_breaker):
+        return {n["node_id"]: "topic" for n in dag["nodes"]}
+
+    def fake_run_pipeline(strategy):
+        raise RuntimeError("should not run")
+
+    monkeypatch.setattr(Runner, "_post_gateway_async", staticmethod(fake_post_gateway_async))
+    monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
+
+    with caplog.at_level(logging.INFO):
+        strategy = Runner.dryrun(SampleStrategy, gateway_url="http://gw")
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("No executable nodes" in m for m in messages)
+    assert all(not n.execute for n in strategy.nodes)
+
+
+def test_live_exits_when_all_nodes_mapped(monkeypatch, caplog):
+    from qmtl.sdk.tagquery_manager import TagQueryManager
+
+    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type, circuit_breaker):
+        return {n["node_id"]: "topic" for n in dag["nodes"]}
+
+    def fake_run_pipeline(strategy):
+        raise RuntimeError("should not run")
+
+    async def fake_start(self):
+        raise RuntimeError("should not start")
+
+    monkeypatch.setattr(Runner, "_post_gateway_async", staticmethod(fake_post_gateway_async))
+    monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(TagQueryManager, "start", fake_start)
+
+    with caplog.at_level(logging.INFO):
+        strategy = Runner.live(SampleStrategy, gateway_url="http://gw")
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("No executable nodes" in m for m in messages)
+    assert all(not n.execute for n in strategy.nodes)
+
+
 def test_gateway_error(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(409)
