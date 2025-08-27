@@ -1,8 +1,17 @@
 name: CI
 
-# Disabled automatic triggers. This workflow can only be run manually.
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      run_bootstrap:
+        description: 'Run bootstrap smoke test'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   lint-test-doc:
@@ -18,7 +27,7 @@ jobs:
           uv venv
           uv pip install -e qmtl[dev]
           uv pip install pyyaml
-  - name: "Optional: Run bootstrap smoke-test"
+      - name: "Optional: Run bootstrap smoke-test"
         if: ${{ github.event.inputs.run_bootstrap == 'true' }}
         run: |
           chmod +x scripts/bootstrap.sh
@@ -39,5 +48,7 @@ jobs:
           fi
       - name: QMTL doc sync
         run: uv run qmtl/scripts/check_doc_sync.py
+      - name: No strategies imports in qmtl
+        run: uv run python scripts/check_no_strategies_import.py
       - name: No strategies imports in qmtl
         run: uv run python scripts/check_no_strategies_import.py

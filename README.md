@@ -1,49 +1,94 @@
-# qmtl-strategies
+# qmtl-strategi## QMTL Subtree Synchronization
 
-이 저장소는 [QMTL](https://github.com/hyophyop/qmtl) 전략 실험을 위한 템플릿 프로젝트입니다.
+The project includes a `qmtl` subtree. Always fetch the latest changes before starting work.
+
+QMTL is a subtree pulled from a separate repository. Modifications should be minimized and synchronized only after being reflected in the upstream repository. Strategy-level optimizations and experiments should be performed in the root directory, not inside `qmtl/`.
+
+### Automated Sync with Backup Management
+
+Use the provided Python script for automated synchronization with backup management:
+
+```bash
+# Basic sync with automatic backup
+python scripts/sync_qmtl.py
+
+# Clean up existing backups before sync
+python scripts/sync_qmtl.py --cleanup-existing
+
+# Show help
+python scripts/sync_qmtl.py --help
+```
+
+### Manual Sync (Alternative)
+
+```bash
+git fetch qmtl-subtree main
+git subtree pull --prefix=qmtl qmtl-subtree main --squash
+```
+
+### Backup Management
+
+The sync script automatically manages backups of the `qmtl/` directory:
+
+```bash
+# View backup statistics
+python scripts/cleanup_backups.py stats
+
+# Preview what would be cleaned up (dry run)
+python scripts/cleanup_backups.py dry-run
+
+# Clean up old backups (interactive)
+python scripts/cleanup_backups.py cleanup
+```
+
+**Environment Variables:**
+- `QMTL_BACKUP_KEEP_COUNT`: Number of recent backups to keep (default: 5)
+- `QMTL_SUBTREE_REMOTE`: Remote name for subtree operations (default: qmtl-subtree)
+
+If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to add the `qmtl-subtree` remote.pository is a template project for [QMTL](https://github.com/hyophyop/qmtl) strategy experiments.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hyophyop/qmtl)
 
-## 환경 설정
+## Environment Setup
 
-프로젝트 의존성은 QMTL 서브트리에서 제공되므로 로컬 패키지는 최소화되어 있습니다. 다음 명령으로 개발 환경을 준비하세요.
+Project dependencies are provided by the QMTL subtree, so local packages are minimized. Prepare your development environment with the following commands:
 
 ```bash
 uv venv
 uv pip install -e qmtl[dev]
 ```
 
-## QMTL 서브트리 동기화
+## QMTL Subtree Synchronization
 
-프로젝트는 `qmtl` 서브트리를 포함합니다. 작업을 시작하기 전에 항상 최신 변경 사항을 가져오세요.
+The project includes a `qmtl` subtree. Always fetch the latest changes before starting work.
 
-QMTL은 별도 저장소에서 가져온 서브트리로, 수정은 최소화하고 upstream 저장소에 반영된 뒤에만 동기화해야 합니다. 전략 레벨 최적화와 실험은 `qmtl/` 내부가 아닌 루트 디렉토리에서 수행하세요.
+QMTL is a subtree pulled from a separate repository. Modifications should be minimized and synchronized only after being reflected in the upstream repository. Strategy-level optimizations and experiments should be performed in the root directory, not inside `qmtl/`.
 
 ```bash
 git fetch qmtl-subtree main
 git subtree pull --prefix=qmtl qmtl-subtree main --squash
 ```
-필요 시 [CONTRIBUTING.md](CONTRIBUTING.md)의 설정 절차를 참고해 `qmtl-subtree` 원격을 추가하세요.
+If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to add the `qmtl-subtree` remote.
 
-## `qmtl init` 실행 방법
+## How to Run `qmtl init`
 
-새 전략 프로젝트를 생성할 때는 `qmtl init` 명령을 사용합니다.
+Use the `qmtl init` command to create new strategy projects.
 
 ```bash
-# 사용 가능한 템플릿 목록 확인
+# List available templates
 qmtl init --list-templates
 
-# 브랜칭 템플릿과 샘플 데이터를 포함해 프로젝트 생성
+# Create project with branching template and sample data
 qmtl init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
-생성된 디렉터리에는 `strategy.py`, `qmtl.yml`, `.gitignore`, 그리고 노드와 DAG를 정의하는 `strategies/nodes/`와 `strategies/dags/` 패키지가 포함됩니다. 기존 `generators/`, `indicators/`, `transforms/` 패키지는 `strategies/nodes/` 하위로 재배치되었습니다.
+The generated directory includes `strategy.py`, `qmtl.yml`, `.gitignore`, and packages defining nodes and DAGs: `strategies/nodes/` and `strategies/dags/`. The previous `generators/`, `indicators/`, `transforms/` packages have been relocated under `strategies/nodes/`.
 
-## 전략 템플릿 작성 절차
+## Strategy Template Creation Procedure
 
-1. `strategies/example_strategy`를 참고해 새 전략 패키지를 작성합니다.
-2. 패키지의 `__init__.py`에 `Strategy` 서브클래스를 구현합니다.
+1. Create a new strategy package referencing `strategies/example_strategy`.
+2. Implement a `Strategy` subclass in the package's `__init__.py`.
 
 ```python
 from qmtl.sdk import Strategy
@@ -53,7 +98,7 @@ class MyStrategy(Strategy):
         pass
 ```
 
-3. `strategies/strategy.py`를 수정하여 원하는 전략을 가져오고 실행합니다.
+3. Modify `strategies/strategy.py` to import and run your desired strategy.
 
 ```python
 from strategies.my_strategy import MyStrategy
@@ -62,24 +107,24 @@ if __name__ == "__main__":
     MyStrategy().run()
 ```
 
-4. 환경 설정이 필요하면 `qmtl.yml`을 수정하고, 커스텀 노드를 `strategies/nodes/`에 추가한 뒤 DAG를 `strategies/dags/`에서 구성합니다. 기존 `generators/`, `indicators/`, `transforms/` 설명은 모두 `strategies/nodes/` 하위로 이동했습니다.
-5. 전략이 정상 동작하는지 확인합니다.
+4. If needed, modify `qmtl.yml` for environment configuration, add custom nodes in `strategies/nodes/`, and configure DAGs in `strategies/dags/`. Documentation for previous `generators/`, `indicators/`, `transforms/` has been moved under `strategies/nodes/`.
+5. Verify that the strategy works correctly.
 
 ```bash
 python strategies/strategy.py
 ```
 
-또는 QMTL CLI 서브커맨드를 통해 실행할 수도 있습니다:
+Alternatively, you can run it through the QMTL CLI subcommand:
 
 ```bash
 qmtl strategies
 ```
 
-## 노드와 DAG 구성
+## Node and DAG Configuration
 
-노드 프로세서는 `strategies/nodes/`에, 전략 DAG는 `strategies/dags/`에 구성하며 자세한 방식은 [strategies/README.md](strategies/README.md)를 참고하세요.
+Node processors are configured in `strategies/nodes/`, and strategy DAGs in `strategies/dags/`. Refer to [strategies/README.md](strategies/README.md) for detailed instructions.
 
-## 추가 학습 자료
+## Additional Learning Resources
 
-프로젝트 아키텍처 전반에 대한 설명은 [qmtl/architecture.md](qmtl/architecture.md) 문서를 참고하세요.
+For an overview of the project architecture, refer to the [qmtl/architecture.md](qmtl/architecture.md) document.
 

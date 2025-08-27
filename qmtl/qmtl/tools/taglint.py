@@ -93,7 +93,7 @@ def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
     errors = []
     if node is None:
         if fix:
-            scaffold = {key: "TODO" for key in REQUIRED_KEYS + RECOMMENDED_KEYS}
+            scaffold = {key: "Please provide a description" for key in REQUIRED_KEYS + RECOMMENDED_KEYS}
             write_tags(path, tree, None, scaffold)
             return True, ""
         return False, "missing TAGS dict"
@@ -126,7 +126,7 @@ def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
     for req in REQUIRED_KEYS:
         if req not in fixed_tags:
             if fix:
-                fixed_tags[req] = "TODO"
+                fixed_tags[req] = "Please provide a description"
             else:
                 errors.append(f"missing required key: {req}")
     if fix and errors:
