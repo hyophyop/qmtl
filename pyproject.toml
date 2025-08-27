@@ -16,7 +16,55 @@ default-groups = ["dev"]
 qmtl = { path = "qmtl", editable = true }
 
 [dependency-groups]
-dev = ["qmtl[dev]"]
+dev = ["qmtl[dev]", "pytest-cov", "python-dotenv"]
+test = ["pytest", "pytest-cov", "pytest-xdist", "pytest-mock"]
+lint = ["black", "isort", "flake8", "mypy", "pre-commit"]
+docs = ["mkdocs", "mkdocs-material", "mkdocstrings"]
+security = ["safety", "bandit", "pip-audit"]
 
-[tool.setuptools]
-packages = []
+[tool.pytest.ini_options]
+testpaths = ["tests", "strategies/tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml",
+    "--cov-fail-under=80"
+]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning"
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/__pycache__/*",
+    "*/build/*",
+    "*/dist/*",
+    "*.egg-info/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

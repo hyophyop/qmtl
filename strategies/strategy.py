@@ -1,12 +1,21 @@
 """Run configured strategies and expose Prometheus metrics."""
 
 from strategies.config import load_config
-from strategies.binance_history_strategy import BinanceHistoryStrategy
-from strategies.dags.alpha_signal_dag import AlphaSignalStrategy
-from qmtl.sdk import Runner, metrics
+from strategies.registry import registry
+try:
+    from qmtl.sdk import Runner, metrics  # type: ignore
+except ImportError:
+    # Handle import error gracefully
+    Runner = None  # type: ignore
+    metrics = None  # type: ignore
 
 
 def main() -> None:
+    """Main function to run configured strategies."""
+    if Runner is None or metrics is None:
+        print("Error: qmtl.sdk modules not available")
+        return
+
     cfg = load_config()
     backtest_cfg = cfg.get("backtest", {})
     start_time = backtest_cfg.get("start_time")
@@ -18,23 +27,22 @@ def main() -> None:
     # Start the metrics server so Prometheus can scrape backfill statistics
     metrics.start_metrics_server(port=8000)
 
-    if dags_cfg.get("binance_history"):
-        Runner.backtest(
-            BinanceHistoryStrategy,
-            start_time=start_time,
-            end_time=end_time,
-            gateway_url=gateway_url,
-        )
+    # Dynamically load and run strategies based on configuration
+    for strategy_name, enabled in dags_cfg.items():
+        if enabled and registry.has_strategy(strategy_name):
+            strategy_class = registry.get_strategy(strategy_name)
+            print(f"Running strategy: {strategy_name}")
 
-    if dags_cfg.get("alpha_signal"):
-        Runner.backtest(
-            AlphaSignalStrategy,
-            start_time=start_time,
-            end_time=end_time,
-            gateway_url=gateway_url,
-        )
+            Runner.backtest(  # type: ignore
+                strategy_class,
+                start_time=start_time,
+                end_time=end_time,
+                gateway_url=gateway_url,
+            )
+        elif enabled:
+            print(f"Warning: Strategy '{strategy_name}' not found in registry")
 
-    # Collect key metrics such as ``backfill_jobs_in_progress``
+    # Collect key metrics such as backfill_jobs_in_progress
     print(metrics.collect_metrics())
 
 
