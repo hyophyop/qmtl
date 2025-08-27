@@ -179,5 +179,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())</content>
-<parameter name="filePath">/Users/munseungjin/workspace/research/qmtl-strategies/scripts/cleanup_backups.py
+    sys.exit(main())
