@@ -45,7 +45,15 @@ GitHub Actions가 push/pull_request 이벤트에서 자동으로 실행됩니다
   uv run scripts/check_doc_sync.py
   uv run qmtl/scripts/check_doc_sync.py
   ```
-  CI도 위 검사들을 실행하며 실패 시 워크플로우가 실패합니다.
+- 전략 import 보호 체크:
+  ```bash
+  uv run scripts/check_no_strategies_import.py
+  ```
+- (`AGENTS.md` 파일을 수정했다면) 에이전트 문서 재생성:
+  ```bash
+  uv run python scripts/build_agent_instructions.py
+  ```
+  CI도 위 검사들을 실행하며, `AGENTS.md` 변경 시에는 위 문서 재생성도 수행합니다. 실패 시 워크플로우가 실패합니다.
 
 ## QMTL 서브트리 최신화 및 변경 원칙 (필수)
 
