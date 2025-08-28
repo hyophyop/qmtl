@@ -47,6 +47,7 @@ from .execution_velocity_hazard import (
     execution_velocity_hazard,
 )
 from .order_book_inertia import obii_from_survival, order_book_inertia
+from .credit_liquidity_amplification import credit_liquidity_amplification
 
 __all__ = [
     "rate_of_change",
@@ -99,4 +100,5 @@ __all__ = [
     "execution_velocity_hazard",
     "obii_from_survival",
     "order_book_inertia",
+    "credit_liquidity_amplification",
 ]
