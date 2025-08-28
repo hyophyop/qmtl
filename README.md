@@ -1,4 +1,6 @@
-# qmtl-strategi## QMTL Subtree Synchronization
+# qmtl-strategies
+
+## QMTL Subtree Synchronization
 
 The project includes a `qmtl` subtree. Always fetch the latest changes before starting work.
 
