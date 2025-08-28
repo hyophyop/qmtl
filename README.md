@@ -1,54 +1,5 @@
 # qmtl-strategies
 
-## QMTL Subtree Synchronization
-
-The project includes a `qmtl` subtree. Always fetch the latest changes before starting work.
-
-QMTL is a subtree pulled from a separate repository. Modifications should be minimized and synchronized only after being reflected in the upstream repository. Strategy-level optimizations and experiments should be performed in the root directory, not inside `qmtl/`.
-
-### Automated Sync with Backup Management
-
-Use the provided Python script for automated synchronization with backup management:
-
-```bash
-# Basic sync with automatic backup
-python scripts/sync_qmtl.py
-
-# Clean up existing backups before sync
-python scripts/sync_qmtl.py --cleanup-existing
-
-# Show help
-python scripts/sync_qmtl.py --help
-```
-
-### Manual Sync (Alternative)
-
-```bash
-git fetch qmtl-subtree main
-git subtree pull --prefix=qmtl qmtl-subtree main --squash
-```
-
-### Backup Management
-
-The sync script automatically manages backups of the `qmtl/` directory:
-
-```bash
-# View backup statistics
-python scripts/cleanup_backups.py stats
-
-# Preview what would be cleaned up (dry run)
-python scripts/cleanup_backups.py dry-run
-
-# Clean up old backups (interactive)
-python scripts/cleanup_backups.py cleanup
-```
-
-**Environment Variables:**
-- `QMTL_BACKUP_KEEP_COUNT`: Number of recent backups to keep (default: 5)
-- `QMTL_SUBTREE_REMOTE`: Remote name for subtree operations (default: qmtl-subtree)
-
-If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to add the `qmtl-subtree` remote. This repository is a template project for [QMTL](https://github.com/hyophyop/qmtl) strategy experiments.
-
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hyophyop/qmtl)
 
 ## Environment Setup
@@ -129,4 +80,3 @@ Node processors are configured in `strategies/nodes/`, and strategy DAGs in `str
 ## Additional Learning Resources
 
 For an overview of the project architecture, refer to the [qmtl/architecture.md](qmtl/architecture.md) document.
-
