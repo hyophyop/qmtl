@@ -8,7 +8,7 @@ Project dependencies are provided by the QMTL subtree, so local packages are min
 
 ```bash
 uv venv
-uv pip install -e qmtl[dev]
+uv pip install -e ./qmtl[dev]
 ```
 
 ## QMTL Subtree Synchronization
@@ -28,7 +28,7 @@ If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to
 Prerequisite: install the CLI from the subtree in editable mode:
 
 ```bash
-uv pip install -e qmtl[dev]
+uv pip install -e ./qmtl[dev]
 ```
 
 Use the `qmtl init` command to create new strategy projects.
@@ -86,4 +86,3 @@ Node processors are configured in `strategies/nodes/`, and strategy DAGs in `str
 ## Additional Learning Resources
 
 For an overview of the project architecture, refer to the [qmtl/architecture.md]`qmtl/docs/architecture/architecture.md` document.
-
