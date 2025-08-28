@@ -47,7 +47,7 @@ python scripts/cleanup_backups.py cleanup
 - `QMTL_BACKUP_KEEP_COUNT`: Number of recent backups to keep (default: 5)
 - `QMTL_SUBTREE_REMOTE`: Remote name for subtree operations (default: qmtl-subtree)
 
-If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to add the `qmtl-subtree` remote.pository is a template project for [QMTL](https://github.com/hyophyop/qmtl) strategy experiments.
+If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to add the `qmtl-subtree` remote. This repository is a template project for [QMTL](https://github.com/hyophyop/qmtl) strategy experiments.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hyophyop/qmtl)
 
