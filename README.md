@@ -25,6 +25,12 @@ If needed, refer to the setup procedure in [CONTRIBUTING.md](CONTRIBUTING.md) to
 
 ## How to Run `qmtl init`
 
+Prerequisite: install the CLI from the subtree in editable mode:
+
+```bash
+uv pip install -e qmtl[dev]
+```
+
 Use the `qmtl init` command to create new strategy projects.
 
 ```bash
@@ -79,4 +85,4 @@ Node processors are configured in `strategies/nodes/`, and strategy DAGs in `str
 
 ## Additional Learning Resources
 
-For an overview of the project architecture, refer to the [qmtl/architecture.md](qmtl/architecture.md) document.
+For an overview of the project architecture, refer to the upstream QMTL documentation or the subtree README: [qmtl/README.md](qmtl/README.md) and https://github.com/hyophyop/qmtl.

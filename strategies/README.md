@@ -18,27 +18,27 @@ and runs any enabled DAGs.
 Node processors are pure functions located under the `nodes/` package. Name each function with the `_node` suffix so it can be easily identified and reused.
 
 ```python
-# nodes/generators/price.py
+# nodes/price.py
 
-def price_generator_node():
+def price_node():
     """Generate the latest price as a dictionary."""
     return {"price": 100}
 ```
 
 ## Composing a DAG
 
-Use `qmtl.dag_manager` to wire processors into an acyclic graph. Inputs are mapped by explicit keys, allowing outputs from one node to feed downstream nodes.
+Use `qmtl.dag_manager` to wire processors into an acyclic graph (DAG). Inputs are mapped by explicit keys, allowing outputs from one node to feed downstream nodes.
 
 ```python
 from qmtl.dag_manager import DAGManager
-from nodes.generators.price import price_generator_node
-from nodes.indicators.moving_average import moving_average_node
-from nodes.transforms.signal import signal_transform_node
+from strategies.nodes.price import price_node
+from strategies.nodes.moving_average import moving_average_node
+from strategies.nodes.signal import signal_node
 
 dag = DAGManager()
-dag.add_node("price", price_generator_node)
+dag.add_node("price", price_node)
 dag.add_node("ma", moving_average_node, inputs={"data": "price"})
-dag.add_node("signal", signal_transform_node, inputs={"metric": "ma"})
+dag.add_node("signal", signal_node, inputs={"metric": "ma"})
 
 result = dag.execute()
 ```
@@ -47,7 +47,7 @@ result = dag.execute()
 
 ```mermaid
 graph TD
-    price_generator_node --> moving_average_node --> signal_transform_node
+    price_node --> moving_average_node --> signal_node
 ```
 
 ## Reusing Nodes

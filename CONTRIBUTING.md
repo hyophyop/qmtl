@@ -43,6 +43,7 @@ GitHub Actions가 push/pull_request 이벤트에서 자동으로 실행됩니다
 - 문서 동기화 체크:
   ```bash
   uv run scripts/check_doc_sync.py
+  # qmtl 서브트리 내부 문서 변경을 점검하려면:
   uv run qmtl/scripts/check_doc_sync.py
   ```
 - 전략 import 보호 체크:
@@ -106,8 +107,8 @@ GitHub Actions가 push/pull_request 이벤트에서 자동으로 실행됩니다
 4. 구현이 완료되면 레지스트리의 `status`와 `modules` 목록을 갱신하고 관련
    테스트를 추가합니다.
    
-   개발자 워크플로 (구현 후 필수)
-   --------------------------------
+  개발자 워크플로 (구현 후 필수)
+  --------------------------------
    - 구현이 완료된 모듈을 레지스트리에 등록하고 상태와 이력 로그를 자동으로 갱신하려면 아래 명령을 사용하세요:
 
    ```bash
@@ -198,5 +199,20 @@ GitHub Actions가 push/pull_request 이벤트에서 자동으로 실행됩니다
 이 저장소의 모든 문서/가이드/README는 "서브트리 최신화" 원칙을 전제로 합니다. `qmtl` 서브트리 변경 시 반드시 루트 저장소에 커밋하고, 변경된 QMTL 코드에 대해서는 `qmtl/AGENTS.md`의 정책과 테스트 지침을 준수하세요.
 
 ## 추가 안내
+ 
+## 문서 스타일 가이드(용어 통일)
+
+- AlphaDocs/alphadocs: 문서에서는 “AlphaDocs”, 경로/명령/코드는 `docs/alphadocs/` 등 소문자.
+- DAG: 약어는 항상 대문자 “DAG”. 파일/모듈명은 파이썬 규칙(소문자).
+- Strategy/strategy: 개념·클래스는 “Strategy”, 일반 설명/폴더는 “strategy/strategies”.
+- Node processor: 용어는 “node processor”로 통일. 함수 접미사는 `_node`.
+- QuestDB: 설명문 “QuestDB”, 설정 키는 `questdb_dsn` 그대로 표기.
+- Binance: 설명문 “Binance”, 태그/코드는 소문자 그대로.
+- CLI: 용어는 “CLI” 대문자. 명령은 코드 블록 사용.
+- Subtree: “subtree”로 고정(예: `git subtree`).
+- 가상환경: “가상환경(uv venv)”처럼 병기 가능. 명령은 `uv venv`.
+- pre-commit: 도구 명칭은 “pre-commit”.
+- 파일명: `AGENTS.md`와 산출물 `docs/agents-instructions.md`를 정확히 표기.
+- 스모크 테스트: 한국어 본문은 “스모크 테스트(smoke test)”로 최초 병기.
 
 에이전트/개발자 대상 요약 지침을 `docs/agents-instructions.md`에 수록했습니다. `AGENTS.md` 파일을 수정했다면 `uv run python scripts/build_agent_instructions.py`로 이 문서를 갱신한 뒤 커밋하세요. GitHub 템플릿과 PR/Issue 지침은 `.github/` 디렉터리를 확인하세요.
