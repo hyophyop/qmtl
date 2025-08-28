@@ -22,7 +22,6 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
   data-processing utilities belong here. All alpha logic should live in the root project's
   `strategies/` directory.
-
 ## Documentation Management
 
 - Store documentation in the `docs/` directory with descriptive filenames.
