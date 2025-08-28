@@ -17,8 +17,8 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ## Architecture
 
-- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
-  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
+- Follow the upstream QMTL architecture docs (examples: architecture, gateway, DAG manager). In this subtree snapshot those files are not vendored; refer to the upstream repository documentation instead.
+  - Upstream docs: https://github.com/hyophyop/qmtl
 - Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
   data-processing utilities belong here. All alpha logic should live in the root project's
   `strategies/` directory.
@@ -40,12 +40,6 @@ project:
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 
-## Prioritizing external alpha ideas
+## External alpha ideas
 
-- The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten
-  by a stronger model (GPT-5-Pro). These files should be treated as higher-priority
-  implementation targets by agents and maintainers working within the `qmtl` project.
-- When implementing from these documents inside `qmtl`, include
-  `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and add `# Priority: gpt5pro` to the
-  module header. Automated tooling should create an implementation branch/issue and record
-  history in `docs/alphadocs_history.log`.
+- Prioritization of alpha ideas (including `docs/alphadocs/ideas/gpt5pro/`) is managed at the repository root. The `qmtl/` subtree should not implement alphas directly; reference the root guidelines instead.

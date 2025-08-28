@@ -20,34 +20,32 @@ canonical-guidelines: <relative link to CONTRIBUTING.md>
 Include this block at the top of new or modified `AGENTS.md` files to keep
 instructions consistent across the repository.
 
-## 공지: GitHub CI 일시 비활성화 (2025-08-14)
+## CI 상태 및 로컬 검증
 
-레포지토리의 GitHub Actions 자동 트리거(push/pull_request)가 임시로 비활성화되었습니다. 현재 워크플로우는 수동(workflow_dispatch)으로만 실행됩니다. PR 생성/업데이트 시 자동 검증이 수행되지 않으므로, 아래 로컬 체크를 직접 수행한 뒤 푸시/PR을 생성해 주세요.
+GitHub Actions가 push/pull_request 이벤트에서 자동으로 실행됩니다. 아래 로컬 체크는 PR 전에 빠르게 검증할 때 사용하세요.
 
-- 의존성/환경 준비:
-   ```bash
-   pip install uv pre-commit
-   uv venv
-   uv pip install -e qmtl[dev]
-   uv pip install pyyaml
-   ```
+- 의존성/환경 준비(또는 `scripts/bootstrap.sh` 사용):
+  ```bash
+  pip install uv pre-commit
+  uv venv
+  uv pip install -e qmtl[dev]
+  uv pip install pyyaml
+  ```
 - Lint:
-   ```bash
-   uv run pre-commit run --files $(git ls-files '*.py')
-   uv run qmtl check-imports
-   ```
+  ```bash
+  uv run pre-commit run --files $(git ls-files '*.py')
+  uv run qmtl check-imports
+  ```
 - 테스트:
-   ```bash
-   uv run -m pytest -W error
-   ```
+  ```bash
+  uv run -m pytest -W error
+  ```
 - 문서 동기화 체크:
-   ```bash
-   uv run scripts/check_doc_sync.py
-   uv run qmtl/scripts/check_doc_sync.py
-   ```
-   PR에서 `docs/` 경로를 수정하면 GitHub Actions가 이 스크립트를 자동 실행하며 실패 시 워크플로우가 실패합니다.
-
-CI가 재활성화되면 본 문서에서 안내를 갱신하겠습니다.
+  ```bash
+  uv run scripts/check_doc_sync.py
+  uv run qmtl/scripts/check_doc_sync.py
+  ```
+  CI도 위 검사들을 실행하며 실패 시 워크플로우가 실패합니다.
 
 ## QMTL 서브트리 최신화 및 변경 원칙 (필수)
 
