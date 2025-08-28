@@ -85,4 +85,5 @@ Node processors are configured in `strategies/nodes/`, and strategy DAGs in `str
 
 ## Additional Learning Resources
 
-For an overview of the project architecture, refer to the upstream QMTL documentation or the subtree README: [qmtl/README.md](qmtl/README.md) and https://github.com/hyophyop/qmtl.
+For an overview of the project architecture, refer to the [qmtl/architecture.md]`qmtl/docs/architecture/architecture.md` document.
+

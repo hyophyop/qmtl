@@ -12,6 +12,7 @@ Key reminders:
 
 - Always synchronize the `qmtl/` subtree before starting work and push upstream after making changes.
 - Strategy-specific code lives under `strategies/`; keep reusable utilities only in `qmtl/`.
+  - Exception: thin, strategy-local convenience wrappers (e.g., lightweight shims under `strategies/utils/`) are acceptable when they adapt QMTL APIs for strategy ergonomics. Promote broadly reusable helpers to `qmtl/` via the subtree process.
 - When modifying the subtree itself, follow `qmtl/AGENTS.md`. For strategy conventions, refer to `strategies/AGENTS.md`.
 - If any `AGENTS.md` files change, run `uv run python scripts/build_agent_instructions.py` to refresh `docs/agents-instructions.md` before committing. CI already runs this when relevant, so running it locally avoids surprises.
 
