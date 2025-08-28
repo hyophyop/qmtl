@@ -13,7 +13,25 @@ Key reminders:
 - Always synchronize the `qmtl/` subtree before starting work and push upstream after making changes.
 - Strategy-specific code lives under `strategies/`; keep reusable utilities only in `qmtl/`.
 - When modifying the subtree itself, follow `qmtl/AGENTS.md`. For strategy conventions, refer to `strategies/AGENTS.md`.
-- If any `AGENTS.md` files change, run `uv run python scripts/build_agent_instructions.py` to refresh `docs/agents-instructions.md` before committing. Once GitHub Actions returns, consider wiring this into pre-commit or CI.
+- If any `AGENTS.md` files change, run `uv run python scripts/build_agent_instructions.py` to refresh `docs/agents-instructions.md` before committing. CI already runs this when relevant, so running it locally avoids surprises.
+
+Automation helpers
+
+- A pair of helper scripts are provided under `scripts/` to standardize common tasks:
+	- `scripts/bootstrap.sh` — create `uv` venv, install editable `qmtl[dev]` deps and run a fast smoke test (strategies tests if present).
+	- `scripts/sync_qmtl.sh` — fetch and pull the `qmtl` subtree from the `qmtl-subtree` remote and print recent commits for verification.
+
+Please run `scripts/bootstrap.sh` when setting up a dev environment. If you modify any files under `qmtl/`, run `scripts/sync_qmtl.sh` to pull upstream changes before making edits and follow subtree push instructions when pushing changes back upstream.
+
+CI / Docs triggers
+
+- The CI workflow will run the agent docs build step when `AGENTS.md` changes. If you update `AGENTS.md`, ensure `docs/agents-instructions.md` is refreshed by running:
+
+```bash
+uv run python scripts/build_agent_instructions.py
+```
+
+This repository's maintainers aim to keep the doc build step in CI to prevent stale agent instructions.
 
 ## qmtl/AGENTS.md (scope: qmtl subtree)
 
@@ -30,8 +48,8 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ## Architecture
 
-- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
-  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
+- Follow the upstream QMTL architecture docs (examples: architecture, gateway, DAG manager). In this subtree snapshot those files are not vendored; refer to the upstream repository documentation instead.
+  - Upstream docs: https://github.com/hyophyop/qmtl
 - Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
   data-processing utilities belong here. All alpha logic should live in the root project's
   `strategies/` directory.
@@ -53,15 +71,9 @@ project:
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 
-## Prioritizing external alpha ideas
+## External alpha ideas
 
-- The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten
-  by a stronger model (GPT-5-Pro). These files should be treated as higher-priority
-  implementation targets by agents and maintainers working within the `qmtl` project.
-- When implementing from these documents inside `qmtl`, include
-  `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and add `# Priority: gpt5pro` to the
-  module header. Automated tooling should create an implementation branch/issue and record
-  history in `docs/alphadocs_history.log`.
+- Prioritization of alpha ideas (including `docs/alphadocs/ideas/gpt5pro/`) is managed at the repository root. The `qmtl/` subtree should not implement alphas directly; reference the root guidelines instead.
 
 ## strategies/AGENTS.md (scope: strategies directory)
 
