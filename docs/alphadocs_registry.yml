@@ -122,6 +122,16 @@
   priority: gpt5pro
   tags: []
   usage_status: unused
+- doc: docs/alphadocs/ideas/gpt5pro/Credit-Liquidity Amplification Theory.md
+  status: implemented
+  source_model: gpt5pro
+  modules:
+  - qmtl/qmtl/transforms/credit_liquidity_amplification.py
+  - strategies/nodes/indicators/credit_liquidity_amplification.py
+  priority: gpt5pro
+  tags: []
+  usage_status: unused
+  used_in_strategies: []
 - doc: docs/alphadocs/ideas/gpt5pro/Dynamic Price Elasticity Threshold Theory.md
   status: implemented
   source_model: gpt5pro
