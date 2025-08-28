@@ -86,4 +86,3 @@ Node processors are configured in `strategies/nodes/`, and strategy DAGs in `str
 ## Additional Learning Resources
 
 For an overview of the project architecture, refer to the [qmtl/architecture.md]`qmtl/docs/architecture/architecture.md` document.
-
