@@ -1,8 +1,11 @@
+import math
 import pytest
 
 from qmtl.transforms.execution_diffusion_contraction import (
     concentration_scores,
+    depth_wedge,
     hazard_probability,
+    path_resistance,
     expected_jump,
     edch_side,
 )
@@ -10,9 +13,15 @@ from qmtl.transforms.execution_diffusion_contraction import (
 
 def test_concentration_scores():
     e, h, f = concentration_scores([1.0, 1.0, 2.0], [1.0, 1.0, 1.0], bins=2)
-    assert e >= 0
-    assert h >= 0
-    assert f >= 0
+    assert e == pytest.approx(0.6365141682929341)
+    assert h == pytest.approx(0.5555555555551852)
+    assert f == pytest.approx(0.5)
+
+
+def test_path_resistance_and_depth_wedge():
+    assert path_resistance([1.0, 1.0]) == pytest.approx(-math.log(2.0))
+    wedge = depth_wedge([1.0, 1.0], [2.0, 1.0])
+    assert wedge == pytest.approx((2.0 - 3.0) / (2.0 + 3.0))
 
 
 def test_hazard_probability():

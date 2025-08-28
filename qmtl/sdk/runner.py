@@ -592,6 +592,10 @@ class Runner:
             raise RuntimeError(queue_map["error"])
 
         Runner._apply_queue_map(strategy, queue_map)
+        if not any(n.execute for n in strategy.nodes):
+            logger.info("No executable nodes; exiting strategy")
+            return strategy
+
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
@@ -645,6 +649,10 @@ class Runner:
             raise RuntimeError(queue_map["error"])
 
         Runner._apply_queue_map(strategy, queue_map)
+        if not any(n.execute for n in strategy.nodes):
+            logger.info("No executable nodes; exiting strategy")
+            return strategy
+
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)

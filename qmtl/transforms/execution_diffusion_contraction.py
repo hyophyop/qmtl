@@ -43,6 +43,26 @@ def concentration_scores(
     return entropy, hhi, fano
 
 
+def path_resistance(depth: Sequence[float] | None, eps: float = 1e-12) -> float:
+    """Return negative log cumulative depth as path resistance."""
+    if not depth:
+        return 0.0
+    return -math.log(sum(depth) + eps)
+
+
+def depth_wedge(
+    up_depth: Sequence[float] | None,
+    down_depth: Sequence[float] | None,
+    eps: float = 1e-12,
+) -> float:
+    """Return normalized depth wedge between up and down paths."""
+    if not up_depth and not down_depth:
+        return 0.0
+    up = sum(up_depth or [])
+    down = sum(down_depth or [])
+    return (up - down) / (up + down + eps)
+
+
 def hazard_probability(x: Sequence[float], eta: Sequence[float]) -> float:
     """Logistic hazard probability with bias term.
 
@@ -82,3 +102,13 @@ def expected_jump(
 def edch_side(prob: float, jump_expect: float) -> float:
     """Return EDCH for one side."""
     return prob * jump_expect
+
+
+__all__ = [
+    "concentration_scores",
+    "path_resistance",
+    "depth_wedge",
+    "hazard_probability",
+    "expected_jump",
+    "edch_side",
+]
