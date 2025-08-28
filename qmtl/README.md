@@ -112,7 +112,7 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
 3. **Design Approach** – Follow the Single Responsibility Principle (SRP) when designing modules and classes. This keeps features modular and easier to maintain.
 
-For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
+For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](../AGENTS.md) in the project root for the full guidelines.
 
 ## Documentation
 
