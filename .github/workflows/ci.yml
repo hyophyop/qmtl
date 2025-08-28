@@ -38,14 +38,8 @@ jobs:
         run: uv run -m pytest -W error
       - name: Doc sync
         run: uv run scripts/check_doc_sync.py
-      - name: Build agent instructions if AGENTS.md changed
-        run: |
-          # If AGENTS.md modified in this commit/PR, regenerate docs/agents-instructions.md
-          if git diff --name-only HEAD~1 HEAD | grep -q "AGENTS.md"; then
-            uv run python scripts/build_agent_instructions.py
-          else
-            echo "No AGENTS.md changes detected; skipping agent docs build."
-          fi
+      - name: Build agent instructions
+        run: uv run python scripts/build_agent_instructions.py
       - name: QMTL doc sync
         run: uv run qmtl/scripts/check_doc_sync.py
       - name: No strategies imports in qmtl
