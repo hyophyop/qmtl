@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, Tuple
 
 import httpx
 
@@ -39,11 +39,11 @@ class WorldClient:
         self.base_url = base_url.rstrip("/")
         self.retries = retries
         self._client = http_client or httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
-        self._decision_cache: Dict[str, _DecisionCacheEntry] = {}
+        self._decision_cache: Dict[Tuple[str, str], _DecisionCacheEntry] = {}
         self._activation_cache: Dict[str, _ActivationCacheEntry] = {}
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        last_exc: Exception | None = None
+        last_exc: Optional[Exception] = None
         for attempt in range(self.retries + 1):
             try:
                 return await self._client.request(method, url, **kwargs)
@@ -55,7 +55,9 @@ class WorldClient:
         raise last_exc
 
     async def get_decision(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        entry = self._decision_cache.get(world_id)
+        auth = (headers or {}).get("Authorization")
+        cache_key: Optional[Tuple[str, str]] = (world_id, auth) if auth else None
+        entry = self._decision_cache.get(cache_key) if cache_key else None
         now = time.time()
         if entry and entry.expires_at > now:
             gw_metrics.worldservice_cache_hits_total.labels(endpoint="decide").inc()
@@ -68,9 +70,10 @@ class WorldClient:
         resp.raise_for_status()
         data = resp.json()
         ttl = float(data.get("ttl", 300))
-        self._decision_cache[world_id] = _DecisionCacheEntry(
-            data=data, expires_at=now + ttl, etag=resp.headers.get("ETag")
-        )
+        if cache_key:
+            self._decision_cache[cache_key] = _DecisionCacheEntry(
+                data=data, expires_at=now + ttl, etag=resp.headers.get("ETag")
+            )
         return data
 
     async def get_activation(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:

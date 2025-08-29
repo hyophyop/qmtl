@@ -11,7 +11,7 @@ import asyncio
 
 from fastapi import FastAPI, HTTPException, status, Response, Request
 from contextlib import asynccontextmanager
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
@@ -201,12 +201,24 @@ def create_app(
         return await ws_client_local.get_decision(world_id, headers)
 
     @app.get("/worlds/{world_id}/activation")
-    async def world_activation(world_id: str, request: Request) -> dict:
+    async def world_activation(world_id: str, request: Request) -> Response:
         headers: dict[str, str] = {}
         auth = request.headers.get("Authorization")
         if auth:
             headers["Authorization"] = auth
-        return await ws_client_local.get_activation(world_id, headers)
+        cache_entry = ws_client_local._activation_cache.get(world_id)
+        client_etag = request.headers.get("If-None-Match")
+        if cache_entry and client_etag and client_etag == cache_entry.etag:
+            resp = Response(status_code=304)
+            resp.headers["ETag"] = cache_entry.etag
+            gw_metrics.worldservice_cache_hits_total.labels(endpoint="activation").inc()
+            return resp
+        data = await ws_client_local.get_activation(world_id, headers)
+        cache_entry = ws_client_local._activation_cache.get(world_id)
+        resp = JSONResponse(data)
+        if cache_entry and cache_entry.etag:
+            resp.headers["ETag"] = cache_entry.etag
+        return resp
 
     @app.post("/worlds/{world_id}/evaluate")
     async def world_evaluate(world_id: str, payload: dict, request: Request) -> dict:
