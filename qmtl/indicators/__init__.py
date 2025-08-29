@@ -17,7 +17,11 @@ from .kalman_trend import kalman_trend
 from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
 from .volatility import volatility_node, volatility
-from .gap_amplification_alpha import gap_amplification_node
+# Optional alpha indicator; may not be available in all deployments
+try:  # pragma: no cover - fallback for missing alpha module
+    from .gap_amplification_alpha import gap_amplification_node
+except Exception:  # pragma: no cover
+    gap_amplification_node = None
 from .helpers import alpha_indicator_with_history
 
 __all__ = [
@@ -39,6 +43,8 @@ __all__ = [
     "stoch_rsi",
     "volatility_node",
     "volatility",
-    "gap_amplification_node",
     "alpha_indicator_with_history",
 ]
+
+if gap_amplification_node is not None:  # pragma: no cover
+    __all__.append("gap_amplification_node")
