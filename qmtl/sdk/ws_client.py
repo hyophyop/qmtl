@@ -5,6 +5,8 @@ import json
 import contextlib
 from typing import Awaitable, Callable, Optional, TYPE_CHECKING
 
+from urllib.parse import urlparse, urlunparse
+
 import websockets
 import logging
 
@@ -27,6 +29,10 @@ class WebSocketClient:
         max_delay: float = 8.0,
         token: str | None = None,
     ) -> None:
+        parts = urlparse(url)
+        if parts.path in ("", "/"):
+            parts = parts._replace(path="/ws")
+            url = urlunparse(parts)
         self.url = url
         self.on_message = on_message
         self.queue_topics: dict[str, str] = {}

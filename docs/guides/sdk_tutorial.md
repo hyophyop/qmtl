@@ -34,7 +34,7 @@ SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드�
 Gateway 상태 변화를 실시간으로 수신하기 위한 클래스입니다. 기본 사용법은 다음과 같습니다.
 
 ```python
-client = WebSocketClient("ws://localhost:8000/ws", on_message=my_handler)
+client = WebSocketClient("ws://localhost:8000", on_message=my_handler)
 ```
 
 `url`은 WebSocket 엔드포인트 주소이며 `on_message`는 수신 메시지를 처리할 비동기 함수입니다. `start()`를 호출하면 백그라운드에서 연결을 유지하며 메시지를 받고, `stop()`을 호출하면 연결이 종료됩니다.

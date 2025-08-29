@@ -12,7 +12,15 @@ from typing import Optional, Coroutine, Any
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, HTTPException, status, Response, Request
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    status,
+    Response,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
 import time
@@ -206,9 +214,13 @@ def create_app(
             if ws_hub_local and controlbus_consumer_local.ws_hub is None:
                 controlbus_consumer_local.ws_hub = ws_hub_local
             await controlbus_consumer_local.start()
+        if ws_hub_local:
+            await ws_hub_local.start()
         try:
             yield
         finally:
+            if ws_hub_local:
+                await ws_hub_local.stop()
             if controlbus_consumer_local:
                 await controlbus_consumer_local.stop()
             if hasattr(dagmanager, "close"):
@@ -259,6 +271,29 @@ def create_app(
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
         return await gateway_health(redis_conn, database_obj, dagmanager)
+
+    if ws_hub_local:
+        @app.websocket("/ws")
+        async def ws_endpoint(websocket: WebSocket) -> None:
+            await ws_hub_local.connect(websocket)
+            try:
+                while True:
+                    await websocket.receive_text()
+            except WebSocketDisconnect:
+                pass
+            finally:
+                await ws_hub_local.disconnect(websocket)
+
+        @app.websocket("/ws/evt")
+        async def ws_evt_endpoint(websocket: WebSocket) -> None:
+            await ws_hub_local.connect(websocket)
+            try:
+                while True:
+                    await websocket.receive_text()
+            except WebSocketDisconnect:
+                pass
+            finally:
+                await ws_hub_local.disconnect(websocket)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
