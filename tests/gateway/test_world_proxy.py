@@ -1,8 +1,9 @@
 import pytest
 import httpx
 
+from qmtl.common import AsyncCircuitBreaker
 from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.world_client import WorldServiceClient
+from qmtl.gateway.world_client import WorldServiceClient, Budget
 from qmtl.gateway import metrics
 
 
@@ -182,3 +183,27 @@ async def test_state_hash_probe_divergence(fake_redis):
     await asgi.aclose()
     await client._client.aclose()
     assert calls["snap"] == 2
+
+
+@pytest.mark.asyncio
+async def test_status_reports_worldservice_breaker(fake_redis):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom")
+
+    transport = httpx.MockTransport(handler)
+    breaker = AsyncCircuitBreaker(max_failures=1)
+    client = WorldServiceClient(
+        "http://world",
+        budget=Budget(timeout=0.1, retries=0),
+        client=httpx.AsyncClient(transport=transport),
+        breaker=breaker,
+    )
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r = await api_client.get("/worlds/abc/decide")
+        assert r.status_code == 500
+        s = await api_client.get("/status")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert s.json()["worldservice"] == "open"

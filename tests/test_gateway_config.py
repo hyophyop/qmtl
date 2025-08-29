@@ -73,3 +73,5 @@ def test_gateway_config_defaults() -> None:
     assert cfg.database_backend == "sqlite"
     assert cfg.database_dsn == "./qmtl.db"
     assert cfg.insert_sentinel is True
+    assert cfg.worldservice_timeout == 0.3
+    assert cfg.worldservice_retries == 2

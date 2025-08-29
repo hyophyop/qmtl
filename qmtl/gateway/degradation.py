@@ -26,17 +26,20 @@ class DegradationManager:
         redis_client,
         database,
         dag_client,
+        world_client=None,
         *,
         check_interval: float = 5.0,
     ) -> None:
         self.redis = redis_client
         self.database = database
         self.dag_client = dag_client
+        self.world_client = world_client
         self.check_interval = check_interval
         self.level = DegradationLevel.NORMAL
         self.redis_ok = True
         self.db_ok = True
         self.dag_ok = True
+        self.world_ok = True
         self.local_queue: list[str] = []
         self._task: Optional[asyncio.Task] = None
         self._gauge = metrics.degrade_level.labels(service="gateway")
@@ -79,15 +82,27 @@ class DegradationManager:
             except Exception:
                 return False
 
-        self.redis_ok, self.db_ok, self.dag_ok = await asyncio.gather(
-            check_redis(), check_db(), check_dag()
+        async def check_world() -> bool:
+            if self.world_client is None:
+                return True
+            return not self.world_client.breaker.is_open
+
+        (
+            self.redis_ok,
+            self.db_ok,
+            self.dag_ok,
+            self.world_ok,
+        ) = await asyncio.gather(
+            check_redis(), check_db(), check_dag(), check_world()
         )
 
     async def evaluate(self) -> DegradationLevel:
         await self._check_dependencies()
         cpu = psutil.cpu_percent(interval=None)
-        failures = sum(not f for f in (self.redis_ok, self.db_ok, self.dag_ok))
-        if cpu > 95 or failures == 3:
+        failures = sum(
+            not f for f in (self.redis_ok, self.db_ok, self.dag_ok, self.world_ok)
+        )
+        if cpu > 95 or failures >= 3:
             return DegradationLevel.STATIC
         if cpu > 85 or failures >= 2:
             return DegradationLevel.MINIMAL

@@ -73,6 +73,25 @@ worlds_cache_hit_ratio = Gauge(
     registry=global_registry,
 )
 
+# Circuit breaker metrics for WorldService
+worlds_breaker_state = Gauge(
+    "worlds_breaker_state",
+    "WorldService circuit breaker state (1=open, 0=closed)",
+    registry=global_registry,
+)
+
+worlds_breaker_failures = Gauge(
+    "worlds_breaker_failures",
+    "Consecutive failures recorded by the WorldService circuit breaker",
+    registry=global_registry,
+)
+
+worlds_breaker_open_total = Gauge(
+    "worlds_breaker_open_total",
+    "Number of times the WorldService client breaker opened",
+    registry=global_registry,
+)
+
 
 # Track the percentage of traffic routed to each sentinel version
 if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
@@ -238,6 +257,12 @@ def reset_metrics() -> None:
     worlds_cache_hit_ratio.set(0)
     worlds_cache_hit_ratio._val = 0  # type: ignore[attr-defined]
     _worlds_samples.clear()
+    worlds_breaker_state.set(0)
+    worlds_breaker_state._val = 0  # type: ignore[attr-defined]
+    worlds_breaker_failures.set(0)
+    worlds_breaker_failures._val = 0  # type: ignore[attr-defined]
+    worlds_breaker_open_total.set(0)
+    worlds_breaker_open_total._val = 0  # type: ignore[attr-defined]
     _sentinel_weight_updates.clear()
     controlbus_lag_ms.clear()
     event_relay_events_total.clear()
