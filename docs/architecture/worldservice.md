@@ -145,6 +145,7 @@ Metrics example
 - world_decide_latency_ms_p95, world_apply_duration_ms_p95
 - activation_skew_seconds, promotion_fail_total, demotion_fail_total
 - registry_write_fail_total, audit_backlog_depth
+- Gateway enforces a 300 ms budget with two retries and exposes a circuit breaker state via ``/status``
 
 Skew Metrics
 - `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.

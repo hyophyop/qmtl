@@ -44,6 +44,7 @@ from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 from .world_client import WorldServiceClient, Budget
 from .event_descriptor import EventDescriptorConfig, sign_event_token
+from qmtl.common import AsyncCircuitBreaker
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -150,8 +151,9 @@ def create_app(
     database_backend: str = "postgres",
     database_dsn: str | None = None,
     worldservice_url: str | None = None,
-    worldservice_timeout: float = 5.0,
-    worldservice_retries: int = 0,
+    worldservice_timeout: float = 0.3,
+    worldservice_retries: int = 2,
+    worldservice_breaker_max_failures: int = 3,
     enable_worldservice_proxy: bool = True,
     enforce_live_guard: bool = True,
 ) -> FastAPI:
@@ -173,15 +175,6 @@ def create_app(
         else:
             raise ValueError(f"Unsupported database backend: {database_backend}")
     fsm = StrategyFSM(redis=redis_conn, database=database_obj)
-    dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
-    degradation = DegradationManager(redis_conn, database_obj, dagmanager)
-    manager = StrategyManager(
-        redis=redis_conn,
-        database=database_obj,
-        fsm=fsm,
-        degrade=degradation,
-        insert_sentinel=insert_sentinel,
-    )
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
@@ -191,8 +184,35 @@ def create_app(
         and enable_worldservice_proxy
         and worldservice_url is not None
     ):
+        breaker = AsyncCircuitBreaker(
+            max_failures=worldservice_breaker_max_failures,
+            on_open=lambda: (
+                gw_metrics.worlds_breaker_state.set(1),
+                gw_metrics.worlds_breaker_open_total.inc(),
+            ),
+            on_close=lambda: (
+                gw_metrics.worlds_breaker_state.set(0),
+                gw_metrics.worlds_breaker_failures.set(0),
+            ),
+            on_failure=lambda c: gw_metrics.worlds_breaker_failures.set(c),
+        )
+        gw_metrics.worlds_breaker_state.set(0)
+        gw_metrics.worlds_breaker_failures.set(0)
         budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
-        world_client_local = WorldServiceClient(worldservice_url, budget=budget)
+        world_client_local = WorldServiceClient(
+            worldservice_url, budget=budget, breaker=breaker
+        )
+    dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
+    degradation = DegradationManager(
+        redis_conn, database_obj, dagmanager, world_client_local
+    )
+    manager = StrategyManager(
+        redis=redis_conn,
+        database=database_obj,
+        fsm=fsm,
+        degrade=degradation,
+        insert_sentinel=insert_sentinel,
+    )
     if event_config is not None:
         event_cfg = event_config
     else:
@@ -263,14 +283,16 @@ def create_app(
 
     @app.get("/status")
     async def status_endpoint() -> dict[str, str]:
-        health_data = await gateway_health(redis_conn, database_obj, dagmanager)
+        health_data = await gateway_health(
+            redis_conn, database_obj, dagmanager, world_client_local
+        )
         health_data["degrade_level"] = degradation.level.name
         return health_data
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
-        return await gateway_health(redis_conn, database_obj, dagmanager)
+        return await gateway_health(redis_conn, database_obj, dagmanager, world_client_local)
 
     if ws_hub_local:
         @app.websocket("/ws")

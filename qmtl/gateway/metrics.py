@@ -40,6 +40,25 @@ dagclient_breaker_open_total = Gauge(
     registry=global_registry,
 )
 
+# Circuit breaker metrics for WorldService proxy
+worlds_breaker_state = Gauge(
+    "worlds_breaker_state",
+    "WorldService circuit breaker state (1=open, 0=closed)",
+    registry=global_registry,
+)
+
+worlds_breaker_failures = Gauge(
+    "worlds_breaker_failures",
+    "Consecutive failures recorded by the WorldService circuit breaker",
+    registry=global_registry,
+)
+
+worlds_breaker_open_total = Gauge(
+    "worlds_breaker_open_total",
+    "Number of times the WorldService client breaker opened",
+    registry=global_registry,
+)
+
 # Metrics for WorldService proxy
 worlds_proxy_latency_ms = Gauge(
     "worlds_proxy_latency_ms",
@@ -126,6 +145,12 @@ def reset_metrics() -> None:
     degrade_level.clear()
     dagclient_breaker_open_total.set(0)
     dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
+    worlds_breaker_state.set(0)
+    worlds_breaker_state._val = 0  # type: ignore[attr-defined]
+    worlds_breaker_failures.set(0)
+    worlds_breaker_failures._val = 0  # type: ignore[attr-defined]
+    worlds_breaker_open_total.set(0)
+    worlds_breaker_open_total._val = 0  # type: ignore[attr-defined]
     worlds_proxy_latency_ms.set(0)
     worlds_proxy_latency_ms._val = 0  # type: ignore[attr-defined]
     worlds_cache_hits_total._value.set(0)  # type: ignore[attr-defined]

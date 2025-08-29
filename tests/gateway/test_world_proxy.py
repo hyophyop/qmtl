@@ -3,6 +3,7 @@ import httpx
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.world_client import WorldServiceClient
+from qmtl.common import AsyncCircuitBreaker
 
 
 class FakeDB(Database):
@@ -142,3 +143,20 @@ async def test_decide_ttl_zero_no_cache(fake_redis):
     assert r2.json() == {"v": 2, "ttl": "0s"}
     # No cache should have been used
     assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_world_client_circuit_breaker():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("fail", request=request)
+
+    transport = httpx.MockTransport(handler)
+    breaker = AsyncCircuitBreaker(max_failures=1)
+    client = WorldServiceClient(
+        "http://world", client=httpx.AsyncClient(transport=transport), breaker=breaker
+    )
+    with pytest.raises(httpx.ConnectError):
+        await client.get_decide("abc")
+    with pytest.raises(RuntimeError):
+        await client.get_decide("abc")
+    assert client.breaker.is_open is True

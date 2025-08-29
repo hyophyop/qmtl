@@ -56,12 +56,28 @@ class DummyRedis:
         pass
 
 
+class DummyWorld:
+    def __init__(self, ok: bool = True) -> None:
+        self.ok = ok
+        self.breaker = type("B", (), {"is_open": False})()
+
+        class C:
+            async def aclose(self) -> None:
+                return None
+
+        self._client = C()
+
+    async def status(self) -> bool:
+        return self.ok
+
+
 @pytest.mark.asyncio
 async def test_level_transitions(monkeypatch):
     redis = DummyRedis()
     db = FakeDB()
     dag = DummyDag()
-    mgr = DegradationManager(redis, db, dag, check_interval=0.01)
+    world = DummyWorld()
+    mgr = DegradationManager(redis, db, dag, world, check_interval=0.01)
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 10)
     await mgr.update()
     assert mgr.level == DegradationLevel.NORMAL
@@ -85,7 +101,8 @@ async def test_check_dependencies_parallel(monkeypatch):
     redis = DummyRedis()
     db = FakeDB()
     dag = DummyDag()
-    mgr = DegradationManager(redis, db, dag)
+    world = DummyWorld()
+    mgr = DegradationManager(redis, db, dag, world)
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 0)
 
     start_times: dict[str, float] = {}
@@ -104,9 +121,13 @@ async def test_check_dependencies_parallel(monkeypatch):
     async def record_dag() -> bool:
         return await record("dag")
 
+    async def record_world() -> bool:
+        return await record("world")
+
     redis.ping = AsyncMock(side_effect=record_redis)
     db.healthy = AsyncMock(side_effect=record_db)
     dag.status = AsyncMock(side_effect=record_dag)
+    world.status = AsyncMock(side_effect=record_world)
 
     start = asyncio.get_running_loop().time()
     await mgr.evaluate()
@@ -117,6 +138,7 @@ async def test_check_dependencies_parallel(monkeypatch):
     redis.ping.assert_awaited_once()
     db.healthy.assert_awaited_once()
     dag.status.assert_awaited_once()
+    world.status.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -125,7 +147,8 @@ async def test_flushes_local_queue(monkeypatch):
     redis.rpush = AsyncMock()
     db = FakeDB()
     dag = DummyDag(ok=False)
-    mgr = DegradationManager(redis, db, dag)
+    world = DummyWorld()
+    mgr = DegradationManager(redis, db, dag, world)
     monkeypatch.setattr("psutil.cpu_percent", lambda interval=None: 0)
 
     await mgr.update()
@@ -142,7 +165,9 @@ async def test_flushes_local_queue(monkeypatch):
 
 def make_app(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=fake_redis, database=db, dag_client=DummyDag())
+    app = create_app(
+        redis_client=fake_redis, database=db, dag_client=DummyDag(), world_client=DummyWorld()
+    )
     async def nop():
         return None
 

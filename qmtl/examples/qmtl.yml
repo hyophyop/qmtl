@@ -16,6 +16,7 @@ gateway:
   # worldservice_url: http://localhost:8080
   # worldservice_timeout: 0.3
   # worldservice_retries: 2
+  # worldservice_breaker_max_failures: 3
   # enable_worldservice_proxy: true
   # enforce_live_guard: true
   # To use Postgres in a production cluster uncomment below

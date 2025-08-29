@@ -58,6 +58,7 @@ async def _main(argv: list[str] | None = None) -> None:
         worldservice_url=config.worldservice_url,
         worldservice_timeout=config.worldservice_timeout,
         worldservice_retries=config.worldservice_retries,
+        worldservice_breaker_max_failures=config.worldservice_breaker_max_failures,
         enable_worldservice_proxy=config.enable_worldservice_proxy,
         enforce_live_guard=config.enforce_live_guard,
     )

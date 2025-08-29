@@ -20,6 +20,20 @@ import warnings
 import pytest
 
 
+class FakeWorldClient:
+    def __init__(self):
+        self.breaker = type("B", (), {"is_open": False})()
+
+        class C:
+            async def aclose(self) -> None:
+                return None
+
+        self._client = C()
+
+    async def status(self):
+        return True
+
+
 class DummyGC:
     def collect(self):
         return [QueueInfo("q", "raw", datetime.now(UTC), interval="60s")]
@@ -46,7 +60,12 @@ def test_gateway_health(fake_redis):
     redis_client = fake_redis
     db = FakeDB()
     with TestClient(
-        gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient())
+        gw_create_app(
+            redis_client=redis_client,
+            database=db,
+            dag_client=FakeDagClient(),
+            world_client=FakeWorldClient(),
+        )
     ) as client:
         resp = client.get("/status")
         assert resp.status_code == 200
@@ -54,6 +73,8 @@ def test_gateway_health(fake_redis):
         assert data["redis"] == "ok"
         assert data["postgres"] == "ok"
         assert data["dagmanager"] == "ok"
+        assert data["worldservice"] == "ok"
+        assert data["worldservice_breaker"] == "closed"
 
 
 def test_dagmanager_http_health():

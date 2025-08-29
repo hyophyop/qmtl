@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from qmtl.common import AsyncCircuitBreaker
 from . import metrics as gw_metrics
 
 
@@ -14,8 +15,8 @@ from . import metrics as gw_metrics
 class Budget:
     """Request budget configuration."""
 
-    timeout: float = 5.0
-    retries: int = 0
+    timeout: float = 0.3
+    retries: int = 2
 
 
 class TTLCacheEntry:
@@ -44,27 +45,57 @@ class WorldServiceClient:
         *,
         budget: Budget | None = None,
         client: httpx.AsyncClient | None = None,
+        breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._budget = budget or Budget()
         self._client = client or httpx.AsyncClient()
         self._decision_cache: Dict[str, TTLCacheEntry] = {}
         self._activation_cache: Dict[str, tuple[str, Any]] = {}
+        self._breaker = breaker or AsyncCircuitBreaker()
+
+    @property
+    def breaker(self) -> AsyncCircuitBreaker:
+        return self._breaker
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        backoff = 0.1
-        for attempt in range(self._budget.retries + 1):
-            try:
-                start = time.perf_counter()
-                resp = await self._client.request(method, url, timeout=self._budget.timeout, **kwargs)
-                gw_metrics.observe_worlds_proxy_latency((time.perf_counter() - start) * 1000)
-                return resp
-            except Exception:
-                if attempt == self._budget.retries:
-                    raise
-                await asyncio.sleep(backoff)
-                backoff *= 2
-        raise RuntimeError("unreachable")
+        @self._breaker
+        async def _call() -> httpx.Response:
+            backoff = 0.1
+            for attempt in range(self._budget.retries + 1):
+                try:
+                    start = time.perf_counter()
+                    resp = await self._client.request(
+                        method, url, timeout=self._budget.timeout, **kwargs
+                    )
+                    gw_metrics.observe_worlds_proxy_latency(
+                        (time.perf_counter() - start) * 1000
+                    )
+                    return resp
+                except Exception:
+                    if attempt == self._budget.retries:
+                        raise
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+            raise RuntimeError("unreachable")
+
+        try:
+            resp = await _call()
+        except Exception:
+            gw_metrics.worlds_breaker_failures.set(self._breaker.failures)
+            raise
+        else:
+            self._breaker.reset()
+            gw_metrics.worlds_breaker_failures.set(self._breaker.failures)
+            return resp
+
+    async def status(self) -> bool:
+        """Check WorldService health endpoint."""
+        try:
+            resp = await self._request("GET", f"{self._base}/status")
+            return resp.status_code == 200
+        except Exception:
+            return False
 
     async def get_decide(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
         entry = self._decision_cache.get(world_id)
