@@ -16,6 +16,8 @@ last_modified: 2025-08-21
 - [Gateway](gateway.md)
 - [DAG Manager](dag-manager.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
+- [WorldManager](worldmanager.md)
+- [EventPool](eventpool.md)
 
 ---
 
@@ -29,18 +31,38 @@ QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 
 
 ## 1. 시스템 구성: 계층 간 상호작용과 처리 흐름
 
-```
-Strategy SDK ──▶ Gateway ──▶ DAG Manager ──▶ Graph DB (Neo4j)
-     │                │                    │                │
-     │                │                    └──▶ Kafka Queue 생성
-     │                └── 결과 큐 상태 회신 ◀───┘
-     └─▶ 로컬 DAG 실행 (필요 노드만 병렬 처리)
+```mermaid
+graph LR
+  subgraph Client
+    SDK[SDK / Runner]
+  end
+  subgraph Edge
+    GW[Gateway]
+  end
+  subgraph Core
+    WM[WorldManager (SSOT Worlds)]
+    DM[DAG Manager (SSOT Graph)]
+    EP[(EventPool — internal)]
+    GDB[(Graph DB)]
+    KQ[(Kafka/Redpanda)]
+  end
+
+  SDK -- HTTP submit/queues/worlds --> GW
+  GW -- proxy --> WM
+  GW -- proxy --> DM
+  DM --> GDB
+  DM --> KQ
+  WM -- publish --> EP
+  DM -- publish --> EP
+  GW -- subscribe --> EP
+  GW -- WS (opaque) --> SDK
 ```
 
-1. **SDK**는 전략 코드를 DAG로 직렬화하며, 각 노드는 메타데이터, 연산 함수, 입력 태그를 포함한다.
-2. **Gateway**는 DAG를 DAG Manager로 전송하며, Neo4j 기반 전역 DAG와 비교하여 중복 연산을 제거하는 Diff 연산을 수행한다. 이 Diff 연산은 DAG 내 각 노드의 연산 정의를 구성하는 요소들 — 예를 들어 `node_type`, `code_hash`, `config_hash`, `schema_hash` — 을 기반으로 결정적 NodeID를 생성하고, 이 NodeID가 전역 DAG에 이미 존재하는지를 판별하는 방식으로 이루어진다. 일치하는 노드가 있을 경우, 해당 노드는 재실행되지 않고, DAG Manager가 관리 중인 기존 Kafka/Redpanda 큐의 토픽에서 이미 생산되고 있는 스트림 데이터를 구독하는 방식으로 참조하여 계산 자원의 낭비를 방지한다. 이때 SDK는 해당 노드에 대한 처리 함수는 실행하지 않으며, 해당 큐의 오프셋 정보만을 추적하여 후속 노드로 데이터를 전달한다.
-3. **DAG Manager**는 DAG 내 신규 노드에 대해 큐가 필요한지를 판별하며, Kafka 또는 Redpanda를 사용해 idempotent 큐 생성을 수행한다.
-4. **Gateway**는 각 노드의 실행 여부(이미 큐가 생산 중인지 여부 포함)와 큐 매핑 정보를 SDK에 반환하며, SDK는 그에 따라 로컬에서 병렬 처리 가능한 노드만 실행한다.
+1. **SDK**는 전략을 DAG로 직렬화하고 Gateway에 제출/질의한다. 실행 중에는 Gateway의 WS로부터 불투명(EventPool 기반) 이벤트 스트림을 전달받아 활성/큐 변경을 반영한다.
+2. **Gateway**는 외부 단일 접점으로서 WorldManager/DAG Manager를 프록시하고, 캐시/서킷/관측을 담당한다. 또한 EventPool을 구독하여 SDK로 이벤트를 재전송한다.
+3. **WorldManager**는 월드/정책/결정/활성의 SSOT이며, 결정·활성 업데이트를 EventPool에 발행한다.
+4. **DAG Manager**는 그래프/노드/큐의 SSOT이며, Diff와 큐 오케스트레이션을 수행하고 QueueUpdated 이벤트를 EventPool에 발행한다.
+5. **SDK**는 반환된 큐 매핑에 따라 로컬에서 필요한 노드만 실행하며, 활성 게이트(OrderGateNode)로 주문 발동을 제어한다.
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
 
@@ -432,4 +454,3 @@ Runner.dryrun(CrossMarketLagStrategy)
 
 
 {{ nav_links() }}
-

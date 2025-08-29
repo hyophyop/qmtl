@@ -156,6 +156,29 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 ---
 
+### 3‑B. Control Events (QueueUpdated) (New)
+
+DAG Manager publishes control‑plane updates about queue availability and tag resolution so that Gateways can update SDKs in real time without polling.
+
+- Publisher: DAG Manager → EventPool (internal)
+- Event: ``QueueUpdated`` with schema
+
+```json
+{
+  "type": "QueueUpdated",
+  "tags": ["BTC", "price"],
+  "interval": 60,
+  "queues": ["q1", "q2"],
+  "etag": "q:BTC.price:60:77",
+  "ts": "2025-08-28T09:00:00Z"
+}
+```
+
+Semantics
+- Partition key: ``hash(tags, interval)``; ordering within partition only
+- At‑least‑once delivery; consumers must deduplicate by ``etag``
+- Gateways subscribe and rebroadcast via WS to SDK; SDK TagQueryManager heals via periodic HTTP reconcile on divergence
+
 ```mermaid
 sequenceDiagram
     participant G as Gateway
@@ -166,6 +189,8 @@ sequenceDiagram
 ```
 
 ---
+
+Note: In the current architecture, control updates (e.g., queue/tag changes, traffic weights) are also published to the internal EventPool and consumed by Gateways for WebSocket relay to SDKs. The callback interface above remains for backward compatibility and operational tooling.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
@@ -304,4 +329,3 @@ Available flags:
 - ``--config`` – optional path to configuration file.
 
 {{ nav_links() }}
-

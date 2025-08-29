@@ -12,6 +12,7 @@ last_modified: 2025-08-21
 - [QMTL Architecture](architecture.md)
 - [Gateway](gateway.md)
 - [DAG Manager](dag-manager.md)
+- [WorldManager](worldmanager.md)
 
 아래는 \*\*Lean의 ‘브로커리지 모델(Brokerage Model)’\*\*을 구현할 때 필요한 핵심 기술과, 이를 **조합**해 “현실적인 체결·거래 제약”을 한 번에 모델링하는 설계 가이드입니다. 마지막에 **QMTL**로 옮겨 담는 방법(모듈 배치/파이프라인)도 제안합니다.
 
@@ -212,6 +213,14 @@ Lean의 브로커리지 모델은 \*\*“브로커별 현실 모델 번들 + 사
 
 If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬 의사코드)로 실행 순서(Pre→Fill→Slip→Fee→Settle)를 보여드릴게요.
 
+---
+
+## Integration Note: Worlds and Brokerage
+
+- Activation vs. Execution: WorldManager decides whether a strategy/side may trade (activation set). Brokerage models define how orders are validated and executed once allowed.
+- Separation of concerns: Gateway/SDK enforce world activation via an order gate before invoking brokerage logic. Brokerage does not determine activation and remains broker‑specific.
+- Safety: If activation is stale/unknown, orders are gated OFF regardless of brokerage model outcomes.
+
 [1]: https://www.quantconnect.com/docs/v2/writing-algorithms/universes/settings?utm_source=chatgpt.com "Settings"
 [2]: https://www.lean.io/docs/v2/lean-engine/class-reference/IBrokerageModel_8cs_source.html?utm_source=chatgpt.com "Common/Brokerages/IBrokerageModel.cs Source File"
 [3]: https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/brokerages/supported-models/interactive-brokers?utm_source=chatgpt.com "Interactive Brokers"
@@ -240,4 +249,3 @@ If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬
 [26]: https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/key-concepts?utm_source=chatgpt.com "Reality Modeling"
 
 {{ nav_links() }}
-
