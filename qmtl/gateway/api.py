@@ -5,6 +5,8 @@ import uuid
 import base64
 import logging
 import hashlib
+import os
+import secrets
 from dataclasses import dataclass
 from typing import Optional, Coroutine, Any
 import asyncio
@@ -183,13 +185,20 @@ def create_app(
     ):
         budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
         world_client_local = WorldServiceClient(worldservice_url, budget=budget)
-    event_cfg = event_config or EventDescriptorConfig(
-        secret="secret",
-        kid="default",
-        ttl=300,
-        stream_url="wss://gateway/ws/evt",
-        fallback_url="wss://gateway/ws/fallback",
-    )
+    if event_config is not None:
+        event_cfg = event_config
+    else:
+        secret = os.getenv("QMTL_EVENT_SECRET")
+        if not secret:
+            secret = secrets.token_hex(32)
+            logger.warning("QMTL_EVENT_SECRET is not set; using a generated secret")
+        event_cfg = EventDescriptorConfig(
+            secret=secret,
+            kid="default",
+            ttl=300,
+            stream_url="wss://gateway/ws/evt",
+            fallback_url="wss://gateway/ws/fallback",
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
