@@ -116,3 +116,29 @@ async def test_decide_ttl_envelope_fallback(fake_redis):
     assert r1.json() == {"v": 1, "ttl": "300s"}
     assert r2.json() == {"v": 1, "ttl": "300s"}
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_decide_ttl_zero_no_cache(fake_redis):
+    calls = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            calls["n"] += 1
+            # No Cache-Control; envelope explicitly disables caching
+            return httpx.Response(200, json={"v": calls["n"], "ttl": "0s"})
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r1 = await api_client.get("/worlds/abc/decide")
+        r2 = await api_client.get("/worlds/abc/decide")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert r1.json() == {"v": 1, "ttl": "0s"}
+    assert r2.json() == {"v": 2, "ttl": "0s"}
+    # No cache should have been used
+    assert calls["n"] == 2
