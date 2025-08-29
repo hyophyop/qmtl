@@ -145,3 +145,40 @@ async def test_decide_ttl_zero_no_cache(fake_redis):
     assert r2.json() == {"v": 2, "ttl": "0s"}
     # No cache should have been used
     assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_state_hash_probe_divergence(fake_redis):
+    hashes = ["h1", "h1", "h2"]
+    calls = {"hash": 0, "snap": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation/state_hash"):
+            idx = calls["hash"]
+            calls["hash"] += 1
+            return httpx.Response(200, json={"state_hash": hashes[idx]})
+        if request.url.path.endswith("/activation"):
+            calls["snap"] += 1
+            return httpx.Response(200, json={"a": calls["snap"]})
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        # initial full snapshot
+        await api_client.get("/worlds/abc/activation")
+        # unchanged hash
+        h1 = await api_client.get("/worlds/abc/activation/state_hash")
+        assert h1.json() == {"state_hash": "h1"}
+        h2 = await api_client.get("/worlds/abc/activation/state_hash")
+        assert h2.json() == {"state_hash": "h1"}
+        assert calls["snap"] == 1
+        # divergence
+        h3 = await api_client.get("/worlds/abc/activation/state_hash")
+        assert h3.json() == {"state_hash": "h2"}
+        await api_client.get("/worlds/abc/activation")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert calls["snap"] == 2

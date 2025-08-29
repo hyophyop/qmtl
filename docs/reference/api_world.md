@@ -61,6 +61,16 @@ Response (ActivationEnvelope)
 ```
 Schema: reference/schemas/activation_envelope.schema.json
 
+### GET /worlds/{id}/{topic}/state_hash
+Returns a `state_hash` for the given topic so clients can check for divergence before requesting a full snapshot.
+
+Example: `/worlds/{id}/activation/state_hash`
+
+Response
+```json
+{ "state_hash": "sha256:..." }
+```
+
 ### POST /worlds/{id}/evaluate
 Evaluates current policy and returns a plan. Read‑only; does not change activation.
 
