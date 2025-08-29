@@ -22,7 +22,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from contextlib import asynccontextmanager
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
@@ -43,7 +43,7 @@ from .controlbus_consumer import ControlBusConsumer
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 from .world_client import WorldServiceClient, Budget
-from .event_descriptor import EventDescriptorConfig, sign_event_token
+from .event_descriptor import EventDescriptorConfig, sign_event_token, jwks
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -201,8 +201,8 @@ def create_app(
             secret = secrets.token_hex(32)
             logger.warning("QMTL_EVENT_SECRET is not set; using a generated secret")
         event_cfg = EventDescriptorConfig(
-            secret=secret,
-            kid="default",
+            keys={"default": secret},
+            active_kid="default",
             ttl=300,
             stream_url="wss://gateway/ws/evt",
             fallback_url="wss://gateway/ws/fallback",
@@ -535,6 +535,11 @@ def create_app(
             fallback_url=cfg.fallback_url,
         )
 
+    @app.get("/events/jwks")
+    async def events_jwks() -> dict[str, Any]:
+        cfg: EventDescriptorConfig = app.state.event_config
+        return jwks(cfg)
+
     @app.get("/worlds/{world_id}/decide")
     async def get_world_decide(world_id: str, request: Request) -> Any:
         client: WorldServiceClient | None = app.state.world_client
@@ -544,7 +549,13 @@ def create_app(
         auth = request.headers.get("authorization")
         if auth:
             headers["Authorization"] = auth
-        return await client.get_decide(world_id, headers=headers)
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        data = await client.get_decide(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
     @app.get("/worlds/{world_id}/activation")
     async def get_world_activation(world_id: str, request: Request) -> Any:
@@ -555,7 +566,13 @@ def create_app(
         auth = request.headers.get("authorization")
         if auth:
             headers["Authorization"] = auth
-        return await client.get_activation(world_id, headers=headers)
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        data = await client.get_activation(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
     @app.get("/worlds/{world_id}/{topic}/state_hash")
     async def get_world_state_hash(world_id: str, topic: str, request: Request) -> Any:
@@ -566,7 +583,13 @@ def create_app(
         auth = request.headers.get("authorization")
         if auth:
             headers["Authorization"] = auth
-        return await client.get_state_hash(world_id, topic, headers=headers)
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        data = await client.get_state_hash(world_id, topic, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
     @app.post("/worlds/{world_id}/evaluate")
     async def post_world_evaluate(world_id: str, payload: dict, request: Request) -> Any:
@@ -577,7 +600,13 @@ def create_app(
         auth = request.headers.get("authorization")
         if auth:
             headers["Authorization"] = auth
-        return await client.post_evaluate(world_id, payload, headers=headers)
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        data = await client.post_evaluate(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
     @app.post("/worlds/{world_id}/apply")
     async def post_world_apply(world_id: str, payload: dict, request: Request) -> Any:
@@ -590,7 +619,13 @@ def create_app(
         auth = request.headers.get("authorization")
         if auth:
             headers["Authorization"] = auth
-        return await client.post_apply(world_id, payload, headers=headers)
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        data = await client.post_apply(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
     @app.get("/metrics")
     async def metrics_endpoint() -> Response:
