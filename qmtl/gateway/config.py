@@ -13,3 +13,7 @@ class GatewayConfig:
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
     insert_sentinel: bool = True
+    worldservice_url: str = "http://localhost:8421"
+    worldservice_timeout: float = 0.3
+    worldservice_retries: int = 2
+    worldservice_enabled: bool = True

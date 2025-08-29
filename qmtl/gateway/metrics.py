@@ -40,6 +40,21 @@ dagclient_breaker_open_total = Gauge(
     registry=global_registry,
 )
 
+# WorldService proxy metrics
+worldservice_cache_hits_total = Counter(
+    "worldservice_cache_hits_total",
+    "Total cache hits for WorldService proxy",
+    ["endpoint"],
+    registry=global_registry,
+)
+
+worldservice_latency_ms = Gauge(
+    "worldservice_latency_ms",
+    "WorldService request latency in milliseconds",
+    ["endpoint"],
+    registry=global_registry,
+)
+
 
 # Track the percentage of traffic routed to each sentinel version
 if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
@@ -107,4 +122,6 @@ def reset_metrics() -> None:
     degrade_level.clear()
     dagclient_breaker_open_total.set(0)
     dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
+    worldservice_cache_hits_total._metrics.clear()
+    worldservice_latency_ms.clear()
 

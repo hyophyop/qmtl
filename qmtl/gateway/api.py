@@ -29,6 +29,7 @@ from qmtl.sdk.node import MatchMode
 from .ws import WebSocketHub
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
+from .world_client import WorldClient
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -111,6 +112,7 @@ def create_app(
     redis_client: Optional[redis.Redis] = None,
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
+    world_client: Optional[WorldClient] = None,
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
     *,
@@ -147,6 +149,7 @@ def create_app(
     )
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
+    ws_client_local = world_client or WorldClient("http://localhost:8421")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -188,6 +191,40 @@ def create_app(
     async def health() -> dict[str, str]:
         """Deprecated health check; alias for ``/status``."""
         return await gateway_health(redis_conn, database_obj, dagmanager)
+
+    @app.get("/worlds/{world_id}/decide")
+    async def world_decide(world_id: str, request: Request) -> dict:
+        headers: dict[str, str] = {}
+        auth = request.headers.get("Authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await ws_client_local.get_decision(world_id, headers)
+
+    @app.get("/worlds/{world_id}/activation")
+    async def world_activation(world_id: str, request: Request) -> dict:
+        headers: dict[str, str] = {}
+        auth = request.headers.get("Authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await ws_client_local.get_activation(world_id, headers)
+
+    @app.post("/worlds/{world_id}/evaluate")
+    async def world_evaluate(world_id: str, payload: dict, request: Request) -> dict:
+        headers: dict[str, str] = {}
+        auth = request.headers.get("Authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await ws_client_local.post_evaluate(world_id, payload, headers)
+
+    @app.post("/worlds/{world_id}/apply")
+    async def world_apply(world_id: str, payload: dict, request: Request) -> dict:
+        if request.headers.get("X-Allow-Live", "").lower() != "true":
+            raise HTTPException(status_code=403, detail="live trading not allowed")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("Authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await ws_client_local.post_apply(world_id, payload, headers)
 
     class Gateway:
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
