@@ -84,21 +84,29 @@ class WebSocketHub:
         """Queue ``data`` for broadcast to all connected clients."""
         await self._queue.put(json.dumps(data))
 
-    async def send_progress(self, strategy_id: str, status: str) -> None:
+    async def send_progress(
+        self, strategy_id: str, status: str, *, correlation_id: str | None = None
+    ) -> None:
         event = format_event(
             "qmtl.gateway",
             "progress",
             {"strategy_id": strategy_id, "status": status},
+            correlation_id=correlation_id,
         )
         await self.broadcast(event)
 
     async def send_queue_map(
-        self, strategy_id: str, queue_map: dict[str, list[str] | str]
+        self,
+        strategy_id: str,
+        queue_map: dict[str, list[str] | str],
+        *,
+        correlation_id: str | None = None,
     ) -> None:
         event = format_event(
             "qmtl.gateway",
             "queue_map",
             {"strategy_id": strategy_id, "queue_map": queue_map},
+            correlation_id=correlation_id,
         )
         await self.broadcast(event)
 
@@ -108,6 +116,8 @@ class WebSocketHub:
         interval: int,
         queues: list[str],
         match_mode: MatchMode = MatchMode.ANY,
+        *,
+        correlation_id: str | None = None,
     ) -> None:
         """Broadcast queue update events.
 
@@ -122,26 +132,44 @@ class WebSocketHub:
                 "queues": queues,
                 "match_mode": match_mode.value,
             },
+            correlation_id=correlation_id,
         )
         await self.broadcast(event)
 
-    async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
+    async def send_sentinel_weight(
+        self, sentinel_id: str, weight: float, *, correlation_id: str | None = None
+    ) -> None:
         """Broadcast sentinel weight updates."""
         event = format_event(
             "qmtl.gateway",
             "sentinel_weight",
             {"sentinel_id": sentinel_id, "weight": weight},
+            correlation_id=correlation_id,
         )
         await self.broadcast(event)
 
-    async def send_activation_updated(self, payload: dict) -> None:
+    async def send_activation_updated(
+        self, payload: dict, *, correlation_id: str | None = None
+    ) -> None:
         """Broadcast activation updates."""
-        event = format_event("qmtl.gateway", "activation_updated", payload)
+        event = format_event(
+            "qmtl.gateway",
+            "activation_updated",
+            payload,
+            correlation_id=correlation_id or payload.get("correlation_id"),
+        )
         await self.broadcast(event)
 
-    async def send_policy_updated(self, payload: dict) -> None:
+    async def send_policy_updated(
+        self, payload: dict, *, correlation_id: str | None = None
+    ) -> None:
         """Broadcast policy updates."""
-        event = format_event("qmtl.gateway", "policy_updated", payload)
+        event = format_event(
+            "qmtl.gateway",
+            "policy_updated",
+            payload,
+            correlation_id=correlation_id or payload.get("correlation_id"),
+        )
         await self.broadcast(event)
 
 

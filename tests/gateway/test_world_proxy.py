@@ -1,3 +1,5 @@
+import base64
+import json
 import pytest
 import httpx
 
@@ -142,3 +144,39 @@ async def test_decide_ttl_zero_no_cache(fake_redis):
     assert r2.json() == {"v": 2, "ttl": "0s"}
     # No cache should have been used
     assert calls["n"] == 2
+
+
+def _make_token(claims: dict) -> str:
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "none"}).encode()).rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+    return f"{header}.{payload}."
+
+
+@pytest.mark.asyncio
+async def test_world_proxy_correlation_and_rbac(fake_redis):
+    corr_id = "cid-1"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("X-Correlation-ID") == corr_id
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    good = _make_token({"worlds": ["abc"]})
+    bad = _make_token({"worlds": ["xyz"]})
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r_ok = await api_client.get(
+            "/worlds/abc/decide",
+            headers={"Authorization": f"Bearer {good}", "X-Correlation-ID": corr_id},
+        )
+        r_bad = await api_client.get(
+            "/worlds/abc/decide",
+            headers={"Authorization": f"Bearer {bad}"},
+        )
+    await asgi.aclose()
+    await client._client.aclose()
+    assert r_ok.status_code == 200
+    assert r_ok.headers["X-Correlation-ID"] == corr_id
+    assert r_bad.status_code == 403

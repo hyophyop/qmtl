@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -51,12 +52,27 @@ class WorldServiceClient:
         self._decision_cache: Dict[str, TTLCacheEntry] = {}
         self._activation_cache: Dict[str, tuple[str, Any]] = {}
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        hdrs = dict(headers or {})
+        hdrs.setdefault("X-Correlation-ID", str(uuid.uuid4()))
         backoff = 0.1
         for attempt in range(self._budget.retries + 1):
             try:
                 start = time.perf_counter()
-                resp = await self._client.request(method, url, timeout=self._budget.timeout, **kwargs)
+                resp = await self._client.request(
+                    method,
+                    url,
+                    timeout=self._budget.timeout,
+                    headers=hdrs,
+                    **kwargs,
+                )
                 gw_metrics.observe_worlds_proxy_latency((time.perf_counter() - start) * 1000)
                 return resp
             except Exception:

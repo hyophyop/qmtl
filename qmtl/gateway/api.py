@@ -528,50 +528,73 @@ def create_app(
             fallback_url=cfg.fallback_url,
         )
 
-    @app.get("/worlds/{world_id}/decide")
-    async def get_world_decide(world_id: str, request: Request) -> Any:
-        client: WorldServiceClient | None = app.state.world_client
-        if client is None:
-            raise HTTPException(status_code=503, detail="world service disabled")
+    def _decode_jwt_payload(token: str) -> dict[str, Any]:
+        """Decode a JWT payload without verifying the signature."""
+        try:
+            payload_b64 = token.split(".")[1]
+            pad = "=" * (-len(payload_b64) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload_b64 + pad))
+        except Exception:
+            return {}
+
+    def _prepare_world_headers(world_id: str, request: Request, response: Response) -> dict[str, str]:
+        """Prepare headers for WorldService requests.
+
+        If an Authorization header is present, ensure the token grants access
+        to the requested ``world_id``. A correlation identifier is always
+        generated and attached to both the outbound request and response.
+        """
         headers: dict[str, str] = {}
         auth = request.headers.get("authorization")
         if auth:
+            try:
+                scheme, token = auth.split(" ", 1)
+            except ValueError:
+                raise HTTPException(status_code=401, detail="invalid authorization")
+            if scheme.lower() != "bearer":
+                raise HTTPException(status_code=401, detail="invalid authorization")
+            claims = _decode_jwt_payload(token)
+            worlds = claims.get("worlds")
+            if isinstance(worlds, list) and world_id not in worlds:
+                raise HTTPException(status_code=403, detail="forbidden for world")
             headers["Authorization"] = auth
+        corr = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
+        response.headers["X-Correlation-ID"] = corr
+        headers["X-Correlation-ID"] = corr
+        return headers
+
+    @app.get("/worlds/{world_id}/decide")
+    async def get_world_decide(world_id: str, request: Request, response: Response) -> Any:
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers = _prepare_world_headers(world_id, request, response)
         return await client.get_decide(world_id, headers=headers)
 
     @app.get("/worlds/{world_id}/activation")
-    async def get_world_activation(world_id: str, request: Request) -> Any:
+    async def get_world_activation(world_id: str, request: Request, response: Response) -> Any:
         client: WorldServiceClient | None = app.state.world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
+        headers = _prepare_world_headers(world_id, request, response)
         return await client.get_activation(world_id, headers=headers)
 
     @app.post("/worlds/{world_id}/evaluate")
-    async def post_world_evaluate(world_id: str, payload: dict, request: Request) -> Any:
+    async def post_world_evaluate(world_id: str, payload: dict, request: Request, response: Response) -> Any:
         client: WorldServiceClient | None = app.state.world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
+        headers = _prepare_world_headers(world_id, request, response)
         return await client.post_evaluate(world_id, payload, headers=headers)
 
     @app.post("/worlds/{world_id}/apply")
-    async def post_world_apply(world_id: str, payload: dict, request: Request) -> Any:
+    async def post_world_apply(world_id: str, payload: dict, request: Request, response: Response) -> Any:
         if app.state.enforce_live_guard and request.headers.get("X-Allow-Live") != "true":
             raise HTTPException(status_code=403, detail="live trading not allowed")
         client: WorldServiceClient | None = app.state.world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
+        headers = _prepare_world_headers(world_id, request, response)
         return await client.post_apply(world_id, payload, headers=headers)
 
     @app.get("/metrics")

@@ -29,9 +29,10 @@ async def test_hub_broadcasts_progress_and_queue_map():
     await asyncio.sleep(0.1)
     await hub.stop()
     assert len(ws.messages) == 2
-    types = {json.loads(m)["type"] for m in ws.messages}
-    assert "progress" in types
-    assert "queue_map" in types
+    for msg in ws.messages:
+        payload = json.loads(msg)
+        assert payload["type"] in {"progress", "queue_map"}
+        assert "correlation_id" in payload
 
 
 @pytest.mark.asyncio
