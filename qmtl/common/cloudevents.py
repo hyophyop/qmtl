@@ -5,8 +5,13 @@ from typing import Any
 from uuid import uuid4
 
 
-def format_event(source: str, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Return a CloudEvents-formatted dictionary."""
+def format_event(
+    source: str, event_type: str, data: dict[str, Any], *, correlation_id: str | None = None
+) -> dict[str, Any]:
+    """Return a CloudEvents-formatted dictionary with ``correlation_id``."""
+
+    if correlation_id is None:
+        correlation_id = str(uuid4())
     return {
         "specversion": "1.0",
         "id": str(uuid4()),
@@ -15,6 +20,7 @@ def format_event(source: str, event_type: str, data: dict[str, Any]) -> dict[str
         "time": datetime.now(tz=timezone.utc).isoformat(),
         "datacontenttype": "application/json",
         "data": data,
+        "correlation_id": correlation_id,
     }
 
 __all__ = ["format_event"]
