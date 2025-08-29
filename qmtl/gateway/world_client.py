@@ -47,7 +47,7 @@ class WorldClient:
         for attempt in range(self.retries + 1):
             try:
                 return await self._client.request(method, url, **kwargs)
-            except Exception as exc:  # pragma: no cover - network failure
+            except httpx.RequestError as exc:  # pragma: no cover - network failure
                 last_exc = exc
                 if attempt < self.retries:
                     await asyncio.sleep(0.05)
