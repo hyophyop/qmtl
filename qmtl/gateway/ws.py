@@ -133,6 +133,24 @@ class WebSocketHub:
         )
         await self.broadcast(event)
 
+    async def send_activation_updated(self, activation: dict) -> None:
+        """Broadcast activation updates."""
+        event = format_event(
+            "qmtl.gateway",
+            "activation_updated",
+            activation,
+        )
+        await self.broadcast(event)
+
+    async def send_policy_updated(self, policy: dict) -> None:
+        """Broadcast policy updates."""
+        event = format_event(
+            "qmtl.gateway",
+            "policy_updated",
+            policy,
+        )
+        await self.broadcast(event)
+
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         """Broadcast sentinel weight updates."""
         event = format_event(
