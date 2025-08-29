@@ -160,5 +160,21 @@ class WebSocketHub:
         )
         await self.broadcast(event)
 
+    async def send_activation_updated(self, payload: dict) -> None:
+        event = format_event(
+            "qmtl.gateway",
+            "activation_updated",
+            payload,
+        )
+        await self.broadcast(event)
+
+    async def send_policy_updated(self, payload: dict) -> None:
+        event = format_event(
+            "qmtl.gateway",
+            "policy_updated",
+            payload,
+        )
+        await self.broadcast(event)
+
 
 __all__ = ["WebSocketHub"]
