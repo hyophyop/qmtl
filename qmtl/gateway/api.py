@@ -8,6 +8,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Optional, Coroutine, Any
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, status, Response, Request
 from contextlib import asynccontextmanager
@@ -32,6 +33,7 @@ from .controlbus_consumer import ControlBusConsumer
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 from .world_client import WorldServiceClient, Budget
+from .event_descriptor import EventDescriptorConfig, sign_event_token
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -51,6 +53,20 @@ class StrategyAck(BaseModel):
 
 class StatusResponse(BaseModel):
     status: str
+
+
+class EventSubscribeRequest(BaseModel):
+    world_id: str
+    strategy_id: str
+    topics: list[str] = Field(default_factory=list)
+
+
+class EventSubscribeResponse(BaseModel):
+    stream_url: str
+    token: str
+    topics: list[str]
+    expires_at: datetime
+    fallback_url: str | None = None
 
 
 
@@ -118,6 +134,7 @@ def create_app(
     ws_hub: Optional[WebSocketHub] = None,
     controlbus_consumer: Optional[ControlBusConsumer] = None,
     world_client: Optional[WorldServiceClient] = None,
+    event_config: EventDescriptorConfig | None = None,
     *,
     insert_sentinel: bool = True,
     database_backend: str = "postgres",
@@ -166,6 +183,13 @@ def create_app(
     ):
         budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
         world_client_local = WorldServiceClient(worldservice_url, budget=budget)
+    event_cfg = event_config or EventDescriptorConfig(
+        secret="secret",
+        kid="default",
+        ttl=300,
+        stream_url="wss://gateway/ws/evt",
+        fallback_url="wss://gateway/ws/fallback",
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -201,6 +225,7 @@ def create_app(
     app.state.degradation = degradation
     app.state.world_client = world_client_local
     app.state.enforce_live_guard = enforce_live_guard
+    app.state.event_config = event_cfg
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):
@@ -434,6 +459,30 @@ def create_app(
                 yield json.dumps({"queues": queues}) + "\n"
 
         return StreamingResponse(streamer(), media_type="text/plain")
+
+    @app.post("/events/subscribe", response_model=EventSubscribeResponse)
+    async def events_subscribe(payload: EventSubscribeRequest) -> EventSubscribeResponse:
+        cfg: EventDescriptorConfig = app.state.event_config
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(seconds=cfg.ttl)
+        claims = {
+            "aud": "controlbus",
+            "sub": payload.strategy_id,
+            "world_id": payload.world_id,
+            "strategy_id": payload.strategy_id,
+            "topics": payload.topics,
+            "jti": str(uuid.uuid4()),
+            "iat": int(now.timestamp()),
+            "exp": int(exp.timestamp()),
+        }
+        token = sign_event_token(claims, cfg)
+        return EventSubscribeResponse(
+            stream_url=cfg.stream_url,
+            token=token,
+            topics=payload.topics,
+            expires_at=exp,
+            fallback_url=cfg.fallback_url,
+        )
 
     @app.get("/worlds/{world_id}/decide")
     async def get_world_decide(world_id: str, request: Request) -> Any:
