@@ -4,9 +4,8 @@ import hashlib
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.dagmanager import compute_node_id
+from qmtl.common import compute_node_id, crc32_of_list
 from qmtl.gateway.api import create_app, Database, StrategySubmit
-from qmtl.common import crc32_of_list
 
 
 class FakeDB(Database):
@@ -42,6 +41,29 @@ def test_compute_node_id_collision():
     second = compute_node_id(*data, existing_ids={first})
     assert first != second
     assert second == hashlib.sha3_256(b"A:B:C:D").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_node_id_mismatch(client_and_redis):
+    client, _ = client_and_redis
+    node = {
+        "node_type": "N",
+        "code_hash": "c",
+        "config_hash": "cfg",
+        "schema_hash": "s",
+        "node_id": "wrong",
+    }
+    dag = {"nodes": [node]}
+    payload = StrategySubmit(
+        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+        meta=None,
+        run_type="dry-run",
+        node_ids_crc32=crc32_of_list(["wrong"]),
+    )
+    resp = client.post("/strategies", json=payload.model_dump())
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "node_id_mismatch" in detail
 
 
 @pytest.mark.asyncio
