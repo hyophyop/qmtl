@@ -4,6 +4,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+import uuid
 
 import httpx
 
@@ -52,6 +53,8 @@ class WorldServiceClient:
         self._activation_cache: Dict[str, tuple[str, Any]] = {}
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        headers = kwargs.setdefault("headers", {})
+        headers.setdefault("X-Correlation-ID", uuid.uuid4().hex)
         backoff = 0.1
         for attempt in range(self._budget.retries + 1):
             try:
