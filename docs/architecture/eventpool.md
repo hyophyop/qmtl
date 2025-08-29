@@ -74,7 +74,7 @@ PolicyUpdated (versioned)
   "type": "PolicyUpdated",
   "version": 1,
   "world_id": "crypto_mom_1h",
-  "version": 3,
+  "policy_version": 3,
   "checksum": "sha256:...",
   "status": "ACTIVE",
   "ts": "2025-08-28T09:00:00Z"
