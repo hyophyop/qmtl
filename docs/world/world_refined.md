@@ -94,10 +94,10 @@ F. 운영·관측·감사
 
 3) 정책/아키텍처 보강: 적용 청사진
 
-(1) WorldManager(신규 서비스, 경계 명확화)
+(1) WorldService(신규 서비스, 경계 명확화)
 	•	책임: 정책 파싱/검증 → 평가주기 실행 → 후보 선별(게이트→스코어→제약→Top‑K) → 전환 트랜잭션 발행.
 	•	상태기계(FSM): submitted → backtest → dry-run(evaluating) → live → inactive(←→dry-run)
-	•	Gateway 연결: Gateway는 실행/상태 저장에 집중, WorldManager는 정책·결정에 집중(약결합).
+	•	Gateway 연결: Gateway는 실행/상태 저장에 집중, WorldService는 정책·결정에 집중(약결합).
 	•	기존 Runner/메트릭 수집을 그대로 활용(설계 초안과 호환).  ￼  ￼
 
 (2) API/CLI (외부 제어)
@@ -193,7 +193,7 @@ def hysteresis(prev_state, checks, policy):
 9) 본 설계가 기존 결과와 합치/강화되는 지점
 	•	Runner 모드 전환·PaperTrading↔Brokerage 전환은 그대로 활용하되, 게이트 노드+2‑Phase 전환으로 금융 시스템에 필요한 원자성·안전장치를 부여.  ￼
 	•	월드 정책/Top‑K/히스테리시스·가지치기(Mark‑&‑Sweep) 구상은 유지하되, 데이터 통화성/표본충분성/리스크 총량을 정식 게이트로 승격.  ￼  ￼
-	•	CLI/API는 Gateway를 기본 채널로 하되, WorldManager를 분리해 구조적 명확성 확보(정책 결정은 WorldManager, 실행/상태는 Gateway).  ￼
+	•	CLI/API는 Gateway를 기본 채널로 하되, WorldService를 분리해 구조적 명확성 확보(정책 결정은 WorldService, 실행/상태는 Gateway).  ￼
 
 ⸻
 

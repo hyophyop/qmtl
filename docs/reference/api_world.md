@@ -9,11 +9,11 @@ last_modified: 2025-08-29
 
 # World API Reference — Proxied via Gateway
 
-Gateway proxies WorldManager endpoints for SDKs and tools. This page lists the key endpoints and normative envelopes. See also: docs/world/world.md §12 for examples.
+Gateway proxies WorldService endpoints for SDKs and tools. This page lists the key endpoints and normative envelopes. See also: docs/world/world.md §12 for examples.
 
 ## Authentication
 
-- External callers authenticate to Gateway (JWT). Gateway authenticates/authorizes to WorldManager using service credentials and forwards identity scopes.
+- External callers authenticate to Gateway (JWT). Gateway authenticates/authorizes to WorldService using service credentials and forwards identity scopes.
 
 ## Endpoints
 

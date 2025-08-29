@@ -1,5 +1,5 @@
 ---
-title: "WorldManager — World Policy, Decisions, and Activation"
+title: "WorldService — World Policy, Decisions, and Activation"
 tags: [architecture, world, policy]
 author: "QMTL Team"
 last_modified: 2025-08-29
@@ -7,11 +7,11 @@ last_modified: 2025-08-29
 
 {{ nav_links() }}
 
-# WorldManager — World Policy, Decisions, and Activation
+# WorldService — World Policy, Decisions, and Activation
 
 ## 0. Role & Scope
 
-WorldManager is the system of record (SSOT) for Worlds. It owns:
+WorldService is the system of record (SSOT) for Worlds. It owns:
 - World/Policy registry: CRUD, versioning, defaults, rollback
 - Decision engine: data-currency, sample sufficiency, gates/score/constraints, hysteresis → effective_mode
 - Activation control: per-world activation set for strategies/sides with weights
@@ -130,12 +130,12 @@ Concurrency & Single‑Flight
 
 ## 6. Security & RBAC
 
-- Auth: service‑to‑service tokens (mTLS/JWT); user tokens at Gateway → propagated to WM
-- World‑scope RBAC enforced at WM; Gateway only proxies
+- Auth: service‑to‑service tokens (mTLS/JWT); user tokens at Gateway → propagated to WS
+- World‑scope RBAC enforced at WS; Gateway only proxies
 - Audit: all write ops and evaluations are logged with correlation_id
 
 Clock Discipline
-- Decisions depend on time. WM uses a monotonic server clock and enforces NTP health. Maximum tolerated client skew should be documented (e.g., ≤ 2s).
+- Decisions depend on time. WS uses a monotonic server clock and enforces NTP health. Maximum tolerated client skew should be documented (e.g., ≤ 2s).
 
 ---
 
@@ -156,7 +156,7 @@ Alerts
 
 ## 8. Failure Modes & Recovery
 
-- WM down: Gateway returns cached DecisionEnvelope if fresh; else safe default (offline/backtest). Activation defaults to inactive.
+- WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (offline/backtest). Activation defaults to inactive.
 - Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
 - Policy parse errors: reject version; keep prior default.
 
@@ -166,7 +166,7 @@ Alerts
 
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
-- EventPool: WM publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
+- EventPool: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
 
 ---
 

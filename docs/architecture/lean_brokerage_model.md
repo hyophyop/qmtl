@@ -12,7 +12,7 @@ last_modified: 2025-08-21
 - [QMTL Architecture](architecture.md)
 - [Gateway](gateway.md)
 - [DAG Manager](dag-manager.md)
-- [WorldManager](worldmanager.md)
+- [WorldService](worldservice.md)
 
 아래는 \*\*Lean의 ‘브로커리지 모델(Brokerage Model)’\*\*을 구현할 때 필요한 핵심 기술과, 이를 **조합**해 “현실적인 체결·거래 제약”을 한 번에 모델링하는 설계 가이드입니다. 마지막에 **QMTL**로 옮겨 담는 방법(모듈 배치/파이프라인)도 제안합니다.
 
@@ -217,7 +217,7 @@ If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬
 
 ## Integration Note: Worlds and Brokerage
 
-- Activation vs. Execution: WorldManager decides whether a strategy/side may trade (activation set). Brokerage models define how orders are validated and executed once allowed.
+- Activation vs. Execution: WorldService decides whether a strategy/side may trade (activation set). Brokerage models define how orders are validated and executed once allowed.
 - Separation of concerns: Gateway/SDK enforce world activation via an order gate before invoking brokerage logic. Brokerage does not determine activation and remains broker‑specific.
 - Safety: If activation is stale/unknown, orders are gated OFF regardless of brokerage model outcomes.
 

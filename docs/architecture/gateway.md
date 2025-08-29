@@ -15,7 +15,7 @@ last_modified: 2025-08-21
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)
 - [DAG Manager](dag-manager.md)
-- [WorldManager](worldmanager.md)
+- [WorldService](worldservice.md)
 - [EventPool](eventpool.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 
@@ -68,7 +68,7 @@ Worker -->|topic map| SDK
 DAGM-.->|queue events|Ingest
 ```
 
-Note: WorldManager and EventPool are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to EventPool and proxies WorldManager APIs.
+Note: WorldService and EventPool are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to EventPool and proxies WorldService APIs.
 
 ---
 
@@ -217,18 +217,18 @@ Available flags:
 
 ## S6 · Worlds Proxy & Event Stream (New)
 
-Gateway remains the single public boundary for SDKs. It proxies WorldManager endpoints and provides an opaque event stream descriptor to SDKs; it does not compute world policy itself.
+Gateway remains the single public boundary for SDKs. It proxies WorldService endpoints and provides an opaque event stream descriptor to SDKs; it does not compute world policy itself.
 
 ### Worlds Proxy
 
-- Proxied endpoints → WorldManager:
+- Proxied endpoints → WorldService:
   - ``GET /worlds/{id}/decide`` → DecisionEnvelope (cached with TTL/etag)
   - ``GET /worlds/{id}/activation`` → ActivationEnvelope (fail‑safe: inactive on stale)
   - ``POST /worlds/{id}/evaluate`` / ``POST /worlds/{id}/apply`` (operator‑only)
 - Caching & TTLs:
   - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (offline/backtest)
   - Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
-- Circuit breakers & budgets: independent timeouts/retries for WorldManager and DAG Manager backends (defaults: WM 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)
+- Circuit breakers & budgets: independent timeouts/retries for WorldService and DAG Manager backends (defaults: WS 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)
 
 ### Event Stream Descriptor
 
@@ -251,13 +251,13 @@ Token (JWT) claims (delegated WS or future use):
 
 ### Degrade & Fail‑Safe Policy (Summary)
 
-- WorldManager unavailable:
+- WorldService unavailable:
   - ``/decide`` → cached DecisionEnvelope if fresh; else safe default (offline/backtest)
   - ``/activation`` → inactive
 - Event stream unavailable:
   - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP
 - Live guard: even if DecisionEnvelope says ``live``, Gateway requires explicit caller consent (e.g., CLI `--allow-live` or header `X-Allow-Live: true`).
-- Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldManager; WorldManager logs it in audit records.
+- Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.
 
 See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).
 
