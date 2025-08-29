@@ -249,6 +249,13 @@ Token (JWT) claims (delegated WS or future use):
 - `world_id`, `strategy_id`, `topics`: subscription scope
 - `jti`, `iat`, `exp`, `kid`: idempotency and keying
 
+### Legacy Queue Watch & HTTP Fallback
+
+`GET /queues/watch` remains for backward compatibility but is marked as deprecated.
+Responses include a `Deprecation` header pointing callers to `POST /events/subscribe`.
+SDKs should use the event stream when available and periodically reconcile via
+`GET /queues/by_tag` if the stream drops or diverges.
+
 ### Degrade & Fail‑Safe Policy (Summary)
 
 - WorldService unavailable:

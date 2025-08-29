@@ -59,8 +59,9 @@ Related specs:
 
 ## Low Priority (P2)
 
-- Deprecation path for "/queues/watch":
-  - Mark as legacy once "/events/subscribe" is available. Keep until SDK migrates to the opaque event stream.
+- Legacy "/queues/watch":
+  - Endpoint retained for compatibility; emits ``Deprecation`` header pointing to ``/events/subscribe``.
+  - SDKs should reconcile via ``/queues/by_tag`` over HTTP if the event stream is unavailable.
 
 - World initial snapshot semantics:
   - Add optional HTTP endpoints for "state_hash" probe to avoid full snapshot when unchanged.
