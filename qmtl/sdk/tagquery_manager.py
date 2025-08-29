@@ -134,7 +134,7 @@ class TagQueryManager:
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
-        for task in self._watch_tasks.values():
+        for task in list(self._watch_tasks.values()):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -145,30 +145,43 @@ class TagQueryManager:
     ) -> None:
         if not self.gateway_url:
             return
+
+        key = (tags, interval, match_mode)
         params = {
             "tags": ",".join(tags),
             "interval": interval,
             "match_mode": match_mode.value,
         }
         url = self.gateway_url.rstrip("/") + "/queues/watch"
+        backoff: float = 1.0
         try:
-            async with httpx.AsyncClient() as client:
-                async with client.stream("GET", url, params=params) as resp:
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        payload = {
-                            "tags": list(tags),
-                            "interval": interval,
-                            "queues": data.get("queues", []),
-                            "match_mode": match_mode.value,
-                        }
-                        await self.handle_message(
-                            {"event": "queue_update", "data": payload}
-                        )
-        except Exception:
-            return
+            while key in self._nodes:
+                try:
+                    async with httpx.AsyncClient() as client:
+                        async with client.stream("GET", url, params=params) as resp:
+                            async for line in resp.aiter_lines():
+                                if not line:
+                                    continue
+                                try:
+                                    data = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                payload = {
+                                    "tags": list(tags),
+                                    "interval": interval,
+                                    "queues": data.get("queues", []),
+                                    "match_mode": match_mode.value,
+                                }
+                                await self.handle_message(
+                                    {"event": "queue_update", "data": payload}
+                                )
+                    backoff = 1.0
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 30)
+                    continue
+                await asyncio.sleep(backoff)
+        finally:
+            self._watch_tasks.pop(key, None)
