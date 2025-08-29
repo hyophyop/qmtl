@@ -344,7 +344,7 @@ def create_app(
                 if event_type == "ActivationUpdated"
                 else gateway._handle_policy_updated
             )
-            await handler(event)
+            await handler(data)
             return {"ok": True}
 
         return {"ok": True}
