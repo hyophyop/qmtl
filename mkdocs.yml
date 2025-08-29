@@ -36,7 +36,9 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
-  - World: world/world.md
+  - World:
+      - Spec: world/world.md
+      - Realm Terminology Evaluation: world/realm_rename_eval.md
   - Archive: archive/README.md
   - Tags: tags.md
   - Template: templates/template.md
