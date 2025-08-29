@@ -27,6 +27,7 @@ from .degradation import DegradationManager, DegradationLevel
 from .watch import QueueWatchHub
 from qmtl.sdk.node import MatchMode
 from .ws import WebSocketHub
+from .controlbus_consumer import ControlBusConsumer
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 
@@ -113,6 +114,7 @@ def create_app(
     dag_client: Optional[DagManagerClient] = None,
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
+    controlbus_consumer: Optional[ControlBusConsumer] = None,
     *,
     insert_sentinel: bool = True,
     database_backend: str = "postgres",
@@ -147,18 +149,27 @@ def create_app(
     )
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
+    controlbus_consumer_local = controlbus_consumer
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        if hasattr(dagmanager, "close"):
-            await dagmanager.close()
-        db_obj = getattr(app.state, "database", None)
-        if db_obj is not None and hasattr(db_obj, "close"):
-            try:
-                await db_obj.close()  # type: ignore[attr-defined]
-            except Exception:
-                logger.exception("Failed to close database connection")
+        if controlbus_consumer_local:
+            if ws_hub_local and controlbus_consumer_local.ws_hub is None:
+                controlbus_consumer_local.ws_hub = ws_hub_local
+            await controlbus_consumer_local.start()
+        try:
+            yield
+        finally:
+            if controlbus_consumer_local:
+                await controlbus_consumer_local.stop()
+            if hasattr(dagmanager, "close"):
+                await dagmanager.close()
+            db_obj = getattr(app.state, "database", None)
+            if db_obj is not None and hasattr(db_obj, "close"):
+                try:
+                    await db_obj.close()  # type: ignore[attr-defined]
+                except Exception:
+                    logger.exception("Failed to close database connection")
 
     app = FastAPI(lifespan=lifespan)
     FastAPIInstrumentor().instrument_app(app)

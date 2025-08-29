@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -13,3 +13,7 @@ class GatewayConfig:
     database_backend: str = "sqlite"
     database_dsn: str = "./qmtl.db"
     insert_sentinel: bool = True
+    controlbus_brokers: list[str] = field(default_factory=list)
+    controlbus_dsn: Optional[str] = None
+    controlbus_topics: list[str] = field(default_factory=list)
+    controlbus_group: str = "gateway"

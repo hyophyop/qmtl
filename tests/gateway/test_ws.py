@@ -119,3 +119,29 @@ async def test_hub_sends_sentinel_weight():
 
     assert received[0]["type"] == "sentinel_weight"
     assert received[0]["data"] == {"sentinel_id": "s1", "weight": 0.5}
+
+
+@pytest.mark.asyncio
+async def test_hub_sends_activation_and_policy():
+    hub = WebSocketHub()
+    port = await hub.start()
+    url = f"ws://localhost:{port}"
+    received = []
+
+    async def client():
+        async with websockets.connect(url) as ws:
+            while len(received) < 2:
+                msg = await ws.recv()
+                received.append(json.loads(msg))
+
+    task = asyncio.create_task(client())
+    await asyncio.sleep(0.1)
+    await hub.send_activation_updated({"strategy_id": "s1"})
+    await hub.send_policy_updated({"strategy_id": "s1", "limit": 1})
+    await asyncio.sleep(0.1)
+    await hub.stop()
+    await task
+
+    types = {evt["type"] for evt in received}
+    assert "activation_updated" in types
+    assert "policy_updated" in types
