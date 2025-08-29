@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import Optional, Set
+from typing import Optional, Set, Any, Dict
 
 from fastapi import WebSocket
 
@@ -20,16 +20,56 @@ class WebSocketHub:
     """Broadcast Gateway state updates to SDK clients."""
 
     def __init__(self) -> None:
-        self._clients: Set[WebSocket] = set()
+        self._clients: Set[Any] = set()
+        self._topics: Dict[Any, Optional[Set[str]]] = {}
         self._lock = asyncio.Lock()
         self._sentinel: object = object()
         self._queue: asyncio.Queue[object] = asyncio.Queue()
         self._task: Optional[asyncio.Task] = None
+        self._server: Optional[Any] = None
+        self._port: Optional[int] = None
 
-    async def start(self) -> None:
-        """Start the internal sender loop."""
+    async def start(self) -> int:
+        """Start the internal sender loop and a lightweight WS server.
+
+        Returns the bound port for the ephemeral WebSocket server. FastAPI
+        apps can also attach to this hub via ``/ws``; this server exists for
+        test scenarios that connect directly to the hub.
+        """
         if self._task is None:
             self._task = asyncio.create_task(self._sender_loop())
+
+        # Lazily start an ephemeral ws server to satisfy tests that
+        # connect directly to the hub.
+        if self._server is None:
+            try:
+                import websockets
+
+                async def _acceptor(sock):
+                    async with self._lock:
+                        self._clients.add(sock)
+                    try:
+                        # Drain incoming messages; hub is broadcast-only
+                        while True:
+                            await sock.recv()
+                    except Exception:
+                        pass
+                    finally:
+                        async with self._lock:
+                            self._clients.discard(sock)
+
+                self._server = await websockets.serve(_acceptor, "127.0.0.1", 0)
+                # Determine the bound port from the underlying socket
+                sockets = getattr(self._server, "sockets", None) or []
+                if sockets:
+                    self._port = sockets[0].getsockname()[1]
+                else:
+                    self._port = 0
+            except Exception:
+                logger.exception("Failed to start internal WebSocket server")
+                self._port = 0
+
+        return int(self._port or 0)
 
     async def stop(self) -> None:
         """Stop the sender loop and disconnect clients."""
@@ -38,6 +78,16 @@ class WebSocketHub:
         if self._task:
             await self._task
             self._task = None
+        # Close ephemeral server if running
+        if self._server is not None:
+            try:
+                self._server.close()
+                await self._server.wait_closed()
+            except Exception:
+                logger.exception("Failed to stop internal WebSocket server")
+            finally:
+                self._server = None
+                self._port = None
         async with self._lock:
             for ws in list(self._clients):
                 with contextlib.suppress(Exception):
@@ -48,28 +98,54 @@ class WebSocketHub:
         """Return ``True`` if the sender loop is active."""
         return self._task is not None and not self._task.done()
 
-    async def connect(self, websocket: WebSocket) -> None:
-        """Register an incoming WebSocket connection."""
+    async def connect(self, websocket: WebSocket, topics: Optional[Set[str]] = None) -> None:
+        """Register an incoming WebSocket connection.
+
+        If ``topics`` is provided, the connection only receives events
+        matching those topic names (e.g., {"activation", "policy", "queue"}).
+        ``None`` means no restriction (receive all events).
+        """
         await websocket.accept()
         async with self._lock:
             self._clients.add(websocket)
+            self._topics[websocket] = topics
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection."""
         async with self._lock:
             self._clients.discard(websocket)
+            self._topics.pop(websocket, None)
 
     async def _sender_loop(self) -> None:
         while True:
-            msg = await self._queue.get()
-            if msg is self._sentinel:
+            item = await self._queue.get()
+            if item is self._sentinel:
                 self._queue.task_done()
                 break
+            # Support both (message, topic) tuples and raw message strings
+            if isinstance(item, tuple) and len(item) == 2:
+                msg, topic = item  # type: ignore[misc]
+            else:
+                msg, topic = item, None
             async with self._lock:
-                clients = list(self._clients)
+                if topic is None:
+                    clients = list(self._clients)
+                else:
+                    clients = [
+                        ws
+                        for ws in self._clients
+                        if self._topics.get(ws) is None or topic in (self._topics.get(ws) or set())
+                    ]
             if clients:
+                async def _send(ws_any: Any, data: str):
+                    if hasattr(ws_any, "send_text"):
+                        return await ws_any.send_text(data)
+                    if hasattr(ws_any, "send"):
+                        return await ws_any.send(data)
+                    raise RuntimeError("Unknown websocket client type")
+
                 results = await asyncio.gather(
-                    *(ws.send_text(msg) for ws in clients), return_exceptions=True
+                    *(_send(ws, msg) for ws in clients), return_exceptions=True
                 )
                 for client_ws, res in zip(clients, results):
                     if isinstance(res, Exception):
@@ -80,9 +156,13 @@ class WebSocketHub:
                         )
             self._queue.task_done()
 
-    async def broadcast(self, data: dict) -> None:
-        """Queue ``data`` for broadcast to all connected clients."""
-        await self._queue.put(json.dumps(data))
+    async def broadcast(self, data: dict, *, topic: Optional[str] = None) -> None:
+        """Queue ``data`` for broadcast to clients.
+
+        If ``topic`` is provided, only clients subscribed to that topic will
+        receive the message. Otherwise the message is broadcast to all.
+        """
+        await self._queue.put((json.dumps(data), topic))
 
     async def send_progress(self, strategy_id: str, status: str) -> None:
         event = format_event(
@@ -123,7 +203,7 @@ class WebSocketHub:
                 "match_mode": match_mode.value,
             },
         )
-        await self.broadcast(event)
+        await self.broadcast(event, topic="queue")
 
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         """Broadcast sentinel weight updates."""
@@ -132,12 +212,12 @@ class WebSocketHub:
             "sentinel_weight",
             {"sentinel_id": sentinel_id, "weight": weight},
         )
-        await self.broadcast(event)
+        await self.broadcast(event, topic="activation")
 
     async def send_activation_updated(self, payload: dict) -> None:
         """Broadcast activation updates."""
         event = format_event("qmtl.gateway", "activation_updated", payload)
-        await self.broadcast(event)
+        await self.broadcast(event, topic="policy")
 
     async def send_policy_updated(self, payload: dict) -> None:
         """Broadcast policy updates."""

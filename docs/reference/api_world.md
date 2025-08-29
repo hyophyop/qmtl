@@ -111,6 +111,19 @@ Response
 ```
 Initial message MUST be a full snapshot or include a `state_hash` per topic. Tokens are short‑lived JWTs with claims: `aud`, `sub`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`, `kid`.
 
+### GET /events/jwks
+Returns a JWKS document describing the current and previous signing keys for event stream tokens.
+
+Response (example)
+```json
+{
+  "keys": [
+    { "kty": "oct", "use": "sig", "alg": "HS256", "kid": "old", "k": "czE=" },
+    { "kty": "oct", "use": "sig", "alg": "HS256", "kid": "new", "k": "czI=" }
+  ]
+}
+```
+
 ## Error Semantics
 
 - 404: unknown world
