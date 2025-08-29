@@ -15,6 +15,8 @@ last_modified: 2025-08-21
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)
 - [DAG Manager](dag-manager.md)
+- [WorldManager](worldmanager.md)
+- [EventPool](eventpool.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 
 > This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
@@ -36,6 +38,10 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 **Ax‑1** SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
 **Ax‑2** Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.
 
+### Non‑Goals
+- Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
+- Gateway does not manage brokerage execution; it only mediates requests and relays control events.
+
 ---
 
 ## S1 · Functional Decomposition
@@ -53,14 +59,16 @@ graph LR
        WS["WebSocket Hub"]
     end
     subgraph Core Tier
-       DAGM["DAG Manager gRPC"]
-       KAFKA[(Kafka/Redpanda)]
-    end
-    SDK --> Ingest --> FIFO --> Worker --> DAGM
-    DAGM --> Worker --> FSM --> WS --> SDK
-    Worker -->|topic map| SDK
-    DAGM-.->|queue events|Ingest
+    DAGM["DAG Manager gRPC"]
+    KAFKA[(Kafka/Redpanda)]
+end
+SDK --> Ingest --> FIFO --> Worker --> DAGM
+DAGM --> Worker --> FSM --> WS --> SDK
+Worker -->|topic map| SDK
+DAGM-.->|queue events|Ingest
 ```
+
+Note: WorldManager and EventPool are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to EventPool and proxies WorldManager APIs.
 
 ---
 
@@ -165,7 +173,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via EventPool) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 ### S5 · Reliability Checklist
 
@@ -205,5 +213,52 @@ Available flags:
 - ``--config`` – optional path to configuration file.
 - ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.
 
-{{ nav_links() }}
+---
 
+## S6 · Worlds Proxy & Event Stream (New)
+
+Gateway remains the single public boundary for SDKs. It proxies WorldManager endpoints and provides an opaque event stream descriptor to SDKs; it does not compute world policy itself.
+
+### Worlds Proxy
+
+- Proxied endpoints → WorldManager:
+  - ``GET /worlds/{id}/decide`` → DecisionEnvelope (cached with TTL/etag)
+  - ``GET /worlds/{id}/activation`` → ActivationEnvelope (fail‑safe: inactive on stale)
+  - ``POST /worlds/{id}/evaluate`` / ``POST /worlds/{id}/apply`` (operator‑only)
+- Caching & TTLs:
+  - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (offline/backtest)
+  - Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
+- Circuit breakers & budgets: independent timeouts/retries for WorldManager and DAG Manager backends (defaults: WM 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)
+
+### Event Stream Descriptor
+
+SDKs obtain an opaque WebSocket descriptor from Gateway and subscribe to real‑time control updates without learning about EventPool.
+
+```
+POST /events/subscribe
+{ "world_id": "crypto_mom_1h", "strategy_id": "...", "topics": ["activation", "queues"] }
+→ { "stream_url": "wss://gateway/ws/evt?ticket=...", "token": "<jwt>", "topics": ["activation"], "expires_at": "..." }
+```
+
+- Gateway subscribes to internal EventPool and relays events to SDK over the descriptor URL.
+- Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot or carry a `state_hash`.
+
+Token (JWT) claims (delegated WS or future use):
+- `aud`: `eventpool`
+- `sub`: user/service identity
+- `world_id`, `strategy_id`, `topics`: subscription scope
+- `jti`, `iat`, `exp`, `kid`: idempotency and keying
+
+### Degrade & Fail‑Safe Policy (Summary)
+
+- WorldManager unavailable:
+  - ``/decide`` → cached DecisionEnvelope if fresh; else safe default (offline/backtest)
+  - ``/activation`` → inactive
+- Event stream unavailable:
+  - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP
+- Live guard: even if DecisionEnvelope says ``live``, Gateway requires explicit caller consent (e.g., CLI `--allow-live` or header `X-Allow-Live: true`).
+- Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldManager; WorldManager logs it in audit records.
+
+See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).
+
+{{ nav_links() }}
