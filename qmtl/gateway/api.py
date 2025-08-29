@@ -30,6 +30,17 @@ from .ws import WebSocketHub
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 from .world_client import WorldClient
+from qmtl.common.cloudevents import format_event
+
+# Optional grpc import with a safe fallback stub
+try:  # pragma: no cover - grpc may be missing in minimal envs
+    import grpc  # type: ignore
+except Exception:  # pragma: no cover
+    class _GrpcModuleStub:  # type: ignore
+        class RpcError(Exception):
+            pass
+
+    grpc = _GrpcModuleStub()  # type: ignore
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -115,6 +126,7 @@ def create_app(
     world_client: Optional[WorldClient] = None,
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
+    controlbus_consumer: Optional[Any] = None,
     *,
     insert_sentinel: bool = True,
     database_backend: str = "postgres",
@@ -150,18 +162,42 @@ def create_app(
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
     ws_client_local = world_client or WorldClient("http://localhost:8421")
+    controlbus_consumer_local = controlbus_consumer
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        if hasattr(dagmanager, "close"):
-            await dagmanager.close()
-        db_obj = getattr(app.state, "database", None)
-        if db_obj is not None and hasattr(db_obj, "close"):
+        # Start optional controlbus consumer if provided
+        if controlbus_consumer_local is not None:
             try:
-                await db_obj.close()  # type: ignore[attr-defined]
+                if ws_hub_local is not None and getattr(controlbus_consumer_local, "ws_hub", None) is None:
+                    try:
+                        controlbus_consumer_local.ws_hub = ws_hub_local  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                start = getattr(controlbus_consumer_local, "start", None)
+                if callable(start):
+                    await start()  # type: ignore[misc]
             except Exception:
-                logger.exception("Failed to close database connection")
+                logger.exception("Failed to start controlbus consumer")
+        try:
+            yield
+        finally:
+            # Stop optional controlbus consumer if provided
+            if controlbus_consumer_local is not None:
+                try:
+                    stop = getattr(controlbus_consumer_local, "stop", None)
+                    if callable(stop):
+                        await stop()  # type: ignore[misc]
+                except Exception:
+                    logger.exception("Failed to stop controlbus consumer")
+            if hasattr(dagmanager, "close"):
+                await dagmanager.close()
+            db_obj = getattr(app.state, "database", None)
+            if db_obj is not None and hasattr(db_obj, "close"):
+                try:
+                    await db_obj.close()  # type: ignore[attr-defined]
+                except Exception:
+                    logger.exception("Failed to close database connection")
 
     app = FastAPI(lifespan=lifespan)
     FastAPIInstrumentor().instrument_app(app)
@@ -259,6 +295,36 @@ def create_app(
             from . import metrics as gw_metrics
             gw_metrics.set_sentinel_traffic_ratio(sid, weight)
 
+        async def _handle_activation_updated(self, payload: dict) -> None:
+            if payload.get("version") != 1:
+                return
+            etag = payload.get("etag")
+            if not etag:
+                return
+            if self.ws_hub:
+                event = format_event("qmtl.controlbus", "ActivationUpdated", payload)
+                await self.ws_hub.broadcast(event)
+
+        async def _handle_policy_updated(self, payload: dict) -> None:
+            if payload.get("version") != 1:
+                return
+            world_id = payload.get("world_id")
+            version = payload.get("policy_version")
+            if world_id is None or version is None:
+                return
+            try:
+                int(version)
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Invalid policy_version %r for world_id %r; must be integer-convertible.",
+                    version,
+                    world_id,
+                )
+                return
+            if self.ws_hub:
+                event = format_event("qmtl.controlbus", "PolicyUpdated", payload)
+                await self.ws_hub.broadcast(event)
+
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
         start = time.perf_counter()
@@ -347,6 +413,18 @@ def create_app(
                 gateway = Gateway(ws_hub_local)
                 app.state.gateway = gateway
             await gateway._handle_sentinel_weight(data)
+            return {"ok": True}
+        elif event_type in {"ActivationUpdated", "PolicyUpdated"}:
+            gateway = getattr(app.state, "gateway", None)
+            if gateway is None:
+                gateway = Gateway(ws_hub_local)
+                app.state.gateway = gateway
+            handler = (
+                gateway._handle_activation_updated
+                if event_type == "ActivationUpdated"
+                else gateway._handle_policy_updated
+            )
+            await handler(data)
             return {"ok": True}
 
         return {"ok": True}
