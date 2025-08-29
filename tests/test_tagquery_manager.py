@@ -1,4 +1,5 @@
 import asyncio
+import json
 import httpx
 import pytest
 
@@ -111,4 +112,96 @@ async def test_match_mode_routes_updates():
         "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"]},
     })
     assert node_any.upstreams == ["q2"]
+
+
+@pytest.mark.asyncio
+async def test_start_uses_event_descriptor(monkeypatch):
+    node = TagQueryNode(["t1"], interval="60s", period=1)
+    manager = TagQueryManager("http://gw")
+    manager.register(node)
+
+    class DummyWS:
+        def __init__(self, url: str, *, token: str | None = None, on_message=None, **_):
+            self.url = url
+            self.token = token
+            self.on_message = on_message
+            self.started = False
+
+        async def start(self):
+            self.started = True
+            await self.on_message({
+                "event": "queue_update",
+                "data": {"tags": ["t1"], "interval": 60, "queues": ["q3"], "match_mode": "any"},
+            })
+
+        async def stop(self):
+            self.started = False
+
+    async def fake_post(self, url, json=None):
+        return httpx.Response(200, json={"stream_url": "wss://evt", "token": "tok"})
+
+    async def aenter(self):
+        return self
+
+    async def aexit(self, exc_type, exc, tb):
+        pass
+
+    FakeClient = type("FakeClient", (), {"__aenter__": aenter, "__aexit__": aexit, "post": fake_post})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: FakeClient())
+    monkeypatch.setattr("qmtl.sdk.tagquery_manager.WebSocketClient", DummyWS)
+
+    await manager.start()
+    assert isinstance(manager.client, DummyWS)
+    assert manager.client.url == "wss://evt"
+    assert manager.client.token == "tok"
+    assert node.upstreams == ["q3"]
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_falls_back_to_watch(monkeypatch):
+    node = TagQueryNode(["t1"], interval="60s", period=1)
+    manager = TagQueryManager("http://gw")
+    manager.register(node)
+
+    class Stream:
+        def __init__(self, lines):
+            self._lines = lines
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def aiter_lines(self):
+            for line in self._lines:
+                yield line
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def post(self, url, json=None):
+            return httpx.Response(404)
+
+        async def get(self, url, params=None):
+            resp = httpx.Response(200, json={"queues": []})
+            resp.request = httpx.Request("GET", url, params=params)
+            return resp
+
+        def stream(self, method, url, params=None):
+            data = json.dumps({"queues": ["q4"]})
+            return Stream([data])
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: DummyClient())
+
+    await manager.start()
+    await asyncio.sleep(0.05)
+    assert manager.client is None
+    assert node.upstreams == ["q4"]
+    await manager.stop()
 

@@ -25,6 +25,7 @@ class WebSocketClient:
         base_delay: float = 1.0,
         backoff_factor: float = 2.0,
         max_delay: float = 8.0,
+        token: str | None = None,
     ) -> None:
         self.url = url
         self.on_message = on_message
@@ -38,6 +39,7 @@ class WebSocketClient:
         self._base_delay = base_delay
         self._backoff_factor = backoff_factor
         self._max_delay = max_delay
+        self.token = token
 
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -69,7 +71,12 @@ class WebSocketClient:
         start = loop.time()
         while not self._stop_event.is_set():
             try:
-                async with websockets.connect(self.url) as ws:
+                connect_kwargs = {}
+                if self.token:
+                    connect_kwargs["extra_headers"] = {
+                        "Authorization": f"Bearer {self.token}"
+                    }
+                async with websockets.connect(self.url, **connect_kwargs) as ws:
                     self._ws = ws
                     delay = self._base_delay
                     while not self._stop_event.is_set():

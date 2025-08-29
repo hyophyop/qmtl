@@ -73,7 +73,7 @@ async def test_ws_client_reconnects(monkeypatch):
 
     connects: list[str] = []
 
-    def fake_connect(url: str):
+    def fake_connect(url: str, extra_headers=None):
         connects.append(url)
         if len(connects) == 1:
             return DummyWS([])
@@ -143,3 +143,38 @@ async def test_ws_client_logs_invalid_weight(caplog):
     finally:
         server.close()
         await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_ws_client_sends_token(monkeypatch):
+    headers: dict | None = None
+
+    class DummyWS:
+        close_timeout = 0
+
+        async def recv(self) -> str:
+            await asyncio.sleep(0.01)
+            raise websockets.ConnectionClosed(1000, "")
+
+        async def close(self) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_connect(url: str, extra_headers=None):
+        nonlocal headers
+        headers = extra_headers
+        return DummyWS()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+
+    client = WebSocketClient("ws://dummy", token="abc")
+    await client.start()
+    await asyncio.sleep(0.05)
+    await client.stop()
+
+    assert headers == {"Authorization": "Bearer abc"}
