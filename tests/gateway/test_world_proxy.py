@@ -3,6 +3,7 @@ import httpx
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.world_client import WorldServiceClient
+from qmtl.gateway import metrics
 
 
 class FakeDB(Database):
@@ -21,6 +22,7 @@ class FakeDB(Database):
 
 @pytest.mark.asyncio
 async def test_decide_ttl_cache(fake_redis):
+    metrics.reset_metrics()
     call_count = {"n": 0}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -41,6 +43,7 @@ async def test_decide_ttl_cache(fake_redis):
     assert r1.json() == {"v": 1}
     assert r2.json() == {"v": 1}
     assert call_count["n"] == 1
+    assert metrics.worlds_cache_hit_ratio._value.get() == pytest.approx(0.5)
 
 
 @pytest.mark.asyncio

@@ -1,8 +1,10 @@
 import asyncio
+import time
 import pytest
 
 from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 from qmtl.gateway.api import create_app, Database
+from qmtl.gateway import metrics
 
 
 class FakeHub:
@@ -32,12 +34,14 @@ class DummyDB(Database):
 
 @pytest.mark.asyncio
 async def test_consumer_relays_and_deduplicates():
+    metrics.reset_metrics()
     hub = FakeHub()
     consumer = ControlBusConsumer(brokers=[], topics=["activation", "policy"], group="g", ws_hub=hub)
     await consumer.start()
-    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1})
-    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1})
-    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2})
+    ts = time.time() * 1000
+    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
+    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
+    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2}, timestamp_ms=ts)
     await consumer.publish(msg1)
     await consumer.publish(dup)
     await consumer.publish(msg2)
@@ -47,6 +51,9 @@ async def test_consumer_relays_and_deduplicates():
         ("activation_updated", {"id": 1}),
         ("policy_updated", {"id": 2}),
     ]
+    assert metrics.event_relay_events_total.labels(topic="activation")._value.get() == 1
+    assert metrics.event_relay_events_total.labels(topic="policy")._value.get() == 1
+    assert metrics.event_relay_dropped_total.labels(topic="activation")._value.get() == 1
 
 
 class StartStopConsumer(ControlBusConsumer):

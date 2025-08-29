@@ -316,6 +316,7 @@ def create_app(
                 await self.ws_hub.send_sentinel_weight(sid, weight)
             self._sentinel_weights[sid] = weight
             from . import metrics as gw_metrics
+            gw_metrics.record_sentinel_weight_update(sid)
             gw_metrics.set_sentinel_traffic_ratio(sid, weight)
 
         async def _handle_activation_updated(self, payload: dict) -> None:

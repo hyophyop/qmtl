@@ -6,9 +6,17 @@ from collections import deque
 from typing import Deque
 import time
 
-from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
+from prometheus_client import (
+    Gauge,
+    Counter,
+    generate_latest,
+    start_http_server,
+    REGISTRY as global_registry,
+)
 
 _e2e_samples: Deque[float] = deque(maxlen=100)
+_worlds_samples: Deque[float] = deque(maxlen=100)
+_sentinel_weight_updates: dict[str, float] = {}
 
 gateway_e2e_latency_p95 = Gauge(
     "gateway_e2e_latency_p95",
@@ -41,15 +49,27 @@ dagclient_breaker_open_total = Gauge(
 )
 
 # Metrics for WorldService proxy
-worlds_proxy_latency_ms = Gauge(
-    "worlds_proxy_latency_ms",
-    "Latency of requests proxied to WorldService in milliseconds",
+worlds_proxy_latency_p95 = Gauge(
+    "worlds_proxy_latency_p95",
+    "95th percentile latency of requests proxied to WorldService in milliseconds",
+    registry=global_registry,
+)
+
+worlds_proxy_requests_total = Counter(
+    "worlds_proxy_requests_total",
+    "Total number of requests proxied to WorldService",
     registry=global_registry,
 )
 
 worlds_cache_hits_total = Counter(
     "worlds_cache_hits_total",
     "Total number of cache hits when proxying WorldService requests",
+    registry=global_registry,
+)
+
+worlds_cache_hit_ratio = Gauge(
+    "worlds_cache_hit_ratio",
+    "Cache hit ratio for WorldService proxy requests",
     registry=global_registry,
 )
 
@@ -74,11 +94,54 @@ degrade_level = Gauge(
     registry=global_registry,
 )
 
+# Event relay and ControlBus metrics
+controlbus_lag_ms = Gauge(
+    "controlbus_lag_ms",
+    "Delay between event creation and processing in milliseconds",
+    ["topic"],
+    registry=global_registry,
+)
+
+event_relay_events_total = Counter(
+    "event_relay_events_total",
+    "Total number of ControlBus events relayed to clients",
+    ["topic"],
+    registry=global_registry,
+)
+
+event_relay_dropped_total = Counter(
+    "event_relay_dropped_total",
+    "Total number of ControlBus events dropped",
+    ["topic"],
+    registry=global_registry,
+)
+
+event_relay_skew_ms = Gauge(
+    "event_relay_skew_ms",
+    "Clock skew between event timestamp and relay time in milliseconds",
+    ["topic"],
+    registry=global_registry,
+)
+
+sentinel_skew_seconds = Gauge(
+    "sentinel_skew_seconds",
+    "Seconds between sentinel weight update and observed traffic ratio",
+    ["sentinel_id"],
+    registry=global_registry,
+)
+sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
+
 
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
     """Update the live traffic ratio for a sentinel version."""
     gateway_sentinel_traffic_ratio.labels(sentinel_id=sentinel_id).set(ratio)
     gateway_sentinel_traffic_ratio._vals[sentinel_id] = ratio  # type: ignore[attr-defined]
+    if sentinel_id in _sentinel_weight_updates:
+        skew = time.time() - _sentinel_weight_updates[sentinel_id]
+        sentinel_skew_seconds.labels(sentinel_id=sentinel_id).set(skew)
+        sentinel_skew_seconds._vals[sentinel_id] = sentinel_skew_seconds.labels(  # type: ignore[attr-defined]
+            sentinel_id=sentinel_id
+        )._value.get()
 
 
 def observe_gateway_latency(duration_ms: float) -> None:
@@ -94,8 +157,48 @@ def observe_gateway_latency(duration_ms: float) -> None:
 
 def observe_worlds_proxy_latency(duration_ms: float) -> None:
     """Record latency for WorldService proxy requests."""
-    worlds_proxy_latency_ms.set(duration_ms)
-    worlds_proxy_latency_ms._val = worlds_proxy_latency_ms._value.get()  # type: ignore[attr-defined]
+    _worlds_samples.append(duration_ms)
+    ordered = sorted(_worlds_samples)
+    if ordered:
+        idx = max(0, int(len(ordered) * 0.95) - 1)
+        worlds_proxy_latency_p95.set(ordered[idx])
+        worlds_proxy_latency_p95._val = worlds_proxy_latency_p95._value.get()  # type: ignore[attr-defined]
+    worlds_proxy_requests_total.inc()
+    worlds_proxy_requests_total._val = worlds_proxy_requests_total._value.get()  # type: ignore[attr-defined]
+    _update_worlds_cache_ratio()
+
+
+def record_worlds_cache_hit() -> None:
+    """Record a cache hit for WorldService proxy."""
+    worlds_cache_hits_total.inc()
+    worlds_cache_hits_total._val = worlds_cache_hits_total._value.get()  # type: ignore[attr-defined]
+    _update_worlds_cache_ratio()
+
+
+def _update_worlds_cache_ratio() -> None:
+    total = worlds_cache_hits_total._value.get() + worlds_proxy_requests_total._value.get()
+    ratio = worlds_cache_hits_total._value.get() / total if total else 0
+    worlds_cache_hit_ratio.set(ratio)
+    worlds_cache_hit_ratio._val = worlds_cache_hit_ratio._value.get()  # type: ignore[attr-defined]
+
+
+def record_sentinel_weight_update(sentinel_id: str) -> None:
+    """Record the time when a sentinel weight update was received."""
+    _sentinel_weight_updates[sentinel_id] = time.time()
+
+
+def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:
+    """Record metrics for a ControlBus message being relayed."""
+    event_relay_events_total.labels(topic=topic).inc()
+    if timestamp_ms is not None:
+        now_ms = time.time() * 1000
+        controlbus_lag_ms.labels(topic=topic).set(max(0.0, now_ms - timestamp_ms))
+        event_relay_skew_ms.labels(topic=topic).set(timestamp_ms - now_ms)
+
+
+def record_event_dropped(topic: str) -> None:
+    """Increment drop counter for ControlBus events."""
+    event_relay_dropped_total.labels(topic=topic).inc()
 
 
 def start_metrics_server(port: int = 8000) -> None:
@@ -126,8 +229,20 @@ def reset_metrics() -> None:
     degrade_level.clear()
     dagclient_breaker_open_total.set(0)
     dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
-    worlds_proxy_latency_ms.set(0)
-    worlds_proxy_latency_ms._val = 0  # type: ignore[attr-defined]
+    worlds_proxy_latency_p95.set(0)
+    worlds_proxy_latency_p95._val = 0  # type: ignore[attr-defined]
+    worlds_proxy_requests_total._value.set(0)  # type: ignore[attr-defined]
+    worlds_proxy_requests_total._val = 0  # type: ignore[attr-defined]
     worlds_cache_hits_total._value.set(0)  # type: ignore[attr-defined]
     worlds_cache_hits_total._val = 0  # type: ignore[attr-defined]
+    worlds_cache_hit_ratio.set(0)
+    worlds_cache_hit_ratio._val = 0  # type: ignore[attr-defined]
+    _worlds_samples.clear()
+    _sentinel_weight_updates.clear()
+    controlbus_lag_ms.clear()
+    event_relay_events_total.clear()
+    event_relay_dropped_total.clear()
+    event_relay_skew_ms.clear()
+    sentinel_skew_seconds.clear()
+    sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
 

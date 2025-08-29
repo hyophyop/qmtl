@@ -32,6 +32,7 @@ def test_metrics_endpoint(app):
     metrics.reset_metrics()
     metrics.lost_requests_total.inc()
     metrics.observe_gateway_latency(42)
+    metrics.record_sentinel_weight_update("v1")
     metrics.set_sentinel_traffic_ratio("v1", 0.5)
     with TestClient(app) as client:
         resp = client.get("/metrics")
@@ -39,6 +40,7 @@ def test_metrics_endpoint(app):
         assert "lost_requests_total" in resp.text
         assert "gateway_e2e_latency_p95" in resp.text
         assert "gateway_sentinel_traffic_ratio" in resp.text
+        assert "sentinel_skew_seconds" in resp.text
         resp.close()
 
 
