@@ -19,7 +19,7 @@ Role
 - Bounded retention with compacted history for late subscribers
 
 Non‑Goals
-- Not a source of truth (SSOT); decisions/activation live in WorldManager, queues in DAG Manager
+- Not a source of truth (SSOT); decisions/activation live in WorldService, queues in DAG Manager
 - Not a general data bus; market/indicator/trade data remain on data topics managed by DAG Manager
 
 ---
@@ -106,13 +106,13 @@ Metrics
 - replay_queue_depth, partition_skew_seconds
 
 Runbooks
-- Recreate consumer groups, increase partitions per world count, backfill via HTTP reconcile endpoints at Gateway/WorldManager/DAG Manager
+- Recreate consumer groups, increase partitions per world count, backfill via HTTP reconcile endpoints at Gateway/WorldService/DAG Manager
 
 ---
 
 ## 6. Integration Pattern
 
-- WorldManager publishes ActivationUpdated/PolicyUpdated.
+- WorldService publishes ActivationUpdated/PolicyUpdated.
 - DAG Manager publishes QueueUpdated.
 - Gateway instances subscribe to EventPool and relay updates to SDK via an opaque WebSocket stream (`/events/subscribe`).
 

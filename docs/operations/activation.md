@@ -15,7 +15,7 @@ last_modified: 2025-08-29
 - Rollback after failed apply
 
 ## Preconditions
-- Confirm NTP health on WorldManager and Gateway nodes
+- Confirm NTP health on WorldService and Gateway nodes
 - Identify `world_id` and current `resource_version`/`etag`
 
 ## Procedures

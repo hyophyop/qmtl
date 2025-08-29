@@ -22,7 +22,7 @@ See also: Architecture Glossary (architecture/glossary.md) for canonical terms s
 - [Architecture Overview](architecture.md): High-level system design.
 - [Gateway](gateway.md): Gateway component specification.
 - [DAG Manager](dag-manager.md): DAG Manager design.
-- [WorldManager](worldmanager.md): World policy, decisions, activation.
+- [WorldService](worldservice.md): World policy, decisions, activation.
 - [EventPool](eventpool.md): Internal control bus (opaque to SDK).
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
 

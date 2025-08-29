@@ -289,7 +289,7 @@ POST /events/subscribe HTTP/1.1
 
 ## 13. 월드 레지스트리(CRUD & 전역 접근)
 
-월드는 전략 제출과 독립적으로 생성/수정/삭제/조회가 가능해야 하며, 프레임워크 전역에서 동일한 ID로 접근 가능해야 한다. 중앙 진실 원천(SSOT)은 WorldManager의 월드 레지스트리이며, Gateway는 외부 접근을 위한 프록시/캐시 역할을 수행한다. 내부 전파는 Redis 캐시와 EventPool(은닉) 이벤트를 사용하고, 외부에는 Gateway WS/HTTP로 노출한다.
+월드는 전략 제출과 독립적으로 생성/수정/삭제/조회가 가능해야 하며, 프레임워크 전역에서 동일한 ID로 접근 가능해야 한다. 중앙 진실 원천(SSOT)은 WorldService의 월드 레지스트리이며, Gateway는 외부 접근을 위한 프록시/캐시 역할을 수행한다. 내부 전파는 Redis 캐시와 EventPool(은닉) 이벤트를 사용하고, 외부에는 Gateway WS/HTTP로 노출한다.
 
 ### 13.1 데이터 모델(경량)
 
@@ -366,7 +366,7 @@ qmtl world delete crypto_mom_1h --force
 SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이며 외부에 명시적으로 드러나지 않는다. 실행 단계에서 Gateway가 “이벤트 스트림 기술서(EventStreamDescriptor)”를 반환하고, SDK는 이를 사용해 실시간 이벤트를 푸시로 수신한다.
 
 - 역할 분리
-  - SSOT: WorldManager(세계/정책/활성), DAG Manager(그래프/큐)
+  - SSOT: WorldService(세계/정책/활성), DAG Manager(그래프/큐)
   - 배포/팬아웃: EventPool(내부), 외부에는 Gateway가 단일 접점
 - EventStreamDescriptor(불투명)
   - `stream_url`(wss): 게이트웨이 도메인 하의 URL. 내부 구현상 EventPool로 프록시/리다이렉트될 수 있으나 클라이언트는 불문에 부친다.
@@ -384,10 +384,10 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
   - 스트림 실패 시 Gateway WS `fallback_url` 또는 주기적 `GET /worlds/{id}/activation`/`/queues/by_tag`로 보정.
   - 만료 혹은 401/403 발생 시 `POST /events/subscribe`로 재발급.
 - 보안/RBAC
-  - Gateway가 토큰을 발급하고 WorldManager 권한을 대행 검증. 민감 토픽은 world‑scope 권한 요구.
+  - Gateway가 토큰을 발급하고 WorldService 권한을 대행 검증. 민감 토픽은 world‑scope 권한 요구.
 - SLO/관측(권장)
   - `event_subscribe_latency_ms_p95` ≤ 150ms, `event_fanout_lag_ms_p95` ≤ 200ms
-  - 드롭/재연결/스큐 지표와 감사 로그(WorldManager 원본 이벤트 ID 포함) 노출
+  - 드롭/재연결/스큐 지표와 감사 로그(WorldService 원본 이벤트 ID 포함) 노출
 
 실행 흐름(요지)
 1) Runner 시작 → Gateway로 전략 제출/월드 결정 조회
@@ -397,18 +397,18 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
 
 ## 15. 컴포넌트 관계(모듈/인터페이스 명세)
 
-본 절은 sdk, gateway, eventpool(은닉), worldmanager, dagmanager 간의 책임·경계·인터페이스를 모듈 관점에서 명시한다.
+본 절은 sdk, gateway, eventpool(은닉), worldservice, dagmanager 간의 책임·경계·인터페이스를 모듈 관점에서 명시한다.
 
 ### 15.1 소유권(SSOT)과 책임
 
-- WorldManager(SSOT)
+- WorldService(SSOT)
   - 월드/정책 CRUD, 버전 관리, 결정/평가/적용, 활성 테이블 관리, 감사/알림, RBAC
 - DAG Manager(SSOT)
   - 그래프/노드/토픽/태그 쿼리, Diff, 버전/롤백, 큐 메타데이터
 - Gateway(프록시/캐시)
   - SDK 외부 단일 접점; 전략 제출/상태/큐 조회 프록시, 월드 API 프록시, 이벤트 스트림 발급, 캐시/서킷/관측
 - EventPool(배포/팬아웃)
-  - 제어 이벤트의 내부 퍼브/섭 허브(비공개). SSOT 아님. WM/DM의 업데이트를 다수 Gateway 인스턴스로 팬아웃
+  - 제어 이벤트의 내부 퍼브/섭 허브(비공개). SSOT 아님. WS/DM의 업데이트를 다수 Gateway 인스턴스로 팬아웃
 - SDK(클라이언트/런타임)
   - 전략 직렬화/제출, 태그 해석, OrderGateNode로 주문 게이트, 이벤트 스트림 구독/적용
 
@@ -417,17 +417,17 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
 - SDK → Gateway (HTTP)
   - `/strategies`(제출), `/strategies/{id}/status`, `/queues/by_tag`, `/worlds/*`(프록시), `/events/subscribe`
   - 인증: 사용자 토큰(JWT)
-- Gateway → WorldManager (HTTP/gRPC)
+- Gateway → WorldService (HTTP/gRPC)
   - `/worlds` CRUD, `/worlds/{id}/decide|activation|evaluate|apply`, `/worlds/{id}/audit`
   - 인증: 서비스 간 토큰(mTLS/JWT), world‑scope RBAC 위임
 - Gateway → DAG Manager (gRPC/HTTP)
   - `get_queues_by_tag`, Diff/콜백, 센티넬 트래픽 업데이트 수신
-- WorldManager → EventPool (Publish)
+- WorldService → EventPool (Publish)
   - `ActivationUpdated`, `PolicyUpdated`, `WorldUpdated`
 - DAG Manager → EventPool (Publish)
   - `QueueUpdated`
 - Gateway → EventPool (Subscribe)
-  - WM/DM 이벤트를 수신 → SDK로 WS 재전송. 실패 시 HTTP 폴백
+  - WS/DM 이벤트를 수신 → SDK로 WS 재전송. 실패 시 HTTP 폴백
 
 ### 15.3 이벤트 타입(요약)
 
@@ -441,7 +441,7 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
 
 - SDK→Gateway 제출 p95 ≤ 150ms, 큐 조회 p95 ≤ 200ms
 - 이벤트 팬아웃 지연 p95 ≤ 200ms, 최대 스큐(`activation_skew_seconds`) ≤ 2s
-- Gateway 프록시 타임아웃: WM/DM 각각 독립 서킷 브레이커 적용(예: 300ms/500ms)
+- Gateway 프록시 타임아웃: WS/DM 각각 독립 서킷 브레이커 적용(예: 300ms/500ms)
 - 실패 기본값: 월드 결정을 못 받으면 `backtest|offline`으로 폴백, 활성 미확인 시 게이트 OFF
 
 ### 15.5 개발 단위 매핑
@@ -450,7 +450,7 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
   - Runner: `auto_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
   - api: `/worlds/*` 프록시, `/events/subscribe`, EventPool 구독자, 캐시/서킷
-- worldmanager/
+- worldservice/
   - api: CRUD/Policy/Decide/Evaluate/Apply, 감사/알림, RBAC
 - dagmanager/
   - api: get_queues_by_tag, Diff, 센티넬/토픽 관리
@@ -468,15 +468,15 @@ graph LR
     GW[Gateway]
   end
   subgraph Core
-    WM[WorldManager (SSOT Worlds)]
+    WS[WorldService (SSOT Worlds)]
     DM[DAG Manager (SSOT Graph)]
     EP[(EventPool — internal)]
   end
 
   SDK -- HTTP submit/decide/activation --> GW
-  GW -- proxy --> WM
+  GW -- proxy --> WS
   GW -- proxy --> DM
-  WM -- publish --> EP
+  WS -- publish --> EP
   DM -- publish --> EP
   GW -- subscribe --> EP
   GW -- WS (opaque) --> SDK

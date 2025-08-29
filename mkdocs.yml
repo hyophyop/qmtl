@@ -8,7 +8,7 @@ nav:
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md
-      - World Manager: architecture/worldmanager.md
+      - World Service: architecture/worldservice.md
       - EventPool: architecture/eventpool.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
   - Guides:
