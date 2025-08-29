@@ -269,13 +269,13 @@ POST /worlds/{world}/apply HTTP/1.1
 → { "ok": true, "run_id": "..." }
 ```
 
-이벤트 구독(은닉 EventPool 핸드오버)
+이벤트 구독(은닉 ControlBus 핸드오버)
 
 ```http
 POST /events/subscribe HTTP/1.1
 { "world_id": "crypto_mom_1h", "strategy_id": "...", "topics": ["activation", "queues"] }
 → {
-  "stream_url": "wss://gateway.example/ws/evt?ticket=...",  # Opaque; 내부적으로 EventPool일 수 있음
+  "stream_url": "wss://gateway.example/ws/evt?ticket=...",  # Opaque; 내부적으로 ControlBus일 수 있음
   "token": "<jwt>",              # scope: world:*, strategy:*, topics
   "topics": ["activation"],      # 서버가 정규화한 구독 목록
   "expires_at": "2025-08-28T09:30:00Z",
@@ -289,7 +289,7 @@ POST /events/subscribe HTTP/1.1
 
 ## 13. 월드 레지스트리(CRUD & 전역 접근)
 
-월드는 전략 제출과 독립적으로 생성/수정/삭제/조회가 가능해야 하며, 프레임워크 전역에서 동일한 ID로 접근 가능해야 한다. 중앙 진실 원천(SSOT)은 WorldService의 월드 레지스트리이며, Gateway는 외부 접근을 위한 프록시/캐시 역할을 수행한다. 내부 전파는 Redis 캐시와 EventPool(은닉) 이벤트를 사용하고, 외부에는 Gateway WS/HTTP로 노출한다.
+월드는 전략 제출과 독립적으로 생성/수정/삭제/조회가 가능해야 하며, 프레임워크 전역에서 동일한 ID로 접근 가능해야 한다. 중앙 진실 원천(SSOT)은 WorldService의 월드 레지스트리이며, Gateway는 외부 접근을 위한 프록시/캐시 역할을 수행한다. 내부 전파는 Redis 캐시와 ControlBus(은닉) 이벤트를 사용하고, 외부에는 Gateway WS/HTTP로 노출한다.
 
 ### 13.1 데이터 모델(경량)
 
@@ -361,15 +361,15 @@ qmtl world delete crypto_mom_1h --force
 - 롤백: 정책 버전은 언제든 `set-default`로 롤백. `apply` 실패 시 활성 테이블은 이전 스냅샷으로 복원.
 - 가시성: Grafana에 World 대시보드(정책 버전, 활성 세트, 서킷 상태, 최근 알림) 제공.
 
-## 14. 이벤트 스트림(은닉 EventPool) 핸드오버
+## 14. 이벤트 스트림(은닉 ControlBus) 핸드오버
 
-SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이며 외부에 명시적으로 드러나지 않는다. 실행 단계에서 Gateway가 “이벤트 스트림 기술서(EventStreamDescriptor)”를 반환하고, SDK는 이를 사용해 실시간 이벤트를 푸시로 수신한다.
+SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이며 외부에 명시적으로 드러나지 않는다. 실행 단계에서 Gateway가 “이벤트 스트림 기술서(EventStreamDescriptor)”를 반환하고, SDK는 이를 사용해 실시간 이벤트를 푸시로 수신한다.
 
 - 역할 분리
   - SSOT: WorldService(세계/정책/활성), DAG Manager(그래프/큐)
-  - 배포/팬아웃: EventPool(내부), 외부에는 Gateway가 단일 접점
+  - 배포/팬아웃: ControlBus(내부), 외부에는 Gateway가 단일 접점
 - EventStreamDescriptor(불투명)
-  - `stream_url`(wss): 게이트웨이 도메인 하의 URL. 내부 구현상 EventPool로 프록시/리다이렉트될 수 있으나 클라이언트는 불문에 부친다.
+  - `stream_url`(wss): 게이트웨이 도메인 하의 URL. 내부 구현상 ControlBus로 프록시/리다이렉트될 수 있으나 클라이언트는 불문에 부친다.
   - `token`(JWT): 구독 범위(world_id/strategy_id/topics)와 만료를 포함. SDK는 그대로 사용.
   - `topics`: 서버가 정규화한 구독 주제(예: `activation`, `queues`, `policy`).
   - `expires_at`: 재구독 시점 안내.
@@ -397,7 +397,7 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
 
 ## 15. 컴포넌트 관계(모듈/인터페이스 명세)
 
-본 절은 sdk, gateway, eventpool(은닉), worldservice, dagmanager 간의 책임·경계·인터페이스를 모듈 관점에서 명시한다.
+본 절은 sdk, gateway, controlbus(은닉), worldservice, dagmanager 간의 책임·경계·인터페이스를 모듈 관점에서 명시한다.
 
 ### 15.1 소유권(SSOT)과 책임
 
@@ -407,7 +407,7 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
   - 그래프/노드/토픽/태그 쿼리, Diff, 버전/롤백, 큐 메타데이터
 - Gateway(프록시/캐시)
   - SDK 외부 단일 접점; 전략 제출/상태/큐 조회 프록시, 월드 API 프록시, 이벤트 스트림 발급, 캐시/서킷/관측
-- EventPool(배포/팬아웃)
+- ControlBus(배포/팬아웃)
   - 제어 이벤트의 내부 퍼브/섭 허브(비공개). SSOT 아님. WS/DM의 업데이트를 다수 Gateway 인스턴스로 팬아웃
 - SDK(클라이언트/런타임)
   - 전략 직렬화/제출, 태그 해석, OrderGateNode로 주문 게이트, 이벤트 스트림 구독/적용
@@ -422,11 +422,11 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
   - 인증: 서비스 간 토큰(mTLS/JWT), world‑scope RBAC 위임
 - Gateway → DAG Manager (gRPC/HTTP)
   - `get_queues_by_tag`, Diff/콜백, 센티넬 트래픽 업데이트 수신
-- WorldService → EventPool (Publish)
+- WorldService → ControlBus (Publish)
   - `ActivationUpdated`, `PolicyUpdated`, `WorldUpdated`
-- DAG Manager → EventPool (Publish)
+- DAG Manager → ControlBus (Publish)
   - `QueueUpdated`
-- Gateway → EventPool (Subscribe)
+- Gateway → ControlBus (Subscribe)
   - WS/DM 이벤트를 수신 → SDK로 WS 재전송. 실패 시 HTTP 폴백
 
 ### 15.3 이벤트 타입(요약)
@@ -449,12 +449,12 @@ SDK는 오직 Gateway와만 통신한다. EventPool은 내부 제어 버스이�
 - sdk/
   - Runner: `auto_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
-  - api: `/worlds/*` 프록시, `/events/subscribe`, EventPool 구독자, 캐시/서킷
+  - api: `/worlds/*` 프록시, `/events/subscribe`, ControlBus 구독자, 캐시/서킷
 - worldservice/
   - api: CRUD/Policy/Decide/Evaluate/Apply, 감사/알림, RBAC
 - dagmanager/
   - api: get_queues_by_tag, Diff, 센티넬/토픽 관리
-- eventpool/
+- controlbus/
   - control.* 토픽/채널 구성, 파티션 키, 보관/압축 정책, 관측
 
 ### 15.6 상호작용 개요(다이어그램)
@@ -470,16 +470,16 @@ graph LR
   subgraph Core
     WS[WorldService (SSOT Worlds)]
     DM[DAG Manager (SSOT Graph)]
-    EP[(EventPool — internal)]
+    CB[(ControlBus — internal)]
   end
 
   SDK -- HTTP submit/decide/activation --> GW
   GW -- proxy --> WS
   GW -- proxy --> DM
-  WS -- publish --> EP
-  DM -- publish --> EP
-  GW -- subscribe --> EP
+  WS -- publish --> CB
+  DM -- publish --> CB
+  GW -- subscribe --> CB
   GW -- WS (opaque) --> SDK
 ```
 
-상기 구조에서 EventPool은 외부에 노출되지 않으며, SDK는 Gateway로부터 불투명 스트림을 전달받아 구독한다(§14).
+상기 구조에서 ControlBus는 외부에 노출되지 않으며, SDK는 Gateway로부터 불투명 스트림을 전달받아 구독한다(§14).

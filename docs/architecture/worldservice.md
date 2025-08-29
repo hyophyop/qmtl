@@ -17,7 +17,7 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - Activation control: per-world activation set for strategies/sides with weights
 - 2‑Phase apply: Freeze/Drain → Switch → Unfreeze, idempotent with run_id
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
-- Events: emits activation/policy updates to the internal EventPool
+- Events: emits activation/policy updates to the internal ControlBus
 
 Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 
@@ -166,7 +166,7 @@ Alerts
 
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
-- EventPool: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
+- ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
 
 ---
 
