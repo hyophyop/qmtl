@@ -40,6 +40,24 @@ project:
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 
+## Issue & PR Linking
+
+- When work starts from a GitHub issue, include a closing keyword in both your final result message and the PR description so the issue auto‑closes on merge.
+- Use one of: `Fixes #<number>`, `Closes #<number>`, or `Resolves #<number>` (e.g., `Fixes #123`).
+- If referencing multiple issues, list each on its own line.
+- For cross-repo issues, use `owner/repo#<number>` (e.g., `openai/qmtl#123`).
+- If the change is partial and should not close the issue, prefer `Refs #<number>` instead of a closing keyword.
+- Prefer placing the closing keyword in the PR body; commit messages on the default branch also work but are less visible.
+
+Example PR snippet:
+
+```
+Summary: Implement data loader fallback path
+
+Fixes #123
+Also Refs #119 for broader tracking
+```
+
 ## Prioritizing external alpha ideas
 
 - The top-level docs directory `docs/alphadocs/ideas/gpt5pro/` contains alpha ideas rewritten
