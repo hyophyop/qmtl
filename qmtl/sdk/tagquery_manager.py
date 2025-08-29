@@ -22,11 +22,15 @@ class TagQueryManager:
         gateway_url: str | None = None,
         *,
         ws_client: WebSocketClient | None = None,
+        world_id: str | None = None,
+        strategy_id: str | None = None,
     ) -> None:
         self.gateway_url = gateway_url
         self.client = ws_client
         if self.client is not None:
             self.client.on_message = self.handle_message
+        self.world_id = world_id
+        self.strategy_id = strategy_id
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
         self._watch_tasks: Dict[
             Tuple[Tuple[str, ...], int, MatchMode], asyncio.Task
@@ -108,9 +112,10 @@ class TagQueryManager:
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    subscribe_url, json={"topics": ["queues"]}
-                )
+                payload = {"topics": ["queues"]}
+                if self.world_id is not None and self.strategy_id is not None:
+                    payload |= {"world_id": self.world_id, "strategy_id": self.strategy_id}
+                resp = await client.post(subscribe_url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()
                     stream_url = data.get("stream_url")

@@ -11,9 +11,9 @@ from qmtl.gateway.ws import WebSocketHub
 class DummyWS:
     def __init__(self):
         self.messages: list[str] = []
-        self.remote_address = ("test", 0)
+        self.client = ("test", 0)
 
-    async def send(self, msg: str) -> None:
+    async def send_text(self, msg: str) -> None:
         self.messages.append(msg)
 
 
@@ -59,9 +59,9 @@ async def test_hub_logs_send_errors(caplog):
     await hub.start()
 
     class BadWS:
-        remote_address = ("dummy", 1234)
+        client = ("dummy", 1234)
 
-        async def send(self, msg):
+        async def send_text(self, msg):
             raise RuntimeError("boom")
 
     async with hub._lock:

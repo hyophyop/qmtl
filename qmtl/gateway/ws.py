@@ -69,13 +69,13 @@ class WebSocketHub:
                 clients = list(self._clients)
             if clients:
                 results = await asyncio.gather(
-                    *(ws.send(msg) for ws in clients), return_exceptions=True
+                    *(ws.send_text(msg) for ws in clients), return_exceptions=True
                 )
                 for client_ws, res in zip(clients, results):
                     if isinstance(res, Exception):
                         logger.warning(
                             "Failed to send message to client %s: %s",
-                            client_ws.remote_address,
+                            getattr(client_ws, "client", None) or "unknown",
                             res,
                         )
             self._queue.task_done()

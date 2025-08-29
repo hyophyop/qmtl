@@ -117,7 +117,7 @@ async def test_match_mode_routes_updates():
 @pytest.mark.asyncio
 async def test_start_uses_event_descriptor(monkeypatch):
     node = TagQueryNode(["t1"], interval="60s", period=1)
-    manager = TagQueryManager("http://gw")
+    manager = TagQueryManager("http://gw", world_id="w1", strategy_id="s1")
     manager.register(node)
 
     class DummyWS:
@@ -137,7 +137,10 @@ async def test_start_uses_event_descriptor(monkeypatch):
         async def stop(self):
             self.started = False
 
+    posted = {"body": None}
+
     async def fake_post(self, url, json=None):
+        posted["body"] = json
         return httpx.Response(200, json={"stream_url": "wss://evt", "token": "tok"})
 
     async def aenter(self):
@@ -154,6 +157,8 @@ async def test_start_uses_event_descriptor(monkeypatch):
     assert isinstance(manager.client, DummyWS)
     assert manager.client.url == "wss://evt"
     assert manager.client.token == "tok"
+    assert posted["body"]["world_id"] == "w1"
+    assert posted["body"]["strategy_id"] == "s1"
     assert node.upstreams == ["q3"]
     await manager.stop()
 
@@ -258,4 +263,3 @@ async def test_watch_reconnects(monkeypatch):
     await orig_sleep(0.1)
     assert node.upstreams == ["q2"]
     await manager.stop()
-
