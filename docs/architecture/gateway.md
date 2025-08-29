@@ -16,7 +16,7 @@ last_modified: 2025-08-21
 - [QMTL Architecture](architecture.md)
 - [DAG Manager](dag-manager.md)
 - [WorldService](worldservice.md)
-- [EventPool](eventpool.md)
+- [ControlBus](controlbus.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 
 > This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
@@ -68,7 +68,7 @@ Worker -->|topic map| SDK
 DAGM-.->|queue events|Ingest
 ```
 
-Note: WorldService and EventPool are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to EventPool and proxies WorldService APIs.
+Note: WorldService and ControlBus are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to ControlBus and proxies WorldService APIs.
 
 ---
 
@@ -173,7 +173,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens (via EventPool) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 ### S5 · Reliability Checklist
 
@@ -232,7 +232,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 
 ### Event Stream Descriptor
 
-SDKs obtain an opaque WebSocket descriptor from Gateway and subscribe to real‑time control updates without learning about EventPool.
+SDKs obtain an opaque WebSocket descriptor from Gateway and subscribe to real‑time control updates without learning about ControlBus.
 
 ```
 POST /events/subscribe
@@ -240,11 +240,11 @@ POST /events/subscribe
 → { "stream_url": "wss://gateway/ws/evt?ticket=...", "token": "<jwt>", "topics": ["activation"], "expires_at": "..." }
 ```
 
-- Gateway subscribes to internal EventPool and relays events to SDK over the descriptor URL.
+- Gateway subscribes to internal ControlBus and relays events to SDK over the descriptor URL.
 - Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot or carry a `state_hash`.
 
 Token (JWT) claims (delegated WS or future use):
-- `aud`: `eventpool`
+- `aud`: `controlbus`
 - `sub`: user/service identity
 - `world_id`, `strategy_id`, `topics`: subscription scope
 - `jti`, `iat`, `exp`, `kid`: idempotency and keying

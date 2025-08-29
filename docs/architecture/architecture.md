@@ -17,7 +17,7 @@ last_modified: 2025-08-21
 - [DAG Manager](dag-manager.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 - [WorldService](worldservice.md)
-- [EventPool](eventpool.md)
+- [ControlBus](controlbus.md)
 
 ---
 
@@ -42,7 +42,7 @@ graph LR
   subgraph Core
     WS[WorldService (SSOT Worlds)]
     DM[DAG Manager (SSOT Graph)]
-    EP[(EventPool — internal)]
+    CB[(ControlBus — internal)]
     GDB[(Graph DB)]
     KQ[(Kafka/Redpanda)]
   end
@@ -52,16 +52,16 @@ graph LR
   GW -- proxy --> DM
   DM --> GDB
   DM --> KQ
-  WS -- publish --> EP
-  DM -- publish --> EP
-  GW -- subscribe --> EP
+  WS -- publish --> CB
+  DM -- publish --> CB
+  GW -- subscribe --> CB
   GW -- WS (opaque) --> SDK
 ```
 
-1. **SDK**는 전략을 DAG로 직렬화하고 Gateway에 제출/질의한다. 실행 중에는 Gateway의 WS로부터 불투명(EventPool 기반) 이벤트 스트림을 전달받아 활성/큐 변경을 반영한다.
-2. **Gateway**는 외부 단일 접점으로서 WorldService/DAG Manager를 프록시하고, 캐시/서킷/관측을 담당한다. 또한 EventPool을 구독하여 SDK로 이벤트를 재전송한다.
-3. **WorldService**는 월드/정책/결정/활성의 SSOT이며, 결정·활성 업데이트를 EventPool에 발행한다.
-4. **DAG Manager**는 그래프/노드/큐의 SSOT이며, Diff와 큐 오케스트레이션을 수행하고 QueueUpdated 이벤트를 EventPool에 발행한다.
+1. **SDK**는 전략을 DAG로 직렬화하고 Gateway에 제출/질의한다. 실행 중에는 Gateway의 WS로부터 불투명(ControlBus 기반) 이벤트 스트림을 전달받아 활성/큐 변경을 반영한다.
+2. **Gateway**는 외부 단일 접점으로서 WorldService/DAG Manager를 프록시하고, 캐시/서킷/관측을 담당한다. 또한 ControlBus를 구독하여 SDK로 이벤트를 재전송한다.
+3. **WorldService**는 월드/정책/결정/활성의 SSOT이며, 결정·활성 업데이트를 ControlBus에 발행한다.
+4. **DAG Manager**는 그래프/노드/큐의 SSOT이며, Diff와 큐 오케스트레이션을 수행하고 QueueUpdated 이벤트를 ControlBus에 발행한다.
 5. **SDK**는 반환된 큐 매핑에 따라 로컬에서 필요한 노드만 실행하며, 활성 게이트(OrderGateNode)로 주문 발동을 제어한다.
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.

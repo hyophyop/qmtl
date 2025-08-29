@@ -1,5 +1,5 @@
 ---
-title: "EventPool — Internal Control Bus (Opaque to SDK)"
+title: "ControlBus — Internal Control Bus (Opaque to SDK)"
 tags: [architecture, events, control]
 author: "QMTL Team"
 last_modified: 2025-08-29
@@ -7,9 +7,9 @@ last_modified: 2025-08-29
 
 {{ nav_links() }}
 
-# EventPool — Internal Control Bus
+# ControlBus — Internal Control Bus
 
-EventPool distributes control‑plane updates (not data) from core services to Gateways. It is an internal component and not a public API; SDKs never connect directly in the default deployment. All control events are versioned envelopes and include `type` and `version` fields.
+ControlBus distributes control‑plane updates (not data) from core services to Gateways. It is an internal component and not a public API; SDKs never connect directly in the default deployment. All control events are versioned envelopes and include `type` and `version` fields.
 
 ## 0. Role & Non‑Goals
 
@@ -102,7 +102,7 @@ PolicyUpdated (versioned)
 ## 5. Observability
 
 Metrics
-- eventpool_publish_latency_ms, fanout_lag_ms, dropped_subscribers_total
+- controlbus_publish_latency_ms, fanout_lag_ms, dropped_subscribers_total
 - replay_queue_depth, partition_skew_seconds
 
 Runbooks
@@ -114,15 +114,15 @@ Runbooks
 
 - WorldService publishes ActivationUpdated/PolicyUpdated.
 - DAG Manager publishes QueueUpdated.
-- Gateway instances subscribe to EventPool and relay updates to SDK via an opaque WebSocket stream (`/events/subscribe`).
+- Gateway instances subscribe to ControlBus and relay updates to SDK via an opaque WebSocket stream (`/events/subscribe`).
 
 ---
 
 ## 7. Initial Snapshot & Delegated WS (Optional)
 
 - Initial snapshot: first message per topic SHOULD be a full snapshot or include a `state_hash` so clients can confirm convergence without a full GET.
-- Delegated WS (feature‑flagged): Gateway may return an alternate `alt_stream_url` that points to a dedicated event streamer tier sitting in front of EventPool.
-  - Tokens are short‑lived JWTs with claims: `aud=eventpool`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`, `kid`.
-  - Streamer verifies JWKS/claims and bridges to EventPool; default deployment keeps this disabled.
+- Delegated WS (feature‑flagged): Gateway may return an alternate `alt_stream_url` that points to a dedicated event streamer tier sitting in front of ControlBus.
+  - Tokens are short‑lived JWTs with claims: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`, `kid`.
+  - Streamer verifies JWKS/claims and bridges to ControlBus; default deployment keeps this disabled.
 
 {{ nav_links() }}

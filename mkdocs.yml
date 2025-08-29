@@ -9,7 +9,7 @@ nav:
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md
       - World Service: architecture/worldservice.md
-      - EventPool: architecture/eventpool.md
+      - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
   - Guides:
       - Overview: guides/README.md

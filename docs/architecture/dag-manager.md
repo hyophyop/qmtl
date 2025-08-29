@@ -160,7 +160,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 DAG Manager publishes control‑plane updates about queue availability and tag resolution so that Gateways can update SDKs in real time without polling.
 
-- Publisher: DAG Manager → EventPool (internal)
+- Publisher: DAG Manager → ControlBus (internal)
 - Event: ``QueueUpdated`` with schema
 
 ```json
@@ -190,7 +190,7 @@ sequenceDiagram
 
 ---
 
-Note: In the current architecture, control updates (e.g., queue/tag changes, traffic weights) are also published to the internal EventPool and consumed by Gateways for WebSocket relay to SDKs. The callback interface above remains for backward compatibility and operational tooling.
+Note: In the current architecture, control updates (e.g., queue/tag changes, traffic weights) are also published to the internal ControlBus and consumed by Gateways for WebSocket relay to SDKs. The callback interface above remains for backward compatibility and operational tooling.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
