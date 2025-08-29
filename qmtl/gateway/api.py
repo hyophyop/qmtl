@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 import time
 from pydantic import BaseModel, Field
 import redis.asyncio as redis
+import grpc
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor

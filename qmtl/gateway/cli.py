@@ -11,6 +11,7 @@ from .redis_client import InMemoryRedis
 from .api import create_app
 from .config import GatewayConfig
 from ..config import load_config, find_config_file
+from .controlbus_consumer import ControlBusConsumer
 
 
 async def _main(argv: list[str] | None = None) -> None:
@@ -40,11 +41,25 @@ async def _main(argv: list[str] | None = None) -> None:
         if args.insert_sentinel is None
         else args.insert_sentinel
     )
+    consumer = None
+    if config.controlbus_topics:
+        consumer = ControlBusConsumer(
+            brokers=config.controlbus_brokers,
+            topics=config.controlbus_topics,
+            group=config.controlbus_group,
+        )
+
     app = create_app(
         redis_client=redis_client,
         database_backend=config.database_backend,
         database_dsn=config.database_dsn,
         insert_sentinel=insert_sentinel,
+        controlbus_consumer=consumer,
+        worldservice_url=config.worldservice_url,
+        worldservice_timeout=config.worldservice_timeout,
+        worldservice_retries=config.worldservice_retries,
+        enable_worldservice_proxy=config.enable_worldservice_proxy,
+        enforce_live_guard=config.enforce_live_guard,
     )
     db = app.state.database
     if hasattr(db, "connect"):
@@ -72,4 +87,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry
     main()
-
