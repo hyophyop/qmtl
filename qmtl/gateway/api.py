@@ -484,6 +484,8 @@ def create_app(
     async def queues_watch(
         tags: str, interval: int, match: str = "any", match_mode: str | None = None
     ):
+        """Legacy queue watch; prefer ``POST /events/subscribe``."""
+        logger.warning("/queues/watch is deprecated; use /events/subscribe instead")
         tag_list = [t for t in tags.split(",") if t]
         mode_str = match_mode or match
         try:
@@ -503,7 +505,11 @@ def create_app(
             async for queues in watch_hub_local.subscribe(tag_list, interval, mode):
                 yield json.dumps({"queues": queues}) + "\n"
 
-        return StreamingResponse(streamer(), media_type="text/plain")
+        headers = {
+            "Deprecation": "true",
+            "Link": "</events/subscribe>; rel=\"successor-version\"",
+        }
+        return StreamingResponse(streamer(), media_type="text/plain", headers=headers)
 
     @app.post("/events/subscribe", response_model=EventSubscribeResponse)
     async def events_subscribe(payload: EventSubscribeRequest) -> EventSubscribeResponse:
