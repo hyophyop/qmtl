@@ -231,7 +231,17 @@ def create_app(
                 return
             if self._policy_versions.get(world_id) == version:
                 return
-            self._policy_versions[world_id] = int(version)
+            try:
+                if isinstance(version, int):
+                    self._policy_versions[world_id] = version
+                else:
+                    self._policy_versions[world_id] = int(version)
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Invalid policy_version %r for world_id %r; must be integer-convertible.",
+                    version, world_id
+                )
+                return
             if self.ws_hub:
                 await self.ws_hub.send_policy_updated(payload)
 
