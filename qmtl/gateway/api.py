@@ -193,6 +193,8 @@ def create_app(
         def __init__(self, ws_hub: Optional[WebSocketHub] = None):
             self.ws_hub = ws_hub
             self._sentinel_weights: dict[str, float] = {}
+            self._activation_etags: set[str] = set()
+            self._policy_versions: dict[str, int] = {}
 
         async def _handle_sentinel_weight(self, payload: dict) -> None:
             sid: str = payload["sentinel_id"]
@@ -209,6 +211,29 @@ def create_app(
             self._sentinel_weights[sid] = weight
             from . import metrics as gw_metrics
             gw_metrics.set_sentinel_traffic_ratio(sid, weight)
+
+        async def _handle_activation_updated(self, payload: dict) -> None:
+            if payload.get("version") != 1:
+                return
+            etag = payload.get("etag")
+            if not etag or etag in self._activation_etags:
+                return
+            self._activation_etags.add(etag)
+            if self.ws_hub:
+                await self.ws_hub.send_activation_updated(payload)
+
+        async def _handle_policy_updated(self, payload: dict) -> None:
+            if payload.get("version") != 1:
+                return
+            world_id = payload.get("world_id")
+            version = payload.get("policy_version")
+            if world_id is None or version is None:
+                return
+            if self._policy_versions.get(world_id) == version:
+                return
+            self._policy_versions[world_id] = int(version)
+            if self.ws_hub:
+                await self.ws_hub.send_policy_updated(payload)
 
     @app.post("/strategies", status_code=status.HTTP_202_ACCEPTED, response_model=StrategyAck)
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
@@ -298,6 +323,18 @@ def create_app(
                 gateway = Gateway(ws_hub_local)
                 app.state.gateway = gateway
             await gateway._handle_sentinel_weight(data)
+            return {"ok": True}
+        elif event_type in {"ActivationUpdated", "PolicyUpdated"}:
+            gateway = getattr(app.state, "gateway", None)
+            if gateway is None:
+                gateway = Gateway(ws_hub_local)
+                app.state.gateway = gateway
+            handler = (
+                gateway._handle_activation_updated
+                if event_type == "ActivationUpdated"
+                else gateway._handle_policy_updated
+            )
+            await handler(event)
             return {"ok": True}
 
         return {"ok": True}

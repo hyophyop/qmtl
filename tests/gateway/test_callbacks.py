@@ -145,3 +145,70 @@ async def test_dag_event_sentinel_weight_invalid(fake_redis):
         assert hub.weights == []
         assert "v3" not in metrics.gateway_sentinel_traffic_ratio._vals
     await transport.aclose()
+
+
+@pytest.mark.asyncio
+async def test_dag_event_activation_policy_updated(fake_redis):
+    class DummyHub:
+        def __init__(self):
+            self.activations = []
+            self.policies = []
+
+        async def send_activation_updated(self, payload: dict) -> None:
+            self.activations.append(payload)
+
+        async def send_policy_updated(self, payload: dict) -> None:
+            self.policies.append(payload)
+
+    hub = DummyHub()
+    dag_client = DummyDagManagerClient()
+    app = create_app(
+        redis_client=fake_redis,
+        ws_hub=hub,
+        dag_client=dag_client,
+        database_backend="memory",
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        act = {
+            "type": "ActivationUpdated",
+            "version": 1,
+            "world_id": "w1",
+            "strategy_id": "s1",
+            "side": "long",
+            "active": True,
+            "weight": 1.0,
+            "etag": "e1",
+        }
+        resp = await client.post("/callbacks/dag-event", json=act)
+        assert resp.status_code == 202
+        assert hub.activations == [act]
+        # duplicate ignored
+        resp = await client.post("/callbacks/dag-event", json=act)
+        assert resp.status_code == 202
+        assert hub.activations == [act]
+        # unknown version ignored
+        act2 = dict(act, version=2, etag="e2")
+        resp = await client.post("/callbacks/dag-event", json=act2)
+        assert resp.status_code == 202
+        assert hub.activations == [act]
+
+        pol = {
+            "type": "PolicyUpdated",
+            "version": 1,
+            "world_id": "w1",
+            "policy_version": 3,
+        }
+        resp = await client.post("/callbacks/dag-event", json=pol)
+        assert resp.status_code == 202
+        assert hub.policies == [pol]
+        # duplicate ignored
+        resp = await client.post("/callbacks/dag-event", json=pol)
+        assert resp.status_code == 202
+        assert hub.policies == [pol]
+        # unknown version ignored
+        pol2 = dict(pol, version=2, policy_version=4)
+        resp = await client.post("/callbacks/dag-event", json=pol2)
+        assert resp.status_code == 202
+        assert hub.policies == [pol]
+    await transport.aclose()
