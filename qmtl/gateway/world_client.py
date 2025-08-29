@@ -82,20 +82,41 @@ class WorldServiceClient:
                 ttl = int(cache_control.split("max-age=")[1].split(",")[0])
             except Exception:
                 ttl = 0
-        if ttl <= 0:
-            # Fallback to envelope ttl, default 300s if present or default required by spec
-            # Accept values like "300s" or integer seconds
-            env_ttl = 0
-            tval = data.get("ttl") if isinstance(data, dict) else None
-            if isinstance(tval, str) and tval.endswith("s"):
+
+        # Header max-age takes precedence if positive
+        if ttl > 0:
+            self._decision_cache[world_id] = TTLCacheEntry(data, ttl)
+            return data
+
+        # Fallback to envelope ttl semantics when header is missing or <= 0
+        tval = data.get("ttl") if isinstance(data, dict) else None
+        if tval is None:
+            # Spec default when envelope omits ttl
+            self._decision_cache[world_id] = TTLCacheEntry(data, 300)
+            return data
+
+        # Envelope provided ttl; honor zero as "do not cache"
+        env_ttl: int | None = None
+        if isinstance(tval, str):
+            if tval.endswith("s"):
                 try:
                     env_ttl = int(tval[:-1])
                 except Exception:
-                    env_ttl = 0
-            elif isinstance(tval, (int, float)):
-                env_ttl = int(tval)
-            ttl = env_ttl or 300
-        self._decision_cache[world_id] = TTLCacheEntry(data, ttl)
+                    env_ttl = None
+            else:
+                # Not a supported format; treat as invalid → no cache
+                env_ttl = None
+        elif isinstance(tval, (int, float)):
+            env_ttl = int(tval)
+
+        if env_ttl is None:
+            # Invalid ttl provided → be conservative and do not cache
+            return data
+        if env_ttl <= 0:
+            # Explicit no-cache
+            return data
+
+        self._decision_cache[world_id] = TTLCacheEntry(data, env_ttl)
         return data
 
     async def get_activation(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
