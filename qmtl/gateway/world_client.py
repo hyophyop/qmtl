@@ -136,6 +136,22 @@ class WorldServiceClient:
             self._activation_cache[world_id] = (new_etag, data)
         return data
 
+    async def get_state_hash(
+        self,
+        world_id: str,
+        topic: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        """Fetch state hash for a topic without retrieving full snapshot."""
+
+        resp = await self._request(
+            "GET",
+            f"{self._base}/worlds/{world_id}/{topic}/state_hash",
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def post_evaluate(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         resp = await self._request(
             "POST",

@@ -550,6 +550,17 @@ def create_app(
             headers["Authorization"] = auth
         return await client.get_activation(world_id, headers=headers)
 
+    @app.get("/worlds/{world_id}/{topic}/state_hash")
+    async def get_world_state_hash(world_id: str, topic: str, request: Request) -> Any:
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await client.get_state_hash(world_id, topic, headers=headers)
+
     @app.post("/worlds/{world_id}/evaluate")
     async def post_world_evaluate(world_id: str, payload: dict, request: Request) -> Any:
         client: WorldServiceClient | None = app.state.world_client
