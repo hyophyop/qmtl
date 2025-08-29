@@ -2,30 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, Optional
-
-from prometheus_client import Gauge
 
 from qmtl.sdk.node import MatchMode
 
 from .ws import WebSocketHub
+from . import metrics as gw_metrics
 
 logger = logging.getLogger(__name__)
-
-
-# Metrics for monitoring consumer delay and clock skew
-_controlbus_lag_ms = Gauge(
-    "controlbus_lag_ms",
-    "Delay between event creation and processing in milliseconds",
-    ["topic"],
-)
-_controlbus_skew_ms = Gauge(
-    "controlbus_skew_ms",
-    "Clock skew between event timestamp and consumer processing time in milliseconds",
-    ["topic"],
-)
 
 
 @dataclass
@@ -89,14 +74,11 @@ class ControlBusConsumer:
         key = (msg.topic, msg.key)
         marker = (msg.etag, msg.run_id)
         if self._last_seen.get(key) == marker:
+            gw_metrics.record_event_dropped(msg.topic)
             return
         self._last_seen[key] = marker
 
-        now_ms = time.time() * 1000
-        if msg.timestamp_ms is not None:
-            lag = max(0.0, now_ms - msg.timestamp_ms)
-            _controlbus_lag_ms.labels(topic=msg.topic).set(lag)
-            _controlbus_skew_ms.labels(topic=msg.topic).set(msg.timestamp_ms - now_ms)
+        gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
         if not self.ws_hub:
             return

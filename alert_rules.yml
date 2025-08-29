@@ -48,3 +48,10 @@ prometheus:
             severity: warning
           annotations:
             summary: Queue count growth is abnormal
+        - alert: SentinelSkewHigh
+          expr: sentinel_skew_seconds > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Sentinel traffic skew persists beyond 5s

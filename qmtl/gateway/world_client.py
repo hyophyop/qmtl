@@ -69,8 +69,7 @@ class WorldServiceClient:
     async def get_decide(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
         entry = self._decision_cache.get(world_id)
         if entry and entry.valid():
-            gw_metrics.worlds_cache_hits_total.inc()
-            gw_metrics.worlds_cache_hits_total._val = gw_metrics.worlds_cache_hits_total._value.get()  # type: ignore[attr-defined]
+            gw_metrics.record_worlds_cache_hit()
             return entry.value
         resp = await self._request("GET", f"{self._base}/worlds/{world_id}/decide", headers=headers)
         resp.raise_for_status()
@@ -126,8 +125,7 @@ class WorldServiceClient:
             req_headers["If-None-Match"] = etag
         resp = await self._request("GET", f"{self._base}/worlds/{world_id}/activation", headers=req_headers)
         if resp.status_code == 304 and cached is not None:
-            gw_metrics.worlds_cache_hits_total.inc()
-            gw_metrics.worlds_cache_hits_total._val = gw_metrics.worlds_cache_hits_total._value.get()  # type: ignore[attr-defined]
+            gw_metrics.record_worlds_cache_hit()
             return cached
         resp.raise_for_status()
         data = resp.json()
