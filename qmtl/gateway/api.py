@@ -30,6 +30,7 @@ from .ws import WebSocketHub
 from .controlbus_consumer import ControlBusConsumer
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
+from .world_client import WorldServiceClient, Budget
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -115,10 +116,16 @@ def create_app(
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
     controlbus_consumer: Optional[ControlBusConsumer] = None,
+    world_client: Optional[WorldServiceClient] = None,
     *,
     insert_sentinel: bool = True,
     database_backend: str = "postgres",
     database_dsn: str | None = None,
+    worldservice_url: str | None = None,
+    worldservice_timeout: float = 5.0,
+    worldservice_retries: int = 0,
+    enable_worldservice_proxy: bool = True,
+    enforce_live_guard: bool = True,
 ) -> FastAPI:
     setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(
@@ -150,6 +157,14 @@ def create_app(
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
+    world_client_local = world_client
+    if (
+        world_client_local is None
+        and enable_worldservice_proxy
+        and worldservice_url is not None
+    ):
+        budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
+        world_client_local = WorldServiceClient(worldservice_url, budget=budget)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -170,11 +185,21 @@ def create_app(
                     await db_obj.close()  # type: ignore[attr-defined]
                 except Exception:
                     logger.exception("Failed to close database connection")
+            if (
+                world_client_local is not None
+                and hasattr(world_client_local._client, "aclose")
+            ):
+                try:
+                    await world_client_local._client.aclose()  # type: ignore[attr-defined]
+                except Exception:
+                    logger.exception("Failed to close world client")
 
     app = FastAPI(lifespan=lifespan)
     FastAPIInstrumentor().instrument_app(app)
     app.state.database = database_obj
     app.state.degradation = degradation
+    app.state.world_client = world_client_local
+    app.state.enforce_live_guard = enforce_live_guard
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):
@@ -408,6 +433,52 @@ def create_app(
                 yield json.dumps({"queues": queues}) + "\n"
 
         return StreamingResponse(streamer(), media_type="text/plain")
+
+    @app.get("/worlds/{world_id}/decide")
+    async def get_world_decide(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await client.get_decide(world_id, headers=headers)
+
+    @app.get("/worlds/{world_id}/activation")
+    async def get_world_activation(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await client.get_activation(world_id, headers=headers)
+
+    @app.post("/worlds/{world_id}/evaluate")
+    async def post_world_evaluate(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await client.post_evaluate(world_id, payload, headers=headers)
+
+    @app.post("/worlds/{world_id}/apply")
+    async def post_world_apply(world_id: str, payload: dict, request: Request) -> Any:
+        if app.state.enforce_live_guard and request.headers.get("X-Allow-Live") != "true":
+            raise HTTPException(status_code=403, detail="live trading not allowed")
+        client: WorldServiceClient | None = app.state.world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+        return await client.post_apply(world_id, payload, headers=headers)
 
     @app.get("/metrics")
     async def metrics_endpoint() -> Response:

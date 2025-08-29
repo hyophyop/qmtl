@@ -40,6 +40,19 @@ dagclient_breaker_open_total = Gauge(
     registry=global_registry,
 )
 
+# Metrics for WorldService proxy
+worlds_proxy_latency_ms = Gauge(
+    "worlds_proxy_latency_ms",
+    "Latency of requests proxied to WorldService in milliseconds",
+    registry=global_registry,
+)
+
+worlds_cache_hits_total = Counter(
+    "worlds_cache_hits_total",
+    "Total number of cache hits when proxying WorldService requests",
+    registry=global_registry,
+)
+
 
 # Track the percentage of traffic routed to each sentinel version
 if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
@@ -79,6 +92,12 @@ def observe_gateway_latency(duration_ms: float) -> None:
     gateway_e2e_latency_p95._val = gateway_e2e_latency_p95._value.get()  # type: ignore[attr-defined]
 
 
+def observe_worlds_proxy_latency(duration_ms: float) -> None:
+    """Record latency for WorldService proxy requests."""
+    worlds_proxy_latency_ms.set(duration_ms)
+    worlds_proxy_latency_ms._val = worlds_proxy_latency_ms._value.get()  # type: ignore[attr-defined]
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Start an HTTP server to expose metrics."""
     start_http_server(port, registry=global_registry)
@@ -107,4 +126,8 @@ def reset_metrics() -> None:
     degrade_level.clear()
     dagclient_breaker_open_total.set(0)
     dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
+    worlds_proxy_latency_ms.set(0)
+    worlds_proxy_latency_ms._val = 0  # type: ignore[attr-defined]
+    worlds_cache_hits_total._value.set(0)  # type: ignore[attr-defined]
+    worlds_cache_hits_total._val = 0  # type: ignore[attr-defined]
 

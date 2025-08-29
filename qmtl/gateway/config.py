@@ -17,3 +17,8 @@ class GatewayConfig:
     controlbus_dsn: Optional[str] = None
     controlbus_topics: list[str] = field(default_factory=list)
     controlbus_group: str = "gateway"
+    worldservice_url: Optional[str] = None
+    worldservice_timeout: float = 5.0
+    worldservice_retries: int = 0
+    enable_worldservice_proxy: bool = True
+    enforce_live_guard: bool = True
