@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-from typing import Optional
+from typing import Optional, Set
+
+from fastapi import WebSocket
 
 from qmtl.sdk.node import MatchMode
 
 from ..common.cloudevents import format_event
-
-import websockets
-from websockets.asyncio.server import Server, ServerConnection
 
 
 logger = logging.getLogger(__name__)
@@ -19,53 +19,45 @@ logger = logging.getLogger(__name__)
 class WebSocketHub:
     """Broadcast Gateway state updates to SDK clients."""
 
-    def __init__(self, host: str = "localhost", port: int = 0) -> None:
-        self.host = host
-        self.port = port
-        self._server: Optional[Server] = None
-        self._clients: set[ServerConnection] = set()
+    def __init__(self) -> None:
+        self._clients: Set[WebSocket] = set()
         self._lock = asyncio.Lock()
         self._sentinel: object = object()
         self._queue: asyncio.Queue[object] = asyncio.Queue()
-        self._stop_event = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
 
-    async def start(self) -> int:
-        """Start the WebSocket server and return the bound port."""
-        self._server = await websockets.serve(self._handler, self.host, self.port)
-        assert self._server.sockets
-        self.port = self._server.sockets[0].getsockname()[1]
-        self._task = asyncio.create_task(self._sender_loop())
-        return self.port
+    async def start(self) -> None:
+        """Start the internal sender loop."""
+        if self._task is None:
+            self._task = asyncio.create_task(self._sender_loop())
 
     async def stop(self) -> None:
-        """Stop the server and cleanup resources."""
+        """Stop the sender loop and disconnect clients."""
         await self._queue.put(self._sentinel)
         await self._queue.join()
-        self._stop_event.set()
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
-            self._server = None
-            await asyncio.sleep(0)
         if self._task:
             await self._task
             self._task = None
         async with self._lock:
+            for ws in list(self._clients):
+                with contextlib.suppress(Exception):
+                    await ws.close()
             self._clients.clear()
 
     def is_running(self) -> bool:
-        """Return ``True`` if the WebSocket server is active."""
-        return self._server is not None
+        """Return ``True`` if the sender loop is active."""
+        return self._task is not None and not self._task.done()
 
-    async def _handler(self, websocket: ServerConnection) -> None:
+    async def connect(self, websocket: WebSocket) -> None:
+        """Register an incoming WebSocket connection."""
+        await websocket.accept()
         async with self._lock:
             self._clients.add(websocket)
-        try:
-            await websocket.wait_closed()
-        finally:
-            async with self._lock:
-                self._clients.discard(websocket)
+
+    async def disconnect(self, websocket: WebSocket) -> None:
+        """Remove a WebSocket connection."""
+        async with self._lock:
+            self._clients.discard(websocket)
 
     async def _sender_loop(self) -> None:
         while True:
