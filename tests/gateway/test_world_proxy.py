@@ -72,9 +72,10 @@ async def test_activation_etag_cache(fake_redis):
     async with httpx.AsyncClient(transport=transport, base_url="http://gw") as client:
         r1 = await client.get("/worlds/foo/activation")
         assert r1.status_code == 200 and r1.json()["active"] is True
-        r2 = await client.get("/worlds/foo/activation")
-        assert r2.status_code == 200 and r2.json()["active"] is True
-    assert calls["activation"] == 2
+        etag = r1.headers.get("etag")
+        r2 = await client.get("/worlds/foo/activation", headers={"If-None-Match": etag})
+        assert r2.status_code == 304
+    assert calls["activation"] == 1
     assert metrics.worldservice_cache_hits_total.labels(endpoint="activation")._value.get() == 1
 
 
