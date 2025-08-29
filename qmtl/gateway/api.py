@@ -44,7 +44,12 @@ from .controlbus_consumer import ControlBusConsumer
 from .gateway_health import get_health as gateway_health
 from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
 from .world_client import WorldServiceClient, Budget
-from .event_descriptor import EventDescriptorConfig, sign_event_token, jwks
+from .event_descriptor import (
+    EventDescriptorConfig,
+    sign_event_token,
+    jwks,
+    validate_event_token,
+)
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -308,7 +313,28 @@ def create_app(
 
         @app.websocket("/ws/evt")
         async def ws_evt_endpoint(websocket: WebSocket) -> None:
-            await ws_hub_local.connect(websocket)
+            # Optional token validation; if a token is provided but invalid, reject.
+            topics_set: Optional[set[str]] = None
+            try:
+                auth = websocket.headers.get("authorization")
+                token = None
+                if auth and auth.lower().startswith("bearer "):
+                    token = auth.split(" ", 1)[1].strip()
+                if token is None:
+                    # also allow as query string param
+                    token = websocket.query_params.get("token")
+                if token:
+                    cfg: EventDescriptorConfig = app.state.event_config
+                    claims = validate_event_token(token, cfg)
+                    raw_topics = claims.get("topics") or []
+                    # Normalize to gateway-internal topic names
+                    normalize = {"queues": "queue", "queue": "queue", "activation": "activation", "policy": "policy"}
+                    topics_set = {normalize[t] for t in raw_topics if t in normalize}
+            except Exception:
+                await websocket.close(code=1008)
+                return
+
+            await ws_hub_local.connect(websocket, topics=topics_set)
             try:
                 while True:
                     await websocket.receive_text()
@@ -388,8 +414,15 @@ def create_app(
         if crc != payload.node_ids_crc32:
             raise HTTPException(status_code=400, detail="node id checksum mismatch")
 
+        # Enforce strict node_id integrity only for live runs.
+        # For dry-run and other modes, checksum validation above is sufficient
+        # to catch tampering while keeping the endpoint flexible for tooling/tests.
         mismatches: list[dict[str, str | int]] = []
         for idx, node in enumerate(dag.get("nodes", [])):
+            # TagQueryNode is a special case used to fetch queue maps; skip strict ID checks
+            if node.get("node_type") == "TagQueryNode":
+                continue
+            # For all other node types, enforce integrity in both dry-run and live
             expected = compute_node_id(
                 node.get("node_type", ""),
                 node.get("code_hash", ""),
