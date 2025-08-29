@@ -56,3 +56,10 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
     assert header["kid"] == cfg.kid
     now = int(time.time())
     assert 50 <= claims["exp"] - now <= 60
+
+
+@pytest.mark.asyncio
+async def test_event_descriptor_secret_from_env(fake_redis, monkeypatch):
+    monkeypatch.setenv("QMTL_EVENT_SECRET", "envsecret")
+    app = create_app(redis_client=fake_redis, database=FakeDB())
+    assert app.state.event_config.secret == "envsecret"
