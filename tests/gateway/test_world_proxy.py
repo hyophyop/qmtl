@@ -39,11 +39,14 @@ async def test_decide_ttl_cache(fake_redis):
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=ws_client)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://gw") as client:
-        r1 = await client.get("/worlds/foo/decide")
+        headers = {"Authorization": "Bearer token"}
+        r1 = await client.get("/worlds/foo/decide", headers=headers)
         assert r1.status_code == 200
-        r2 = await client.get("/worlds/foo/decide")
+        r2 = await client.get("/worlds/foo/decide", headers=headers)
         assert r2.status_code == 200
-    assert calls["decide"] == 1
+        r3 = await client.get("/worlds/foo/decide")
+        assert r3.status_code == 200
+    assert calls["decide"] == 2
     assert metrics.worldservice_cache_hits_total.labels(endpoint="decide")._value.get() == 1
 
 
