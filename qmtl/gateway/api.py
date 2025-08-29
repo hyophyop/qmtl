@@ -219,10 +219,25 @@ def create_app(
         except Exception:
             dag = json.loads(payload.dag_json)
 
-        from qmtl.common import crc32_of_list
+        from qmtl.common import crc32_of_list, compute_node_id
         crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
         if crc != payload.node_ids_crc32:
             raise HTTPException(status_code=400, detail="node id checksum mismatch")
+
+        mismatches: list[dict[str, str | int]] = []
+        for idx, node in enumerate(dag.get("nodes", [])):
+            expected = compute_node_id(
+                node.get("node_type", ""),
+                node.get("code_hash", ""),
+                node.get("config_hash", ""),
+                node.get("schema_hash", ""),
+            )
+            if node.get("node_id") != expected:
+                mismatches.append(
+                    {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
+                )
+        if mismatches:
+            raise HTTPException(status_code=400, detail={"node_id_mismatch": mismatches})
 
         strategy_id, existed = await manager.submit(payload)
         if existed:

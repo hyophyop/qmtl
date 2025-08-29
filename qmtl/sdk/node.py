@@ -27,7 +27,7 @@ from . import metrics as sdk_metrics
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
 
-from qmtl.dagmanager import compute_node_id
+from qmtl.common import compute_node_id
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
