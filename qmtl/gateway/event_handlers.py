@@ -81,6 +81,8 @@ def create_event_router(
             "iat": int(now.timestamp()),
             "exp": int(exp.timestamp()),
         }
+        # ``kid`` is not part of the payload claims; ``sign_event_token`` writes
+        # the key identifier to the JWT header.
         token = sign_event_token(claims, event_config)
         return EventSubscribeResponse(
             stream_url=event_config.stream_url,

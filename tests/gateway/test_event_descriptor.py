@@ -54,6 +54,7 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
     assert claims["world_id"] == "w1"
     assert claims["strategy_id"] == "s1"
     assert claims["topics"] == ["activation"]
+    assert "kid" not in claims
     header = get_token_header(token)
     assert header["kid"] == cfg.active_kid
     now = int(time.time())
