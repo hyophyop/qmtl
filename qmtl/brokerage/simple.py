@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .order import Account, Order, Fill
+from .settlement import SettlementModel
 
 
 class CashBuyingPowerModel(BuyingPowerModel):
@@ -14,6 +15,17 @@ class CashBuyingPowerModel(BuyingPowerModel):
     def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
         required = order.price * order.quantity
         return account.cash >= required
+
+
+class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
+    """Buying power that accounts for reserved cash in SettlementModel."""
+
+    def __init__(self, settlement: SettlementModel) -> None:
+        self.settlement = settlement
+
+    def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
+        required = order.price * order.quantity
+        return self.settlement.available_cash(account) >= required
 
 
 class PerShareFeeModel(FeeModel):

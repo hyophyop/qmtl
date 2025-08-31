@@ -24,16 +24,24 @@ class SettlementModel:
     choose to reserve cash instead and only apply at settle time.
     """
 
-    def __init__(self, days: int = 2) -> None:
+    def __init__(self, days: int = 2, defer_cash: bool = False) -> None:
         self.days = days
+        self.defer_cash = defer_cash
         self._pending: List[PendingSettlement] = []
+        self._reserved: float = 0.0  # reserved cash for pending buys (fees included)
 
     def record(self, fill: Fill, now: datetime) -> None:
         notional = fill.price * fill.quantity
-        # Cash effect sign mirrors BrokerageModel immediate move; record for audit
+        # Cash effect sign mirrors BrokerageModel movement; record for audit
         self._pending.append(
             PendingSettlement(symbol=fill.symbol, amount=notional, settles_at=now + timedelta(days=self.days))
         )
+        # If deferring cash, reserve for buys (negative notional); for sells, no immediate credit
+        if self.defer_cash and notional > 0:
+            # Sell: nothing to reserve
+            pass
+        elif self.defer_cash and notional < 0:
+            self._reserved += abs(notional) + getattr(fill, 'fee', 0.0)
 
     def apply_due(self, account: Account, now: datetime) -> int:
         """Apply all settlements due at or before `now`. Returns count applied."""
@@ -41,10 +49,22 @@ class SettlementModel:
         applied = 0
         for p in self._pending:
             if p.settles_at <= now:
-                # No-op in this minimal model, since BrokerageModel already moved cash
+                # Apply cash if in defer mode; otherwise this is a no-op
+                if self.defer_cash:
+                    account.cash += p.amount
+                    # Reduce reserved for buys
+                    if p.amount < 0:
+                        self._reserved -= abs(p.amount)
                 applied += 1
             else:
                 remaining.append(p)
         self._pending = remaining
         return applied
 
+    # Utilities for buying power
+    @property
+    def reserved(self) -> float:
+        return max(0.0, self._reserved)
+
+    def available_cash(self, account: Account) -> float:
+        return account.cash - self.reserved
