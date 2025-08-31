@@ -17,7 +17,7 @@ class CashBuyingPowerModel(BuyingPowerModel):
 
 
 class PerShareFeeModel(FeeModel):
-    """Charge a fixed fee per share."""
+    """Deprecated: use qmtl.brokerage.fees.PerShareFeeModel instead."""
 
     def __init__(self, fee_per_share: float = 0.01) -> None:
         self.fee_per_share = fee_per_share
@@ -27,7 +27,7 @@ class PerShareFeeModel(FeeModel):
 
 
 class VolumeShareSlippageModel(SlippageModel):
-    """Apply slippage proportional to price."""
+    """Deprecated: use qmtl.brokerage.slippage.VolumeShareSlippageModel."""
 
     def __init__(self, slippage_rate: float = 0.0005) -> None:
         self.slippage_rate = slippage_rate

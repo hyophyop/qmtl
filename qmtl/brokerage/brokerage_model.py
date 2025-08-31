@@ -4,12 +4,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Optional
+
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
-from .order import Account, Order, Fill
+from .order import Account, Order, Fill, OrderType, TimeInForce
+from .symbols import SymbolPropertiesProvider
+from .exchange_hours import ExchangeHoursProvider
 
 
 class BrokerageModel:
-    """Compose buying power, fee, slippage and fill models."""
+    """Compose buying power, fee, slippage and fill models with pre-trade checks."""
 
     def __init__(
         self,
@@ -17,27 +22,60 @@ class BrokerageModel:
         fee_model: FeeModel,
         slippage_model: SlippageModel,
         fill_model: FillModel,
+        *,
+        symbols: SymbolPropertiesProvider | None = None,
+        hours: ExchangeHoursProvider | None = None,
     ) -> None:
         self.buying_power_model = buying_power_model
         self.fee_model = fee_model
         self.slippage_model = slippage_model
         self.fill_model = fill_model
+        self.symbols = symbols
+        self.hours = hours
 
-    def can_submit_order(self, account: Account, order: Order) -> bool:
-        """Return ``True`` if the order passes buying power checks."""
+    def _validate_order_properties(self, order: Order) -> None:
+        if self.symbols is not None:
+            price_for_validation = order.limit_price if order.type in {OrderType.LIMIT, OrderType.STOP_LIMIT} else order.price
+            self.symbols.validate_order(order.symbol, price_for_validation, order.quantity)
 
+    def _validate_hours(self, ts: Optional[datetime]) -> None:
+        if self.hours is None or ts is None:
+            return
+        if not self.hours.is_open(ts):
+            raise ValueError("Market is closed per exchange hours policy")
+
+    def can_submit_order(self, account: Account, order: Order, *, ts: Optional[datetime] = None) -> bool:
+        """Return True if the order passes symbol/hour/buying power checks."""
+
+        # Symbol/tick/lot validation
+        self._validate_order_properties(order)
+        # Market hours validation (if configured)
+        self._validate_hours(ts)
+        # Buying power validation
         return self.buying_power_model.has_sufficient_buying_power(account, order)
 
-    def execute_order(self, account: Account, order: Order, market_price: float) -> Fill:
-        """Execute ``order`` and update ``account`` cash balance."""
+    def execute_order(self, account: Account, order: Order, market_price: float, *, ts: Optional[datetime] = None) -> Fill:
+        """Execute ``order`` and update ``account`` cash balance.
 
-        if not self.can_submit_order(account, order):
-            raise ValueError("Insufficient buying power")
+        Applies slippage, fills via fill model, computes fees, and debits/credits cash.
+        Time-in-force policy is enforced at fill model level. If no shares are
+        filled, no fees are applied and no cash is moved.
+        """
+
+        if not self.can_submit_order(account, order, ts=ts):
+            raise ValueError("Order rejected by pre-trade checks")
 
         price_with_slippage = self.slippage_model.apply(order, market_price)
         fill = self.fill_model.fill(order, price_with_slippage)
+
+        if fill.quantity == 0:
+            # Nothing executed
+            fill.fee = 0.0
+            return fill
+
         fee = self.fee_model.calculate(order, fill.price)
         fill.fee = fee
-        cost = fill.price * order.quantity + fee
+        # Use actual filled quantity for cash movement
+        cost = fill.price * fill.quantity + fee
         account.cash -= cost
         return fill
