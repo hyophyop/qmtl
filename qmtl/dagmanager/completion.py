@@ -8,6 +8,7 @@ from .callbacks import post_with_backoff
 from ..common.cloudevents import format_event
 from .diff_service import NodeRepository
 from .kafka_admin import KafkaAdmin
+from .controlbus_producer import ControlBusProducer
 
 
 @dataclass
@@ -17,6 +18,7 @@ class QueueCompletionMonitor:
     repo: NodeRepository
     admin: KafkaAdmin
     callback_url: str
+    bus: ControlBusProducer | None = None
     interval: float = 5.0
     threshold: int = 2
     _sizes: Dict[str, int] = field(default_factory=dict)
@@ -59,17 +61,23 @@ class QueueCompletionMonitor:
             ):
                 record = self.repo.get_node_by_queue(topic)
                 if record and record.interval is not None and record.tags:
+                    payload = {
+                        "tags": list(record.tags),
+                        "interval": record.interval,
+                        "queues": [],
+                        "match_mode": "any",
+                    }
                     event = format_event(
-                        "qmtl.dagmanager",
-                        "queue_update",
-                        {
-                            "tags": list(record.tags),
-                            "interval": record.interval,
-                            "queues": [],
-                            "match_mode": "any",
-                        },
+                        "qmtl.dagmanager", "queue_update", payload
                     )
                     await post_with_backoff(self.callback_url, event)
+                    if self.bus:
+                        await self.bus.publish_queue_update(
+                            payload["tags"],
+                            payload["interval"],
+                            payload["queues"],
+                            payload["match_mode"],
+                        )
                     self._completed.add(topic)
 
 

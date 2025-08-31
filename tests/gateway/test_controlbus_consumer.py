@@ -5,6 +5,7 @@ import pytest
 from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway import metrics
+from qmtl.sdk.node import MatchMode
 
 
 class FakeHub:
@@ -25,6 +26,21 @@ class FakeHub:
     async def send_policy_updated(self, data: dict) -> None:
         self.events.append(("policy_updated", data))
 
+    async def send_queue_update(
+        self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY
+    ) -> None:
+        self.events.append(
+            (
+                "queue_update",
+                {
+                    "tags": tags,
+                    "interval": interval,
+                    "queues": queues,
+                    "match_mode": match_mode,
+                },
+            )
+        )
+
 
 class DummyDB(Database):
     async def insert_strategy(self, strategy_id: str, meta: dict | None) -> None:  # pragma: no cover - not used
@@ -44,23 +60,39 @@ class DummyDB(Database):
 async def test_consumer_relays_and_deduplicates():
     metrics.reset_metrics()
     hub = FakeHub()
-    consumer = ControlBusConsumer(brokers=[], topics=["activation", "policy"], group="g", ws_hub=hub)
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["activation", "policy", "queue"], group="g", ws_hub=hub
+    )
     await consumer.start()
     ts = time.time() * 1000
     msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
     dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
     msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2}, timestamp_ms=ts)
+    msg3 = ControlBusMessage(
+        topic="queue",
+        key="t",
+        etag="e3",
+        run_id="r3",
+        data={"tags": ["x"], "interval": 60, "queues": ["q"], "match_mode": "any"},
+        timestamp_ms=ts,
+    )
     await consumer.publish(msg1)
     await consumer.publish(dup)
     await consumer.publish(msg2)
+    await consumer.publish(msg3)
     await asyncio.sleep(0.1)
     await consumer.stop()
     assert hub.events == [
         ("activation_updated", {"id": 1}),
         ("policy_updated", {"id": 2}),
+        (
+            "queue_update",
+            {"tags": ["x"], "interval": 60, "queues": ["q"], "match_mode": MatchMode.ANY},
+        ),
     ]
     assert metrics.event_relay_events_total.labels(topic="activation")._value.get() == 1
     assert metrics.event_relay_events_total.labels(topic="policy")._value.get() == 1
+    assert metrics.event_relay_events_total.labels(topic="queue")._value.get() == 1
     assert metrics.event_relay_dropped_total.labels(topic="activation")._value.get() == 1
 
 
