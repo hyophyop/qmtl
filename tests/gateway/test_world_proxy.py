@@ -1,5 +1,7 @@
 import pytest
 import httpx
+import base64
+import json
 
 from qmtl.common import AsyncCircuitBreaker
 from qmtl.gateway.api import create_app, Database
@@ -207,3 +209,73 @@ async def test_status_reports_worldservice_breaker(fake_redis):
     await asgi.aclose()
     await client._client.aclose()
     assert s.json()["worldservice"] == "open"
+
+
+def _make_jwt(payload: dict) -> str:
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "none", "typ": "JWT"}).encode()).decode().rstrip("=")
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return f"{header}.{body}."
+
+
+@pytest.mark.asyncio
+async def test_identity_headers_forwarded(fake_redis):
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update({"sub": request.headers.get("X-Caller-Sub"), "claims": request.headers.get("X-Caller-Claims")})
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    token = _make_jwt({"sub": "alice", "role": "admin"})
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        await api_client.get("/worlds/abc/decide", headers={"Authorization": f"Bearer {token}"})
+    await asgi.aclose()
+    await client._client.aclose()
+    assert captured["sub"] == "alice"
+    claims = json.loads(captured["claims"])
+    assert claims["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_identity_headers_absent_without_jwt(fake_redis):
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(request.headers)
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        await api_client.get("/worlds/abc/decide")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert "X-Caller-Sub" not in captured
+    assert "X-Caller-Claims" not in captured
+
+
+@pytest.mark.asyncio
+async def test_identity_headers_malformed_jwt(fake_redis):
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(request.headers)
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        await api_client.get(
+            "/worlds/abc/decide", headers={"Authorization": "Bearer not.a.jwt"}
+        )
+    await asgi.aclose()
+    await client._client.aclose()
+    assert "X-Caller-Sub" not in captured
+    assert "X-Caller-Claims" not in captured
