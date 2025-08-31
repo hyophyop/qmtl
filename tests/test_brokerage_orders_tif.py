@@ -75,6 +75,15 @@ def test_limit_order_crosses_and_fok_requires_full_fill():
     assert fill.price == 100.0
 
 
+def test_ioc_partial_fill_with_liquidity_cap():
+    account = Account(cash=1_000_000)
+    order = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MARKET, tif=TimeInForce.IOC)
+    # Cap immediate liquidity to 30 shares
+    brk = make_brokerage(fill=MarketFillModel(liquidity_cap=30))
+    fill = brk.execute_order(account, order, market_price=100.0)
+    assert fill.quantity == 30
+
+
 def test_symbol_properties_validation_enforces_tick_and_lot():
     symbols = SymbolPropertiesProvider()
     brk = make_brokerage(symbols=symbols, fill=MarketFillModel())
@@ -99,4 +108,3 @@ def test_exchange_hours_provider_blocks_when_closed():
     ts = datetime.combine(datetime.utcnow().date(), time(3, 0))
     with pytest.raises(ValueError, match="Market is closed"):
         brk.can_submit_order(account, order, ts=ts)
-
