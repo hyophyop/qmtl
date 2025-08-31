@@ -89,11 +89,12 @@ def create_api_router(
     router = APIRouter()
 
     @router.get("/status")
-    async def status_endpoint() -> dict[str, str]:
+    async def status_endpoint() -> dict[str, Any]:
         health_data = await gateway_health(
             redis_conn, database_obj, dagmanager, world_client
         )
         health_data["degrade_level"] = degradation.level.name
+        health_data["enforce_live_guard"] = enforce_live_guard
         return health_data
 
     @router.get("/health")

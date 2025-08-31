@@ -136,6 +136,37 @@ def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
     assert captured["insert_sentinel"] is False
 
 
+def test_gateway_cli_allow_live_flag(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  enforce_live_guard: true",
+            ]
+        )
+    )
+
+    captured = {}
+
+    from types import SimpleNamespace
+    from qmtl.gateway import cli
+
+    def fake_create_app(**kwargs):
+        captured["enforce_live_guard"] = kwargs.get("enforce_live_guard")
+        return SimpleNamespace(state=SimpleNamespace(database=None))
+
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.chdir(tmp_path)
+
+    cli.main(["--allow-live"])
+
+    assert captured["enforce_live_guard"] is False
+
+
 def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):
     config_path = tmp_path / "qmtl.yml"
     config_path.write_text(

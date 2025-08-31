@@ -14,6 +14,7 @@ def test_load_config_gateway_yaml(tmp_path: Path) -> None:
         "database_backend": "postgres",
         "database_dsn": "postgresql://db/test",
         "insert_sentinel": False,
+        "enforce_live_guard": False,
     }
     config_file = tmp_path / "gw.yaml"
     config_file.write_text(yaml.safe_dump({"gateway": data}))
@@ -22,6 +23,7 @@ def test_load_config_gateway_yaml(tmp_path: Path) -> None:
     assert config.gateway.database_backend == "postgres"
     assert config.gateway.database_dsn == data["database_dsn"]
     assert config.gateway.insert_sentinel is False
+    assert config.gateway.enforce_live_guard is False
 
 
 def test_load_config_gateway_json(tmp_path: Path) -> None:
@@ -30,6 +32,7 @@ def test_load_config_gateway_json(tmp_path: Path) -> None:
         "database_backend": "memory",
         "database_dsn": "sqlite:///:memory:",
         "insert_sentinel": True,
+        "enforce_live_guard": True,
     }
     config_file = tmp_path / "gw.json"
     config_file.write_text(json.dumps({"gateway": data}))
@@ -38,6 +41,7 @@ def test_load_config_gateway_json(tmp_path: Path) -> None:
     assert config.gateway.database_backend == "memory"
     assert config.gateway.database_dsn == data["database_dsn"]
     assert config.gateway.insert_sentinel is True
+    assert config.gateway.enforce_live_guard is True
 
 
 def test_load_config_missing_file() -> None:
@@ -75,3 +79,4 @@ def test_gateway_config_defaults() -> None:
     assert cfg.insert_sentinel is True
     assert cfg.worldservice_timeout == 0.3
     assert cfg.worldservice_retries == 2
+    assert cfg.enforce_live_guard is True
