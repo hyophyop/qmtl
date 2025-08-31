@@ -8,7 +8,7 @@ import ast
 import json
 import os
 from collections import OrderedDict
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 REQUIRED_KEYS = ["scope", "family", "interval", "asset"]
 RECOMMENDED_KEYS = ["window", "price", "side", "target_horizon", "label"]
@@ -61,6 +61,37 @@ def load_tags(path: str) -> Tuple[Dict[str, Any], ast.Assign | None, ast.Module]
     return tags, tags_node, tree
 
 
+def validate_tags(tags: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    """Return normalized tags and a list of validation errors."""
+    errors: List[str] = []
+    fixed_tags: Dict[str, Any] = {}
+    for key, val in tags.items():
+        key_l = str(key).lower()
+        if isinstance(val, list):
+            errors.append(f"{key}: lists are not allowed")
+            continue
+        if isinstance(val, str):
+            val_l = val.lower()
+        else:
+            val_l = val
+        if key_l == "interval":
+            norm, ok = normalize_interval(val_l)
+            if not ok:
+                errors.append(f"interval value '{val}' is invalid")
+            elif norm != val_l:
+                errors.append(f"interval '{val}' not normalized (expected {norm})")
+                val_l = norm
+        if key_l == "scope" and isinstance(val_l, str) and val_l not in VALID_SCOPES:
+            errors.append(f"scope '{val_l}' is invalid")
+        fixed_tags[key_l] = val_l
+        if key != key_l or (isinstance(val, str) and val != val_l):
+            errors.append(f"{key}: keys and string values must be lowercase")
+    for req in REQUIRED_KEYS:
+        if req not in fixed_tags:
+            errors.append(f"missing required key: {req}")
+    return fixed_tags, errors
+
+
 def write_tags(path: str, tree: ast.Module, node: ast.Assign | None, tags: Dict[str, Any]):
     # Build ordered dict
     ordered = OrderedDict()
@@ -88,51 +119,27 @@ def write_tags(path: str, tree: ast.Module, node: ast.Assign | None, tags: Dict[
         f.write("\n".join(new_lines) + "\n")
 
 
+def apply_fixes(path: str, tags: Dict[str, Any], tree: ast.Module, node: ast.Assign | None) -> None:
+    """Write normalized tags to disk, adding placeholders for missing keys."""
+    fixed = dict(tags)
+    keys = REQUIRED_KEYS + RECOMMENDED_KEYS if node is None else REQUIRED_KEYS
+    for key in keys:
+        fixed.setdefault(key, "TODO")
+    write_tags(path, tree, node, fixed)
+
+
 def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
     tags, node, tree = load_tags(path)
-    errors = []
     if node is None:
         if fix:
-            scaffold = {key: "TODO" for key in REQUIRED_KEYS + RECOMMENDED_KEYS}
-            write_tags(path, tree, None, scaffold)
+            apply_fixes(path, {}, tree, None)
             return True, ""
         return False, "missing TAGS dict"
 
-    fixed_tags: Dict[str, Any] = {}
-    for key, val in tags.items():
-        key_l = str(key).lower()
-        if isinstance(val, list):
-            errors.append(f"{key}: lists are not allowed")
-            continue
-        if isinstance(val, str):
-            val_l = val.lower()
-        else:
-            val_l = val
-        if key_l == "interval":
-            norm, ok = normalize_interval(val_l)
-            if not ok:
-                errors.append(f"interval value '{val}' is invalid")
-            elif norm != val_l:
-                if fix:
-                    val_l = norm
-                else:
-                    errors.append(f"interval '{val}' not normalized (expected {norm})")
-        if key_l == "scope" and isinstance(val_l, str) and val_l not in VALID_SCOPES:
-            errors.append(f"scope '{val_l}' is invalid")
-        fixed_tags[key_l] = val_l
-        if key != key_l or (isinstance(val, str) and val != val_l):
-            if not fix:
-                errors.append(f"{key}: keys and string values must be lowercase")
-    for req in REQUIRED_KEYS:
-        if req not in fixed_tags:
-            if fix:
-                fixed_tags[req] = "TODO"
-            else:
-                errors.append(f"missing required key: {req}")
-    if fix and errors:
-        errors = []
+    fixed_tags, errors = validate_tags(tags)
     if fix:
-        write_tags(path, tree, node, fixed_tags)
+        apply_fixes(path, fixed_tags, tree, node)
+        return True, ""
     return not errors, "\n".join(errors)
 
 
