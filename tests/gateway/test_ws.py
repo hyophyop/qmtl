@@ -6,6 +6,7 @@ import time
 import pytest
 
 from qmtl.gateway.ws import WebSocketHub
+from qmtl.gateway import metrics
 
 
 class DummyWS:
@@ -15,6 +16,9 @@ class DummyWS:
 
     async def send_text(self, msg: str) -> None:
         self.messages.append(msg)
+
+    async def accept(self) -> None:
+        pass
 
 
 @pytest.mark.asyncio
@@ -105,3 +109,39 @@ async def test_hub_sends_activation_and_policy():
     types = {json.loads(m)["type"] for m in ws.messages}
     assert "activation_updated" in types
     assert "policy_updated" in types
+
+
+@pytest.mark.asyncio
+async def test_ws_metrics_fanout_and_drops():
+    metrics.reset_metrics()
+    hub = WebSocketHub()
+    await hub.start()
+    ws1 = DummyWS()
+    ws2 = DummyWS()
+    await hub.connect(ws1, {"t"})
+    await hub.connect(ws2, {"t"})
+    await hub.broadcast({"msg": 1}, topic="t")
+    await asyncio.sleep(0.1)
+    assert metrics.event_fanout_total.labels(topic="t")._value.get() == 2
+    assert metrics.ws_subscribers._vals["t"] == 2
+
+    class BadWS:
+        client = ("bad", 0)
+
+        async def send_text(self, msg: str) -> None:
+            raise RuntimeError("boom")
+
+        async def accept(self) -> None:
+            pass
+
+    bad = BadWS()
+    await hub.connect(bad, {"t"})
+    await hub.broadcast({"msg": 2}, topic="t")
+    await asyncio.sleep(0.1)
+    assert metrics.ws_dropped_subscribers_total._value.get() == 1
+    assert metrics.ws_subscribers._vals["t"] == 2
+
+    await hub.disconnect(ws1)
+    assert metrics.ws_dropped_subscribers_total._value.get() == 2
+    assert metrics.ws_subscribers._vals["t"] == 1
+    await hub.stop()

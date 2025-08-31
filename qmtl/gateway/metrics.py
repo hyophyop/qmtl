@@ -142,6 +142,27 @@ event_relay_skew_ms = Gauge(
     registry=global_registry,
 )
 
+event_fanout_total = Counter(
+    "event_fanout_total",
+    "Total number of recipients for relayed ControlBus events",
+    ["topic"],
+    registry=global_registry,
+)
+
+ws_subscribers = Gauge(
+    "ws_subscribers",
+    "Active WebSocket subscribers",
+    ["topic"],
+    registry=global_registry,
+)
+ws_subscribers._vals = {}  # type: ignore[attr-defined]
+
+ws_dropped_subscribers_total = Counter(
+    "ws_dropped_subscribers_total",
+    "Total number of WebSocket subscribers dropped",
+    registry=global_registry,
+)
+
 sentinel_skew_seconds = Gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
@@ -220,6 +241,25 @@ def record_event_dropped(topic: str) -> None:
     event_relay_dropped_total.labels(topic=topic).inc()
 
 
+def record_event_fanout(topic: str, recipients: int) -> None:
+    """Record the number of recipients for a relayed event."""
+    event_fanout_total.labels(topic=topic).inc(recipients)
+
+
+def update_ws_subscribers(counts: dict[str, int]) -> None:
+    """Update active WebSocket subscriber counts per topic."""
+    ws_subscribers.clear()
+    ws_subscribers._vals = {}  # type: ignore[attr-defined]
+    for topic, count in counts.items():
+        ws_subscribers.labels(topic=topic).set(count)
+        ws_subscribers._vals[topic] = count  # type: ignore[attr-defined]
+
+
+def record_ws_drop(count: int = 1) -> None:
+    """Increment dropped subscriber counter."""
+    ws_dropped_subscribers_total.inc(count)
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Start an HTTP server to expose metrics."""
     start_http_server(port, registry=global_registry)
@@ -268,6 +308,11 @@ def reset_metrics() -> None:
     event_relay_events_total.clear()
     event_relay_dropped_total.clear()
     event_relay_skew_ms.clear()
+    event_fanout_total.clear()
+    ws_subscribers.clear()
+    ws_subscribers._vals = {}  # type: ignore[attr-defined]
+    ws_dropped_subscribers_total._value.set(0)  # type: ignore[attr-defined]
+    ws_dropped_subscribers_total._val = 0  # type: ignore[attr-defined]
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
 
