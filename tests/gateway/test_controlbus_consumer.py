@@ -11,6 +11,14 @@ class FakeHub:
     def __init__(self):
         self.events: list[tuple[str, dict]] = []
 
+    async def start(self) -> None:
+        """Start method required by lifespan context."""
+        pass
+
+    async def stop(self) -> None:
+        """Stop method required by lifespan context."""
+        pass
+
     async def send_activation_updated(self, data: dict) -> None:
         self.events.append(("activation_updated", data))
 
