@@ -297,8 +297,12 @@ def create_api_router(
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
         headers, cid = _build_world_headers(request)
-        data = await client.get_decide(world_id, headers=headers)
-        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+        data, stale = await client.get_decide(world_id, headers=headers)
+        resp_headers = {"X-Correlation-ID": cid}
+        if stale:
+            resp_headers["Warning"] = "110 - Response is stale"
+            resp_headers["X-Stale"] = "true"
+        return JSONResponse(data, headers=resp_headers)
 
     @router.get("/worlds/{world_id}/activation")
     async def get_world_activation(world_id: str, request: Request) -> Any:
@@ -306,8 +310,12 @@ def create_api_router(
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
         headers, cid = _build_world_headers(request)
-        data = await client.get_activation(world_id, headers=headers)
-        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+        data, stale = await client.get_activation(world_id, headers=headers)
+        resp_headers = {"X-Correlation-ID": cid}
+        if stale:
+            resp_headers["Warning"] = "110 - Response is stale"
+            resp_headers["X-Stale"] = "true"
+        return JSONResponse(data, headers=resp_headers)
 
     @router.get("/worlds/{world_id}/{topic}/state_hash")
     async def get_world_state_hash(world_id: str, topic: str, request: Request) -> Any:
