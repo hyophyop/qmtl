@@ -212,6 +212,7 @@ Available flags:
 
 - ``--config`` – optional path to configuration file.
 - ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.
+- ``--allow-live`` – disable the live trading guard requiring ``X-Allow-Live: true``.
 
 ---
 
@@ -264,7 +265,9 @@ SDKs should use the event stream when available and periodically reconcile via
   - ``/activation`` → inactive
 - Event stream unavailable:
   - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP
-- Live guard: even if DecisionEnvelope says ``live``, Gateway requires explicit caller consent (e.g., CLI `--allow-live` or header `X-Allow-Live: true`).
+- Live guard: Gateway rejects live trading unless consent is given.
+  - When enabled, callers must include header ``X-Allow-Live: true``.
+  - Starting Gateway with ``--allow-live`` disables the guard for testing.
 - Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.
 
 See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).

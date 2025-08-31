@@ -25,6 +25,13 @@ async def _main(argv: list[str] | None = None) -> None:
         help="Disable automatic VersionSentinel insertion",
         default=None,
     )
+    parser.add_argument(
+        "--allow-live",
+        dest="enforce_live_guard",
+        action="store_false",
+        help="Disable live trading guard requiring X-Allow-Live header",
+        default=None,
+    )
     args = parser.parse_args(argv)
 
     cfg_path = args.config or find_config_file()
@@ -40,6 +47,11 @@ async def _main(argv: list[str] | None = None) -> None:
         config.insert_sentinel
         if args.insert_sentinel is None
         else args.insert_sentinel
+    )
+    enforce_live_guard = (
+        config.enforce_live_guard
+        if args.enforce_live_guard is None
+        else args.enforce_live_guard
     )
     consumer = None
     if config.controlbus_topics:
@@ -59,7 +71,7 @@ async def _main(argv: list[str] | None = None) -> None:
         worldservice_timeout=config.worldservice_timeout,
         worldservice_retries=config.worldservice_retries,
         enable_worldservice_proxy=config.enable_worldservice_proxy,
-        enforce_live_guard=config.enforce_live_guard,
+        enforce_live_guard=enforce_live_guard,
     )
     db = app.state.database
     if hasattr(db, "connect"):

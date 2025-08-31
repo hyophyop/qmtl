@@ -54,13 +54,31 @@ def test_gateway_health(fake_redis):
         assert data["redis"] == "ok"
         assert data["postgres"] == "ok"
         assert data["dagmanager"] == "ok"
+        assert data["enforce_live_guard"] is True
 
 
 def test_dagmanager_http_health():
     with TestClient(dag_api_create_app(DummyGC())) as client:
         resp = client.get("/status")
+    assert resp.status_code == 200
+    assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
+
+
+def test_gateway_health_live_guard_disabled(fake_redis):
+    redis_client = fake_redis
+    db = FakeDB()
+    with TestClient(
+        gw_create_app(
+            redis_client=redis_client,
+            database=db,
+            dag_client=FakeDagClient(),
+            enforce_live_guard=False,
+        )
+    ) as client:
+        resp = client.get("/status")
         assert resp.status_code == 200
-        assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
+        data = resp.json()
+        assert data["enforce_live_guard"] is False
 
 
 @pytest.mark.asyncio

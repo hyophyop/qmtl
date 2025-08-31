@@ -100,6 +100,29 @@ async def test_live_guard(fake_redis):
 
 
 @pytest.mark.asyncio
+async def test_live_guard_disabled(fake_redis):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/apply"):
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enforce_live_guard=False,
+    )
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r = await api_client.post("/worlds/abc/apply", json={})
+    await asgi.aclose()
+    await client._client.aclose()
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_decide_ttl_envelope_fallback(fake_redis):
     calls = {"n": 0}
 
