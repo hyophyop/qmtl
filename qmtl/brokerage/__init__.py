@@ -13,6 +13,9 @@ from .slippage import NullSlippageModel, ConstantSlippageModel, SpreadBasedSlipp
 from .fill_models import BaseFillModel, MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel
 from .symbols import SymbolPropertiesProvider, SymbolProperties
 from .exchange_hours import ExchangeHoursProvider
+from .shortable import ShortableProvider, StaticShortableProvider
+from .settlement import SettlementModel
+from .profile import BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile
 from .brokerage_model import BrokerageModel
 
 __all__ = [
@@ -42,5 +45,11 @@ __all__ = [
     "SymbolProperties",
     "SymbolPropertiesProvider",
     "ExchangeHoursProvider",
+    "ShortableProvider",
+    "StaticShortableProvider",
+    "SettlementModel",
+    "BrokerageProfile",
+    "SecurityInitializer",
+    "ibkr_equities_like_profile",
     "BrokerageModel",
 ]
