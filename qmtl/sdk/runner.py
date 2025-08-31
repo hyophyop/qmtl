@@ -20,6 +20,7 @@ tracer = trace.get_tracer(__name__)
 from .strategy import Strategy
 from .gateway_client import GatewayClient
 from .tag_manager_service import TagManagerService
+from .activation_manager import ActivationManager
 from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 
@@ -49,6 +50,7 @@ class Runner:
     _kafka_producer = None
     _trade_order_http_url = None
     _trade_order_kafka_topic = None
+    _activation_manager: ActivationManager | None = None
 
     # ------------------------------------------------------------------
 
@@ -63,6 +65,11 @@ class Runner:
     def set_gateway_client(cls, client: GatewayClient) -> None:
         """Inject a custom ``GatewayClient`` instance."""
         cls._gateway_client = client
+
+    @classmethod
+    def set_activation_manager(cls, am: ActivationManager | None) -> None:
+        """Inject or clear the activation manager (for tests or custom wiring)."""
+        cls._activation_manager = am
 
     # ------------------------------------------------------------------
 
@@ -495,6 +502,14 @@ class Runner:
 
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
+        # Start activation manager if gateway URL provided
+        if gateway_url and not offline_mode:
+            try:
+                if Runner._activation_manager is None:
+                    Runner._activation_manager = ActivationManager(gateway_url, world_id=manager.world_id, strategy_id=manager.strategy_id)
+                await Runner._activation_manager.start()
+            except Exception:
+                logger.warning("Activation manager failed to start; proceeding without gating")
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         if offline_mode:
             Runner.run_pipeline(strategy)
@@ -636,6 +651,15 @@ class Runner:
     @staticmethod
     def _handle_trade_order(order: dict) -> None:
         """Handle trade order submission via HTTP and/or Kafka."""
+        # Gating: check world activation before submitting
+        am = Runner._activation_manager
+        side = (order.get("side") or "").lower() if isinstance(order, dict) else ""
+        if am is not None and side:
+            allowed = am.allow_side(side)
+            if not allowed:
+                logger.info("Order gated off by activation: side=%s", side)
+                return
+
         # Submit via trade execution service if available
         service = Runner._trade_execution_service
         if service is not _trade_execution_service_sentinel and service is not None:
