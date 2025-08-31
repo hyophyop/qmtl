@@ -16,6 +16,7 @@ from .exchange_hours import ExchangeHoursProvider
 from .shortable import ShortableProvider, StaticShortableProvider
 from .settlement import SettlementModel
 from .profile import BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile
+from .interest import MarginInterestModel
 from .brokerage_model import BrokerageModel
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "ShortableProvider",
     "StaticShortableProvider",
     "SettlementModel",
+    "MarginInterestModel",
     "BrokerageProfile",
     "SecurityInitializer",
     "ibkr_equities_like_profile",
