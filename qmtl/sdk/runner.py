@@ -33,12 +33,19 @@ except Exception:  # pragma: no cover - Ray not installed
     ray = None  # type: ignore
 
 
+# Global trade execution service, kept across reloads
+if "_trade_execution_service_sentinel" not in globals():
+    _trade_execution_service_sentinel = object()
+if "_trade_execution_service" not in globals():
+    _trade_execution_service = _trade_execution_service_sentinel
+
+
 class Runner:
     """Execute strategies in various modes."""
     _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_client: GatewayClient = GatewayClient()
-    _trade_execution_service = None
+    _trade_execution_service = _trade_execution_service
     _kafka_producer = None
     _trade_order_http_url = None
     _trade_order_kafka_topic = None
@@ -594,6 +601,8 @@ class Runner:
     @classmethod
     def set_trade_execution_service(cls, service) -> None:
         """Set the trade execution service."""
+        global _trade_execution_service
+        _trade_execution_service = service
         cls._trade_execution_service = service
 
     @classmethod
@@ -628,8 +637,9 @@ class Runner:
     def _handle_trade_order(order: dict) -> None:
         """Handle trade order submission via HTTP and/or Kafka."""
         # Submit via trade execution service if available
-        if Runner._trade_execution_service is not None:
-            Runner._trade_execution_service.post_order(order)
+        service = Runner._trade_execution_service
+        if service is not _trade_execution_service_sentinel and service is not None:
+            service.post_order(order)
             return
             
         # Submit via HTTP if URL is configured

@@ -25,3 +25,17 @@ def test_runner_trade_execution_service_invoked():
         service.post_order.assert_called_once_with({"side": "BUY"})
     finally:
         runner_mod.Runner.set_trade_execution_service(None)
+
+
+def test_runner_trade_execution_service_survives_reload():
+    service = MagicMock()
+    runner_module.Runner.set_trade_execution_service(service)
+    try:
+        runner_module.Runner._handle_trade_order({"side": "BUY"})
+        service.post_order.assert_called_once_with({"side": "BUY"})
+        service.post_order.reset_mock()
+        importlib.reload(runner_module)
+        runner_module.Runner._handle_trade_order({"side": "SELL"})
+        service.post_order.assert_called_once_with({"side": "SELL"})
+    finally:
+        runner_module.Runner.set_trade_execution_service(None)
