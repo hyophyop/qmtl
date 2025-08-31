@@ -9,7 +9,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-from qmtl.sdk.runner import Runner
+from qmtl.sdk.gateway_client import GatewayClient
 from qmtl.sdk.node import Node
 
 
@@ -42,8 +42,9 @@ async def test_post_gateway_propagates_trace(monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **_: DummyClient())
     tracer = trace.get_tracer(__name__)
+    client = GatewayClient()
     with tracer.start_as_current_span("parent"):
-        await Runner._post_gateway_async(
+        await client.post_strategy(
             gateway_url="http://gw", dag={}, meta=None, run_type="test"
         )
     assert "traceparent" in captured
