@@ -16,7 +16,7 @@ This page describes QMTL’s brokerage layer: how orders are validated and execu
 - Interfaces: BuyingPowerModel, FillModel, SlippageModel, FeeModel
 - Fill models: MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel (IOC/FOK supported via TIF)
 - Slippage models: NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
-- Fee models: PerShareFeeModel, PercentFeeModel, CompositeFeeModel
+- Fee models: PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
 - Providers: SymbolPropertiesProvider (tick/lot/min), ExchangeHoursProvider (regular/pre/post), ShortableProvider
 - Profiles: BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile()
 
@@ -36,7 +36,7 @@ flowchart LR
 
 Notes:
 - Activation is enforced in SDK/Gateway, before brokerage checks.
-- Settlement can be configured to record-only or deferred-cash mode (see settlement docs). Default is immediate cash movement.
+- Settlement supports two modes: record-only (default, immediate cash move) and deferred-cash (`SettlementModel(defer_cash=True)` with `CashWithSettlementBuyingPowerModel`).
 
 ## Quick Start
 
@@ -59,6 +59,10 @@ model = BrokerageModel(
     symbols=SymbolPropertiesProvider(),
     hours=ExchangeHoursProvider(allow_pre_post_market=False, require_regular_hours=True),
 )
+
+# Optional: tiered IBKR-like fees
+from qmtl.brokerage import IBKRFeeModel
+fee = IBKRFeeModel(minimum=1.0)
 ```
 
 ## Time-in-Force and Order Types
