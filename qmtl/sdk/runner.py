@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import base64
-import json
 import asyncio
+import json
 import time
 from typing import Optional, Iterable
 import logging
 import httpx
 
 from opentelemetry import trace
-from opentelemetry.propagate import inject
 
 from qmtl.common.tracing import setup_tracing
+from qmtl.common import AsyncCircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +18,9 @@ setup_tracing("sdk")
 tracer = trace.get_tracer(__name__)
 
 from .strategy import Strategy
-from .tagquery_manager import TagQueryManager
-from qmtl.common import AsyncCircuitBreaker
+from .gateway_client import GatewayClient
+from .tag_manager_service import TagManagerService
+from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 
 try:  # Optional aiokafka dependency
@@ -37,7 +37,7 @@ class Runner:
     """Execute strategies in various modes."""
     _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
-    _gateway_cb: AsyncCircuitBreaker | None = None
+    _gateway_client: GatewayClient = GatewayClient()
     _trade_execution_service = None
     _kafka_producer = None
     _trade_order_http_url = None
@@ -50,13 +50,12 @@ class Runner:
         cls, cb: AsyncCircuitBreaker | None
     ) -> None:
         """Configure circuit breaker for Gateway communication."""
-        cls._gateway_cb = cb
+        cls._gateway_client.set_circuit_breaker(cb)
 
     @classmethod
-    def _get_gateway_circuit_breaker(cls) -> AsyncCircuitBreaker:
-        if cls._gateway_cb is None:
-            cls._gateway_cb = AsyncCircuitBreaker(max_failures=3)
-        return cls._gateway_cb
+    def set_gateway_client(cls, client: GatewayClient) -> None:
+        """Inject a custom ``GatewayClient`` instance."""
+        cls._gateway_client = client
 
     # ------------------------------------------------------------------
 
@@ -71,118 +70,10 @@ class Runner:
             fn(cache_view)
 
     @staticmethod
-    async def _post_gateway_async(
-        *,
-        gateway_url: str,
-        dag: dict,
-        meta: Optional[dict],
-        run_type: str,
-        circuit_breaker: AsyncCircuitBreaker | None = None,
-    ) -> dict:
-        url = gateway_url.rstrip("/") + "/strategies"
-        from qmtl.common import crc32_of_list
-
-        payload = {
-            "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
-            "meta": meta,
-            "run_type": run_type,
-            "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
-        }
-        if circuit_breaker is None:
-            circuit_breaker = Runner._get_gateway_circuit_breaker()
-        headers: dict[str, str] = {}
-        inject(headers)
-        try:
-            client = httpx.AsyncClient(headers=headers)
-        except TypeError:
-            client = httpx.AsyncClient()
-        try:
-            client.headers.update(headers)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        async with client:
-            post_fn = client.post
-            if circuit_breaker is not None:
-                post_fn = circuit_breaker(post_fn)
-            try:
-                resp = await post_fn(url, json=payload)
-            except Exception as exc:
-                return {"error": str(exc)}
-        if resp.status_code == 202:
-            if circuit_breaker is not None:
-                circuit_breaker.reset()
-            return resp.json().get("queue_map", {})
-        if resp.status_code == 409:
-            return {"error": "duplicate strategy"}
-        if resp.status_code == 422:
-            return {"error": "invalid strategy payload"}
-        return {"error": f"gateway error {resp.status_code}"}
-
-    @staticmethod
     def _prepare(strategy_cls: type[Strategy]) -> Strategy:
         strategy = strategy_cls()
         strategy.setup()
         return strategy
-
-    @staticmethod
-    def _apply_queue_map(strategy: Strategy, queue_map: dict[str, str | list[str]]) -> None:
-        from .node import TagQueryNode
-
-        for node in strategy.nodes:
-            mapping = queue_map.get(node.node_id)
-            old_execute = node.execute
-            if isinstance(node, TagQueryNode):
-                if isinstance(mapping, list):
-                    node.upstreams = list(mapping)
-                    node.execute = bool(mapping)
-                else:
-                    node.upstreams = []
-                    node.execute = False
-            else:
-                if mapping:
-                    node.execute = False
-                    node.kafka_topic = mapping  # type: ignore[assignment]
-                else:
-                    node.execute = True
-                    node.kafka_topic = None
-
-            if node.execute != old_execute:
-                logger.debug(
-                    "execute changed for %s: %s -> %s (mapping=%s)",
-                    node.node_id,
-                    old_execute,
-                    node.execute,
-                    mapping,
-                )
-
-    @staticmethod
-    def _init_tag_manager(strategy: Strategy, gateway_url: str | None) -> TagQueryManager:
-        from .node import TagQueryNode
-
-        manager = TagQueryManager(gateway_url)
-        for n in strategy.nodes:
-            if isinstance(n, TagQueryNode):
-                manager.register(n)
-        setattr(strategy, "tag_query_manager", manager)
-        return manager
-
-    @staticmethod
-    async def _load_history(
-        strategy: Strategy, start: int | None = None, end: int | None = None
-    ) -> None:
-        """Load history for all StreamInput nodes."""
-        from .node import StreamInput
-
-        if start is None or end is None:
-            return
-
-        tasks = [
-            asyncio.create_task(n.load_history(start, end))
-            for n in strategy.nodes
-            if isinstance(n, StreamInput)
-        ]
-        if tasks:
-            await asyncio.gather(*tasks)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -500,7 +391,8 @@ class Runner:
         if start_time is None or end_time is None:
             raise ValueError("start_time and end_time are required")
         strategy = Runner._prepare(strategy_cls)
-        manager = Runner._init_tag_manager(strategy, gateway_url)
+        tag_service = TagManagerService(gateway_url)
+        manager = tag_service.init(strategy)
         logger.info(
             f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}"
         )
@@ -509,17 +401,16 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for backtest mode")
 
-        queue_map = await Runner._post_gateway_async(
+        queue_map = await Runner._gateway_client.post_strategy(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="backtest",
-            circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
 
-        Runner._apply_queue_map(strategy, queue_map)
+        tag_service.apply_queue_map(strategy, queue_map)
         await manager.resolve_tags(offline=False)
         await Runner._ensure_history(strategy, start_time, end_time)
         
@@ -573,7 +464,8 @@ class Runner:
     ) -> Strategy:
         """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
-        manager = Runner._init_tag_manager(strategy, gateway_url)
+        tag_service = TagManagerService(gateway_url)
+        manager = tag_service.init(strategy)
         logger.info(f"[DRYRUN] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
@@ -581,17 +473,15 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for dry-run mode")
 
-        queue_map = await Runner._post_gateway_async(
+        queue_map = await Runner._gateway_client.post_strategy(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="dry-run",
-            circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
-
-        Runner._apply_queue_map(strategy, queue_map)
+        tag_service.apply_queue_map(strategy, queue_map)
         if not any(n.execute for n in strategy.nodes):
             logger.info("No executable nodes; exiting strategy")
             return strategy
@@ -630,7 +520,8 @@ class Runner:
     ) -> Strategy:
         """Run strategy in live trading mode. Requires ``gateway_url``."""
         strategy = Runner._prepare(strategy_cls)
-        manager = Runner._init_tag_manager(strategy, gateway_url)
+        tag_service = TagManagerService(gateway_url)
+        manager = tag_service.init(strategy)
         logger.info(f"[LIVE] {strategy_cls.__name__} starting")
         dag = strategy.serialize()
         logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
@@ -638,17 +529,15 @@ class Runner:
         if not gateway_url:
             raise RuntimeError("gateway_url is required for live mode")
 
-        queue_map = await Runner._post_gateway_async(
+        queue_map = await Runner._gateway_client.post_strategy(
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
             run_type="live",
-            circuit_breaker=Runner._get_gateway_circuit_breaker(),
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
-
-        Runner._apply_queue_map(strategy, queue_map)
+        tag_service.apply_queue_map(strategy, queue_map)
         if not any(n.execute for n in strategy.nodes):
             logger.info("No executable nodes; exiting strategy")
             return strategy
@@ -689,11 +578,12 @@ class Runner:
     @staticmethod
     async def offline_async(strategy_cls: type[Strategy]) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
-        manager = Runner._init_tag_manager(strategy, None)
+        tag_service = TagManagerService(None)
+        manager = tag_service.init(strategy)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
-        Runner._apply_queue_map(strategy, {})
+        tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
-        await Runner._load_history(strategy, None, None)
+        await HistoryLoader.load(strategy, None, None)
         await Runner._replay_history(strategy, None, None)
         return strategy
 

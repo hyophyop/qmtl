@@ -3,6 +3,7 @@ from typing import Any
 from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import Node
 from qmtl.sdk.strategy import Strategy
+from qmtl.sdk.tag_manager_service import TagManagerService
 
 
 class AlphaPerformanceNode(Node):
@@ -52,8 +53,15 @@ def test_backtest_hooks(monkeypatch):
         async def resolve_tags(self, offline=False):
             pass
 
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._post_gateway_async", staticmethod(fake_gateway))
-    monkeypatch.setattr(Runner, "_init_tag_manager", lambda s, u: DummyManager())
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        fake_gateway,
+    )
+    monkeypatch.setattr(
+        TagManagerService,
+        "init",
+        lambda self, strategy: DummyManager(),
+    )
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
 
@@ -122,9 +130,16 @@ def test_live_hooks(monkeypatch):
         async def resolve_tags(self, offline=False):
             pass
 
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._post_gateway_async", staticmethod(fake_gateway))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        fake_gateway,
+    )
     monkeypatch.setattr("qmtl.sdk.runner.Runner.run_pipeline", staticmethod(lambda s: None))
-    monkeypatch.setattr(Runner, "_init_tag_manager", lambda s, u: DummyManager())
+    monkeypatch.setattr(
+        TagManagerService,
+        "init",
+        lambda self, strategy: DummyManager(),
+    )
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
 

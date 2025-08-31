@@ -97,8 +97,9 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
         async def get(self, url, params=None):
             return await self._client.get(url, params=params)
 
-    monkeypatch.setattr("qmtl.sdk.runner.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr("qmtl.sdk.gateway_client.httpx.AsyncClient", DummyClient)
     monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr(Runner, "_kafka_available", True)
 
     strat = await Runner.live_async(TQStrategy, gateway_url="http://gw")
 

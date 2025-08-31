@@ -163,13 +163,16 @@ def test_gateway_queue_mapping(monkeypatch):
 
 
 def test_dry_run_exits_when_all_nodes_mapped(monkeypatch, caplog):
-    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type, circuit_breaker):
+    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type):
         return {n["node_id"]: "topic" for n in dag["nodes"]}
 
     def fake_run_pipeline(strategy):
         raise RuntimeError("should not run")
 
-    monkeypatch.setattr(Runner, "_post_gateway_async", staticmethod(fake_post_gateway_async))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        fake_post_gateway_async,
+    )
     monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
 
     with caplog.at_level(logging.INFO):
@@ -183,7 +186,7 @@ def test_dry_run_exits_when_all_nodes_mapped(monkeypatch, caplog):
 def test_live_exits_when_all_nodes_mapped(monkeypatch, caplog):
     from qmtl.sdk.tagquery_manager import TagQueryManager
 
-    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type, circuit_breaker):
+    async def fake_post_gateway_async(*, gateway_url, dag, meta, run_type):
         return {n["node_id"]: "topic" for n in dag["nodes"]}
 
     def fake_run_pipeline(strategy):
@@ -192,7 +195,10 @@ def test_live_exits_when_all_nodes_mapped(monkeypatch, caplog):
     async def fake_start(self):
         raise RuntimeError("should not start")
 
-    monkeypatch.setattr(Runner, "_post_gateway_async", staticmethod(fake_post_gateway_async))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        fake_post_gateway_async,
+    )
     monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(TagQueryManager, "start", fake_start)
 

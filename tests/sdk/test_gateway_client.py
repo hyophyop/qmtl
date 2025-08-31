@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from qmtl.common import AsyncCircuitBreaker
-from qmtl.sdk.runner import Runner
+from qmtl.sdk.gateway_client import GatewayClient
 
 
 class FailingClient:
@@ -52,23 +52,22 @@ class TrackingCircuitBreaker(AsyncCircuitBreaker):
 async def test_post_gateway_circuit_breaker(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", FailingClient)
     cb = AsyncCircuitBreaker(max_failures=1)
+    client = GatewayClient(cb)
 
-    res = await Runner._post_gateway_async(
+    res = await client.post_strategy(
         gateway_url="http://gw",
         dag={},
         meta=None,
         run_type="x",
-        circuit_breaker=cb,
     )
     assert "error" in res and "fail" in res["error"]
     assert cb.is_open
 
-    res = await Runner._post_gateway_async(
+    res = await client.post_strategy(
         gateway_url="http://gw",
         dag={},
         meta=None,
         run_type="x",
-        circuit_breaker=cb,
     )
     assert res["error"] == "circuit open"
 
@@ -76,10 +75,10 @@ async def test_post_gateway_circuit_breaker(monkeypatch):
 @pytest.mark.asyncio
 async def test_default_circuit_breaker(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", FailingClient)
-    Runner.set_gateway_circuit_breaker(None)
+    client = GatewayClient()
 
     for _ in range(3):
-        res = await Runner._post_gateway_async(
+        res = await client.post_strategy(
             gateway_url="http://gw",
             dag={},
             meta=None,
@@ -87,37 +86,35 @@ async def test_default_circuit_breaker(monkeypatch):
         )
         assert "error" in res
 
-    res = await Runner._post_gateway_async(
+    res = await client.post_strategy(
         gateway_url="http://gw",
         dag={},
         meta=None,
         run_type="x",
     )
     assert res["error"] == "circuit open"
-    Runner.set_gateway_circuit_breaker(None)
 
 
 @pytest.mark.asyncio
 async def test_breaker_resets_on_success(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", FlakyClient)
     cb = TrackingCircuitBreaker(max_failures=2)
+    client = GatewayClient(cb)
 
-    first = await Runner._post_gateway_async(
+    first = await client.post_strategy(
         gateway_url="http://gw",
         dag={},
         meta=None,
         run_type="x",
-        circuit_breaker=cb,
     )
     assert "error" in first
     assert cb.failures == 1
 
-    second = await Runner._post_gateway_async(
+    second = await client.post_strategy(
         gateway_url="http://gw",
         dag={},
         meta=None,
         run_type="x",
-        circuit_breaker=cb,
     )
     assert second == {"n": "t"}
     assert cb.reset_calls == 1
