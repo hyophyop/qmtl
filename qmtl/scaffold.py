@@ -16,38 +16,10 @@ TEMPLATES = {
 }
 
 
-def create_project(
-    path: Path,
-    template: str = "general",
-    with_sample_data: bool = False,
-    with_docs: bool = False,
-    with_scripts: bool = False,
-    with_pyproject: bool = False,
-) -> None:
-    """Create a new project scaffold under *path* using the given *template*.
-
-    Parameters
-    ----------
-    path:
-        Destination directory for the project.
-    template:
-        Name of example strategy template.
-    with_sample_data:
-        When ``True`` copy bundled example OHLCV data into ``data/`` of the
-        new project.
-    with_docs:
-        When ``True`` include the ``docs/`` directory template.
-    with_scripts:
-        When ``True`` include the ``scripts/`` directory template.
-    with_pyproject:
-        When ``True`` include a ``pyproject.toml`` template.
-    """
-    dest = Path(path)
+def copy_nodes(dest: Path) -> None:
+    dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-
     examples = resources.files(_EXAMPLES_PKG)
-
-    # extension package directories
     nodes_src = examples.joinpath("nodes")
     nodes_dest = dest / "nodes"
     nodes_dest.mkdir(exist_ok=True)
@@ -62,7 +34,11 @@ def create_project(
             if file.suffix == ".py":
                 (dst_dir / file.name).write_bytes(file.read_bytes())
 
-    # Copy example DAG definitions
+
+def copy_dags(dest: Path, template: str) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
     dags_src = examples.joinpath("dags")
     dags_dest = dest / "dags"
     if dags_src.is_dir():
@@ -77,47 +53,87 @@ def create_project(
             for file in example_src.iterdir():
                 if file.is_file():
                     (example_dest / file.name).write_bytes(file.read_bytes())
-    (dest / "qmtl.yml").write_bytes(
-        examples.joinpath("qmtl.yml").read_bytes()
+    try:
+        template_file = TEMPLATES[template]
+    except KeyError:
+        raise ValueError(f"unknown template: {template}")
+    (dags_dest / "example_strategy.py").write_bytes(
+        examples.joinpath(template_file).read_bytes()
     )
+
+
+def copy_docs(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    docs_src = examples.joinpath("docs")
+    docs_dest = dest / "docs"
+    if docs_src.is_dir():
+        for file in docs_src.rglob("*"):
+            if file.is_file():
+                dst_file = docs_dest / file.relative_to(docs_src)
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                dst_file.write_bytes(file.read_bytes())
+
+
+def copy_scripts(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    scripts_src = examples.joinpath("scripts")
+    scripts_dest = dest / "scripts"
+    if scripts_src.is_dir():
+        for file in scripts_src.rglob("*"):
+            if file.is_file():
+                dst_file = scripts_dest / file.relative_to(scripts_src)
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                dst_file.write_bytes(file.read_bytes())
+
+
+def copy_sample_data(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    data_dir = dest / "data"
+    data_dir.mkdir(exist_ok=True)
+    sample = examples.joinpath("data/sample_ohlcv.csv")
+    if sample.is_file():
+        (data_dir / "sample_ohlcv.csv").write_bytes(sample.read_bytes())
+    nb_src = examples.joinpath("notebooks/strategy_analysis_example.ipynb")
+    if nb_src.is_file():
+        nb_dest = dest / "notebooks"
+        nb_dest.mkdir(exist_ok=True)
+        (nb_dest / "strategy_analysis_example.ipynb").write_bytes(
+            nb_src.read_bytes()
+        )
+
+
+def copy_pyproject(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    py_src = examples.joinpath("pyproject.toml")
+    if py_src.is_file():
+        (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
+
+
+def copy_base_files(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    (dest / "qmtl.yml").write_bytes(examples.joinpath("qmtl.yml").read_bytes())
     (dest / "config.example.yml").write_bytes(
         examples.joinpath("config.example.yml").read_bytes()
     )
     (dest / ".gitignore").write_bytes(
         examples.joinpath("gitignore").read_bytes()
     )
-
-    if with_docs:
-        docs_src = examples.joinpath("docs")
-        docs_dest = dest / "docs"
-        if docs_src.is_dir():
-            for file in docs_src.rglob("*"):
-                if file.is_file():
-                    dst_file = docs_dest / file.relative_to(docs_src)
-                    dst_file.parent.mkdir(parents=True, exist_ok=True)
-                    dst_file.write_bytes(file.read_bytes())
-
-    if with_scripts:
-        scripts_src = examples.joinpath("scripts")
-        scripts_dest = dest / "scripts"
-        if scripts_src.is_dir():
-            for file in scripts_src.rglob("*"):
-                if file.is_file():
-                    dst_file = scripts_dest / file.relative_to(scripts_src)
-                    dst_file.parent.mkdir(parents=True, exist_ok=True)
-                    dst_file.write_bytes(file.read_bytes())
-
-    if with_pyproject:
-        py_src = examples.joinpath("pyproject.toml")
-        if py_src.is_file():
-            (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
-
-    # Documentation template
-    readme_src = examples.joinpath("README.md")
-    if readme_src.is_file():
-        (dest / "README.md").write_bytes(readme_src.read_bytes())
-
-    # Copy bundled example tests
+    readme = examples.joinpath("README.md")
+    if readme.is_file():
+        (dest / "README.md").write_bytes(readme.read_bytes())
+    (dest / "strategy.py").write_bytes(
+        examples.joinpath("strategy.py").read_bytes()
+    )
     tests_src = examples.joinpath("tests")
     tests_dest = dest / "tests"
     if tests_src.is_dir():
@@ -127,39 +143,47 @@ def create_project(
                 dst_file.parent.mkdir(parents=True, exist_ok=True)
                 dst_file.write_bytes(file.read_bytes())
 
-    # Copy strategy entry point
-    (dest / "strategy.py").write_bytes(
-        examples.joinpath("strategy.py").read_bytes()
-    )
 
-    try:
-        template_file = TEMPLATES[template]
-    except KeyError:
-        raise ValueError(f"unknown template: {template}")
+def create_project(
+    path: Path,
+    template: str = "general",
+    with_sample_data: bool = False,
+    with_docs: bool = False,
+    with_scripts: bool = False,
+    with_pyproject: bool = False,
+) -> None:
+    """Create a new project scaffold under *path*.
 
-    # Copy example DAG under ``dags/example_strategy.py``
-    dags_dir = dest / "dags"
-    dags_dir.mkdir(exist_ok=True)
-    (dags_dir / "example_strategy.py").write_bytes(
-        examples.joinpath(template_file).read_bytes()
-    )
+    The project is seeded with example nodes, DAGs and tests. Optional
+    components such as docs, scripts, sample data and ``pyproject.toml`` are
+    included when the respective flags are enabled.
+    """
 
+    dest = Path(path)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    copy_nodes(dest)
+    copy_dags(dest, template)
+    copy_base_files(dest)
+    if with_docs:
+        copy_docs(dest)
+    if with_scripts:
+        copy_scripts(dest)
     if with_sample_data:
-        data_dir = dest / "data"
-        data_dir.mkdir(exist_ok=True)
-        sample = examples.joinpath("data/sample_ohlcv.csv")
-        if sample.is_file():
-            (data_dir / "sample_ohlcv.csv").write_bytes(sample.read_bytes())
-
-        # Copy example notebook for strategy analysis
-        nb_src = examples.joinpath("notebooks/strategy_analysis_example.ipynb")
-        if nb_src.is_file():
-            nb_dest_dir = dest / "notebooks"
-            nb_dest_dir.mkdir(exist_ok=True)
-            (nb_dest_dir / "strategy_analysis_example.ipynb").write_bytes(
-                nb_src.read_bytes()
-            )
+        copy_sample_data(dest)
+    if with_pyproject:
+        copy_pyproject(dest)
 
 
+__all__ = [
+    "create_project",
+    "copy_nodes",
+    "copy_dags",
+    "copy_docs",
+    "copy_scripts",
+    "copy_sample_data",
+    "copy_pyproject",
+    "copy_base_files",
+    "TEMPLATES",
+]
 
-__all__ = ["create_project", "TEMPLATES"]
