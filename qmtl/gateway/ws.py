@@ -11,6 +11,7 @@ from fastapi import WebSocket
 from qmtl.sdk.node import MatchMode
 
 from ..common.cloudevents import format_event
+from . import metrics
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class WebSocketHub:
         self._task: Optional[asyncio.Task] = None
         self._server: Optional[Any] = None
         self._port: Optional[int] = None
+        self._known_topics: Set[str] = set()
 
     async def start(self) -> int:
         """Start the internal sender loop and a lightweight WS server.
@@ -109,13 +111,31 @@ class WebSocketHub:
         async with self._lock:
             self._clients.add(websocket)
             self._topics[websocket] = topics
+        await self._recalc_subscriber_metrics()
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection."""
         async with self._lock:
             self._clients.discard(websocket)
             self._topics.pop(websocket, None)
+        metrics.record_ws_drop()
+        await self._recalc_subscriber_metrics()
 
+    async def _recalc_subscriber_metrics(self) -> None:
+        """Recompute subscriber gauge metrics."""
+        counts: Dict[str, int] = {}
+        async with self._lock:
+            all_topics: Set[str] = set(self._known_topics)
+            for tset in self._topics.values():
+                if tset is not None:
+                    all_topics.update(tset)
+            for topic in all_topics:
+                count = 0
+                for tset in self._topics.values():
+                    if tset is None or (tset is not None and topic in tset):
+                        count += 1
+                counts[topic] = count
+        metrics.update_ws_subscribers(counts)
     async def _sender_loop(self) -> None:
         while True:
             item = await self._queue.get()
@@ -136,6 +156,9 @@ class WebSocketHub:
                         for ws in self._clients
                         if self._topics.get(ws) is None or topic in (self._topics.get(ws) or set())
                     ]
+            if topic is not None:
+                self._known_topics.add(topic)
+                metrics.record_event_fanout(topic, len(clients))
             if clients:
                 async def _send(ws_any: Any, data: str):
                     if hasattr(ws_any, "send_text"):
@@ -147,6 +170,7 @@ class WebSocketHub:
                 results = await asyncio.gather(
                     *(_send(ws, msg) for ws in clients), return_exceptions=True
                 )
+                failures = []
                 for client_ws, res in zip(clients, results):
                     if isinstance(res, Exception):
                         logger.warning(
@@ -154,6 +178,14 @@ class WebSocketHub:
                             getattr(client_ws, "client", None) or "unknown",
                             res,
                         )
+                        failures.append(client_ws)
+                if failures:
+                    async with self._lock:
+                        for ws in failures:
+                            self._clients.discard(ws)
+                            self._topics.pop(ws, None)
+                    metrics.record_ws_drop(len(failures))
+                    await self._recalc_subscriber_metrics()
             self._queue.task_done()
 
     async def broadcast(self, data: dict, *, topic: Optional[str] = None) -> None:
@@ -163,6 +195,9 @@ class WebSocketHub:
         receive the message. Otherwise the message is broadcast to all.
         """
         await self._queue.put((json.dumps(data), topic))
+        if topic is not None and topic not in self._known_topics:
+            self._known_topics.add(topic)
+            await self._recalc_subscriber_metrics()
 
     async def send_progress(self, strategy_id: str, status: str) -> None:
         event = format_event(
