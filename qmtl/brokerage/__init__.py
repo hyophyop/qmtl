@@ -8,7 +8,7 @@ from .simple import (
     CashBuyingPowerModel,
     ImmediateFillModel,
 )
-from .fees import PerShareFeeModel, PercentFeeModel, CompositeFeeModel
+from .fees import PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel
 from .slippage import NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
 from .fill_models import BaseFillModel, MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel
 from .symbols import SymbolPropertiesProvider, SymbolProperties
@@ -34,6 +34,7 @@ __all__ = [
     "PerShareFeeModel",
     "PercentFeeModel",
     "CompositeFeeModel",
+    "IBKRFeeModel",
     "NullSlippageModel",
     "ConstantSlippageModel",
     "SpreadBasedSlippageModel",
