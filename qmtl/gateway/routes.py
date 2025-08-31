@@ -260,23 +260,42 @@ def create_api_router(
         headers = {
             "Deprecation": "true",
             "Link": "</events/subscribe>; rel=\"successor-version\"",
-        }
+        } 
         return StreamingResponse(streamer(), media_type="text/plain", headers=headers)
+
+    def _build_world_headers(request: Request) -> tuple[dict[str, str], str]:
+        headers: dict[str, str] = {}
+        auth = request.headers.get("authorization")
+        if auth:
+            headers["Authorization"] = auth
+            if auth.lower().startswith("bearer "):
+                token = auth.split(" ", 1)[1]
+                try:
+                    parts = token.split(".")
+                    if len(parts) > 1:
+                        payload_b64 = parts[1]
+                        padding = "=" * (-len(payload_b64) % 4)
+                        payload_json = base64.urlsafe_b64decode(payload_b64 + padding).decode()
+                        claims = json.loads(payload_json)
+                        sub = claims.get("sub")
+                        if sub is not None:
+                            headers["X-Caller-Sub"] = str(sub)
+                        headers["X-Caller-Claims"] = json.dumps(claims)
+                except Exception:
+                    pass
+        roles = request.headers.get("x-world-roles")
+        if roles:
+            headers["X-World-Roles"] = roles
+        cid = uuid.uuid4().hex
+        headers["X-Correlation-ID"] = cid
+        return headers, cid
 
     @router.get("/worlds/{world_id}/decide")
     async def get_world_decide(world_id: str, request: Request) -> Any:
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
-        roles = request.headers.get("x-world-roles")
-        if roles:
-            headers["X-World-Roles"] = roles
-        cid = uuid.uuid4().hex
-        headers["X-Correlation-ID"] = cid
+        headers, cid = _build_world_headers(request)
         data = await client.get_decide(world_id, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
@@ -285,15 +304,7 @@ def create_api_router(
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
-        roles = request.headers.get("x-world-roles")
-        if roles:
-            headers["X-World-Roles"] = roles
-        cid = uuid.uuid4().hex
-        headers["X-Correlation-ID"] = cid
+        headers, cid = _build_world_headers(request)
         data = await client.get_activation(world_id, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
@@ -302,15 +313,7 @@ def create_api_router(
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
-        roles = request.headers.get("x-world-roles")
-        if roles:
-            headers["X-World-Roles"] = roles
-        cid = uuid.uuid4().hex
-        headers["X-Correlation-ID"] = cid
+        headers, cid = _build_world_headers(request)
         data = await client.get_state_hash(world_id, topic, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
@@ -319,15 +322,7 @@ def create_api_router(
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
-        roles = request.headers.get("x-world-roles")
-        if roles:
-            headers["X-World-Roles"] = roles
-        cid = uuid.uuid4().hex
-        headers["X-Correlation-ID"] = cid
+        headers, cid = _build_world_headers(request)
         data = await client.post_evaluate(world_id, payload, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
@@ -338,15 +333,7 @@ def create_api_router(
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
-        headers: dict[str, str] = {}
-        auth = request.headers.get("authorization")
-        if auth:
-            headers["Authorization"] = auth
-        roles = request.headers.get("x-world-roles")
-        if roles:
-            headers["X-World-Roles"] = roles
-        cid = uuid.uuid4().hex
-        headers["X-Correlation-ID"] = cid
+        headers, cid = _build_world_headers(request)
         data = await client.post_apply(world_id, payload, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
