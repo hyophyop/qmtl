@@ -417,24 +417,24 @@ def create_app(
         # Enforce strict node_id integrity only for live runs.
         # For dry-run and other modes, checksum validation above is sufficient
         # to catch tampering while keeping the endpoint flexible for tooling/tests.
-        mismatches: list[dict[str, str | int]] = []
-        for idx, node in enumerate(dag.get("nodes", [])):
-            # TagQueryNode is a special case used to fetch queue maps; skip strict ID checks
-            if node.get("node_type") == "TagQueryNode":
-                continue
-            # For all other node types, enforce integrity in both dry-run and live
-            expected = compute_node_id(
-                node.get("node_type", ""),
-                node.get("code_hash", ""),
-                node.get("config_hash", ""),
-                node.get("schema_hash", ""),
-            )
-            if node.get("node_id") != expected:
-                mismatches.append(
-                    {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
+        if payload.run_type == "live":
+            mismatches: list[dict[str, str | int]] = []
+            for idx, node in enumerate(dag.get("nodes", [])):
+                # TagQueryNode is a special case used to fetch queue maps; skip strict ID checks
+                if node.get("node_type") == "TagQueryNode":
+                    continue
+                expected = compute_node_id(
+                    node.get("node_type", ""),
+                    node.get("code_hash", ""),
+                    node.get("config_hash", ""),
+                    node.get("schema_hash", ""),
                 )
-        if mismatches:
-            raise HTTPException(status_code=400, detail={"node_id_mismatch": mismatches})
+                if node.get("node_id") != expected:
+                    mismatches.append(
+                        {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
+                    )
+            if mismatches:
+                raise HTTPException(status_code=400, detail={"node_id_mismatch": mismatches})
 
         strategy_id, existed = await manager.submit(payload)
         if existed:

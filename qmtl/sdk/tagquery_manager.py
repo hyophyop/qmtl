@@ -61,8 +61,7 @@ class TagQueryManager:
                     n.update_queues([])
             return
 
-        url = self.gateway_url.rstrip("/") + "/queues/by_tag"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(base_url=self.gateway_url) as client:
             for (tags, interval, match_mode), nodes in self._nodes.items():
                 params = {
                     "tags": ",".join(tags),
@@ -70,7 +69,7 @@ class TagQueryManager:
                     "match_mode": match_mode.value,
                 }
                 try:
-                    resp = await client.get(url, params=params)
+                    resp = await client.get("/queues/by_tag", params=params)
                     resp.raise_for_status()
                     queues = resp.json().get("queues", [])
                 except httpx.RequestError:
@@ -109,23 +108,12 @@ class TagQueryManager:
         if not self.gateway_url:
             return
 
-        subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
-            async with httpx.AsyncClient() as client:
-                payload = {"topics": ["queues"]}
-                if self.world_id is not None and self.strategy_id is not None:
-                    payload |= {"world_id": self.world_id, "strategy_id": self.strategy_id}
-                resp = await client.post(subscribe_url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    stream_url = data.get("stream_url")
-                    token = data.get("token")
-                    if stream_url:
-                        self.client = WebSocketClient(
-                            stream_url, on_message=self.handle_message, token=token
-                        )
-                        await self.client.start()
-                        return
+            self.client = WebSocketClient(
+                self.gateway_url, on_message=self.handle_message
+            )
+            await self.client.start()
+            return
         except Exception:
             pass
 
@@ -157,13 +145,12 @@ class TagQueryManager:
             "interval": interval,
             "match_mode": match_mode.value,
         }
-        url = self.gateway_url.rstrip("/") + "/queues/watch"
         backoff: float = 1.0
         try:
             while key in self._nodes:
                 try:
-                    async with httpx.AsyncClient() as client:
-                        async with client.stream("GET", url, params=params) as resp:
+                    async with httpx.AsyncClient(base_url=self.gateway_url) as client:
+                        async with client.stream("GET", "/queues/watch", params=params) as resp:
                             async for line in resp.aiter_lines():
                                 if not line:
                                     continue
