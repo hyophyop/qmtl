@@ -43,7 +43,7 @@ class EventDescriptorConfig:
     active_kid: str
     ttl: int = 300
     stream_url: str = "wss://gateway/ws/evt"
-    fallback_url: str = "wss://gateway/ws/fallback"
+    fallback_url: str = "wss://gateway/ws"
 
 
 def sign_event_token(claims: dict[str, Any], cfg: EventDescriptorConfig) -> str:

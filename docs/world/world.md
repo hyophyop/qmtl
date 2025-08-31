@@ -279,7 +279,7 @@ POST /events/subscribe HTTP/1.1
   "token": "<jwt>",              # scope: world:*, strategy:*, topics
   "topics": ["activation"],      # 서버가 정규화한 구독 목록
   "expires_at": "2025-08-28T09:30:00Z",
-  "fallback_url": "wss://gateway.example/ws/fallback"
+  "fallback_url": "wss://gateway.example/ws"
 }
 ```
 

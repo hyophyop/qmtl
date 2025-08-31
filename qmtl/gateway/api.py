@@ -109,7 +109,7 @@ def create_app(
             active_kid="default",
             ttl=300,
             stream_url="wss://gateway/ws/evt",
-            fallback_url="wss://gateway/ws/fallback",
+            fallback_url="wss://gateway/ws",
         )
 
     @asynccontextmanager
