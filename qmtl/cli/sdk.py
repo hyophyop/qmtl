@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import List
 
 
@@ -10,5 +11,5 @@ def run(argv: List[str] | None = None) -> None:
     from qmtl.sdk.cli import main as sdk_main
 
     logging.basicConfig(level=logging.INFO)
-    sdk_main(argv)
+    sys.exit(sdk_main(argv))
 

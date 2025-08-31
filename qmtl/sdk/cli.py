@@ -3,12 +3,16 @@ import argparse
 import importlib
 
 import asyncio
+import logging
 from typing import List
 from .runner import Runner
 from . import runtime
 
 
-async def _main(argv: List[str] | None = None) -> None:
+logger = logging.getLogger(__name__)
+
+
+async def _main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="qmtl sdk",
         description="Run QMTL strategy (backtest/dry-run/live/offline)",
@@ -53,10 +57,14 @@ async def _main(argv: List[str] | None = None) -> None:
             gateway_url=args.gateway_url,
         )
     elif args.mode == "dryrun":
-        await Runner.dryrun_async(
-            strategy_cls,
-            gateway_url=args.gateway_url,
-        )
+        try:
+            await Runner.dryrun_async(
+                strategy_cls,
+                gateway_url=args.gateway_url,
+            )
+        except RuntimeError as err:
+            logger.error("Dry run failed: %s", err)
+            return 1
     elif args.mode == "live":
         await Runner.live_async(
             strategy_cls,
@@ -65,6 +73,9 @@ async def _main(argv: List[str] | None = None) -> None:
     else:  # offline
         await Runner.offline_async(strategy_cls)
 
-def main(argv: List[str] | None = None) -> None:
-    asyncio.run(_main(argv))
+    return 0
+
+
+def main(argv: List[str] | None = None) -> int:
+    return asyncio.run(_main(argv))
 
