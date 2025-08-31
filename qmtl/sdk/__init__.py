@@ -38,6 +38,7 @@ from .exceptions import (
 )
 from . import metrics
 from .trade_execution_service import TradeExecutionService
+from .event_service import EventRecorderService
 
 __all__ = [
     "Node",
@@ -62,6 +63,7 @@ __all__ = [
     "BackfillEngine",
     "metrics",
     "TradeExecutionService",
+    "EventRecorderService",
     "parse_interval",
     "parse_period",
     "validate_tag",
