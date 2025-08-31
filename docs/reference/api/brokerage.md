@@ -38,6 +38,10 @@ Notes:
 - Activation is enforced in SDK/Gateway, before brokerage checks.
 - Settlement supports two modes: record-only (default, immediate cash move) and deferred-cash (`SettlementModel(defer_cash=True)` with `CashWithSettlementBuyingPowerModel`).
 
+Activation in SDK:
+- The SDK `Runner` integrates an activation gate for trade orders. When running live with a `gateway_url`, it subscribes to `ActivationUpdated` events and blocks BUY/SELL submissions if the corresponding long/short side is disabled.
+
+
 ## Quick Start
 
 ```python
