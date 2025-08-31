@@ -1,5 +1,7 @@
 import httpx
 import time
+import os
+os.environ["OTEL_SDK_DISABLED"] = "true"
 import pytest
 
 from qmtl.gateway.api import create_app, Database
@@ -26,6 +28,9 @@ class FakeDB(Database):
         return None
 
 
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+
+
 @pytest.mark.asyncio
 async def test_event_descriptor_scope_and_expiry(fake_redis):
     cfg = EventDescriptorConfig(
@@ -33,7 +38,7 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
         active_kid="kid1",
         ttl=60,
         stream_url="wss://gateway/ws/evt",
-        fallback_url="wss://gateway/ws/fallback",
+        fallback_url="wss://gateway/ws",
     )
     app = create_app(redis_client=fake_redis, database=FakeDB(), event_config=cfg)
     transport = httpx.ASGITransport(app=app)
@@ -75,7 +80,7 @@ async def test_event_descriptor_rotation_and_jwks():
         active_kid="old",
         ttl=60,
         stream_url="wss://gateway/ws/evt",
-        fallback_url="wss://gateway/ws/fallback",
+        fallback_url="wss://gateway/ws",
     )
     claims = {"aud": "controlbus", "sub": "s1"}
     tok_old = sign_event_token(claims, cfg)

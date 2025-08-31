@@ -1,10 +1,26 @@
+import os
+os.environ["OTEL_SDK_DISABLED"] = "true"
 import pytest
 import httpx
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from qmtl.gateway.event_handlers import create_event_router
 from qmtl.gateway.event_descriptor import EventDescriptorConfig
 from qmtl.gateway.ws import WebSocketHub
+from qmtl.gateway.api import create_app
+
+
+class NoServerHub(WebSocketHub):
+    async def start(self) -> int:  # type: ignore[override]
+        return 0
+
+    async def stop(self) -> None:  # type: ignore[override]
+        async with self._lock:
+            self._clients.clear()
+
+
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 
 
 @pytest.mark.asyncio
@@ -30,3 +46,17 @@ async def test_event_subscription_endpoints():
         assert data["stream_url"] == "ws://test/ws"
         assert data["topics"] == ["queues"]
     await transport.aclose()
+
+
+def test_ws_fallback_endpoint_connects():
+    hub = NoServerHub()
+    app = create_app(ws_hub=hub)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/events/subscribe",
+            json={"world_id": "w", "strategy_id": "s", "topics": []},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["fallback_url"] == "wss://gateway/ws"
+        with client.websocket_connect("/ws") as ws:
+            ws.send_text("ping")
