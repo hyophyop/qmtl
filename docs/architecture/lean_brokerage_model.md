@@ -221,6 +221,21 @@ If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬
 - Separation of concerns: Gateway/SDK enforce world activation via an order gate before invoking brokerage logic. Brokerage does not determine activation and remains broker‑specific.
 - Safety: If activation is stale/unknown, orders are gated OFF regardless of brokerage model outcomes.
 
+### QMTL Module Mapping (Implementation Pointers)
+
+- Orders & TIF: `qmtl/brokerage/order.py` (`OrderType`, `TimeInForce`, extended `Order`)
+- Fill: `qmtl/brokerage/fill_models.py` (market/limit/stop/stop-limit + IOC/FOK)
+- Slippage: `qmtl/brokerage/slippage.py` (null/constant/spread/volume-share)
+- Fees: `qmtl/brokerage/fees.py` (percent/per-share/composite)
+- Symbol properties: `qmtl/brokerage/symbols.py` (tick/lot/min validation)
+- Exchange hours: `qmtl/brokerage/exchange_hours.py` (regular/pre/post; holiday support is incremental)
+- Shortable: `qmtl/brokerage/shortable.py` (default static provider)
+- Profiles/Initializer: `qmtl/brokerage/profile.py` (`ibkr_equities_like_profile()`)
+- Settlement & Interest: `qmtl/brokerage/settlement.py`, `qmtl/brokerage/interest.py` (skeletons)
+- SDK Gate: `qmtl/sdk/order_gate.py` (activation gate helper)
+
+See also: Reference API at `docs/reference/api/brokerage.md`.
+
 [1]: https://www.quantconnect.com/docs/v2/writing-algorithms/universes/settings?utm_source=chatgpt.com "Settings"
 [2]: https://www.lean.io/docs/v2/lean-engine/class-reference/IBrokerageModel_8cs_source.html?utm_source=chatgpt.com "Common/Brokerages/IBrokerageModel.cs Source File"
 [3]: https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/brokerages/supported-models/interactive-brokers?utm_source=chatgpt.com "Interactive Brokers"
