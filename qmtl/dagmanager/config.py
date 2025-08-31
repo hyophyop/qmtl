@@ -18,6 +18,8 @@ class DagManagerConfig:
     http_port: int = 8000
     diff_callback: Optional[str] = None
     gc_callback: Optional[str] = None
+    controlbus_dsn: Optional[str] = None
+    controlbus_queue_topic: str = "queue"
 
 
 def load_dagmanager_config(path: str) -> DagManagerConfig:

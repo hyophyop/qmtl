@@ -112,9 +112,11 @@ class TagQueryManager:
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
             async with httpx.AsyncClient() as client:
-                payload = {"topics": ["queues"]}
-                if self.world_id is not None and self.strategy_id is not None:
-                    payload |= {"world_id": self.world_id, "strategy_id": self.strategy_id}
+                payload = {
+                    "topics": ["queues"],
+                    "world_id": self.world_id or "",
+                    "strategy_id": self.strategy_id or "",
+                }
                 resp = await client.post(subscribe_url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -128,6 +130,10 @@ class TagQueryManager:
                         return
         except Exception:
             pass
+
+        if self.client:
+            await self.client.start()
+            return
 
         # fallback to /queues/watch + HTTP reconcile
         self._use_watch = True

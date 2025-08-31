@@ -13,6 +13,7 @@ from qmtl.dagmanager import metrics
 from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.dagmanager.monitor import AckStatus
+from qmtl.dagmanager.controlbus_producer import ControlBusProducer
 
 
 class FakeSession:
@@ -455,3 +456,49 @@ async def test_http_sentinel_traffic_overwrite():
     query, params = driver.session_obj.run_calls[0]
     assert params["version"] == "v1"
     assert params["weight"] == 0.4
+
+
+class DummyProducer:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, bytes, bytes | None]] = []
+
+    async def send_and_wait(self, topic, data, key=None):
+        self.sent.append((topic, data, key))
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_publishes_controlbus():
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    producer = DummyProducer()
+    bus = ControlBusProducer(producer=producer, topic="queue")
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0, bus=bus)
+    await server.start()
+    dag_json = json.dumps(
+        {
+            "nodes": [
+                {
+                    "node_id": "n1",
+                    "node_type": "N",
+                    "code_hash": "c",
+                    "schema_hash": "s",
+                    "interval": 60,
+                    "tags": ["x"],
+                }
+            ]
+        }
+    )
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+        async for chunk in stub.Diff(request):
+            await stub.AckChunk(
+                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
+            )
+    await server.stop(None)
+    assert producer.sent
+    topic, data, key = producer.sent[0]
+    assert topic == "queue"
+    payload = json.loads(data.decode())
+    assert payload["tags"] == ["x"]
