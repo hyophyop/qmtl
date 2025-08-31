@@ -11,6 +11,7 @@ from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .order import Account, Order, Fill, OrderType, TimeInForce
 from .symbols import SymbolPropertiesProvider
 from .exchange_hours import ExchangeHoursProvider
+from .shortable import ShortableProvider
 
 
 class BrokerageModel:
@@ -25,6 +26,7 @@ class BrokerageModel:
         *,
         symbols: SymbolPropertiesProvider | None = None,
         hours: ExchangeHoursProvider | None = None,
+        shortable: ShortableProvider | None = None,
     ) -> None:
         self.buying_power_model = buying_power_model
         self.fee_model = fee_model
@@ -32,6 +34,7 @@ class BrokerageModel:
         self.fill_model = fill_model
         self.symbols = symbols
         self.hours = hours
+        self.shortable = shortable
 
     def _validate_order_properties(self, order: Order) -> None:
         if self.symbols is not None:
@@ -44,6 +47,15 @@ class BrokerageModel:
         if not self.hours.is_open(ts):
             raise ValueError("Market is closed per exchange hours policy")
 
+    def _validate_shortable(self, order: Order, ts: Optional[datetime]) -> None:
+        if self.shortable is None:
+            return
+        if order.quantity < 0:
+            # Simplified: treat any sell as potentially short without positions context
+            from datetime import date as _date
+            if not self.shortable.is_shortable(order.symbol, on=_date.today() if ts is None else ts.date()):
+                raise ValueError(f"Symbol {order.symbol} not shortable")
+
     def can_submit_order(self, account: Account, order: Order, *, ts: Optional[datetime] = None) -> bool:
         """Return True if the order passes symbol/hour/buying power checks."""
 
@@ -51,6 +63,8 @@ class BrokerageModel:
         self._validate_order_properties(order)
         # Market hours validation (if configured)
         self._validate_hours(ts)
+        # Shortability
+        self._validate_shortable(order, ts)
         # Buying power validation
         return self.buying_power_model.has_sufficient_buying_power(account, order)
 
