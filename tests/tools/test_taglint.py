@@ -2,6 +2,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from qmtl.tools.taglint import (
+    REQUIRED_KEYS,
+    RECOMMENDED_KEYS,
+    apply_fixes,
+    load_tags,
+    validate_tags,
+)
+
 
 def run(path: Path, fix: bool = False):
     args = [sys.executable, "-m", "qmtl", "taglint"]
@@ -59,3 +67,27 @@ def test_taglint_directory(tmp_path):
     )
     res = run(pkg)
     assert res.returncode == 0
+
+
+def test_validate_tags_normalization():
+    tags = {"Scope": "Indicator", "family": "rsi", "interval": "60s", "asset": "BTC"}
+    fixed, errors = validate_tags(tags)
+    assert fixed["scope"] == "indicator"
+    assert fixed["interval"] == "1m"
+    assert fixed["asset"] == "btc"
+    assert any("keys and string values must be lowercase" in e for e in errors)
+    assert any("not normalized" in e for e in errors)
+
+
+def test_apply_fixes_adds_placeholders(tmp_path):
+    file = tmp_path / "fix_tags.py"
+    file.write_text("TAGS = {'scope': 'indicator'}\n")
+    tags, node, tree = load_tags(str(file))
+    fixed, errors = validate_tags(tags)
+    assert errors  # missing keys reported
+    apply_fixes(str(file), fixed, tree, node)
+    new_tags, _, _ = load_tags(str(file))
+    for key in REQUIRED_KEYS:
+        assert key in new_tags
+    for key in RECOMMENDED_KEYS:
+        assert key not in new_tags
