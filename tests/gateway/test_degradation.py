@@ -3,7 +3,8 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
-from qmtl.gateway.api import create_app, StrategySubmit
+from qmtl.gateway.api import create_app
+from qmtl.gateway.models import StrategySubmit
 from qmtl.gateway.database import Database
 from qmtl.gateway.degradation import DegradationManager, DegradationLevel
 from qmtl.common import crc32_of_list

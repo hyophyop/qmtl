@@ -4,7 +4,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.gateway.api import create_app, Database, StrategySubmit
+from qmtl.gateway.api import create_app, Database
+from qmtl.gateway.models import StrategySubmit
 from qmtl.common import crc32_of_list
 
 
