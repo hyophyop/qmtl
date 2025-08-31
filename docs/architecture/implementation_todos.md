@@ -20,7 +20,7 @@ Related specs:
   - Spec refs: architecture/gateway.md §S6; architecture/worldservice.md §2–§6; reference/api_world.md; reference/schemas.md.
 
 - Event Stream Descriptor endpoint:
-  - Implement POST "/events/subscribe" -> returns "{ stream_url, token, topics, expires_at, fallback_url }". Generate short-lived JWT (claims: "aud=controlbus", "sub", "world_id", "strategy_id", "topics", "jti", "iat", "exp", "kid").
+  - Implement POST "/events/subscribe" -> returns "{ stream_url, token, topics, expires_at, fallback_url }". Generate short-lived JWT (claims: "aud=controlbus", "sub", "world_id", "strategy_id", "topics", "jti", "iat", "exp". Key ID ("kid") is conveyed in the JWT header).
   - Provide WS entrypoint (e.g., "wss://…/ws/evt") that relays ControlBus events to clients; first message per topic MUST be a full snapshot or include "state_hash".
   - Spec refs: architecture/gateway.md §S6, architecture/controlbus.md §7, reference/api_world.md.
 

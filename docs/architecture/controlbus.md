@@ -123,7 +123,7 @@ Runbooks
 - Initial snapshot: first message per topic SHOULD be a full snapshot or include a `state_hash` so clients can confirm convergence without a full GET.
 - Clients MAY probe `/worlds/{id}/{topic}/state_hash` via Gateway to check for divergence before fetching a snapshot.
 - Delegated WS (feature‑flagged): Gateway may return an alternate `alt_stream_url` that points to a dedicated event streamer tier sitting in front of ControlBus.
-  - Tokens are short‑lived JWTs with claims: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`, `kid`.
+  - Tokens are short‑lived JWTs with claims: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. Key ID (`kid`) is conveyed in the JWT header.
   - Streamer verifies JWKS/claims and bridges to ControlBus; default deployment keeps this disabled.
 
 {{ nav_links() }}
