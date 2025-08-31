@@ -2,7 +2,13 @@
 
 # qmtl
 
-QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](docs/architecture/architecture.md) for full details.
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its architecture is built around three components:
+
+1. **Gateway** – accepts strategy submissions from SDKs and forwards DAGs to the DAG Manager for deduplication and scheduling.
+2. **WorldService** – the single source of truth for policy and activation state.
+3. **ControlBus** – an internal event bus bridged to clients through a tokenized WebSocket.
+
+SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/architecture/architecture.md) for full details.
 
 Use the DAG Manager CLI to preview DAG structures:
 
