@@ -67,6 +67,12 @@ worlds_cache_hits_total = Counter(
     registry=global_registry,
 )
 
+worlds_cache_stale_total = Counter(
+    "worlds_cache_stale_total",
+    "Total number of stale responses served by WorldService proxy",
+    registry=global_registry,
+)
+
 worlds_cache_hit_ratio = Gauge(
     "worlds_cache_hit_ratio",
     "Cache hit ratio for WorldService proxy requests",
@@ -194,6 +200,12 @@ def record_worlds_cache_hit() -> None:
     _update_worlds_cache_ratio()
 
 
+def record_worlds_stale_served() -> None:
+    """Record that a stale cached response was served."""
+    worlds_cache_stale_total.inc()
+    worlds_cache_stale_total._val = worlds_cache_stale_total._value.get()  # type: ignore[attr-defined]
+
+
 def _update_worlds_cache_ratio() -> None:
     total = worlds_cache_hits_total._value.get() + worlds_proxy_requests_total._value.get()
     ratio = worlds_cache_hits_total._value.get() / total if total else 0
@@ -254,6 +266,8 @@ def reset_metrics() -> None:
     worlds_proxy_requests_total._val = 0  # type: ignore[attr-defined]
     worlds_cache_hits_total._value.set(0)  # type: ignore[attr-defined]
     worlds_cache_hits_total._val = 0  # type: ignore[attr-defined]
+    worlds_cache_stale_total._value.set(0)  # type: ignore[attr-defined]
+    worlds_cache_stale_total._val = 0  # type: ignore[attr-defined]
     worlds_cache_hit_ratio.set(0)
     worlds_cache_hit_ratio._val = 0  # type: ignore[attr-defined]
     _worlds_samples.clear()
