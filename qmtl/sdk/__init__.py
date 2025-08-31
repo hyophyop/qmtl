@@ -25,6 +25,7 @@ from qmtl.sdk.data_io import (
     QuestDBLoader,
     QuestDBRecorder,
 )
+from .event_recorder_service import EventRecorderService
 from .backfill_engine import BackfillEngine
 from .util import parse_interval, parse_period, validate_tag, validate_name
 from .exceptions import (
@@ -59,6 +60,7 @@ __all__ = [
     "EventRecorder",
     "QuestDBLoader",
     "QuestDBRecorder",
+    "EventRecorderService",
     "BackfillEngine",
     "metrics",
     "TradeExecutionService",

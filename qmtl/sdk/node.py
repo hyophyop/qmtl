@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import json
 import os
-from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import Any, TYPE_CHECKING
 import logging
@@ -19,10 +17,13 @@ import asyncio
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
-from .util import parse_interval, parse_period, validate_tag, validate_name
+from .util import parse_interval, parse_period, validate_tag
 from .exceptions import NodeValidationError, InvalidParameterError
 from . import arrow_cache
 from . import metrics as sdk_metrics
+from . import node_validation
+from . import hash_utils
+from .event_recorder_service import EventRecorderService
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -376,19 +377,6 @@ class Node:
     assigned at initialization or later via :py:meth:`add_tag`.
     """
 
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _normalize_inputs(inp: Node | Iterable[Node] | None) -> list[Node]:
-        if inp is None:
-            return []
-        if isinstance(inp, Node):
-            return [inp]
-        if isinstance(inp, Mapping):
-            raise TypeError("mapping inputs no longer supported")
-        if isinstance(inp, Iterable):
-            return list(inp)
-        raise TypeError("invalid input type")
-
     def __init__(
         self,
         input: Node | Iterable[Node] | None = None,
@@ -399,37 +387,25 @@ class Node:
         tags: list[str] | None = None,
         config: dict | None = None,
         schema: dict | None = None,
+        *,
+        event_recorder_service: EventRecorderService | None = None,
+        validator=node_validation,
+        hash_utils_module=hash_utils,
     ) -> None:
+        self._validator = validator
+        self._hash_utils = hash_utils_module
+        self.event_recorder_service = event_recorder_service
+
         # Validate and parse parameters
         interval_val = parse_interval(interval) if interval is not None else None
         period_val = parse_period(period) if period is not None else None
-        
-        # Validate name
-        validated_name = validate_name(name)
-        
-        # Validate tags
-        validated_tags = []
-        if tags is not None:
-            if not isinstance(tags, list):
-                raise InvalidParameterError("tags must be a list")
-            seen_tags = set()
-            for tag in tags:
-                validated_tag = validate_tag(tag)
-                if validated_tag in seen_tags:
-                    raise InvalidParameterError(f"duplicate tag: {validated_tag!r}")
-                seen_tags.add(validated_tag)
-                validated_tags.append(validated_tag)
-        
-        # Validate config and schema
-        if config is not None and not isinstance(config, dict):
-            raise InvalidParameterError("config must be a dictionary")
-        if schema is not None and not isinstance(schema, dict):
-            raise InvalidParameterError("schema must be a dictionary")
-        
-        # Validate compatibility between interval and period
-        if interval_val is not None and period_val is not None:
-            if period_val < 1:
-                raise InvalidParameterError("period must be at least 1 when interval is specified")
+
+        validated_name = self._validator.validate_name_value(name)
+        validated_tags = self._validator.validate_tags(tags)
+        self._validator.validate_config_schema(config, schema)
+
+        if interval_val is not None and period_val is not None and period_val < 1:
+            raise InvalidParameterError("period must be at least 1 when interval is specified")
 
         if compute_fn is not None:
             sig = inspect.signature(compute_fn)
@@ -452,7 +428,7 @@ class Node:
                 )
 
         self.input = input
-        self.inputs = self._normalize_inputs(input)
+        self.inputs = self._validator.normalize_inputs(input)
         self.compute_fn = compute_fn
         self.name = validated_name
         self.interval = interval_val
@@ -480,52 +456,21 @@ class Node:
             self.tags.append(validated_tag)
         return self
 
-    # --- hashing helpers -------------------------------------------------
-    @staticmethod
-    def _sha256(data: bytes) -> str:
-        try:
-            h = hashlib.sha256()
-            h.update(data)
-            return h.hexdigest()
-        except Exception:
-            # Fallback if sha256 unavailable
-            h = hashlib.sha3_256()
-            h.update(data)
-            return h.hexdigest()
-
-    @staticmethod
-    def _sha3(data: bytes) -> str:
-        h = hashlib.sha3_256()
-        h.update(data)
-        return h.hexdigest()
-
     @property
     def node_type(self) -> str:
         return self.__class__.__name__
 
     @property
     def code_hash(self) -> str:
-        if self.compute_fn is None:
-            return self._sha256(b"null")
-        try:
-            source = inspect.getsource(self.compute_fn).encode()
-        except (OSError, TypeError):
-            source = getattr(self.compute_fn, "__code__", None)
-            if source is not None:
-                source = source.co_code
-            else:
-                source = repr(self.compute_fn).encode()
-        return self._sha256(source)
+        return self._hash_utils.code_hash(self.compute_fn)
 
     @property
     def config_hash(self) -> str:
-        data = json.dumps(self.config, sort_keys=True).encode()
-        return self._sha256(data)
+        return self._hash_utils.config_hash(self.config)
 
     @property
     def schema_hash(self) -> str:
-        data = json.dumps(self.schema, sort_keys=True).encode()
-        return self._sha256(data)
+        return self._hash_utils.schema_hash(self.schema)
 
     @property
     def node_id(self) -> str:
@@ -578,16 +523,10 @@ class Node:
                 self.node_id, self.cache.resident_bytes
             )
 
-        recorder = getattr(self, "event_recorder", None)
-        if recorder is not None:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                asyncio.run(recorder.persist(self.node_id, interval, timestamp, payload))
-            else:
-                loop.create_task(
-                    recorder.persist(self.node_id, interval, timestamp, payload)
-                )
+        if self.event_recorder_service is not None:
+            self.event_recorder_service.record(
+                self.node_id, interval, timestamp, payload
+            )
 
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
@@ -638,9 +577,9 @@ class ProcessingNode(Node):
 class StreamInput(SourceNode):
     """Represents an upstream data stream placeholder.
 
-    ``history_provider`` and ``event_recorder`` must be supplied when the
-    instance is created. These dependencies are immutable for the lifetime of
-    the node and attempts to reassign them will raise ``AttributeError``.
+    ``history_provider`` and the optional ``event_recorder`` are immutable
+    dependencies. When an ``event_recorder`` is supplied it is wrapped by an
+    :class:`EventRecorderService` to handle persistence.
     """
 
     def __init__(
@@ -651,7 +590,9 @@ class StreamInput(SourceNode):
         *,
         history_provider: "HistoryProvider" | None = None,
         event_recorder: "EventRecorder" | None = None,
+        event_recorder_service: EventRecorderService | None = None,
     ) -> None:
+        service = event_recorder_service or EventRecorderService(event_recorder)
         super().__init__(
             input=None,
             compute_fn=None,
@@ -659,13 +600,13 @@ class StreamInput(SourceNode):
             interval=interval,
             period=period,
             tags=tags or [],
+            event_recorder_service=service,
         )
         self._history_provider = history_provider
         if history_provider and hasattr(history_provider, "bind_stream"):
             history_provider.bind_stream(self)
-        self._event_recorder = event_recorder
-        if event_recorder and hasattr(event_recorder, "bind_stream"):
-            event_recorder.bind_stream(self)
+        if service.recorder and hasattr(service.recorder, "bind_stream"):
+            service.recorder.bind_stream(self)
 
     @property
     def history_provider(self) -> "HistoryProvider" | None:
@@ -679,7 +620,11 @@ class StreamInput(SourceNode):
     @property
     def event_recorder(self) -> "EventRecorder" | None:
         """Return the configured event recorder."""
-        return self._event_recorder
+        return (
+            self.event_recorder_service.recorder
+            if self.event_recorder_service is not None
+            else None
+        )
 
     @event_recorder.setter
     def event_recorder(self, value: "EventRecorder" | None) -> None:
