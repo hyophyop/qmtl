@@ -12,6 +12,7 @@ from .order import Account, Order, Fill, OrderType, TimeInForce
 from .symbols import SymbolPropertiesProvider
 from .exchange_hours import ExchangeHoursProvider
 from .shortable import ShortableProvider
+from .settlement import SettlementModel
 
 
 class BrokerageModel:
@@ -27,6 +28,7 @@ class BrokerageModel:
         symbols: SymbolPropertiesProvider | None = None,
         hours: ExchangeHoursProvider | None = None,
         shortable: ShortableProvider | None = None,
+        settlement: SettlementModel | None = None,
     ) -> None:
         self.buying_power_model = buying_power_model
         self.fee_model = fee_model
@@ -35,6 +37,7 @@ class BrokerageModel:
         self.symbols = symbols
         self.hours = hours
         self.shortable = shortable
+        self.settlement = settlement
 
     def _validate_order_properties(self, order: Order) -> None:
         if self.symbols is not None:
@@ -91,5 +94,12 @@ class BrokerageModel:
         fill.fee = fee
         # Use actual filled quantity for cash movement
         cost = fill.price * fill.quantity + fee
-        account.cash -= cost
+        if self.settlement and self.settlement.defer_cash:
+            # Record pending settlement; no immediate cash move when deferring
+            self.settlement.record(fill, ts or datetime.utcnow())
+        else:
+            account.cash -= cost
+            # Record for audit if settlement exists
+            if self.settlement:
+                self.settlement.record(fill, ts or datetime.utcnow())
         return fill

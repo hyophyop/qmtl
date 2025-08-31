@@ -7,6 +7,7 @@ from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .simple import (
     CashBuyingPowerModel,
     ImmediateFillModel,
+    CashWithSettlementBuyingPowerModel,
 )
 from .fees import PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel
 from .slippage import NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
@@ -30,6 +31,7 @@ __all__ = [
     "SlippageModel",
     "FillModel",
     "CashBuyingPowerModel",
+    "CashWithSettlementBuyingPowerModel",
     "ImmediateFillModel",
     "PerShareFeeModel",
     "PercentFeeModel",
