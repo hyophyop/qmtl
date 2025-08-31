@@ -73,6 +73,12 @@ worlds_cache_hit_ratio = Gauge(
     registry=global_registry,
 )
 
+worlds_stale_responses_total = Counter(
+    "worlds_stale_responses_total",
+    "Total number of stale cache responses served for WorldService requests",
+    registry=global_registry,
+)
+
 # Circuit breaker metrics for WorldService
 worlds_breaker_state = Gauge(
     "worlds_breaker_state",
@@ -215,6 +221,12 @@ def record_worlds_cache_hit() -> None:
     _update_worlds_cache_ratio()
 
 
+def record_worlds_stale_response() -> None:
+    """Record serving a stale WorldService cache entry."""
+    worlds_stale_responses_total.inc()
+    worlds_stale_responses_total._val = worlds_stale_responses_total._value.get()  # type: ignore[attr-defined]
+
+
 def _update_worlds_cache_ratio() -> None:
     total = worlds_cache_hits_total._value.get() + worlds_proxy_requests_total._value.get()
     ratio = worlds_cache_hits_total._value.get() / total if total else 0
@@ -296,6 +308,8 @@ def reset_metrics() -> None:
     worlds_cache_hits_total._val = 0  # type: ignore[attr-defined]
     worlds_cache_hit_ratio.set(0)
     worlds_cache_hit_ratio._val = 0  # type: ignore[attr-defined]
+    worlds_stale_responses_total._value.set(0)  # type: ignore[attr-defined]
+    worlds_stale_responses_total._val = 0  # type: ignore[attr-defined]
     _worlds_samples.clear()
     worlds_breaker_state.set(0)
     worlds_breaker_state._val = 0  # type: ignore[attr-defined]

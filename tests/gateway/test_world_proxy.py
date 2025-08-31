@@ -76,6 +76,107 @@ async def test_activation_etag_cache(fake_redis):
 
 
 @pytest.mark.asyncio
+async def test_decide_stale_on_backend_error(fake_redis):
+    metrics.reset_metrics()
+    calls = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(200, json={"v": 1}, headers={"Cache-Control": "max-age=60"})
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r1 = await api_client.get("/worlds/abc/decide")
+        client._decision_cache["abc"].expires_at = 0
+        r2 = await api_client.get("/worlds/abc/decide")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert r1.json() == {"v": 1}
+    assert r2.json() == {"v": 1}
+    assert r2.headers["X-Stale"] == "true"
+    assert r2.headers["Warning"] == "110 - Response is stale"
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_decide_backend_error_no_cache(fake_redis):
+    metrics.reset_metrics()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await api_client.get("/worlds/abc/decide")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert metrics.worlds_stale_responses_total._value.get() == 0
+
+
+@pytest.mark.asyncio
+async def test_activation_stale_on_backend_error(fake_redis):
+    metrics.reset_metrics()
+    calls = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(200, json={"a": 1}, headers={"ETag": "abc"})
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        r1 = await api_client.get("/worlds/abc/activation")
+        r2 = await api_client.get("/worlds/abc/activation")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert r1.json() == {"a": 1}
+    assert r2.json() == {"a": 1}
+    assert r2.headers["X-Stale"] == "true"
+    assert r2.headers["Warning"] == "110 - Response is stale"
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_activation_backend_error_no_cache(fake_redis):
+    metrics.reset_metrics()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
+    asgi = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await api_client.get("/worlds/abc/activation")
+    await asgi.aclose()
+    await client._client.aclose()
+    assert metrics.worlds_stale_responses_total._value.get() == 0
+
+
+@pytest.mark.asyncio
 async def test_live_guard(fake_redis):
     call_count = {"n": 0}
 
@@ -226,8 +327,8 @@ async def test_status_reports_worldservice_breaker(fake_redis):
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
     asgi = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r = await api_client.get("/worlds/abc/decide")
-        assert r.status_code == 500
+        with pytest.raises(httpx.ConnectError):
+            await api_client.get("/worlds/abc/decide")
         s = await api_client.get("/status")
     await asgi.aclose()
     await client._client.aclose()
