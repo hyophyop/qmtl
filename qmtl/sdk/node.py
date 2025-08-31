@@ -22,6 +22,7 @@ from . import metrics as sdk_metrics
 from . import node_validation as default_validator
 from . import hash_utils as default_hash_utils
 from .event_service import EventRecorderService
+from .util import parse_interval
 
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
@@ -396,6 +397,9 @@ class Node:
         self.hash_utils = hash_utils
         self.event_service = event_service
 
+        if isinstance(interval, str):
+            interval = parse_interval(interval)
+
         validator.validate_compute_fn(compute_fn)
         (
             validated_name,
@@ -410,6 +414,9 @@ class Node:
             config,
             schema,
         )
+
+        if isinstance(interval_val, str):
+            interval_val = parse_interval(interval_val)
 
         self.input = input
         self.inputs = validator.normalize_inputs(input)
