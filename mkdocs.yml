@@ -11,6 +11,7 @@ nav:
       - World Service: architecture/worldservice.md
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
+      - Brokerage API: reference/api/brokerage.md
       - Implementation TODOs: architecture/implementation_todos.md
   - Guides:
       - Overview: guides/README.md
@@ -35,6 +36,7 @@ nav:
       - Enhanced Validation: reference/enhanced_validation.md
       - Backtest Validation: reference/backtest_validation.md
       - Lean-like Features: reference/lean_like_features.md
+      - Brokerage API: reference/api/brokerage.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
   - World:
