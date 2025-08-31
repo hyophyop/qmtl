@@ -145,3 +145,26 @@ async def test_ws_metrics_fanout_and_drops():
     assert metrics.ws_dropped_subscribers_total._value.get() == 2
     assert metrics.ws_subscribers._vals["t"] == 1
     await hub.stop()
+
+
+@pytest.mark.asyncio
+async def test_hub_topic_routing_filters_by_subscription():
+    hub = WebSocketHub()
+    await hub.start()
+    ws_activation = DummyWS()
+    ws_policy = DummyWS()
+    ws_all = DummyWS()
+    async with hub._lock:
+        hub._clients.update({ws_activation, ws_policy, ws_all})
+        hub._topics[ws_activation] = {"activation"}
+        hub._topics[ws_policy] = {"policy"}
+    await hub.send_activation_updated({"strategy_id": "s1"})
+    await hub.send_policy_updated({"strategy_id": "s1"})
+    await asyncio.sleep(0.1)
+    await hub.stop()
+    act_types = {json.loads(m)["type"] for m in ws_activation.messages}
+    pol_types = {json.loads(m)["type"] for m in ws_policy.messages}
+    all_types = {json.loads(m)["type"] for m in ws_all.messages}
+    assert act_types == {"activation_updated"}
+    assert pol_types == {"policy_updated"}
+    assert "activation_updated" in all_types and "policy_updated" in all_types

@@ -248,7 +248,7 @@ Token (JWT) claims (delegated WS or future use):
 - `aud`: `controlbus`
 - `sub`: user/service identity
 - `world_id`, `strategy_id`, `topics`: subscription scope
-- `jti`, `iat`, `exp`, `kid`: idempotency and keying
+- `jti`, `iat`, `exp`: idempotency and keying. Key ID (`kid`) is conveyed in the JWT header.
 
 ### Legacy Queue Watch & HTTP Fallback
 

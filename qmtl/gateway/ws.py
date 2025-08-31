@@ -252,12 +252,12 @@ class WebSocketHub:
     async def send_activation_updated(self, payload: dict) -> None:
         """Broadcast activation updates."""
         event = format_event("qmtl.gateway", "activation_updated", payload)
-        await self.broadcast(event, topic="policy")
+        await self.broadcast(event, topic="activation")
 
     async def send_policy_updated(self, payload: dict) -> None:
         """Broadcast policy updates."""
         event = format_event("qmtl.gateway", "policy_updated", payload)
-        await self.broadcast(event)
+        await self.broadcast(event, topic="policy")
 
 
 __all__ = ["WebSocketHub"]

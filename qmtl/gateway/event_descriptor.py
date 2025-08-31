@@ -1,8 +1,9 @@
 """Utility helpers for event stream JWT descriptors.
 
 This module provides minimal JWT creation and validation using symmetric
-HMAC keys. Keys are identified by ``kid`` allowing rotation. A helper is
-also provided to expose the configured keys as a JWKS document so that
+HMAC keys. Keys are identified by ``kid`` allowing rotation. The ``kid``
+is embedded in the JWT header, not the payload claims. A helper is also
+provided to expose the configured keys as a JWKS document so that
 external services can validate tokens without sharing secrets.
 
 The implementation intentionally avoids external dependencies to keep the
@@ -46,7 +47,11 @@ class EventDescriptorConfig:
 
 
 def sign_event_token(claims: dict[str, Any], cfg: EventDescriptorConfig) -> str:
-    """Return a signed JWT containing ``claims``."""
+    """Return a signed JWT containing ``claims``.
+
+    The key ID used for signing is written to the JWT header; ``claims``
+    MUST NOT include a ``kid`` entry.
+    """
 
     secret = cfg.keys[cfg.active_kid]
     header = {"alg": "HS256", "typ": "JWT", "kid": cfg.active_kid}
