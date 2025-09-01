@@ -15,7 +15,12 @@ if TYPE_CHECKING:  # pragma: no cover - only for typing
 
 
 class WebSocketClient:
-    """Subscribe to Gateway state updates via WebSocket."""
+    """Connect to the opaque event stream returned by ``/events/subscribe``.
+
+    The stream bridges Gateway to ControlBus and forwards event messages.
+    A JWT token is passed during connection when provided. The client also
+    stores auxiliary data such as ``queue_topics`` and ``sentinel_weights``.
+    """
 
     def __init__(
         self,
