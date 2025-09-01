@@ -11,7 +11,7 @@ from qmtl.dagmanager.diff_service import (
 )
 from qmtl.dagmanager.monitor import AckStatus
 from qmtl.dagmanager.node_repository import MemoryNodeRepository
-from qmtl.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.dagmanager.kafka_admin import KafkaAdmin, partition_key
 from qmtl.dagmanager.topic import topic_name
 from qmtl.dagmanager import metrics
 
@@ -122,6 +122,7 @@ def test_hash_compare_and_queue_upsert():
         None,
         None,
         [],
+        None,
         topic_name("asset", "N", "c1", "v1"),
     )
     queue = FakeQueue()
@@ -137,8 +138,8 @@ def test_hash_compare_and_queue_upsert():
     chunk = service.diff(req)
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
-    assert chunk.queue_map["A"] == expected_a
-    assert chunk.queue_map["B"] == expected_b
+    assert chunk.queue_map[partition_key("A", None, None)] == expected_a
+    assert chunk.queue_map[partition_key("B", None, None)] == expected_b
     assert queue.calls == [("asset", "N", "c2", "v1", False)]
 
 
@@ -153,6 +154,7 @@ def test_schema_change_buffering_flag():
         None,
         None,
         [],
+        None,
         topic_name("asset", "N", "c1", "v1"),
     )
     queue = FakeQueue()
@@ -165,7 +167,7 @@ def test_schema_change_buffering_flag():
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
     expected_a = topic_name("asset", "N", "c1", "v1")
-    assert chunk.queue_map["A"] == expected_a
+    assert chunk.queue_map[partition_key("A", None, None)] == expected_a
     assert queue.calls == []
     assert not chunk.new_nodes
     assert [n.node_id for n in chunk.buffering_nodes] == ["A"]
@@ -276,7 +278,10 @@ def test_integration_with_backends():
 
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
-    assert chunk.queue_map == {"A": expected_a, "B": expected_b}
+    assert chunk.queue_map == {
+        partition_key("A", None, None): expected_a,
+        partition_key("B", None, None): expected_b,
+    }
     assert any("sid" in p for _, p in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == expected_b
     assert stream.chunks[0] == chunk
@@ -295,6 +300,7 @@ def test_integration_with_memory_repo(tmp_path):
             None,
             None,
             [],
+            None,
             topic_name("asset", "N", "c1", "v1"),
         )
     )
@@ -311,7 +317,10 @@ def test_integration_with_memory_repo(tmp_path):
 
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
-    assert chunk.queue_map == {"A": expected_a, "B": expected_b}
+    assert chunk.queue_map == {
+        partition_key("A", None, None): expected_a,
+        partition_key("B", None, None): expected_b,
+    }
     # ensure persistence
     repo2 = MemoryNodeRepository(str(path))
     assert "A" in repo2.get_nodes(["A"])
@@ -329,6 +338,7 @@ def test_sentinel_gap_metric_increment():
         None,
         None,
         [],
+        None,
         topic_name("asset", "N", "c1", "v1"),
     )
     queue = FakeQueue()

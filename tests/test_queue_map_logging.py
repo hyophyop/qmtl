@@ -2,6 +2,7 @@ import logging
 
 from qmtl.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
 from qmtl.sdk.tag_manager_service import TagManagerService
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 class _Strat(Strategy):
@@ -17,7 +18,10 @@ class _Strat(Strategy):
 def test_apply_queue_map_logs_on_change(caplog):
     strat = _Strat()
     strat.setup()
-    mapping = {strat.proc.node_id: "topic1", strat.tq.node_id: ["q1"]}
+    mapping = {
+        partition_key(strat.proc.node_id, strat.proc.interval, 0): "topic1",
+        partition_key(strat.tq.node_id, strat.tq.interval, 0): ["q1"],
+    }
 
     service = TagManagerService(None)
     caplog.set_level(logging.DEBUG, logger="qmtl.sdk.tag_manager_service")

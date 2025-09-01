@@ -7,6 +7,7 @@ import httpx
 import json
 
 from qmtl.dagmanager.diff_service import StreamSender
+from qmtl.dagmanager.kafka_admin import partition_key
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.api import create_app
 from qmtl.dagmanager import metrics
@@ -146,7 +147,8 @@ async def test_grpc_redo_diff(monkeypatch):
         def diff(self, request: DiffRequest):
             called["sid"] = request.strategy_id
             return DiffChunk(
-                queue_map={"x": "t"}, sentinel_id=request.strategy_id + "-sentinel"
+                queue_map={partition_key("x", None, None): "t"},
+                sentinel_id=request.strategy_id + "-sentinel",
             )
 
         async def diff_async(self, request: DiffRequest):
@@ -166,7 +168,7 @@ async def test_grpc_redo_diff(monkeypatch):
     await server.stop(None)
 
     assert called["sid"] == "v2"
-    assert dict(resp.queue_map)["x"] == "t"
+    assert dict(resp.queue_map)[partition_key("x", None, None)] == "t"
     assert resp.sentinel_id == "v2-sentinel"
 
 

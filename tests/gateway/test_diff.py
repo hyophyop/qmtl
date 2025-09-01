@@ -4,6 +4,7 @@ import grpc
 
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 class DummyChannel:
@@ -38,8 +39,12 @@ def make_stub(chunks, fail_times=0):
 @pytest.mark.asyncio
 async def test_diff_collects_chunks(monkeypatch):
     chunks = [
-        dagmanager_pb2.DiffChunk(queue_map={"A": "topic_a"}, sentinel_id="s"),
-        dagmanager_pb2.DiffChunk(queue_map={"B": "topic_b"}, sentinel_id="s"),
+        dagmanager_pb2.DiffChunk(
+            queue_map={partition_key("A", None, None): "topic_a"}, sentinel_id="s"
+        ),
+        dagmanager_pb2.DiffChunk(
+            queue_map={partition_key("B", None, None): "topic_b"}, sentinel_id="s"
+        ),
     ]
     Stub, _ = make_stub(chunks)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
@@ -49,7 +54,10 @@ async def test_diff_collects_chunks(monkeypatch):
 
     client = DagManagerClient("127.0.0.1:1")
     result = await client.diff("sid", "{}")
-    assert result.queue_map == {"A": "topic_a", "B": "topic_b"}
+    assert result.queue_map == {
+        partition_key("A", None, None): "topic_a",
+        partition_key("B", None, None): "topic_b",
+    }
     assert result.sentinel_id == "s"
     await client.close()
 
@@ -58,9 +66,9 @@ async def test_diff_collects_chunks(monkeypatch):
 async def test_diff_returns_buffer_nodes(monkeypatch):
     chunks = [
         dagmanager_pb2.DiffChunk(
-            queue_map={"A": "topic_a"},
+            queue_map={partition_key("A", None, None): "topic_a"},
             sentinel_id="s",
-            buffer_nodes=[dagmanager_pb2.BufferInstruction(node_id="A", lag=5)]
+            buffer_nodes=[dagmanager_pb2.BufferInstruction(node_id="A", lag=5)],
         )
     ]
     Stub, _ = make_stub(chunks)
@@ -78,7 +86,9 @@ async def test_diff_returns_buffer_nodes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_diff_retries(monkeypatch):
-    chunk = dagmanager_pb2.DiffChunk(queue_map={"A": "t"}, sentinel_id="s")
+    chunk = dagmanager_pb2.DiffChunk(
+        queue_map={partition_key("A", None, None): "t"}, sentinel_id="s"
+    )
     Stub, get_calls = make_stub([chunk], fail_times=2)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", Stub)
     monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
@@ -89,6 +99,6 @@ async def test_diff_retries(monkeypatch):
 
     client = DagManagerClient("127.0.0.1:1")
     result = await client.diff("sid", "{}")
-    assert result.queue_map == {"A": "t"}
+    assert result.queue_map == {partition_key("A", None, None): "t"}
     assert get_calls() == 3
     await client.close()

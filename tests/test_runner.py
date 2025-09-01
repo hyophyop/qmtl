@@ -10,6 +10,7 @@ from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import StreamInput, ProcessingNode
 from qmtl.sdk import Strategy
 from tests.sample_strategy import SampleStrategy
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 def test_backtest(caplog, monkeypatch):
@@ -136,9 +137,11 @@ def test_gateway_queue_mapping(monkeypatch):
         first_node = dag["nodes"][0]
         assert "code_hash" in first_node and "schema_hash" in first_node
         first_id = first_node["node_id"]
+        interval = first_node.get("interval")
+        key = partition_key(first_id, interval, 0)
         return httpx.Response(
             202,
-            json={"strategy_id": "s1", "queue_map": {first_id: "topic1"}},
+            json={"strategy_id": "s1", "queue_map": {key: "topic1"}},
         )
 
     transport = httpx.MockTransport(handler)

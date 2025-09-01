@@ -68,6 +68,7 @@ class MemoryNodeRepository(NodeRepository):
                 interval=record.interval,
                 period=record.period,
                 tags=list(record.tags),
+                bucket=record.bucket,
                 topic=record.topic,
             )
 
@@ -88,6 +89,7 @@ class MemoryNodeRepository(NodeRepository):
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),
+                    bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
                 )
         return records
@@ -130,6 +132,7 @@ class MemoryNodeRepository(NodeRepository):
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),
+                    bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
                 )
         return None

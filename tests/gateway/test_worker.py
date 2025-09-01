@@ -10,6 +10,7 @@ from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.ws import WebSocketHub
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 class FakeDB(Database):
@@ -89,7 +90,9 @@ async def test_worker_diff_success_broadcasts(fake_redis):
 
     async def diff(sid: str, dag: str):
         called.append((sid, dag))
-        return SimpleNamespace(queue_map={"n": "t"}, sentinel_id="s")
+        return SimpleNamespace(
+            queue_map={partition_key("n", None, None): "t"}, sentinel_id="s"
+        )
 
     dag_client = SimpleNamespace(diff=diff)
     hub = DummyHub()
@@ -97,7 +100,7 @@ async def test_worker_diff_success_broadcasts(fake_redis):
     await worker.run_once()
 
     assert called == [("sid", "{}")]
-    assert hub.maps == [("sid", {"n": "t"})]
+    assert hub.maps == [("sid", {partition_key("n", None, None): "t"})]
     assert hub.progress[0] == ("sid", "processing")
     assert hub.progress[-1] == ("sid", "completed")
     assert db.records["sid"] == "completed"
