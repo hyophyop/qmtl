@@ -31,17 +31,18 @@ class SettlementModel:
         self._reserved: float = 0.0  # reserved cash for pending buys (fees included)
 
     def record(self, fill: Fill, now: datetime) -> None:
-        notional = fill.price * fill.quantity
-        # Cash effect sign mirrors BrokerageModel movement; record for audit
+        # Negative amount represents cash debit (buy); positive credit (sell)
+        amount = -fill.price * fill.quantity
         self._pending.append(
-            PendingSettlement(symbol=fill.symbol, amount=notional, settles_at=now + timedelta(days=self.days))
+            PendingSettlement(
+                symbol=fill.symbol,
+                amount=amount,
+                settles_at=now + timedelta(days=self.days),
+            )
         )
-        # If deferring cash, reserve for buys (negative notional); for sells, no immediate credit
-        if self.defer_cash and notional > 0:
-            # Sell: nothing to reserve
-            pass
-        elif self.defer_cash and notional < 0:
-            self._reserved += abs(notional) + getattr(fill, 'fee', 0.0)
+        # If deferring cash, reserve funds for buy orders (cash outflow)
+        if self.defer_cash and fill.quantity > 0:
+            self._reserved += (-amount) + getattr(fill, "fee", 0.0)
 
     def apply_due(self, account: Account, now: datetime) -> int:
         """Apply all settlements due at or before `now`. Returns count applied."""

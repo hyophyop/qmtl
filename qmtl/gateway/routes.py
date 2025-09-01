@@ -85,7 +85,9 @@ def create_api_router(
     degradation: DegradationManager,
     world_client: Optional[WorldServiceClient],
     enforce_live_guard: bool,
+
 ) -> APIRouter:
+
     router = APIRouter()
 
     @router.get("/status")

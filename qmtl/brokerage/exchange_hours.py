@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, date, time
-from typing import Optional, Set, Dict
+from typing import Set, Dict
 
 from qmtl.sdk.timing_controls import MarketHours, MarketSession
 
@@ -13,11 +13,18 @@ from qmtl.sdk.timing_controls import MarketHours, MarketSession
 class ExchangeHoursProvider:
     """Simple provider to answer market session queries."""
 
-    market_hours: MarketHours = MarketHours()
+    market_hours: MarketHours = field(
+        default_factory=lambda: MarketHours(
+            pre_market_start=time(4, 0),
+            regular_start=time(9, 30),
+            regular_end=time(16, 0),
+            post_market_end=time(20, 0),
+        )
+    )
     allow_pre_post_market: bool = False
     require_regular_hours: bool = False
-    holidays: Set[date] = None
-    early_closes: Dict[date, time] = None
+    holidays: Set[date] = field(default_factory=set)
+    early_closes: Dict[date, time] = field(default_factory=dict)
 
     def session(self, ts: datetime) -> MarketSession:
         # Holiday full-day closure

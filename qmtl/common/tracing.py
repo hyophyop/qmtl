@@ -16,8 +16,12 @@ from opentelemetry import trace
 from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+try:  # Console exporter is optional; avoid when not explicitly requested
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter  # type: ignore
+except Exception:  # pragma: no cover - optional dependency not present
+    ConsoleSpanExporter = None  # type: ignore
 
 _INITIALISED = False
 
@@ -31,11 +35,18 @@ def setup_tracing(service_name: str, exporter_endpoint: Optional[str] = None) ->
     endpoint = exporter_endpoint or os.getenv("QMTL_OTEL_EXPORTER_ENDPOINT")
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
+    # Exporters:
+    # - If endpoint provided → use OTLP HTTP exporter
+    # - Else if explicitly requested console via env value 'console' → Console exporter (when available)
+    # - Else → no exporter (tests/local default) to avoid noisy/fragile shutdown warnings
     if endpoint:
-        exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
-    else:
-        exporter = ConsoleSpanExporter()
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+        if endpoint.strip().lower() == "console" and ConsoleSpanExporter is not None:
+            exporter = ConsoleSpanExporter()  # type: ignore[call-arg]
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+        else:
+            exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+    # When no exporter configured, tracing remains enabled with a provider but nothing is exported.
     trace.set_tracer_provider(provider)
     _INITIALISED = True
 
