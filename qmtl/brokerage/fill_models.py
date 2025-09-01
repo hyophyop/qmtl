@@ -125,3 +125,30 @@ class StopLimitFillModel(BaseFillModel):
         lfm = LimitFillModel(liquidity_cap=self.liquidity_cap)
         return lfm.fill(order, market_price)
 
+
+class UnifiedFillModel(FillModel):
+    """Dispatch to the appropriate fill model by order type.
+
+    This adapter enables a single ``FillModel`` to support multiple
+    order types, mirroring how backtest engines route orders to
+    different handlers. It preserves the simple IOC/FOK behavior via
+    the ``liquidity_cap`` knob on ``BaseFillModel`` derivatives.
+    """
+
+    def __init__(self, *, liquidity_cap: Optional[int] = None) -> None:
+        self._market = MarketFillModel(liquidity_cap=liquidity_cap)
+        self._limit = LimitFillModel(liquidity_cap=liquidity_cap)
+        self._stop = StopMarketFillModel(liquidity_cap=liquidity_cap)
+        self._stop_limit = StopLimitFillModel(liquidity_cap=liquidity_cap)
+
+    def fill(self, order: Order, market_price: float) -> Fill:
+        if order.type == OrderType.MARKET:
+            return self._market.fill(order, market_price)
+        if order.type == OrderType.LIMIT:
+            return self._limit.fill(order, market_price)
+        if order.type == OrderType.STOP:
+            return self._stop.fill(order, market_price)
+        if order.type == OrderType.STOP_LIMIT:
+            return self._stop_limit.fill(order, market_price)
+        # Fallback: no fill
+        return Fill(symbol=order.symbol, quantity=0, price=market_price)

@@ -11,7 +11,7 @@ from .simple import (
 )
 from .fees import PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel
 from .slippage import NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
-from .fill_models import BaseFillModel, MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel
+from .fill_models import BaseFillModel, MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel, UnifiedFillModel
 from .symbols import SymbolPropertiesProvider, SymbolProperties
 from .exchange_hours import ExchangeHoursProvider
 from .shortable import ShortableProvider, StaticShortableProvider
@@ -46,6 +46,7 @@ __all__ = [
     "LimitFillModel",
     "StopMarketFillModel",
     "StopLimitFillModel",
+    "UnifiedFillModel",
     "SymbolProperties",
     "SymbolPropertiesProvider",
     "ExchangeHoursProvider",
