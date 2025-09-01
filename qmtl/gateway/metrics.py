@@ -177,6 +177,60 @@ sentinel_skew_seconds = Gauge(
 )
 sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
 
+# ---------------------------------------------------------------------------
+# Pre-trade rejection metrics (Gateway-side)
+if "gw_pretrade_attempts_total" in global_registry._names_to_collectors:
+    pretrade_attempts_total = global_registry._names_to_collectors["gw_pretrade_attempts_total"]
+else:
+    pretrade_attempts_total = Counter(
+        "gw_pretrade_attempts_total",
+        "Total number of pre-trade validation attempts observed by Gateway",
+        registry=global_registry,
+    )
+
+if "gw_pretrade_rejections_total" in global_registry._names_to_collectors:
+    pretrade_rejections_total = global_registry._names_to_collectors["gw_pretrade_rejections_total"]
+else:
+    pretrade_rejections_total = Counter(
+        "gw_pretrade_rejections_total",
+        "Total pre-trade rejections grouped by reason at Gateway",
+        ["reason"],
+        registry=global_registry,
+    )
+
+if "gw_pretrade_rejection_ratio" in global_registry._names_to_collectors:
+    pretrade_rejection_ratio = global_registry._names_to_collectors["gw_pretrade_rejection_ratio"]
+else:
+    pretrade_rejection_ratio = Gauge(
+        "gw_pretrade_rejection_ratio",
+        "Ratio of rejected to attempted pre-trade validations seen by Gateway",
+        registry=global_registry,
+    )
+
+pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
+pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+
+
+def record_pretrade_attempt() -> None:
+    pretrade_attempts_total.inc()
+    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    _update_pretrade_ratio()
+
+
+def record_pretrade_rejection(reason: str) -> None:
+    pretrade_rejections_total.labels(reason=reason).inc()
+    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
+    _update_pretrade_ratio()
+
+
+def _update_pretrade_ratio() -> None:
+    total = pretrade_attempts_total._value.get()
+    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
+    ratio = (rejected / total) if total else 0.0
+    pretrade_rejection_ratio.set(ratio)
+    pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
+
 
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
     """Update the live traffic ratio for a sentinel version."""
@@ -330,3 +384,11 @@ def reset_metrics() -> None:
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
 
+
+def get_pretrade_stats() -> dict:
+    """Return a snapshot of pre-trade rejection counts and ratio for status."""
+    return {
+        "attempts": int(pretrade_attempts_total._value.get()),  # type: ignore[attr-defined]
+        "rejections": dict(pretrade_rejections_total._vals),  # type: ignore[attr-defined]
+        "ratio": float(pretrade_rejection_ratio._value.get()),  # type: ignore[attr-defined]
+    }
