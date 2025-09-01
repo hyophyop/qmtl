@@ -150,9 +150,10 @@ class DagManagerClient:
         request = dagmanager_pb2.TagQueryRequest(
             tags=tags, interval=interval, match_mode=match_mode
         )
-        
+
         @self._breaker
         async def _call() -> list[str]:
+            self._ensure_channel()
             backoff = 0.5
             retries = 5
             for attempt in range(retries):
