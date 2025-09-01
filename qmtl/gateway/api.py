@@ -135,6 +135,15 @@ def create_app(
                     await db_obj.close()  # type: ignore[attr-defined]
                 except Exception:
                     logger.exception("Failed to close database connection")
+            # Close Redis connection to avoid unclosed socket warnings in tests
+            try:
+                if hasattr(redis_conn, "close"):
+                    await redis_conn.close()  # type: ignore[attr-defined]
+                pool = getattr(redis_conn, "connection_pool", None)
+                if pool is not None and hasattr(pool, "disconnect"):
+                    await pool.disconnect()  # type: ignore[attr-defined]
+            except Exception:
+                logger.exception("Failed to close Redis connection")
             if world_client_local is not None and hasattr(world_client_local._client, "aclose"):
                 try:
                     await world_client_local._client.aclose()  # type: ignore[attr-defined]
