@@ -95,6 +95,11 @@ def create_api_router(
         )
         health_data["degrade_level"] = degradation.level.name
         health_data["enforce_live_guard"] = enforce_live_guard
+        # Include basic pre-trade rejection metrics for quick visibility
+        try:
+            health_data["pretrade"] = gw_metrics.get_pretrade_stats()
+        except Exception:
+            pass
         return health_data
 
     @router.get("/health")
