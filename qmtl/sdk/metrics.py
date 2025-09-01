@@ -92,6 +92,66 @@ backfill_failure_total._vals = {}  # type: ignore[attr-defined]
 backfill_retry_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
+# Pre-trade metrics
+if "pretrade_attempts_total" in global_registry._names_to_collectors:
+    pretrade_attempts_total = global_registry._names_to_collectors[
+        "pretrade_attempts_total"
+    ]
+else:
+    pretrade_attempts_total = Counter(
+        "pretrade_attempts_total",
+        "Total number of pre-trade checks",
+        registry=global_registry,
+    )
+
+if "pretrade_rejections_total" in global_registry._names_to_collectors:
+    pretrade_rejections_total = global_registry._names_to_collectors[
+        "pretrade_rejections_total"
+    ]
+else:
+    pretrade_rejections_total = Counter(
+        "pretrade_rejections_total",
+        "Total number of pre-trade rejections grouped by reason",
+        ["reason"],
+        registry=global_registry,
+    )
+
+if "pretrade_rejection_ratio" in global_registry._names_to_collectors:
+    pretrade_rejection_ratio = global_registry._names_to_collectors[
+        "pretrade_rejection_ratio"
+    ]
+else:
+    pretrade_rejection_ratio = Gauge(
+        "pretrade_rejection_ratio",
+        "Ratio of rejected pre-trade checks",
+        registry=global_registry,
+    )
+
+pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
+pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+
+
+def _update_pretrade_ratio() -> None:
+    total = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
+    ratio = rejected / total if total else 0.0
+    pretrade_rejection_ratio.set(ratio)
+    pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
+
+
+def record_pretrade_attempt() -> None:
+    pretrade_attempts_total.inc()
+    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    _update_pretrade_ratio()
+
+
+def record_pretrade_rejection(reason: str) -> None:
+    pretrade_rejections_total.labels(reason=reason).inc()
+    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
+    _update_pretrade_ratio()
+
+# ---------------------------------------------------------------------------
 if "nodecache_resident_bytes" in global_registry._names_to_collectors:
     nodecache_resident_bytes = global_registry._names_to_collectors[
         "nodecache_resident_bytes"

@@ -13,6 +13,7 @@ class DummyRepo(NodeRepository):
             node_type="N",
             code_hash="c",
             schema_hash="s",
+            schema_id="id1",
             interval="60s",
             period=1,
             tags=["t1"],

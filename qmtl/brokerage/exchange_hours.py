@@ -23,8 +23,8 @@ class ExchangeHoursProvider:
     )
     allow_pre_post_market: bool = False
     require_regular_hours: bool = False
-    holidays: Set[date] = None
-    early_closes: Dict[date, time] = None
+    holidays: Set[date] = field(default_factory=set)
+    early_closes: Dict[date, time] = field(default_factory=dict)
 
     def session(self, ts: datetime) -> MarketSession:
         # Holiday full-day closure

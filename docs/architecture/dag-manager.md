@@ -40,7 +40,7 @@ last_modified: 2025-08-21
 
 | Label             | 필수 속성                                                           | 선택 속성                                   | 설명                      |
 | ----------------- | --------------------------------------------------------------- | --------------------------------------- | ----------------------- |
-| `ComputeNode`     | `node_id`(pk), `interval`, `period`, `code_hash`, `schema_hash` | `created_at`, `tags[]`, `owner`         | DAG 연산 노드 (지표·전처리·매매 등) |
+| `ComputeNode`     | `node_id`(pk), `interval`, `period`, `code_hash`, `schema_hash`, `schema_id` | `created_at`, `tags[]`, `owner`         | DAG 연산 노드 (지표·전처리·매매 등) |
 | `Queue`           | `topic`, `created_at`, `ttl`, `retention_ms`                    | `brokers`, `tag`, `lag_alert_threshold` | Kafka/Redpanda 토픽       |
 | `VersionSentinel` | `version`, `commit_hash`, `created_at`                          | `release_tag`, `traffic_weight`         | 버전 경계 · 롤백 포인트          |
 | `Artifact`        | `path`, `checksum`, `size`                                      | `framework`, `dtype`                    | 모델·파라미터 파일 등 binary     |
@@ -64,6 +64,7 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 - NodeID = SHA-256 hash of `(node_type, code_hash, config_hash, schema_hash)`.
 - On collision detection the hash upgrades to SHA-3.
 - Uniqueness enforced via `compute_pk` constraint.
+- `schema_id` references the Schema Registry entry for the node's message format.
 
 ---
 

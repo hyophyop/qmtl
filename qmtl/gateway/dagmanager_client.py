@@ -17,8 +17,12 @@ class DagManagerClient:
 
     def __init__(self, target: str, *, breaker_max_failures: int = 3) -> None:
         self._target = target
-        # Avoid touching the global event loop at import time; lazy init below
+        # Do not create or set a global event loop here; the ASGI runtime
+        # guarantees a running loop when RPCs are awaited. Creating a loop
+        # at import time leaks resources under pytest's unraisable warnings.
         self._created_loop = None
+        # Lazily create channel/stubs on first use to avoid touching the
+        # event loop at import time (prevents resource warnings under pytest).
         self._channel = None
         self._health_stub = None
         self._diff_stub = None
