@@ -1,6 +1,6 @@
 import pytest
 
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 
 from qmtl.brokerage import (
     Account,
@@ -105,6 +105,6 @@ def test_exchange_hours_provider_blocks_when_closed():
     account = Account(cash=1_000_000)
     order = Order(symbol="AAPL", quantity=1, price=100.0)
     # 3:00 AM US/Eastern equivalent naive: treat as closed (MarketHours defaults assume US equities)
-    ts = datetime.combine(datetime.utcnow().date(), time(3, 0))
+    ts = datetime.combine(datetime.now(timezone.utc).date(), time(3, 0))
     with pytest.raises(ValueError, match="Market is closed"):
         brk.can_submit_order(account, order, ts=ts)

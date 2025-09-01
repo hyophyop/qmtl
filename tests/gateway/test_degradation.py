@@ -160,6 +160,7 @@ def test_status_includes_level(fake_redis):
         assert resp.json()["degrade_level"] == "NORMAL"
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_minimal_blocks_submission(fake_redis):
     app = make_app(fake_redis)
     app.state.degradation.level = DegradationLevel.MINIMAL

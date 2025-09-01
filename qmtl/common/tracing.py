@@ -47,6 +47,7 @@ def setup_tracing(service_name: str, exporter_endpoint: Optional[str] = None) ->
             exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
             provider.add_span_processor(BatchSpanProcessor(exporter))
     # When no exporter configured, tracing remains enabled with a provider but nothing is exported.
+    # When no exporter configured, tracing remains enabled with a provider but nothing is exported.
     trace.set_tracer_provider(provider)
     _INITIALISED = True
 

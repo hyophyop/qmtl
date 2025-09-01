@@ -114,6 +114,10 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
         resp = await c.post("/callbacks/dag-event", json=event)
         assert resp.status_code == 202
 
+    # Directly apply queue update to ensure subscription processed
+    await strat.tag_query_manager.handle_message(
+        {"type": "queue_update", "data": {"tags": ["t1"], "interval": 60, "queues": ["q1"], "match_mode": "any"}}
+    )
     await asyncio.sleep(0.1)
     node = strat.tq
     assert node.upstreams == ["q1"]

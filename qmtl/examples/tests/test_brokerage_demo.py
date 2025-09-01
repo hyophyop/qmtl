@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from qmtl.brokerage import (
     Account,
@@ -33,7 +33,7 @@ def test_demo_executes_market_order():
 
     acct = Account(cash=1_000.0)
     order = Order(symbol="AAPL", quantity=5, price=100.0, type=OrderType.MARKET, tif=TimeInForce.DAY)
-    fill = model.execute_order(acct, order, market_price=100.0, ts=datetime.utcnow())
+    fill = model.execute_order(acct, order, market_price=100.0, ts=datetime.now(timezone.utc))
     assert fill.quantity == 5
     # Fee minimum applies: $1
     assert fill.fee >= 1.0
