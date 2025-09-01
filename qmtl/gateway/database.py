@@ -14,6 +14,31 @@ logger = logging.getLogger(__name__)
 _INITIAL_STATUS = "queued"
 
 
+async def pg_try_advisory_lock(conn: asyncpg.Connection, key: int) -> bool:
+    """Attempt to acquire a PostgreSQL advisory lock.
+
+    Parameters
+    ----------
+    conn:
+        An open :class:`asyncpg.Connection`.
+    key:
+        The lock identifier.
+
+    Returns
+    -------
+    bool
+        ``True`` if the lock was acquired, ``False`` otherwise.
+    """
+
+    return await conn.fetchval("SELECT pg_try_advisory_lock($1)", key)
+
+
+async def pg_advisory_unlock(conn: asyncpg.Connection, key: int) -> bool:
+    """Release a previously acquired PostgreSQL advisory lock."""
+
+    return await conn.fetchval("SELECT pg_advisory_unlock($1)", key)
+
+
 class Database:
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
         raise NotImplementedError
@@ -261,4 +286,6 @@ __all__ = [
     "PostgresDatabase",
     "SQLiteDatabase",
     "MemoryDatabase",
+    "pg_try_advisory_lock",
+    "pg_advisory_unlock",
 ]

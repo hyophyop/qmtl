@@ -137,7 +137,9 @@ def create_app(
                     logger.exception("Failed to close database connection")
             # Close Redis connection to avoid unclosed socket warnings in tests
             try:
-                if hasattr(redis_conn, "close"):
+                if hasattr(redis_conn, "aclose"):
+                    await redis_conn.aclose()  # type: ignore[attr-defined]
+                elif hasattr(redis_conn, "close"):
                     await redis_conn.close()  # type: ignore[attr-defined]
                 pool = getattr(redis_conn, "connection_pool", None)
                 if pool is not None and hasattr(pool, "disconnect"):

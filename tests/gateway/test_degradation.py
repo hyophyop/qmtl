@@ -175,6 +175,7 @@ def test_minimal_blocks_submission(fake_redis):
         assert resp.status_code == 503
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_static_returns_204(fake_redis):
     app = make_app(fake_redis)
     app.state.degradation.level = DegradationLevel.STATIC
