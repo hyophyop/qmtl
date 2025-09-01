@@ -48,7 +48,7 @@ class FakeDiff(DiffService):
 async def test_scheduler_reprocesses_old_nodes():
     repo = FakeRepo()
     repo.records["A"] = NodeRecord(
-        "A", "N", "c", "s", None, None, [], topic_name("asset", "N", "c", "v1")
+        "A", "N", "c", "s", "id1", None, None, [], topic_name("asset", "N", "c", "v1")
     )
     repo.mark_buffering("A", timestamp_ms=0)
     diff = FakeDiff()

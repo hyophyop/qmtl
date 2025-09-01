@@ -46,6 +46,7 @@ class NodeInfo:
     node_type: str
     code_hash: str
     schema_hash: str
+    schema_id: str
     interval: int | None
     period: int | None
     tags: list[str]
@@ -209,6 +210,7 @@ class DiffService:
                 node_type=node_map[n].get("node_type", ""),
                 code_hash=node_map[n]["code_hash"],
                 schema_hash=node_map[n]["schema_hash"],
+                schema_id=node_map[n].get("schema_id", ""),
                 interval=node_map[n].get("interval"),
                 period=node_map[n].get("period"),
                 tags=list(node_map[n].get("tags", [])),
@@ -262,6 +264,7 @@ class DiffService:
                     node_type=n.node_type,
                     code_hash=n.code_hash,
                     schema_hash=n.schema_hash,
+                    schema_id=n.schema_id,
                     interval=n.interval,
                     period=n.period,
                     tags=list(n.tags),
