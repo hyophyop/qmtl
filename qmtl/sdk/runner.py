@@ -649,10 +649,11 @@ class Runner:
                 sdk_metrics.alpha_max_drawdown._val = result["max_drawdown"]  # type: ignore[attr-defined]
 
     @staticmethod
-    def _handle_trade_order(order: dict) -> None:
+    @classmethod
+    def _handle_trade_order(cls, order: dict) -> None:
         """Handle trade order submission via HTTP and/or Kafka."""
         # Gating: check world activation before submitting
-        am = Runner._activation_manager
+        am = cls._activation_manager
         side = (order.get("side") or "").lower() if isinstance(order, dict) else ""
         if am is not None and side:
             allowed = am.allow_side(side)
@@ -661,19 +662,18 @@ class Runner:
                 return
 
         # Submit via trade execution service if available
-        service = Runner._trade_execution_service
+        service = cls._trade_execution_service
         if service is not _trade_execution_service_sentinel and service is not None:
             service.post_order(order)
             return
-            
+
         # Submit via HTTP if URL is configured
-        if Runner._trade_order_http_url is not None:
-            httpx.post(Runner._trade_order_http_url, json=order)
-            
+        if cls._trade_order_http_url is not None:
+            httpx.post(cls._trade_order_http_url, json=order)
+
         # Submit via Kafka if producer and topic are configured
-        if (Runner._kafka_producer is not None and 
-            Runner._trade_order_kafka_topic is not None):
-            Runner._kafka_producer.send(Runner._trade_order_kafka_topic, order)
+        if cls._kafka_producer is not None and cls._trade_order_kafka_topic is not None:
+            cls._kafka_producer.send(cls._trade_order_kafka_topic, order)
 
     @staticmethod
     def _postprocess_result(node, result) -> None:

@@ -36,12 +36,9 @@ class SettlementModel:
         self._pending.append(
             PendingSettlement(symbol=fill.symbol, amount=notional, settles_at=now + timedelta(days=self.days))
         )
-        # If deferring cash, reserve for buys (negative notional); for sells, no immediate credit
+        # If deferring cash, reserve funds for buy orders (cash outflow)
         if self.defer_cash and notional > 0:
-            # Sell: nothing to reserve
-            pass
-        elif self.defer_cash and notional < 0:
-            self._reserved += abs(notional) + getattr(fill, 'fee', 0.0)
+            self._reserved += notional + getattr(fill, "fee", 0.0)
 
     def apply_due(self, account: Account, now: datetime) -> int:
         """Apply all settlements due at or before `now`. Returns count applied."""
