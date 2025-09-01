@@ -1,4 +1,7 @@
-"""Manage activation state (long/short) via Gateway events."""
+"""Consume activation updates via the Gateway's `/events/subscribe` descriptor, bridging the internal ControlBus.
+
+If the descriptor or resulting stream is unavailable, all sides remain allowed without error.
+"""
 
 from __future__ import annotations
 
