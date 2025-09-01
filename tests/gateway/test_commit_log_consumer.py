@@ -1,7 +1,9 @@
 from qmtl.gateway.commit_log_consumer import CommitLogDeduplicator
+from qmtl.gateway import metrics
 
 
 def test_commit_log_deduplicator_filters_duplicates():
+    metrics.reset_metrics()
     dedup = CommitLogDeduplicator()
     records = [
         ("n1", 100, "h1", {"a": 1}),
@@ -16,3 +18,4 @@ def test_commit_log_deduplicator_filters_duplicates():
     # second batch should drop already seen key
     more = list(dedup.filter([( "n1", 100, "h1", {"a": 4})]))
     assert more == []
+    assert metrics.commit_duplicate_total._value.get() == 2

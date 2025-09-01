@@ -11,6 +11,7 @@ from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.gateway import metrics
 
 
 class FakeDB(Database):
@@ -192,4 +193,27 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
     assert result is False
     assert "Unhandled error processing strategy sid" in caplog.text
     assert db.records["sid"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_owner_reassign_increments_metric(fake_redis):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+
+    await fsm.create("sid", None)
+    await redis.hset("strategy:sid", mapping={"dag": "{}"})
+    await queue.push("sid")
+
+    async def diff(sid: str, dag: str):
+        await redis.set("lock:sid", "other")
+        return SimpleNamespace(queue_map={}, sentinel_id="s")
+
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
+
+    metrics.reset_metrics()
+    await worker.run_once()
+    assert metrics.owner_reassign_total._value.get() == 1
 
