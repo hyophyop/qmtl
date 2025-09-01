@@ -12,6 +12,7 @@ from .ws import WebSocketHub
 from .fsm import StrategyFSM
 from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
+from . import metrics as gw_metrics
 
 
 class StrategyWorker:
@@ -108,6 +109,14 @@ class StrategyWorker:
                 await self.ws_hub.send_progress(strategy_id, state)
             return False
         finally:
+            current_owner = await self.redis.get(lock_key)
+            if isinstance(current_owner, bytes):
+                current_owner = current_owner.decode()
+            if current_owner != self.worker_id:
+                gw_metrics.owner_reassign_total.inc()
+                gw_metrics.owner_reassign_total._val = (
+                    gw_metrics.owner_reassign_total._value.get()
+                )  # type: ignore[attr-defined]
             # The lock expires automatically; explicit deletion would allow
             # another worker to reprocess the same strategy immediately.
             pass

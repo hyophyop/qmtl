@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Iterator, Tuple
 
+from . import metrics as gw_metrics
+
 
 class CommitLogDeduplicator:
     """Filter out duplicate commit-log records.
@@ -20,6 +22,10 @@ class CommitLogDeduplicator:
         for node_id, bucket_ts, input_hash, payload in records:
             key = (node_id, bucket_ts, input_hash)
             if key in self._seen:
+                gw_metrics.commit_duplicate_total.inc()
+                gw_metrics.commit_duplicate_total._val = (
+                    gw_metrics.commit_duplicate_total._value.get()
+                )  # type: ignore[attr-defined]
                 continue
             self._seen.add(key)
             yield (node_id, bucket_ts, input_hash, payload)

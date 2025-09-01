@@ -30,6 +30,18 @@ lost_requests_total = Counter(
     registry=global_registry,
 )
 
+commit_duplicate_total = Counter(
+    "commit_duplicate_total",
+    "Total number of duplicate commit-log records detected",
+    registry=global_registry,
+)
+
+owner_reassign_total = Counter(
+    "owner_reassign_total",
+    "Total number of lease owner changes mid-bucket",
+    registry=global_registry,
+)
+
 dagclient_breaker_state = Gauge(
     "dagclient_breaker_state",
     "DAG Manager circuit breaker state (1=open, 0=closed)",
@@ -343,6 +355,10 @@ def reset_metrics() -> None:
     gateway_e2e_latency_p95._val = 0  # type: ignore[attr-defined]
     lost_requests_total._value.set(0)  # type: ignore[attr-defined]
     lost_requests_total._val = 0  # type: ignore[attr-defined]
+    commit_duplicate_total._value.set(0)  # type: ignore[attr-defined]
+    commit_duplicate_total._val = 0  # type: ignore[attr-defined]
+    owner_reassign_total._value.set(0)  # type: ignore[attr-defined]
+    owner_reassign_total._val = 0  # type: ignore[attr-defined]
     gateway_sentinel_traffic_ratio.clear()
     gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
     if hasattr(gateway_sentinel_traffic_ratio, "_metrics"):
