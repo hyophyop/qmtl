@@ -373,7 +373,7 @@ async def test_grpc_tag_query():
         req = dagmanager_pb2.TagQueryRequest(tags=["t"], interval=60)
         resp = await stub.GetQueues(req)
     await server.stop(None)
-    assert list(resp.queues) == ["q1", "q2"]
+    assert [q.queue for q in resp.queues] == ["q1", "q2"]
 
 
 @pytest.mark.asyncio

@@ -48,7 +48,12 @@ async def test_node_unpauses_on_queue_update():
     event = format_event(
         "qmtl.dagmanager",
         "queue_update",
-        {"tags": ["t1"], "interval": 60, "queues": ["q1"], "match_mode": "any"},
+        {
+            "tags": ["t1"],
+            "interval": 60,
+            "queues": [{"queue": "q1", "global": False}],
+            "match_mode": "any",
+        },
     )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/callbacks/dag-event", json=event)

@@ -18,6 +18,7 @@ class DummyRepo(NodeRepository):
             period=1,
             tags=["t1"],
             bucket=None,
+            is_global=False,
             topic="q1",
         )
 

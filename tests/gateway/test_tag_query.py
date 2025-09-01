@@ -82,7 +82,7 @@ class DummyDag(DagManagerClient):
 
     async def get_queues_by_tag(self, tags, interval, match_mode="any"):
         self.called_with = (tags, interval, match_mode)
-        return ["q1", "q2"]
+        return [{"queue": "q1", "global": False}, {"queue": "q2", "global": False}]
 
 
 @pytest.fixture
@@ -101,7 +101,10 @@ def test_queues_by_tag_route(client):
         params={"tags": "t1,t2", "interval": "60", "match_mode": "any"},
     )
     assert resp.status_code == 200
-    assert resp.json()["queues"] == ["q1", "q2"]
+    assert resp.json()["queues"] == [
+        {"queue": "q1", "global": False},
+        {"queue": "q2", "global": False},
+    ]
     assert dag.called_with == (["t1", "t2"], 60, "any")
 
 
@@ -111,7 +114,10 @@ def test_queues_by_tag_route_match_alias(client):
         "/queues/by_tag", params={"tags": "t1,t2", "interval": "60", "match": "all"}
     )
     assert resp.status_code == 200
-    assert resp.json()["queues"] == ["q1", "q2"]
+    assert resp.json()["queues"] == [
+        {"queue": "q1", "global": False},
+        {"queue": "q2", "global": False},
+    ]
     assert dag.called_with == (["t1", "t2"], 60, "all")
 
 
@@ -139,7 +145,12 @@ def test_submit_tag_query_node(client):
     }
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202
-    assert resp.json()["queue_map"] == {"N1": ["q1", "q2"]}
+    assert resp.json()["queue_map"] == {
+        "N1": [
+            {"queue": "q1", "global": False},
+            {"queue": "q2", "global": False},
+        ]
+    }
     assert dag.called_with == (["t1"], 60, "any")
 
 
@@ -153,7 +164,7 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
             self.calls.append((tags, interval, match_mode))
             if "bad" in tags:
                 raise RuntimeError("boom")
-            return [f"{tags[0]}_q"]
+            return [{"queue": f"{tags[0]}_q", "global": False}]
 
     dag = ErrorDag()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
@@ -190,7 +201,10 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         }
         resp = c.post("/strategies", json=payload)
         assert resp.status_code == 202
-        assert resp.json()["queue_map"] == {"N1": ["good_q"], "N2": []}
+        assert resp.json()["queue_map"] == {
+            "N1": [{"queue": "good_q", "global": False}],
+            "N2": [],
+        }
         assert len(dag.calls) == 2
     asyncio.run(dag.close())
 
@@ -208,10 +222,12 @@ async def test_watch_hub_broadcast():
 
     task = asyncio.create_task(listen())
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
+    await hub.broadcast(
+        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
+    )
     try:
         result = await task
-        assert result == ["q3"]
+        assert result == [{"queue": "q3", "global": False}]
     except asyncio.CancelledError:
         pytest.fail("Task was unexpectedly cancelled")
 
@@ -231,18 +247,27 @@ async def test_watch_hub_broadcast_only_on_change():
     task = asyncio.create_task(listener())
     await ready.wait()
 
-    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
+    await hub.broadcast(
+        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
+    )
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q3"], MatchMode.ANY)
+    await hub.broadcast(
+        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
+    )
     await asyncio.sleep(0)
-    await hub.broadcast(["t1"], 60, ["q4"], MatchMode.ANY)
+    await hub.broadcast(
+        ["t1"], 60, [{"queue": "q4", "global": False}], MatchMode.ANY
+    )
     await asyncio.sleep(0)
 
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert results == [["q3"], ["q4"]]
+    assert results == [
+        [{"queue": "q3", "global": False}],
+        [{"queue": "q4", "global": False}],
+    ]
 
 
 @pytest.mark.asyncio
@@ -256,7 +281,10 @@ async def test_dag_client_queries_grpc():
     client = DagManagerClient(f"127.0.0.1:{port}")
     try:
         queues = await client.get_queues_by_tag(["t"], 60, "any")
-        assert queues == ["q1", "q2"]
+        assert queues == [
+            {"queue": "q1", "global": False},
+            {"queue": "q2", "global": False},
+        ]
     finally:
         await client.close()
         await server.stop(None)

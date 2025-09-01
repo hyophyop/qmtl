@@ -43,3 +43,17 @@ def test_apply_queue_map_updates_nodes(caplog):
         if r.name == "qmtl.sdk.tag_manager_service"
     ]
     assert any(strat.proc.node_id in m for m in msgs)
+
+
+def test_apply_queue_map_filters_global():
+    strat = _Strat()
+    strat.setup()
+    service = TagManagerService(None)
+    mapping = {
+        partition_key(strat.tq.node_id, strat.tq.interval, 0): [
+            {"queue": "q1", "global": True},
+            {"queue": "q2", "global": False},
+        ]
+    }
+    service.apply_queue_map(strat, mapping)
+    assert strat.tq.upstreams == ["q2"]

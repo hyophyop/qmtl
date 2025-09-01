@@ -73,7 +73,12 @@ async def test_consumer_relays_and_deduplicates():
         key="t",
         etag="e3",
         run_id="r3",
-        data={"tags": ["x"], "interval": 60, "queues": ["q"], "match_mode": "any"},
+        data={
+            "tags": ["x"],
+            "interval": 60,
+            "queues": [{"queue": "q", "global": False}],
+            "match_mode": "any",
+        },
         timestamp_ms=ts,
     )
     await consumer.publish(msg1)
@@ -85,10 +90,15 @@ async def test_consumer_relays_and_deduplicates():
     assert hub.events == [
         ("activation_updated", {"id": 1}),
         ("policy_updated", {"id": 2}),
-        (
-            "queue_update",
-            {"tags": ["x"], "interval": 60, "queues": ["q"], "match_mode": MatchMode.ANY},
-        ),
+            (
+                "queue_update",
+                {
+                    "tags": ["x"],
+                    "interval": 60,
+                    "queues": [{"queue": "q", "global": False}],
+                    "match_mode": MatchMode.ANY,
+                },
+            ),
     ]
     assert metrics.event_relay_events_total.labels(topic="activation")._value.get() == 1
     assert metrics.event_relay_events_total.labels(topic="policy")._value.get() == 1

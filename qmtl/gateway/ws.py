@@ -221,7 +221,7 @@ class WebSocketHub:
         self,
         tags: list[str],
         interval: int,
-        queues: list[str],
+        queues: list[dict[str, object]],
         match_mode: MatchMode = MatchMode.ANY,
     ) -> None:
         """Broadcast queue update events.

@@ -51,6 +51,7 @@ class NodeInfo:
     period: int | None
     tags: list[str]
     bucket: int | None = None
+    is_global: bool = False
 
 
 @dataclass
@@ -90,8 +91,8 @@ class NodeRepository:
         match_mode: str = "any",
         *,
         breaker: AsyncCircuitBreaker | None = None,
-    ) -> list[str]:
-        """Return queue topics matching ``tags`` and ``interval``.
+    ) -> list[dict[str, object]]:
+        """Return queue descriptors matching ``tags`` and ``interval``.
 
         ``match_mode`` determines whether all tags must match ("all") or any
         tag may match ("any").
@@ -386,6 +387,7 @@ class Neo4jNodeRepository(NodeRepository):
                     period=r.get("period"),
                     tags=list(r.get("tags", [])),
                     topic=r.get("topic"),
+                    is_global=r.get("global", False),
                 )
             return records
 
@@ -413,7 +415,7 @@ class Neo4jNodeRepository(NodeRepository):
         match_mode: str = "any",
         *,
         breaker: AsyncCircuitBreaker | None = None,
-    ) -> list[str]:
+    ) -> list[dict[str, object]]:
         if not tags:
             return []
         if match_mode == "all":
@@ -423,11 +425,14 @@ class Neo4jNodeRepository(NodeRepository):
         query = (
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue) "
             f"WHERE {cond} AND q.interval = $interval "
-            "RETURN q.topic AS topic"
+            "RETURN q.topic AS topic, c.global AS global"
         )
         with self._open_session(breaker) as session:
             result = session.run(query, tags=list(tags), interval=interval)
-            return [r.get("topic") for r in result]
+            return [
+                {"queue": r.get("topic"), "global": bool(r.get("global", False))}
+                for r in result
+            ]
 
     def get_node_by_queue(
         self,
@@ -458,6 +463,7 @@ class Neo4jNodeRepository(NodeRepository):
                 period=record.get("period"),
                 tags=list(record.get("tags", [])),
                 topic=record.get("topic"),
+                is_global=record.get("global", False),
             )
 
     # buffering -------------------------------------------------------------

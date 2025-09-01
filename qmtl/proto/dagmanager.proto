@@ -40,8 +40,13 @@ message TagQueryRequest {
   string match_mode = 3;
 }
 
+message QueueDescriptor {
+  string queue = 1;
+  bool global = 2;
+}
+
 message TagQueryReply {
-  repeated string queues = 1;
+  repeated QueueDescriptor queues = 1;
 }
 
 service TagQuery {

@@ -12,10 +12,17 @@ async def test_update_warmup_and_removal():
     manager.register(node)
 
     # Initial queue registration
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t"], "interval": 60, "queues": ["q1"], "match_mode": "any"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t"],
+                "interval": 60,
+                "queues": [{"queue": "q1", "global": False}],
+                "match_mode": "any",
+            },
+        }
+    )
     assert node.upstreams == ["q1"]
     assert node.pre_warmup
 
@@ -27,10 +34,20 @@ async def test_update_warmup_and_removal():
     assert len(calls) == 1
 
     # Add new queue and ensure warmup resets
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t"], "interval": 60, "queues": ["q1", "q2"], "match_mode": "any"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t"],
+                "interval": 60,
+                "queues": [
+                    {"queue": "q1", "global": False},
+                    {"queue": "q2", "global": False},
+                ],
+                "match_mode": "any",
+            },
+        }
+    )
     assert set(node.upstreams) == {"q1", "q2"}
     assert node.pre_warmup
 
@@ -41,9 +58,16 @@ async def test_update_warmup_and_removal():
     assert len(calls) == 2
 
     # Remove queue and validate cache drop
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t"], "interval": 60, "queues": ["q2"], "match_mode": "any"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t"],
+                "interval": 60,
+                "queues": [{"queue": "q2", "global": False}],
+                "match_mode": "any",
+            },
+        }
+    )
     assert node.upstreams == ["q2"]
     assert node.cache.get_slice("q1", 60, count=1) == []
