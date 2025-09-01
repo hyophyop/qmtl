@@ -5,7 +5,7 @@ Run with: uv run python qmtl/examples/brokerage_demo/run_demo.py
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from qmtl.brokerage import (
     Account,
@@ -38,7 +38,7 @@ def main() -> None:
     model.buying_power_model = _BP()  # type: ignore[attr-defined]
 
     acct = Account(cash=10_000.0)
-    ts = datetime.utcnow()
+    ts = datetime.now(timezone.utc)
     order = Order(symbol="AAPL", quantity=10, price=100.0, type=OrderType.MARKET, tif=TimeInForce.DAY)
     fill = model.execute_order(acct, order, market_price=100.0, ts=ts)
     print({"fill": fill, "cash": acct.cash})

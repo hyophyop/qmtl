@@ -73,7 +73,7 @@ def test_gateway_status_includes_pretrade_metrics():
 
     # Extract the status endpoint and execute
     status_func = next(r.endpoint for r in router.routes if getattr(r, "path", None) == "/status")
-    result = asyncio.get_event_loop().run_until_complete(status_func())
+    result = asyncio.run(status_func())
     assert "pretrade" in result
     assert "degrade_level" in result
 

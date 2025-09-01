@@ -246,6 +246,7 @@ async def test_watch_hub_broadcast_only_on_change():
 
 
 @pytest.mark.asyncio
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 async def test_dag_client_queries_grpc():
     driver = _FakeDriver([{"topic": "q1"}, {"topic": "q2"}])
     admin = _FakeAdmin()

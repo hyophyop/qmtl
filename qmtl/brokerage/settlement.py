@@ -31,7 +31,7 @@ class SettlementModel:
         self._reserved: float = 0.0  # reserved cash for pending buys (fees included)
 
     def record(self, fill: Fill, now: datetime) -> None:
-        notional = fill.price * fill.quantity
+        notional = -fill.price * fill.quantity
         # Cash effect sign mirrors BrokerageModel movement; record for audit
         self._pending.append(
             PendingSettlement(symbol=fill.symbol, amount=notional, settles_at=now + timedelta(days=self.days))

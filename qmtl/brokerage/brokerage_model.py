@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
@@ -96,10 +96,10 @@ class BrokerageModel:
         cost = fill.price * fill.quantity + fee
         if self.settlement and self.settlement.defer_cash:
             # Record pending settlement; no immediate cash move when deferring
-            self.settlement.record(fill, ts or datetime.utcnow())
+            self.settlement.record(fill, ts or datetime.now(timezone.utc))
         else:
             account.cash -= cost
             # Record for audit if settlement exists
             if self.settlement:
-                self.settlement.record(fill, ts or datetime.utcnow())
+                self.settlement.record(fill, ts or datetime.now(timezone.utc))
         return fill
