@@ -17,6 +17,7 @@ class DummyRepo(NodeRepository):
             interval="60s",
             period=1,
             tags=["t1"],
+            bucket=None,
             topic="q1",
         )
 

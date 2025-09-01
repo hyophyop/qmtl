@@ -7,6 +7,7 @@ import pytest
 
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway import metrics
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 class DummyWS:
@@ -29,7 +30,7 @@ async def test_hub_broadcasts_progress_and_queue_map():
     async with hub._lock:
         hub._clients.add(ws)
     await hub.send_progress("s1", "queued")
-    await hub.send_queue_map("s1", {"n1": "t1"})
+    await hub.send_queue_map("s1", {partition_key("n1", None, None): "t1"})
     await asyncio.sleep(0.1)
     await hub.stop()
     assert len(ws.messages) == 2

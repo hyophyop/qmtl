@@ -3,6 +3,7 @@ import pytest
 from qmtl.dagmanager.cli import main
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
+from qmtl.dagmanager.kafka_admin import partition_key
 
 class DummyChannel:
     async def close(self):
@@ -68,7 +69,10 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
 
         async def RedoDiff(self, request):
             called["sentinel"] = request.sentinel_id
-            return dagmanager_pb2.DiffResult(queue_map={"q": "t"}, sentinel_id=request.sentinel_id)
+            return dagmanager_pb2.DiffResult(
+                queue_map={partition_key("q", None, None): "t"},
+                sentinel_id=request.sentinel_id,
+            )
 
     monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
@@ -77,7 +81,8 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
     main(["redo-diff", "--sentinel", "v1", "--file", str(path)])
     out = capsys.readouterr().out
     assert called["sentinel"] == "v1"
-    assert '"q": "t"' in out
+    key = partition_key("q", None, None)
+    assert f'"{key}": "t"' in out
 
 
 def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
@@ -89,7 +94,10 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
 
         async def RedoDiff(self, request):
             called["sentinel"] = request.sentinel_id
-            return dagmanager_pb2.DiffResult(queue_map={"q": "t"}, sentinel_id=request.sentinel_id)
+            return dagmanager_pb2.DiffResult(
+                queue_map={partition_key("q", None, None): "t"},
+                sentinel_id=request.sentinel_id,
+            )
 
     monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
@@ -98,7 +106,8 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
     main(["redo-diff", "--sentinel", "v1", "--file", str(path)])
     out = capsys.readouterr().out
     assert called["sentinel"] == "v1"
-    assert '"q": "t"' in out
+    key = partition_key("q", None, None)
+    assert f'"{key}": "t"' in out
 
 
 def test_cli_export_schema(monkeypatch, tmp_path):

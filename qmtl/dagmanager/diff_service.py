@@ -17,7 +17,7 @@ from .metrics import (
     queue_create_error_total,
     sentinel_gap_count,
 )
-from .kafka_admin import KafkaAdmin
+from .kafka_admin import KafkaAdmin, partition_key
 from .topic import TopicConfig, topic_name
 from qmtl.common import AsyncCircuitBreaker
 from .monitor import AckStatus
@@ -50,16 +50,17 @@ class NodeInfo:
     interval: int | None
     period: int | None
     tags: list[str]
+    bucket: int | None = None
 
 
 @dataclass
 class NodeRecord(NodeInfo):
-    topic: str
+    topic: str = ""
 
 
 @dataclass
 class BufferInstruction(NodeInfo):
-    lag: int
+    lag: int = 0
 
 
 class NodeRepository:
@@ -214,6 +215,7 @@ class DiffService:
                 interval=node_map[n].get("interval"),
                 period=node_map[n].get("period"),
                 tags=list(node_map[n].get("tags", [])),
+                bucket=node_map[n].get("bucket"),
             )
             for n in ordered
         ]
@@ -231,12 +233,12 @@ class DiffService:
         buffering_nodes: List[NodeInfo] = []
         for n in nodes:
             rec = existing.get(n.node_id)
-            if rec:
-                if rec.code_hash == n.code_hash:
-                    queue_map[n.node_id] = rec.topic
-                    if rec.schema_hash != n.schema_hash:
-                        buffering_nodes.append(n)
-                    continue
+            key = partition_key(n.node_id, n.interval, n.bucket)
+            if rec and rec.code_hash == n.code_hash:
+                queue_map[key] = rec.topic
+                if rec.schema_hash != n.schema_hash:
+                    buffering_nodes.append(n)
+                continue
             try:
                 topic = self.queue_manager.upsert(
                     "asset",
@@ -248,7 +250,7 @@ class DiffService:
                 queue_create_error_total.inc()
                 queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
                 raise
-            queue_map[n.node_id] = topic
+            queue_map[key] = topic
             new_nodes.append(n)
         return queue_map, new_nodes, buffering_nodes
 

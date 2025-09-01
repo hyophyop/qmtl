@@ -27,22 +27,34 @@ class TagManagerService:
     def apply_queue_map(self, strategy, queue_map: dict[str, str | list[str]]) -> None:
         """Apply queue mappings to strategy nodes."""
         for node in strategy.nodes:
-            mapping = queue_map.get(node.node_id)
+            prefix = f"{node.node_id}:"
+            matches: list[str | list[str]] = []
+            if node.node_id in queue_map:
+                matches.append(queue_map[node.node_id])
+            matches.extend(v for k, v in queue_map.items() if k.startswith(prefix))
+
             old_execute = node.execute
+            mapping: str | list[str] | None
             if isinstance(node, TagQueryNode):
-                if isinstance(mapping, list):
-                    node.upstreams = list(mapping)
-                else:
-                    node.upstreams = []
-                # Always execute tag query nodes so they can auto-subscribe
-                node.execute = True
+                merged: list[str] = []
+                for m in matches:
+                    if isinstance(m, list):
+                        merged.extend(m)
+                    else:
+                        merged.append(m)
+                node.upstreams = merged
+                node.execute = True  # always execute tag queries
+                mapping = merged
             else:
-                if mapping:
+                mapping_val = matches[0] if matches else None
+                if mapping_val:
                     node.execute = False
-                    node.kafka_topic = mapping  # type: ignore[assignment]
+                    node.kafka_topic = mapping_val  # type: ignore[assignment]
                 else:
                     node.execute = True
                     node.kafka_topic = None
+                mapping = mapping_val
+
             if node.execute != old_execute:
                 logger.debug(
                     "execute changed for %s: %s -> %s (mapping=%s)",

@@ -12,6 +12,17 @@ from . import metrics
 from .topic import TopicConfig
 
 
+def partition_key(node_id: str, interval: int | None, bucket: int | None) -> str:
+    """Return a stable partition key for Kafka operations.
+
+    ``interval`` and ``bucket`` may be ``None`` which is normal for nodes that
+    do not operate on a fixed schedule. ``None`` values are normalised to ``0``
+    so that the resulting key is always a simple ``":"`` separated string.
+    """
+
+    return f"{node_id}:{interval or 0}:{bucket or 0}"
+
+
 class TopicExistsError(Exception):
     """Raised when attempting to create a topic that already exists."""
 
@@ -148,4 +159,5 @@ __all__ = [
     "AdminClient",
     "TopicExistsError",
     "InMemoryAdminClient",
+    "partition_key",
 ]
