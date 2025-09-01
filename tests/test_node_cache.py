@@ -3,6 +3,15 @@ import xarray as xr
 from qmtl.sdk import ProcessingNode, StreamInput, Runner, NodeCache
 
 
+def test_input_window_hash_changes():
+    cache = NodeCache(period=2)
+    cache.append("u1", 1, 1, {"v": 1})
+    h1 = cache.input_window_hash()
+    cache.append("u1", 1, 2, {"v": 2})
+    h2 = cache.input_window_hash()
+    assert h1 != h2
+
+
 def test_cache_warmup_and_compute():
     calls = []
 
