@@ -17,21 +17,12 @@ class DagManagerClient:
 
     def __init__(self, target: str, *, breaker_max_failures: int = 3) -> None:
         self._target = target
+        # Avoid touching the global event loop at import time; lazy init below
         self._created_loop = None
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            self._created_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._created_loop)
-        try:
-            self._channel = grpc.aio.insecure_channel(
-                self._target, interceptors=aio_client_interceptors()
-            )
-        except TypeError:
-            self._channel = grpc.aio.insecure_channel(self._target)
-        self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
-        self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
-        self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
+        self._channel = None
+        self._health_stub = None
+        self._diff_stub = None
+        self._tag_stub = None
         self._breaker = AsyncCircuitBreaker(
             max_failures=breaker_max_failures,
             on_open=lambda: (
@@ -47,9 +38,22 @@ class DagManagerClient:
         gw_metrics.dagclient_breaker_state.set(0)
         gw_metrics.dagclient_breaker_failures.set(0)
 
+    def _ensure_channel(self) -> None:
+        if self._channel is None:
+            try:
+                self._channel = grpc.aio.insecure_channel(
+                    self._target, interceptors=aio_client_interceptors()
+                )
+            except TypeError:
+                self._channel = grpc.aio.insecure_channel(self._target)
+            self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
+            self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
+            self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
+
     async def close(self) -> None:
         """Close the underlying gRPC channel."""
-        await self._channel.close()
+        if self._channel is not None:
+            await self._channel.close()
         if self._created_loop is not None:
             self._created_loop.close()
 
@@ -62,6 +66,7 @@ class DagManagerClient:
         """Return ``True`` if the remote DAG Manager reports healthy status."""
         @self._breaker
         async def _call() -> bool:
+            self._ensure_channel()
             reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
             return reply.neo4j == "ok" and reply.state == "running"
 
@@ -85,6 +90,7 @@ class DagManagerClient:
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:
+            self._ensure_channel()
             backoff = 0.5
             retries = 5
             for attempt in range(retries):

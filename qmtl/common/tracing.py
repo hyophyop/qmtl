@@ -16,8 +16,12 @@ from opentelemetry import trace
 from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+try:
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter  # type: ignore
+except Exception:  # pragma: no cover
+    ConsoleSpanExporter = None  # type: ignore
 
 _INITIALISED = False
 
@@ -32,10 +36,12 @@ def setup_tracing(service_name: str, exporter_endpoint: Optional[str] = None) ->
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
     if endpoint:
-        exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
-    else:
-        exporter = ConsoleSpanExporter()
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+        if endpoint.strip().lower() == "console" and ConsoleSpanExporter is not None:
+            exporter = ConsoleSpanExporter()  # type: ignore[call-arg]
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+        else:
+            exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     _INITIALISED = True
 
