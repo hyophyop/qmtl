@@ -15,7 +15,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 
 class TagQueryManager:
-    """Manage :class:`TagQueryNode` instances and deliver updates."""
+    """Manage :class:`TagQueryNode` instances and deliver updates.
+
+    Queue updates are received via the ControlBus-backed WebSocket from
+    ``/events/subscribe``. The ``/queues/watch`` stream is retained only as a
+    legacy fallback.
+    """
 
     def __init__(
         self,
