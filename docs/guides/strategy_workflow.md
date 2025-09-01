@@ -74,6 +74,8 @@ The scaffolded script uses `Runner.offline()` by default, so no external
 services are required. Add `--backtest` to run `Runner.backtest()`, which
 requires a running Gateway and DAG Manager and a `--gateway-url` argument.
 
+The Gateway proxies the WorldService, and SDKs receive control events over the tokenized WebSocket returned by `/events/subscribe`. Activation and queue updates arrive through this opaque control stream instead of being read directly from Gateway state.
+
 ## 2a. Example Run Output
 
 The following snippet demonstrates the results of executing the above commands in a clean
@@ -133,8 +135,7 @@ python -m qmtl.sdk mypkg.strategy:MyStrategy --backtest \
 
 Available modes are `offline` (default), `backtest`, `dryrun` and `live`.
 Backtest, dryrun and live require a running Gateway and DAG Manager. Start them
-in separate terminals. The
-``--config`` flag is optional:
+in separate terminals. Activation and queue updates are delivered via the Gateway's opaque control stream on the `/events/subscribe` WebSocket rather than direct Gateway state. The ``--config`` flag is optional:
 
 ```bash
 # start with built-in defaults
