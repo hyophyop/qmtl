@@ -181,6 +181,23 @@ class NodeCache:
             result.setdefault(u, {})[i] = ts
         return result
 
+    def input_window_hash(self, *, hash_utils=default_hash_utils) -> str:
+        """Return a stable hash of the current cache window.
+
+        The hash covers all ``(upstream_id, interval)`` slices ordered by
+        upstream and interval. It is suitable for commit-log de-duplication of
+        node outputs.
+        """
+
+        ordered: list[tuple[str, int, list[tuple[int, Any]]]] = []
+        for (u, i), buf in sorted(self._buffers.items()):
+            items = [
+                (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
+            ]
+            ordered.append((u, i, items))
+        blob = json.dumps(ordered, sort_keys=True, default=repr).encode()
+        return hash_utils._sha256(blob)
+
     def as_xarray(self) -> xr.DataArray:
         """Return a read-only ``xarray`` view of the internal tensor.
 

@@ -2,6 +2,7 @@ import json
 import pytest
 
 from qmtl.gateway.commit_log import CommitLogWriter
+from qmtl.sdk.node import NodeCache
 
 
 class FakeProducer:
@@ -29,14 +30,19 @@ async def test_publish_bucket_commits() -> None:
     producer = FakeProducer()
     writer = CommitLogWriter(producer, "commit-log")
 
-    await writer.publish_bucket(100, [("n1", "h1", {"a": 1})])
+    cache = NodeCache(period=2)
+    cache.append("u1", 60, 60, {"v": 1})
+    cache.append("u1", 60, 120, {"v": 2})
+    h = cache.input_window_hash()
+
+    await writer.publish_bucket(120, [("n1", h, {"a": 1})])
 
     assert producer.begin_called == 1
     assert producer.commit_called == 1
     assert producer.abort_called == 0
     assert producer.messages[0][0] == "commit-log"
-    assert producer.messages[0][1] == b"n1:100:h1"
-    assert json.loads(producer.messages[0][2].decode()) == ["n1", 100, "h1", {"a": 1}]
+    assert producer.messages[0][1] == f"n1:120:{h}".encode()
+    assert json.loads(producer.messages[0][2].decode()) == ["n1", 120, h, {"a": 1}]
 
 
 @pytest.mark.asyncio
