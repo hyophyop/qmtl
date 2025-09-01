@@ -367,7 +367,8 @@ class Neo4jNodeRepository(NodeRepository):
             "WHERE c.node_id IN $ids "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
-            "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags"
+            "c.schema_id AS schema_id, q.topic AS topic, "
+            "q.interval AS interval, c.period AS period, c.tags AS tags"
         )
         with self._open_session(breaker) as session:
             result = session.run(query, ids=list(node_ids))
@@ -378,6 +379,7 @@ class Neo4jNodeRepository(NodeRepository):
                     node_type=r.get("node_type", ""),
                     code_hash=r.get("code_hash"),
                     schema_hash=r.get("schema_hash"),
+                    schema_id=r.get("schema_id"),
                     interval=r.get("interval"),
                     period=r.get("period"),
                     tags=list(r.get("tags", [])),
@@ -435,7 +437,8 @@ class Neo4jNodeRepository(NodeRepository):
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue {topic: $queue}) "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
-            "q.topic AS topic, q.interval AS interval, c.period AS period, c.tags AS tags "
+            "c.schema_id AS schema_id, q.topic AS topic, q.interval AS interval, "
+            "c.period AS period, c.tags AS tags "
             "LIMIT 1"
         )
         with self._open_session(breaker) as session:
@@ -448,6 +451,7 @@ class Neo4jNodeRepository(NodeRepository):
                 node_type=record.get("node_type", ""),
                 code_hash=record.get("code_hash"),
                 schema_hash=record.get("schema_hash"),
+                schema_id=record.get("schema_id"),
                 interval=record.get("interval"),
                 period=record.get("period"),
                 tags=list(record.get("tags", [])),

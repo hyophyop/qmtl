@@ -23,6 +23,7 @@ from .tag_manager_service import TagManagerService
 from .activation_manager import ActivationManager
 from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
+from . import snapshot as snap
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -186,6 +187,44 @@ class Runner:
             tasks.append(task)
         if tasks:
             await asyncio.gather(*tasks)
+
+    @staticmethod
+    def _hydrate_snapshots(strategy: Strategy) -> int:
+        """Attempt to hydrate all StreamInput nodes from snapshots.
+
+        Returns number of nodes hydrated.
+        """
+        from .node import StreamInput
+
+        count = 0
+        for n in strategy.nodes:
+            if isinstance(n, StreamInput) and n.interval is not None and n.period:
+                try:
+                    if snap.hydrate(n):
+                        count += 1
+                except Exception:
+                    logger.exception("snapshot hydration failed for %s", n.node_id)
+        if count:
+            logger.info("hydrated %d nodes from snapshots", count)
+        return count
+
+    @staticmethod
+    def _write_snapshots(strategy: Strategy) -> int:
+        """Write snapshots for all StreamInput nodes that have data."""
+        from .node import StreamInput
+
+        count = 0
+        for n in strategy.nodes:
+            if isinstance(n, StreamInput) and n.interval is not None and n.period:
+                try:
+                    p = snap.write_snapshot(n)
+                    if p:
+                        count += 1
+                except Exception:
+                    logger.exception("snapshot write failed for %s", n.node_id)
+        if count:
+            logger.info("wrote %d node snapshots", count)
+        return count
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -566,11 +605,15 @@ class Runner:
 
         offline_mode = offline or not Runner._kafka_available
         await manager.resolve_tags(offline=offline_mode)
+        # Try snapshot hydration to reduce warmup
+        Runner._hydrate_snapshots(strategy)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         if offline_mode:
             Runner.run_pipeline(strategy)
         else:
             await manager.start()
+        # Best-effort snapshot after initial warmup
+        Runner._write_snapshots(strategy)
 
         # Placeholder for live trading logic
         return strategy
@@ -605,7 +648,11 @@ class Runner:
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
+        # Hydrate from snapshots first, then fill any gaps from history
+        Runner._hydrate_snapshots(strategy)
         await HistoryLoader.load(strategy, None, None)
+        # After replay, write a fresh snapshot for faster next start
+        Runner._write_snapshots(strategy)
         await Runner._replay_history(strategy, None, None)
         return strategy
 

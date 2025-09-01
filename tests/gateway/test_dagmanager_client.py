@@ -18,5 +18,7 @@ async def test_close_closes_channel(monkeypatch):
     monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
     monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     client = DagManagerClient("dummy")
+    # ensure channel is created before closing
+    await client.status()
     await client.close()
     assert chan.closed is True
