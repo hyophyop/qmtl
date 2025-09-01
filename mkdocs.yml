@@ -4,7 +4,7 @@ nav:
   - Maintenance Schedule: MAINTENANCE_SCHEDULE.md
   - Architecture:
       - Overview: architecture/README.md
-      - Architecture: architecture/architecture.md
+      - Architecture & Ownership: architecture/architecture.md
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md

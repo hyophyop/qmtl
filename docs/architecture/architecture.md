@@ -432,6 +432,29 @@ Runner.dryrun(CrossMarketLagStrategy)
 
 ---
 
+## Ownership Model
+
+- **SDK** — 로컬에서 DAG를 실행하고 결과를 캐시하지만 전역 상태는 소유하지 않는다.
+- **Gateway** — 제출 요청의 수명주기와 Redis 기반 FSM을 관리하나, 그래프·월드·큐의 SSOT는 아니다.
+- **DAG Manager** — 전역 ComputeNode와 Queue 메타데이터의 단일 소스이며 토픽 생성·GC를 전담한다.
+- **WorldService** — 월드/정책/결정/활성 상태의 소유자이며, 해당 변경을 ControlBus에 발행한다.
+- **Infra(Redpanda/Kafka)** — 데이터·컨트롤 평면 스트림의 영속성을 제공하는 커밋 로그 저장소.
+
+---
+
+## Commit-Log Design
+
+QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화를 재생 가능한 이벤트로 남긴다.
+
+1. 각 ComputeNode의 출력은 고유 Kafka 토픽(큐)에 append되어, 과거 데이터를 필요 시 재생(replay)할 수 있다.
+2. DAG Manager는 큐 생성/갱신과 `QueueUpdated`, `sentinel_weight`와 같은 컨트롤 이벤트를 ControlBus 토픽에 발행한다.
+3. Gateway는 전략 제출을 `gateway.ingest` 로그에 기록한 뒤 Diff 결과를 처리하고, 오프셋을 Redis에 저장해 최소 한 번(at-least-once) 처리 보장한다.
+4. WorldService 역시 활성/결정 이벤트를 동일한 커밋 로그에 남겨 감사(audit)와 롤백을 지원한다.
+
+이와 같은 로그 기반 설계는 서비스별 **소유권 경계**를 명확히 하며, 장애 발생 시 정확한 시점으로 상태를 복원할 수 있는 토대를 제공한다.
+
+---
+
 ## 6. Deterministic Checklist (v0.9)
 
 아래 항목들은 전역 DAG 일관성 및 고신뢰 큐 오케스트레이션을 보장하기 위해 실무에서
