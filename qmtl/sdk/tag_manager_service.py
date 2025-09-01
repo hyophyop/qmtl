@@ -32,10 +32,10 @@ class TagManagerService:
             if isinstance(node, TagQueryNode):
                 if isinstance(mapping, list):
                     node.upstreams = list(mapping)
-                    node.execute = bool(mapping)
                 else:
                     node.upstreams = []
-                    node.execute = False
+                # Always execute tag query nodes so they can auto-subscribe
+                node.execute = True
             else:
                 if mapping:
                     node.execute = False

@@ -18,6 +18,6 @@ class MarginInterestModel:
     borrow_rate: float = 0.05
 
     def daily_interest(self, balance: float, now: datetime) -> float:
-        rate = self.cash_rate if balance >= 0 else -self.borrow_rate
+        rate = self.cash_rate if balance >= 0 else self.borrow_rate
         return balance * (rate / 365.0)
 

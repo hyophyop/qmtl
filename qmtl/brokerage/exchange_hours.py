@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, date, time
-from typing import Optional, Set, Dict
+from typing import Set, Dict
 
 from qmtl.sdk.timing_controls import MarketHours, MarketSession
 
