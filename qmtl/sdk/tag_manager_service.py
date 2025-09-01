@@ -24,11 +24,11 @@ class TagManagerService:
         setattr(strategy, "tag_query_manager", manager)
         return manager
 
-    def apply_queue_map(self, strategy, queue_map: dict[str, str | list[str]]) -> None:
+    def apply_queue_map(self, strategy, queue_map: dict[str, object]) -> None:
         """Apply queue mappings to strategy nodes."""
         for node in strategy.nodes:
             prefix = f"{node.node_id}:"
-            matches: list[str | list[str]] = []
+            matches: list[object] = []
             if node.node_id in queue_map:
                 matches.append(queue_map[node.node_id])
             matches.extend(v for k, v in queue_map.items() if k.startswith(prefix))
@@ -38,22 +38,35 @@ class TagManagerService:
             if isinstance(node, TagQueryNode):
                 merged: list[str] = []
                 for m in matches:
-                    if isinstance(m, list):
-                        merged.extend(m)
-                    else:
-                        merged.append(m)
+                    items = m if isinstance(m, list) else [m]
+                    for q in items:
+                        if isinstance(q, dict):
+                            if q.get("global"):
+                                continue
+                            val = q.get("queue") or q.get("topic")
+                            if val:
+                                merged.append(val)
+                        else:
+                            merged.append(q)
                 node.upstreams = merged
-                node.execute = True  # always execute tag queries
+                node.execute = bool(merged)
                 mapping = merged
             else:
                 mapping_val = matches[0] if matches else None
-                if mapping_val:
-                    node.execute = False
-                    node.kafka_topic = mapping_val  # type: ignore[assignment]
+                queue = None
+                global_flag = False
+                if isinstance(mapping_val, dict):
+                    queue = mapping_val.get("queue") or mapping_val.get("topic")
+                    global_flag = bool(mapping_val.get("global"))
                 else:
-                    node.execute = True
+                    queue = mapping_val
+                if queue:
+                    node.execute = False
+                    node.kafka_topic = queue  # type: ignore[assignment]
+                else:
+                    node.execute = not global_flag
                     node.kafka_topic = None
-                mapping = mapping_val
+                mapping = queue
 
             if node.execute != old_execute:
                 logger.debug(

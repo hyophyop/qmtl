@@ -14,7 +14,9 @@ async def test_resolve_and_update(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/queues/by_tag"
         assert request.url.params.get("match_mode") == "any"
-        return httpx.Response(200, json={"queues": ["q1"]})
+        return httpx.Response(
+            200, json={"queues": [{"queue": "q1", "global": False}]}
+        )
 
     transport = httpx.MockTransport(handler)
 
@@ -42,16 +44,30 @@ async def test_resolve_and_update(monkeypatch):
     assert node.upstreams == ["q1"]
     assert node.execute
 
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"], "match_mode": "any"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t1"],
+                "interval": 60,
+                "queues": [{"queue": "q2", "global": False}],
+                "match_mode": "any",
+            },
+        }
+    )
     assert node.upstreams == ["q2"]
 
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": [], "match_mode": "any"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t1"],
+                "interval": 60,
+                "queues": [],
+                "match_mode": "any",
+            },
+        }
+    )
     assert node.upstreams == []
     assert not node.execute
 
@@ -100,18 +116,72 @@ async def test_match_mode_routes_updates():
     manager.register(node_any)
     manager.register(node_all)
 
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": ["q1"], "match_mode": "all"},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t1"],
+                "interval": 60,
+                "queues": [{"queue": "q1", "global": False}],
+                "match_mode": "all",
+            },
+        }
+    )
     assert node_all.upstreams == ["q1"]
     assert node_any.upstreams == []
 
-    await manager.handle_message({
-        "event": "queue_update",
-        "data": {"tags": ["t1"], "interval": 60, "queues": ["q2"]},
-    })
+    await manager.handle_message(
+        {
+            "event": "queue_update",
+            "data": {
+                "tags": ["t1"],
+                "interval": 60,
+                "queues": [{"queue": "q2", "global": False}],
+            },
+        }
+    )
     assert node_any.upstreams == ["q2"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_filters_global(monkeypatch):
+    node = TagQueryNode(["t1"], interval="60s", period=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "queues": [
+                    {"queue": "q1", "global": True},
+                    {"queue": "q2", "global": False},
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def get(self, url, params=None):
+            request = httpx.Request("GET", url, params=params)
+            resp = handler(request)
+            resp.request = request
+            return resp
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    manager = TagQueryManager("http://gw")
+    manager.register(node)
+    await manager.resolve_tags()
+    assert node.upstreams == ["q2"]
 
 
 @pytest.mark.asyncio
@@ -131,7 +201,12 @@ async def test_start_uses_event_descriptor(monkeypatch):
             self.started = True
             await self.on_message({
                 "event": "queue_update",
-                "data": {"tags": ["t1"], "interval": 60, "queues": ["q3"], "match_mode": "any"},
+            "data": {
+                "tags": ["t1"],
+                "interval": 60,
+                "queues": [{"queue": "q3", "global": False}],
+                "match_mode": "any",
+            },
             })
 
         async def stop(self):
@@ -199,7 +274,7 @@ async def test_start_falls_back_to_watch(monkeypatch):
             return resp
 
         def stream(self, method, url, params=None):
-            data = json.dumps({"queues": ["q4"]})
+            data = json.dumps({"queues": [{"queue": "q4", "global": False}]})
             return Stream([data])
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: DummyClient())
@@ -229,9 +304,9 @@ async def test_watch_reconnects(monkeypatch):
         async def aiter_lines(self):
             calls["count"] += 1
             if calls["count"] == 1:
-                yield json.dumps({"queues": ["q1"]})
+                yield json.dumps({"queues": [{"queue": "q1", "global": False}]})
             else:
-                yield json.dumps({"queues": ["q2"]})
+                yield json.dumps({"queues": [{"queue": "q2", "global": False}]})
 
     class DummyClient:
         async def __aenter__(self):

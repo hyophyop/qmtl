@@ -15,7 +15,7 @@ class StrategySubmit(BaseModel):
 
 class StrategyAck(BaseModel):
     strategy_id: str
-    queue_map: dict[str, list[str] | str] = Field(default_factory=dict)
+    queue_map: dict[str, object] = Field(default_factory=dict)
 
 
 class StatusResponse(BaseModel):

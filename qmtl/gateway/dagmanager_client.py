@@ -130,8 +130,8 @@ class DagManagerClient:
 
     async def get_queues_by_tag(
         self, tags: list[str], interval: int, match_mode: str = "any"
-    ) -> list[str]:
-        """Return queues matching ``tags`` and ``interval``.
+    ) -> list[dict[str, object]]:
+        """Return queue descriptors matching ``tags`` and ``interval``.
 
         Parameters
         ----------
@@ -152,14 +152,17 @@ class DagManagerClient:
         )
 
         @self._breaker
-        async def _call() -> list[str]:
+        async def _call() -> list[dict[str, object]]:
             self._ensure_channel()
             backoff = 0.5
             retries = 5
             for attempt in range(retries):
                 try:
                     response = await self._tag_stub.GetQueues(request)
-                    return list(response.queues)
+                    return [
+                        {"queue": q.queue, "global": getattr(q, "global")}
+                        for q in response.queues
+                    ]
                 except Exception:
                     if attempt == retries - 1:
                         raise

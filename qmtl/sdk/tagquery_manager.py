@@ -77,9 +77,19 @@ class TagQueryManager:
                 try:
                     resp = await client.get(url, params=params)
                     resp.raise_for_status()
-                    queues = resp.json().get("queues", [])
+                    raw = resp.json().get("queues", [])
                 except httpx.RequestError:
-                    queues = []
+                    raw = []
+                queues: list[str] = []
+                for q in raw:
+                    if isinstance(q, dict):
+                        if q.get("global"):
+                            continue
+                        val = q.get("queue") or q.get("topic")
+                        if val:
+                            queues.append(val)
+                    else:
+                        queues.append(q)
                 for n in nodes:
                     n.update_queues(list(queues))
 
@@ -91,7 +101,17 @@ class TagQueryManager:
         if event == "queue_update":
             tags = payload.get("tags") or []
             interval = payload.get("interval")
-            queues = payload.get("queues", [])
+            raw = payload.get("queues", [])
+            queues: list[str] = []
+            for q in raw:
+                if isinstance(q, dict):
+                    if q.get("global"):
+                        continue
+                    val = q.get("queue") or q.get("topic")
+                    if val:
+                        queues.append(val)
+                else:
+                    queues.append(q)
             try:
                 match_mode = MatchMode(payload.get("match_mode", "any"))
             except ValueError:

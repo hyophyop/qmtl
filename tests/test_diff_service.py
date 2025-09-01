@@ -123,6 +123,7 @@ def test_hash_compare_and_queue_upsert():
         None,
         [],
         None,
+        False,
         topic_name("asset", "N", "c1", "v1"),
     )
     queue = FakeQueue()
@@ -155,6 +156,7 @@ def test_schema_change_buffering_flag():
         None,
         [],
         None,
+        False,
         topic_name("asset", "N", "c1", "v1"),
     )
     queue = FakeQueue()
@@ -301,6 +303,7 @@ def test_integration_with_memory_repo(tmp_path):
             None,
             [],
             None,
+            False,
             topic_name("asset", "N", "c1", "v1"),
         )
     )

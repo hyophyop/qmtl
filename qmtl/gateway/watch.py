@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import AsyncGenerator, DefaultDict, List
+from typing import AsyncGenerator, DefaultDict, List, Dict, Any
 
 from qmtl.sdk.node import MatchMode
 
@@ -11,8 +11,8 @@ class QueueWatchHub:
     """Manage subscribers for tag query updates."""
 
     def __init__(self) -> None:
-        self._subs: DefaultDict[str, List[asyncio.Queue[List[str]]]] = defaultdict(list)
-        self._latest: DefaultDict[str, List[str]] = defaultdict(list)
+        self._subs: DefaultDict[str, List[asyncio.Queue[List[Dict[str, Any]]]]] = defaultdict(list)
+        self._latest: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def _key(self, tags: List[str], interval: int, match_mode: MatchMode) -> str:
@@ -20,7 +20,7 @@ class QueueWatchHub:
 
     async def subscribe(
         self, tags: List[str], interval: int, match_mode: MatchMode
-    ) -> AsyncGenerator[List[str], None]:
+    ) -> AsyncGenerator[List[Dict[str, Any]], None]:
         """Subscribe to queue updates for ``tags``.
 
         Parameters
@@ -32,7 +32,7 @@ class QueueWatchHub:
         match_mode:
             Tag matching mode, either ``MatchMode.ANY`` or ``MatchMode.ALL``.
         """
-        q: asyncio.Queue[List[str]] = asyncio.Queue()
+        q: asyncio.Queue[List[Dict[str, Any]]] = asyncio.Queue()
         key = self._key(tags, interval, match_mode)
         async with self._lock:
             self._subs[key].append(q)
@@ -48,7 +48,11 @@ class QueueWatchHub:
                 self._subs[key].remove(q)
 
     async def broadcast(
-        self, tags: List[str], interval: int, queues: List[str], match_mode: MatchMode
+        self,
+        tags: List[str],
+        interval: int,
+        queues: List[Dict[str, Any]],
+        match_mode: MatchMode,
     ) -> None:
         """Broadcast updated ``queues`` to subscribers.
 

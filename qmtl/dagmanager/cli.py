@@ -38,7 +38,7 @@ class _MemRepo(NodeRepository):
 
     def get_queues_by_tag(
         self, tags: Iterable[str], interval: int, match_mode: str = "any"
-    ) -> list[str]:
+    ) -> list[dict[str, object]]:
         return []
 
     def get_node_by_queue(self, queue: str) -> NodeRecord | None:

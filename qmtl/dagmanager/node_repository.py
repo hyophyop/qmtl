@@ -58,19 +58,20 @@ class MemoryNodeRepository(NodeRepository):
 
     # utility --------------------------------------------------------------
     def add_node(self, record: NodeRecord) -> None:
-            _GRAPH.add_node(
-                record.node_id,
-                type="compute",
-                node_type=record.node_type,
-                code_hash=record.code_hash,
-                schema_hash=record.schema_hash,
-                schema_id=record.schema_id,
-                interval=record.interval,
-                period=record.period,
-                tags=list(record.tags),
-                bucket=record.bucket,
-                topic=record.topic,
-            )
+                _GRAPH.add_node(
+                    record.node_id,
+                    type="compute",
+                    node_type=record.node_type,
+                    code_hash=record.code_hash,
+                    schema_hash=record.schema_hash,
+                    schema_id=record.schema_id,
+                    interval=record.interval,
+                    period=record.period,
+                    tags=list(record.tags),
+                    bucket=record.bucket,
+                    topic=record.topic,
+                    **{"global": record.is_global},
+                )
 
     # interface ------------------------------------------------------------
     def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -91,6 +92,7 @@ class MemoryNodeRepository(NodeRepository):
                     tags=list(data.get("tags", [])),
                     bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
+                    is_global=data.get("global", False),
                 )
         return records
 
@@ -101,9 +103,9 @@ class MemoryNodeRepository(NodeRepository):
 
     def get_queues_by_tag(
         self, tags: Iterable[str], interval: int, match_mode: str = "any"
-    ) -> list[str]:
+    ) -> list[dict[str, object]]:
         tag_set = set(tags)
-        queues: list[str] = []
+        queues: list[dict[str, object]] = []
         for _, data in _GRAPH.nodes(data=True):
             if data.get("type") != "compute":
                 continue
@@ -117,7 +119,12 @@ class MemoryNodeRepository(NodeRepository):
             else:
                 match = bool(tag_set & node_tags)
             if match and "topic" in data:
-                queues.append(data["topic"])
+                queues.append(
+                    {
+                        "queue": data["topic"],
+                        "global": bool(data.get("global", False)),
+                    }
+                )
         return queues
 
     def get_node_by_queue(self, queue: str) -> NodeRecord | None:
@@ -134,6 +141,7 @@ class MemoryNodeRepository(NodeRepository):
                     tags=list(data.get("tags", [])),
                     bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
+                    is_global=data.get("global", False),
                 )
         return None
 

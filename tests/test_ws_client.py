@@ -17,7 +17,7 @@ async def test_ws_client_updates_state():
             "event": "queue_update",
             "tags": ["t"],
             "interval": 60,
-            "queues": ["q1"],
+            "queues": [{"queue": "q1", "global": False}],
             "match_mode": "any",
         },
     ]

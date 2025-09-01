@@ -227,9 +227,12 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
             except Exception:
                 tags = []
             if tags and interval:
-                queues = set(
-                    self._repo.get_queues_by_tag(tags, interval, match_mode="any")
-                )
+                queues = {
+                    q["queue"]
+                    for q in self._repo.get_queues_by_tag(
+                        tags, interval, match_mode="any"
+                    )
+                }
                 sizes = {k: v for k, v in sizes.items() if k in queues}
         return dagmanager_pb2.QueueStats(sizes=sizes)
 
@@ -260,7 +263,14 @@ class TagQueryServicer(dagmanager_pb2_grpc.TagQueryServicer):
         queues = self._repo.get_queues_by_tag(
             request.tags, request.interval, match_mode=request.match_mode or "any"
         )
-        return dagmanager_pb2.TagQueryReply(queues=queues)
+        return dagmanager_pb2.TagQueryReply(
+            queues=[
+                dagmanager_pb2.QueueDescriptor(
+                    queue=q["queue"], **{"global": q.get("global", False)}
+                )
+                for q in queues
+            ]
+        )
 
 
 class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
