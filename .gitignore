@@ -85,3 +85,6 @@ last_pytest_output.txt
 *.pb2.py
 *.pb2_grpc.py
 uv.lock
+
+# Snapshots
+.qmtl_snapshots/
