@@ -58,17 +58,18 @@ class MemoryNodeRepository(NodeRepository):
 
     # utility --------------------------------------------------------------
     def add_node(self, record: NodeRecord) -> None:
-        _GRAPH.add_node(
-            record.node_id,
-            type="compute",
-            node_type=record.node_type,
-            code_hash=record.code_hash,
-            schema_hash=record.schema_hash,
-            interval=record.interval,
-            period=record.period,
-            tags=list(record.tags),
-            topic=record.topic,
-        )
+            _GRAPH.add_node(
+                record.node_id,
+                type="compute",
+                node_type=record.node_type,
+                code_hash=record.code_hash,
+                schema_hash=record.schema_hash,
+                schema_id=record.schema_id,
+                interval=record.interval,
+                period=record.period,
+                tags=list(record.tags),
+                topic=record.topic,
+            )
 
     # interface ------------------------------------------------------------
     def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -83,6 +84,7 @@ class MemoryNodeRepository(NodeRepository):
                     node_type=data.get("node_type", ""),
                     code_hash=data.get("code_hash", ""),
                     schema_hash=data.get("schema_hash", ""),
+                    schema_id=data.get("schema_id", ""),
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),
@@ -124,6 +126,7 @@ class MemoryNodeRepository(NodeRepository):
                     node_type=data.get("node_type", ""),
                     code_hash=data.get("code_hash", ""),
                     schema_hash=data.get("schema_hash", ""),
+                    schema_id=data.get("schema_id", ""),
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),
