@@ -27,7 +27,7 @@ uv pip install -e .[io]  # 데이터 IO 모듈
 ## 기본 구조
 
 
-SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다. `interval` 값은 정수 또는 `"1h"`, `"30m"`, `"45s"`처럼 단위 접미사를 가진 문자열로 지정할 수 있습니다. `period` 값은 **항상 양의 정수(바 개수)** 로 지정합니다. `TagQueryNode` 자체는 네트워크 요청을 수행하지 않고, Runner가 생성하는 **TagQueryManager**가 Gateway와 통신하여 큐 목록을 갱신합니다. 각 노드가 등록된 후 `TagQueryManager.resolve_tags()`를 호출하여 초기 큐 목록을 받아오며, 이후 업데이트는 WebSocket을 통해 처리됩니다. 태그 매칭 방식은 `match_mode` 옵션으로 지정하며 기본값은 OR 조건에 해당하는 `"any"` 입니다. 모든 태그가 일치해야 할 경우 `match_mode="all"`을 사용합니다.
+SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다. `interval` 값은 정수 또는 `"1h"`, `"30m"`, `"45s"`처럼 단위 접미사를 가진 문자열로 지정할 수 있습니다. `period` 값은 **항상 양의 정수(바 개수)** 로 지정합니다. `TagQueryNode` 자체는 네트워크 요청을 수행하지 않고, Runner가 생성하는 **TagQueryManager**가 Gateway와 통신하여 큐 목록을 갱신합니다. 각 노드가 등록된 후 `TagQueryManager.resolve_tags()`를 호출하여 초기 큐 목록과 이벤트 설명자(event descriptor), 토큰(token)을 받아오며, 이후 업데이트는 이 설명자와 토큰을 사용해 WebSocket으로 처리됩니다. 태그 매칭 방식은 `match_mode` 옵션으로 지정하며 기본값은 OR 조건에 해당하는 `"any"` 입니다. 모든 태그가 일치해야 할 경우 `match_mode="all"`을 사용합니다.
 
 ### WebSocketClient
 
@@ -39,7 +39,11 @@ client = WebSocketClient("ws://localhost:8000", on_message=my_handler)
 
 `url`은 WebSocket 엔드포인트 주소이며 `on_message`는 수신 메시지를 처리할 비동기 함수입니다. `start()`를 호출하면 백그라운드에서 연결을 유지하며 메시지를 받고, `stop()`을 호출하면 연결이 종료됩니다.
 
-`TagQueryManager`는 이 객체를 생성하거나 주입받아 `handle_message()`를 콜백으로 등록합니다. 큐 업데이트(`queue_update`)와 센티널 가중치(`sentinel_weight`) 이벤트가 도착하면 해당 `TagQueryNode`에 `update_queues()`가 호출되고, 가중치 값은 `WebSocketClient.sentinel_weights`에 저장됩니다.
+`TagQueryManager`는 이 객체를 생성하거나 주입받아 `handle_message()`를 콜백으로 등록합니다. 각 이벤트에는 디스크립터와 토큰이 포함되며, 큐 업데이트(`queue_update`)와 센티널 가중치(`sentinel_weight`) 이벤트가 도착하면 해당 `TagQueryNode`에 `update_queues()`가 호출되고, 가중치 값은 `WebSocketClient.sentinel_weights`에 저장됩니다.
+
+### Gateway Event Subscription
+
+Gateway는 `/events/subscribe` 엔드포인트를 통해 WebSocket 이벤트를 제공합니다. 실제 활성화와 큐 업데이트 이벤트는 내부 ControlBus에서 발생하며 Gateway가 이를 전달합니다. 정책과 활성화 결정에 대한 최종 권위는 WorldService에 있습니다.
 
 
 `ProcessingNode`의 `input`은 단일 노드 또는 노드들의 리스트로 지정합니다. 딕셔너리 입력 형식은 더 이상 지원되지 않습니다.
@@ -96,7 +100,7 @@ Runner.backtest(
 ```
 
 `Runner`를 사용하면 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여
-해당 태그에 매칭되는 큐를 조회하고 WebSocket 구독을 시작합니다. 백테스트와 dry-run 모드에서도 Gateway URL을 지정하지 않으면 `RuntimeError`가 발생합니다.
+해당 태그에 매칭되는 큐를 조회하고 이벤트 설명자와 토큰을 설정한 뒤 WebSocket 구독을 시작합니다. 백테스트와 dry-run 모드에서도 Gateway URL을 지정하지 않으면 `RuntimeError`가 발생합니다.
 
 ## CLI 도움말
 
