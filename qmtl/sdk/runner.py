@@ -648,7 +648,6 @@ class Runner:
                 sdk_metrics.alpha_max_drawdown.set(result["max_drawdown"])
                 sdk_metrics.alpha_max_drawdown._val = result["max_drawdown"]  # type: ignore[attr-defined]
 
-    @staticmethod
     @classmethod
     def _handle_trade_order(cls, order: dict) -> None:
         """Handle trade order submission via HTTP and/or Kafka."""
