@@ -80,7 +80,14 @@ class CommitLogConsumer:
         records: list[tuple[str, int, str, Any]] = []
         for messages in result.values():
             for msg in messages:
-                node_id, bucket_ts, input_hash, payload = json.loads(msg.value)
+                try:
+                    node_id, bucket_ts, input_hash, payload = json.loads(msg.value)
+                except json.JSONDecodeError:
+                    gw_metrics.commit_invalid_total.inc()
+                    gw_metrics.commit_invalid_total._val = (
+                        gw_metrics.commit_invalid_total._value.get()
+                    )  # type: ignore[attr-defined]
+                    continue
                 records.append((node_id, bucket_ts, input_hash, payload))
         return records
 
