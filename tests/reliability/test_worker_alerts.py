@@ -7,6 +7,18 @@ from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.database import Database
 
 
+class DummyManager:
+    def __init__(self) -> None:
+        self.acquire_calls: list[int] = []
+
+    async def acquire(self, key: int) -> bool:
+        self.acquire_calls.append(key)
+        return True
+
+    async def release(self, key: int) -> None:
+        pass
+
+
 class FakeDB(Database):
     def __init__(self) -> None:
         self.states: dict[str, str] = {}
@@ -60,6 +72,7 @@ async def test_worker_alerts_after_repeated_failures(fake_redis):
         ws_hub=None,
         alert_manager=alerts,
         grpc_fail_threshold=2,
+        manager=DummyManager(),
     )
 
     # enqueue three strategies that will all fail
