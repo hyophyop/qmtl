@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+# Suppress unraisable exception warnings from ASGI client/event loop teardown
 pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 
 from qmtl.gateway.api import create_app

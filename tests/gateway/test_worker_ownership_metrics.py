@@ -1,13 +1,19 @@
 import asyncio
+import zlib
 from collections import deque
+from types import SimpleNamespace
 
 import pytest
 
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.gateway.commit_log_consumer import CommitLogConsumer
-from qmtl.gateway.database import PostgresDatabase
+from qmtl.gateway.database import PostgresDatabase, Database
 from qmtl.gateway.ownership import OwnershipManager
+from qmtl.gateway.redis_queue import RedisTaskQueue
+from qmtl.gateway.worker import StrategyWorker
+from qmtl.gateway.fsm import StrategyFSM
+from qmtl.dagmanager.kafka_admin import partition_key
 
 
 class FakeConn:
@@ -90,6 +96,23 @@ class _FakeConsumer:
         self.commit_calls += 1
 
 
+class FakeDB(Database):
+    def __init__(self) -> None:
+        self.records: dict[str, str] = {}
+
+    async def insert_strategy(self, strategy_id: str, meta=None) -> None:
+        self.records[strategy_id] = "queued"
+
+    async def set_status(self, strategy_id: str, status: str) -> None:
+        self.records[strategy_id] = status
+
+    async def get_status(self, strategy_id: str) -> str | None:
+        return self.records.get(strategy_id)
+
+    async def append_event(self, strategy_id: str, event: str) -> None:
+        return None
+
+
 @pytest.mark.asyncio
 async def test_two_workers_single_commit_no_duplicates() -> None:
     metrics.reset_metrics()
@@ -133,54 +156,42 @@ async def test_two_workers_single_commit_no_duplicates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_worker_takeover_increments_reassign_metric_once() -> None:
+async def test_worker_takeover_increments_reassign_metric_once(fake_redis) -> None:
     metrics.reset_metrics()
     conn = FakeConn()
-    db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
-    manager = OwnershipManager(db)
+    lock_db = PostgresDatabase("dsn")
+    lock_db._pool = FakePool(conn)  # type: ignore[assignment]
+    manager = OwnershipManager(lock_db)
 
-    producer = FakeProducer()
-    writer = CommitLogWriter(producer, "commit-log")
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
 
-    key = 456
+    async def diff(sid: str, dag: str):
+        return SimpleNamespace(queue_map={}, sentinel_id="s")
 
-    async def owning_worker() -> None:
-        acquired = await manager.acquire(key, owner="w1")
-        assert acquired
-        try:
-            await asyncio.sleep(0.1)
-        finally:
-            await manager.release(key)
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(
+        redis, db, fsm, queue, dag_client, ws_hub=None, manager=manager
+    )
 
-    task = asyncio.create_task(owning_worker())
-    await asyncio.sleep(0.01)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    strategy_id = "sid"
+    await fsm.create(strategy_id, None)
+    await redis.hset(f"strategy:{strategy_id}", mapping={"dag": "{}"})
+    await queue.push(strategy_id)
 
-    async def takeover_worker() -> None:
-        acquired = await manager.acquire(key, owner="w2")
-        assert acquired
-        try:
-            await writer.publish_bucket(200, 60, [("n1", "h2", {"b": 2})])
-        finally:
-            await manager.release(key)
+    key = zlib.crc32(partition_key(strategy_id, None, None).encode())
+    # Simulate another worker currently holding the key so acquisition fails
+    assert await manager.acquire(key)
 
-    await takeover_worker()
-    assert len(producer.messages) == 1
+    # First attempt fails and item is requeued
+    result = await worker.run_once()
+    assert result is None
 
-    batch = [_FakeMessage(value) for _, _, value in producer.messages]
-    consumer = _FakeConsumer([batch])
-    cl_consumer = CommitLogConsumer(consumer, topic="commit", group_id="g1")
+    await manager.release(key)
 
-    received: list[tuple[str, int, str, dict[str, int]]] = []
-
-    async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
-        received.extend(records)
-
-    await cl_consumer.consume(handler)
-
-    assert received == [("n1", 200, "h2", {"b": 2})]
-    assert metrics.commit_duplicate_total._value.get() == 0
+    # Second attempt succeeds and triggers the reassignment metric
+    result = await worker.run_once()
+    assert result == strategy_id
     assert metrics.owner_reassign_total._value.get() == 1
