@@ -26,6 +26,13 @@ except Exception:  # pragma: no cover - optional dependency
     pa = None  # type: ignore
     pq = None  # type: ignore
 
+try:  # optional
+    import fsspec  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    fsspec = None  # type: ignore
+
+from . import metrics as sdk_metrics
+
 
 def _b64(obj: Any) -> str:
     return base64.b64encode(obj).decode()
@@ -96,12 +103,20 @@ def write_snapshot(node) -> Path | None:
             data.setdefault(u, {})[interval] = [
                 (int(ts), _b64(json.dumps(payload).encode())) for ts, payload in items
             ]
+    # Compute a state hash for validation/fallback
+    state_hash: str | None = None
+    try:
+        state_hash = cache.input_window_hash()  # type: ignore[attr-defined]
+    except Exception:
+        state_hash = None
+
     meta: Dict[str, Any] = {
         "node_id": node.node_id,
         "interval": node.interval,
         "period": node.period,
         "schema_hash": node.schema_hash,
         "runtime_fingerprint": runtime_fingerprint(),
+        "state_hash": state_hash,
         "wm_ts": int(min(
             (ts for mp in last_ts.values() for ts in mp.values() if ts is not None),
             default=0,
@@ -111,8 +126,19 @@ def write_snapshot(node) -> Path | None:
     }
     key = _node_key(node)
     path = _snapshot_dir() / f"{key}_{meta['wm_ts']}.snap.json"
+    start = time.perf_counter()
     with path.open("w") as f:
         json.dump({"meta": meta, "data": data}, f)
+    duration_ms = (time.perf_counter() - start) * 1000
+    try:
+        sdk_metrics.node_processed_total  # type: ignore[attr-defined]
+        # Record snapshot metrics when available
+        if hasattr(sdk_metrics, "snapshot_write_duration_ms"):
+            sdk_metrics.snapshot_write_duration_ms.observe(duration_ms)  # type: ignore[attr-defined]
+        if hasattr(sdk_metrics, "snapshot_bytes_total"):
+            sdk_metrics.snapshot_bytes_total.inc(path.stat().st_size)  # type: ignore[attr-defined]
+    except Exception:
+        pass
     return path
 
 
@@ -148,8 +174,26 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
                             continue
                         decoded.append((int(ts), payload))
                     node.cache.backfill_bulk(u, interval, decoded)
+            # Optional state hash validation
+            try:
+                expect_hash = meta.get("state_hash")
+                cur_hash = node.cache.input_window_hash()  # type: ignore[attr-defined]
+                if expect_hash and cur_hash != expect_hash:
+                    # Fallback: drop hydrated state
+                    for u, mp in list(node.cache.last_timestamps().items()):  # type: ignore[attr-defined]
+                        for i in list(mp.keys()):
+                            node.cache.drop(u, i)  # type: ignore[attr-defined]
+                    if hasattr(sdk_metrics, "snapshot_hydration_fallback_total"):
+                        sdk_metrics.snapshot_hydration_fallback_total.inc()  # type: ignore[attr-defined]
+                    continue
+            except Exception:
+                pass
+            if hasattr(sdk_metrics, "snapshot_hydration_success_total"):
+                try:
+                    sdk_metrics.snapshot_hydration_success_total.inc()  # type: ignore[attr-defined]
+                except Exception:
+                    pass
             return True
         except Exception:
             continue
     return False
-
