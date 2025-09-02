@@ -121,7 +121,13 @@ class StrategyWorker:
         strategy_id = await self.queue.pop()
         if strategy_id is None:
             return None
-        await self._process(strategy_id)
+        processed = await self._process(strategy_id)
+        if not processed:
+            # If acquisition failed we push the strategy back onto the queue so
+            # it can be retried later. This allows a worker to take over a
+            # strategy once the previous owner releases its lock.
+            await self.queue.push(strategy_id)
+            return None
         return strategy_id
 
     async def close(self) -> None:
