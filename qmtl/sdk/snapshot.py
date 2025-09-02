@@ -122,13 +122,45 @@ def write_snapshot(node) -> Path | None:
             default=0,
         )),
         "created_at": int(time.time()),
-        "format": "json-b64",
+        "format": os.getenv("QMTL_SNAPSHOT_FORMAT", "json").lower(),
     }
     key = _node_key(node)
-    path = _snapshot_dir() / f"{key}_{meta['wm_ts']}.snap.json"
-    start = time.perf_counter()
-    with path.open("w") as f:
-        json.dump({"meta": meta, "data": data}, f)
+    fmt = meta["format"]
+    base = _snapshot_dir()
+    if fmt == "parquet" and pa is not None and pq is not None:
+        # Write rows to Parquet and meta to a sidecar JSON
+        rows_u: list[str] = []
+        rows_i: list[int] = []
+        rows_t: list[int] = []
+        rows_v: list[bytes] = []
+        for u, mp in data.items():
+            for interval, items in mp.items():
+                for ts, b64 in items:
+                    rows_u.append(u)
+                    rows_i.append(int(interval))
+                    rows_t.append(int(ts))
+                    rows_v.append(_b64d(b64))
+        table = pa.table({
+            "u": pa.array(rows_u, pa.string()),
+            "i": pa.array(rows_i, pa.int64()),
+            "t": pa.array(rows_t, pa.int64()),
+            "v": pa.array(rows_v, pa.binary()),
+        })
+        pq_path = base / f"{key}_{meta['wm_ts']}.snap.parquet"
+        start = time.perf_counter()
+        pq.write_table(table, pq_path)
+        meta_path = base / f"{key}_{meta['wm_ts']}.meta.json"
+        meta_obj = {"meta": meta}
+        with meta_path.open("w") as mf:
+            json.dump(meta_obj, mf)
+        duration_ms = (time.perf_counter() - start) * 1000
+        path = pq_path
+    else:
+        # Fallback to JSON container
+        path = base / f"{key}_{meta['wm_ts']}.snap.json"
+        start = time.perf_counter()
+        with path.open("w") as f:
+            json.dump({"meta": meta, "data": data}, f)
     duration_ms = (time.perf_counter() - start) * 1000
     try:
         sdk_metrics.node_processed_total  # type: ignore[attr-defined]
@@ -150,18 +182,36 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
     strict = os.getenv("QMTL_SNAPSHOT_STRICT_RUNTIME", "0") == "1" if strict_runtime is None else strict_runtime
     key = _node_key(node)
     base = _snapshot_dir()
-    candidates = sorted(base.glob(f"{key}_*.snap.json"), reverse=True)
+    # Prefer Parquet snapshots when present, fall back to JSON
+    pq_candidates = sorted(base.glob(f"{key}_*.snap.parquet"), reverse=True)
+    json_candidates = sorted(base.glob(f"{key}_*.snap.json"), reverse=True)
+    candidates = pq_candidates + json_candidates
     if not candidates:
         return False
     for path in candidates:
         try:
-            obj = json.loads(path.read_text())
-            meta = obj.get("meta", {})
+            if path.suffix == ".parquet" and pa is not None and pq is not None:
+                meta_path = path.with_suffix(".meta.json")
+                if not meta_path.exists():
+                    continue
+                obj = json.loads(meta_path.read_text())
+                meta = obj.get("meta", {})
+                table = pq.read_table(path)
+                data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
+                u_col = table.column("u").to_pylist()
+                i_col = table.column("i").to_pylist()
+                t_col = table.column("t").to_pylist()
+                v_col = table.column("v").to_pylist()
+                for u, i, t, v in zip(u_col, i_col, t_col, v_col):
+                    data.setdefault(u, {}).setdefault(int(i), []).append((int(t), json.loads(v)))
+            else:
+                obj = json.loads(path.read_text())
+                meta = obj.get("meta", {})
+                data = obj.get("data", {})
             if strict and meta.get("runtime_fingerprint") != runtime_fingerprint():
                 continue
             if meta.get("schema_hash") != node.schema_hash:
                 continue
-            data = obj.get("data", {})
             # Merge into cache preserving most recent
             for u, mp in data.items():
                 for interval_s, items in mp.items():
@@ -169,7 +219,10 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
                     decoded = []
                     for ts, b64 in items:
                         try:
-                            payload = json.loads(_b64d(b64).decode())
+                            if isinstance(b64, (bytes, bytearray)):
+                                payload = json.loads(b64.decode())
+                            else:
+                                payload = json.loads(_b64d(b64).decode())
                         except Exception:
                             continue
                         decoded.append((int(ts), payload))
