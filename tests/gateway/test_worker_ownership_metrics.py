@@ -146,7 +146,7 @@ async def test_worker_takeover_increments_reassign_metric_once() -> None:
     key = 456
 
     async def owning_worker() -> None:
-        acquired = await manager.acquire(key)
+        acquired = await manager.acquire(key, owner="w1")
         assert acquired
         try:
             await asyncio.sleep(0.1)
@@ -159,10 +159,8 @@ async def test_worker_takeover_increments_reassign_metric_once() -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    metrics.owner_reassign_total.inc()
-
     async def takeover_worker() -> None:
-        acquired = await manager.acquire(key)
+        acquired = await manager.acquire(key, owner="w2")
         assert acquired
         try:
             await writer.publish_bucket(200, 60, [("n1", "h2", {"b": 2})])

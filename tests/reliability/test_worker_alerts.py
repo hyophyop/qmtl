@@ -11,7 +11,7 @@ class DummyManager:
     def __init__(self) -> None:
         self.acquire_calls: list[int] = []
 
-    async def acquire(self, key: int) -> bool:
+    async def acquire(self, key: int, owner: str | None = None) -> bool:
         self.acquire_calls.append(key)
         return True
 

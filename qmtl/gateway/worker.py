@@ -68,7 +68,7 @@ class StrategyWorker:
     async def _process(self, strategy_id: str) -> bool:
         key_str = partition_key(strategy_id, None, None)
         key = zlib.crc32(key_str.encode())
-        acquired = await self.manager.acquire(key)
+        acquired = await self.manager.acquire(key, owner=self.worker_id)
         if not acquired:
             return False
         try:
