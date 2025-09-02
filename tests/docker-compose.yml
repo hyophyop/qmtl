@@ -1,21 +1,23 @@
-version: '3'
 services:
   zookeeper:
-    image: bitnami/zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.4.10
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOOKEEPER_CLIENT_PORT=2181
   kafka:
-    image: bitnami/kafka:latest
+    image: confluentinc/cp-kafka:7.4.10
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER_ID=1
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
   gateway:
-    image: python:3
+    image: python:3.11-slim
     command: ["python", "-m", "http.server", "8000"]
     ports:
       - "8000:8000"
