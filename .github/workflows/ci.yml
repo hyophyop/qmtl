@@ -1,7 +1,10 @@
 name: CI
 
-# Disabled automatic triggers. This workflow can only be run manually.
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -25,5 +28,5 @@ jobs:
             --python_out=qmtl/proto \
             --grpc_python_out=qmtl/proto \
             qmtl/proto/dagmanager.proto
-      - name: Run tests
-        run: PYTHONPATH=qmtl/proto uv run pytest -q tests
+      - name: Run tests (warnings are errors)
+        run: PYTHONPATH=qmtl/proto uv run pytest -W error -q tests

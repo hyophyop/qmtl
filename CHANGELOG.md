@@ -9,6 +9,19 @@
 
 ---
 
+## v0.1.1-rc1 — Ownership + Commit Log (2025-09-03)
+
+Highlights for issue #544 acceptance:
+
+- Ownership handoff metric: OwnershipManager now auto-increments `owner_reassign_total` when a different worker takes over a key (best-effort). StrategyWorker passes its `worker_id` to ownership acquisition. (PR #596)
+- Exactly-once soak tests: Added multi-round race test to ensure a single commit per (Node×Interval×Bucket) with zero duplicates; consumer deduplicates by `(node_id, bucket_ts, input_window_hash)`. (PR #597)
+- Commit log consumer CLI: Added `qmtl-commitlog-consumer` with Prometheus metrics and configurable options. (PR #598)
+- CI hardening: Re-enabled push/PR triggers; enforce `-W error` and `PYTHONWARNINGS=error`. (PR #599)
+- Docs: Documented partition key, message-key format, dedup triple, and owner handoff metric in Gateway and DAG Manager docs. (PR #600, #601)
+
+Contributors: @hyophyop
+
+
 ### Infra: CI 임시 비활성화 및 문서 안내 (2025-08-14)
 
 PR 제목: ci: temporarily disable GitHub Actions auto triggers; update docs for manual verification (2025-08-14)
