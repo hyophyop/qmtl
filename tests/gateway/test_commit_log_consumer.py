@@ -134,3 +134,25 @@ async def test_owner_reassign_emits_one_additional_commit() -> None:
 
     assert out2 == [("n1", 100, "h2", {"a": 2})]
     assert metrics.commit_duplicate_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_commit_log_consumer_ignores_invalid_messages() -> None:
+    metrics.reset_metrics()
+
+    valid = ("n1", 100, "h1", {"a": 1})
+    bad_msg = _FakeMessage(b"{invalid")
+    good_msg = _FakeMessage(json.dumps(valid).encode())
+
+    fake_consumer = _FakeConsumer([[bad_msg, good_msg]])
+    cl_consumer = CommitLogConsumer(fake_consumer, topic="commit", group_id="g1")
+
+    received: list[list[tuple[str, int, str, dict[str, int]]]] = []
+
+    async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
+        received.append(records)
+
+    await cl_consumer.consume(handler)
+
+    assert received == [[valid]]
+    assert metrics.commit_invalid_total._value.get() == 1

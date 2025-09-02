@@ -1,18 +1,5 @@
 from __future__ import annotations
 
-"""Lightweight Schema Registry client (pluggable backend).
-
-This module provides a minimal interface for registering and resolving schema
-IDs for subjects (topics or logical message types). It also exposes a simple
-compatibility check that can be tailored to specific encoding formats.
-
-Environment variables:
-- QMTL_SCHEMA_REGISTRY_URL: Base URL for an external registry (optional).
-
-Default implementation stores schemas in-memory; production deployments can
-provide a drop-in client that talks to Confluent/Redpanda registries.
-"""
-
 from dataclasses import dataclass
 from typing import Dict, Optional
 import json
@@ -23,7 +10,7 @@ import os
 class Schema:
     subject: str
     id: int
-    schema: str  # raw schema definition (JSON or .proto string)
+    schema: str
     version: int
 
 
@@ -52,14 +39,6 @@ class SchemaRegistryClient:
 
     @staticmethod
     def is_backward_compatible(old_schema: str, new_schema: str) -> bool:
-        """Naive compatibility check for JSON schemas.
-
-        Strategy:
-        - Treat both inputs as JSON objects if possible; ensure all keys in
-          ``old_schema`` exist in ``new_schema`` (subset check). For non-JSON
-          payloads (e.g., .proto strings), return True (caller should validate
-          separately or plug-in a stronger checker).
-        """
         try:
             old = json.loads(old_schema)
             new = json.loads(new_schema)
@@ -71,4 +50,3 @@ class SchemaRegistryClient:
 
 
 __all__ = ["SchemaRegistryClient", "Schema"]
-

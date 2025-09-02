@@ -36,6 +36,12 @@ commit_duplicate_total = Counter(
     registry=global_registry,
 )
 
+commit_invalid_total = Counter(
+    "commit_invalid_total",
+    "Total number of invalid commit-log records detected",
+    registry=global_registry,
+)
+
 owner_reassign_total = Counter(
     "owner_reassign_total",
     "Total number of lease owner changes mid-bucket",
@@ -357,6 +363,8 @@ def reset_metrics() -> None:
     lost_requests_total._val = 0  # type: ignore[attr-defined]
     commit_duplicate_total._value.set(0)  # type: ignore[attr-defined]
     commit_duplicate_total._val = 0  # type: ignore[attr-defined]
+    commit_invalid_total._value.set(0)  # type: ignore[attr-defined]
+    commit_invalid_total._val = 0  # type: ignore[attr-defined]
     owner_reassign_total._value.set(0)  # type: ignore[attr-defined]
     owner_reassign_total._val = 0  # type: ignore[attr-defined]
     gateway_sentinel_traffic_ratio.clear()
