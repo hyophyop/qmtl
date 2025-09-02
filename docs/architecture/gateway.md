@@ -72,7 +72,7 @@ Note: WorldService and ControlBus are omitted in this decomposition for brevity.
 
 ---
 
-## S2 · API Contract (**OpenAPI 3.1 excerpt**)
+## S2 · API Contract (**OpenAPI 3.1 excerpt**)
 
 ```yaml
 paths:
@@ -153,6 +153,19 @@ Authorization: Bearer <jwt>
 |  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid    |
 
 ---
+
+## S3 · Exactly‑Once Execution (Node×Interval×Bucket)
+
+This section summarizes the once‑and‑only‑once layer required by issue #544.
+
+- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka‑based coordination.
+- Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is `(node_id, bucket_ts, input_window_hash, payload)`.
+- Message key: The Kafka message key is built as `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"` ensuring compaction on a stable prefix while preserving uniqueness per input window.
+- Deduplication: Downstream consumers deduplicate on the triple `(node_id, bucket_ts, input_window_hash)` and increment `commit_duplicate_total` when duplicates are observed.
+- Owner handoff metric: Gateway increments `owner_reassign_total` when a different worker takes ownership of the same execution key mid‑bucket (best‑effort reporting).
+
+Acceptance tests cover: (a) two workers competing for the same key yield exactly one commit with zero duplicates, and (b) owner takeover increments `owner_reassign_total` once.
+
 
 ## S3 · Deterministic FIFO & Idempotency
 

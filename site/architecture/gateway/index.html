@@ -1,0 +1,2104 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+        <meta name="author" content="QMTL Team">
+      
+      
+      
+        <link rel="prev" href="../dag-manager/">
+      
+      
+        <link rel="next" href="../worldservice/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.18">
+    
+    
+      
+        <title>QMTL Gateway — Comprehensive Technical Specification - QMTL Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.7e37652d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#qmtl-gateway-comprehensive-technical-specification" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="QMTL Documentation" class="md-header__button md-logo" aria-label="QMTL Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            QMTL Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              QMTL Gateway — Comprehensive Technical Specification
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="QMTL Documentation" class="md-nav__button md-logo" aria-label="QMTL Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    QMTL Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../MAINTENANCE_SCHEDULE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Maintenance Schedule
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture & Ownership
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Glossary
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dag-manager/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DAG Manager
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Gateway
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Gateway
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      관련 문서
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s0-system-context-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      S0 · System Context &amp; Goals
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S0 · System Context &amp; Goals">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nongoals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Non‑Goals
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s1-functional-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      S1 · Functional Decomposition
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s2-api-contract-openapi-31-excerpt" class="md-nav__link">
+    <span class="md-ellipsis">
+      S2 · API Contract (OpenAPI 3.1 excerpt)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s3-exactlyonce-execution-nodeintervalbucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3 · Exactly‑Once Execution (Node×Interval×Bucket)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s3-deterministic-fifo-idempotency" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3 · Deterministic FIFO &amp; Idempotency
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S3 · Deterministic FIFO &amp; Idempotency">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#s4-architecture-alignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      S4 · Architecture Alignment
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s5-reliability-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      S5 · Reliability Checklist
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gateway-cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Gateway CLI Options
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s4-ownership-commitlog-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      S4 · Ownership &amp; Commit‑Log Design
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s6-worlds-proxy-event-stream-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      S6 · Worlds Proxy &amp; Event Stream (New)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S6 · Worlds Proxy &amp; Event Stream (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#worlds-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Worlds Proxy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-stream-descriptor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Event Stream Descriptor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#legacy-queue-watch-http-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      Legacy Queue Watch &amp; HTTP Fallback
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#degrade-failsafe-policy-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Degrade &amp; Fail‑Safe Policy (Summary)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../worldservice/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    World Service
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../controlbus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    ControlBus
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lean_brokerage_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lean Brokerage Model
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/brokerage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brokerage API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../implementation_todos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Implementation TODOs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/sdk_tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SDK Tutorial
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/strategy_workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Strategy Workflow
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Operations
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Operations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/backfill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backfill
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/canary_rollout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Canary Rollout
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/e2e_testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    E2E Testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Monitoring
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/activation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    World Activation Runbook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/risk_management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Risk Management
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/timing_controls/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Timing Controls
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Release
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Schemas
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Templates
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api_world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    World API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/enhanced_validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Enhanced Validation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/backtest_validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backtest Validation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/lean_like_features/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lean-like Features
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/brokerage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brokerage API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/_inventory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Inventory
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    World
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            World
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../world/world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Spec
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../world/realm_rename_eval/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Realm Terminology Evaluation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../archive/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Archive
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tags
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../templates/template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Template
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      관련 문서
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s0-system-context-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      S0 · System Context &amp; Goals
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S0 · System Context &amp; Goals">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nongoals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Non‑Goals
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s1-functional-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      S1 · Functional Decomposition
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s2-api-contract-openapi-31-excerpt" class="md-nav__link">
+    <span class="md-ellipsis">
+      S2 · API Contract (OpenAPI 3.1 excerpt)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s3-exactlyonce-execution-nodeintervalbucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3 · Exactly‑Once Execution (Node×Interval×Bucket)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s3-deterministic-fifo-idempotency" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3 · Deterministic FIFO &amp; Idempotency
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S3 · Deterministic FIFO &amp; Idempotency">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#s4-architecture-alignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      S4 · Architecture Alignment
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s5-reliability-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      S5 · Reliability Checklist
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gateway-cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Gateway CLI Options
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s4-ownership-commitlog-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      S4 · Ownership &amp; Commit‑Log Design
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#s6-worlds-proxy-event-stream-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      S6 · Worlds Proxy &amp; Event Stream (New)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="S6 · Worlds Proxy &amp; Event Stream (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#worlds-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Worlds Proxy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-stream-descriptor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Event Stream Descriptor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#legacy-queue-watch-http-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      Legacy Queue Watch &amp; HTTP Fallback
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#degrade-failsafe-policy-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Degrade &amp; Fail‑Safe Policy (Summary)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<p><a href="/">Home</a> / <a href="/architecture">architecture</a> / <a href="/architecture/gateway">gateway</a>
+<strong>Related:</strong> <a href="../">Overview</a>, <a href="../architecture/">Architecture &amp; Ownership</a>, <a href="../glossary/">Glossary</a>, <a href="../dag-manager/">DAG Manager</a>, <a href="./">Gateway</a>, <a href="../worldservice/">World Service</a>, <a href="../controlbus/">ControlBus</a>, <a href="../lean_brokerage_model/">Lean Brokerage Model</a>, <a href="../../reference/api/brokerage/">Brokerage API</a>, <a href="../implementation_todos/">Implementation TODOs</a></p>
+<h1 id="qmtl-gateway-comprehensive-technical-specification">QMTL Gateway — Comprehensive Technical Specification</h1>
+<p><em>Research‑Driven Draft v1.2 — 2025‑06‑10</em></p>
+<h2 id="_1">관련 문서</h2>
+<ul>
+<li><a href="../">Architecture Overview</a></li>
+<li><a href="../architecture/">QMTL Architecture</a></li>
+<li><a href="../dag-manager/">DAG Manager</a></li>
+<li><a href="../worldservice/">WorldService</a></li>
+<li><a href="../controlbus/">ControlBus</a></li>
+<li><a href="../lean_brokerage_model/">Lean Brokerage Model</a></li>
+</ul>
+<blockquote>
+<p>This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
+Legend: <strong>Sx</strong> = Section, <strong>Rx</strong> = Requirement, <strong>Ax</strong> = Assumption.</p>
+</blockquote>
+<hr />
+<h2 id="s0-system-context-goals">S0 · System Context &amp; Goals</h2>
+<p>Gateway sits at the <strong>operational boundary</strong> between <em>ephemeral</em> strategy submissions and the <em>persistent</em> graph state curated by DAG Manager. Its design objectives are:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Goal</th>
+<th>Metric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> G‑01 </td>
+<td>Diff submission queuing <strong>loss‑free</strong> under 1 k req/s burst</td>
+<td><code>lost_requests_total = 0</code></td>
+</tr>
+<tr>
+<td> G‑02 </td>
+<td><strong>≤ 150 ms</strong> p95 end‑to‑end latency (SDK POST → Warm‑up ack)</td>
+<td><code>gateway_e2e_latency_p95</code></td>
+</tr>
+<tr>
+<td> G‑03 </td>
+<td>Zero duplicated Kafka topics across concurrent submissions</td>
+<td>invariants §S3</td>
+</tr>
+<tr>
+<td> G‑04 </td>
+<td>Line‑rate WebSocket streaming of state updates (≥ 500 msg/s)</td>
+<td>WS load test</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ax‑1</strong> SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
+<strong>Ax‑2</strong> Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.</p>
+<h3 id="nongoals">Non‑Goals</h3>
+<ul>
+<li>Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.</li>
+<li>Gateway does not manage brokerage execution; it only mediates requests and relays control events.</li>
+</ul>
+<hr />
+<h2 id="s1-functional-decomposition">S1 · Functional Decomposition</h2>
+<pre><code class="language-mermaid">graph LR
+    subgraph Client Tier
+       SDK[&quot;Strategy SDK&quot;]
+    end
+    subgraph Gateway Tier
+       Ingest[/REST Ingest/]
+       FIFO[&quot;FIFO Queue (Redis)&quot;]
+       Worker[&quot;Async Worker&quot;]
+       FSM[&quot;Redis FSM Store&quot;]
+       WS[&quot;WebSocket Hub&quot;]
+    end
+    subgraph Core Tier
+    DAGM[&quot;DAG Manager gRPC&quot;]
+    KAFKA[(Kafka/Redpanda)]
+end
+SDK --&gt; Ingest --&gt; FIFO --&gt; Worker --&gt; DAGM
+DAGM --&gt; Worker --&gt; FSM --&gt; WS --&gt; SDK
+Worker --&gt;|topic map| SDK
+DAGM-.-&gt;|queue events|Ingest
+</code></pre>
+<p>Note: WorldService and ControlBus are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to ControlBus and proxies WorldService APIs.</p>
+<hr />
+<h2 id="s2-api-contract-openapi-31-excerpt">S2 · API Contract (<strong>OpenAPI 3.1 excerpt</strong>)</h2>
+<pre><code class="language-yaml">paths:
+  /strategies:
+    post:
+      summary: Submit local DAG for execution
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StrategySubmit' }
+      responses:
+        '202': { $ref: '#/components/responses/Ack202' }
+  /strategies/{id}/status:
+    get:
+      parameters:
+        - in: path
+          name: id
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Status200' }
+  /queues/by_tag:
+    get:
+      summary: Fetch queues matching tags and interval
+      parameters:
+        - in: query
+          name: tags
+          schema: { type: string }
+        - in: query
+          name: interval
+          schema: { type: integer }
+        - in: query
+          name: match_mode
+          schema: { type: string, enum: [any, all] }
+          description: |
+            Preferred tag matching mode. ``match`` is accepted as a deprecated alias
+            for backwards compatibility.
+      responses:
+        '200':
+          description: Queue list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queues:
+                    type: array
+                    items: { type: string }
+</code></pre>
+<p><code>match_mode</code> should be used by new clients. <code>match</code> remains available for
+older integrations.</p>
+<p><strong>Example Request (compressed 32 KiB DAG JSON omitted)</strong></p>
+<pre><code class="language-http">POST /strategies HTTP/1.1
+Authorization: Bearer &lt;jwt&gt;
+Content‑Encoding: gzip
+Content‑Type: application/json
+{
+  &quot;dag_json&quot;: &quot;&lt;base64&gt;&quot;,
+  &quot;meta&quot;: { &quot;user&quot;: &quot;quant.alice&quot;, &quot;desc&quot;: &quot;BTC scalper&quot; },
+  &quot;run_type&quot;: &quot;dry-run&quot;
+}
+</code></pre>
+<p><strong>Example Queue Lookup</strong></p>
+<pre><code class="language-http">GET /queues/by_tag?tags=t1,t2&amp;interval=60&amp;match_mode=any HTTP/1.1
+Authorization: Bearer &lt;jwt&gt;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>HTTP Status</th>
+<th>Meaning</th>
+<th>Typical Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> 202 Accepted </td>
+<td> Ingest successful, StrategyID returned</td>
+<td>Nominal</td>
+</tr>
+<tr>
+<td> 400 Bad Request </td>
+<td> CRC mismatch between SDK and Gateway</td>
+<td>NodeID CRC failure</td>
+</tr>
+<tr>
+<td> 409 Conflict </td>
+<td> Duplicate StrategyID within TTL</td>
+<td>Same DAG re‑submit</td>
+</tr>
+<tr>
+<td> 422 Unprocessable </td>
+<td> Schema validation failure</td>
+<td>DAG JSON invalid</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="s3-exactlyonce-execution-nodeintervalbucket">S3 · Exactly‑Once Execution (Node×Interval×Bucket)</h2>
+<p>This section summarizes the once‑and‑only‑once layer required by issue #544.</p>
+<ul>
+<li>Ownership: For each execution key <code>(node_id, interval, bucket_ts)</code>, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres <code>pg_try_advisory_lock</code>) with optional Kafka‑based coordination.</li>
+<li>Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is <code>(node_id, bucket_ts, input_window_hash, payload)</code>.</li>
+<li>Message key: The Kafka message key is built as <code>"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"</code> ensuring compaction on a stable prefix while preserving uniqueness per input window.</li>
+<li>Deduplication: Downstream consumers deduplicate on the triple <code>(node_id, bucket_ts, input_window_hash)</code> and increment <code>commit_duplicate_total</code> when duplicates are observed.</li>
+<li>Owner handoff metric: Gateway increments <code>owner_reassign_total</code> when a different worker takes ownership of the same execution key mid‑bucket (best‑effort reporting).</li>
+</ul>
+<p>Acceptance tests cover: (a) two workers competing for the same key yield exactly one commit with zero duplicates, and (b) owner takeover increments <code>owner_reassign_total</code> once.</p>
+<h2 id="s3-deterministic-fifo-idempotency">S3 · Deterministic FIFO &amp; Idempotency</h2>
+<p><strong>Invariant R‑3.1</strong> At most one Worker may pop a given StrategyID. Implemented by:
+<code>SETNX("lock:{id}", worker_id, "NX", "PX", 60000)</code></p>
+<h3 id="s4-architecture-alignment">S4 · Architecture Alignment</h3>
+<p>The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed from <code>(node_type, code_hash, config_hash, schema_hash)</code> using SHA-256, falling back to SHA-3 when a collision is detected. Gateway must generate the same IDs before calling the DiffService.</p>
+<p>Immediately after ingest, Gateway inserts a <code>VersionSentinel</code> node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the <code>insert_sentinel</code> configuration field; it may be disabled with the <code>--no-sentinel</code> CLI flag.</p>
+<p>Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).</p>
+<p>When resolving <code>TagQueryNode</code> dependencies, the Runner's <strong>TagQueryManager</strong>
+invokes <code>resolve_tags()</code> which issues a <code>/queues/by_tag</code> request. Gateway
+consults DAG Manager for queues matching <code>(tags, interval)</code> and returns the list
+so that TagQueryNode instances remain network‑agnostic and only nodes lacking
+upstream queues execute locally.</p>
+<p>Gateway also listens (via ControlBus) for <code>sentinel_weight</code> CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge <code>gateway_sentinel_traffic_ratio{version="&lt;id&gt;"}</code>.</p>
+<h3 id="s5-reliability-checklist">S5 · Reliability Checklist</h3>
+<ul>
+<li><strong>NodeID CRC 파이프라인</strong> – SDK가 전송한 <code>node_id</code>와 Gateway가 재계산한 값이
+  diff 요청 및 응답의 <code>crc32</code> 필드로 상호 검증된다. CRC 불일치가 발생하면 HTTP 400으로 반환된다.</li>
+<li><strong>TagQueryNode 런타임 확장</strong> – Gateway가 새 <code>(tags, interval)</code> 큐를 발견하면
+  <code>tagquery.upsert</code> CloudEvent를 발행하고 Runner의 <strong>TagQueryManager</strong>가 이를
+  수신해 노드 버퍼를 자동 초기화한다.</li>
+<li><strong>Local DAG Fallback Queue</strong> – DAG Manager가 응답하지 않을 때 제출된 전략 ID는
+  메모리에 임시 저장되며 서비스가 복구되면 Redis 큐로 플러시된다.</li>
+<li><strong>Sentinel Traffic Δ 확인 루프</strong> – <code>traffic_weight</code> 변경 후 Gateway 라우팅
+  테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 <code>sentinel_skew_seconds</code>
+  지표로 측정한다.</li>
+</ul>
+<h3 id="gateway-cli-options">Gateway CLI Options</h3>
+<p>Run the Gateway service. The <code>--config</code> flag is optional:</p>
+<pre><code class="language-bash"># start with built-in defaults
+qmtl gw
+
+# specify a configuration file
+qmtl gw --config qmtl/examples/qmtl.yml
+</code></pre>
+<p>When provided, the command reads the <code>gateway</code> section of
+<code>qmtl/examples/qmtl.yml</code> for all server parameters. Omitting <code>--config</code>
+starts the service with built-in defaults that use SQLite and an in-memory
+Redis substitute. The sample file illustrates how to set <code>redis_dsn</code> to point
+to a real cluster. If <code>redis_dsn</code> is omitted, Gateway automatically uses the
+in-memory substitute. See the file for a fully annotated configuration template.
+Setting <code>insert_sentinel: false</code> disables automatic <code>VersionSentinel</code> insertion.</p>
+<p>Available flags:</p>
+<ul>
+<li><code>--config</code> – optional path to configuration file.</li>
+<li><code>--no-sentinel</code> – disable automatic <code>VersionSentinel</code> insertion.</li>
+<li><code>--allow-live</code> – disable the live trading guard requiring <code>X-Allow-Live: true</code>.</li>
+</ul>
+<hr />
+<h2 id="s4-ownership-commitlog-design">S4 · Ownership &amp; Commit‑Log Design</h2>
+<ul>
+<li><strong>Ownership</strong> — Gateway는 제출 요청 큐(FIFO)와 전략별 FSM만을 관리하며, 그래프나 큐, 월드 상태의 단일 소스는 아니다. Diff 이후 생성되는 토픽과 그 생명주기는 DAG Manager가 소유하고, 월드 정책과 활성 상태는 WorldService가 책임진다.</li>
+<li><strong>Commit Log</strong> — 모든 전략 제출은 처리 전에 <code>gateway.ingest</code> 토픽(Redpanda/Kafka)에 append된다. Gateway는 오프셋을 Redis에 저장해 재시도 시점을 복원하며, DAG Manager와 WorldService가 발행하는 ControlBus 이벤트를 구독해 SDK로 중계한다. 이러한 로그 기반 경계는 장애 시 재생(replay)과 감사를 가능하게 한다.</li>
+</ul>
+<hr />
+<h2 id="s6-worlds-proxy-event-stream-new">S6 · Worlds Proxy &amp; Event Stream (New)</h2>
+<p>Gateway remains the single public boundary for SDKs. It proxies WorldService endpoints and provides an opaque event stream descriptor to SDKs; it does not compute world policy itself.</p>
+<h3 id="worlds-proxy">Worlds Proxy</h3>
+<ul>
+<li>Proxied endpoints → WorldService:</li>
+<li><code>GET /worlds/{id}/decide</code> → DecisionEnvelope (cached with TTL/etag)</li>
+<li><code>GET /worlds/{id}/activation</code> → ActivationEnvelope (fail‑safe: inactive on stale)</li>
+<li><code>POST /worlds/{id}/evaluate</code> / <code>POST /worlds/{id}/apply</code> (operator‑only)</li>
+<li>Caching &amp; TTLs:</li>
+<li>Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (offline/backtest)</li>
+<li>Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include <code>state_hash</code> for quick divergence checks</li>
+<li>Circuit breakers &amp; budgets: independent timeouts/retries for WorldService and DAG Manager backends (defaults: WS 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)</li>
+<li><code>/status</code> exposes circuit breaker states for dependencies, including WorldService.</li>
+</ul>
+<h3 id="event-stream-descriptor">Event Stream Descriptor</h3>
+<p>SDKs obtain an opaque WebSocket descriptor from Gateway and subscribe to real‑time control updates without learning about ControlBus.</p>
+<pre><code>POST /events/subscribe
+{ &quot;world_id&quot;: &quot;crypto_mom_1h&quot;, &quot;strategy_id&quot;: &quot;...&quot;, &quot;topics&quot;: [&quot;activation&quot;, &quot;queues&quot;] }
+→ { &quot;stream_url&quot;: &quot;wss://gateway/ws/evt?ticket=...&quot;, &quot;token&quot;: &quot;&lt;jwt&gt;&quot;, &quot;topics&quot;: [&quot;activation&quot;], &quot;expires_at&quot;: &quot;...&quot; }
+</code></pre>
+<ul>
+<li>Gateway subscribes to internal ControlBus and relays events to SDK over the descriptor URL.</li>
+<li>Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via <code>etag</code>/<code>run_id</code>. First message per topic SHOULD be a full snapshot or carry a <code>state_hash</code>.</li>
+</ul>
+<p>Token (JWT) claims (delegated WS or future use):
+- <code>aud</code>: <code>controlbus</code>
+- <code>sub</code>: user/service identity
+- <code>world_id</code>, <code>strategy_id</code>, <code>topics</code>: subscription scope
+- <code>jti</code>, <code>iat</code>, <code>exp</code>: idempotency and keying. Key ID (<code>kid</code>) is conveyed in the JWT header.</p>
+<h3 id="legacy-queue-watch-http-fallback">Legacy Queue Watch &amp; HTTP Fallback</h3>
+<p><code>GET /queues/watch</code> remains for backward compatibility but is marked as deprecated.
+Responses include a <code>Deprecation</code> header pointing callers to <code>POST /events/subscribe</code>.
+SDKs should use the event stream when available and periodically reconcile via
+<code>GET /queues/by_tag</code> if the stream drops or diverges.</p>
+<h3 id="degrade-failsafe-policy-summary">Degrade &amp; Fail‑Safe Policy (Summary)</h3>
+<ul>
+<li>WorldService unavailable:</li>
+<li><code>/decide</code> → cached DecisionEnvelope if fresh; else safe default (offline/backtest)</li>
+<li><code>/activation</code> → inactive</li>
+<li>Event stream unavailable:</li>
+<li>Reconnect with provided <code>fallback_url</code>; SDK may periodically reconcile via HTTP</li>
+<li>Live guard: Gateway rejects live trading unless consent is given.</li>
+<li>When enabled, callers must include header <code>X-Allow-Live: true</code>.</li>
+<li>Starting Gateway with <code>--allow-live</code> disables the guard for testing.</li>
+<li>Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.</li>
+</ul>
+<p>See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).</p>
+<p><strong>Related:</strong> <a href="../">Overview</a>, <a href="../architecture/">Architecture &amp; Ownership</a>, <a href="../glossary/">Glossary</a>, <a href="../dag-manager/">DAG Manager</a>, <a href="./">Gateway</a>, <a href="../worldservice/">World Service</a>, <a href="../controlbus/">ControlBus</a>, <a href="../lean_brokerage_model/">Lean Brokerage Model</a>, <a href="../../reference/api/brokerage/">Brokerage API</a>, <a href="../implementation_todos/">Implementation TODOs</a></p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.top", "navigation.expand", "navigation.path"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.92b07e13.min.js"></script>
+      
+    
+  </body>
+</html>
