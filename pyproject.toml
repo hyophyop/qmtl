@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-httpx",
     "opentelemetry-instrumentation-grpc",
+    "cachetools",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +34,6 @@ dev = [
     "fakeredis",
     "grpcio-tools>=1.74.0",
     "pyarrow",
-    "xstate",
     "mkdocs-material",
     "mkdocs-macros-plugin",
     "mkdocs-breadcrumbs-plugin",
@@ -44,6 +44,7 @@ io = ["pandas"]
 
 [project.scripts]
 qmtl = "qmtl.cli:main"
+qmtl-commitlog-consumer = "qmtl.gateway.commit_log_cli:main"
 
 [build-system]
 requires = ["setuptools"]

@@ -37,7 +37,18 @@ last_modified: 2025-08-21
 ## 0-A. Ownership & Commit-Log Design
 
 - **Ownership** — DAG Manager는 ComputeNode와 Queue 메타데이터의 단일 소스로서 토픽 생성·버전 롤아웃·GC를 전담한다. Gateway는 제출 파이프라인을 조정하지만 그래프 상태를 소유하지 않으며, WorldService는 월드·결정 상태를 유지한다.
-- **Commit Log** — 모든 큐는 Redpanda/Kafka의 append-only 토픽으로 구현되며, DAG Manager는 `QueueUpdated` 등 제어 이벤트를 ControlBus 토픽에 발행한다. 토픽 생성·삭제 이력도 관리 로그에 기록되어 장애 시점 복원과 감사(audit)을 지원한다.
+- **Commit Log** — 모든 큐는 Redpanda/Kafka의 append-only 토픽으로 구현되며, DAG Manager는 `QueueUpdated` 등 제어 이벤트를 ControlBus 토픽에 발행한다. 토픽 생성·삭제 이력도 관리 로그에 기록되어 장애 시점 복원과 감사(audit)을 지원한다.
+
+### 0-A.1 Commit-Log Message Keys and Partitioning
+
+- Partitioning key derives from `partition_key(node_id, interval, bucket_ts)`; the full Kafka message key used by Gateway is:
+
+  `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"`
+
+  This allows log compaction across all input windows for the same execution key while keeping per‑window uniqueness.
+
+- Consumers must deduplicate based on `(node_id, bucket_ts, input_window_hash)`.
+
 
 ---
 
