@@ -420,6 +420,37 @@ else:
         registry=global_registry,
     )
 
+# ---------------------------------------------------------------------------
+# Warmup SLO metrics
+if "warmup_ready_nodes_total" in global_registry._names_to_collectors:
+    warmup_ready_nodes_total = global_registry._names_to_collectors[
+        "warmup_ready_nodes_total"
+    ]
+else:
+    warmup_ready_nodes_total = Counter(
+        "warmup_ready_nodes_total",
+        "Total number of nodes that completed warmup",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+if "warmup_ready_duration_ms" in global_registry._names_to_collectors:
+    warmup_ready_duration_ms = global_registry._names_to_collectors[
+        "warmup_ready_duration_ms"
+    ]
+else:
+    warmup_ready_duration_ms = Histogram(
+        "warmup_ready_duration_ms",
+        "Duration from node creation to ready state in milliseconds",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
+    n = str(node_id)
+    warmup_ready_nodes_total.labels(node_id=n).inc()
+    warmup_ready_duration_ms.labels(node_id=n).observe(duration_ms)
+
 if "snapshot_bytes_total" in global_registry._names_to_collectors:
     snapshot_bytes_total = global_registry._names_to_collectors[
         "snapshot_bytes_total"

@@ -11,6 +11,7 @@ from qmtl.sdk.node import MatchMode
 
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
+from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +133,16 @@ class ControlBusConsumer:
         headers = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in (message.headers or [])}
         etag = headers.get("etag", "")
         run_id = headers.get("run_id", "")
-        try:
-            data = json.loads(message.value.decode()) if isinstance(message.value, (bytes, bytearray)) else json.loads(message.value)
-        except Exception:  # pragma: no cover - malformed message
-            data = {}
+        data: dict[str, Any]
+        content_type = headers.get("content_type")
+        if content_type == PROTO_CONTENT_TYPE:
+            # Placeholder proto path: decode via helper (still JSON today)
+            data = decode_cb(message.value if isinstance(message.value, (bytes, bytearray)) else str(message.value).encode())
+        else:
+            try:
+                data = json.loads(message.value.decode()) if isinstance(message.value, (bytes, bytearray)) else json.loads(message.value)
+            except Exception:  # pragma: no cover - malformed message
+                data = {}
         timestamp_ms = getattr(message, "timestamp", None)
         return ControlBusMessage(
             topic=message.topic,

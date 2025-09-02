@@ -13,6 +13,7 @@ from opentelemetry import trace
 import numpy as np
 import xarray as xr
 import httpx
+import time
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
@@ -472,6 +473,7 @@ class Node:
         else:
             self.cache = NodeCache(period_val or 0)
         self.pre_warmup = True
+        self._warmup_started_at = time.perf_counter()
         # Event-time controls
         self.allowed_lateness: int = int(allowed_lateness)
         self.on_late: str = on_late
@@ -566,6 +568,11 @@ class Node:
 
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
+            try:
+                duration_ms = (time.perf_counter() - self._warmup_started_at) * 1000.0
+                sdk_metrics.observe_warmup_ready(self.node_id, duration_ms)
+            except Exception:
+                pass
 
         missing = self.cache.missing_flags().get(upstream_id, {}).get(interval, False)
         if missing:
