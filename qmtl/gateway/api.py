@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import secrets
-from contextlib import asynccontextmanager
-from typing import Optional
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from typing import Optional, Callable, Awaitable, Any
 
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Response
@@ -28,6 +29,8 @@ from .strategy_manager import StrategyManager
 from .watch import QueueWatchHub
 from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
+from .commit_log_consumer import CommitLogConsumer
+from .commit_log import CommitLogWriter
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -40,6 +43,11 @@ def create_app(
     watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
     controlbus_consumer: Optional[ControlBusConsumer] = None,
+    commit_log_consumer: Optional[CommitLogConsumer] = None,
+    commit_log_writer: Optional[CommitLogWriter] = None,
+    commit_log_handler: Optional[
+        Callable[[list[tuple[str, int, str, Any]]], Awaitable[None]]
+    ] = None,
     world_client: Optional[WorldServiceClient] = None,
     event_config: EventDescriptorConfig | None = None,
     *,
@@ -78,6 +86,9 @@ def create_app(
     watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
+    commit_log_consumer_local = commit_log_consumer
+    commit_log_writer_local = commit_log_writer
+    commit_log_handler_local = commit_log_handler
     world_client_local = world_client
     if world_client_local is None and enable_worldservice_proxy and worldservice_url is not None:
         budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
@@ -114,19 +125,43 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        commit_task: asyncio.Task[None] | None = None
         if controlbus_consumer_local:
             if ws_hub_local and controlbus_consumer_local.ws_hub is None:
                 controlbus_consumer_local.ws_hub = ws_hub_local
             await controlbus_consumer_local.start()
+        if commit_log_consumer_local:
+            await commit_log_consumer_local.start()
+            handler = commit_log_handler_local or (
+                lambda records: None
+            )
+            async def _consume_loop() -> None:
+                while True:
+                    await commit_log_consumer_local.consume(
+                        handler, timeout_ms=1000
+                    )
+
+            commit_task = asyncio.create_task(_consume_loop())
         if ws_hub_local:
             await ws_hub_local.start()
         try:
             yield
         finally:
+            if commit_task:
+                commit_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await commit_task
             if ws_hub_local:
                 await ws_hub_local.stop()
             if controlbus_consumer_local:
                 await controlbus_consumer_local.stop()
+            if commit_log_consumer_local:
+                await commit_log_consumer_local.stop()
+            if commit_log_writer_local is not None:
+                try:
+                    await commit_log_writer_local._producer.stop()
+                except Exception:
+                    logger.exception("Failed to close commit-log writer")
             if hasattr(dagmanager, "close"):
                 await dagmanager.close()
             db_obj = getattr(app.state, "database", None)
@@ -160,6 +195,8 @@ def create_app(
     app.state.enforce_live_guard = enforce_live_guard
     app.state.event_config = event_cfg
     app.state.ws_hub = ws_hub_local
+    app.state.commit_log_consumer = commit_log_consumer_local
+    app.state.commit_log_writer = commit_log_writer_local
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):

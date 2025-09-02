@@ -17,6 +17,10 @@ class GatewayConfig:
     controlbus_dsn: Optional[str] = None
     controlbus_topics: list[str] = field(default_factory=list)
     controlbus_group: str = "gateway"
+    commitlog_bootstrap: Optional[str] = None
+    commitlog_topic: Optional[str] = None
+    commitlog_group: str = "gateway-commit"
+    commitlog_transactional_id: str = "gateway-commit-writer"
     worldservice_url: Optional[str] = None
     worldservice_timeout: float = 0.3
     worldservice_retries: int = 2
