@@ -44,6 +44,7 @@ io = ["pandas"]
 
 [project.scripts]
 qmtl = "qmtl.cli:main"
+qmtl-commitlog-consumer = "qmtl.gateway.commit_log_cli:main"
 
 [build-system]
 requires = ["setuptools"]
