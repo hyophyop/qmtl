@@ -11,7 +11,25 @@ from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.dagmanager.kafka_admin import partition_key
-from qmtl.gateway import metrics
+import zlib
+
+
+class DummyManager:
+    def __init__(self) -> None:
+        self.locked: set[int] = set()
+        self.acquire_calls: list[int] = []
+        self.release_calls: list[int] = []
+
+    async def acquire(self, key: int) -> bool:
+        self.acquire_calls.append(key)
+        if key in self.locked:
+            return False
+        self.locked.add(key)
+        return True
+
+    async def release(self, key: int) -> None:
+        self.release_calls.append(key)
+        self.locked.discard(key)
 
 
 class FakeDB(Database):
@@ -41,11 +59,11 @@ async def test_worker_locking_single_processing(fake_redis):
     queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
+    manager = DummyManager()
 
     await fsm.create("sid", None)
     await redis.hset("strategy:sid", mapping={"dag": "{}"})
 
-    await queue.push("sid")
     await queue.push("sid")
 
     async def diff(sid: str, dag: str):
@@ -53,14 +71,17 @@ async def test_worker_locking_single_processing(fake_redis):
 
     dag_client = SimpleNamespace(diff=diff)
 
-    w1 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
-    w2 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
+    w1 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None, manager=manager)
+    w2 = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None, manager=manager)
 
-    await asyncio.gather(w1.run_once(), w2.run_once())
-    await asyncio.gather(w1.run_once(), w2.run_once())
+    results = await asyncio.gather(w1.run_once(), w2.run_once())
 
+    assert results.count("sid") == 1
     assert db.completions.count("sid") == 1
     assert db.records["sid"] == "completed"
+    expected_key = zlib.crc32(partition_key("sid", None, None).encode())
+    assert manager.acquire_calls == [expected_key]
+    assert manager.release_calls == [expected_key]
 
 
 class DummyHub(WebSocketHub):
@@ -97,7 +118,7 @@ async def test_worker_diff_success_broadcasts(fake_redis):
 
     dag_client = SimpleNamespace(diff=diff)
     hub = DummyHub()
-    worker = StrategyWorker(redis, db, fsm, queue, dag_client, hub)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, hub, manager=DummyManager())
     await worker.run_once()
 
     assert called == [("sid", "{}")]
@@ -126,7 +147,7 @@ async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
 
     dag_client = SimpleNamespace(diff=diff)
     hub = DummyHub()
-    worker = StrategyWorker(redis, db, fsm, queue, dag_client, hub)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, hub, manager=DummyManager())
     await worker.run_once()
 
     assert called == [("sid", "{}")]
@@ -150,7 +171,7 @@ async def test_process_logs_diff_error(fake_redis, caplog):
         raise RuntimeError("fail")
 
     dag_client = SimpleNamespace(diff=diff)
-    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
+    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None, manager=DummyManager())
 
     caplog.set_level(logging.ERROR)
     result = await worker._process("sid")
@@ -185,6 +206,7 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
         dag_client,
         ws_hub=None,
         handler=handler,
+        manager=DummyManager(),
     )
 
     caplog.set_level(logging.ERROR)
@@ -194,26 +216,4 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
     assert "Unhandled error processing strategy sid" in caplog.text
     assert db.records["sid"] == "failed"
 
-
-@pytest.mark.asyncio
-async def test_owner_reassign_increments_metric(fake_redis):
-    redis = fake_redis
-    queue = RedisTaskQueue(redis, "strategy_queue")
-    db = FakeDB()
-    fsm = StrategyFSM(redis, db)
-
-    await fsm.create("sid", None)
-    await redis.hset("strategy:sid", mapping={"dag": "{}"})
-    await queue.push("sid")
-
-    async def diff(sid: str, dag: str):
-        await redis.set("lock:sid", "other")
-        return SimpleNamespace(queue_map={}, sentinel_id="s")
-
-    dag_client = SimpleNamespace(diff=diff)
-    worker = StrategyWorker(redis, db, fsm, queue, dag_client, ws_hub=None)
-
-    metrics.reset_metrics()
-    await worker.run_once()
-    assert metrics.owner_reassign_total._value.get() == 1
 

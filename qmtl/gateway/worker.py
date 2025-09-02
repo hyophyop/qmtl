@@ -4,6 +4,7 @@ import uuid
 from typing import Awaitable, Callable, Optional
 
 import logging
+import zlib
 import redis.asyncio as redis
 
 from .database import Database
@@ -12,7 +13,8 @@ from .ws import WebSocketHub
 from .fsm import StrategyFSM
 from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
-from . import metrics as gw_metrics
+from .ownership import OwnershipManager
+from ..dagmanager.kafka_admin import partition_key
 
 
 class StrategyWorker:
@@ -30,6 +32,7 @@ class StrategyWorker:
         handler: Optional[Callable[[str], Awaitable[None]]] = None,
         alert_manager: Optional[AlertManager] = None,
         grpc_fail_threshold: int = 3,
+        manager: Optional[OwnershipManager] = None,
     ) -> None:
         self.redis = redis_client
         self.database = database
@@ -42,6 +45,7 @@ class StrategyWorker:
         self.alerts = alert_manager
         self._grpc_fail_thresh = grpc_fail_threshold
         self._grpc_fail_count = 0
+        self.manager = manager or OwnershipManager(database)
 
     async def healthy(self) -> bool:
         """Return ``True`` if all critical dependencies are reachable."""
@@ -62,9 +66,10 @@ class StrategyWorker:
         return bool(redis_ok) and dag_ok and db_ok
 
     async def _process(self, strategy_id: str) -> bool:
-        lock_key = f"lock:{strategy_id}"
-        locked = await self.redis.set(lock_key, self.worker_id, nx=True, px=60000)
-        if not locked:
+        key_str = partition_key(strategy_id, None, None)
+        key = zlib.crc32(key_str.encode())
+        acquired = await self.manager.acquire(key)
+        if not acquired:
             return False
         try:
             state = await self.fsm.transition(strategy_id, "PROCESS")
@@ -109,17 +114,7 @@ class StrategyWorker:
                 await self.ws_hub.send_progress(strategy_id, state)
             return False
         finally:
-            current_owner = await self.redis.get(lock_key)
-            if isinstance(current_owner, bytes):
-                current_owner = current_owner.decode()
-            if current_owner != self.worker_id:
-                gw_metrics.owner_reassign_total.inc()
-                gw_metrics.owner_reassign_total._val = (
-                    gw_metrics.owner_reassign_total._value.get()
-                )  # type: ignore[attr-defined]
-            # The lock expires automatically; explicit deletion would allow
-            # another worker to reprocess the same strategy immediately.
-            pass
+            await self.manager.release(key)
 
     async def run_once(self) -> Optional[str]:
         """Pop and process a single strategy."""
