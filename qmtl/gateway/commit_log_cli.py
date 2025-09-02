@@ -5,6 +5,8 @@ import asyncio
 import logging
 import signal
 from typing import Any
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 from . import metrics as gw_metrics
 from .commit_log_consumer import CommitLogConsumer
@@ -18,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--topic", required=True, help="Commit log topic")
     p.add_argument("--group", required=True, help="Consumer group id")
     p.add_argument("--metrics-port", type=int, default=8000, help="Prometheus metrics port")
+    p.add_argument("--health-port", type=int, default=0, help="Optional health endpoint port (0=disabled)")
     p.add_argument("--poll-timeout-ms", type=int, default=500, help="Poll timeout in milliseconds")
     return p
 
@@ -65,13 +68,38 @@ async def run(bootstrap: str, topic: str, group: str, poll_timeout_ms: int) -> N
             logger.exception("Failed to stop consumer")
 
 
+def _start_health_server(port: int) -> None:
+    """Start a minimal health probe server in a background thread."""
+    class Handler(BaseHTTPRequestHandler):  # pragma: no cover - trivial
+        def do_GET(self):
+            if self.path in ("/health", "/healthz", "/readyz"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, fmt: str, *args) -> None:  # noqa: D401
+            return
+
+    def _run():  # pragma: no cover - runtime
+        httpd = HTTPServer(("0.0.0.0", port), Handler)
+        httpd.serve_forever()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
     args = build_parser().parse_args(argv)
     gw_metrics.start_metrics_server(port=args.metrics_port)
+    if args.health_port and args.health_port > 0:
+        _start_health_server(args.health_port)
     asyncio.run(run(args.bootstrap, args.topic, args.group, args.poll_timeout_ms))
     return 0
 
 
 __all__ = ["build_parser", "main", "run"]
-

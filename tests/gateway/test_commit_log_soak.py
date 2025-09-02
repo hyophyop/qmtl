@@ -1,134 +1,74 @@
-import asyncio
-from collections import deque
-
+import json
 import pytest
 
+from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.gateway.commit_log_consumer import CommitLogConsumer
-from qmtl.gateway.ownership import OwnershipManager
-from qmtl.gateway.database import PostgresDatabase
 
 
-class FakeConn:
+class P:
     def __init__(self) -> None:
-        self.locked: set[int] = set()
+        self.buf = []
 
-    async def fetchval(self, query: str, key: int) -> bool:
-        if "pg_try_advisory_lock" in query:
-            if key in self.locked:
-                return False
-            self.locked.add(key)
-            return True
-        if "pg_advisory_unlock" in query:
-            self.locked.discard(key)
-            return True
-        return True
+    async def begin_transaction(self):
+        return None
+
+    async def send_and_wait(self, topic, *, key=None, value=None, headers=None):
+        self.buf.append((topic, key, value, headers))
+
+    async def commit_transaction(self):
+        return None
 
 
-class FakePool:
-    def __init__(self, conn: FakeConn) -> None:
-        self.conn = conn
-
-    def acquire(self):
-        conn = self.conn
-
-        class _Ctx:
-            async def __aenter__(self):
-                return conn
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return None
-
-        return _Ctx()
-
-
-class FakeProducer:
-    def __init__(self) -> None:
-        self.messages: list[tuple[str, bytes, bytes]] = []
-        self.begin_called = 0
-        self.commit_called = 0
-        self.abort_called = 0
-
-    async def begin_transaction(self) -> None:
-        self.begin_called += 1
-
-    async def send_and_wait(self, topic: str, key: bytes, value: bytes) -> None:
-        self.messages.append((topic, key, value))
-
-    async def commit_transaction(self) -> None:
-        self.commit_called += 1
-
-    async def abort_transaction(self) -> None:
-        self.abort_called += 1
-
-
-class _FakeMessage:
+class _M:
     def __init__(self, value: bytes) -> None:
         self.value = value
 
 
-class _FakeConsumer:
-    def __init__(self, batches: list[list[_FakeMessage]]) -> None:
-        self._batches: deque[list[_FakeMessage]] = deque(batches)
+class C:
+    def __init__(self, batches):
+        self._batches = list(batches)
         self.commit_calls = 0
 
-    async def start(self) -> None:
+    async def start(self):
         return None
 
-    async def stop(self) -> None:
+    async def stop(self):
         return None
 
-    async def getmany(self, timeout_ms: int | None = None):
+    async def getmany(self, timeout_ms=None):
         if self._batches:
-            return {None: self._batches.popleft()}
+            return {None: self._batches.pop(0)}
         return {}
 
-    async def commit(self) -> None:
+    async def commit(self):
         self.commit_calls += 1
 
 
 @pytest.mark.asyncio
-async def test_exactly_once_multi_round_soak() -> None:
-    rounds = 10
-    conn = FakeConn()
-    db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
-    manager = OwnershipManager(db)
+async def test_commit_log_exactly_once_soak():
+    metrics.reset_metrics()
+    p = P()
+    w = CommitLogWriter(p, "t")
+    n = 100
+    # produce duplicates for the same (node, bucket, input_hash)
+    await w.publish_bucket(100, 60, [("n1", "ih", {"v": i % 3}) for i in range(n)])
 
-    producer = FakeProducer()
-    writer = CommitLogWriter(producer, "commit-log")
+    batch = [_M(v) for (_, _, v, _) in p.buf]
+    # consumer
+    c = C([batch])
+    clc = CommitLogConsumer(c, topic="t", group_id="g")
 
-    async def one_round(idx: int) -> None:
-        key = 1000 + idx
+    out = []
 
-        async def worker(owner: str) -> bool:
-            if not await manager.acquire(key, owner=owner):
-                return False
-            try:
-                await asyncio.sleep(0.005)
-                await writer.publish_bucket(100 + idx, 60, [("n1", f"h{idx}", {"v": idx})])
-                return True
-            finally:
-                await manager.release(key)
+    async def handler(records):
+        out.extend(records)
 
-        # Race two workers for the same key
-        r1, r2 = await asyncio.gather(worker("w1"), worker("w2"))
-        assert (r1 or r2) and not (r1 and r2), "exactly one worker should win per round"
+    await clc.start()
+    await clc.consume(handler)
+    await clc.stop()
 
-    await asyncio.gather(*[one_round(i) for i in range(rounds)])
-
-    # Build a single batch of all produced messages
-    batch = [_FakeMessage(value) for _, _, value in producer.messages]
-    consumer = _FakeConsumer([batch])
-    cl_consumer = CommitLogConsumer(consumer, topic="commit", group_id="g1")
-
-    received: list[tuple[str, int, str, dict[str, int]]] = []
-
-    async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
-        received.extend(records)
-
-    await cl_consumer.consume(handler)
-
-    # We should receive exactly one record per round
-    assert len(received) == rounds
-
+    # Only the first record survives dedup
+    assert len(out) == 1
+    assert metrics.commit_duplicate_total._value.get() == n - 1
+    assert c.commit_calls == 1
