@@ -200,7 +200,12 @@ class Runner:
         for n in strategy.nodes:
             if isinstance(n, StreamInput) and n.interval is not None and n.period:
                 try:
-                    if snap.hydrate(n):
+                    strict = False
+                    try:
+                        strict = getattr(n, "runtime_compat", "loose") == "strict"
+                    except Exception:
+                        strict = False
+                    if snap.hydrate(n, strict_runtime=strict):
                         count += 1
                 except Exception:
                     logger.exception("snapshot hydration failed for %s", n.node_id)

@@ -151,11 +151,16 @@ class NodeCacheArrow:
         sl = self._ensure(u, interval)
         bucket = timestamp - (timestamp % interval)
         prev = self._last_ts.get((u, interval))
-        if prev is not None and prev + interval != bucket:
-            self._missing[(u, interval)] = True
-        else:
+        if prev is None:
             self._missing[(u, interval)] = False
-        self._last_ts[(u, interval)] = bucket
+            self._last_ts[(u, interval)] = bucket
+        else:
+            if bucket < prev:
+                # Late arrival: do not regress last_ts nor set missing
+                self._missing[(u, interval)] = False
+            else:
+                self._missing[(u, interval)] = prev + interval != bucket
+                self._last_ts[(u, interval)] = bucket
         sl.append(bucket, payload)
         filled = self._filled[(u, interval)]
         if filled < self.period:
@@ -207,6 +212,17 @@ class NodeCacheArrow:
             result.setdefault(u, {})[i] = ts
         return result
 
+    def watermark(self, *, allowed_lateness: int = 0) -> int | None:
+        """Return event-time watermark based on last timestamps.
+
+        Watermark is ``min(last_ts) - allowed_lateness`` across all observed
+        ``(upstream_id, interval)`` pairs. Returns ``None`` when empty.
+        """
+        last = [ts for ts in self._last_ts.values() if ts is not None]
+        if not last:
+            return None
+        return int(min(last)) - int(allowed_lateness)
+
     def latest(self, u: str, interval: int) -> tuple[int, Any] | None:
         sl = self._slices.get((u, interval))
         if not sl:
@@ -242,4 +258,3 @@ else:
 
     class _Evictor:  # pragma: no cover - dummy placeholder
         pass
-

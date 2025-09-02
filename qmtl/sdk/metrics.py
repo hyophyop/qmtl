@@ -398,3 +398,88 @@ def reset_metrics() -> None:
     pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
     pretrade_rejection_ratio.set(0.0)
     pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+    # Snapshot metrics reset
+    try:
+        snapshot_write_duration_ms.clear()  # type: ignore[attr-defined]
+        snapshot_bytes_total._value.set(0)  # type: ignore[attr-defined]
+        snapshot_hydration_success_total._value.set(0)  # type: ignore[attr-defined]
+        snapshot_hydration_fallback_total._value.set(0)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------------
+# Snapshot metrics
+if "snapshot_write_duration_ms" in global_registry._names_to_collectors:
+    snapshot_write_duration_ms = global_registry._names_to_collectors[
+        "snapshot_write_duration_ms"
+    ]
+else:
+    snapshot_write_duration_ms = Histogram(
+        "snapshot_write_duration_ms",
+        "Duration of snapshot writes in milliseconds",
+        registry=global_registry,
+    )
+
+# ---------------------------------------------------------------------------
+# Warmup SLO metrics
+if "warmup_ready_nodes_total" in global_registry._names_to_collectors:
+    warmup_ready_nodes_total = global_registry._names_to_collectors[
+        "warmup_ready_nodes_total"
+    ]
+else:
+    warmup_ready_nodes_total = Counter(
+        "warmup_ready_nodes_total",
+        "Total number of nodes that completed warmup",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+if "warmup_ready_duration_ms" in global_registry._names_to_collectors:
+    warmup_ready_duration_ms = global_registry._names_to_collectors[
+        "warmup_ready_duration_ms"
+    ]
+else:
+    warmup_ready_duration_ms = Histogram(
+        "warmup_ready_duration_ms",
+        "Duration from node creation to ready state in milliseconds",
+        ["node_id"],
+        registry=global_registry,
+    )
+
+def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
+    n = str(node_id)
+    warmup_ready_nodes_total.labels(node_id=n).inc()
+    warmup_ready_duration_ms.labels(node_id=n).observe(duration_ms)
+
+if "snapshot_bytes_total" in global_registry._names_to_collectors:
+    snapshot_bytes_total = global_registry._names_to_collectors[
+        "snapshot_bytes_total"
+    ]
+else:
+    snapshot_bytes_total = Counter(
+        "snapshot_bytes_total",
+        "Total bytes written to snapshots",
+        registry=global_registry,
+    )
+
+if "snapshot_hydration_success_total" in global_registry._names_to_collectors:
+    snapshot_hydration_success_total = global_registry._names_to_collectors[
+        "snapshot_hydration_success_total"
+    ]
+else:
+    snapshot_hydration_success_total = Counter(
+        "snapshot_hydration_success_total",
+        "Total number of successful snapshot hydrations",
+        registry=global_registry,
+    )
+
+if "snapshot_hydration_fallback_total" in global_registry._names_to_collectors:
+    snapshot_hydration_fallback_total = global_registry._names_to_collectors[
+        "snapshot_hydration_fallback_total"
+    ]
+else:
+    snapshot_hydration_fallback_total = Counter(
+        "snapshot_hydration_fallback_total",
+        "Total number of hydration fallbacks due to snapshot mismatch",
+        registry=global_registry,
+    )

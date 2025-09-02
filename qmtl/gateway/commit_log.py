@@ -5,6 +5,7 @@ import logging
 from typing import Any, Iterable
 
 from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.sdk.snapshot import runtime_fingerprint
 
 try:
     from aiokafka import AIOKafkaProducer
@@ -50,11 +51,22 @@ class CommitLogWriter:
                 ).encode()
                 pkey = partition_key(node_id, interval, bucket_ts)
                 key = f"{pkey}:{input_window_hash}".encode()
-                await self._producer.send_and_wait(
-                    self._topic,
-                    key=key,
-                    value=value,
-                )
+                # Attach runtime fingerprint in Kafka headers when supported
+                headers = [("rfp", runtime_fingerprint().encode())]
+                try:
+                    await self._producer.send_and_wait(
+                        self._topic,
+                        key=key,
+                        value=value,
+                        headers=headers,
+                    )
+                except TypeError:
+                    # Fallback for producers that don't accept headers in tests
+                    await self._producer.send_and_wait(
+                        self._topic,
+                        key=key,
+                        value=value,
+                    )
             await self._producer.commit_transaction()
         except Exception:  # pragma: no cover - defensive log
             try:

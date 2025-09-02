@@ -13,6 +13,7 @@ from opentelemetry import trace
 import numpy as np
 import xarray as xr
 import httpx
+import time
 
 from .cache_view import CacheView
 from .backfill_state import BackfillState
@@ -111,11 +112,16 @@ class NodeCache:
         buf = self._ensure_buffer(u, interval)
         timestamp_bucket = timestamp - (timestamp % interval)
         prev = self._last_ts.get((u, interval))
-        if prev is not None and prev + interval != timestamp_bucket:
-            self._missing[(u, interval)] = True
-        else:
+        if prev is None:
             self._missing[(u, interval)] = False
-        self._last_ts[(u, interval)] = timestamp_bucket
+            self._last_ts[(u, interval)] = timestamp_bucket
+        else:
+            if timestamp_bucket < prev:
+                # Late arrival: do not regress last_ts nor set missing
+                self._missing[(u, interval)] = False
+            else:
+                self._missing[(u, interval)] = prev + interval != timestamp_bucket
+                self._last_ts[(u, interval)] = timestamp_bucket
         off = self._offset.get((u, interval), 0)
         buf.data[off, 0] = timestamp_bucket
         buf.data[off, 1] = payload
@@ -197,6 +203,19 @@ class NodeCache:
             ordered.append((u, i, items))
         blob = json.dumps(ordered, sort_keys=True, default=repr).encode()
         return hash_utils._sha256(blob)
+
+    # ------------------------------------------------------------------
+    def watermark(self, *, allowed_lateness: int = 0) -> int | None:
+        """Return event-time watermark for the cache.
+
+        Watermark is defined as ``min(last_ts) - allowed_lateness`` across all
+        observed ``(upstream_id, interval)`` pairs. Returns ``None`` if the
+        cache has not seen any data yet.
+        """
+        last = [ts for ts in self._last_ts.values() if ts is not None]
+        if not last:
+            return None
+        return int(min(last)) - int(allowed_lateness)
 
     def as_xarray(self) -> xr.DataArray:
         """Return a read-only ``xarray`` view of the internal tensor.
@@ -406,6 +425,9 @@ class Node:
         config: dict | None = None,
         schema: dict | None = None,
         *,
+        allowed_lateness: int = 0,
+        on_late: str = "recompute",
+        runtime_compat: str = "loose",
         validator=default_validator,
         hash_utils=default_hash_utils,
         event_service: EventRecorderService | None = None,
@@ -451,6 +473,15 @@ class Node:
         else:
             self.cache = NodeCache(period_val or 0)
         self.pre_warmup = True
+        self._warmup_started_at = time.perf_counter()
+        # Event-time controls
+        self.allowed_lateness: int = int(allowed_lateness)
+        self.on_late: str = on_late
+        self._last_watermark: int | None = None
+        # Late event sink for optional side output policy
+        self._late_events: list[tuple[str, int, Any]] = []
+        # Runtime reuse policy surface
+        self.runtime_compat: str = runtime_compat  # "strict" | "loose"
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -537,6 +568,11 @@ class Node:
 
         if self.pre_warmup and self.cache.ready():
             self.pre_warmup = False
+            try:
+                duration_ms = (time.perf_counter() - self._warmup_started_at) * 1000.0
+                sdk_metrics.observe_warmup_ready(self.node_id, duration_ms)
+            except Exception:
+                pass
 
         missing = self.cache.missing_flags().get(upstream_id, {}).get(interval, False)
         if missing:
@@ -545,7 +581,38 @@ class Node:
             if on_missing == "skip":
                 return False
 
-        return not self.pre_warmup and self.compute_fn is not None
+        # Event-time gating & late-data handling
+        try:
+            self._last_watermark = self.cache.watermark(allowed_lateness=self.allowed_lateness)  # type: ignore[attr-defined]
+        except Exception:
+            self._last_watermark = None
+
+        if self.pre_warmup or self.compute_fn is None:
+            return False
+
+        if self._last_watermark is None:
+            return False
+
+        bucket_ts = timestamp - (timestamp % (interval or 1))
+        wm = int(self._last_watermark)
+
+        if bucket_ts < wm:
+            policy = (self.on_late or "recompute").lower()
+            if policy == "ignore":
+                return False
+            if policy == "side_output":
+                self._late_events.append((upstream_id, bucket_ts, payload))
+                return False
+            return True
+
+        if bucket_ts >= wm:
+            return True
+
+        return False
+
+    def watermark(self) -> int | None:
+        """Return the last computed watermark for this node."""
+        return self._last_watermark
 
     def to_dict(self) -> dict:
         return {
@@ -601,6 +668,7 @@ class StreamInput(SourceNode):
         event_service: EventRecorderService | None = None,
         validator=default_validator,
         hash_utils=default_hash_utils,
+        **node_kwargs,
     ) -> None:
         if event_service is None and event_recorder is not None:
             event_service = EventRecorderService(event_recorder)
@@ -614,6 +682,7 @@ class StreamInput(SourceNode):
             validator=validator,
             hash_utils=hash_utils,
             event_service=event_service,
+            **node_kwargs,
         )
         self._history_provider = history_provider
         if history_provider and hasattr(history_provider, "bind_stream"):
@@ -747,4 +816,3 @@ class TagQueryNode(SourceNode):
                     "warmup_reset": warmup_reset,
                 },
             )
-
