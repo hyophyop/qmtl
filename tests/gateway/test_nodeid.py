@@ -8,6 +8,9 @@ from qmtl.common import compute_node_id, crc32_of_list
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
 
+# Ignore unraisable exception warnings produced by event loop cleanup in TestClient
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+
 
 class FakeDB(Database):
     def __init__(self) -> None:
@@ -106,4 +109,3 @@ async def test_sentinel_skip(fake_redis):
         assert not any(
             n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"]
         )
-

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections import deque
 
 import pytest
@@ -8,23 +9,35 @@ from qmtl.gateway.commit_log_consumer import CommitLogConsumer, CommitLogDedupli
 from qmtl.gateway import metrics
 
 
-def test_commit_log_deduplicator_filters_duplicates():
+def test_commit_log_deduplicator_filters_duplicates_and_ttl():
     metrics.reset_metrics()
-    dedup = CommitLogDeduplicator()
-    records = [
-        ("n1", 100, "h1", {"a": 1}),
-        ("n1", 100, "h1", {"a": 2}),  # duplicate
-        ("n1", 100, "h2", {"a": 3}),
-    ]
-    out = list(dedup.filter(records))
-    assert out == [
-        ("n1", 100, "h1", {"a": 1}),
-        ("n1", 100, "h2", {"a": 3}),
-    ]
+    dedup = CommitLogDeduplicator(maxsize=128, ttl=0.01)
+    first = ("n1", 100, "h1", {"a": 1})
+    dup = ("n1", 100, "h1", {"a": 2})
+    third = ("n1", 100, "h2", {"a": 3})
+    out = list(dedup.filter([first, dup, third]))
+    assert out == [first, third]
     # second batch should drop already seen key
     more = list(dedup.filter([( "n1", 100, "h1", {"a": 4})]))
     assert more == []
     assert metrics.commit_duplicate_total._value.get() == 2
+    # after TTL expires the key is processed again
+    time.sleep(0.02)
+    again = list(dedup.filter([( "n1", 100, "h1", {"a": 5})]))
+    assert again == [("n1", 100, "h1", {"a": 5})]
+
+
+def test_commit_log_deduplicator_evicts_old_keys():
+    metrics.reset_metrics()
+    dedup = CommitLogDeduplicator(maxsize=2, ttl=60.0)
+    r1 = ("n1", 100, "h1", {"a": 1})
+    r2 = ("n1", 100, "h2", {"a": 2})
+    r3 = ("n1", 100, "h3", {"a": 3})
+    assert list(dedup.filter([r1])) == [r1]
+    assert list(dedup.filter([r1])) == []
+    assert metrics.commit_duplicate_total._value.get() == 1
+    assert list(dedup.filter([r2, r3])) == [r2, r3]
+    assert list(dedup.filter([r1])) == [r1]
 
 
 @pytest.mark.asyncio

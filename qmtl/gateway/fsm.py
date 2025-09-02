@@ -1,11 +1,66 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict
 
 import logging
 import redis.asyncio as redis
-from xstate.machine import Machine
+
+
+class _State:
+    """Lightweight state wrapper to mirror xstate's `.value` API."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class Machine:
+    """Minimal FSM engine compatible with the usage in this module.
+
+    It supports an `initial_state` with a `.value` attribute and two methods:
+    - `state_from(name)` -> returns a state object
+    - `transition(state, event)` -> returns the next state object
+
+    The machine is defined by a dictionary with the following structure:
+    {
+      "id": "strategy",
+      "initial": "queued",
+      "states": {
+        "queued": {"on": {"PROCESS": "processing"}},
+        "processing": {"on": {"COMPLETE": "completed", "FAIL": "failed"}},
+        "failed": {"on": {"RETRY": "processing"}},
+        "completed": {}
+      }
+    }
+    """
+
+    def __init__(self, definition: Dict) -> None:
+        self._initial = str(definition.get("initial"))
+        self._states: Dict[str, Dict] = dict(definition.get("states", {}))
+        if self._initial not in self._states:
+            raise ValueError("initial state must be defined in states")
+        self.initial_state = _State(self._initial)
+
+    def state_from(self, name: str) -> _State:
+        if name not in self._states:
+            raise ValueError(f"unknown state: {name}")
+        return _State(name)
+
+    def transition(self, state: _State, event: str) -> _State:
+        current = state.value
+        config = self._states.get(current)
+        if not config:
+            raise ValueError(f"unknown state: {current}")
+        on = config.get("on", {})
+        if event not in on:
+            raise ValueError(f"invalid event {event!r} for state {current!r}")
+        next_state = on[event]
+        if next_state not in self._states:
+            # Allow terminal next states that have empty config objects
+            if next_state not in self._states:
+                # If not present, treat as terminal with no transitions
+                self._states[next_state] = {}
+        return _State(next_state)
 
 if TYPE_CHECKING:
     from .database import Database
