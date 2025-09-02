@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,9 @@ from qmtl.gateway.models import StrategySubmit
 from qmtl.common import crc32_of_list
 from qmtl.gateway import metrics
 
+warnings.filterwarnings(
+    "ignore", category=ResourceWarning, message="unclosed event loop"
+)
 
 class FakeDB(Database):
     async def insert_strategy(self, strategy_id: str, meta):
