@@ -17,7 +17,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 try:  # optional
     import pyarrow as pa  # type: ignore
@@ -79,6 +79,23 @@ def _snapshot_dir() -> Path:
     return p
 
 
+def _remote_base() -> Tuple[str | None, Any | None]:
+    """Return (base_url, filesystem) when remote snapshots are configured.
+
+    Uses ``QMTL_SNAPSHOT_URL`` (e.g. ``s3://bucket/prefix``). Returns ``(None, None)``
+    when not configured or when ``fsspec`` is unavailable.
+    """
+    url = os.getenv("QMTL_SNAPSHOT_URL")
+    if not url or fsspec is None:
+        return None, None
+    try:
+        fs, _, paths = fsspec.get_fs_token_paths(url)  # type: ignore[attr-defined]
+        base = paths[0] if paths else url
+        return (url, fs)
+    except Exception:
+        return None, None
+
+
 def _node_key(node) -> str:
     return f"{node.node_id}"
 
@@ -126,6 +143,8 @@ def write_snapshot(node) -> Path | None:
     }
     key = _node_key(node)
     fmt = meta["format"]
+    # Prefer remote base when configured
+    remote_url, fs = _remote_base()
     base = _snapshot_dir()
     if fmt == "parquet" and pa is not None and pq is not None:
         # Write rows to Parquet and meta to a sidecar JSON
@@ -146,21 +165,33 @@ def write_snapshot(node) -> Path | None:
             "t": pa.array(rows_t, pa.int64()),
             "v": pa.array(rows_v, pa.binary()),
         })
-        pq_path = base / f"{key}_{meta['wm_ts']}.snap.parquet"
         start = time.perf_counter()
-        pq.write_table(table, pq_path)
-        meta_path = base / f"{key}_{meta['wm_ts']}.meta.json"
-        meta_obj = {"meta": meta}
-        with meta_path.open("w") as mf:
-            json.dump(meta_obj, mf)
+        if remote_url and fs is not None:
+            pq_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
+            with fs.open(pq_path, "wb") as fobj:  # type: ignore[attr-defined]
+                pq.write_table(table, fobj)
+            meta_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
+            with fs.open(meta_path, "w") as mf:  # type: ignore[attr-defined]
+                json.dump({"meta": meta}, mf)
+        else:
+            pq_path = base / f"{key}_{meta['wm_ts']}.snap.parquet"
+            pq.write_table(table, pq_path)
+            meta_path = base / f"{key}_{meta['wm_ts']}.meta.json"
+            with meta_path.open("w") as mf:
+                json.dump({"meta": meta}, mf)
         duration_ms = (time.perf_counter() - start) * 1000
-        path = pq_path
+        path = Path(pq_path) if not isinstance(pq_path, Path) else pq_path
     else:
         # Fallback to JSON container
-        path = base / f"{key}_{meta['wm_ts']}.snap.json"
         start = time.perf_counter()
-        with path.open("w") as f:
-            json.dump({"meta": meta, "data": data}, f)
+        if remote_url and fs is not None:
+            path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
+            with fs.open(path, "w") as f:  # type: ignore[attr-defined]
+                json.dump({"meta": meta, "data": data}, f)
+        else:
+            path = base / f"{key}_{meta['wm_ts']}.snap.json"
+            with path.open("w") as f:
+                json.dump({"meta": meta, "data": data}, f)
     duration_ms = (time.perf_counter() - start) * 1000
     try:
         sdk_metrics.node_processed_total  # type: ignore[attr-defined]
@@ -183,20 +214,52 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
     key = _node_key(node)
     base = _snapshot_dir()
     # Prefer Parquet snapshots when present, fall back to JSON
-    pq_candidates = sorted(base.glob(f"{key}_*.snap.parquet"), reverse=True)
-    json_candidates = sorted(base.glob(f"{key}_*.snap.json"), reverse=True)
+    remote_url, fs = _remote_base()
+    pq_candidates = []
+    json_candidates = []
+    if remote_url and fs is not None:
+        try:
+            pq_candidates = sorted(
+                fs.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.parquet"), reverse=True  # type: ignore[attr-defined]
+            )
+            json_candidates = sorted(
+                fs.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.json"), reverse=True  # type: ignore[attr-defined]
+            )
+        except Exception:
+            pq_candidates = []
+            json_candidates = []
+    else:
+        pq_candidates = sorted(base.glob(f"{key}_*.snap.parquet"), reverse=True)
+        json_candidates = sorted(base.glob(f"{key}_*.snap.json"), reverse=True)
     candidates = pq_candidates + json_candidates
     if not candidates:
         return False
     for path in candidates:
         try:
-            if path.suffix == ".parquet" and pa is not None and pq is not None:
-                meta_path = path.with_suffix(".meta.json")
-                if not meta_path.exists():
+            if (isinstance(path, str) and path.endswith(".parquet")) or (
+                isinstance(path, Path) and path.suffix == ".parquet"
+            ):
+                if pa is None or pq is None:
                     continue
-                obj = json.loads(meta_path.read_text())
+                # Read sidecar meta
+                if remote_url and fs is not None and isinstance(path, str):
+                    meta_path = path.replace(".snap.parquet", ".meta.json")
+                    try:
+                        with fs.open(meta_path, "r") as mf:  # type: ignore[attr-defined]
+                            obj = json.load(mf)
+                    except Exception:
+                        continue
+                else:
+                    meta_path = Path(path).with_suffix(".meta.json")
+                    if not meta_path.exists():
+                        continue
+                    obj = json.loads(meta_path.read_text())
                 meta = obj.get("meta", {})
-                table = pq.read_table(path)
+                if remote_url and fs is not None and isinstance(path, str):
+                    with fs.open(path, "rb") as fobj:  # type: ignore[attr-defined]
+                        table = pq.read_table(fobj)
+                else:
+                    table = pq.read_table(path)
                 data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
                 u_col = table.column("u").to_pylist()
                 i_col = table.column("i").to_pylist()
@@ -205,7 +268,11 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
                 for u, i, t, v in zip(u_col, i_col, t_col, v_col):
                     data.setdefault(u, {}).setdefault(int(i), []).append((int(t), json.loads(v)))
             else:
-                obj = json.loads(path.read_text())
+                if remote_url and fs is not None and isinstance(path, str):
+                    with fs.open(path, "r") as f:  # type: ignore[attr-defined]
+                        obj = json.load(f)
+                else:
+                    obj = json.loads(Path(path).read_text() if isinstance(path, str) else path.read_text())
                 meta = obj.get("meta", {})
                 data = obj.get("data", {})
             if strict and meta.get("runtime_fingerprint") != runtime_fingerprint():
