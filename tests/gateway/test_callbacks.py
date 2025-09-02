@@ -1,6 +1,8 @@
 import httpx
 import pytest
 
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+
 from qmtl.gateway.api import create_app
 from qmtl.gateway import metrics
 from qmtl.common.cloudevents import format_event
