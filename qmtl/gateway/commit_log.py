@@ -4,6 +4,8 @@ import json
 import logging
 from typing import Any, Iterable
 
+from qmtl.dagmanager.kafka_admin import partition_key
+
 try:
     from aiokafka import AIOKafkaProducer
 except Exception:  # pragma: no cover - aiokafka optional
@@ -27,15 +29,17 @@ class CommitLogWriter:
     async def publish_bucket(
         self,
         bucket_ts: int,
+        interval: int | None,
         records: Iterable[tuple[str, str, Any]],
     ) -> None:
-        """Publish ``records`` for ``bucket_ts`` in a single transaction.
+        """Publish ``records`` for ``interval``/``bucket_ts`` in a transaction.
 
         Each record is a tuple ``(node_id, input_window_hash, payload)``.  The
         value sent to Kafka contains ``(node_id, bucket_ts, input_window_hash,
         payload)`` serialised as JSON.  The message key combines the
-        ``node_id``, ``bucket_ts`` and ``input_window_hash`` so that the topic
-        can be compacted.
+        :func:`~qmtl.dagmanager.kafka_admin.partition_key` for the ``node_id``,
+        ``interval`` and ``bucket_ts`` with the ``input_window_hash`` to ensure
+        the topic can be compacted.
         """
 
         await self._producer.begin_transaction()
@@ -44,7 +48,8 @@ class CommitLogWriter:
                 value = json.dumps(
                     (node_id, bucket_ts, input_window_hash, payload)
                 ).encode()
-                key = f"{node_id}:{bucket_ts}:{input_window_hash}".encode()
+                pkey = partition_key(node_id, interval, bucket_ts)
+                key = f"{pkey}:{input_window_hash}".encode()
                 await self._producer.send_and_wait(
                     self._topic,
                     key=key,
