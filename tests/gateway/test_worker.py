@@ -20,7 +20,7 @@ class DummyManager:
         self.acquire_calls: list[int] = []
         self.release_calls: list[int] = []
 
-    async def acquire(self, key: int) -> bool:
+    async def acquire(self, key: int, owner: str | None = None) -> bool:
         self.acquire_calls.append(key)
         if key in self.locked:
             return False
@@ -215,5 +215,4 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
     assert result is False
     assert "Unhandled error processing strategy sid" in caplog.text
     assert db.records["sid"] == "failed"
-
 
