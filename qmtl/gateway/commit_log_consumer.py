@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Awaitable, Callable, Iterable, Iterator, Tuple
 
+from cachetools import TTLCache
+
 from . import metrics as gw_metrics
 
 
@@ -10,12 +12,15 @@ class CommitLogDeduplicator:
     """Filter out duplicate commit-log records.
 
     Records are identified by the triple ``(node_id, bucket_ts, input_window_hash)``.
-    Only the first occurrence of each triple is yielded. Subsequent duplicates are
-    discarded silently.
+    Entries are cached for ``ttl`` seconds (or until ``maxsize`` is exceeded).
+    Only the first occurrence of each triple within the cache window is yielded;
+    subsequent duplicates are discarded silently.
     """
 
-    def __init__(self) -> None:
-        self._seen: set[Tuple[str, int, str]] = set()
+    def __init__(self, *, maxsize: int = 1024, ttl: float = 60.0) -> None:
+        self._seen: TTLCache[Tuple[str, int, str], None] = TTLCache(
+            maxsize=maxsize, ttl=ttl
+        )
 
     def filter(
         self, records: Iterable[Tuple[str, int, str, Any]]
@@ -28,7 +33,7 @@ class CommitLogDeduplicator:
                     gw_metrics.commit_duplicate_total._value.get()
                 )  # type: ignore[attr-defined]
                 continue
-            self._seen.add(key)
+            self._seen[key] = None
             yield (node_id, bucket_ts, input_hash, payload)
 
 
