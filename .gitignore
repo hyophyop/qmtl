@@ -88,3 +88,17 @@ uv.lock
 
 # Snapshots
 .qmtl_snapshots/
+# MkDocs build output
+site/
+
+# MkDocs breadcrumbs plugin generated index pages (do not commit)
+docs/architecture/index.md
+docs/archive/index.md
+docs/guides/index.md
+docs/operations/index.md
+docs/operations/dashboards/index.md
+docs/reference/index.md
+docs/reference/api/index.md
+docs/reference/schemas/index.md
+docs/templates/index.md
+docs/world/index.md
