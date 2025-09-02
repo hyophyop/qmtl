@@ -36,6 +36,7 @@ nav:
       - Enhanced Validation: reference/enhanced_validation.md
       - Backtest Validation: reference/backtest_validation.md
       - Lean-like Features: reference/lean_like_features.md
+      - Commit Log: reference/commit_log.md
       - Brokerage API: reference/api/brokerage.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
