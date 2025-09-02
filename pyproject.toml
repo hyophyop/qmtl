@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-httpx",
     "opentelemetry-instrumentation-grpc",
+    "cachetools",
 ]
 
 [project.optional-dependencies]
