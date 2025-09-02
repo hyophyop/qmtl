@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator, Tuple
+import json
+from typing import Any, Awaitable, Callable, Iterable, Iterator, Tuple
 
 from . import metrics as gw_metrics
 
@@ -31,4 +32,71 @@ class CommitLogDeduplicator:
             yield (node_id, bucket_ts, input_hash, payload)
 
 
-__all__ = ["CommitLogDeduplicator"]
+try:  # pragma: no cover - aiokafka optional
+    from aiokafka import AIOKafkaConsumer
+except Exception:  # pragma: no cover - import guard
+    AIOKafkaConsumer = Any  # type: ignore[misc]
+
+
+class CommitLogConsumer:
+    """Consume commit-log records from Kafka.
+
+    The consumer wraps an :class:`AIOKafkaConsumer` and deduplicates records
+    with :class:`CommitLogDeduplicator` before handing them off to a downstream
+    processor.  Offsets are committed after the processor successfully
+    completes.
+    """
+
+    def __init__(
+        self,
+        consumer: AIOKafkaConsumer,  # type: ignore[misc]
+        *,
+        topic: str,
+        group_id: str,
+        commit_offsets: bool = True,
+        deduplicator: CommitLogDeduplicator | None = None,
+    ) -> None:
+        self._consumer = consumer
+        self.topic = topic
+        self.group_id = group_id
+        self._commit_offsets = commit_offsets
+        self._dedup = deduplicator or CommitLogDeduplicator()
+
+    async def start(self) -> None:
+        await self._consumer.start()
+
+    async def stop(self) -> None:
+        await self._consumer.stop()
+
+    async def _poll_raw(
+        self, timeout_ms: int | None = None
+    ) -> list[tuple[str, int, str, Any]]:
+        result = await self._consumer.getmany(timeout_ms=timeout_ms)
+        records: list[tuple[str, int, str, Any]] = []
+        for messages in result.values():
+            for msg in messages:
+                node_id, bucket_ts, input_hash, payload = json.loads(msg.value)
+                records.append((node_id, bucket_ts, input_hash, payload))
+        return records
+
+    async def consume(
+        self,
+        processor: Callable[[list[tuple[str, int, str, Any]]], Awaitable[None]],
+        *,
+        timeout_ms: int | None = None,
+    ) -> None:
+        """Poll once and pass records to ``processor``.
+
+        Only unique records are forwarded.  Offsets are committed after the
+        processor returns when ``commit_offsets`` is ``True``.
+        """
+
+        raw_records = await self._poll_raw(timeout_ms)
+        records = list(self._dedup.filter(raw_records))
+        if records:
+            await processor(records)
+        if self._commit_offsets:
+            await self._consumer.commit()
+
+
+__all__ = ["CommitLogDeduplicator", "CommitLogConsumer"]
