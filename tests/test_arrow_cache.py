@@ -1,8 +1,8 @@
-import os
+import time
 import pytest
 
 from qmtl.sdk import arrow_cache
-from importlib import reload
+from qmtl.sdk.cache_view import CacheView
 
 from qmtl.sdk import ProcessingNode, StreamInput
 
@@ -58,3 +58,38 @@ def test_no_ray_forces_thread(monkeypatch):
 
     cache = arrow_cache.NodeCacheArrow(period=2)
     assert called["flag"]
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_arrow_cache_view_sequence_behavior():
+    cache = arrow_cache.NodeCacheArrow(period=4)
+    for i in range(4):
+        cache.append("u", 60, (i + 1) * 60, i)
+    view = cache.view()
+    seq = view["u"][60]
+    assert seq[-1] == (240, 3)
+    assert list(seq[-2:]) == [(180, 2), (240, 3)]
+    assert not seq[:0]
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_arrow_cache_view_iteration_benchmark():
+    cache = arrow_cache.NodeCacheArrow(period=1024)
+    n = 5000
+    for i in range(n):
+        cache.append("u", 60, (i + 1) * 60, {"v": i})
+
+    start = time.perf_counter()
+    view = cache.view()
+    total = sum(v["v"] for _, v in view["u"][60])
+    arrow_duration = time.perf_counter() - start
+
+    sl = cache._slices[("u", 60)]
+    start = time.perf_counter()
+    data = {"u": {60: sl.get_list()}}
+    list_view = CacheView(data)
+    total2 = sum(v["v"] for _, v in list_view["u"][60])
+    list_duration = time.perf_counter() - start
+
+    assert total == total2
+    assert arrow_duration < list_duration
