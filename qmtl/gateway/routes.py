@@ -237,22 +237,22 @@ def create_api_router(
 
     @router.get("/queues/by_tag")
     async def queues_by_tag(
-        tags: str, interval: int, match: str = "any", match_mode: str | None = None
+        tags: str, interval: int, match_mode: str = "any"
     ) -> dict:
         from qmtl.common.tagquery import split_tags, normalize_match_mode
         tag_list = split_tags(tags)
-        mode = normalize_match_mode(match, match_mode).value
+        mode = normalize_match_mode(match_mode).value
         queues = await dagmanager.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
 
     @router.get("/queues/watch")
     async def queues_watch(
-        tags: str, interval: int, match: str = "any", match_mode: str | None = None
+        tags: str, interval: int, match_mode: str = "any"
     ):
         """Legacy queue watch; prefer ``POST /events/subscribe``."""
         from qmtl.common.tagquery import split_tags, normalize_match_mode
         tag_list = split_tags(tags)
-        mode = normalize_match_mode(match, match_mode)
+        mode = normalize_match_mode(match_mode)
 
         async def streamer():
             try:

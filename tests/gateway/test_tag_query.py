@@ -108,10 +108,11 @@ def test_queues_by_tag_route(client):
     assert dag.called_with == (["t1", "t2"], 60, "any")
 
 
-def test_queues_by_tag_route_match_alias(client):
+def test_queues_by_tag_route_all_mode(client):
     c, dag = client
     resp = c.get(
-        "/queues/by_tag", params={"tags": "t1,t2", "interval": "60", "match": "all"}
+        "/queues/by_tag",
+        params={"tags": "t1,t2", "interval": "60", "match_mode": "all"},
     )
     assert resp.status_code == 200
     assert resp.json()["queues"] == [

@@ -103,6 +103,6 @@ Related specs:
 
 - Strategy ingest & FSM with Redis + DB mirror; idempotent queue locking ("SETNX lock:{id}" with TTL).
 - VersionSentinel insertion with "insert_sentinel" config and "--no-sentinel" flag.
-- Tag query resolution via "/queues/by_tag" with "match_mode" (and "match" alias) and streaming updates bridged to SDK.
+- Tag query resolution via "/queues/by_tag" with "match_mode" and streaming updates bridged to SDK.
 - Degradation manager and local fallback queue for DAG outages; "/status" health caching.
 - Sentinel traffic ratio metric "gateway_sentinel_traffic_ratio{sentinel_id=...}".

@@ -21,8 +21,8 @@ def split_tags(tags: str | Iterable[str] | None) -> list[str]:
     return [str(t) for t in tags]
 
 
-def normalize_match_mode(match: str | None, match_mode: str | None) -> MatchMode:
-    mode_str = (match_mode or match or "any").lower()
+def normalize_match_mode(match_mode: str | None) -> MatchMode:
+    mode_str = (match_mode or "any").lower()
     try:
         return MatchMode(mode_str)
     except ValueError:

@@ -90,7 +90,7 @@ class TagQueryManager:
             raw = payload.get("queues", [])
             queues = normalize_queues(raw)
             try:
-                match_mode = normalize_match_mode(None, payload.get("match_mode"))
+                match_mode = normalize_match_mode(payload.get("match_mode"))
             except ValueError:
                 return
             if isinstance(tags, str):
@@ -150,7 +150,7 @@ class TagQueryManager:
             params = {
                 "tags": ",".join(tags),
                 "interval": interval,
-                "match": match_mode.value,
+                "match_mode": match_mode.value,
             }
             while True:
                 try:
