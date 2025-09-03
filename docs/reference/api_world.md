@@ -31,7 +31,7 @@ Response (DecisionEnvelope)
 {
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
-  "effective_mode": "dryrun",
+  "effective_mode": "validate",
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",

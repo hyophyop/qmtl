@@ -226,46 +226,19 @@ TimeScaleDB의 Continuous Aggregates 원리를 연산 캐시 계층에 적용하
 
 ---
 
-## 4. 실행 모드 및 구성요소 역할
+## 4. 실행 모델 및 구성요소 역할
 
-### 4.1 전략 실행 모드
+### 4.1 월드 주도 실행 (World‑Driven)
 
-QMTL의 모든 실행 모드는 각 노드가 종속된 업스트림 큐로부터 정해진 `interval` 및 `period`에 해당하는 데이터를 확보한 이후에만 연산 결과를 생성할 수 있다. 즉, 백테스트이든 실시간 실행이든, **모든 노드는 초기 period가 충족되지 않으면 데이터를 생성할 수 없으며**, 해당 상태는 'pre-warmup' 상태로 간주된다. 이는 연산 일관성을 보장하고, 누락된 데이터로 인한 왜곡을 방지하기 위함이다.
+QMTL 실행은 월드(WorldService)의 결정에 의해 제어된다. Runner는 단일 진입점으로 실행되며, 호출자는 `world_id`만 제공한다. Runner/SDK는 자체적으로 실행 모드를 선택하지 않고, WS가 산출하는 결정(DecisionEnvelope)과 활성(ActivationEnvelope)을 따르며, 결정이 신선하지 않거나 활성 정보가 부재한 경우에는 compute‑only(주문 게이트 OFF)를 기본으로 한다.
 
-* 각 노드는 실행 시점에 다음 조건을 충족해야 함:
+Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `period × interval` 데이터가 충족될 때까지 pre‑warmup 상태이며, 해당 조건 충족 이후에만 결과가 생성된다.
 
-  * 설정된 모든 업스트림에 대해 period × interval 만큼의 데이터가 수신되었는가?
-  * interval마다 데이터가 정확히 정렬되었고, 이상치 또는 결측이 보정되었는가?
-
-이 제약 조건은 초기 전략 실행 지연을 감수하더라도 연산의 정확도를 우선시하며, 특히 실시간 환경에서도 노이즈나 불완전한 초기 큐 상태로 인한 오동작을 방지하는 데 핵심적인 역할을 한다. 예를 들어, interval=60s, period=30으로 설정된 노드는 최소 30분간의 데이터가 수집되기 전까지는 출력을 생성하지 않으며, 평균적으로 실시간 환경에서 30분 내외의 warmup 시간이 소요된다. 특히 MFI, RSI와 같은 지표 기반 전략은 이전 캔들 히스토리에 강하게 의존하기 때문에, warmup이 되지 않은 상태에서의 실행은 잘못된 매매 신호를 유발할 수 있다. 시스템 수준에서는 해당 노드가 'pre-warmup' 상태임을 로그 레벨에서 명시적으로 기록하며, 사용자는 UI 상에서도 각 노드별 warmup 상태를 직관적으로 확인할 수 있도록 하여 운영자가 초기 상태를 추적하고 안정적으로 전략 실행을 통제할 수 있도록 한다.
-QMTL은 다음 두 가지 전략 실행 모드를 기본적으로 제공해야 한다:
-
-1. **백테스트 모드 (Backtest Mode)**
-
-   * 사용자는 전략 실행 시 명시적인 `시작 시간(start_time)`과 `종료 시간(end_time)`을 지정해야 한다.
-   * SDK는 해당 구간의 데이터를 리플레이 방식으로 처리하며, 각 노드의 interval 및 period 설정에 따라 입력 데이터를 정렬 후 연산을 수행한다.
-   * 데이터 수급 실패나 결측이 발생할 경우, 해당 노드 또는 전략은 지정된 정책에 따라
-
-     1. 해당 시간 블록을 건너뛰고 다음 블록으로 이동하거나,
-     2. 에러 상태로 전환되어 중단될 수 있으며,
-     3. 로그 수준에서 누락 정보를 기록한 후 사용자에게 알림을 보낸다.
-   * 이러한 예외 처리 정책은 전략별 설정 파일에서 명시 가능하며, 시스템의 기본 정책은 "skip-on-missing"이다.
-   * 사용 목적: 전략 성능 검증, 파라미터 튜닝, 회귀 테스트 등.
-
-2. **실시간 모드 (Realtime Mode)**
-
-   **✅ 두 가지 하위 모드 제공**
-
-   | 하위 모드                    | 목적            | 특징                                                                |
-   | ------------------------ | ------------- | ----------------------------------------------------------------- |
-   | **`live`**\*\* (기본값)\*\* | 실제 주문 및 알림 전송 | 매매 실행 노드 활성화, 거래소/브로커 API 호출, PnL 실시간 반영                          |
-   | **`dry-run`**            | 전략 검증·시뮬레이션   | 매매 실행 노드가 PaperTrading 노드로 자동 대체, 주문은 기록되나 미발주, 실시간 성과(PnL) 로그 저장 |
-
-   * 전략 실행 요청 시 `mode="realtime", run_type="dry-run"` 또는 `run_type="live"` 플래그를 전달한다.
-   * 지표 계산(DAG 예: RSI, MFI)만 포함된 전략은 일반적으로 `live` 모드로 바로 실행 가능하지만, **매매 판단 및 주문 트리거를 포함하는 전략**은 먼저 `dry-run` 모드로 운영 환경에서 성과를 측정하고, 목표 KPI(PnL, 매수·매도 빈도 등)를 충족할 때 `live` 로 전환하는 것을 권장한다.
-   * `dry-run` 모드에서 수집된 주문 로그와 PnL은 SDK가 제공하는 분석 유틸리티를 통해 백테스트 결과와 동일한 포맷으로 저장되어, 비교·검증이 용이하다.
-
-이와 같은 모드 구분은 전략 실행 API 설계 시 필수적인 파라미터 구성 기준이 되며, 각 모드별 리소스 예약, 큐 구독 범위, 캐시 초기화 방식이 달라진다.
+핵심 동작 원칙:
+- 호출자는 `Runner.run(strategy_cls, world_id=..., gateway_url=...)`만 사용한다.
+- WS의 `effective_mode`는 내부 정책 결과이며, Runner는 이를 입력으로만 취급한다.
+- 활성 정보가 미상·만료 상태이거나 결정 TTL이 만료되면, Runner는 안전기본(compute‑only, 주문 게이트 OFF)로 유지한다.
+- 검증→프로모션(실전 활성화)은 WS의 히스테리시스·게이트 정책과 2‑Phase Apply에 의해 수행된다.
 
 ---
 
@@ -300,13 +273,12 @@ class GeneralStrategy(Strategy):
 
         self.add_nodes([price_stream, signal_node])
 
-# 백테스트 실행 예시
+# 실행 예시 (월드 주도)
 if __name__ == "__main__":
-    Runner.backtest(
+    Runner.run(
         GeneralStrategy,
-        start_time="2024-01-01T00:00:00Z",
-        end_time="2024-02-01T00:00:00Z",
-        on_missing="skip"
+        world_id="general_demo",
+        gateway_url="http://gateway.local"
     )
 ```
 
@@ -349,9 +321,9 @@ class CorrelationStrategy(Strategy):
         # match_mode="any" 는 하나 이상의 태그가 일치하면 매칭되며,
         # "all" 로 지정하면 모든 태그가 존재하는 큐만 선택된다.
 
-# 실시간 실행 예시
+# 실시간 실행 예시 (월드 주도)
 if __name__ == "__main__":
-    Runner.live(CorrelationStrategy)
+    Runner.run(CorrelationStrategy, world_id="corr_demo", gateway_url="http://gateway.local")
 ```
 
 
@@ -409,15 +381,15 @@ class CrossMarketLagStrategy(Strategy):
 
         self.add_nodes([btc_price, mstr_price, corr_node])
 
-# 실시간 dry‑run: 거래 여부 검증
-Runner.dryrun(CrossMarketLagStrategy)
+# 실시간 실행: 월드 결정에 따른 게이팅/활성
+Runner.run(CrossMarketLagStrategy, world_id="cross_market_lag", gateway_url="http://gateway.local")
 ```
 
 > **동작 요약**
 >
 > 1. Binance 1분 BTC 가격과 Nasdaq 1분 MSTR 가격 큐를 각각 태그로 매핑.
 > 2. 90분(90샘플) 시차 상관계수를 지속 계산하여 `lag_corr` ≥ 임계값이면 별도 매매 DAG(주식 매수)로 신호 전달 가능.
-> 3. `Runner.dryrun()` 으로 실시간 시뮬레이션 후, 충분한 PnL·승률이 검증되면 동일 코드로 `Runner.live()` 전환.
+> 3. 월드의 결정이 검증(Validate)에서 활성(Active)로 승격되면, 동일 전략은 별도 코드 변경 없이 주문 게이트가 ON으로 전환된다.
 
 ---
 

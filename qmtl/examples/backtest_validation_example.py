@@ -32,12 +32,10 @@ def main() -> None:
         strategy = ValidationStrategy()
         strategy.setup()
         validate_backtest_data(strategy)
-        Runner.backtest(
+        Runner.run(
             ValidationStrategy,
-            start_time=start,
-            end_time=end,
-            on_missing=on_missing,
-            validate_data=True,
+            world_id="validation_example",
+            gateway_url="http://localhost:8000",
         )
     else:
         Runner.offline(ValidationStrategy)

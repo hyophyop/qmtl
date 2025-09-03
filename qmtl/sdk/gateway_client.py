@@ -26,14 +26,14 @@ class GatewayClient:
         gateway_url: str,
         dag: dict,
         meta: Optional[dict],
-        run_type: str,
+        world_id: Optional[str] = None,
     ) -> dict:
         """Submit a strategy DAG to the gateway."""
         url = gateway_url.rstrip("/") + "/strategies"
         payload = {
             "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
             "meta": meta,
-            "run_type": run_type,
+            "world_id": world_id,
             "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
         }
         headers: dict[str, str] = {}

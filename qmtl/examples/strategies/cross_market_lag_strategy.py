@@ -47,5 +47,4 @@ class CrossMarketLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # For backtesting provide start_time and end_time to Runner.backtest
-    Runner.dryrun(CrossMarketLagStrategy)
+    Runner.run(CrossMarketLagStrategy, world_id="cross_market_lag", gateway_url="http://gateway.local")

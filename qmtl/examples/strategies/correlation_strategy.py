@@ -30,4 +30,4 @@ class CorrelationStrategy(Strategy):
 if __name__ == "__main__":
     # Running via Runner will automatically fetch matching queues and
     # subscribe to updates.
-    Runner.live(CorrelationStrategy)
+    Runner.run(CorrelationStrategy, world_id="correlation_demo", gateway_url="http://gateway.local")

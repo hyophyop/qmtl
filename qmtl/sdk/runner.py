@@ -434,206 +434,78 @@ class Runner:
                     )
 
     @staticmethod
-    async def backtest_async(
+    async def run_async(
         strategy_cls: type[Strategy],
         *,
-        start_time=None,
-        end_time=None,
-        on_missing="skip",
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        validate_data: bool = False,
-        validation_config: Optional[dict] = None,
-    ) -> Strategy:
-        """Run strategy in backtest mode. Requires ``gateway_url``."""
-        if start_time is None or end_time is None:
-            raise ValueError("start_time and end_time are required")
-        strategy = Runner._prepare(strategy_cls)
-        tag_service = TagManagerService(gateway_url)
-        manager = tag_service.init(strategy)
-        logger.info(
-            f"[BACKTEST] {strategy_cls.__name__} from {start_time} to {end_time} on_missing={on_missing}"
-        )
-        dag = strategy.serialize()
-        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
-        if not gateway_url:
-            raise RuntimeError("gateway_url is required for backtest mode")
-
-        queue_map = await Runner._gateway_client.post_strategy(
-            gateway_url=gateway_url,
-            dag=dag,
-            meta=meta,
-            run_type="backtest",
-        )
-        if isinstance(queue_map, dict) and "error" in queue_map:
-            raise RuntimeError(queue_map["error"])
-
-        tag_service.apply_queue_map(strategy, queue_map)
-        await manager.resolve_tags(offline=False)
-        await Runner._ensure_history(strategy, start_time, end_time)
-        
-        # Enhanced data validation before replay
-        if validate_data:
-            from .backtest_validation import validate_backtest_data
-            logger.info("Validating backtest data quality...")
-            validation_reports = validate_backtest_data(
-                strategy, 
-                validation_config=validation_config
-            )
-            logger.info(f"Data validation completed for {len(validation_reports)} nodes")
-        
-        start = Runner._maybe_int(start_time)
-        end = Runner._maybe_int(end_time)
-        await Runner._replay_history(strategy, start, end, on_missing=on_missing)
-        return strategy
-
-    @staticmethod
-    def backtest(
-        strategy_cls: type[Strategy],
-        *,
-        start_time=None,
-        end_time=None,
-        on_missing="skip",
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        validate_data: bool = False,
-        validation_config: Optional[dict] = None,
-    ) -> Strategy:
-        return asyncio.run(
-            Runner.backtest_async(
-                strategy_cls,
-                start_time=start_time,
-                end_time=end_time,
-                on_missing=on_missing,
-                gateway_url=gateway_url,
-                meta=meta,
-                validate_data=validate_data,
-                validation_config=validation_config,
-            )
-        )
-
-    @staticmethod
-    async def dryrun_async(
-        strategy_cls: type[Strategy],
-        *,
+        world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
         offline: bool = False,
     ) -> Strategy:
-        """Run strategy in dry-run (paper trading) mode. Requires ``gateway_url``."""
+        """Run a strategy under a given world, following WS decisions/activation.
+
+        In offline mode or when Kafka is unavailable, executes compute‑only locally.
+        """
         strategy = Runner._prepare(strategy_cls)
         tag_service = TagManagerService(gateway_url)
         manager = tag_service.init(strategy)
-        logger.info(f"[DRYRUN] {strategy_cls.__name__} starting")
+        logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
         dag = strategy.serialize()
         logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
-        if not gateway_url:
-            raise RuntimeError("gateway_url is required for dry-run mode")
+        queue_map = {}
+        if gateway_url:
+            queue_map = await Runner._gateway_client.post_strategy(
+                gateway_url=gateway_url,
+                dag=dag,
+                meta=meta,
+                world_id=world_id,
+            )
+            if isinstance(queue_map, dict) and "error" in queue_map:
+                raise RuntimeError(queue_map["error"])
 
-        queue_map = await Runner._gateway_client.post_strategy(
-            gateway_url=gateway_url,
-            dag=dag,
-            meta=meta,
-            run_type="dry-run",
-        )
-        if isinstance(queue_map, dict) and "error" in queue_map:
-            raise RuntimeError(queue_map["error"])
-        tag_service.apply_queue_map(strategy, queue_map)
+        tag_service.apply_queue_map(strategy, queue_map or {})
         if not any(n.execute for n in strategy.nodes):
             logger.info("No executable nodes; exiting strategy")
             return strategy
 
-        offline_mode = offline or not Runner._kafka_available
+        offline_mode = offline or not Runner._kafka_available or not gateway_url
         await manager.resolve_tags(offline=offline_mode)
-        # Start activation manager if gateway URL provided
+
+        # Start activation manager to gate orders by world activation
         if gateway_url and not offline_mode:
             try:
                 if Runner._activation_manager is None:
-                    Runner._activation_manager = ActivationManager(gateway_url, world_id=manager.world_id, strategy_id=manager.strategy_id)
+                    Runner._activation_manager = ActivationManager(
+                        gateway_url, world_id=world_id, strategy_id=None
+                    )
                 await Runner._activation_manager.start()
             except Exception:
-                logger.warning("Activation manager failed to start; proceeding without gating")
-        await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
-        if offline_mode:
-            Runner.run_pipeline(strategy)
-        # Placeholder for dry-run logic when Kafka available
-        return strategy
+                logger.warning("Activation manager failed to start; proceeding with gates OFF by default")
 
-    def dryrun(
-        strategy_cls: type[Strategy],
-        *,
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        offline: bool = False,
-    ) -> Strategy:
-        return asyncio.run(
-            Runner.dryrun_async(
-                strategy_cls,
-                gateway_url=gateway_url,
-                meta=meta,
-                offline=offline,
-            )
-        )
-
-    @staticmethod
-    async def live_async(
-        strategy_cls: type[Strategy],
-        *,
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        offline: bool = False,
-    ) -> Strategy:
-        """Run strategy in live trading mode. Requires ``gateway_url``."""
-        strategy = Runner._prepare(strategy_cls)
-        tag_service = TagManagerService(gateway_url)
-        manager = tag_service.init(strategy)
-        logger.info(f"[LIVE] {strategy_cls.__name__} starting")
-        dag = strategy.serialize()
-        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
-
-        if not gateway_url:
-            raise RuntimeError("gateway_url is required for live mode")
-
-        queue_map = await Runner._gateway_client.post_strategy(
-            gateway_url=gateway_url,
-            dag=dag,
-            meta=meta,
-            run_type="live",
-        )
-        if isinstance(queue_map, dict) and "error" in queue_map:
-            raise RuntimeError(queue_map["error"])
-        tag_service.apply_queue_map(strategy, queue_map)
-        if not any(n.execute for n in strategy.nodes):
-            logger.info("No executable nodes; exiting strategy")
-            return strategy
-
-        offline_mode = offline or not Runner._kafka_available
-        await manager.resolve_tags(offline=offline_mode)
-        # Try snapshot hydration to reduce warmup
+        # Hydrate and warm up from history to satisfy periods
         Runner._hydrate_snapshots(strategy)
         await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
         if offline_mode:
             Runner.run_pipeline(strategy)
         else:
             await manager.start()
-        # Best-effort snapshot after initial warmup
         Runner._write_snapshots(strategy)
-
-        # Placeholder for live trading logic
         return strategy
 
     @staticmethod
-    def live(
+    def run(
         strategy_cls: type[Strategy],
         *,
+        world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
         offline: bool = False,
     ) -> Strategy:
         return asyncio.run(
-            Runner.live_async(
+            Runner.run_async(
                 strategy_cls,
+                world_id=world_id,
                 gateway_url=gateway_url,
                 meta=meta,
                 offline=offline,

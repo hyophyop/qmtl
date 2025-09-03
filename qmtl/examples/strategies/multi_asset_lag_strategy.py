@@ -35,9 +35,8 @@ class MultiAssetLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # For backtesting provide explicit start and end timestamps
-    Runner.backtest(
+    Runner.run(
         MultiAssetLagStrategy,
-        start_time="2024-01-01T00:00:00Z",
-        end_time="2024-02-01T00:00:00Z",
+        world_id="multi_asset_lag",
+        gateway_url="http://gateway.local",
     )

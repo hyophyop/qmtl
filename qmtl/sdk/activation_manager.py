@@ -1,6 +1,7 @@
 """Consume activation updates via the Gateway's `/events/subscribe` descriptor, bridging the internal ControlBus.
 
-If the descriptor or resulting stream is unavailable, all sides remain allowed without error.
+Default policy is safe: if the descriptor or resulting stream is unavailable or stale,
+orders remain gated OFF (no long/short) until an activation is received.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from .ws_client import WebSocketClient
 
 @dataclass
 class ActivationState:
-    long_active: bool = True
-    short_active: bool = True
+    long_active: bool = False
+    short_active: bool = False
     etag: Optional[str] = None
 
 
@@ -89,4 +90,3 @@ class ActivationManager:
         if self.client:
             await self.client.stop()
         self._started = False
-

@@ -73,7 +73,7 @@ DecisionEnvelope
 {
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
-  "effective_mode": "dryrun",  
+  "effective_mode": "validate",  
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",
@@ -98,14 +98,14 @@ ActivationEnvelope
 Idempotency: consumers must treat older etag/run_id as no‑ops. Unknown or expired decisions/activations should default to “inactive/safe”.
 
 TTL & Staleness
-- DecisionEnvelope includes a TTL (default 300s if unspecified). After TTL, Gateway must treat the decision as stale and fall back to a safe mode (offline/backtest) until refreshed.
+- DecisionEnvelope includes a TTL (default 300s if unspecified). After TTL, Gateway must treat the decision as stale and enforce a safe default: compute‑only (orders gated OFF) until a fresh decision is obtained.
 - Activation has no TTL but carries `etag` (and optional `state_hash`). Unknown/expired activation → orders gated OFF.
 
 ---
 
 ## 4. Decision Semantics
 
-- Data Currency: now − data_end ≤ max_lag → near‑real‑time; else backtest until caught up
+- Data Currency: now − data_end ≤ max_lag → near‑real‑time; else compute‑only replay until caught up (orders remain gated OFF)
 - Sample Sufficiency: metric‑specific minimums (days, trades, bars) gate before scoring
 - Gates: AND/OR of thresholds; Score: weighted function; Constraints: correlation/exposure
 - Hysteresis: promote_after, demote_after, min_dwell to avoid flapping
@@ -156,7 +156,7 @@ Alerts
 
 ## 8. Failure Modes & Recovery
 
-- WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (offline/backtest). Activation defaults to inactive.
+- WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute‑only/inactive). Activation defaults to inactive.
 - Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
 - Policy parse errors: reject version; keep prior default.
 
@@ -167,6 +167,10 @@ Alerts
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
 - ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
+
+Runner & SDK Integration (clarification)
+- SDK/Runner do not choose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
+- `effective_mode` in DecisionEnvelope is computed by WS and treated as input by SDK. Unknown or stale decisions default to compute‑only with order gates OFF.
 
 ---
 

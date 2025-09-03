@@ -39,6 +39,6 @@ class TagQueryStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Simply running the strategy triggers automatic tag resolution and
-    # WebSocket subscriptions.
-    Runner.live(TagQueryStrategy)
+    # Running the strategy triggers automatic tag resolution and
+    # WebSocket subscriptions under the selected world.
+    Runner.run(TagQueryStrategy, world_id="tag_query_demo", gateway_url="http://gateway.local")

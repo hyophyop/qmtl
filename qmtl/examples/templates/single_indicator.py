@@ -39,11 +39,10 @@ if __name__ == "__main__":
     on_missing = args.on_missing or defaults.get("on_missing", "skip")
 
     if args.backtest:
-        Runner.backtest(
+        Runner.run(
             SingleIndicatorStrategy,
-            start_time=start,
-            end_time=end,
-            on_missing=on_missing,
+            world_id="single_indicator_example",
+            gateway_url="http://localhost:8000",
         )
     else:
         Runner.offline(SingleIndicatorStrategy)
