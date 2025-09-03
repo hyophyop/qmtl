@@ -107,7 +107,7 @@ SDK.
 Historical data and event recording can be supplied when creating a `StreamInput`:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 stream = StreamInput(
     interval="60s",
@@ -115,8 +115,10 @@ stream = StreamInput(
         dsn="postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,
     ),
-    event_recorder=QuestDBRecorder(
-        dsn="postgresql://user:pass@localhost:8812/qdb",
+    event_service=EventRecorderService(
+        QuestDBRecorder(
+            dsn="postgresql://user:pass@localhost:8812/qdb",
+        )
     ),
 )
 ```
@@ -125,9 +127,9 @@ When the QuestDB loader or recorder is created without a ``table`` argument it
 automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
 explicitly to override this behaviour.
 
-``StreamInput`` binds the provider and recorder during construction and then
-treats them as read-only. Attempting to modify ``history_provider`` or
-``event_recorder`` after creation will raise an ``AttributeError``.
+``StreamInput`` binds the provider and recorder service during construction and
+then treats them as read-only. Attempting to modify ``history_provider`` or
+``event_service`` after creation will raise an ``AttributeError``.
 
 ## Running a Backfill
 
@@ -211,4 +213,3 @@ engine emits metrics such as ``backfill_jobs_in_progress``,
 
 
 {{ nav_links() }}
-

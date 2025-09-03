@@ -1,4 +1,4 @@
-from qmtl.sdk import StreamInput
+from qmtl.sdk import StreamInput, EventRecorderService
 from qmtl.io import QuestDBLoader, QuestDBRecorder, BinanceFetcher
 from qmtl.io import binance_fetcher as bf_mod
 
@@ -11,7 +11,7 @@ def test_binance_stream_components(monkeypatch) -> None:
         interval="1m",
         period=120,
         history_provider=QuestDBLoader("db", fetcher=fetcher),
-        event_recorder=QuestDBRecorder("db"),
+        event_service=EventRecorderService(QuestDBRecorder("db")),
     )
     assert isinstance(stream.history_provider.fetcher, BinanceFetcher)
     assert stream.history_provider.dsn == "db"

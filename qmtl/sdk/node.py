@@ -637,9 +637,9 @@ class StreamInput(SourceNode):
     """Represents an upstream data stream placeholder.
 
     ``history_provider`` and ``event_service`` must be supplied when the
-    instance is created. For backward compatibility an ``event_recorder`` may
-    be provided and will be wrapped by :class:`EventRecorderService`. These
-    dependencies are immutable for the lifetime of the node.
+    instance is created. These dependencies are immutable for the lifetime of
+    the node. Only the :class:`EventRecorderService` path is supported for
+    event recording.
     """
 
     def __init__(
@@ -649,14 +649,13 @@ class StreamInput(SourceNode):
         period: int | None = None,
         *,
         history_provider: "HistoryProvider" | None = None,
-        event_recorder: "EventRecorder" | None = None,
         event_service: EventRecorderService | None = None,
         validator=default_validator,
         hash_utils=default_hash_utils,
         **node_kwargs,
     ) -> None:
-        if event_service is None and event_recorder is not None:
-            event_service = EventRecorderService(event_recorder)
+        # Allow initial assignment of event_service during super().__init__
+        self._allow_event_service_set = True
         super().__init__(
             input=None,
             compute_fn=None,
@@ -669,11 +668,12 @@ class StreamInput(SourceNode):
             event_service=event_service,
             **node_kwargs,
         )
+        self._allow_event_service_set = False
         self._history_provider = history_provider
         if history_provider and hasattr(history_provider, "bind_stream"):
             history_provider.bind_stream(self)
-        if event_service and hasattr(event_service, "bind_stream"):
-            event_service.bind_stream(self)
+        if self.event_service and hasattr(self.event_service, "bind_stream"):
+            self.event_service.bind_stream(self)
 
     @property
     def history_provider(self) -> "HistoryProvider" | None:
@@ -694,6 +694,20 @@ class StreamInput(SourceNode):
     @event_recorder.setter
     def event_recorder(self, value: "EventRecorder" | None) -> None:
         raise AttributeError("event_recorder is read-only and must be provided via __init__")
+
+    # Enforce immutability of event_service after initialization
+    @property
+    def event_service(self) -> EventRecorderService | None:  # type: ignore[override]
+        return getattr(self, "_event_service", None)
+
+    @event_service.setter
+    def event_service(self, value: EventRecorderService | None) -> None:  # type: ignore[override]
+        # Allow a single assignment during initialization
+        if getattr(self, "_allow_event_service_set", False) and not hasattr(self, "_event_service_initialized"):
+            self._event_service = value
+            self._event_service_initialized = True
+            return
+        raise AttributeError("event_service is read-only and must be provided via __init__")
 
     async def load_history(self, start: int, end: int) -> None:
         """Load historical data if a provider was configured."""

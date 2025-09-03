@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner
+from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService
 from qmtl.io import QuestDBRecorder
 
 
@@ -25,10 +25,15 @@ class TagQueryAggregationStrategy(Strategy):
             df = pd.concat(frames, axis=1)
             return df.corr(method="pearson")
 
-        corr_node = Node(input=indicators, compute_fn=calc_corr, name="indicator_corr")
-        # persist correlation matrices if a database is configured
-        corr_node.event_recorder = QuestDBRecorder(
-            dsn="postgresql://localhost:8812/qdb",
+        corr_node = Node(
+            input=indicators,
+            compute_fn=calc_corr,
+            name="indicator_corr",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
+            ),
         )
 
         self.add_nodes([indicators, corr_node])
@@ -37,4 +42,3 @@ class TagQueryAggregationStrategy(Strategy):
 if __name__ == "__main__":
     # Running in live mode automatically resolves queues and subscribes
     Runner.live(TagQueryAggregationStrategy)
-

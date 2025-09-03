@@ -4,7 +4,7 @@ import asyncio
 import pandas as pd
 
 from qmtl.io import QuestDBRecorder
-from qmtl.sdk import StreamInput, Node, Runner, metrics
+from qmtl.sdk import StreamInput, Node, Runner, metrics, EventRecorderService
 from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
 
 
@@ -13,8 +13,10 @@ class MA1(BaseMA1):
         price = StreamInput(
             interval="60s",
             period=30,
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
 
@@ -31,8 +33,10 @@ class MA2(BaseMA2):
         price = StreamInput(
             interval="60s",
             period=60,
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
 

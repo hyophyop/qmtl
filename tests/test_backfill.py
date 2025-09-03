@@ -6,6 +6,7 @@ from qmtl.sdk import (
     QuestDBRecorder,
     HistoryProvider,
     EventRecorder,
+    EventRecorderService,
 )
 from tests.dummy_fetcher import DummyDataFetcher
 
@@ -179,8 +180,7 @@ def test_stream_input_records_on_feed():
         async def persist(self, node_id, interval, timestamp, payload):
             events.append((node_id, interval, timestamp, payload))
 
-    s = StreamInput(interval="60s", period=1, event_recorder=DummyRecorder())
+    s = StreamInput(interval="60s", period=1, event_service=EventRecorderService(DummyRecorder()))
 
     s.feed("s", 60, 1, {"v": 1})
     assert events == [(s.node_id, 60, 1, {"v": 1})]
-

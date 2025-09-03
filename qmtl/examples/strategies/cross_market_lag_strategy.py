@@ -1,4 +1,4 @@
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 import pandas as pd
 
@@ -11,8 +11,10 @@ class CrossMarketLagStrategy(Strategy):
             history_provider=QuestDBLoader(
                 dsn="postgresql://localhost:8812/qdb",
             ),
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
         mstr_price = StreamInput(
@@ -22,8 +24,10 @@ class CrossMarketLagStrategy(Strategy):
             history_provider=QuestDBLoader(
                 dsn="postgresql://localhost:8812/qdb",
             ),
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
         def lagged_corr(view):
