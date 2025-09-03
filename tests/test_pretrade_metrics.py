@@ -64,7 +64,6 @@ def test_gateway_status_includes_pretrade_metrics():
         redis_conn=None,
         database_obj=None,
         dagmanager=None,
-        watch_hub=None,
         ws_hub=None,
         degradation=DegradationManager(None, None, None),
         world_client=None,

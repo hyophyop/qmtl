@@ -26,7 +26,6 @@ from .fsm import StrategyFSM
 from .gateway_health import get_health as gateway_health
 from .routes import create_api_router
 from .strategy_manager import StrategyManager
-from .watch import QueueWatchHub
 from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
 from .commit_log_consumer import CommitLogConsumer
@@ -40,7 +39,6 @@ def create_app(
     redis_client: Optional[redis.Redis] = None,
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
-    watch_hub: Optional[QueueWatchHub] = None,
     ws_hub: Optional[WebSocketHub] = None,
     controlbus_consumer: Optional[ControlBusConsumer] = None,
     commit_log_consumer: Optional[CommitLogConsumer] = None,
@@ -84,7 +82,6 @@ def create_app(
         degrade=degradation,
         insert_sentinel=insert_sentinel,
     )
-    watch_hub_local = watch_hub or QueueWatchHub()
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
     commit_log_consumer_local = commit_log_consumer
@@ -225,7 +222,6 @@ def create_app(
         redis_conn,
         database_obj,
         dagmanager,
-        watch_hub_local,
         ws_hub_local,
         degradation,
         world_client_local,

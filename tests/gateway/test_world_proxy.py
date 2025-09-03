@@ -318,6 +318,11 @@ async def test_status_reports_worldservice_breaker(fake_redis):
 
     transport = httpx.MockTransport(handler)
     breaker = AsyncCircuitBreaker(max_failures=1)
+    from qmtl.gateway import gateway_health
+
+    gateway_health._STATUS_CACHE = None
+    gateway_health._STATUS_CACHE_TS = 0.0
+
     client = WorldServiceClient(
         "http://world",
         budget=Budget(timeout=0.1, retries=0),

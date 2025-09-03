@@ -5,9 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 import asyncio
 
-from qmtl.gateway.watch import QueueWatchHub
-from qmtl.sdk import MatchMode
-
 from qmtl.gateway.api import create_app, Database
 from qmtl.common import crc32_of_list
 from qmtl.gateway.dagmanager_client import DagManagerClient
@@ -208,67 +205,6 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         }
         assert len(dag.calls) == 2
     asyncio.run(dag.close())
-
-
-@pytest.mark.asyncio
-async def test_watch_hub_broadcast():
-    hub = QueueWatchHub()
-
-    async def listen():
-        gen = hub.subscribe(["t1"], 60, MatchMode.ANY)
-        try:
-            return await gen.__anext__()
-        finally:
-            await gen.aclose()
-
-    task = asyncio.create_task(listen())
-    await asyncio.sleep(0)
-    await hub.broadcast(
-        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
-    )
-    try:
-        result = await task
-        assert result == [{"queue": "q3", "global": False}]
-    except asyncio.CancelledError:
-        pytest.fail("Task was unexpectedly cancelled")
-
-
-@pytest.mark.asyncio
-async def test_watch_hub_broadcast_only_on_change():
-    hub = QueueWatchHub()
-    results: list[list[str]] = []
-    ready = asyncio.Event()
-
-    async def listener() -> None:
-        gen = hub.subscribe(["t1"], 60, MatchMode.ANY)
-        ready.set()
-        async for data in gen:
-            results.append(data)
-
-    task = asyncio.create_task(listener())
-    await ready.wait()
-
-    await hub.broadcast(
-        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
-    )
-    await asyncio.sleep(0)
-    await hub.broadcast(
-        ["t1"], 60, [{"queue": "q3", "global": False}], MatchMode.ANY
-    )
-    await asyncio.sleep(0)
-    await hub.broadcast(
-        ["t1"], 60, [{"queue": "q4", "global": False}], MatchMode.ANY
-    )
-    await asyncio.sleep(0)
-
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    assert results == [
-        [{"queue": "q3", "global": False}],
-        [{"queue": "q4", "global": False}],
-    ]
 
 
 @pytest.mark.asyncio

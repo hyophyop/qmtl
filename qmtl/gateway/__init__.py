@@ -8,7 +8,6 @@ from .degradation import DegradationManager, DegradationLevel
 from .database import Database
 from .fsm import StrategyFSM
 from .ws import WebSocketHub
-from .watch import QueueWatchHub
 
 __all__ = [
     "DagManagerClient",
@@ -24,5 +23,4 @@ __all__ = [
     "DegradationManager",
     "DegradationLevel",
     "WebSocketHub",
-    "QueueWatchHub",
 ]
