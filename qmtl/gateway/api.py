@@ -59,6 +59,7 @@ def create_app(
     worldservice_retries: int = 2,
     enable_worldservice_proxy: bool = True,
     enforce_live_guard: bool = True,
+    enable_otel: bool | None = None,
 ) -> FastAPI:
     setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
@@ -188,7 +189,15 @@ def create_app(
                     logger.exception("Failed to close world client")
 
     app = FastAPI(lifespan=lifespan)
-    FastAPIInstrumentor().instrument_app(app)
+    # Opt-in FastAPI OpenTelemetry instrumentation to avoid resource warnings in tests
+    # Default is disabled unless explicitly enabled via argument or env var
+    _otel_enabled = (
+        enable_otel
+        if enable_otel is not None
+        else os.getenv("QMTL_ENABLE_FASTAPI_OTEL", "0").lower() in {"1", "true", "yes"}
+    )
+    if _otel_enabled:
+        FastAPIInstrumentor().instrument_app(app)
     app.state.database = database_obj
     app.state.degradation = degradation
     app.state.world_client = world_client_local
