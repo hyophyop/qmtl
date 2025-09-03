@@ -7,6 +7,7 @@ import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
 
 from .node import MatchMode
+from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient
 
@@ -80,16 +81,7 @@ class TagQueryManager:
                     raw = resp.json().get("queues", [])
                 except httpx.RequestError:
                     raw = []
-                queues: list[str] = []
-                for q in raw:
-                    if isinstance(q, dict):
-                        if q.get("global"):
-                            continue
-                        val = q.get("queue") or q.get("topic")
-                        if val:
-                            queues.append(val)
-                    else:
-                        queues.append(q)
+                queues = normalize_queues(raw)
                 for n in nodes:
                     n.update_queues(list(queues))
 
@@ -102,22 +94,13 @@ class TagQueryManager:
             tags = payload.get("tags") or []
             interval = payload.get("interval")
             raw = payload.get("queues", [])
-            queues: list[str] = []
-            for q in raw:
-                if isinstance(q, dict):
-                    if q.get("global"):
-                        continue
-                    val = q.get("queue") or q.get("topic")
-                    if val:
-                        queues.append(val)
-                else:
-                    queues.append(q)
+            queues = normalize_queues(raw)
             try:
-                match_mode = MatchMode(payload.get("match_mode", "any"))
+                match_mode = normalize_match_mode(None, payload.get("match_mode"))
             except ValueError:
                 return
             if isinstance(tags, str):
-                tags = [t for t in tags.split(",") if t]
+                tags = split_tags(tags)
             try:
                 interval = int(interval)
             except (TypeError, ValueError):

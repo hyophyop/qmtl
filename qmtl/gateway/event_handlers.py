@@ -78,16 +78,14 @@ def create_event_router(
                         or "any"
                     )
                     if tags_param and interval_param:
+                        from qmtl.common.tagquery import split_tags, normalize_match_mode
                         try:
                             interval_int = int(interval_param)
                         except (TypeError, ValueError):
                             interval_int = None
-                        tags_list = [t for t in tags_param.split(",") if t]
+                        tags_list = split_tags(tags_param)
                         if interval_int is not None and tags_list:
-                            try:
-                                mode = MatchMode(match_param)
-                            except ValueError:
-                                mode = MatchMode.ANY
+                            mode = normalize_match_mode(match_param, None)
                             try:
                                 queues = await dagmanager.get_queues_by_tag(
                                     tags_list, interval_int, mode.value
