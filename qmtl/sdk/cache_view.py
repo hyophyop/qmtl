@@ -61,6 +61,22 @@ class CacheView:
             return self._data[-1] if self._data else None
         raise AttributeError("latest")
 
+    def table(self):  # Arrow-friendly convenience for Arrow backend adapters
+        from typing import Sequence as _Seq
+        if isinstance(self._data, _Seq):
+            try:  # pragma: no cover - exercised via Arrow tests
+                import pyarrow as pa
+                import pickle
+            except Exception as e:  # pragma: no cover - optional dependency
+                raise AttributeError("table") from e
+            ts = [int(t) for t, _ in self._data]
+            vals = [pickle.dumps(v) for _, v in self._data]
+            return pa.table({
+                "t": pa.array(ts, pa.int64()),
+                "v": pa.array(vals, pa.binary()),
+            })
+        raise AttributeError("table")
+
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return f"CacheView({self._data!r})"
 
@@ -68,5 +84,4 @@ class CacheView:
     def access_log(self) -> list[tuple[str, int]]:
         """Return list of accessed ``(upstream_id, interval)`` pairs."""
         return list(self._access_log)
-
 
