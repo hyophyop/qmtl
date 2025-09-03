@@ -104,7 +104,7 @@ F. 운영·관측·감사
 	•	CLI
 	•	qmtl world apply -f world.yml (정책/리소스 버전 적용)
 	•	qmtl world eval <world_id> --now (즉시 평가 트리거)
-	•	qmtl strategy set-mode <sid> --world W --mode dry-run|live|stop (강제 개입)
+	•	qmtl world activation set <world_id> --strategy <sid> --side long|short --active true|false (강제 개입)
 	•	API
 	•	POST /worlds/{id}/policy(버전드), POST /worlds/{id}/state(Active/EvalOnly/Paused)
 	•	POST /worlds/{id}/evaluate, POST /strategies/{sid}/promote|demote

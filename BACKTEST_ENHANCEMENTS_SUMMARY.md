@@ -50,21 +50,15 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 
 ### Runner API
 ```python
-# Legacy API (historical reference)
-Runner.backtest(strategy, start_time="2024-01-01", end_time="2024-12-31", gateway_url="http://gw")
+# WS-first run (follows WorldService decisions; orders gated by activation)
+Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
 
-# Enhanced API with new features
-Runner.backtest(
-    strategy,
-    start_time="2024-01-01",
-    end_time="2024-12-31",
-    gateway_url="http://gw",
-    validate_data=True,                    # Enable data validation
-    validation_config={                    # Custom validation settings
-        "max_price_change_pct": 0.05,
-        "min_price": 1.0
-    }
-)
+# Offline/local run (no Gateway/WS)
+Runner.offline(MyStrategy)
+
+# Data validation is provided as a separate utility
+from qmtl.sdk.backtest_validation import validate_backtest_data
+reports = validate_backtest_data(strategy)
 ```
 
 ### Standalone Component Usage
