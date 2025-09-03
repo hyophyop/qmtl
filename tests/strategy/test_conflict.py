@@ -35,7 +35,6 @@ def make_payload(dag: dict) -> StrategySubmit:
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        run_type="dry-run",
         node_ids_crc32=crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
     )
 

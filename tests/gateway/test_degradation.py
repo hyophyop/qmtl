@@ -168,7 +168,6 @@ def test_minimal_blocks_submission(fake_redis):
     payload = StrategySubmit(
         dag_json="{}",
         meta=None,
-        run_type="dry-run",
         node_ids_crc32=crc32_of_list([]),
     )
     with TestClient(app, raise_server_exceptions=False) as client:

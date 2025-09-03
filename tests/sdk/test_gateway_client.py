@@ -61,7 +61,6 @@ async def test_post_gateway_circuit_breaker(monkeypatch):
         gateway_url="http://gw",
         dag={},
         meta=None,
-        run_type="x",
     )
     assert "error" in res and "fail" in res["error"]
     assert cb.is_open
@@ -70,7 +69,6 @@ async def test_post_gateway_circuit_breaker(monkeypatch):
         gateway_url="http://gw",
         dag={},
         meta=None,
-        run_type="x",
     )
     assert res["error"] == "circuit open"
 
@@ -85,7 +83,6 @@ async def test_default_circuit_breaker(monkeypatch):
             gateway_url="http://gw",
             dag={},
             meta=None,
-            run_type="x",
         )
         assert "error" in res
 
@@ -93,7 +90,6 @@ async def test_default_circuit_breaker(monkeypatch):
         gateway_url="http://gw",
         dag={},
         meta=None,
-        run_type="x",
     )
     assert res["error"] == "circuit open"
 
@@ -108,7 +104,6 @@ async def test_breaker_resets_on_success(monkeypatch):
         gateway_url="http://gw",
         dag={},
         meta=None,
-        run_type="x",
     )
     assert "error" in first
     assert cb.failures == 1
@@ -117,10 +112,8 @@ async def test_breaker_resets_on_success(monkeypatch):
         gateway_url="http://gw",
         dag={},
         meta=None,
-        run_type="x",
     )
     assert second == {partition_key("n", None, None): "t"}
     assert cb.reset_calls == 1
     assert cb.failures == 0
     assert not cb.is_open
-

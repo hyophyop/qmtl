@@ -45,7 +45,7 @@ async def test_post_gateway_propagates_trace(monkeypatch):
     client = GatewayClient()
     with tracer.start_as_current_span("parent"):
         await client.post_strategy(
-            gateway_url="http://gw", dag={}, meta=None, run_type="test"
+            gateway_url="http://gw", dag={}, meta=None
         )
     assert "traceparent" in captured
 

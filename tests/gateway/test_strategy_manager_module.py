@@ -21,7 +21,6 @@ async def test_strategy_manager_submit_and_status():
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        run_type="dry-run",
         node_ids_crc32=0,
     )
     sid, existed = await manager.submit(payload)
