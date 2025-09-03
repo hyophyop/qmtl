@@ -90,7 +90,6 @@ class Runner:
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
-            run_type="backtest",
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
@@ -166,7 +165,6 @@ class Runner:
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
-            run_type="dry-run",
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
@@ -237,7 +235,6 @@ class Runner:
             gateway_url=gateway_url,
             dag=dag,
             meta=meta,
-            run_type="live",
         )
         if isinstance(queue_map, dict) and "error" in queue_map:
             raise RuntimeError(queue_map["error"])
