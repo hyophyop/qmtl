@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover - optional dependency
     ray = None  # type: ignore
 
 from . import runtime
+from .cache_view import CacheView
 
 ARROW_AVAILABLE = pa is not None
 RAY_AVAILABLE = ray is not None
@@ -194,11 +195,17 @@ class NodeCacheArrow:
         self._filled.pop(key, None)
         self._last_seen.pop(key, None)
 
-    def view(self, *, track_access: bool = False) -> ArrowCacheView:
-        by_upstream: Dict[str, Dict[int, _Slice]] = {}
+    def view(self, *, track_access: bool = False) -> CacheView:
+        """Return a CacheView-compatible structure for Arrow backend.
+
+        Adapts Arrow slices to the standard CacheView contract by exposing
+        ``list[(timestamp, value)]`` at the deepest level, enabling identical
+        access patterns across backends.
+        """
+        data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
         for (u, i), sl in self._slices.items():
-            by_upstream.setdefault(u, {})[i] = sl
-        return ArrowCacheView(by_upstream, track_access=track_access)
+            data.setdefault(u, {})[i] = sl.get_list()
+        return CacheView(data, track_access=track_access)
 
     def missing_flags(self) -> Dict[str, Dict[int, bool]]:
         result: Dict[str, Dict[int, bool]] = {}
