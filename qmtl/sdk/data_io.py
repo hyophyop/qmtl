@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-"""Interfaces for I/O operations and legacy re-exports."""
+"""Interfaces for I/O operations.
+
+This module defines the abstract I/O interfaces used by the SDK.
+Concrete implementations live under ``qmtl.io``.
+"""
 
 from typing import Protocol, Any, TYPE_CHECKING
 from abc import ABC, abstractmethod
@@ -75,14 +79,8 @@ class EventRecorder(ABC):
 
 
 # re-export concrete implementations for backward compatibility
-from qmtl.io.historyprovider import QuestDBLoader
-from qmtl.io.eventrecorder import QuestDBRecorder
-
 __all__ = [
     "DataFetcher",
     "HistoryProvider",
     "EventRecorder",
-    "QuestDBLoader",
-    "QuestDBRecorder",
 ]
-

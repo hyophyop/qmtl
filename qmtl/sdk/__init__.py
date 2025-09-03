@@ -22,9 +22,8 @@ from qmtl.sdk.data_io import (
     DataFetcher,
     HistoryProvider,
     EventRecorder,
-    QuestDBLoader,
-    QuestDBRecorder,
 )
+from qmtl.io import QuestDBLoader, QuestDBRecorder
 from .backfill_engine import BackfillEngine
 from .util import parse_interval, parse_period, validate_tag, validate_name
 from .exceptions import (

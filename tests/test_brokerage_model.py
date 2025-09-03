@@ -33,7 +33,7 @@ def test_execute_order_applies_slippage_and_fee():
     brokerage = BrokerageModel(
         CashBuyingPowerModel(),
         PerShareFeeModel(fee_per_share=0.5),
-        VolumeShareSlippageModel(slippage_rate=0.01),
+        VolumeShareSlippageModel(fallback_pct=0.01),
         ImmediateFillModel(),
     )
     fill = brokerage.execute_order(account, order, market_price=100)

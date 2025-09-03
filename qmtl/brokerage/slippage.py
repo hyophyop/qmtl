@@ -57,9 +57,6 @@ class VolumeShareSlippageModel(SlippageModel):
     fallback_pct: float = 0.0005
 
     def __init__(self, k: float = 0.1, bar_volume: Optional[float] = None, fallback_pct: float = 0.0005, **kwargs) -> None:
-        # Backward-compat: support `slippage_rate` alias for fallback_pct
-        if "slippage_rate" in kwargs and "fallback_pct" not in kwargs:
-            fallback_pct = float(kwargs["slippage_rate"])
         self.k = k
         self.bar_volume = bar_volume
         self.fallback_pct = fallback_pct
