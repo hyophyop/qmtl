@@ -52,24 +52,23 @@ def _make_strategy(calls, results):
     return Strat
 
 
-def test_dry_run_offline_pipeline(monkeypatch):
+def test_run_offline_pipeline(monkeypatch):
     _mock_gateway(monkeypatch)
     monkeypatch.setattr(Runner, "_kafka_available", True)
     calls, results = [], []
 
-    Runner.dryrun(_make_strategy(calls, results), gateway_url="http://gw", offline=True)
+    Runner.run(_make_strategy(calls, results), world_id="w", gateway_url="http://gw", offline=True)
 
     assert calls == ["n1", "n2", "n1", "n2"]
     assert results == [4, 6]
 
 
-def test_live_no_kafka_pipeline(monkeypatch):
+def test_run_no_kafka_pipeline(monkeypatch):
     _mock_gateway(monkeypatch)
     monkeypatch.setattr(Runner, "_kafka_available", False)
     calls, results = [], []
 
-    Runner.live(_make_strategy(calls, results), gateway_url="http://gw")
+    Runner.run(_make_strategy(calls, results), world_id="w", gateway_url="http://gw")
 
     assert calls == ["n1", "n2", "n1", "n2"]
     assert results == [4, 6]
-

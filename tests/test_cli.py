@@ -17,17 +17,15 @@ def test_cli_help():
     assert "usage: qmtl sdk" in result.stdout
 
 
-def test_cli_dry_run():
+def test_cli_run_requires_args():
+    # Missing required args should produce non-zero exit
     result = subprocess.run([
         sys.executable,
         "-m",
         "qmtl",
         "sdk",
+        "run",
         STRATEGY_PATH,
-        "--mode",
-        "dryrun",
-        "--gateway-url",
-        "http://gw",
     ], capture_output=True, text=True)
     assert result.returncode != 0
 
@@ -39,9 +37,8 @@ def test_cli_offline():
         "-m",
         "qmtl",
         "sdk",
-        STRATEGY_PATH,
-        "--mode",
         "offline",
+        STRATEGY_PATH,
     ], capture_output=True, text=True, cwd="qmtl", env=env)
     assert result.returncode == 0
     assert "[OFFLINE] SampleStrategy" in result.stderr
@@ -51,9 +48,8 @@ def test_cli_offline():
 async def test_cli_sets_no_ray(monkeypatch):
     monkeypatch.setattr(runtime, "NO_RAY", False)
     await sdk_cli._main([
-        STRATEGY_PATH,
-        "--mode",
         "offline",
+        STRATEGY_PATH,
         "--no-ray",
     ])
     assert runtime.NO_RAY

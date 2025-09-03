@@ -41,7 +41,7 @@ def _mock_gateway(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
 
-def test_backtest_executes_nodes(monkeypatch):
+def test_run_executes_nodes_offline(monkeypatch):
     _mock_gateway(monkeypatch)
     calls = []
 
@@ -51,7 +51,7 @@ def test_backtest_executes_nodes(monkeypatch):
             node = Node(input=src, compute_fn=lambda v: calls.append(v), interval="60s", period=2)
             self.add_nodes([src, node])
 
-    Runner.backtest(Strat, start_time=60, end_time=120, gateway_url="http://gw")
+    Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
     assert len(calls) == 1
 
 

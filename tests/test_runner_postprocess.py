@@ -37,7 +37,7 @@ def _trigger(strategy: DummyStrategy) -> None:
     Runner.feed_queue_data(strategy.trade, strategy.alpha.node_id, 1, 0, {})
 
 
-def test_backtest_hooks(monkeypatch):
+def test_run_hooks_offline(monkeypatch):
     collected = []
     orders = []
 
@@ -65,7 +65,7 @@ def test_backtest_hooks(monkeypatch):
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
 
-    strategy = Runner.backtest(DummyStrategy, start_time=0, end_time=1, gateway_url="http://gw")
+    strategy = Runner.run(DummyStrategy, world_id="w", gateway_url="http://gw", offline=True)
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)
@@ -114,7 +114,7 @@ def test_handle_trade_order_http_and_kafka(monkeypatch):
     runner.set_kafka_producer(None)
 
 
-def test_live_hooks(monkeypatch):
+def test_run_hooks_live_like(monkeypatch):
     collected = []
     orders = []
 
@@ -143,7 +143,7 @@ def test_live_hooks(monkeypatch):
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
     monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
 
-    strategy = Runner.live(DummyStrategy, gateway_url="http://gw", offline=True)
+    strategy = Runner.run(DummyStrategy, world_id="w", gateway_url="http://gw", offline=True)
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)
