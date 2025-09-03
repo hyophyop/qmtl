@@ -88,3 +88,6 @@ uv.lock
 
 # Snapshots
 .qmtl_snapshots/
+
+# MkDocs build artifacts
+site/
