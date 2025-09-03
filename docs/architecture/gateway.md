@@ -107,8 +107,7 @@ paths:
           name: match_mode
           schema: { type: string, enum: [any, all] }
           description: |
-            Preferred tag matching mode. ``match`` is accepted as a deprecated alias
-            for backwards compatibility.
+            Preferred tag matching mode.
       responses:
         '200':
           description: Queue list
@@ -121,8 +120,7 @@ paths:
                     type: array
                     items: { type: string }
 ```
-``match_mode`` should be used by new clients. ``match`` remains available for
-older integrations.
+Clients must specify ``match_mode`` to control tag matching behavior.
 
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 

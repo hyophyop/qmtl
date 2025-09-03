@@ -72,11 +72,7 @@ def create_event_router(
                 if "queue" in topics_set and dagmanager is not None:
                     tags_param = websocket.query_params.get("tags")
                     interval_param = websocket.query_params.get("interval")
-                    match_param = (
-                        websocket.query_params.get("match_mode")
-                        or websocket.query_params.get("match")
-                        or "any"
-                    )
+                    match_param = websocket.query_params.get("match_mode") or "any"
                     if tags_param and interval_param:
                         from qmtl.common.tagquery import split_tags, normalize_match_mode
                         try:
@@ -85,7 +81,7 @@ def create_event_router(
                             interval_int = None
                         tags_list = split_tags(tags_param)
                         if interval_int is not None and tags_list:
-                            mode = normalize_match_mode(match_param, None)
+                            mode = normalize_match_mode(match_param)
                             try:
                                 queues = await dagmanager.get_queues_by_tag(
                                     tags_list, interval_int, mode.value
