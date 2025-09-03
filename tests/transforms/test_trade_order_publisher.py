@@ -22,7 +22,7 @@ def test_trade_order_publisher_builds_order_and_publishes():
     runner.set_trade_order_kafka_topic("orders")
 
     signal_node = Node(name="signal", interval="1s", period=1)
-    pub_node = TradeOrderPublisherNode(signal_node, topic="orders")
+    pub_node = TradeOrderPublisherNode(signal_node)
     view = CacheView({signal_node.node_id: {1: [(0, {"action": "BUY", "size": 2, "stop_loss": 3, "take_profit": 4})]}})
     order = pub_node.compute_fn(view)
     runner._postprocess_result(pub_node, order)
@@ -40,7 +40,7 @@ def test_trade_order_publisher_builds_order_and_publishes():
 
 def test_trade_order_publisher_filters_actions():
     signal_node = Node(name="signal", interval="1s", period=1)
-    pub_node = TradeOrderPublisherNode(signal_node, topic="orders")
+    pub_node = TradeOrderPublisherNode(signal_node)
     view = CacheView({signal_node.node_id: {1: [(0, {"action": "HOLD"})]}})
     assert pub_node.compute_fn(view) is None
     view = CacheView({signal_node.node_id: {1: [(0, {"action": "WAIT"})]}})
