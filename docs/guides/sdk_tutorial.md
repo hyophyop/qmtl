@@ -231,7 +231,8 @@ metrics = alpha_performance_node(
 
 `TradeOrderPublisherNode` turns trade signals into standardized order
 payloads. Publication targets are configured through `Runner` hooks; the
-node itself carries no topic information. The `Runner` examines node results
+node itself carries no topic information. The `topic` parameter has been
+removed from this node; configure destinations via `Runner` hooks. The `Runner` examines node results
 and delivers orders to external systems via:
 
 1. `Runner.set_trade_execution_service(service)` forwards the order to a
@@ -275,4 +276,3 @@ execution backend.
 
 
 {{ nav_links() }}
-
