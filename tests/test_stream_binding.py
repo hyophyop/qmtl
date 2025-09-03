@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 
 def test_questdb_table_defaults_to_node_id():
@@ -7,7 +7,7 @@ def test_questdb_table_defaults_to_node_id():
         interval="60s",
         period=1,
         history_provider=QuestDBLoader("db"),
-        event_recorder=QuestDBRecorder("db"),
+        event_service=EventRecorderService(QuestDBRecorder("db")),
     )
     assert stream.history_provider.table == stream.node_id
     assert stream.event_recorder.table == stream.node_id
@@ -20,8 +20,7 @@ def test_questdb_explicit_table_override():
         interval="60s",
         period=1,
         history_provider=loader,
-        event_recorder=recorder,
+        event_service=EventRecorderService(recorder),
     )
     assert loader.table == "t"
     assert recorder.table == "t"
-

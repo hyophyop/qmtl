@@ -3,7 +3,7 @@ import pandas as pd
 
 from qmtl.examples.defaults import load_backtest_defaults
 from qmtl.io import QuestDBLoader, QuestDBRecorder
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
 
 class GeneralStrategy(Strategy):
     def __init__(self):
@@ -14,8 +14,10 @@ class GeneralStrategy(Strategy):
             history_provider=QuestDBLoader(
                 dsn="postgresql://localhost:8812/qdb",
             ),
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
 

@@ -247,12 +247,14 @@ and cannot be reassigned later. The same guide covers persisting data via
 Example injection:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 stream = StreamInput(
     interval="60s",
     history_provider=QuestDBLoader(dsn="postgresql://user:pass@localhost:8812/qdb"),
-    event_recorder=QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb"),
+    event_service=EventRecorderService(
+        QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb")
+    ),
 )
 ```
 
@@ -292,4 +294,3 @@ loader = QuestDBLoader(
     fetcher=fetcher,
 )
 ```
-

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner, metrics
+from qmtl.sdk import Strategy, Node, StreamInput, Runner, metrics, EventRecorderService
 from qmtl.io import QuestDBLoader, QuestDBRecorder
 
 
@@ -12,7 +12,7 @@ class RecorderStrategy(Strategy):
             interval="60s",
             period=30,
             history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+            event_service=EventRecorderService(QuestDBRecorder("postgresql://localhost:8812/qdb")),
         )
 
         def momentum(view) -> pd.DataFrame:
