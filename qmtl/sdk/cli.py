@@ -13,32 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 async def _main(argv: List[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="qmtl sdk",
-        description="Run QMTL strategy (backtest/dry-run/live/offline)",
-    )
-    parser.add_argument("strategy", help="Import path as module:Class")
-    parser.add_argument(
-        "--mode",
-        choices=["backtest", "dryrun", "live", "offline"],
-        required=True,
-        help=(
-            "Execution mode: backtest replays history, dryrun connects to the Gateway without trading, "
-            "live executes with real queues, offline runs locally without Gateway"
-        ),
-    )
-    parser.add_argument("--start-time")
-    parser.add_argument("--end-time")
-    parser.add_argument("--on-missing", default="skip")
-    parser.add_argument(
-        "--gateway-url",
-        help="Gateway base URL (required for backtest, dryrun and live modes)",
-    )
-    parser.add_argument(
-        "--no-ray",
-        action="store_true",
-        help="Disable Ray-based features (compute functions and cache eviction)",
-    )
+    parser = argparse.ArgumentParser(prog="qmtl sdk", description="Run QMTL strategy")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    run_p = sub.add_parser("run", help="Run under WorldService decisions")
+    run_p.add_argument("strategy", help="Import path as module:Class")
+    run_p.add_argument("--world-id", required=True)
+    run_p.add_argument("--gateway-url", required=True, help="Gateway base URL")
+    run_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
+
+    off_p = sub.add_parser("offline", help="Run locally without Gateway/WS")
+    off_p.add_argument("strategy", help="Import path as module:Class")
+    off_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
+
     args = parser.parse_args(argv)
 
     if args.no_ray:
@@ -48,34 +35,16 @@ async def _main(argv: List[str] | None = None) -> int:
     module = importlib.import_module(module_name)
     strategy_cls = getattr(module, class_name)
 
-    if args.mode == "backtest":
-        await Runner.backtest_async(
+    if args.cmd == "run":
+        await Runner.run_async(
             strategy_cls,
-            start_time=args.start_time,
-            end_time=args.end_time,
-            on_missing=args.on_missing,
+            world_id=args.world_id,
             gateway_url=args.gateway_url,
         )
-    elif args.mode == "dryrun":
-        try:
-            await Runner.dryrun_async(
-                strategy_cls,
-                gateway_url=args.gateway_url,
-            )
-        except RuntimeError as err:
-            logger.error("Dry run failed: %s", err)
-            return 1
-    elif args.mode == "live":
-        await Runner.live_async(
-            strategy_cls,
-            gateway_url=args.gateway_url,
-        )
-    else:  # offline
+    else:
         await Runner.offline_async(strategy_cls)
-
     return 0
 
 
 def main(argv: List[str] | None = None) -> int:
     return asyncio.run(_main(argv))
-

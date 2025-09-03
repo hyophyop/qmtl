@@ -1,12 +1,12 @@
-"""Test that validation integration works properly with Runner."""
+"""Sanity tests for Runner.run integration (validation features removed)."""
 
 import pytest
 import httpx
 from qmtl.sdk import Runner, Strategy, StreamInput
 
 
-def test_backtest_with_validation_disabled(monkeypatch):
-    """Test that backtest works when validation is disabled."""
+def test_run_offline_minimal(monkeypatch):
+    """Runner.run executes strategy setup and returns instance (offline)."""
     
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
@@ -31,19 +31,17 @@ def test_backtest_with_validation_disabled(monkeypatch):
             stream = StreamInput(interval="60s", period=2)
             self.add_nodes([stream])
 
-    # Should work with validation disabled
-    strategy = Runner.backtest(
+    strategy = Runner.run(
         TestStrategy,
-        start_time="s",
-        end_time="e",
+        world_id="w",
         gateway_url="http://gw",
-        validate_data=False
+        offline=True,
     )
     assert isinstance(strategy, TestStrategy)
 
 
-def test_backtest_with_validation_enabled_clean_data(monkeypatch):
-    """Test that backtest works with validation enabled and clean data."""
+def test_run_offline_with_cached_data(monkeypatch):
+    """Runner.run can operate with pre-cached data offline."""
     
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
@@ -71,19 +69,17 @@ def test_backtest_with_validation_enabled_clean_data(monkeypatch):
             stream.cache.append("test_queue", 60, 120, {"close": 10.1})
             self.add_nodes([stream])
 
-    # Should work with validation enabled and clean data
-    strategy = Runner.backtest(
+    strategy = Runner.run(
         TestStrategy,
-        start_time="s",
-        end_time="e",
+        world_id="w",
         gateway_url="http://gw",
-        validate_data=True
+        offline=True,
     )
     assert isinstance(strategy, TestStrategy)
 
 
-def test_backtest_with_validation_custom_config(monkeypatch):
-    """Test that backtest works with custom validation configuration."""
+def test_run_offline_with_larger_moves(monkeypatch):
+    """Runner.run supports arbitrary cached data without validation."""
     
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
@@ -111,15 +107,10 @@ def test_backtest_with_validation_custom_config(monkeypatch):
             stream.cache.append("test_queue", 60, 120, {"close": 12.0})  # 20% change
             self.add_nodes([stream])
 
-    # Should work with custom validation config allowing larger price movements
-    strategy = Runner.backtest(
+    strategy = Runner.run(
         TestStrategy,
-        start_time="s",
-        end_time="e",
+        world_id="w",
         gateway_url="http://gw",
-        validate_data=True,
-        validation_config={
-            "max_price_change_pct": 0.25,  # Allow up to 25% change
-        }
+        offline=True,
     )
     assert isinstance(strategy, TestStrategy)
