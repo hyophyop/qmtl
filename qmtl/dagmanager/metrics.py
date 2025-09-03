@@ -8,6 +8,11 @@ import time
 import argparse
 
 from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
+from qmtl.common.metrics_shared import (
+    get_nodecache_resident_bytes,
+    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
+    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
+)
 
 # Metrics defined in documentation
 # 95th percentile diff duration in milliseconds
@@ -57,19 +62,7 @@ sentinel_gap_count = Gauge(
 )
 sentinel_gap_count._val = 0  # type: ignore[attr-defined]
 
-if "nodecache_resident_bytes" in global_registry._names_to_collectors:
-    nodecache_resident_bytes = global_registry._names_to_collectors[
-        "nodecache_resident_bytes"
-    ]
-else:
-    nodecache_resident_bytes = Gauge(
-        "nodecache_resident_bytes",
-        "Resident bytes held in node caches",
-        ["node_id", "scope"],
-        registry=global_registry,
-    )
-
-nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+nodecache_resident_bytes = get_nodecache_resident_bytes()
 
 orphan_queue_total = Gauge(
     "orphan_queue_total",
@@ -155,14 +148,7 @@ def observe_diff_duration(duration_ms: float) -> None:
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
-    n = str(node_id)
-    nodecache_resident_bytes.labels(node_id=n, scope="node").set(resident)
-    nodecache_resident_bytes._vals[(n, "node")] = resident  # type: ignore[attr-defined]
-    total = sum(
-        v for (nid, sc), v in nodecache_resident_bytes._vals.items() if sc == "node"
-    )
-    nodecache_resident_bytes.labels(node_id="all", scope="total").set(total)
-    nodecache_resident_bytes._vals[("all", "total")] = total  # type: ignore[attr-defined]
+    _observe_nodecache_resident_bytes(node_id, resident)
 
 
 def observe_queue_lag(topic: str, lag_seconds: float, threshold_seconds: float) -> None:
@@ -228,8 +214,7 @@ def reset_metrics() -> None:
     compute_nodes_total._val = 0  # type: ignore[attr-defined]
     queues_total.set(0)
     queues_total._val = 0  # type: ignore[attr-defined]
-    nodecache_resident_bytes.clear()
-    nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+    _clear_nodecache_resident_bytes()
     queue_lag_seconds.clear()
     queue_lag_seconds._vals = {}  # type: ignore[attr-defined]
     queue_lag_threshold_seconds.clear()

@@ -11,6 +11,11 @@ from prometheus_client import (
     start_http_server,
     REGISTRY as global_registry,
 )
+from qmtl.common.metrics_shared import (
+    get_nodecache_resident_bytes,
+    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
+    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
+)
 
 # Guard against re-registration when tests reload this module
 if "cache_read_total" in global_registry._names_to_collectors:
@@ -152,19 +157,9 @@ def record_pretrade_rejection(reason: str) -> None:
     _update_pretrade_ratio()
 
 # ---------------------------------------------------------------------------
-if "nodecache_resident_bytes" in global_registry._names_to_collectors:
-    nodecache_resident_bytes = global_registry._names_to_collectors[
-        "nodecache_resident_bytes"
-    ]
-else:
-    nodecache_resident_bytes = Gauge(
-        "nodecache_resident_bytes",
-        "Resident bytes held in node caches",
-        ["node_id", "scope"],
-        registry=global_registry,
-    )
-
-nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+# Shared metric instance (avoids duplicate registration when importing
+# qmtl.dagmanager.metrics in the same process)
+nodecache_resident_bytes = get_nodecache_resident_bytes()
 
 # ---------------------------------------------------------------------------
 if "node_processed_total" in global_registry._names_to_collectors:
@@ -330,14 +325,7 @@ def observe_backfill_failure(node_id: str, interval: int) -> None:
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
-    n = str(node_id)
-    nodecache_resident_bytes.labels(node_id=n, scope="node").set(resident)
-    nodecache_resident_bytes._vals[(n, "node")] = resident  # type: ignore[attr-defined]
-    total = sum(
-        v for (nid, sc), v in nodecache_resident_bytes._vals.items() if sc == "node"
-    )
-    nodecache_resident_bytes.labels(node_id="all", scope="total").set(total)
-    nodecache_resident_bytes._vals[("all", "total")] = total  # type: ignore[attr-defined]
+    _observe_nodecache_resident_bytes(node_id, resident)
 
 
 def observe_node_process(node_id: str, duration_ms: float) -> None:
@@ -380,8 +368,7 @@ def reset_metrics() -> None:
     backfill_failure_total._vals = {}  # type: ignore[attr-defined]
     backfill_retry_total.clear()
     backfill_retry_total._vals = {}  # type: ignore[attr-defined]
-    nodecache_resident_bytes.clear()
-    nodecache_resident_bytes._vals = {}  # type: ignore[attr-defined]
+    _clear_nodecache_resident_bytes()
     node_processed_total.clear()
     node_processed_total._vals = {}  # type: ignore[attr-defined]
     node_process_duration_ms.clear()
