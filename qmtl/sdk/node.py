@@ -536,24 +536,9 @@ class Node:
         Returns ``True`` when the node has collected enough data to execute its
         ``compute_fn``. The function **never** triggers execution directly.
         """
-        # Validate parameters
-        if not isinstance(upstream_id, str):
-            raise InvalidParameterError("upstream_id must be a string")
-        if not upstream_id.strip():
-            raise InvalidParameterError("upstream_id must not be empty")
-        
-        if not isinstance(interval, int):
-            raise InvalidParameterError("interval must be an integer")
-        if interval <= 0:
-            raise InvalidParameterError("interval must be positive")
-        
-        if not isinstance(timestamp, int):
-            raise InvalidParameterError("timestamp must be an integer")
-        if timestamp < 0:
-            raise InvalidParameterError("timestamp must not be negative")
-        
-        if on_missing not in ("skip", "fail"):
-            raise InvalidParameterError("on_missing must be 'skip' or 'fail'")
+        # Validate parameters (centralized in node_validation for consistency)
+        from .node_validation import validate_feed_params
+        validate_feed_params(upstream_id, interval, timestamp, on_missing)
         
         with tracer.start_as_current_span(
             "node.feed", attributes={"node.id": self.node_id}

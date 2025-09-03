@@ -11,6 +11,7 @@ __all__ = [
     "normalize_inputs",
     "validate_node_params",
     "validate_compute_fn",
+    "validate_feed_params",
     "validate_tag",
     "validate_name",
 ]
@@ -91,3 +92,33 @@ def validate_compute_fn(compute_fn) -> None:
         raise TypeError(
             "compute_fn must accept exactly one positional argument (지원되지 않는 함수 시그니처). compute_fn(view) 형태로 작성했는지 확인하세요"
         )
+
+
+def validate_feed_params(
+    upstream_id: str,
+    interval: int,
+    timestamp: int,
+    on_missing: str,
+) -> None:
+    """Validate parameters for :meth:`Node.feed`.
+
+    Centralizes type/range checking so error messages and exception types remain
+    consistent across the SDK.
+    """
+    if not isinstance(upstream_id, str):
+        raise InvalidParameterError("upstream_id must be a string")
+    if not upstream_id.strip():
+        raise InvalidParameterError("upstream_id must not be empty")
+
+    if not isinstance(interval, int):
+        raise InvalidParameterError("interval must be an integer")
+    if interval <= 0:
+        raise InvalidParameterError("interval must be positive")
+
+    if not isinstance(timestamp, int):
+        raise InvalidParameterError("timestamp must be an integer")
+    if timestamp < 0:
+        raise InvalidParameterError("timestamp must not be negative")
+
+    if on_missing not in ("skip", "fail"):
+        raise InvalidParameterError("on_missing must be 'skip' or 'fail'")
