@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import types
 
 import pytest
 
@@ -81,29 +80,3 @@ async def test_remote_registry_register_latest_get_by_id_and_from_env(monkeypatc
     # get by id
     g = client.get_by_id(s1.id)
     assert g and json.loads(g.schema)["a"] == 1
-
-
-def test_compatibility_recursive_and_types():
-    # Nested dict key addition allowed
-    assert SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": {"b": 1}}), json.dumps({"a": {"b": 1, "c": 2}})
-    )
-    # Removing required nested key fails
-    assert not SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": {"b": 1}}), json.dumps({"a": {}})
-    )
-    # Scalar type change fails
-    assert not SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": 1}), json.dumps({"a": "1"})
-    )
-    # Numeric type changes are allowed (int<->float)
-    assert SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": 1}), json.dumps({"a": 1.0})
-    )
-    assert SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": 1.0}), json.dumps({"a": 2})
-    )
-    # Lists: structure presence only (no deep check)
-    assert SchemaRegistryClient.is_backward_compatible(
-        json.dumps({"a": [1, 2]}), json.dumps({"a": ["x"]})
-    )

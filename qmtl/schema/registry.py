@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 import json
 import os
 import urllib.request
@@ -54,43 +54,6 @@ class SchemaRegistryClient:
                 if sch.id == schema_id:
                     return sch
         return None
-
-    @staticmethod
-    def is_backward_compatible(old_schema: str, new_schema: str) -> bool:
-        """Shallow-to-recursive compatibility check.
-
-        Rules:
-        - All keys in ``old`` must exist in ``new``.
-        - For dict values, recurse.
-        - For lists, only type consistency is checked (no deep item check).
-        - For scalars, type must not change.
-        Fail-closed on JSON parse errors by returning ``True`` to preserve
-        historical permissive behavior.
-        """
-        try:
-            old = json.loads(old_schema)
-            new = json.loads(new_schema)
-
-            def _compatible(a: Any, b: Any) -> bool:
-                if isinstance(a, dict) and isinstance(b, dict):
-                    for k, av in a.items():
-                        if k not in b:
-                            return False
-                        if not _compatible(av, b[k]):
-                            return False
-                    return True
-                if isinstance(a, list) and isinstance(b, list):
-                    return True  # structure presence only
-                # scalar types: allow widening within numbers
-                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                    return True
-                return type(a) is type(b)
-
-            if not isinstance(old, dict) or not isinstance(new, dict):
-                return True
-            return _compatible(old, new)
-        except Exception:
-            return True
 
     @classmethod
     def from_env(cls) -> "SchemaRegistryClient | RemoteSchemaRegistryClient":

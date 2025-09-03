@@ -19,8 +19,7 @@ last_modified: 2025-08-29
 
 When `QMTL_SCHEMA_REGISTRY_URL` is set, components can resolve `schema_id`s via
 an external Schema Registry. A lightweight in-memory client is available at
-`qmtl/schema/registry.py` with a simple backward-compatibility check
-(`is_backward_compatible`). Production deployments can swap in Confluent or
+`qmtl/schema/registry.py`. Production deployments can swap in Confluent or
 Redpanda clients.
 
 ## ControlBus CloudEvents — Protobuf Migration Path
