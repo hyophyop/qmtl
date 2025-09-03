@@ -35,10 +35,10 @@ def normalize_queues(raw: Iterable[Any]) -> list[str]:
         if isinstance(q, dict):
             if q.get("global"):
                 continue
-            val = q.get("queue") or q.get("topic")
+            # Only accept unified 'queue' key; legacy 'topic' is not supported
+            val = q.get("queue")
             if val:
                 queues.append(str(val))
         else:
             queues.append(str(q))
     return queues
-

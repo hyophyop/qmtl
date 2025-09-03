@@ -19,8 +19,7 @@ class TagQueryManager:
     """Manage :class:`TagQueryNode` instances and deliver updates.
 
     Queue updates are received via the ControlBus-backed WebSocket from
-    ``/events/subscribe``. The ``/queues/watch`` stream is retained only as a
-    legacy fallback.
+    ``/events/subscribe``.
     """
 
     def __init__(
@@ -38,17 +37,12 @@ class TagQueryManager:
         self.world_id = world_id
         self.strategy_id = strategy_id
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
-        self._watch_tasks: Dict[
-            Tuple[Tuple[str, ...], int, MatchMode], asyncio.Task
-        ] = {}
-        self._use_watch = False
+        # Legacy /queues/watch fallback removed; rely solely on event subscription
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
         key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
         self._nodes.setdefault(key, []).append(node)
-        if self._use_watch and key not in self._watch_tasks:
-            self._watch_tasks[key] = asyncio.create_task(self._watch(*key))
 
     def unregister(self, node: TagQueryNode) -> None:
         key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
@@ -147,66 +141,9 @@ class TagQueryManager:
 
         if self.client:
             await self.client.start()
-            return
-
-        # fallback to /queues/watch + HTTP reconcile
-        self._use_watch = True
-        await self.resolve_tags()
-        for key in list(self._nodes.keys()):
-            if key not in self._watch_tasks:
-                self._watch_tasks[key] = asyncio.create_task(self._watch(*key))
+        # No fallback to /queues/watch; require event subscription
 
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
-        for task in list(self._watch_tasks.values()):
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        self._watch_tasks.clear()
-
-    async def _watch(
-        self, tags: Tuple[str, ...], interval: int, match_mode: MatchMode
-    ) -> None:
-        if not self.gateway_url:
-            return
-
-        key = (tags, interval, match_mode)
-        params = {
-            "tags": ",".join(tags),
-            "interval": interval,
-            "match_mode": match_mode.value,
-        }
-        url = self.gateway_url.rstrip("/") + "/queues/watch"
-        backoff: float = 1.0
-        try:
-            while key in self._nodes:
-                try:
-                    async with httpx.AsyncClient() as client:
-                        async with client.stream("GET", url, params=params) as resp:
-                            async for line in resp.aiter_lines():
-                                if not line:
-                                    continue
-                                try:
-                                    data = json.loads(line)
-                                except json.JSONDecodeError:
-                                    continue
-                                payload = {
-                                    "tags": list(tags),
-                                    "interval": interval,
-                                    "queues": data.get("queues", []),
-                                    "match_mode": match_mode.value,
-                                }
-                                await self.handle_message(
-                                    {"event": "queue_update", "data": payload}
-                                )
-                    backoff = 1.0
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 30)
-                    continue
-                await asyncio.sleep(backoff)
-        finally:
-            self._watch_tasks.pop(key, None)
+        # No background watch tasks in the new model
