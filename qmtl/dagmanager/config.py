@@ -18,8 +18,6 @@ class DagManagerConfig:
     grpc_port: int = 50051
     http_host: str = "0.0.0.0"
     http_port: int = 8000
-    diff_callback: Optional[str] = None
-    gc_callback: Optional[str] = None
     controlbus_dsn: Optional[str] = None
     controlbus_queue_topic: str = "queue"
 

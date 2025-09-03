@@ -128,18 +128,18 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
 | G→D | gRPC  | `DiffService.DiffRequest`     | DAG             | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 토픽 매핑      |
-| D→G | HTTP  | `/callbacks/dag-event`        | queue\_added/gc | 202                | backoff 1→8 s ×3   | 큐 이벤트            |
 | G→D | gRPC  | `AdminService.Cleanup`        | strategy\_id    | Ack                | 1 retry            | ref‑count decref |
 | G→D | gRPC  | `AdminService.GetQueueStats`  | filter          | Stats              | 300 ms             | 모니터링             |
 | G→D | gRPC  | `HealthCheck.Ping`            | –               | Pong               | 30 s interval      | Liveness         |
 | G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
 | G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
-| D→G | HTTP  | `/callbacks/sentinel-traffic` | version, weight | 202                | 3×                 | 카나리아 비율 변경       |
+| D→G | CB    | `queue` topic                 | queue_update/gc | at-least-once      | –                  | 큐 이벤트         |
 |     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](../operations/canary_rollout.md) 참조 |
 
-### 2-B. Sentinel Traffic API
+### 2-B. Sentinel Traffic
 
-`/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmanager_active_version_weight{version="<id>"}`로 노출된다.
+Sentinel weight updates are published as `sentinel_weight` events on the ControlBus. See the [Canary Rollout Guide](../operations/canary_rollout.md) for details.
+
 ---
 
 ## 3. 토픽 생성 & 명명 규칙 (확장)
@@ -170,7 +170,6 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 | # | 시나리오                       | 요약                                                                                     |
 | - | -------------------------- | -------------------------------------------------------------------------------------- |
-| 4 | **Sentinel Traffic Shift** | Ops → `/callbacks/sentinel-traffic` (weight=10→50). DAG Manager 업데이트 & Gateway 라우팅 테이블 변경. |
 | 5 | **RedoDiff for Hotfix**    | 버그 수정 코드 빠르게 패치 → `RedoDiff` gRPC 요청 → 새 토픽 vX.Y.Z‑hotfix 생성 후 스왑                       |
 
 ---
@@ -203,8 +202,7 @@ sequenceDiagram
     participant G as Gateway
     participant D as DAG Manager
     Note over G,D: Canary traffic 10% → 50%
-    G->>D: /callbacks/sentinel-traffic weight=0.5
-    D-->>G: 202 OK
+        D-->>G: 202 OK
 ```
 
 ---

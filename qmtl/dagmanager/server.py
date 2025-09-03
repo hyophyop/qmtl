@@ -15,6 +15,7 @@ from .api import create_app
 from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
 from .monitor import AckStatus
+from .controlbus_producer import ControlBusProducer
 
 
 class _NullStream(StreamSender):
@@ -91,29 +92,35 @@ async def _run(cfg: DagManagerConfig) -> None:
 
     gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
 
+    bus = None
+    if cfg.controlbus_dsn:
+        bus = ControlBusProducer(brokers=[cfg.controlbus_dsn], topic=cfg.controlbus_queue_topic)
+        await bus.start()
+
     grpc_server, _ = serve(
         driver,
         admin_client,
         _NullStream(),
         host=cfg.grpc_host,
         port=cfg.grpc_port,
-        callback_url=cfg.diff_callback,
         gc=gc,
         repo=repo,
         queue=queue,
+        bus=bus,
     )
     await grpc_server.start()
 
     app = create_app(
         gc,
-        callback_url=cfg.gc_callback,
         driver=driver,
-        gateway_url=cfg.diff_callback,
+        bus=bus,
     )
     config = uvicorn.Config(app, host=cfg.http_host, port=cfg.http_port, loop="asyncio", log_level="info")
     http_server = uvicorn.Server(config)
 
     await asyncio.gather(http_server.serve(), grpc_server.wait_for_termination())
+    if bus:
+        await bus.stop()
 
 
 def main(argv: list[str] | None = None) -> None:
