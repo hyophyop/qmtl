@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Iterable
+from collections.abc import Iterable, Sequence
+from typing import Any, Dict
 
 try:
     import pyarrow as pa
@@ -14,9 +15,8 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     ray = None  # type: ignore
 
-from . import runtime
+from . import metrics as sdk_metrics, runtime
 from .backfill_state import BackfillState
-from .cache_view import CacheView
 
 ARROW_AVAILABLE = pa is not None
 RAY_AVAILABLE = ray is not None
@@ -75,40 +75,73 @@ class _Slice:
 
 
 class ArrowCacheView:
+    """Hierarchical read-only view backed by Arrow ``_Slice`` objects."""
+
     def __init__(self, data: Dict[str, Dict[int, _Slice]], *, track_access: bool = False) -> None:
         self._data = data
         self._track_access = track_access
         self._access_log: list[tuple[str, int]] = []
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: Any):
+        from .node import Node  # local import to avoid cycle
+
+        if isinstance(key, Node):
+            key = key.node_id
         mp = self._data[key]
-        return _SecondLevelView(mp, self._track_access, self._access_log)
+        return _SecondLevelView(mp, key, self._track_access, self._access_log)
+
+    def __getattr__(self, name: str):  # pragma: no cover - convenience
+        if name in self._data:
+            return self.__getitem__(name)
+        raise AttributeError(name)
 
     def access_log(self) -> list[tuple[str, int]]:
         return list(self._access_log)
 
 
 class _SecondLevelView:
-    def __init__(self, data: Dict[int, _Slice], track_access: bool, log: list[tuple[str, int]]) -> None:
+    def __init__(self, data: Dict[int, _Slice], upstream: str, track_access: bool, log: list[tuple[str, int]]) -> None:
         self._data = data
+        self._upstream = upstream
         self._track_access = track_access
         self._log = log
 
     def __getitem__(self, key: int):
         if self._track_access:
-            self._log.append(("?", key))  # upstream id not tracked here
+            self._log.append((self._upstream, key))
+            sdk_metrics.observe_cache_read(self._upstream, key)
         return _SliceView(self._data[key])
 
 
-class _SliceView:
-    def __init__(self, sl: _Slice) -> None:
+class _SliceView(Sequence):
+    def __init__(self, sl: _Slice, start: int = 0, end: int | None = None) -> None:
         self._slice = sl
+        self._start = start
+        self._end = len(sl.ts) if end is None else end
+
+    def __len__(self) -> int:
+        return self._end - self._start
+
+    def __getitem__(self, idx: int | slice):
+        if isinstance(idx, slice):
+            start, stop, step = idx.indices(len(self))
+            if step != 1:
+                return [self[i] for i in range(start, stop, step)]
+            return _SliceView(self._slice, self._start + start, self._start + stop)
+        if idx < 0:
+            idx += len(self)
+        if idx < 0 or idx >= len(self):
+            raise IndexError("index out of range")
+        real = self._start + idx
+        ts = self._slice.ts[real].as_py()
+        val = self._slice._pickle.loads(self._slice.vals[real].as_py())
+        return int(ts), val
 
     def latest(self) -> tuple[int, Any] | None:
-        return self._slice.latest()
+        return self[-1] if len(self) else None
 
     def table(self) -> pa.Table:
-        return self._slice.table
+        return self._slice.slice_table(self._start, self._end)
 
 
 class NodeCacheArrow:
@@ -202,17 +235,13 @@ class NodeCacheArrow:
         self._filled.pop(key, None)
         self._last_seen.pop(key, None)
 
-    def view(self, *, track_access: bool = False) -> CacheView:
-        """Return a CacheView-compatible structure for Arrow backend.
+    def view(self, *, track_access: bool = False) -> ArrowCacheView:
+        """Return an Arrow-native :class:`CacheView` implementation."""
 
-        Adapts Arrow slices to the standard CacheView contract by exposing
-        ``list[(timestamp, value)]`` at the deepest level, enabling identical
-        access patterns across backends.
-        """
-        data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
+        data: Dict[str, Dict[int, _Slice]] = {}
         for (u, i), sl in self._slices.items():
-            data.setdefault(u, {})[i] = sl.get_list()
-        return CacheView(data, track_access=track_access)
+            data.setdefault(u, {})[i] = sl
+        return ArrowCacheView(data, track_access=track_access)
 
     def missing_flags(self) -> Dict[str, Dict[int, bool]]:
         result: Dict[str, Dict[int, bool]] = {}
