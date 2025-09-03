@@ -12,9 +12,9 @@ Renaming touches documentation, configuration paths, APIs, and tooling.  A rough
 
 ## Prototype: config/realms
 
-- Accept policy files under `config/realms/<realm_id>.yml` alongside the existing `config/worlds/` directory.
-- Gateways and runners first look for a matching realm file; if absent they fall back to a world file for backward compatibility.
-- Documentation examples updated to prefer the new path while noting legacy support.
+- Policy files now live under `config/realms/<realm_id>.yml`, replacing the previous `config/worlds/` directory.
+- Gateways and runners load realm files directly without falling back to world definitions.
+- Documentation examples use the new path exclusively.
 
 ## Prototype: `qmtl realm` CLI
 
