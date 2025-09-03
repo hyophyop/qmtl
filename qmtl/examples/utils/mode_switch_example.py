@@ -22,14 +22,11 @@ class ModeSwitchStrategy(Strategy):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode", choices=["offline", "run"], default="offline"
-    )
     parser.add_argument("--gateway-url")
-    parser.add_argument("--world-id", default="mode_switch_example")
+    parser.add_argument("--world-id")
     args = parser.parse_args()
 
-    if args.mode == "run":
+    if args.world_id and args.gateway_url:
         Runner.run(
             ModeSwitchStrategy,
             world_id=args.world_id,
