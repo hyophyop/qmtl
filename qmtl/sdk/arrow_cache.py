@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover - optional dependency
     ray = None  # type: ignore
 
 from . import runtime
+from .backfill_state import BackfillState
 from .cache_view import CacheView
 
 ARROW_AVAILABLE = pa is not None
@@ -122,6 +123,7 @@ class NodeCacheArrow:
         self._missing: Dict[tuple[str, int], bool] = {}
         self._filled: Dict[tuple[str, int], int] = {}
         self._last_seen: Dict[tuple[str, int], int] = {}
+        self.backfill_state = BackfillState()
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
         if RAY_AVAILABLE and not runtime.NO_RAY:
@@ -241,12 +243,132 @@ class NodeCacheArrow:
             return None
         return sl.latest()
 
+    def get_slice(
+        self,
+        u: str,
+        interval: int,
+        *,
+        count: int | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ):
+        sl = self._slices.get((u, interval))
+        if sl is None:
+            if count is not None:
+                return []
+            import numpy as np  # type: ignore
+            import xarray as xr  # type: ignore
+
+            return xr.DataArray(
+                np.empty((0, 2), dtype=object),
+                dims=("p", "f"),
+                coords={"p": [], "f": ["t", "v"]},
+            )
+
+        items = sl.get_list()
+        if count is not None:
+            if count <= 0:
+                return []
+            return items[-min(count, len(items)) :]
+
+        # Build DataArray like NodeCache.get_slice for consistency
+        import numpy as np  # type: ignore
+        import xarray as xr  # type: ignore
+
+        arr = np.empty((self.period, 2), dtype=object)
+        arr[:] = None
+        for idx, (ts, val) in enumerate(items[-self.period :]):
+            arr[idx, 0] = ts
+            arr[idx, 1] = val
+
+        slice_start = start if start is not None else 0
+        slice_end = end if end is not None else self.period
+        slice_start = max(0, slice_start + self.period if slice_start < 0 else slice_start)
+        slice_end = max(0, slice_end + self.period if slice_end < 0 else slice_end)
+        slice_start = min(self.period, slice_start)
+        slice_end = min(self.period, slice_end)
+
+        da = xr.DataArray(
+            arr,
+            dims=("p", "f"),
+            coords={"p": list(range(self.period)), "f": ["t", "v"]},
+        )
+        return da.isel(p=slice(slice_start, slice_end))
+
     @property
     def resident_bytes(self) -> int:
         total = 0
         for sl in self._slices.values():
             total += sl.resident_bytes
         return total
+
+    # Compatibility helpers to mirror NodeCache API used in tests/backfill
+    def backfill_bulk(
+        self,
+        u: str,
+        interval: int,
+        items: Iterable[tuple[int, Any]],
+    ) -> None:
+        sl = self._ensure(u, interval)
+        # Build merged mapping with live data taking precedence
+        existing: dict[int, Any] = {ts: v for ts, v in sl.get_list()}
+        backfill_items: list[tuple[int, Any]] = []
+        for ts, payload in items:
+            bucket = ts - (ts % interval)
+            backfill_items.append((bucket, payload))
+
+        # Record contiguous ranges for observability/merging behaviour
+        if backfill_items:
+            # De-duplicate by timestamp only; payload equality does not matter for ranges
+            ts_sorted = sorted({ts for ts, _ in backfill_items})
+            ranges: list[tuple[int, int]] = []
+            start_range = ts_sorted[0]
+            prev = start_range
+            for ts in ts_sorted[1:]:
+                if ts == prev + interval:
+                    prev = ts
+                else:
+                    ranges.append((start_range, prev))
+                    start_range = ts
+                    prev = ts
+            ranges.append((start_range, prev))
+            self.backfill_state.mark_ranges(u, interval, ranges)
+
+        merged_map: dict[int, Any] = dict(existing)
+        for ts, payload in backfill_items:
+            merged_map.setdefault(ts, payload)
+        merged = sorted(merged_map.items())[-self.period :]
+
+        # Rewrite slice arrays
+        if ARROW_AVAILABLE:
+            import pyarrow as pa  # type: ignore
+            import pickle
+
+            ts_list = [int(t) for t, _ in merged]
+            val_list = [pickle.dumps(v) for _, v in merged]
+            sl.ts = pa.array(ts_list, pa.int64())
+            sl.vals = pa.array(val_list, pa.binary())
+        else:  # pragma: no cover - safety guard
+            for ts, v in merged:
+                sl.append(int(ts), v)
+
+        # Update bookkeeping similar to append()
+        self._filled[(u, interval)] = min(len(merged), self.period)
+        last_ts = merged[-1][0] if merged else None
+        prev_last = self._last_ts.get((u, interval))
+        if last_ts is not None:
+            if prev_last is None:
+                self._missing[(u, interval)] = False
+            elif last_ts != prev_last:
+                self._missing[(u, interval)] = prev_last + interval != last_ts
+            self._last_ts[(u, interval)] = last_ts
+        self._last_seen[(u, interval)] = last_ts or 0
+
+    def _snapshot(self) -> Dict[str, Dict[int, list[tuple[int, Any]]]]:
+        result: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
+        for (u, i), sl in self._slices.items():
+            result.setdefault(u, {})[i] = sl.get_list()
+        return result
 
     def evict_expired(self) -> None:
         now = int(time.time())
