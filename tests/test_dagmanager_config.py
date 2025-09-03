@@ -39,12 +39,9 @@ def test_load_config_dagmanager_yaml(tmp_path: Path) -> None:
     }
     config_file = tmp_path / "dm.yml"
     config_file.write_text(yaml.safe_dump({"dagmanager": data}))
-    cfg = load_config(str(config_file)).dagmanager
-    assert cfg.neo4j_dsn == data["neo4j_dsn"]
-    assert cfg.kafka_dsn == "kafka:9092"
-    assert cfg.grpc_port == 6000
-    assert not hasattr(cfg, "kafka_breaker_timeout")
-    assert not hasattr(cfg, "kafka_breaker_threshold")
+    # Deprecated breaker keys should cause strict parsing errors now
+    with pytest.raises(TypeError):
+        load_config(str(config_file))
 
 
 def test_load_config_missing_file() -> None:
@@ -65,4 +62,3 @@ def test_load_config_yaml_error(tmp_path: Path, caplog) -> None:
     with caplog.at_level(logging.ERROR):
         with pytest.raises(ValueError, match="Failed to parse configuration file"):
             load_config(str(config_file))
-

@@ -54,15 +54,7 @@ def load_config(path: str) -> UnifiedConfig:
     if not isinstance(dm_data, dict):
         raise TypeError("dagmanager section must be a mapping")
 
-    # Breaker timeouts were removed; services now reset breakers manually
-    # based on explicit success signals.
-    for key in (
-        "kafka_breaker_timeout",
-        "neo4j_breaker_timeout",
-        "kafka_breaker_threshold",
-    ):
-        gw_data.pop(key, None)
-        dm_data.pop(key, None)
+    # Deprecated breaker keys are no longer filtered; invalid keys should be surfaced
 
     gateway_cfg = GatewayConfig(**gw_data)
     dagmanager_cfg = DagManagerConfig(**dm_data)
