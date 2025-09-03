@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements maintain full backward compatibility while providing optional advanced functionality.
+This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality.
 
 ## Key Enhancements Implemented
 
@@ -48,15 +48,15 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 
 ## API Integration
 
-### Backward Compatible Runner API
+### Runner API
 ```python
-# Existing API continues to work
+# Legacy API (historical reference)
 Runner.backtest(strategy, start_time="2024-01-01", end_time="2024-12-31", gateway_url="http://gw")
 
 # Enhanced API with new features
 Runner.backtest(
-    strategy, 
-    start_time="2024-01-01", 
+    strategy,
+    start_time="2024-01-01",
     end_time="2024-12-31",
     gateway_url="http://gw",
     validate_data=True,                    # Enable data validation
@@ -94,7 +94,6 @@ violations = risk_mgr.validate_portfolio_risk(positions, portfolio_value, timest
 - **66 test cases** across 5 test files
 - **100% functionality coverage** for all new modules
 - **Integration tests** validating component interactions
-- **Backward compatibility tests** ensuring existing functionality works
 - **Edge case testing** for robust error handling
 
 ## Performance Considerations
