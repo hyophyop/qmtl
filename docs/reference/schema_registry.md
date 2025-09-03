@@ -50,15 +50,6 @@ The expected JSON API is similar to common registry endpoints:
 Network errors raise `RuntimeError`. Future versions may introduce a dedicated
 exception type.
 
-## Compatibility Checks
-
-`SchemaRegistryClient.is_backward_compatible(old, new)` performs a
-shallow-to-recursive check:
-
-- All keys in `old` must exist in `new` (recurse into nested dicts)
-- For lists, only structure presence is checked
-- For scalars, type must not change; numeric (int/float) changes are allowed
-
 ## Kafka Integration
 
 `qmtl.kafka.schema_producer.SchemaAwareProducer` uses `SchemaRegistryClient.from_env()`
