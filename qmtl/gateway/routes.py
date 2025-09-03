@@ -8,9 +8,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Coroutine, Optional
 
-import grpc
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 from qmtl.sdk.node import MatchMode
 
@@ -20,7 +19,6 @@ from .degradation import DegradationManager
 from .gateway_health import get_health as gateway_health
 from .models import StrategyAck, StrategySubmit, StatusResponse
 from .strategy_manager import StrategyManager
-from .watch import QueueWatchHub
 from .ws import WebSocketHub
 from .world_client import WorldServiceClient
 
@@ -80,7 +78,6 @@ def create_api_router(
     redis_conn,
     database_obj,
     dagmanager: DagManagerClient,
-    watch_hub: QueueWatchHub,
     ws_hub: Optional[WebSocketHub],
     degradation: DegradationManager,
     world_client: Optional[WorldServiceClient],
@@ -211,7 +208,6 @@ def create_api_router(
                     mode = MatchMode(match_mode)
                 except ValueError:
                     return {"ok": True}
-                await watch_hub.broadcast(tags, interval, list(queues), mode)
                 if ws_hub:
                     await ws_hub.send_queue_update(tags, interval, list(queues), mode)
         elif event_type == "sentinel_weight":
@@ -244,31 +240,6 @@ def create_api_router(
         mode = normalize_match_mode(match_mode).value
         queues = await dagmanager.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
-
-    @router.get("/queues/watch")
-    async def queues_watch(
-        tags: str, interval: int, match_mode: str = "any"
-    ):
-        """Legacy queue watch; prefer ``POST /events/subscribe``."""
-        from qmtl.common.tagquery import split_tags, normalize_match_mode
-        tag_list = split_tags(tags)
-        mode = normalize_match_mode(match_mode)
-
-        async def streamer():
-            try:
-                initial = await dagmanager.get_queues_by_tag(tag_list, interval, mode.value)
-            except grpc.RpcError:
-                initial = []
-            yield json.dumps({"queues": initial}) + "\n"
-            async for queues in watch_hub.subscribe(tag_list, interval, mode):
-                yield json.dumps({"queues": queues}) + "\n"
-
-        headers = {
-            "Deprecation": "true",
-            "Link": "</events/subscribe>; rel=\"successor-version\"",
-        } 
-        return StreamingResponse(streamer(), media_type="text/plain", headers=headers)
-
     def _build_world_headers(request: Request) -> tuple[dict[str, str], str]:
         headers: dict[str, str] = {}
         auth = request.headers.get("authorization")

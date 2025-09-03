@@ -59,10 +59,6 @@ Related specs:
 
 ## Low Priority (P2)
 
-- Legacy "/queues/watch":
-  - Endpoint retained for compatibility; emits ``Deprecation`` header pointing to ``/events/subscribe``.
-  - SDKs should reconcile via ``/queues/by_tag`` over HTTP if the event stream is unavailable.
-
 - World initial snapshot semantics:
   - Add optional HTTP endpoints for "state_hash" probe to avoid full snapshot when unchanged.
 
@@ -85,7 +81,7 @@ Related specs:
   - Ensure QueueUpdated events are also published to ControlBus in addition to HTTP callback (already documented as preferred path).
 
 - SDK (follow-up, separate PR):
-  - Migrate "TagQueryManager" to use "/events/subscribe" descriptor when available; keep "/queues/by_tag" + "/queues/watch" as fallback.
+  - TagQueryManager uses the ``/events/subscribe`` descriptor exclusively.
 
 ---
 

@@ -152,6 +152,7 @@ def make_app(fake_redis):
     return app
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_status_includes_level(fake_redis):
     app = make_app(fake_redis)
     with TestClient(app) as client:
