@@ -2,29 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any
 
 from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
 
 
-def publisher_node(signal: Any, *, topic: str) -> Tuple[str, Any]:
-    """Return the given ``signal`` and ``topic`` pair.
+def publisher_node(signal: Any) -> Any:
+    """Return ``signal`` unchanged.
+
+    The Runner's hooks determine the publication destination; this function
+    simply forwards the payload without embedding any topic information.
 
     Parameters
     ----------
     signal:
         Message payload to publish.
-    topic:
-        Kafka topic name for the ``signal``.
 
     Returns
     -------
-    tuple[str, Any]
-        A ``(topic, signal)`` tuple that leaves ``signal`` untouched.
+    Any
+        The ``signal`` payload.
     """
 
-    return topic, signal
+    return signal
 
 
 class TradeOrderPublisherNode(Node):
@@ -34,13 +35,9 @@ class TradeOrderPublisherNode(Node):
         self,
         signal: Node,
         *,
-        topic: str,
         name: str | None = None,
     ) -> None:
         self.signal = signal
-        # ``topic`` is kept for API compatibility though the Runner's hooks
-        # ultimately decide the publication destination.
-        self.topic = topic
         super().__init__(
             input=signal,
             compute_fn=self._compute,

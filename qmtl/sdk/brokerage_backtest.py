@@ -6,8 +6,8 @@ This engine provides an adapter that can simulate executions using the
 pluggable QMTL ``BrokerageModel`` while producing the same shape as the
 existing SDK ``ExecutionModel`` (i.e., returning ``ExecutionFill``).
 
-In ``compat_mode=True``, the pricing logic mirrors the simplified
-``ExecutionModel`` so results are identical given the same inputs.
+The pricing logic mirrors the simplified ``ExecutionModel`` so results
+are identical given the same inputs.
 """
 
 from __future__ import annotations
@@ -64,7 +64,6 @@ class BrokerageBacktestEngine:
     ) -> None:
         self._brokerage = brokerage
         self._account = account or Account(cash=10_000_000.0)
-        self._latency_ms = latency_ms
         self._compat = compat_params or ExecCompatParams(latency_ms=latency_ms)
 
     def _base_price(self, order_type: OrderType, side: OrderSide, requested: float, md: MarketData) -> float:
@@ -82,14 +81,12 @@ class BrokerageBacktestEngine:
         requested_price: float,
         market_data: MarketData,
         timestamp: int,
-        *,
-        compat_mode: bool = True,
     ) -> ExecutionFill:
         """Simulate execution via brokerage components.
 
-        When ``compat_mode=True``, this reproduces the SDK ExecutionModel
-        pricing (base + slippage formula) and uses ``PercentFeeModel`` with
-        the same rate/minimum for fees to ensure output parity.
+        This reproduces the SDK ExecutionModel pricing (base + slippage
+        formula) and uses ``PercentFeeModel`` with the same rate/minimum
+        for fees to ensure output parity.
         """
 
         # Build brokerage order (quantity sign indicates side)

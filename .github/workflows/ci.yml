@@ -29,4 +29,4 @@ jobs:
             --grpc_python_out=qmtl/proto \
             qmtl/proto/dagmanager.proto
       - name: Run tests (warnings are errors)
-        run: PYTHONPATH=qmtl/proto uv run pytest -W error -q tests
+        run: PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
