@@ -239,8 +239,9 @@ def create_api_router(
     async def queues_by_tag(
         tags: str, interval: int, match: str = "any", match_mode: str | None = None
     ) -> dict:
-        mode = match_mode or match
-        tag_list = [t for t in tags.split(",") if t]
+        from qmtl.common.tagquery import split_tags, normalize_match_mode
+        tag_list = split_tags(tags)
+        mode = normalize_match_mode(match, match_mode).value
         queues = await dagmanager.get_queues_by_tag(tag_list, interval, mode)
         return {"queues": queues}
 
@@ -249,12 +250,9 @@ def create_api_router(
         tags: str, interval: int, match: str = "any", match_mode: str | None = None
     ):
         """Legacy queue watch; prefer ``POST /events/subscribe``."""
-        tag_list = [t for t in tags.split(",") if t]
-        mode_str = match_mode or match
-        try:
-            mode = MatchMode(mode_str)
-        except ValueError:
-            mode = MatchMode.ANY
+        from qmtl.common.tagquery import split_tags, normalize_match_mode
+        tag_list = split_tags(tags)
+        mode = normalize_match_mode(match, match_mode)
 
         async def streamer():
             try:
