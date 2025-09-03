@@ -43,7 +43,7 @@ class TagManagerService:
                         if isinstance(q, dict):
                             if q.get("global"):
                                 continue
-                            val = q.get("queue") or q.get("topic")
+                            val = q.get("queue")
                             if val:
                                 merged.append(val)
                         else:
@@ -56,7 +56,7 @@ class TagManagerService:
                 queue = None
                 global_flag = False
                 if isinstance(mapping_val, dict):
-                    queue = mapping_val.get("queue") or mapping_val.get("topic")
+                    queue = mapping_val.get("queue")
                     global_flag = bool(mapping_val.get("global"))
                 else:
                     queue = mapping_val
