@@ -192,15 +192,9 @@ Phase 4 — 멀티‑월드 최적화(선택적)
 ### 10.1 Runner/CLI 단계적 전환(월드‑우선)
 
 - Phase R1 — 기능 추가(비파괴)
-  - CLI: `--world`, `--world-file`, `--allow-live` 추가. `--mode`와 병행 지원.
-  - Runner: `auto_async(world_id, ...)` 구현 → `GET /worlds/{id}/decide` 호출 후 기존 경로로 디스패치.
+  - CLI: `qmtl sdk run --world-id <id> --gateway-url <url>`, `qmtl sdk offline`.
+  - Runner: WS 결정에 따르는 단일 경로(`run`/`offline`)만 유지.
   - 문서/예제: 월드‑우선 실행 예제와 즉시‑라이브 월드 YAML 제공.
-- Phase R2 — 기본 선택 전환(경고 기반)
-  - `--world` 지정 시 `--mode`는 경고 후 무시하거나 `auto`로 강제.
-  - CI/예제 기본을 월드‑우선으로 전환하되, 테스트용 명시 모드는 유지.
-- Phase R3 — 하드 디폴트 변경(옵션)
-  - CLI 도움말에서 모드 옵션을 후순위로 내리고, 월드‑우선 플로우를 기본으로 안내.
-  - `--mode`는 테스트/백필/디버깅용으로 존치(경고 메시지 노출: "--world 사용 시 --mode는 무시됩니다").
 
 로컬 실행 예시
 ```bash

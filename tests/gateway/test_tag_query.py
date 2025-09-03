@@ -138,7 +138,6 @@ def test_submit_tag_query_node(client):
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
-        "run_type": "dry-run",
         "node_ids_crc32": crc32_of_list(["N1"]),
     }
     resp = c.post("/strategies", json=payload)
@@ -194,7 +193,6 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         payload = {
             "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
             "meta": None,
-            "run_type": "dry-run",
             "node_ids_crc32": crc32_of_list(["N1", "N2"]),
         }
         resp = c.post("/strategies", json=payload)
