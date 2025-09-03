@@ -39,7 +39,6 @@ async def test_ingest_and_status(app):
         payload = StrategySubmit(
             dag_json="{}",
             meta={"user": "alice"},
-            run_type="dry-run",
             node_ids_crc32=crc32_of_list([]),
         )
         resp = await client.post("/strategies", json=payload.model_dump())

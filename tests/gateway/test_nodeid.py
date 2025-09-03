@@ -61,7 +61,6 @@ async def test_node_id_mismatch(client_and_redis):
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        run_type="dry-run",
         node_ids_crc32=crc32_of_list(["wrong"]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
@@ -77,7 +76,6 @@ async def test_sentinel_inserted(client_and_redis):
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        run_type="dry-run",
         node_ids_crc32=crc32_of_list([]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
@@ -98,7 +96,6 @@ async def test_sentinel_skip(fake_redis):
         payload = StrategySubmit(
             dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
             meta=None,
-            run_type="dry-run",
             node_ids_crc32=crc32_of_list([]),
         )
         resp = client.post("/strategies", json=payload.model_dump())

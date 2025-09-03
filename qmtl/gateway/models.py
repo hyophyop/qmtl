@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class StrategySubmit(BaseModel):
     dag_json: str = Field(..., description="Base64 encoded DAG JSON")
     meta: Optional[dict] = Field(default=None)
-    run_type: str
+    world_id: Optional[str] = None
     node_ids_crc32: int
 
 
