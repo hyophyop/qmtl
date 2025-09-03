@@ -78,7 +78,6 @@ class EventRecorder(ABC):
         ...
 
 
-# re-export concrete implementations for backward compatibility
 __all__ = [
     "DataFetcher",
     "HistoryProvider",
