@@ -28,25 +28,10 @@ class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
         return self.settlement.available_cash(account) >= required
 
 
-class PerShareFeeModel(FeeModel):
-    """Deprecated: use qmtl.brokerage.fees.PerShareFeeModel instead."""
-
-    def __init__(self, fee_per_share: float = 0.01) -> None:
-        self.fee_per_share = fee_per_share
-
-    def calculate(self, order: Order, fill_price: float) -> float:
-        return abs(order.quantity) * self.fee_per_share
+# Deprecated PerShareFeeModel was removed; use qmtl.brokerage.fees.PerShareFeeModel
 
 
-class VolumeShareSlippageModel(SlippageModel):
-    """Deprecated: use qmtl.brokerage.slippage.VolumeShareSlippageModel."""
-
-    def __init__(self, slippage_rate: float = 0.0005) -> None:
-        self.slippage_rate = slippage_rate
-
-    def apply(self, order: Order, market_price: float) -> float:
-        direction = 1 if order.quantity > 0 else -1
-        return market_price + direction * market_price * self.slippage_rate
+# Deprecated VolumeShareSlippageModel was removed; use qmtl.brokerage.slippage.VolumeShareSlippageModel
 
 
 class ImmediateFillModel(FillModel):
