@@ -67,6 +67,11 @@ class _Slice:
         length = max(0, end - start)
         return pa.table({"t": self.ts.slice(start, length), "v": self.vals.slice(start, length)})
 
+    @property
+    def resident_bytes(self) -> int:
+        # Approximate memory usage backed by Arrow buffers
+        return int(self.ts.nbytes) + int(self.vals.nbytes)
+
 
 class ArrowCacheView:
     def __init__(self, data: Dict[str, Dict[int, _Slice]], *, track_access: bool = False) -> None:
@@ -235,6 +240,13 @@ class NodeCacheArrow:
         if not sl:
             return None
         return sl.latest()
+
+    @property
+    def resident_bytes(self) -> int:
+        total = 0
+        for sl in self._slices.values():
+            total += sl.resident_bytes
+        return total
 
     def evict_expired(self) -> None:
         now = int(time.time())
