@@ -37,8 +37,9 @@ class TQStrategy(Strategy):
 @pytest.mark.asyncio
 async def test_live_auto_subscribes(monkeypatch, fake_redis):
     class DummyWS:
-        def __init__(self, url, *, on_message=None):
+        def __init__(self, url, *, token=None, on_message=None):
             self.on_message = on_message
+            self.token = token
 
         async def start(self):
             pass
@@ -67,8 +68,10 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
             })
 
     client = DummyWS("ws://dummy")
-    def ws_factory(url, *, on_message=None):
+
+    def ws_factory(url, *, on_message=None, token=None):
         client.on_message = on_message
+        client.token = token
         return client
     hub = DummyHub(client)
     redis = fake_redis

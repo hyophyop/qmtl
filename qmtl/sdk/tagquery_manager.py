@@ -121,15 +121,9 @@ class TagQueryManager:
                     stream_url = data.get("stream_url")
                     token = data.get("token")
                     if stream_url:
-                        try:
-                            self.client = WebSocketClient(
-                                stream_url, on_message=self.handle_message, token=token
-                            )
-                        except TypeError:
-                            # Older or test clients may not accept a token parameter
-                            self.client = WebSocketClient(
-                                stream_url, on_message=self.handle_message
-                            )
+                        self.client = WebSocketClient(
+                            stream_url, on_message=self.handle_message, token=token
+                        )
                         await self.client.start()
                         return
         except Exception:
