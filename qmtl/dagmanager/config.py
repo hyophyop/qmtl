@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+import logging
+import yaml
 
 
 @dataclass
@@ -37,7 +39,4 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         raise
     if not isinstance(data, dict):
         raise TypeError("DAG Manager config must be a mapping")
-    # Breaker settings are deprecated; reset breakers manually on success.
-    data.pop("kafka_breaker_timeout", None)
-    data.pop("kafka_breaker_threshold", None)
     return DagManagerConfig(**data)

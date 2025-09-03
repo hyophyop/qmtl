@@ -20,11 +20,9 @@ def test_load_unified_config_yaml(tmp_path: Path) -> None:
     }
     config_file = tmp_path / "cfg.yml"
     config_file.write_text(yaml.safe_dump(data))
-    config = load_config(str(config_file))
-    assert config.gateway.redis_dsn == data["gateway"]["redis_dsn"]
-    assert config.dagmanager.neo4j_dsn == data["dagmanager"]["neo4j_dsn"]
-    assert not hasattr(config.dagmanager, "kafka_breaker_threshold")
-    assert not hasattr(config.dagmanager, "kafka_breaker_timeout")
+    # Deprecated breaker keys under dagmanager should now be rejected
+    with pytest.raises(TypeError):
+        load_config(str(config_file))
 
 
 def test_load_unified_config_json(tmp_path: Path) -> None:
