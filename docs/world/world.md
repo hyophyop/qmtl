@@ -110,22 +110,21 @@ def apply_hysteresis(prev, checks, h):
 
 ## 6. 통합 지점(기존 기능 재사용)
 
-- Runner: 이미 `backtest/dryrun/live/offline` 지원(./qmtl/sdk/runner.py). 월드 결정 결과는 “활성화 게이트”를 통해 주문 발동을 제어한다.
+- Runner: 월드 결정(WS)에 따르는 단일 진입점 `run(world_id=...)`과 `offline()`만 제공한다. 월드 결정 결과는 “활성화 게이트”를 통해 주문 발동을 제어한다.
 - Gateway: 제출/상태/큐 조회 API 그대로 사용(./docs/architecture/gateway.md). 월드용 얇은 엔드포인트(활성 테이블 조회/적용, 감사 기록)만 확장한다.
 - DAG Manager: NodeID/토픽, TagQuery 동작은 변경하지 않는다(./docs/architecture/dag-manager.md). 드라이런 플래그는 기존 접미사/라우팅 규칙을 따른다.
 - 메트릭: SDK/Gateway/DAG Manager의 기존 Prometheus 메트릭을 재사용한다.
 
 ### 6.1 World‑First Runner Execution
 
-월드 정책이 “실행 모드”를 결정하도록 Runner 실행을 일원화하되, 기존 `--mode` 기반 흐름과 호환을 유지한다.
+월드 정책이 “실행 모드”를 결정하도록 Runner 실행을 일원화한다.
 
-- CLI 확장(추가)
-  - `--world <id>`: 월드 우선 실행. 지정 시 Runner는 월드 결정을 조회하여 유효 모드를 선택한다.
-  - `--world-file <path.yml>`: 오프라인/개발 환경에서 월드 정책을 로컬로 로드해 동일한 결정을 재현.
-  - `--allow-live`: 월드가 `live`를 반환해도 명시적 승인 없이는 라이브 실행 금지(가드레일).
+- CLI
+  - `qmtl sdk run --world-id <id> --gateway-url <url>`: 월드‑우선 실행.
+  - `qmtl sdk offline`: 게이트웨이 없이 로컬 실행.
 - 실행 흐름(요지)
   1) Runner가 `--world`를 받으면 Gateway `GET /worlds/{id}/decide`를 호출해 `effective_mode`와 이유/파라미터를 얻는다.
-  2) `effective_mode`에 따라 기존 경로(`backtest_async`/`dryrun_async`/`live_async`)로 디스패치한다.
+  2) Runner는 별도 모드로 분기하지 않고, WS 결정에 따라 주문 게이트/검증만 제어한다.
   3) Gateway가 불가하면 `--world-file`로 동일 결정을 로컬 계산한다. 둘 다 없으면 
      사용자가 지정한 로컬 폴백(`offline|backtest`)로 전환한다.
 - 주문 게이트 상호작용
@@ -134,9 +133,7 @@ def apply_hysteresis(prev, checks, h):
 - 즉시 라이브 세계관
   - “컷오프 제한이 없는” 샘플 월드를 제공(게이트 완화, 히스테리시스/표본 최소값 낮춤). 
   - 그래도 `--allow-live` 플래그와 월드‑스코프 RBAC가 필요하다.
-- 호환성
-  - 기존 `--mode`는 유지되며, `--world`와 함께 사용 시 `--mode=auto`로 간주(또는 경고 후 무시).
-  - 테스트/로컬 실험을 위해 `offline`/`backtest`는 계속 직접 호출 가능.
+호환성: 과거 `--mode` 플래그와 `backtest/dryrun/live` API는 제거되었다.
 
 ## 7. 주문 게이트(OrderGate) 설계(경량)
 
@@ -205,9 +202,9 @@ Phase 4 — 멀티‑월드 최적화(선택적)
   - CLI 도움말에서 모드 옵션을 후순위로 내리고, 월드‑우선 플로우를 기본으로 안내.
   - `--mode`는 테스트/백필/디버깅용으로 존치(경고 메시지 노출: "--world 사용 시 --mode는 무시됩니다").
 
-로컬 결정 재현 예시
+로컬 실행 예시
 ```bash
-qmtl run strategies.my:Alpha --world-file config/worlds/crypto_mom_1h.yml --allow-live --gateway-url http://localhost:8000
+qmtl sdk run strategies.my:Alpha --world-id crypto_mom_1h --gateway-url http://localhost:8000
 ```
 
 ## 11. 경계·원칙(정책)

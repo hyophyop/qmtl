@@ -207,7 +207,7 @@ sequenceDiagram
 
 ---
 
-Note: In the current architecture, control updates (e.g., queue/tag changes, traffic weights) are also published to the internal ControlBus and consumed by Gateways for WebSocket relay to SDKs. The callback interface above remains for backward compatibility and operational tooling.
+Note: Control updates (e.g., queue/tag changes, traffic weights) are published to the internal ControlBus and consumed by Gateways for WebSocket relay to SDKs. The legacy callback interface has been removed.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
