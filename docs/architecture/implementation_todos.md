@@ -52,8 +52,6 @@ Related specs:
 - Circuit budgets & degradation policies (WorldService):
   - Add independent timeouts/retries for WorldService proxy calls (defaults: WS 300 ms 2x; DM 500 ms 1x). Integrate with existing "AsyncCircuitBreaker". Surface states in "/status".
 
-- Backward-compat callbacks:
-  - Keep "/callbacks/dag-event" handling but migrate payloads to the versioned ControlBus envelopes ("ActivationUpdated", "PolicyUpdated", "QueueUpdated").
 
 ---
 
@@ -78,7 +76,7 @@ Related specs:
   - New: "qmtl/common/nodeid.py" (deterministic NodeID computation, SHA-3 fallback).
 
 - DAG Manager (alignment):
-  - Ensure QueueUpdated events are also published to ControlBus in addition to HTTP callback (already documented as preferred path).
+  - Ensure QueueUpdated and sentinel weight events are published to ControlBus.
 
 - SDK (follow-up, separate PR):
   - TagQueryManager uses the ``/events/subscribe`` descriptor exclusively.

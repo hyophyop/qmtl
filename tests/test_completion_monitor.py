@@ -1,9 +1,9 @@
-import httpx
 import pytest
 
 from qmtl.dagmanager.completion import QueueCompletionMonitor
 from qmtl.dagmanager.diff_service import NodeRecord, NodeRepository
 from qmtl.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.dagmanager.controlbus_producer import ControlBusProducer
 
 
 class DummyRepo(NodeRepository):
@@ -59,28 +59,25 @@ def make_admin(sizes) -> KafkaAdmin:
     return KafkaAdmin(client)
 
 
+class DummyBus(ControlBusProducer):
+    def __init__(self) -> None:  # pragma: no cover - simple capture
+        self.published: list[tuple] = []
+
+    async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any") -> None:  # type: ignore[override]
+        self.published.append((list(tags), interval, list(queues), match_mode))
+
+
 @pytest.mark.asyncio
-async def test_completion_emits_event(monkeypatch):
+async def test_completion_emits_event():
     repo = DummyRepo()
     admin = make_admin([{"q1": 10}, {"q1": 10}])
-    events = []
-
-    async def fake_post(url, payload, **_):
-        events.append(payload)
-        return httpx.Response(202)
-
-    monkeypatch.setattr(
-        "qmtl.dagmanager.completion.post_with_backoff",
-        fake_post,
-    )
-
-    monitor = QueueCompletionMonitor(repo, admin, "http://gw/cb", threshold=1)
+    bus = DummyBus()
+    monitor = QueueCompletionMonitor(repo, admin, bus=bus, threshold=1)
     await monitor.check_once()
     await monitor.check_once()
 
-    assert events
-    evt = events[0]
-    assert evt["type"] == "queue_update"
-    assert evt["data"]["queues"] == []
-    assert evt["data"]["tags"] == ["t1"]
-    assert evt["data"]["match_mode"] == "any"
+    assert bus.published
+    tags, interval, queues, mode = bus.published[0]
+    assert queues == []
+    assert tags == ["t1"]
+    assert mode == "any"

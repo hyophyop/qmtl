@@ -9,11 +9,9 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from qmtl.common.tracing import setup_tracing
 from .garbage_collector import GarbageCollector
-from .callbacks import post_with_backoff
-from ..common.cloudevents import format_event
 from .dagmanager_health import get_health
-from . import metrics
 from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
+from .controlbus_producer import ControlBusProducer
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -29,22 +27,11 @@ class GcResponse(BaseModel):
     processed: list[str]
 
 
-class WeightUpdate(BaseModel):
-    """Payload to update traffic weight for a version sentinel."""
-
-    version: str = Field(..., description="Version identifier")
-    weight: float = Field(
-        ..., ge=0.0, le=1.0, description="Traffic weight"
-    )
-
-
 def create_app(
     gc: GarbageCollector,
     *,
-    callback_url: Optional[str] = None,
     driver: "Driver" | None = None,
-    weights: Optional[dict[str, float]] = None,
-    gateway_url: str | None = None,
+    bus: ControlBusProducer | None = None,
 ) -> FastAPI:
     """Return a FastAPI app exposing admin routes."""
     setup_tracing("dagmanager")
@@ -77,39 +64,17 @@ def create_app(
         with tracer.start_as_current_span("dagmanager.gc_trigger"):
             infos = gc.collect()
             processed = [q.name for q in infos]
-            if callback_url:
-                event = format_event(
-                    "qmtl.dagmanager",
-                    "gc",
-                    {"id": payload.id, "queues": processed},
-                )
-                await post_with_backoff(callback_url, event)
+            if bus:
+                for qi in infos:
+                    if getattr(qi, "interval", None) is not None:
+                        await bus.publish_queue_update(
+                            [qi.tag],
+                            qi.interval,
+                            [qi.name],
+                            "any",
+                        )
             return GcResponse(processed=processed)
-
-    store = weights if weights is not None else {}
-
-    @app.post("/callbacks/sentinel-traffic", status_code=status.HTTP_202_ACCEPTED)
-    async def sentinel_traffic(update: WeightUpdate):
-        with tracer.start_as_current_span("dagmanager.sentinel_weight"):
-            store[update.version] = update.weight
-            metrics.set_active_version_weight(update.version, update.weight)
-            if driver:
-                with driver.session() as session:
-                    session.run(
-                        "MERGE (s:VersionSentinel {version: $version}) "
-                        "SET s.traffic_weight = $weight",
-                        version=update.version,
-                        weight=update.weight,
-                    )
-            if gateway_url:
-                event = format_event(
-                    "qmtl.dagmanager",
-                    "sentinel_weight",
-                    {"sentinel_id": update.version, "weight": update.weight},
-                )
-                await post_with_backoff(gateway_url, event)
-            return {"version": update.version, "weight": update.weight}
 
     return app
 
-__all__ = ["GcRequest", "GcResponse", "WeightUpdate", "create_app"]
+__all__ = ["GcRequest", "GcResponse", "create_app"]

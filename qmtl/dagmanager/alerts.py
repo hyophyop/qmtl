@@ -8,7 +8,22 @@ from typing import Protocol
 import httpx
 
 from ..common import AsyncCircuitBreaker
-from .callbacks import post_with_backoff
+
+
+async def _post_json(
+    url: str,
+    payload: dict,
+    breaker: AsyncCircuitBreaker | None = None,
+) -> None:
+    async with httpx.AsyncClient() as client:
+        async def send() -> httpx.Response:
+            resp = await client.post(url, json=payload)
+            if resp.status_code >= 400:
+                raise RuntimeError(f"failed with status {resp.status_code}")
+            return resp
+
+        wrapped = breaker(send) if breaker else send
+        await wrapped()
 
 
 class PagerDutySender(Protocol):
@@ -37,18 +52,12 @@ class PagerDutyClient:
     async def send(
         self, message: str, *, topic: str | None = None, node: str | None = None
     ) -> None:  # pragma: no cover - simple wrapper
-        async with httpx.AsyncClient() as client:
-            payload = {"text": message}
-            if topic is not None:
-                payload["topic"] = topic
-            if node is not None:
-                payload["node"] = node
-            await post_with_backoff(
-                self.url,
-                payload,
-                client=client,
-                circuit_breaker=self.breaker,
-            )
+        payload = {"text": message}
+        if topic is not None:
+            payload["topic"] = topic
+        if node is not None:
+            payload["node"] = node
+        await _post_json(self.url, payload, self.breaker)
 
 
 @dataclass
@@ -59,18 +68,12 @@ class SlackClient:
     async def send(
         self, message: str, *, topic: str | None = None, node: str | None = None
     ) -> None:  # pragma: no cover - simple wrapper
-        async with httpx.AsyncClient() as client:
-            payload = {"text": message}
-            if topic is not None:
-                payload["topic"] = topic
-            if node is not None:
-                payload["node"] = node
-            await post_with_backoff(
-                self.url,
-                payload,
-                client=client,
-                circuit_breaker=self.breaker,
-            )
+        payload = {"text": message}
+        if topic is not None:
+            payload["topic"] = topic
+        if node is not None:
+            payload["node"] = node
+        await _post_json(self.url, payload, self.breaker)
 
 
 @dataclass

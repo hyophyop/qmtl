@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-import httpx
 
 from qmtl.dagmanager.api import create_app
 from qmtl.dagmanager.garbage_collector import QueueInfo
@@ -25,22 +24,5 @@ def test_gc_route_triggers_collect():
         assert resp.json()["processed"] == ["q1"]
 
 
-def test_gc_route_emits_callback(monkeypatch):
-    gc = FakeGC()
-    events = []
 
-    async def fake_post(url, payload, **_):
-        events.append((url, payload))
-        return httpx.Response(202)
-
-    monkeypatch.setattr("qmtl.dagmanager.api.post_with_backoff", fake_post)
-
-    app = create_app(gc, callback_url="http://gw/cb")
-    with TestClient(app) as client:
-        client.post("/admin/gc-trigger", json={"id": "x"})
-
-        assert events
-        assert events[0][0] == "http://gw/cb"
-        assert events[0][1]["type"] == "gc"
-        assert events[0][1]["data"]["id"] == "x"
 

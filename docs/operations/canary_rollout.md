@@ -9,22 +9,13 @@ last_modified: 2025-08-21
 
 # Canary Rollout Guide
 
-This document explains how to gradually shift traffic between strategy versions using the `DAG Manager` callback endpoint `/callbacks/sentinel-traffic`. See [dag-manager.md](../architecture/dag-manager.md) for the full API specification and [gateway.md](../architecture/gateway.md) for how Gateway processes `sentinel_weight` events.
+Traffic splits between strategy versions are adjusted by publishing `sentinel_weight` events to the internal **ControlBus**. Operational tooling should emit these events with the target `version` and desired `weight` (0–1). Gateways consume the ControlBus and relay updates to SDK clients via WebSocket.
 
 ## Adjusting Weights
 
-1. Send an HTTP `POST` request to `/callbacks/sentinel-traffic` on the DAG Manager.
-2. The payload must include the `version` identifier and a `weight` between `0` and `1`.
-3. On success, the DAG Manager updates its routing table and notifies Gateway to route the specified percentage of traffic to the target version.
-
-Example:
-
-```bash
-curl -X POST \ 
-     -H 'Content-Type: application/json' \
-     -d '{"version": "v1.2.1", "weight": 0.25}' \
-     http://dagmanager.internal/callbacks/sentinel-traffic
-```
+1. Use the Ops tooling to publish a `sentinel_weight` event on the ControlBus.
+2. Include the `version` identifier and a `weight` between `0` and `1`.
+3. Gateways will apply the new ratio and broadcast the change to connected clients.
 
 ## Monitoring Metrics
 

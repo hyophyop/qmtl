@@ -6,7 +6,6 @@ import pytest
 from qmtl.sdk import Strategy, TagQueryNode, Runner, MatchMode
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.ws import WebSocketHub
-from qmtl.common.cloudevents import format_event
 
 
 class DummyDag:
@@ -108,21 +107,12 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
 
     await asyncio.sleep(0.1)
 
-    event = format_event(
-        "qmtl.dagmanager",
-        "queue_update",
-        {
-            "tags": ["t1"],
-            "interval": 60,
-            "queues": [{"queue": "q1", "global": False}],
-            "match_mode": "any",
-        },
+    await hub.send_queue_update(
+        ["t1"],
+        60,
+        [{"queue": "q1", "global": False}],
+        MatchMode.ANY,
     )
-    async with httpx.AsyncClient(transport=transport, base_url="http://gw") as c:
-        resp = await c.post("/callbacks/dag-event", json=event)
-        assert resp.status_code == 202
-
-    # Directly apply queue update to ensure subscription processed
     await strat.tag_query_manager.handle_message(
         {
             "type": "queue_update",
@@ -140,4 +130,5 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     assert node.execute
     assert hasattr(strat, "tag_query_manager")
     await strat.tag_query_manager.stop()
+    await client.stop()
     await transport.aclose()

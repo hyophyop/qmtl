@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, UTC
 
 import grpc
 import pytest
-import httpx
 import json
 
 from qmtl.dagmanager.diff_service import StreamSender
@@ -173,126 +172,6 @@ async def test_grpc_redo_diff(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_grpc_diff_callback_sends_cloudevent(monkeypatch):
-    driver = FakeDriver()
-    admin = FakeAdmin()
-    stream = FakeStream()
-    captured: dict = {}
-
-    async def mock_post(url, json, **_):
-        captured.update(json)
-        return httpx.Response(202)
-
-    monkeypatch.setattr(
-        "qmtl.dagmanager.grpc_server.post_with_backoff",
-        mock_post,
-    )
-
-    server, port = serve(
-        driver,
-        admin,
-        stream,
-        host="127.0.0.1",
-        port=0,
-        callback_url="http://gw/cb",
-    )
-    await server.start()
-    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
-        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
-        dag_json = json.dumps(
-            {
-                "nodes": [
-                    {
-                        "node_id": "n1",
-                        "node_type": "N",
-                        "code_hash": "c",
-                        "schema_hash": "s",
-                        "interval": 60,
-                        "tags": ["x"],
-                    }
-                ]
-            }
-        )
-        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
-        async for chunk in stub.Diff(request):
-            await stub.AckChunk(
-                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
-            )
-    await server.stop(None)
-
-    assert captured["type"] == "queue_update"
-    assert captured["specversion"] == "1.0"
-    assert captured["data"]["tags"] == ["x"]
-
-
-@pytest.mark.asyncio
-async def test_grpc_diff_callback_sends_all_cloudevents(monkeypatch):
-    driver = FakeDriver()
-    admin = FakeAdmin()
-    stream = FakeStream()
-    events: list[dict] = []
-    started = 0
-    wait = asyncio.Event()
-
-    async def mock_post(url, json, **_):
-        nonlocal started
-        started += 1
-        if started == 2:
-            wait.set()
-        await asyncio.wait_for(wait.wait(), timeout=1)
-        events.append(json)
-        return httpx.Response(202)
-
-    monkeypatch.setattr(
-        "qmtl.dagmanager.grpc_server.post_with_backoff",
-        mock_post,
-    )
-
-    server, port = serve(
-        driver,
-        admin,
-        stream,
-        host="127.0.0.1",
-        port=0,
-        callback_url="http://gw/cb",
-    )
-    await server.start()
-    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
-        stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
-        dag_json = json.dumps(
-            {
-                "nodes": [
-                    {
-                        "node_id": "n1",
-                        "node_type": "N",
-                        "code_hash": "c",
-                        "schema_hash": "s",
-                        "interval": 60,
-                        "tags": ["x"],
-                    },
-                    {
-                        "node_id": "n2",
-                        "node_type": "N",
-                        "code_hash": "c",
-                        "schema_hash": "s",
-                        "interval": 60,
-                        "tags": ["y"],
-                    },
-                ]
-            }
-        )
-        request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
-        async for chunk in stub.Diff(request):
-            await stub.AckChunk(
-                dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
-            )
-    await server.stop(None)
-
-    assert len(events) == 2
-    tags = sorted(e["data"]["tags"][0] for e in events)
-    assert tags == ["x", "y"]
-
-
 class DummyStore:
     def __init__(self, queues):
         self.queues = queues
@@ -390,74 +269,6 @@ async def test_grpc_queue_stats():
         resp = await stub.GetQueueStats(req)
     await server.stop(None)
     assert dict(resp.sizes) == {"topic1": 3}
-
-
-@pytest.mark.asyncio
-async def test_http_sentinel_traffic(monkeypatch):
-    metrics.reset_metrics()
-    weights: dict[str, float] = {}
-    captured: dict = {}
-    driver = FakeDriver()
-
-    metrics.reset_metrics()
-
-    async def mock_post(url, json, **_):
-        captured.update(json)
-        return httpx.Response(202)
-
-    monkeypatch.setattr(
-        "qmtl.dagmanager.api.post_with_backoff",
-        mock_post,
-    )
-
-    app = create_app(
-        DummyGC(),
-        weights=weights,
-        gateway_url="http://gw",
-        driver=driver,
-    )
-    transport = httpx.ASGITransport(app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/callbacks/sentinel-traffic",
-            json={"version": "v1", "weight": 0.7},
-        )
-    await transport.aclose()
-
-    assert resp.status_code == 202
-    assert weights["v1"] == 0.7
-    assert captured["type"] == "sentinel_weight"
-    assert captured["data"]["sentinel_id"] == "v1"
-    assert captured["data"]["weight"] == 0.7
-    assert metrics.dagmanager_active_version_weight._vals["v1"] == 0.7
-    assert captured["type"] == "sentinel_weight"
-    assert captured["data"]["sentinel_id"] == "v1"
-    assert captured["data"]["weight"] == 0.7
-    query, params = driver.session_obj.run_calls[0]
-    assert "traffic_weight" in query
-    assert params["version"] == "v1"
-    assert params["weight"] == 0.7
-
-
-@pytest.mark.asyncio
-async def test_http_sentinel_traffic_overwrite():
-    metrics.reset_metrics()
-    weights = {"v1": 0.1}
-    driver = FakeDriver()
-    metrics.reset_metrics()
-    app = create_app(DummyGC(), weights=weights, driver=driver)
-    transport = httpx.ASGITransport(app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        await client.post(
-            "/callbacks/sentinel-traffic",
-            json={"version": "v1", "weight": 0.4},
-        )
-    await transport.aclose()
-    assert weights["v1"] == 0.4
-    assert metrics.dagmanager_active_version_weight._vals["v1"] == 0.4
-    query, params = driver.session_obj.run_calls[0]
-    assert params["version"] == "v1"
-    assert params["weight"] == 0.4
 
 
 class DummyProducer:
