@@ -14,21 +14,31 @@ Environment variables:
 
 import base64
 import json
+import logging
 import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+logger = logging.getLogger(__name__)
+
 try:  # optional
     import pyarrow as pa  # type: ignore
     import pyarrow.parquet as pq  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    pa = None  # type: ignore
+    pq = None  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
+    logger.exception("unexpected error importing pyarrow")
     pa = None  # type: ignore
     pq = None  # type: ignore
 
 try:  # optional
     import fsspec  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    fsspec = None  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
+    logger.exception("unexpected error importing fsspec")
     fsspec = None  # type: ignore
 
 from . import metrics as sdk_metrics
