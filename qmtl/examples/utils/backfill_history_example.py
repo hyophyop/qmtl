@@ -30,10 +30,9 @@ class BackfillHistoryStrategy(Strategy):
 
 
 def main() -> None:
-    Runner.backtest(
+    Runner.run(
         BackfillHistoryStrategy,
-        start_time=1700000000,
-        end_time=1700003600,
+        world_id="backfill_history",
         gateway_url="http://localhost:8000",
     )
 

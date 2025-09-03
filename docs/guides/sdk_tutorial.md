@@ -67,40 +67,25 @@ class MyStrategy(Strategy):
         self.add_nodes([price, out])
 ```
 
-## 실행 모드
+## 실행 방법 (월드 주도)
 
-전략은 `Runner` 클래스로 실행합니다. 모드는 `backtest`, `dryrun`, `live`, `offline` 네 가지가 있으며 CLI 또는 Python 코드에서 선택할 수 있습니다. 각 모드의 의미는 다음과 같습니다.
+전략 실행은 월드(WorldService) 결정에 따릅니다. `Runner`는 단일 진입점만 제공합니다.
 
-- **backtest**: 과거 데이터를 재생하며 전략을 검증합니다. Gateway에 DAG을 전송하여 큐 매핑을 받아오므로 `--gateway-url`이 필수입니다.
-- **dryrun**: Gateway와 통신하지만 실거래는 하지 않습니다. 연결 상태와 태그 매핑을 점검할 때 사용하며 역시 `--gateway-url`을 지정해야 합니다.
-- **live**: 실시간 거래 모드로 Gateway 및 외부 서비스와 연동됩니다. 반드시 `--gateway-url`을 지정해야 합니다.
-- **offline**: Gateway 없이 로컬에서만 실행합니다. 태그 기반 노드는 빈 큐 목록으로 초기화되며, 게이트웨이 연결이 없음을 가정한 테스트용입니다.
-
-```bash
-# 커맨드라인 예시
-python -m qmtl.sdk tests.sample_strategy:SampleStrategy --mode backtest --start-time 2024-01-01 --end-time 2024-02-01 --gateway-url http://gw
-python -m qmtl.sdk tests.sample_strategy:SampleStrategy --mode offline
-```
+- `Runner.run(MyStrategy, world_id="...", gateway_url="http://gw")` — WS 결정과 활성 이벤트를 따르는 실행. 게이트는 WS 활성 상태에 따라 ON/OFF 됩니다. 결정이 부재/만료일 때는 기본적으로 compute‑only(주문 OFF)로 동작합니다.
+- `Runner.offline(MyStrategy)` — Gateway 없이 로컬에서만 실행합니다. 태그 기반 노드는 빈 큐 목록으로 초기화됩니다.
 
 ```python
 from qmtl.sdk import Runner
-Runner.dryrun(MyStrategy, gateway_url="http://gw")
+
+# 월드 주도 실행
+Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
+
+# 오프라인 실행
+Runner.offline(MyStrategy)
 ```
 
-과거 데이터를 재생하려면 `Runner.backtest()`에 시작 및 종료 시점을 전달합니다.
-
-```python
-from qmtl.sdk import Runner
-Runner.backtest(
-    MyStrategy,
-    start_time="2024-01-01T00:00:00Z",
-    end_time="2024-02-01T00:00:00Z",
-    gateway_url="http://gw",
-)
-```
-
-`Runner`를 사용하면 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여
-해당 태그에 매칭되는 큐를 조회하고 이벤트 설명자와 토큰을 설정한 뒤 WebSocket 구독을 시작합니다. 백테스트와 dry-run 모드에서도 Gateway URL을 지정하지 않으면 `RuntimeError`가 발생합니다.
+`Runner`는 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여 해당 태그에
+매칭되는 큐를 조회하고 이벤트 디스크립터/토큰을 받아 WebSocket 구독을 시작합니다. 모든 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
 
 ## CLI 도움말
 

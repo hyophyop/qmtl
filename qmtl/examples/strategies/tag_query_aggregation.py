@@ -40,5 +40,5 @@ class TagQueryAggregationStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Running in live mode automatically resolves queues and subscribes
-    Runner.live(TagQueryAggregationStrategy)
+    # Running under a world automatically resolves queues and subscribes
+    Runner.run(TagQueryAggregationStrategy, world_id="tag_query_agg", gateway_url="http://gateway.local")

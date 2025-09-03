@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Upstream rate-of-change transformation."""
 
 from qmtl.sdk.node import Node

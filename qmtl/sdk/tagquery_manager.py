@@ -37,7 +37,7 @@ class TagQueryManager:
         self.world_id = world_id
         self.strategy_id = strategy_id
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
-        # Legacy /queues/watch fallback removed; rely solely on event subscription
+        self._watch_tasks: list[asyncio.Task] = []
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -137,13 +137,48 @@ class TagQueryManager:
                         await self.client.start()
                         return
         except Exception:
+            # fall back to watch
             pass
 
         if self.client:
             await self.client.start()
-        # No fallback to /queues/watch; require event subscription
+            return
+
+        # Fallback: open watch streams per key and update nodes from JSON lines
+        async def watch_key(tags: Tuple[str, ...], interval: int, match_mode: MatchMode) -> None:
+            url = self.gateway_url.rstrip("/") + "/queues/watch"
+            params = {
+                "tags": ",".join(tags),
+                "interval": interval,
+                "match": match_mode.value,
+            }
+            while True:
+                try:
+                    async with httpx.AsyncClient() as client:
+                        async with client.stream("GET", url, params=params) as resp:
+                            async for line in resp.aiter_lines():
+                                if not line:
+                                    continue
+                                try:
+                                    payload = json.loads(line)
+                                except Exception:
+                                    continue
+                                raw = payload.get("queues", [])
+                                queues = normalize_queues(raw)
+                                for n in self._nodes.get((tags, interval, match_mode), []):
+                                    n.update_queues(list(queues))
+                except Exception:
+                    pass
+                await asyncio.sleep(0.05)
+
+        for key in list(self._nodes.keys()):
+            task = asyncio.create_task(watch_key(*key))
+            self._watch_tasks.append(task)
 
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
-        # No background watch tasks in the new model
+        for t in self._watch_tasks:
+            with contextlib.suppress(Exception):
+                t.cancel()
+        self._watch_tasks.clear()

@@ -10,7 +10,7 @@
 - 목적
   - 월드(World)를 전략 상위 추상화로 두고, 정책(WorldPolicy)에 따라 전략을 평가·선정하고 실행 모드를 관리한다.
   - 데이터 통화성(Data Currency), 표본 충분성, 성과 임계값, 상관/리스크 제약, 히스테리시스를 조합해 자동 승격/강등 결정을 내린다.
-  - Runner의 기존 모드(backtest/dryrun/live), Gateway API, DAG Manager, SDK 메트릭을 그대로 활용한다.
+  - Runner는 단일 진입점(월드 주도 실행)으로 동작하며, Gateway API, DAG Manager, SDK 메트릭을 그대로 활용한다.
 - 비범위(초기 단계)
   - 별도 분산 스케줄러, 신규 메시지 브로커, 신규 그래프 모델 추가는 하지 않는다.
   - 전략 코드 자동 배포/프로세스 관리(런너 생성/종료)는 별도 운영 도구로 유지하고, 본 문서는 “선정/전환 계획 생성 + 활성화 게이트”에 집중한다.
@@ -30,7 +30,7 @@
 
 ## 3. 상태·전환(최소 사양)
 
-- 전략 실행 모드(Runner 기준): `backtest`, `dryrun`, `live` (SDK 이미 지원). 전환은 2‑Phase 원자성으로 계획.
+- 전략 실행은 월드(WorldService)의 결정에 따르며, Runner는 모드를 선택하지 않는다. 전환은 2‑Phase 원자성으로 계획한다.
 - 월드 관점 상태: `evaluating`(평가 중) / `applying`(계획 적용 중) / `steady`(안정)만 추적(운영용). 복잡한 월드 FSM은 도입하지 않는다.
 - 2‑Phase 전환(요지)
   1) Freeze/Drain: 주문 차단(게이트 ON) 후 대기; 필요 시 포지션 청산/이월 규칙 적용
@@ -50,7 +50,7 @@ world: crypto_mom_1h
 version: 1
 
 data_currency:
-  max_lag: 5m        # now - data_end <= 5분이면 드라이런, 아니면 백테스트부터
+  max_lag: 5m        # now - data_end <= 5분이면 validate, 아니면 catch-up 동안 compute-only
   min_history: 60d   # 최소 과거 기간 충족 전 지표는 참고용만
   bar_alignment: exchange_calendar
 
@@ -151,7 +151,7 @@ def apply_hysteresis(prev, checks, h):
 
 ## 8. 운영/안전장치(필수)
 
-- 데이터 통화성(최신성) 게이트: `now - data_end <= max_lag` 충족 전에는 드라이런 또는 백테스트로만 실행
+- 데이터 통화성(최신성) 게이트: `now - data_end <= max_lag` 충족 전에는 compute-only로 실행(주문 게이트 OFF)
 - 표본 충분성: 지표별 최소 일수/체결 수 충족 전 결과는 참고용
 - 2‑Phase 전환: Freeze/Drain → Switch → Unfreeze, idempotent run_id
 - 리스크 컷: 월드 총 드로우다운/VAR/레버리지 상한 위반 시 즉시 게이트 ON(서킷)
@@ -229,7 +229,7 @@ GET /worlds/{world}/decide?as_of=2025-08-28T09:00:00Z HTTP/1.1
 → {
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
-  "effective_mode": "dryrun",     # backtest|dryrun|live
+  "effective_mode": "validate",   # validate|active
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",                   # 캐시 유효 시간(권장)
@@ -442,12 +442,12 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
 - SDK→Gateway 제출 p95 ≤ 150ms, 큐 조회 p95 ≤ 200ms
 - 이벤트 팬아웃 지연 p95 ≤ 200ms, 최대 스큐(`activation_skew_seconds`) ≤ 2s
 - Gateway 프록시 타임아웃: WS/DM 각각 독립 서킷 브레이커 적용(예: 300ms/500ms)
-- 실패 기본값: 월드 결정을 못 받으면 `backtest|offline`으로 폴백, 활성 미확인 시 게이트 OFF
+- 실패 기본값: 월드 결정을 못 받으면 compute-only(주문 게이트 OFF)로 폴백, 활성 미확인 시 게이트 OFF
 
 ### 15.5 개발 단위 매핑
 
 - sdk/
-  - Runner: `auto_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
+  - Runner: `run_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
   - api: `/worlds/*` 프록시, `/events/subscribe`, ControlBus 구독자, 캐시/서킷
 - worldservice/

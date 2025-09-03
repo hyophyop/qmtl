@@ -26,4 +26,4 @@ class RecorderStrategy(Strategy):
 
 if __name__ == "__main__":
     metrics.start_metrics_server(port=8000)
-    Runner.dryrun(RecorderStrategy, gateway_url="http://localhost:8000")
+    Runner.run(RecorderStrategy, world_id="recorder_demo", gateway_url="http://localhost:8000")

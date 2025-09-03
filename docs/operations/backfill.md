@@ -131,42 +131,38 @@ explicitly to override this behaviour.
 then treats them as read-only. Attempting to modify ``history_provider`` or
 ``event_service`` after creation will raise an ``AttributeError``.
 
-## Running a Backfill
+## Priming History for Warmup
 
-Backfills can be triggered when executing a strategy through the CLI or the
-`Runner` API. The `Runner` receives ``start_time`` and ``end_time`` arguments
-which define the historical range to load. Before fetching rows it checks
-``HistoryProvider.coverage()`` for every ``StreamInput`` and, when gaps are
-detected, calls ``fill_missing()`` if available.  This ensures caches contain a
-contiguous history before live processing begins.
+When executing a strategy, the SDK ensures each `StreamInput` has enough history
+to satisfy its `period × interval` warmup window. For providers that implement
+`coverage()` and `fill_missing()`, the SDK uses them to backfill missing ranges
+prior to loading history. This primes caches before computation continues.
 
-```bash
-python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
-       --mode backtest \
-       --start-time 1700000000 \
-       --end-time 1700003600 \
-       --gateway-url http://localhost:8000
-```
-
-The same operation via Python code:
+Integrated run (world‑driven):
 
 ```python
 from qmtl.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.backtest(
+Runner.run(
     SampleStrategy,
-    start_time=1700000000,
-    end_time=1700003600,
+    world_id="sample_world",
     gateway_url="http://localhost:8000",
 )
 ```
 
-During backtest and offline runs the SDK **replays** cached history through a
-``Pipeline``.  Events from each ``StreamInput`` are collected concurrently with
-``asyncio.gather`` and sorted by timestamp before being fed into the graph.
-If Ray execution is enabled, compute functions may execute in parallel during this
-replay phase.
+Offline priming for local testing:
+
+```python
+from qmtl.sdk import Runner
+from tests.sample_strategy import SampleStrategy
+
+Runner.offline(SampleStrategy)
+```
+
+During execution the SDK collects cached history and replays it through the
+`Pipeline` in timestamp order to initialize downstream nodes. If Ray execution
+is enabled, compute functions may run concurrently during this replay phase.
 
 ## Monitoring Progress
 

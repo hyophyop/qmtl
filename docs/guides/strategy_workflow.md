@@ -65,14 +65,15 @@ extend the SDK by adding custom nodes.
 > **구조 설명:** 각 폴더/파일의 역할은 위 '실무 개발 가이드' 참고.
 
 Run the default strategy to verify that everything works. Offline mode is used
-when no flags are supplied:
+when no external services are configured:
 
 ```bash
 python strategy.py
 ```
 The scaffolded script uses `Runner.offline()` by default, so no external
-services are required. Add `--backtest` to run `Runner.backtest()`, which
-requires a running Gateway and DAG Manager and a `--gateway-url` argument.
+services are required. To connect to your environment, update the script to call
+`Runner.run(world_id=..., gateway_url=...)`, which follows WorldService decisions
+and activation events.
 
 The Gateway proxies the WorldService, and SDKs receive control events over the tokenized WebSocket returned by `/events/subscribe`. Activation and queue updates arrive through this opaque control stream instead of being read directly from Gateway state.
 
@@ -92,15 +93,9 @@ transforms
 ...
 ```
 
-Running backtest mode without a Gateway URL produces an error:
-
-```text
-$ python strategy.py --backtest
-RuntimeError: gateway_url is required for backtest mode
-```
-
-Backtesting requires a running Gateway and DAG Manager; provide a
-`--gateway-url` argument when using `--backtest`.
+If the script calls `Runner.run(...)` without a reachable Gateway/WorldService,
+the strategy will remain in a safe compute‑only state (order gates OFF) until
+the control connection is restored.
 
 > **자주 발생하는 문제**
 > - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.offline()` 사용
@@ -122,20 +117,12 @@ ready for local development but can be adjusted to point at production services.
 > - 복잡한 로직은 별도 함수/클래스로 분리하고, 주석과 docstring을 작성하세요.
 > - 변경 시 반드시 관련 문서와 테스트를 함께 수정하세요.
 
-## 4. Execute in Different Modes
+## 4. Execute with Worlds
 
-Run strategies via the CLI or programmatically with `Runner`. Offline mode is
-the default; pass `--backtest` to run a historical simulation:
-
-```bash
-python -m qmtl.sdk mypkg.strategy:MyStrategy --backtest \
-    --start-time 2024-01-01 --end-time 2024-02-01 \
-    --gateway-url http://localhost:8000
-```
-
-Available modes are `offline` (default), `backtest`, `dryrun` and `live`.
-Backtest, dryrun and live require a running Gateway and DAG Manager. Start them
-in separate terminals. Activation and queue updates are delivered via the Gateway's opaque control stream on the `/events/subscribe` WebSocket rather than direct Gateway state. The ``--config`` flag is optional:
+Use `Runner.offline()` for local testing without dependencies. For integrated runs,
+switch to `Runner.run(strategy_cls, world_id=..., gateway_url=...)`. Activation and queue
+updates are delivered via the Gateway's opaque control stream on the `/events/subscribe`
+WebSocket; WS remains the authority for policy and activation.
 
 ```bash
 # start with built-in defaults
@@ -212,4 +199,3 @@ Gateway and DAG Manager using your customized `qmtl.yml`.
 > - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
 
 {{ nav_links() }}
-

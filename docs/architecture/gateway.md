@@ -134,7 +134,7 @@ Content‑Type: application/json
 {
   "dag_json": "<base64>",
   "meta": { "user": "quant.alice", "desc": "BTC scalper" },
-  "run_type": "dry-run"
+  "world_id": "crypto_mom_1h"
 }
 ```
 
@@ -247,10 +247,13 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
   - ``GET /worlds/{id}/activation`` → ActivationEnvelope (fail‑safe: inactive on stale)
   - ``POST /worlds/{id}/evaluate`` / ``POST /worlds/{id}/apply`` (operator‑only)
 - Caching & TTLs:
-  - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (offline/backtest)
+  - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (compute‑only, orders gated OFF)
   - Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
 - Circuit breakers & budgets: independent timeouts/retries for WorldService and DAG Manager backends (defaults: WS 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
+
+- Strategy submission and worlds:
+  - SDKs include `world_id` when submitting a strategy. Gateway does not accept `run_type`; execution mode is determined by WorldService decisions.
 
 ### Event Stream Descriptor
 
@@ -281,7 +284,7 @@ SDKs should use the event stream when available and periodically reconcile via
 ### Degrade & Fail‑Safe Policy (Summary)
 
 - WorldService unavailable:
-  - ``/decide`` → cached DecisionEnvelope if fresh; else safe default (offline/backtest)
+  - ``/decide`` → cached DecisionEnvelope if fresh; else safe default (compute‑only)
   - ``/activation`` → inactive
 - Event stream unavailable:
   - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP

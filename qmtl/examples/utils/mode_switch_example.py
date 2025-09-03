@@ -23,23 +23,17 @@ class ModeSwitchStrategy(Strategy):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--mode", choices=["offline", "backtest", "dryrun", "live"], default="offline"
+        "--mode", choices=["offline", "run"], default="offline"
     )
     parser.add_argument("--gateway-url")
-    parser.add_argument("--start", type=int)
-    parser.add_argument("--end", type=int)
+    parser.add_argument("--world-id", default="mode_switch_example")
     args = parser.parse_args()
 
-    if args.mode == "backtest":
-        Runner.backtest(
+    if args.mode == "run":
+        Runner.run(
             ModeSwitchStrategy,
-            start_time=args.start,
-            end_time=args.end,
+            world_id=args.world_id,
             gateway_url=args.gateway_url,
         )
-    elif args.mode == "dryrun":
-        Runner.dryrun(ModeSwitchStrategy, gateway_url=args.gateway_url)
-    elif args.mode == "live":
-        Runner.live(ModeSwitchStrategy, gateway_url=args.gateway_url)
     else:
         Runner.offline(ModeSwitchStrategy)
