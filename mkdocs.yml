@@ -17,6 +17,7 @@ nav:
       - Overview: guides/README.md
       - SDK Tutorial: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Migration (BC Removal): guides/migration_bc_removal.md
   - Operations:
       - Overview: operations/README.md
       - Backfill: operations/backfill.md
