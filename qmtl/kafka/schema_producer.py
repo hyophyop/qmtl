@@ -20,7 +20,8 @@ from qmtl.schema.registry import SchemaRegistryClient
 class SchemaAwareProducer:
     def __init__(self, inner: Producer, registry: SchemaRegistryClient | None = None) -> None:
         self._inner = inner
-        self._registry = registry or SchemaRegistryClient()
+        # Prefer env-selected client (remote vs in-memory) when not provided
+        self._registry = registry or SchemaRegistryClient.from_env()
 
     def register_schema(self, subject: str, schema_str: str) -> int:
         sch = self._registry.register(subject, schema_str)
@@ -41,4 +42,3 @@ class SchemaAwareProducer:
 
 
 __all__ = ["SchemaAwareProducer"]
-
