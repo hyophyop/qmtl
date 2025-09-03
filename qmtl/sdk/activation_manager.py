@@ -17,8 +17,8 @@ from .ws_client import WebSocketClient
 
 @dataclass
 class ActivationState:
-    long_active: bool = True
-    short_active: bool = True
+    long_active: bool = False
+    short_active: bool = False
     etag: Optional[str] = None
 
 
@@ -83,7 +83,7 @@ class ActivationManager:
                         await self.client.start()
                         self._started = True
         except Exception:
-            # Silent fallback; allow all sides by default
+            # Safe default: keep sides gated OFF until activation arrives
             return
 
     async def stop(self) -> None:
