@@ -17,7 +17,11 @@ from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+try:
+    # Optional dependency; only needed when an OTLP endpoint is configured
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore
+except Exception:  # pragma: no cover - optional dependency not present
+    OTLPSpanExporter = None  # type: ignore
 try:  # Console exporter is optional; avoid when not explicitly requested
     from opentelemetry.sdk.trace.export import ConsoleSpanExporter  # type: ignore
 except Exception:  # pragma: no cover - optional dependency not present
@@ -44,8 +48,10 @@ def setup_tracing(service_name: str, exporter_endpoint: Optional[str] = None) ->
             exporter = ConsoleSpanExporter()  # type: ignore[call-arg]
             provider.add_span_processor(BatchSpanProcessor(exporter))
         else:
-            exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
-            provider.add_span_processor(BatchSpanProcessor(exporter))
+            if OTLPSpanExporter is not None:  # type: ignore[truthy-bool]
+                exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)  # type: ignore[call-arg]
+                provider.add_span_processor(BatchSpanProcessor(exporter))
+            # else: silently skip when exporter package is unavailable
     # When no exporter configured, tracing remains enabled with a provider but nothing is exported.
     # When no exporter configured, tracing remains enabled with a provider but nothing is exported.
     trace.set_tracer_provider(provider)

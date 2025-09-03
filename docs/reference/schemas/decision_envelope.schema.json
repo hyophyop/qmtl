@@ -7,7 +7,7 @@
   "properties": {
     "world_id": { "type": "string" },
     "policy_version": { "type": "integer", "minimum": 0 },
-    "effective_mode": { "type": "string", "enum": ["validate", "active"] },
+    "effective_mode": { "type": "string", "enum": ["backtest", "dryrun", "live", "validate", "active"] },
     "reason": { "type": "string" },
     "as_of": { "type": "string", "format": "date-time" },
     "ttl": { "type": "string" },

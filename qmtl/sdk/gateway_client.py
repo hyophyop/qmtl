@@ -26,6 +26,7 @@ class GatewayClient:
         gateway_url: str,
         dag: dict,
         meta: Optional[dict],
+        run_type: Optional[str] = None,
         world_id: Optional[str] = None,
     ) -> dict:
         """Submit a strategy DAG to the gateway."""
@@ -33,9 +34,12 @@ class GatewayClient:
         payload = {
             "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
             "meta": meta,
-            "world_id": world_id,
             "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
         }
+        if world_id is not None:
+            payload["world_id"] = world_id
+        if run_type is not None:
+            payload["run_type"] = run_type
         headers: dict[str, str] = {}
         inject(headers)
         try:

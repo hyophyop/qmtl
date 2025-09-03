@@ -17,8 +17,8 @@ from .ws_client import WebSocketClient
 
 @dataclass
 class ActivationState:
-    long_active: bool = False
-    short_active: bool = False
+    long_active: bool = True
+    short_active: bool = True
     etag: Optional[str] = None
 
 
