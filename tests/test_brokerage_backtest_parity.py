@@ -50,6 +50,7 @@ def test_parity_market_orders():
         market_data=md,
         timestamp=1_700_000_000,
     )
+    # simulate_execution no longer accepts a compat_mode flag; parity behaviour is default
     f2 = engine.simulate_execution(
         order_id="o1",
         symbol="AAPL",
@@ -76,6 +77,7 @@ def test_parity_market_orders():
         market_data=md,
         timestamp=1_700_000_000,
     )
+    # default parity path without compat_mode flag
     f2s = engine.simulate_execution(
         order_id="o2",
         symbol="AAPL",
@@ -123,6 +125,7 @@ def test_parity_limit_orders():
         market_data=md,
         timestamp=1_700_000_100,
     )
+    # ensure limit order path also uses default parity behaviour
     f2 = engine.simulate_execution(
         order_id="o3",
         symbol="MSFT",

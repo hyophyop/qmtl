@@ -26,7 +26,7 @@ class OrderPipelineStrategy(Strategy):
         signal = TradeSignalGeneratorNode(
             history, long_threshold=0.0, short_threshold=0.0
         )
-        orders = TradeOrderPublisherNode(signal, topic="orders")
+        orders = TradeOrderPublisherNode(signal)
         self.add_nodes([price, alpha, history, signal, orders])
 
 

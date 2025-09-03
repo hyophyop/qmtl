@@ -31,6 +31,7 @@ nav:
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
+      - Schema Registry: reference/schema_registry.md
       - Schemas: reference/schemas.md
       - Templates: reference/templates.md
       - World API: reference/api_world.md

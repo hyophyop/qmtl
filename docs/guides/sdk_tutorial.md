@@ -230,8 +230,9 @@ metrics = alpha_performance_node(
 ## Order Results and External Executors
 
 `TradeOrderPublisherNode` turns trade signals into standardized order
-payloads. The `Runner` examines node results and delivers these orders to
-external systems through a series of hooks:
+payloads. Publication targets are configured through `Runner` hooks; the
+node itself carries no topic information. The `Runner` examines node results
+and delivers orders to external systems via:
 
 1. `Runner.set_trade_execution_service(service)` forwards the order to a
    custom object exposing ``post_order``.
@@ -252,7 +253,7 @@ from qmtl.transforms import (
 
 history = alpha_history_node(alpha, window=30)
 signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
-orders = TradeOrderPublisherNode(signal, topic="orders")
+orders = TradeOrderPublisherNode(signal)
 
 from qmtl.sdk import Runner, TradeExecutionService
 
