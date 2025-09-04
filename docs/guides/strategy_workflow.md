@@ -31,7 +31,7 @@ concludes with running the test suite.
 ## 0. Install QMTL
 
 Create a virtual environment and install the package in editable mode. The
-[README](../../README.md) describes the details, but the basic steps are:
+[docs home](../index.md) describes the details, but the basic steps are:
 
 ```bash
 uv venv
@@ -229,8 +229,8 @@ Gateway and DAG Manager using your customized `qmtl.yml`.
 > - [architecture.md](../architecture/architecture.md): 전체 시스템 구조
 > - [sdk_tutorial.md](sdk_tutorial.md): SDK 및 전략 개발 예제
 > - [faq.md](../reference/faq.md): 자주 묻는 질문
-> - [monitoring.md](monitoring.md): 모니터링 및 운영
-> - [canary_rollout.md](canary_rollout.md): 점진적 배포 전략
+> - [monitoring.md](../operations/monitoring.md): 모니터링 및 운영
+> - [canary_rollout.md](../operations/canary_rollout.md): 점진적 배포 전략
 > - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
 
 {{ nav_links() }}

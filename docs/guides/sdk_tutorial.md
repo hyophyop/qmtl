@@ -308,7 +308,7 @@ Runner.set_trade_order_http_url("http://endpoint")
 Runner.set_trade_order_kafka_topic("orders")
 ```
 
-See [`order_pipeline_strategy.py`](../qmtl/examples/strategies/order_pipeline_strategy.py)
+See [`order_pipeline_strategy.py`](https://github.com/hyophyop/qmtl/blob/main/qmtl/examples/strategies/order_pipeline_strategy.py)
 for a complete runnable example. If none of these targets are configured the
 order is ignored, allowing strategies to remain agnostic about the actual
 execution backend.
@@ -316,7 +316,7 @@ execution backend.
 ## 백필 작업
 
 노드 캐시를 과거 데이터로 초기화하는 방법은
-[backfill.md](backfill.md) 문서를 참고하세요.
+[backfill.md](../operations/backfill.md) 문서를 참고하세요.
 
 
 {{ nav_links() }}

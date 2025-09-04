@@ -57,10 +57,15 @@ plugins:
   - macros
   - mkdocs-breadcrumbs-plugin:
       exclude_paths:
+        - architecture
         - architecture/**
+        - archive
         - archive/**
+        - guides
         - guides/**
+        - operations
         - operations/**
+        - reference
         - reference/**
   - tags
 theme:
