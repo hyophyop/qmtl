@@ -92,7 +92,11 @@ class WebSocketClient:
                     delay = self._base_delay
                     while not self._stop_event.is_set():
                         try:
-                            msg = await ws.recv()
+                            try:
+                                msg = await asyncio.wait_for(ws.recv(), timeout=30)
+                            except asyncio.TimeoutError:
+                                # No message within timeout; trigger reconnect loop
+                                break
                         except websockets.ConnectionClosed:
                             break
                         except Exception:

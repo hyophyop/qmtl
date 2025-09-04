@@ -40,12 +40,24 @@ def topic_name(
     length = 6
     suffix = "_sim" if dry_run else ""
 
-    while True:
+    # First try by growing the short hash up to the full hash length
+    while length <= len(code_hash):
         short_hash = code_hash[:length]
         name = f"{asset}_{node_type}_{short_hash}_{version}{suffix}"
         if name not in taken:
             return name
         length += 2
+
+    # Fall back to numeric suffix if all hash-length attempts collide
+    base = f"{asset}_{node_type}_{code_hash}_{version}{suffix}"
+    if base not in taken:
+        return base
+    for n in range(1, 10000):
+        candidate = f"{base}-{n}"
+        if candidate not in taken:
+            return candidate
+    # As a final guard, raise to avoid infinite loops
+    raise RuntimeError("unable to generate unique topic name after 10k attempts")
 
 
 def get_config(topic_type: str) -> TopicConfig:
