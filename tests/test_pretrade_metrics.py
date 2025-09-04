@@ -10,17 +10,14 @@ from qmtl.brokerage.fees import PercentFeeModel
 from qmtl.brokerage.slippage import NullSlippageModel
 from qmtl.brokerage.fill_models import MarketFillModel
 from qmtl.brokerage.order import Account
-from qmtl.gateway.metrics import (
-    record_pretrade_attempt as gw_record_attempt,
-    record_pretrade_rejection as gw_record_rej,
-    get_pretrade_stats,
-)
+from qmtl.gateway import metrics as gw_metrics
 from qmtl.gateway.degradation import DegradationManager
 from qmtl.gateway.routes import create_api_router
 
 
 def test_sdk_pretrade_metrics_activation_reject():
     sdk_metrics.reset_metrics()
+    sdk_metrics.set_world_id("w1")
 
     activation = {"AAPL": Activation(enabled=False, reason="disabled by policy")}
     brokerage = BrokerageModel(
@@ -42,17 +39,20 @@ def test_sdk_pretrade_metrics_activation_reject():
     assert not res.allowed
     assert res.reason == RejectionReason.ACTIVATION_DISABLED
     # Attempt and rejection counters should update
-    assert sdk_metrics.pretrade_attempts_total._val == 1  # type: ignore[attr-defined]
-    assert sdk_metrics.pretrade_rejections_total._vals.get(RejectionReason.ACTIVATION_DISABLED.value, 0) == 1  # type: ignore[attr-defined]
+    assert sdk_metrics.pretrade_attempts_total._vals["w1"] == 1  # type: ignore[attr-defined]
+    key = ("w1", RejectionReason.ACTIVATION_DISABLED.value)
+    assert sdk_metrics.pretrade_rejections_total._vals.get(key, 0) == 1  # type: ignore[attr-defined]
 
 
 def test_gateway_status_includes_pretrade_metrics():
+    gw_metrics.reset_metrics()
+    gw_metrics.set_world_id("w1")
     # Simulate two attempts, one rejection at gateway
-    gw_record_attempt()
-    gw_record_attempt()
-    gw_record_rej("activation_disabled")
+    gw_metrics.record_pretrade_attempt()
+    gw_metrics.record_pretrade_attempt()
+    gw_metrics.record_pretrade_rejection("activation_disabled")
 
-    stats = get_pretrade_stats()
+    stats = gw_metrics.get_pretrade_stats()
     assert stats["attempts"] >= 2
     assert stats["rejections"].get("activation_disabled", 0) >= 1
     assert 0 <= stats["ratio"] <= 1
