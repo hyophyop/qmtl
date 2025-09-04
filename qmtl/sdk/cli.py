@@ -21,6 +21,8 @@ async def _main(argv: List[str] | None = None) -> int:
     run_p.add_argument("--world-id", required=True)
     run_p.add_argument("--gateway-url", required=True, help="Gateway base URL")
     run_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
+    run_p.add_argument("--history-start", dest="history_start", help="Explicit history start (test/deterministic runs)")
+    run_p.add_argument("--history-end", dest="history_end", help="Explicit history end (test/deterministic runs)")
 
     off_p = sub.add_parser("offline", help="Run locally without Gateway/WS")
     off_p.add_argument("strategy", help="Import path as module:Class")
@@ -36,10 +38,17 @@ async def _main(argv: List[str] | None = None) -> int:
     strategy_cls = getattr(module, class_name)
 
     if args.cmd == "run":
+        # In test mode, default to deterministic placeholders when not provided
+        h_start = args.history_start
+        h_end = args.history_end
+        if runtime.TEST_MODE and h_start is None and h_end is None:
+            h_start, h_end = "1", "2"
         await Runner.run_async(
             strategy_cls,
             world_id=args.world_id,
             gateway_url=args.gateway_url,
+            history_start=h_start,
+            history_end=h_end,
         )
     else:
         await Runner.offline_async(strategy_cls)
