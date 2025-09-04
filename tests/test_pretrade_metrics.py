@@ -5,8 +5,7 @@ import asyncio
 from qmtl.sdk import metrics as sdk_metrics
 from qmtl.sdk.pretrade import check_pretrade, Activation
 from qmtl.common.pretrade import RejectionReason
-from qmtl.brokerage import BrokerageModel
-from qmtl.brokerage.simple import CashBuyingPowerModel
+from qmtl.brokerage import BrokerageModel, CashBuyingPowerModel
 from qmtl.brokerage.fees import PercentFeeModel
 from qmtl.brokerage.slippage import NullSlippageModel
 from qmtl.brokerage.fill_models import MarketFillModel
