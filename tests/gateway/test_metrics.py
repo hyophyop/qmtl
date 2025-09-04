@@ -30,7 +30,7 @@ class FakeDB(Database):
 @pytest.fixture
 def app(fake_redis):
     db = FakeDB()
-    return create_app(redis_client=fake_redis, database=db)
+    return create_app(redis_client=fake_redis, database=db, enable_background=False)
 
 
 def test_metrics_endpoint(app):
@@ -69,7 +69,7 @@ def test_lost_requests_counter(monkeypatch, fake_redis):
 
     monkeypatch.setattr(redis, "rpush", fail)
     db = FakeDB()
-    app = create_app(redis_client=redis, database=db)
+    app = create_app(redis_client=redis, database=db, enable_background=False)
     with TestClient(app, raise_server_exceptions=False) as client:
         payload = StrategySubmit(
             dag_json="{}",

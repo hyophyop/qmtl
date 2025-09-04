@@ -26,7 +26,7 @@ class FakeDB(Database):
 @pytest.fixture
 def client(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=fake_redis, database=db)
+    app = create_app(redis_client=fake_redis, database=db, enable_background=False)
     with TestClient(app) as c:
         yield c
 
