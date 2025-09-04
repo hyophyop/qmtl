@@ -2,7 +2,7 @@
 title: "Brokerage API"
 tags: [api]
 author: "QMTL Team"
-last_modified: 2025-08-31
+last_modified: 2025-09-04
 ---
 
 {{ nav_links() }}
@@ -10,6 +10,8 @@ last_modified: 2025-08-31
 # Brokerage API
 
 This page describes QMTL’s brokerage layer: how orders are validated and executed with realistic constraints (ticks/lots, hours, shortability), and how slippage, fees, and settlement are applied. It complements the high-level design in architecture/lean_brokerage_model.md.
+
+Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration: Removing Legacy Modes and Backward Compatibility](../../guides/migration_bc_removal.md) for upgrade steps.
 
 ## Components
 
