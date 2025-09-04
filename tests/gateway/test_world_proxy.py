@@ -42,11 +42,10 @@ async def test_decide_ttl_cache(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/decide")
-        r2 = await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/decide")
+            r2 = await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert r1.json() == {"v": 1}
     assert r2.json() == {"v": 1}
@@ -74,11 +73,10 @@ async def test_activation_etag_cache(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/activation")
-        r2 = await api_client.get("/worlds/abc/activation")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/activation")
+            r2 = await api_client.get("/worlds/abc/activation")
     await client._client.aclose()
     assert r1.json() == {"a": 1}
     assert r2.json() == {"a": 1}
@@ -106,12 +104,11 @@ async def test_decide_stale_on_backend_error(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/decide")
-        client._decision_cache["abc"].expires_at = 0
-        r2 = await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/decide")
+            client._decision_cache["abc"].expires_at = 0
+            r2 = await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert r1.json() == {"v": 1}
     assert r2.json() == {"v": 1}
@@ -137,11 +134,10 @@ async def test_decide_backend_error_no_cache(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        with pytest.raises(httpx.HTTPStatusError):
-            await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert metrics.worlds_stale_responses_total._value.get() == 0
 
@@ -167,11 +163,10 @@ async def test_activation_stale_on_backend_error(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/activation")
-        r2 = await api_client.get("/worlds/abc/activation")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/activation")
+            r2 = await api_client.get("/worlds/abc/activation")
     await client._client.aclose()
     assert r1.json() == {"a": 1}
     assert r2.json() == {"a": 1}
@@ -197,11 +192,10 @@ async def test_activation_backend_error_no_cache(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        with pytest.raises(httpx.HTTPStatusError):
-            await api_client.get("/worlds/abc/activation")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await api_client.get("/worlds/abc/activation")
     await client._client.aclose()
     assert metrics.worlds_stale_responses_total._value.get() == 0
 
@@ -224,11 +218,10 @@ async def test_live_guard(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.post("/worlds/abc/apply", json={})
-        r2 = await api_client.post("/worlds/abc/apply", json={}, headers={"X-Allow-Live": "true"})
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.post("/worlds/abc/apply", json={})
+            r2 = await api_client.post("/worlds/abc/apply", json={}, headers={"X-Allow-Live": "true"})
     await client._client.aclose()
     assert r1.status_code == 403
     assert r2.status_code == 200
@@ -251,10 +244,9 @@ async def test_live_guard_disabled(fake_redis):
         enforce_live_guard=False,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r = await api_client.post("/worlds/abc/apply", json={})
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r = await api_client.post("/worlds/abc/apply", json={})
     await client._client.aclose()
     assert r.status_code == 200
 
@@ -273,11 +265,10 @@ async def test_decide_ttl_envelope_fallback(fake_redis):
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/decide")
-        r2 = await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/decide")
+            r2 = await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert r1.json() == {"v": 1, "ttl": "300s"}
     assert r2.json() == {"v": 1, "ttl": "300s"}
@@ -298,11 +289,10 @@ async def test_decide_ttl_zero_no_cache(fake_redis):
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        r1 = await api_client.get("/worlds/abc/decide")
-        r2 = await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            r1 = await api_client.get("/worlds/abc/decide")
+            r2 = await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert r1.json() == {"v": 1, "ttl": "0s"}
     assert r2.json() == {"v": 2, "ttl": "0s"}
@@ -333,21 +323,20 @@ async def test_state_hash_probe_divergence(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        # initial full snapshot
-        await api_client.get("/worlds/abc/activation")
-        # unchanged hash
-        h1 = await api_client.get("/worlds/abc/activation/state_hash")
-        assert h1.json() == {"state_hash": "h1"}
-        h2 = await api_client.get("/worlds/abc/activation/state_hash")
-        assert h2.json() == {"state_hash": "h1"}
-        assert calls["snap"] == 1
-        # divergence
-        h3 = await api_client.get("/worlds/abc/activation/state_hash")
-        assert h3.json() == {"state_hash": "h2"}
-        await api_client.get("/worlds/abc/activation")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            # initial full snapshot
+            await api_client.get("/worlds/abc/activation")
+            # unchanged hash
+            h1 = await api_client.get("/worlds/abc/activation/state_hash")
+            assert h1.json() == {"state_hash": "h1"}
+            h2 = await api_client.get("/worlds/abc/activation/state_hash")
+            assert h2.json() == {"state_hash": "h1"}
+            assert calls["snap"] == 1
+            # divergence
+            h3 = await api_client.get("/worlds/abc/activation/state_hash")
+            assert h3.json() == {"state_hash": "h2"}
+            await api_client.get("/worlds/abc/activation")
     await client._client.aclose()
     assert calls["snap"] == 2
 
@@ -376,12 +365,11 @@ async def test_status_reports_worldservice_breaker(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        with pytest.raises(httpx.ConnectError):
-            await api_client.get("/worlds/abc/decide")
-        s = await api_client.get("/status")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            with pytest.raises(httpx.ConnectError):
+                await api_client.get("/worlds/abc/decide")
+            s = await api_client.get("/status")
     await client._client.aclose()
     assert s.json()["worldservice"] == "open"
 
@@ -408,11 +396,10 @@ async def test_identity_headers_forwarded(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
     token = _make_jwt({"sub": "alice", "role": "admin"})
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        await api_client.get("/worlds/abc/decide", headers={"Authorization": f"Bearer {token}"})
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            await api_client.get("/worlds/abc/decide", headers={"Authorization": f"Bearer {token}"})
     await client._client.aclose()
     assert captured["sub"] == "alice"
     claims = json.loads(captured["claims"])
@@ -435,10 +422,9 @@ async def test_identity_headers_absent_without_jwt(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        await api_client.get("/worlds/abc/decide")
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            await api_client.get("/worlds/abc/decide")
     await client._client.aclose()
     assert "X-Caller-Sub" not in captured
     assert "X-Caller-Claims" not in captured
@@ -460,12 +446,11 @@ async def test_identity_headers_malformed_jwt(fake_redis):
         world_client=client,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-        await api_client.get(
-            "/worlds/abc/decide", headers={"Authorization": "Bearer not.a.jwt"}
-        )
-    await asgi.aclose()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            await api_client.get(
+                "/worlds/abc/decide", headers={"Authorization": "Bearer not.a.jwt"}
+            )
     await client._client.aclose()
     assert "X-Caller-Sub" not in captured
     assert "X-Caller-Claims" not in captured

@@ -206,7 +206,6 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
 
 
 @pytest.mark.asyncio
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 async def test_dag_client_queries_grpc():
     driver = _FakeDriver([{"topic": "q1"}, {"topic": "q2"}])
     admin = _FakeAdmin()
@@ -226,10 +225,7 @@ async def test_dag_client_queries_grpc():
         await server.wait_for_termination()
         client = None
         server = None
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", ResourceWarning)
-            gc.collect()
+        gc.collect()
 
 
 def test_repository_match_modes():
