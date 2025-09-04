@@ -570,6 +570,7 @@ class Runner:
         strategy = Runner._prepare(strategy_cls)
         tag_service = TagManagerService(gateway_url)
         manager = tag_service.init(strategy, world_id=world_id)
+        sdk_metrics.set_world_id(world_id)
         logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
         dag = strategy.serialize()
         logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])

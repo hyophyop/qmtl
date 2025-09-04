@@ -18,6 +18,14 @@ _e2e_samples: Deque[float] = deque(maxlen=100)
 _worlds_samples: Deque[float] = deque(maxlen=100)
 _sentinel_weight_updates: dict[str, float] = {}
 
+_WORLD_ID = "default"
+
+
+def set_world_id(world_id: str) -> None:
+    global _WORLD_ID
+    _WORLD_ID = str(world_id)
+
+
 gateway_e2e_latency_p95 = Gauge(
     "gateway_e2e_latency_p95",
     "95th percentile end-to-end latency in milliseconds",
@@ -203,6 +211,7 @@ else:
     pretrade_attempts_total = Counter(
         "gw_pretrade_attempts_total",
         "Total number of pre-trade validation attempts observed by Gateway",
+        ["world_id"],
         registry=global_registry,
     )
 
@@ -212,7 +221,7 @@ else:
     pretrade_rejections_total = Counter(
         "gw_pretrade_rejections_total",
         "Total pre-trade rejections grouped by reason at Gateway",
-        ["reason"],
+        ["world_id", "reason"],
         registry=global_registry,
     )
 
@@ -222,32 +231,39 @@ else:
     pretrade_rejection_ratio = Gauge(
         "gw_pretrade_rejection_ratio",
         "Ratio of rejected to attempted pre-trade validations seen by Gateway",
+        ["world_id"],
         registry=global_registry,
     )
 
-pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
 pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
 
 
 def record_pretrade_attempt() -> None:
-    pretrade_attempts_total.inc()
-    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    pretrade_attempts_total.labels(world_id=w).inc()
+    pretrade_attempts_total._vals[w] = pretrade_attempts_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
     _update_pretrade_ratio()
 
 
 def record_pretrade_rejection(reason: str) -> None:
-    pretrade_rejections_total.labels(reason=reason).inc()
-    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    pretrade_rejections_total.labels(world_id=w, reason=reason).inc()
+    key = (w, reason)
+    pretrade_rejections_total._vals[key] = pretrade_rejections_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
     _update_pretrade_ratio()
 
 
 def _update_pretrade_ratio() -> None:
-    total = pretrade_attempts_total._value.get()
-    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    total = pretrade_attempts_total._vals.get(w, 0)  # type: ignore[attr-defined]
+    rejected = sum(
+        v for (wid, _), v in pretrade_rejections_total._vals.items() if wid == w
+    )  # type: ignore[attr-defined]
     ratio = (rejected / total) if total else 0.0
-    pretrade_rejection_ratio.set(ratio)
-    pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
+    pretrade_rejection_ratio.labels(world_id=w).set(ratio)
+    pretrade_rejection_ratio._vals[w] = ratio  # type: ignore[attr-defined]
 
 
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
@@ -407,12 +423,23 @@ def reset_metrics() -> None:
     ws_dropped_subscribers_total._val = 0  # type: ignore[attr-defined]
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
+    pretrade_attempts_total.clear()
+    pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
+    pretrade_rejections_total.clear()
+    pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
+    pretrade_rejection_ratio.clear()
+    pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
 
 
 def get_pretrade_stats() -> dict:
     """Return a snapshot of pre-trade rejection counts and ratio for status."""
+    w = _WORLD_ID
     return {
-        "attempts": int(pretrade_attempts_total._value.get()),  # type: ignore[attr-defined]
-        "rejections": dict(pretrade_rejections_total._vals),  # type: ignore[attr-defined]
-        "ratio": float(pretrade_rejection_ratio._value.get()),  # type: ignore[attr-defined]
+        "attempts": int(pretrade_attempts_total._vals.get(w, 0)),  # type: ignore[attr-defined]
+        "rejections": {
+            reason: count
+            for (wid, reason), count in pretrade_rejections_total._vals.items()  # type: ignore[attr-defined]
+            if wid == w
+        },
+        "ratio": float(pretrade_rejection_ratio._vals.get(w, 0.0)),  # type: ignore[attr-defined]
     }

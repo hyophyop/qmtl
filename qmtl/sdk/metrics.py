@@ -17,6 +17,13 @@ from qmtl.common.metrics_shared import (
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
 )
 
+_WORLD_ID = "default"
+
+
+def set_world_id(world_id: str) -> None:
+    global _WORLD_ID
+    _WORLD_ID = str(world_id)
+
 # Guard against re-registration when tests reload this module
 if "cache_read_total" in global_registry._names_to_collectors:
     cache_read_total = global_registry._names_to_collectors["cache_read_total"]
@@ -97,66 +104,6 @@ backfill_failure_total._vals = {}  # type: ignore[attr-defined]
 backfill_retry_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
-# Pre-trade metrics
-if "pretrade_attempts_total" in global_registry._names_to_collectors:
-    pretrade_attempts_total = global_registry._names_to_collectors[
-        "pretrade_attempts_total"
-    ]
-else:
-    pretrade_attempts_total = Counter(
-        "pretrade_attempts_total",
-        "Total number of pre-trade checks",
-        registry=global_registry,
-    )
-
-if "pretrade_rejections_total" in global_registry._names_to_collectors:
-    pretrade_rejections_total = global_registry._names_to_collectors[
-        "pretrade_rejections_total"
-    ]
-else:
-    pretrade_rejections_total = Counter(
-        "pretrade_rejections_total",
-        "Total number of pre-trade rejections grouped by reason",
-        ["reason"],
-        registry=global_registry,
-    )
-
-if "pretrade_rejection_ratio" in global_registry._names_to_collectors:
-    pretrade_rejection_ratio = global_registry._names_to_collectors[
-        "pretrade_rejection_ratio"
-    ]
-else:
-    pretrade_rejection_ratio = Gauge(
-        "pretrade_rejection_ratio",
-        "Ratio of rejected pre-trade checks",
-        registry=global_registry,
-    )
-
-pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
-pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
-
-
-def _update_pretrade_ratio() -> None:
-    total = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
-    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
-    ratio = rejected / total if total else 0.0
-    pretrade_rejection_ratio.set(ratio)
-    pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
-
-
-def record_pretrade_attempt() -> None:
-    pretrade_attempts_total.inc()
-    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
-    _update_pretrade_ratio()
-
-
-def record_pretrade_rejection(reason: str) -> None:
-    pretrade_rejections_total.labels(reason=reason).inc()
-    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
-    _update_pretrade_ratio()
-
-# ---------------------------------------------------------------------------
 # Shared metric instance (avoids duplicate registration when importing
 # qmtl.dagmanager.metrics in the same process)
 nodecache_resident_bytes = get_nodecache_resident_bytes()
@@ -233,6 +180,7 @@ else:
     pretrade_attempts_total = Counter(
         "pretrade_attempts_total",
         "Total number of pre-trade validation attempts",
+        ["world_id"],
         registry=global_registry,
     )
 
@@ -242,7 +190,7 @@ else:
     pretrade_rejections_total = Counter(
         "pretrade_rejections_total",
         "Total number of pre-trade rejections grouped by reason",
-        ["reason"],
+        ["world_id", "reason"],
         registry=global_registry,
     )
 
@@ -252,32 +200,39 @@ else:
     pretrade_rejection_ratio = Gauge(
         "pretrade_rejection_ratio",
         "Ratio of rejected to attempted pre-trade validations",
+        ["world_id"],
         registry=global_registry,
     )
 
 # Expose values for tests
-pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
 pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
 
 
 def _update_pretrade_ratio() -> None:
-    total = pretrade_attempts_total._value.get()
-    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    total = pretrade_attempts_total._vals.get(w, 0)  # type: ignore[attr-defined]
+    rejected = sum(
+        v for (wid, _), v in pretrade_rejections_total._vals.items() if wid == w
+    )  # type: ignore[attr-defined]
     ratio = (rejected / total) if total else 0.0
-    pretrade_rejection_ratio.set(ratio)
-    pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
+    pretrade_rejection_ratio.labels(world_id=w).set(ratio)
+    pretrade_rejection_ratio._vals[w] = ratio  # type: ignore[attr-defined]
 
 
 def record_pretrade_attempt() -> None:
-    pretrade_attempts_total.inc()
-    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    pretrade_attempts_total.labels(world_id=w).inc()
+    pretrade_attempts_total._vals[w] = pretrade_attempts_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
     _update_pretrade_ratio()
 
 
 def record_pretrade_rejection(reason: str) -> None:
-    pretrade_rejections_total.labels(reason=reason).inc()
-    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
+    w = _WORLD_ID
+    pretrade_rejections_total.labels(world_id=w, reason=reason).inc()
+    key = (w, reason)
+    pretrade_rejections_total._vals[key] = pretrade_rejections_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
     _update_pretrade_ratio()
 
 
@@ -379,12 +334,12 @@ def reset_metrics() -> None:
     alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
     alpha_max_drawdown.set(0.0)
     alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]
-    pretrade_attempts_total._value.set(0)  # type: ignore[attr-defined]
-    pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+    pretrade_attempts_total.clear()
+    pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
     pretrade_rejections_total.clear()
     pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-    pretrade_rejection_ratio.set(0.0)
-    pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
+    pretrade_rejection_ratio.clear()
+    pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
     # Snapshot metrics reset
     try:
         snapshot_write_duration_ms.clear()  # type: ignore[attr-defined]

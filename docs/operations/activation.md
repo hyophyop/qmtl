@@ -39,6 +39,7 @@ last_modified: 2025-08-29
 ## Alerts & Dashboards
 - Alerts: promotion_fail_total, activation_skew_seconds, stale_decision_cache
 - Dashboards: world_decide_latency_ms_p95, event fanout lag, gateway proxy error rates
+- Use world-scoped metrics such as `pretrade_attempts_total{world_id="demo"}` to verify activation state per world.
 
 {{ nav_links() }}
 
