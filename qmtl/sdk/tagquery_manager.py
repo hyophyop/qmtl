@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
 
@@ -7,6 +8,7 @@ from .node import MatchMode
 from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient
+from . import runtime
 from . import runtime
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -35,6 +37,8 @@ class TagQueryManager:
         self.world_id = world_id
         self.strategy_id = strategy_id
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
+        self._poll_task: asyncio.Task | None = None
+        self._stop_event = asyncio.Event()
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -104,6 +108,9 @@ class TagQueryManager:
     async def start(self) -> None:
         if self.client:
             await self.client.start()
+            if self.gateway_url:
+                self._stop_event.clear()
+                self._poll_task = asyncio.create_task(self._poll_loop())
             return
         if not self.gateway_url:
             return
@@ -126,15 +133,43 @@ class TagQueryManager:
                             stream_url, on_message=self.handle_message, token=token
                         )
                         await self.client.start()
+                        # Start periodic reconcile loop for explicit status queries
+                        self._stop_event.clear()
+                        self._poll_task = asyncio.create_task(self._poll_loop())
                         return
         except Exception:
             return
 
         if self.client:
             await self.client.start()
+            # Start reconcile loop even if WS path was injected
+            if self.gateway_url:
+                self._stop_event.clear()
+                self._poll_task = asyncio.create_task(self._poll_loop())
             return
 
         # No legacy watch fallback; WebSocket is required
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
+        if self._poll_task:
+            self._stop_event.set()
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            self._poll_task = None
+
+    async def _poll_loop(self) -> None:
+        # Periodically reconcile tag queries via HTTP GET to avoid depending
+        # solely on WS events. Uses the same /queues/by_tag endpoint.
+        while not self._stop_event.is_set():
+            try:
+                await self.resolve_tags(offline=False)
+            except Exception:
+                pass
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=runtime.POLL_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
