@@ -437,7 +437,7 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
 
 ### 15.5 개발 단위 매핑
 
-- sdk/
+- qmtl/sdk/
   - Runner: `run_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
   - api: `/worlds/*` 프록시, `/events/subscribe`, ControlBus 구독자, 캐시/서킷
