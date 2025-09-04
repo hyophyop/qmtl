@@ -12,7 +12,6 @@ nav:
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Brokerage API: reference/api/brokerage.md
-      - Implementation TODOs: architecture/implementation_todos.md
   - Guides:
       - Overview: guides/README.md
       - SDK Tutorial: guides/sdk_tutorial.md
