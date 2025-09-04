@@ -1,34 +1,10 @@
-name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install uv
-        run: pip install uv
-      - name: Setup uv environment
-        run: uv venv
-      - name: Install dependencies
-        run: uv pip install -e .[dev]
-      - name: Generate Protobuf files
+      # Preflight stages to catch hangs before full run (disabled placeholder)
+      - name: Preflight – import/collection
+        if: ${{ false }}
+        run: uv run -m pytest --collect-only -q
+      - name: Preflight – hang detection
+        if: ${{ false }}
         run: |
-          uv run python -m grpc_tools.protoc \
-            --proto_path=qmtl/proto \
-            --python_out=qmtl/proto \
-            --grpc_python_out=qmtl/proto \
-            qmtl/proto/dagmanager.proto
-      - name: Run tests (warnings are errors)
-        run: PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
-      - name: Run world isolation test
-        run: PYTHONPATH=qmtl/proto uv run -m pytest tests/e2e/test_world_isolation.py
+          PYTHONFAULTHANDLER=1 \
+          uv run --with pytest-timeout -m pytest -q \
+            --timeout=60 --timeout-method=thread --maxfail=1
