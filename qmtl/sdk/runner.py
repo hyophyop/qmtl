@@ -6,7 +6,6 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional, Iterable
 import logging
-import httpx
 
 from opentelemetry import trace
 
@@ -24,6 +23,7 @@ from .tag_manager_service import TagManagerService
 from .activation_manager import ActivationManager
 from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
+from .http import HttpPoster
 from . import snapshot as snap
 
 try:  # Optional aiokafka dependency
@@ -45,6 +45,7 @@ if "_trade_execution_service" not in globals():
 
 class Runner:
     """Execute strategies in various modes."""
+
     _ray_available = ray is not None
     _kafka_available = AIOKafkaConsumer is not None
     _gateway_client: GatewayClient = GatewayClient()
@@ -60,9 +61,7 @@ class Runner:
     # ------------------------------------------------------------------
 
     @classmethod
-    def set_gateway_circuit_breaker(
-        cls, cb: AsyncCircuitBreaker | None
-    ) -> None:
+    def set_gateway_circuit_breaker(cls, cb: AsyncCircuitBreaker | None) -> None:
         """Configure circuit breaker for Gateway communication."""
         cls._gateway_client.set_circuit_breaker(cb)
 
@@ -155,9 +154,7 @@ class Runner:
         # Guard against infinite warm-up if provider never clears pre_warmup
         deadline = time.monotonic() + 60.0
         while node.pre_warmup:
-            cov = await provider.coverage(
-                node_id=node.node_id, interval=node.interval
-            )
+            cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
             missing = Runner._missing_ranges(cov, start, end, node.interval)
             if not missing:
                 await node.load_history(start, end)
@@ -171,7 +168,7 @@ class Runner:
             if time.monotonic() > deadline:
                 logger.warning(
                     "history warm-up timed out for %s; proceeding with available data",
-                    getattr(node, "node_id", "<unknown>")
+                    getattr(node, "node_id", "<unknown>"),
                 )
                 break
             if stop_on_ready:
@@ -179,7 +176,9 @@ class Runner:
                 break
         if node.pre_warmup:
             try:
-                cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
+                cov = await provider.coverage(
+                    node_id=node.node_id, interval=node.interval
+                )
             except Exception:
                 cov = []
             if cov:
@@ -431,7 +430,9 @@ class Runner:
             # Event-local values: node_id -> {interval: [(ts, payload|result)]}
             event_values: dict[str, dict[int, list[tuple[int, any]]]] = {}
             for src, payload in seeds:
-                event_values.setdefault(src.node_id, {}).setdefault(src.interval, []).append((ts, payload))
+                event_values.setdefault(src.node_id, {}).setdefault(
+                    src.interval, []
+                ).append((ts, payload))
 
             progressed = True
             while progressed:
@@ -465,7 +466,9 @@ class Runner:
                     uid = getattr(node, "node_id", None)
                     ival = getattr(node, "interval", None)
                     if uid is not None and ival is not None:
-                        event_values.setdefault(uid, {}).setdefault(ival, []).append((ts, result))
+                        event_values.setdefault(uid, {}).setdefault(ival, []).append(
+                            (ts, result)
+                        )
                         progressed = True
 
     @staticmethod
@@ -584,18 +587,23 @@ class Runner:
                     )
                 await Runner._activation_manager.start()
             except Exception:
-                logger.warning("Activation manager failed to start; proceeding with gates OFF by default")
+                logger.warning(
+                    "Activation manager failed to start; proceeding with gates OFF by default"
+                )
 
         # Hydrate and warm up from history to satisfy periods
         Runner._hydrate_snapshots(strategy)
         # Determine strict mode: only enforce when offline and history providers are present
         from .node import StreamInput
+
         has_provider = any(
-            isinstance(n, StreamInput) and getattr(n, "history_provider", None) is not None
+            isinstance(n, StreamInput)
+            and getattr(n, "history_provider", None) is not None
             for n in strategy.nodes
         )
         # Strict gap handling is opt-in via env/flag only
         from . import runtime as _rt
+
         strict_mode = bool(_rt.FAIL_ON_HISTORY_GAP)
 
         # Apply explicit history ranges if provided; otherwise use defaults
@@ -613,6 +621,7 @@ class Runner:
             # ensure_history with deterministic defaults to satisfy tests that
             # assert load_history invocations.
             from .node import StreamInput
+
             has_cached = False
             for n in strategy.nodes:
                 if isinstance(n, StreamInput):
@@ -645,9 +654,12 @@ class Runner:
             # After replay, enforce strict gap handling if requested
             if strict_mode:
                 from .node import StreamInput
+
                 for n in strategy.nodes:
                     if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
-                        raise RuntimeError("history pre-warmup unresolved in strict mode")
+                        raise RuntimeError(
+                            "history pre-warmup unresolved in strict mode"
+                        )
                 # Additionally, detect non-contiguous gaps when a provider is present
                 for n in strategy.nodes:
                     if not isinstance(n, StreamInput):
@@ -658,7 +670,9 @@ class Runner:
                         snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
                         ts_sorted = sorted(ts for ts, _ in snap)
                         # Compare against provider coverage density
-                        cov = await n.history_provider.coverage(node_id=n.node_id, interval=n.interval)  # type: ignore[attr-defined]
+                        cov = await n.history_provider.coverage(
+                            node_id=n.node_id, interval=n.interval
+                        )  # type: ignore[attr-defined]
                         if cov:
                             s = min(c[0] for c in cov)
                             e = max(c[1] for c in cov)
@@ -666,12 +680,16 @@ class Runner:
                                 expected = int((e - s) // n.interval) + 1
                                 actual = len([t for t in ts_sorted if s <= t <= e])
                                 if actual < expected:
-                                    raise RuntimeError("history gap detected in strict mode")
+                                    raise RuntimeError(
+                                        "history gap detected in strict mode"
+                                    )
                         else:
                             # No coverage reported but we have data; fall back to contiguous check
                             for a, b in zip(ts_sorted, ts_sorted[1:]):
                                 if n.interval and (b - a) != n.interval:
-                                    raise RuntimeError("history gap detected in strict mode")
+                                    raise RuntimeError(
+                                        "history gap detected in strict mode"
+                                    )
                         # If coverage present, also ensure we have at least 'period' samples
                         if cov:
                             needed = getattr(n, "period", 1) or 1
@@ -814,7 +832,7 @@ class Runner:
     def _handle_alpha_performance(result: dict) -> None:
         """Handle alpha performance metrics."""
         from . import metrics as sdk_metrics
-        
+
         if isinstance(result, dict):
             if "sharpe" in result:
                 sdk_metrics.alpha_sharpe.set(result["sharpe"])
@@ -844,8 +862,7 @@ class Runner:
         # Submit via HTTP if URL is configured
         if cls._trade_order_http_url is not None:
             try:
-                # Use client defaults; avoid per-call kwargs that break test doubles
-                httpx.post(cls._trade_order_http_url, json=order)
+                HttpPoster.post(cls._trade_order_http_url, json=order)
             except Exception:
                 logger.warning("trade order HTTP submit failed; dropping order")
 
@@ -858,14 +875,14 @@ class Runner:
         """Postprocess computation results from nodes."""
         if result is None:
             return
-            
+
         # Handle different node types
         node_class_name = node.__class__.__name__
-        
+
         # Check if this is an alpha performance node
-        if 'AlphaPerformance' in node_class_name:
+        if "AlphaPerformance" in node_class_name:
             Runner._handle_alpha_performance(result)
-            
-        # Check if this is a trade order publisher node  
-        if 'TradeOrderPublisher' in node_class_name:
+
+        # Check if this is a trade order publisher node
+        if "TradeOrderPublisher" in node_class_name:
             Runner._handle_trade_order(result)

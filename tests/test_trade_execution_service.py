@@ -19,7 +19,7 @@ class DummyResponse:
 def test_service_retries_on_failure(monkeypatch):
     calls = {"count": 0}
 
-    def fake_post(url: str, json: dict, timeout: float):
+    def fake_post(url: str, *, json: dict):
         calls["count"] += 1
         if calls["count"] == 1:
             raise httpx.HTTPError("boom")
@@ -33,7 +33,7 @@ def test_service_retries_on_failure(monkeypatch):
 
 
 def test_service_raises_after_retries(monkeypatch):
-    def fake_post(url: str, json: dict, timeout: float):
+    def fake_post(url: str, *, json: dict):
         raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx, "post", fake_post)
@@ -54,7 +54,7 @@ def test_runner_delegates_to_service(monkeypatch):
         def post_order(self, order):
             self.orders.append(order)
 
-    monkeypatch.setattr(httpx, "post", boom)
+    monkeypatch.setattr(runner_module.HttpPoster, "post", boom)
     service = DummyService()
     importlib.reload(runner_module)
     runner_module.Runner.set_trade_execution_service(service)
