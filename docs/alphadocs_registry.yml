@@ -38,7 +38,8 @@
 - doc: docs/architecture/lean_brokerage_model.md
   status: implemented
   modules:
-    - qmtl/brokerage/simple.py
+    - qmtl/brokerage/buying_power.py
+    - qmtl/brokerage/fill_models.py
     - qmtl/brokerage/__init__.py
     - qmtl/brokerage/order.py
     - qmtl/brokerage/interfaces.py

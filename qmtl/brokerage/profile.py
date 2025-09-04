@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from .brokerage_model import BrokerageModel
 from .interfaces import BuyingPowerModel, FillModel, SlippageModel, FeeModel
-from . import CashBuyingPowerModel, ImmediateFillModel
+from .buying_power import CashBuyingPowerModel
+from .fill_models import ImmediateFillModel
 from .fees import PerShareFeeModel
 from .slippage import SpreadBasedSlippageModel
 from .symbols import SymbolPropertiesProvider
