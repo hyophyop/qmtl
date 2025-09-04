@@ -69,6 +69,7 @@ class TagQueryManager:
                     "tags": ",".join(tags),
                     "interval": interval,
                     "match_mode": match_mode.value,
+                    "world_id": self.world_id or "",
                 }
                 try:
                     resp = await client.get(url, params=params)
@@ -118,8 +119,11 @@ class TagQueryManager:
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
             async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
+                topic = (
+                    f"w/{self.world_id}/queues" if self.world_id else "queues"
+                )
                 payload = {
-                    "topics": ["queues"],
+                    "topics": [topic],
                     "world_id": self.world_id or "",
                     "strategy_id": self.strategy_id or "",
                 }

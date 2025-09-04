@@ -8,7 +8,7 @@ from qmtl.sdk.tagquery_manager import TagQueryManager
 
 
 class DummyDag:
-    async def get_queues_by_tag(self, tags, interval, match_mode="any"):
+    async def get_queues_by_tag(self, tags, interval, match_mode="any", world_id=None):
         return []
 
 

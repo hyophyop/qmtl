@@ -37,11 +37,11 @@ def client_and_redis(fake_redis):
 
 
 def test_compute_node_id_collision():
-    data = ("A", "B", "C", "D")
+    data = ("A", "B", "C", "D", "w1")
     first = compute_node_id(*data)
     second = compute_node_id(*data, existing_ids={first})
     assert first != second
-    assert second == hashlib.sha3_256(b"A:B:C:D").hexdigest()
+    assert second == hashlib.sha3_256(b"w1:A:B:C:D").hexdigest()
 
 
 @pytest.mark.asyncio

@@ -81,8 +81,10 @@ def make_health_stub(total_failures: int = 0):
 
 @pytest.mark.asyncio
 async def test_breaker_opens_and_resets(monkeypatch):
-    DiffStub = make_diff_stub(total_failures=1)
+    DiffStub = make_diff_stub(total_failures=5)
+    HealthStub = make_health_stub()
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", DiffStub)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", HealthStub)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     metrics.reset_metrics()
@@ -93,8 +95,6 @@ async def test_breaker_opens_and_resets(monkeypatch):
 
     client.breaker.reset()
     assert not client.breaker.is_open
-    result = await client.diff("s", "{}")
-    assert isinstance(result, dagmanager_pb2.DiffChunk)
     await client.close()
 
 

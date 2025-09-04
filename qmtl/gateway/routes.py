@@ -88,7 +88,7 @@ def create_api_router(
             )
             if not all(required):
                 continue
-            expected = compute_node_id(*required)
+            expected = compute_node_id(*required, payload.world_id or "")
             if node.get("node_id") != expected:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
@@ -110,7 +110,9 @@ def create_api_router(
                 match_mode = node.get("match_mode", "any")
                 node_ids.append(node["node_id"])
                 queries.append(
-                    dagmanager.get_queues_by_tag(tags, interval, match_mode)
+                    dagmanager.get_queues_by_tag(
+                        tags, interval, match_mode, payload.world_id
+                    )
                 )
 
         results = []
@@ -141,12 +143,14 @@ def create_api_router(
     # ControlBus-driven updates; see qmtl.gateway.ws and event handlers.
     @router.get("/queues/by_tag")
     async def queues_by_tag(
-        tags: str, interval: int, match_mode: str = "any"
+        tags: str, interval: int, match_mode: str = "any", world_id: str = ""
     ) -> dict:
         from qmtl.common.tagquery import split_tags, normalize_match_mode
         tag_list = split_tags(tags)
         mode = normalize_match_mode(match_mode).value
-        queues = await dagmanager.get_queues_by_tag(tag_list, interval, mode)
+        queues = await dagmanager.get_queues_by_tag(
+            tag_list, interval, mode, world_id or None
+        )
         return {"queues": queues}
     def _build_world_headers(request: Request) -> tuple[dict[str, str], str]:
         headers: dict[str, str] = {}
