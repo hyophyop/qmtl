@@ -11,6 +11,13 @@ from .interfaces import FillModel
 from .order import Order, Fill, OrderType, TimeInForce
 
 
+class ImmediateFillModel(FillModel):
+    """Fill the entire order at the given price."""
+
+    def fill(self, order: Order, market_price: float) -> Fill:
+        return Fill(symbol=order.symbol, quantity=order.quantity, price=market_price)
+
+
 @dataclass
 class BaseFillModel(FillModel):
     """Base fill model with optional liquidity cap for IOC partials.

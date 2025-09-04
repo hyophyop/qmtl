@@ -1,11 +1,11 @@
-"""Simple brokerage model implementations."""
+"""Buying power model implementations."""
 
 # Source: docs/architecture/lean_brokerage_model.md
 
 from __future__ import annotations
 
-from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
-from .order import Account, Order, Fill
+from .interfaces import BuyingPowerModel
+from .order import Account, Order
 from .settlement import SettlementModel
 
 
@@ -26,10 +26,3 @@ class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
     def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
         required = order.price * order.quantity
         return self.settlement.available_cash(account) >= required
-
-
-class ImmediateFillModel(FillModel):
-    """Fill the entire order at the given price."""
-
-    def fill(self, order: Order, market_price: float) -> Fill:
-        return Fill(symbol=order.symbol, quantity=order.quantity, price=market_price)
