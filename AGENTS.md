@@ -40,6 +40,24 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - For suites with shared resources, prefer `--dist loadscope` or cap workers
   (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
 
+### Hang Detection Preflight (required in CI and recommended locally)
+
+To prevent a single hanging test from blocking the entire suite, we run a fast
+"preflight" that auto‑fails long runners before the full test job:
+
+- Quick hang scan (no install step needed in CI/local):
+  - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1`
+  - Rationale: `pytest-timeout` turns hangs into failures with a traceback; `faulthandler` ensures a stack dump is emitted.
+- Optional: collection sanity check to catch import‑time blocks early:
+  - `uv run -m pytest --collect-only -q`
+- After preflight passes, run the full suite:
+  - `uv run -m pytest -W error -n auto`
+
+Guidance for authors:
+- If a test is expected to exceed 60s, add a per‑test timeout override: `@pytest.mark.timeout(180)`.
+- Mark intentionally long or external‑dependency tests as `slow` and exclude them from preflight via `-k 'not slow'` if necessary.
+- Prefer deterministic, dependency‑free tests; avoid unbounded network waits.
+
 ## Example Projects
 
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
