@@ -31,12 +31,21 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
   and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
 
+## Testing
+
+- Always run tests in parallel with `pytest-xdist` for faster feedback:
+  `uv run -m pytest -W error -n auto`
+- If `pytest-xdist` is not installed, add it temporarily with
+  `uv pip install pytest-xdist` (or add it to your local extras).
+- For suites with shared resources, prefer `--dist loadscope` or cap workers
+  (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
+
 ## Example Projects
 
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
 project:
 
-- Run tests with `uv run -m pytest -W error`.
+- Run tests with `uv run -m pytest -W error -n auto`.
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 

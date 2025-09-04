@@ -22,7 +22,13 @@ uv pip install -e .[dev]
 - Run tests via `uv run` so the pinned interpreter is used:
 
 ```bash
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
+```
+
+If `pytest-xdist` is missing, install it with:
+
+```bash
+uv pip install pytest-xdist
 ```
 
 ## HTTPX Usage (tests and examples)

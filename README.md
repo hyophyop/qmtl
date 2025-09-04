@@ -109,10 +109,10 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
    This command ensures all development dependencies are available.
 
-2. **Testing** – Run the tests via `uv` before committing:
+2. **Testing** – Run the tests in parallel via `uv` before committing:
 
    ```bash
-   uv run -m pytest
+   uv run -m pytest -n auto
    ```
 
    Commit only after tests pass.
@@ -152,20 +152,20 @@ Bring up the stack with Docker Compose:
 docker compose -f tests/docker-compose.e2e.yml up -d
 ```
 
-Run the tests using uv:
+Run the tests in parallel using uv:
 
 ```bash
-uv run -m pytest tests/e2e
+uv run -m pytest -n auto tests/e2e
 ```
 
 See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide.
 
 ## Running the Test Suite
 
-Run all unit and integration tests with:
+Run all unit and integration tests in parallel with:
 
 ```bash
-uv run -m pytest
+uv run -m pytest -n auto
 ```
 
 ## Monitoring

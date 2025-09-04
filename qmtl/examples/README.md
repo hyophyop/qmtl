@@ -26,10 +26,10 @@ python strategies/my_strategy.py
 
 ## Testing
 
-Run the test suite and treat warnings as errors:
+Run the test suite in parallel and treat warnings as errors:
 
 ```bash
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 ```
 
 ## Directory Layout

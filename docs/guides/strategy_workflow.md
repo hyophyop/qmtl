@@ -141,10 +141,10 @@ or using the `parallel_strategies_example.py` script.
 
 ## 5. Test Your Implementation
 
-Always run the unit tests before committing code:
+Always run the unit tests in parallel before committing code:
 
 ```bash
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 ```
 
 A sample execution inside the container finished successfully:
@@ -157,7 +157,7 @@ End‑to‑end tests require Docker. Start the stack and execute the tests:
 
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up -d
-uv run -m pytest tests/e2e
+uv run -m pytest -n auto tests/e2e
 ```
 
 For details on the test environment refer to
@@ -167,7 +167,7 @@ tests if desired:
 ```bash
 # Example of running wheels and tests in parallel
 uv pip wheel . &
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 wait
 
 ### Test Teardown and Shutdown
@@ -202,7 +202,7 @@ Example:
 
 ```bash
 export QMTL_TEST_MODE=1
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 ```
 ```
 
