@@ -251,7 +251,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
 - Strategy submission and worlds:
-  - SDKs include `world_id` when submitting a strategy. Gateway does not accept `run_type`; execution mode is determined by WorldService decisions.
+  - SDKs include `world_id` when submitting a strategy; execution mode is determined by WorldService decisions.
 
 ### Event Stream Descriptor
 
