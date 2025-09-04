@@ -23,15 +23,27 @@ async def _main(argv: List[str] | None = None) -> int:
     run_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
     run_p.add_argument("--history-start", dest="history_start", help="Explicit history start (test/deterministic runs)")
     run_p.add_argument("--history-end", dest="history_end", help="Explicit history end (test/deterministic runs)")
+    run_p.add_argument(
+        "--fail-on-history-gap",
+        action="store_true",
+        help="Raise error if history gaps remain after warm-up",
+    )
 
     off_p = sub.add_parser("offline", help="Run locally without Gateway/WS")
     off_p.add_argument("strategy", help="Import path as module:Class")
     off_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
+    off_p.add_argument(
+        "--fail-on-history-gap",
+        action="store_true",
+        help="Raise error if history gaps remain after warm-up",
+    )
 
     args = parser.parse_args(argv)
 
     if args.no_ray:
         runtime.NO_RAY = True
+    if getattr(args, "fail_on_history_gap", False):
+        runtime.FAIL_ON_HISTORY_GAP = True
 
     module_name, class_name = args.strategy.split(":")
     module = importlib.import_module(module_name)

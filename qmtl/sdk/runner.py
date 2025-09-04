@@ -134,6 +134,7 @@ class Runner:
         end: int,
         *,
         stop_on_ready: bool = False,
+        strict: bool = False,
     ) -> None:
         """Ensure history coverage for a single ``StreamInput`` node."""
         if node.interval is None or start is None or end is None:
@@ -187,6 +188,16 @@ class Runner:
                 await node.load_history(s, e)
             else:
                 await node.load_history(start, end)
+        if strict:
+            try:
+                cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
+            except Exception:
+                cov = []
+            missing = Runner._missing_ranges(cov, start, end, node.interval)
+            if missing or getattr(node, "pre_warmup", False):
+                raise RuntimeError(
+                    f"history gap for {getattr(node, 'node_id', '<unknown>')} in strict mode"
+                )
 
     @staticmethod
     async def _ensure_history(
@@ -215,7 +226,11 @@ class Runner:
                 rng_end = end
             task = asyncio.create_task(
                 Runner._ensure_node_history(
-                    n, rng_start, rng_end, stop_on_ready=stop_on_ready
+                    n,
+                    rng_start,
+                    rng_end,
+                    stop_on_ready=stop_on_ready,
+                    strict=strict,
                 )
             )
             tasks.append(task)
