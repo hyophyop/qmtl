@@ -50,7 +50,23 @@ async def test_ws_client_updates_state():
 
 @pytest.mark.asyncio
 async def test_ws_client_reconnects(monkeypatch):
-    """Client reconnects with backoff on connection loss."""
+    """Client reconnects when the idle timeout is reached."""
+
+    class IdleWS:
+        close_timeout = 0
+
+        async def recv(self) -> str:
+            await asyncio.sleep(0.2)
+            return ""  # cancelled by timeout
+
+        async def close(self) -> None:  # pragma: no cover - no behavior
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
 
     class DummyWS:
         def __init__(self, messages: list[str]):
@@ -73,10 +89,10 @@ async def test_ws_client_reconnects(monkeypatch):
 
     connects: list[str] = []
 
-    def fake_connect(url: str, extra_headers=None):
+    def fake_connect(url: str, extra_headers=None, **kwargs):
         connects.append(url)
         if len(connects) == 1:
-            return DummyWS([])
+            return IdleWS()
         return DummyWS([json.dumps({"event": "queue_update"})])
 
     monkeypatch.setattr(websockets, "connect", fake_connect)
@@ -91,6 +107,7 @@ async def test_ws_client_reconnects(monkeypatch):
         on_message=on_msg,
         max_retries=1,
         base_delay=0.01,
+        idle_timeout=0.01,
     )
     await client.start()
     await asyncio.sleep(0.1)
@@ -165,7 +182,7 @@ async def test_ws_client_sends_token(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-    def fake_connect(url: str, extra_headers=None):
+    def fake_connect(url: str, extra_headers=None, **kwargs):
         nonlocal headers
         headers = extra_headers
         return DummyWS()

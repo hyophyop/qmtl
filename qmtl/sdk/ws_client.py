@@ -29,7 +29,8 @@ class WebSocketClient:
         *,
         on_message: Optional[Callable[[dict], Awaitable[None]]] = None,
         max_retries: int | None = None,
-        max_total_time: float | None = None,
+        idle_timeout: float | None = None,
+        heartbeat_interval: float | None = None,
         base_delay: float = 1.0,
         backoff_factor: float = 2.0,
         max_delay: float = 8.0,
@@ -47,7 +48,12 @@ class WebSocketClient:
         self._stop_event = asyncio.Event()
         self._ws: websockets.WebSocketClientProtocol | None = None
         self.max_retries = max_retries
-        self.max_total_time = max_total_time if max_total_time is not None else runtime.WS_MAX_TOTAL_TIME_SECONDS
+        self._idle_timeout = idle_timeout if idle_timeout is not None else runtime.WS_IDLE_TIMEOUT_SECONDS
+        self._heartbeat_interval = (
+            heartbeat_interval
+            if heartbeat_interval is not None
+            else runtime.WS_HEARTBEAT_INTERVAL_SECONDS
+        )
         self._base_delay = base_delay
         self._backoff_factor = backoff_factor
         self._max_delay = max_delay
@@ -79,8 +85,6 @@ class WebSocketClient:
     async def _listen(self) -> None:
         retries = 0
         delay = self._base_delay
-        loop = asyncio.get_running_loop()
-        start = loop.time()
         while not self._stop_event.is_set():
             try:
                 connect_kwargs = {}
@@ -88,13 +92,20 @@ class WebSocketClient:
                     connect_kwargs["extra_headers"] = {
                         "Authorization": f"Bearer {self.token}"
                     }
+                if self._heartbeat_interval is not None:
+                    connect_kwargs.update(
+                        {
+                            "ping_interval": self._heartbeat_interval,
+                            "ping_timeout": self._heartbeat_interval,
+                        }
+                    )
                 async with websockets.connect(self.url, **connect_kwargs) as ws:
                     self._ws = ws
                     delay = self._base_delay
                     while not self._stop_event.is_set():
                         try:
                             try:
-                                msg = await asyncio.wait_for(ws.recv(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
+                                msg = await asyncio.wait_for(ws.recv(), timeout=self._idle_timeout)
                             except asyncio.TimeoutError:
                                 # No message within timeout; trigger reconnect loop
                                 break
@@ -117,8 +128,6 @@ class WebSocketClient:
                 break
             retries += 1
             if self.max_retries is not None and retries > self.max_retries:
-                break
-            if self.max_total_time is not None and loop.time() - start > self.max_total_time:
                 break
             await asyncio.sleep(delay)
             delay = min(delay * self._backoff_factor, self._max_delay)

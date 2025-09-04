@@ -17,5 +17,10 @@ TEST_MODE: bool = str(os.getenv("QMTL_TEST_MODE", "")).strip().lower() in {
 # Default client-side timeouts used by SDK components. These are intentionally
 # small under TEST_MODE to surface issues quickly and prevent hangs.
 HTTP_TIMEOUT_SECONDS: float = 1.5 if TEST_MODE else 2.0
-WS_RECV_TIMEOUT_SECONDS: float = 5.0 if TEST_MODE else 30.0
-WS_MAX_TOTAL_TIME_SECONDS: float | None = 5.0 if TEST_MODE else None
+# Maximum duration to wait for any WebSocket message before considering the
+# connection idle and triggering a reconnect.
+WS_IDLE_TIMEOUT_SECONDS: float = 5.0 if TEST_MODE else 30.0
+
+# Interval at which a heartbeat (WebSocket ping) is sent to keep connections
+# alive. ``None`` disables heartbeats.
+WS_HEARTBEAT_INTERVAL_SECONDS: float | None = 0.5 if TEST_MODE else 20.0
