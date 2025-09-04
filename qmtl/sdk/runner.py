@@ -142,7 +142,6 @@ class Runner:
         if provider is None:
             await node.load_history(start, end)
             return
-
         while node.pre_warmup:
             cov = await provider.coverage(
                 node_id=node.node_id, interval=node.interval
@@ -157,6 +156,11 @@ class Runner:
                 )
                 if stop_on_ready and not node.pre_warmup:
                     return
+            if stop_on_ready:
+                # Avoid infinite loops when history providers fail to warm up
+                break
+        if node.pre_warmup:
+            await node.load_history(start, end)
 
     @staticmethod
     async def _ensure_history(
