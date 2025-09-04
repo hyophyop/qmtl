@@ -150,7 +150,7 @@ Skew Metrics
 - `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
 
 Alerts
-- Decision failures, apply timeouts, stale activation cache at Gateway
+- Decision failures, explicit status polling failures, stale activation cache at Gateway
 
 ---
 

@@ -194,7 +194,7 @@ The helpers are idempotent and safe to call even if no background services are a
 
 Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
 
-- HTTP clients: short default timeout (≈1.5s)
+- HTTP clients: 짧은 폴링 주기 및 명시적 상태 확인
 - WebSocket client: shorter receive timeout and overall max runtime (≈5s)
 
 Example:
