@@ -21,5 +21,6 @@ last_modified: 2025-08-21
   - 테스트 실행 전에 `QMTL_TEST_MODE=1`을 설정하면 SDK의 기본 HTTP/WS 타임아웃이 짧게 설정되어 hang 가능성이 줄어듭니다.
 - ASGI/Transport 자원 정리:
   - `httpx.ASGITransport` 등을 사용했다면 테스트 마지막에 `await transport.aclose()`로 명시적으로 자원을 해제하세요.
+  - Gateway 앱은 백그라운드 태스크를 시작하지 않도록 `create_app(enable_background=False)` 옵션을 제공합니다. 단위 테스트에서는 이 플래그를 끄면 리소스 경합과 경고를 줄일 수 있습니다.
 
 {{ nav_links() }}

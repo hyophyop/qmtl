@@ -58,6 +58,7 @@ def create_app(
     enable_worldservice_proxy: bool = True,
     enforce_live_guard: bool = True,
     enable_otel: bool | None = None,
+    enable_background: bool = True,
 ) -> FastAPI:
     setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
@@ -124,11 +125,11 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         commit_task: asyncio.Task[None] | None = None
-        if controlbus_consumer_local:
+        if enable_background and controlbus_consumer_local:
             if ws_hub_local and controlbus_consumer_local.ws_hub is None:
                 controlbus_consumer_local.ws_hub = ws_hub_local
             await controlbus_consumer_local.start()
-        if commit_log_consumer_local:
+        if enable_background and commit_log_consumer_local:
             await commit_log_consumer_local.start()
             handler = commit_log_handler_local or (
                 lambda records: None
@@ -140,7 +141,7 @@ def create_app(
                     )
 
             commit_task = asyncio.create_task(_consume_loop())
-        if ws_hub_local:
+        if enable_background and ws_hub_local:
             await ws_hub_local.start()
         try:
             yield
