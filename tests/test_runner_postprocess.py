@@ -41,7 +41,7 @@ def test_run_hooks_offline(monkeypatch):
     collected = []
     orders = []
 
-    def fake_alpha(result):
+    def fake_alpha(result, world_id="unknown"):
         collected.append(result)
 
     def fake_order(order):
@@ -61,7 +61,7 @@ def test_run_hooks_offline(monkeypatch):
     monkeypatch.setattr(
         TagManagerService,
         "init",
-        lambda self, strategy: DummyManager(),
+        lambda self, strategy, world_id=None: DummyManager(),
     )
     monkeypatch.setattr(
         "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
@@ -126,7 +126,7 @@ def test_run_hooks_live_like(monkeypatch):
     collected = []
     orders = []
 
-    def fake_alpha(result):
+    def fake_alpha(result, world_id="unknown"):
         collected.append(result)
 
     def fake_order(order):
@@ -149,7 +149,7 @@ def test_run_hooks_live_like(monkeypatch):
     monkeypatch.setattr(
         TagManagerService,
         "init",
-        lambda self, strategy: DummyManager(),
+        lambda self, strategy, world_id=None: DummyManager(),
     )
     monkeypatch.setattr(
         "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)

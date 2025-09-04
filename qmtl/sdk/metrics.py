@@ -98,47 +98,6 @@ backfill_failure_total._vals = {}  # type: ignore[attr-defined]
 backfill_retry_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
-# Pre-trade metrics
-if "pretrade_attempts_total" in global_registry._names_to_collectors:
-    pretrade_attempts_total = global_registry._names_to_collectors[
-        "pretrade_attempts_total"
-    ]
-else:
-    pretrade_attempts_total = Counter(
-        "pretrade_attempts_total",
-        "Total number of pre-trade checks",
-        registry=global_registry,
-    )
-
-if "pretrade_rejections_total" in global_registry._names_to_collectors:
-    pretrade_rejections_total = global_registry._names_to_collectors[
-        "pretrade_rejections_total"
-    ]
-else:
-    pretrade_rejections_total = Counter(
-        "pretrade_rejections_total",
-        "Total number of pre-trade rejections grouped by reason",
-        ["reason"],
-        registry=global_registry,
-    )
-
-if "pretrade_rejection_ratio" in global_registry._names_to_collectors:
-    pretrade_rejection_ratio = global_registry._names_to_collectors[
-        "pretrade_rejection_ratio"
-    ]
-else:
-    pretrade_rejection_ratio = Gauge(
-        "pretrade_rejection_ratio",
-        "Ratio of rejected pre-trade checks",
-        registry=global_registry,
-    )
-
-pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
-pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
-
-
-# ---------------------------------------------------------------------------
 # Shared metric instance (avoids duplicate registration when importing
 # qmtl.dagmanager.metrics in the same process)
 nodecache_resident_bytes = get_nodecache_resident_bytes()
@@ -259,7 +218,7 @@ def _update_pretrade_ratio(world_id: str = "unknown") -> None:
 def record_pretrade_attempt(world_id: str = "unknown") -> None:
     w = str(world_id)
     pretrade_attempts_total.labels(world_id=w).inc()
-    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    pretrade_attempts_total._val = pretrade_attempts_total.labels(world_id=w)._value.get()  # type: ignore[attr-defined]
     _update_pretrade_ratio(world_id)
 
 

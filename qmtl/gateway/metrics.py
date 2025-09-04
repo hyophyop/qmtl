@@ -235,7 +235,7 @@ pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
 def record_pretrade_attempt(world_id: str = "unknown") -> None:
     w = str(world_id)
     pretrade_attempts_total.labels(world_id=w).inc()
-    pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
+    pretrade_attempts_total._val = pretrade_attempts_total.labels(world_id=w)._value.get()  # type: ignore[attr-defined]
     _update_pretrade_ratio(world_id)
 
 
