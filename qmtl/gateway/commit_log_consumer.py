@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from typing import Any, Awaitable, Callable, Iterable, Iterator, Tuple
 
 from cachetools import TTLCache
@@ -43,6 +44,13 @@ except Exception:  # pragma: no cover - import guard
     AIOKafkaConsumer = Any  # type: ignore[misc]
 
 
+class ConsumeStatus(Enum):
+    """Result of a single consume attempt."""
+
+    RECORDS = "records"
+    EMPTY = "empty"
+
+
 class CommitLogConsumer:
     """Consume commit-log records from Kafka.
 
@@ -74,9 +82,10 @@ class CommitLogConsumer:
         await self._consumer.stop()
 
     async def _poll_raw(
-        self, timeout_ms: int | None = None
-    ) -> list[tuple[str, int, str, Any]]:
-        result = await self._consumer.getmany(timeout_ms=timeout_ms)
+        self,
+    ) -> tuple[list[tuple[str, int, str, Any]], bool]:
+        result = await self._consumer.getmany()
+        empty = not result
         records: list[tuple[str, int, str, Any]] = []
         for messages in result.values():
             for msg in messages:
@@ -89,26 +98,26 @@ class CommitLogConsumer:
                     )  # type: ignore[attr-defined]
                     continue
                 records.append((node_id, bucket_ts, input_hash, payload))
-        return records
+        return records, empty
 
-    async def consume(
+    async def consume_once(
         self,
         processor: Callable[[list[tuple[str, int, str, Any]]], Awaitable[None]],
-        *,
-        timeout_ms: int | None = None,
-    ) -> None:
+    ) -> ConsumeStatus:
         """Poll once and pass records to ``processor``.
 
-        Only unique records are forwarded.  Offsets are committed after the
-        processor returns when ``commit_offsets`` is ``True``.
+        The call returns :class:`ConsumeStatus.EMPTY` when the underlying
+        consumer explicitly reports no records. Offsets are committed after
+        the processor returns when ``commit_offsets`` is ``True``.
         """
 
-        raw_records = await self._poll_raw(timeout_ms)
+        raw_records, empty = await self._poll_raw()
         records = list(self._dedup.filter(raw_records))
         if records:
             await processor(records)
         if self._commit_offsets:
             await self._consumer.commit()
+        return ConsumeStatus.EMPTY if empty else ConsumeStatus.RECORDS
 
 
-__all__ = ["CommitLogDeduplicator", "CommitLogConsumer"]
+__all__ = ["CommitLogDeduplicator", "CommitLogConsumer", "ConsumeStatus"]

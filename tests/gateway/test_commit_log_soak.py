@@ -3,7 +3,7 @@ import pytest
 
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.gateway.commit_log_consumer import CommitLogConsumer, ConsumeStatus
 
 
 class P:
@@ -36,7 +36,7 @@ class C:
     async def stop(self):
         return None
 
-    async def getmany(self, timeout_ms=None):
+    async def getmany(self):
         if self._batches:
             return {None: self._batches.pop(0)}
         return {}
@@ -65,7 +65,8 @@ async def test_commit_log_exactly_once_soak():
         out.extend(records)
 
     await clc.start()
-    await clc.consume(handler)
+    status = await clc.consume_once(handler)
+    assert status is ConsumeStatus.RECORDS
     await clc.stop()
 
     # Only the first record survives dedup

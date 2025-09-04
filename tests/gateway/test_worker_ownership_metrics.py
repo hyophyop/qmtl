@@ -7,7 +7,7 @@ import pytest
 
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.gateway.commit_log_consumer import CommitLogConsumer, ConsumeStatus
 from qmtl.gateway.database import PostgresDatabase, Database
 from qmtl.gateway.ownership import OwnershipManager
 from qmtl.gateway.redis_queue import RedisTaskQueue
@@ -87,7 +87,7 @@ class _FakeConsumer:
     async def stop(self) -> None:
         return None
 
-    async def getmany(self, timeout_ms: int | None = None):  # noqa: D401 - test shim
+    async def getmany(self):  # noqa: D401 - test shim
         if self._batches:
             return {None: self._batches.popleft()}
         return {}
@@ -149,7 +149,8 @@ async def test_two_workers_single_commit_no_duplicates() -> None:
     async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
         received.extend(records)
 
-    await cl_consumer.consume(handler)
+    status = await cl_consumer.consume_once(handler)
+    assert status is ConsumeStatus.RECORDS
 
     assert received == [("n1", 100, "h1", {"a": 1})]
     assert metrics.commit_duplicate_total._value.get() == 0

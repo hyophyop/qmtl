@@ -5,7 +5,11 @@ from collections import deque
 
 import pytest
 
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer, CommitLogDeduplicator
+from qmtl.gateway.commit_log_consumer import (
+    CommitLogConsumer,
+    CommitLogDeduplicator,
+    ConsumeStatus,
+)
 from qmtl.gateway import metrics
 
 
@@ -75,7 +79,7 @@ class _FakeConsumer:
     async def stop(self) -> None:
         return None
 
-    async def getmany(self, timeout_ms: int | None = None):  # noqa: D401 - test shim
+    async def getmany(self):  # noqa: D401 - test shim
         if self._batches:
             return {None: self._batches.popleft()}
         return {}
@@ -108,8 +112,10 @@ async def test_commit_log_consumer_dedup_and_metrics() -> None:
     async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
         received.append(records)
 
-    await cl_consumer.consume(handler)
-    await cl_consumer.consume(handler)
+    status1 = await cl_consumer.consume_once(handler)
+    assert status1 is ConsumeStatus.RECORDS
+    status2 = await cl_consumer.consume_once(handler)
+    assert status2 is ConsumeStatus.RECORDS
 
     assert received == [[r1, r2], [r3]]
     assert metrics.commit_duplicate_total._value.get() == 2
@@ -152,7 +158,22 @@ async def test_commit_log_consumer_ignores_invalid_messages() -> None:
     async def handler(records: list[tuple[str, int, str, dict[str, int]]]) -> None:
         received.append(records)
 
-    await cl_consumer.consume(handler)
+    status = await cl_consumer.consume_once(handler)
+    assert status is ConsumeStatus.RECORDS
 
     assert received == [[valid]]
     assert metrics.commit_invalid_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_consume_once_reports_empty_when_no_messages() -> None:
+    metrics.reset_metrics()
+    fake_consumer = _FakeConsumer([])
+    cl_consumer = CommitLogConsumer(fake_consumer, topic="commit", group_id="g1")
+
+    async def handler(records):
+        raise RuntimeError("should not be called")
+
+    status = await cl_consumer.consume_once(handler)
+    assert status is ConsumeStatus.EMPTY
+    assert fake_consumer.commit_calls == 1

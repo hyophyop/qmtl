@@ -316,11 +316,11 @@ class Runner:
         await consumer.start()
         try:
             while not stop_event.is_set():
-                batch = await consumer.getmany(timeout_ms=200)
-                got = False
+                batch = await consumer.getmany()
+                if not batch:
+                    continue
                 for _tp, messages in batch.items():
                     for msg in messages:
-                        got = True
                         try:
                             payload = json.loads(msg.value)
                         except Exception:
@@ -333,9 +333,6 @@ class Runner:
                             ts,
                             payload,
                         )
-                if not got:
-                    # No messages; loop to re-check stop_event promptly
-                    continue
         finally:
             await consumer.stop()
 

@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 
 from . import metrics as gw_metrics
-from .commit_log_consumer import CommitLogConsumer
+from .commit_log_consumer import CommitLogConsumer, ConsumeStatus
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--group", required=True, help="Consumer group id")
     p.add_argument("--metrics-port", type=int, default=8000, help="Prometheus metrics port")
     p.add_argument("--health-port", type=int, default=0, help="Optional health endpoint port (0=disabled)")
-    p.add_argument("--poll-timeout-ms", type=int, default=500, help="Poll timeout in milliseconds")
     return p
 
 
@@ -41,7 +40,7 @@ async def _create_consumer(bootstrap: str, topic: str, group: str) -> Any:
     return consumer
 
 
-async def run(bootstrap: str, topic: str, group: str, poll_timeout_ms: int) -> None:
+async def run(bootstrap: str, topic: str, group: str) -> None:
     consumer = await _create_consumer(bootstrap, topic, group)
     clc = CommitLogConsumer(consumer, topic=topic, group_id=group)
 
@@ -59,8 +58,9 @@ async def run(bootstrap: str, topic: str, group: str, poll_timeout_ms: int) -> N
 
     try:
         while not stop_event.is_set():  # pragma: no cover - runtime path
-            await clc.consume(processor, timeout_ms=poll_timeout_ms)
-            await asyncio.sleep(0.05)
+            status = await clc.consume_once(processor)
+            if status is ConsumeStatus.EMPTY:
+                continue
     finally:
         try:
             await clc.stop()
@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     gw_metrics.start_metrics_server(port=args.metrics_port)
     if args.health_port and args.health_port > 0:
         _start_health_server(args.health_port)
-    asyncio.run(run(args.bootstrap, args.topic, args.group, args.poll_timeout_ms))
+    asyncio.run(run(args.bootstrap, args.topic, args.group))
     return 0
 
 

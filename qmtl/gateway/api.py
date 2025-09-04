@@ -28,7 +28,7 @@ from .routes import create_api_router
 from .strategy_manager import StrategyManager
 from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
-from .commit_log_consumer import CommitLogConsumer
+from .commit_log_consumer import CommitLogConsumer, ConsumeStatus
 from .commit_log import CommitLogWriter
 
 logger = logging.getLogger(__name__)
@@ -136,9 +136,9 @@ def create_app(
             )
             async def _consume_loop() -> None:
                 while True:
-                    await commit_log_consumer_local.consume(
-                        handler, timeout_ms=1000
-                    )
+                    status = await commit_log_consumer_local.consume_once(handler)
+                    if status is ConsumeStatus.EMPTY:
+                        continue
 
             commit_task = asyncio.create_task(_consume_loop())
         if enable_background and ws_hub_local:

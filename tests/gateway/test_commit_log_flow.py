@@ -2,7 +2,7 @@ import pytest
 
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.gateway.commit_log_consumer import CommitLogConsumer, ConsumeStatus
 
 
 class FakeProducer:
@@ -47,7 +47,7 @@ class _FakeConsumer:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def getmany(self, timeout_ms: int | None = None):
+    async def getmany(self):
         if self._batches:
             return {None: self._batches.pop(0)}
         return {}
@@ -76,7 +76,8 @@ async def test_commit_log_end_to_end() -> None:
         received.extend(records)
 
     await cl_consumer.start()
-    await cl_consumer.consume(handler)
+    status = await cl_consumer.consume_once(handler)
+    assert status is ConsumeStatus.RECORDS
     await cl_consumer.stop()
     await producer.stop()
 
