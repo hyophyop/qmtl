@@ -34,7 +34,7 @@ class FakeDB(Database):
 @pytest.fixture
 def client_and_redis(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=fake_redis, database=db)
+    app = create_app(redis_client=fake_redis, database=db, enable_background=False)
     with TestClient(app) as c:
         yield c, fake_redis
 
@@ -90,7 +90,7 @@ async def test_sentinel_inserted(client_and_redis):
 async def test_sentinel_skip(fake_redis):
     redis = fake_redis
     db = FakeDB()
-    app = create_app(redis_client=redis, database=db, insert_sentinel=False)
+    app = create_app(redis_client=redis, database=db, insert_sentinel=False, enable_background=False)
     with TestClient(app) as client:
         dag = {"nodes": []}
         payload = StrategySubmit(

@@ -29,7 +29,7 @@ class FakeDB(Database):
 @pytest.fixture
 def app(fake_redis):
     db = FakeDB()
-    return create_app(redis_client=fake_redis, database=db)
+    return create_app(redis_client=fake_redis, database=db, enable_background=False)
 
 
 @pytest.mark.asyncio
