@@ -4,7 +4,7 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-08-24
 ---
 
 {{ nav_links() }}
@@ -65,6 +65,35 @@ graph LR
 5. **SDK**는 반환된 큐 매핑에 따라 로컬에서 필요한 노드만 실행하며, 활성 게이트(OrderGateNode)로 주문 발동을 제어한다.
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
+
+### World ID 전달 흐름
+
+`world_id`는 전략 실행 시 `Runner`로부터 `TagQueryManager`와 `ActivationManager`로 전달되어 큐 조회와 활성 이벤트 구독에 사용됩니다. 이 값은 다시 각 노드의 `world_id` 속성과 메트릭 레이블에 주입되어 월드별 데이터가 명확히 구분됩니다.
+
+```mermaid
+sequenceDiagram
+    participant R as Runner
+    participant T as TagQueryManager
+    participant A as ActivationManager
+    participant N as Nodes / Metrics
+    R->>T: world_id
+    R->>A: world_id
+    T->>N: queue lookup with world_id
+    A->>N: activation(world_id)
+```
+
+```python
+from qmtl.sdk import Strategy, StreamInput, Runner
+
+class FlowExample(Strategy):
+    def setup(self):
+        price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
+        self.add_nodes([price])
+
+Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
+```
+
+위 호출에서 `TagQueryManager`는 `GET /queues/by_tag` 요청에 `world_id`를 포함하고, `ActivationManager`는 `/worlds/{world_id}/activation`을 주기적으로 조회하여 주문 게이트와 메트릭에 반영합니다.
 
 ---
 
