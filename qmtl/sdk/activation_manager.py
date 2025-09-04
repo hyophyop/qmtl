@@ -21,6 +21,7 @@ class ActivationState:
     long_active: bool = False
     short_active: bool = False
     etag: Optional[str] = None
+    stale: bool = True
 
 
 class ActivationManager:
@@ -40,12 +41,17 @@ class ActivationManager:
         self._stop_event = asyncio.Event()
 
     def allow_side(self, side: str) -> bool:
+        if self.state.stale:
+            return False
         s = side.lower()
         if s in {"buy", "long"}:
             return self.state.long_active
         if s in {"sell", "short"}:
             return self.state.short_active
         return False
+
+    def is_stale(self) -> bool:
+        return self.state.stale
 
     async def _on_message(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -54,6 +60,7 @@ class ActivationManager:
             side = (payload.get("side") or "").lower()
             active = bool(payload.get("active", False))
             self.state.etag = payload.get("etag") or self.state.etag
+            self.state.stale = False
             if side == "long":
                 self.state.long_active = active
             elif side == "short":
