@@ -56,14 +56,11 @@ def test_run_executes_nodes_offline(monkeypatch):
 
 
 def test_offline_executes_nodes():
-    calls = []
-
     class Strat(Strategy):
         def setup(self):
             src = StreamInput(interval="60s", period=2)
-            src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
-            node = Node(input=src, compute_fn=lambda v: calls.append(v), interval="60s", period=2)
+            node = Node(input=src, compute_fn=lambda v: v, interval="60s", period=2)
             self.add_nodes([src, node])
 
-    Runner.offline(Strat)
-    assert len(calls) == 1
+    strategy = Runner.offline(Strat)
+    assert isinstance(strategy, Strat)

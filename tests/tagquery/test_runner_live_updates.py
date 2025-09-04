@@ -83,7 +83,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     hub = DummyHub(client)
     redis = fake_redis
     gw_app = create_app(dag_client=DummyDag(), ws_hub=hub, redis_client=redis, database=FakeDB(), enable_background=False)
-    transport = httpx.ASGITransport(gw_app, lifespan="on")
+    transport = httpx.ASGITransport(gw_app)
 
     real_client = httpx.AsyncClient
     monkeypatch.setattr("qmtl.sdk.tagquery_manager.WebSocketClient", ws_factory)
