@@ -2,7 +2,7 @@
 title: "SDK 사용 가이드"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-08-24
 ---
 
 {{ nav_links() }}
@@ -91,9 +91,64 @@ Runner.offline(MyStrategy)
 `Runner`는 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여 해당 태그에
 매칭되는 큐를 조회하고 이벤트 디스크립터/토큰을 받아 WebSocket 구독을 시작합니다. 모든 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
 
+### world_id 전달 흐름
+
+`world_id`는 실행 시점에서 `Runner`가 받아 `TagQueryManager`와 `ActivationManager`에 전파됩니다. 두 관리자는 각 노드와 메트릭에 동일한 `world_id`를 주입해 큐·활성 상태와 지표가 월드별로 분리되도록 보장합니다.
+
+```mermaid
+sequenceDiagram
+    participant R as Runner
+    participant T as TagQueryManager
+    participant A as ActivationManager
+    participant N as Nodes / Metrics
+    R->>T: world_id
+    R->>A: world_id
+    T->>N: register(world_id)
+    A->>N: activation(world_id)
+```
+
+```python
+from qmtl.sdk import Strategy, StreamInput, Runner
+
+class WorldStrategy(Strategy):
+    def setup(self):
+        price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
+        self.add_nodes([price])
+
+# world_id는 노드 등록과 메트릭 레이블에 자동으로 반영됩니다.
+Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
+```
+
 ## CLI 도움말
 
-CLI에 대한 전체 옵션은 다음 명령으로 확인할 수 있습니다.
+`qmtl sdk run` 명령으로 전략을 실행할 때는 `--world-id`를 반드시 지정합니다.
+
+```bash
+qmtl sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
+```
+
+환경 변수로 값을 주입할 수도 있습니다.
+
+```bash
+export WORLD_ID=demo_world
+qmtl sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
+```
+
+구성 파일에서 값을 읽어오는 방법의 예시는 다음과 같습니다.
+
+```yaml
+# config.yml
+world_id: demo_world
+gateway_url: http://gw
+```
+
+```bash
+WORLD_ID=$(yq '.world_id' config.yml)
+GATEWAY_URL=$(yq '.gateway_url' config.yml)
+qmtl sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWAY_URL
+```
+
+전체 옵션은 아래 명령으로 확인할 수 있습니다.
 
 ```bash
 python -m qmtl.sdk --help
