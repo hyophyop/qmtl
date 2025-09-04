@@ -60,7 +60,7 @@ class FakeStream(StreamSender):
     def send(self, chunk):
         self.chunks.append(chunk)
 
-    def wait_for_ack(self) -> AckStatus:
+    async def wait_for_ack(self) -> AckStatus:
         self.waits += 1
         return AckStatus.OK
 

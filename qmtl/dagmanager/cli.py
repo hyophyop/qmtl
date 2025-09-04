@@ -73,7 +73,7 @@ class _PrintStream(StreamSender):
     def send(self, chunk) -> None:
         print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
 
-    def wait_for_ack(self) -> AckStatus:
+    async def wait_for_ack(self) -> AckStatus:
         return AckStatus.OK
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:

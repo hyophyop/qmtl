@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import AsyncIterable, Dict
 import asyncio
-import threading
 from collections import deque
 
 import grpc
@@ -30,7 +29,7 @@ class _GrpcStream(StreamSender):
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self.loop = loop
         self.queue: asyncio.Queue[DiffChunk | None] = asyncio.Queue()
-        self._ack = threading.Event()
+        self._ack_event = asyncio.Event()
         self._last_ack = AckStatus.OK
         self._pending: deque[DiffChunk] = deque()
 
@@ -38,18 +37,17 @@ class _GrpcStream(StreamSender):
         self._pending.append(chunk)
         asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
 
-    def wait_for_ack(self) -> AckStatus:
-        if self._ack.wait(timeout=1.0):
-            self._ack.clear()
-            return self._last_ack
-        self._last_ack = AckStatus.TIMEOUT
+    async def wait_for_ack(self) -> AckStatus:
+        fut = asyncio.run_coroutine_threadsafe(self._ack_event.wait(), self.loop)
+        await asyncio.wrap_future(fut)
+        self._ack_event.clear()
         return self._last_ack
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:
         if self._pending:
             self._pending.popleft()
         self._last_ack = status
-        self._ack.set()
+        self._ack_event.set()
 
     def ack_status(self) -> AckStatus:
         return self._last_ack

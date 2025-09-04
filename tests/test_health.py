@@ -110,7 +110,7 @@ async def test_grpc_health():
         def send(self, chunk):
             pass
 
-        def wait_for_ack(self) -> AckStatus:
+        async def wait_for_ack(self) -> AckStatus:
             return AckStatus.OK
 
         def ack(self, status: AckStatus = AckStatus.OK):

@@ -22,7 +22,7 @@ class _NullStream(StreamSender):
     def send(self, chunk) -> None:  # pragma: no cover - simple no-op
         pass
 
-    def wait_for_ack(self) -> AckStatus:  # pragma: no cover - noop
+    async def wait_for_ack(self) -> AckStatus:  # pragma: no cover - noop
         return AckStatus.OK
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:  # pragma: no cover - noop

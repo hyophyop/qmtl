@@ -160,8 +160,8 @@ class StreamSender:
     def send(self, chunk: DiffChunk) -> None:
         raise NotImplementedError
 
-    def wait_for_ack(self) -> AckStatus:
-        """Block until the client acknowledges the last chunk."""
+    async def wait_for_ack(self) -> AckStatus:
+        """Await client acknowledgement for the last chunk."""
         raise NotImplementedError
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:
@@ -283,7 +283,7 @@ class DiffService:
     # Step 5 is handled inside _hash_compare via queue upsert --------------
 
     # Step 6 ---------------------------------------------------------------
-    def _stream_send(
+    async def _stream_send(
         self,
         queue_map: Dict[str, str],
         sentinel_id: str,
@@ -302,7 +302,7 @@ class DiffService:
                     buffering_nodes=[],
                 )
             )
-            self.stream_sender.wait_for_ack()
+            await self.stream_sender.wait_for_ack()
             return
         for i in range(0, total, CHUNK_SIZE):
             chunk_new = new_nodes[i:i+CHUNK_SIZE]
@@ -315,7 +315,7 @@ class DiffService:
                     buffering_nodes=chunk_buf,
                 )
             )
-            self.stream_sender.wait_for_ack()
+            await self.stream_sender.wait_for_ack()
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
@@ -329,7 +329,7 @@ class DiffService:
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id, new_nodes, instructions)
+            asyncio.run(self._stream_send(queue_map, sentinel_id, new_nodes, instructions))
             return DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,
