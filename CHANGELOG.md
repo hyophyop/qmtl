@@ -6,7 +6,7 @@
 - Added `coverage()` and `fill_missing()` interfaces for history providers and removed `start`/`end` arguments from `StreamInput`.
 - `TagQueryNode.resolve()` has been removed. Use `TagQueryManager.resolve_tags()` to fetch queue mappings before execution.
 - Added `Node.add_tag()` to attach tags after node creation.
-- Removed deprecated shim module `qmtl.sdk.generators`; import from `qmtl.generators` instead.
+- Added migration guide for removing legacy Runner/CLI/Gateway surfaces. See [docs/guides/migration_bc_removal.md](docs/guides/migration_bc_removal.md).
 
 ---
 

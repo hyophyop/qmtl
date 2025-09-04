@@ -85,7 +85,7 @@ async def test_consumer_relays_and_deduplicates():
     await consumer.publish(dup)
     await consumer.publish(msg2)
     await consumer.publish(msg3)
-    await asyncio.sleep(0.1)
+    await consumer._queue.join()
     await consumer.stop()
     assert hub.events == [
         ("activation_updated", {"id": 1}),

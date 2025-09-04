@@ -86,6 +86,32 @@ class ControlBusConsumer:
             finally:
                 self._queue.task_done()
 
+    async def _broker_ready(self) -> bool:
+        """Return ``True`` if brokers are reachable."""
+        try:  # pragma: no cover - aiokafka optional
+            from aiokafka import AIOKafkaConsumer
+
+            consumer = AIOKafkaConsumer(
+                bootstrap_servers=self.brokers,
+                group_id=self.group,
+                enable_auto_commit=False,
+            )
+            await consumer.start()
+            await consumer.stop()
+            return True
+        except Exception:
+            return False
+
+    async def _wait_for_broker(self, timeout: float = 60.0) -> None:
+        """Poll brokers until they become reachable or ``timeout`` expires."""
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            if await self._broker_ready():
+                return
+            if asyncio.get_running_loop().time() > deadline:
+                raise RuntimeError("brokers unavailable")
+            await asyncio.sleep(1.0)
+
     async def _broker_loop(self) -> None:
         try:
             from aiokafka import AIOKafkaConsumer
@@ -93,7 +119,6 @@ class ControlBusConsumer:
             logger.error("aiokafka is required for broker consumption")
             return
 
-        backoff = 1.0
         while True:
             try:
                 self._consumer = AIOKafkaConsumer(
@@ -103,7 +128,6 @@ class ControlBusConsumer:
                     enable_auto_commit=False,
                 )
                 await self._consumer.start()
-                backoff = 1.0
                 while True:
                     msg = await self._consumer.getone()
                     try:
@@ -120,8 +144,10 @@ class ControlBusConsumer:
                     if self._consumer:
                         await self._consumer.stop()
                 self._consumer = None
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 60)
+                try:
+                    await self._wait_for_broker()
+                except Exception:
+                    break
             finally:
                 if self._consumer is not None:
                     with contextlib.suppress(Exception):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from collections.abc import Iterable, Sequence
 from typing import Any, Dict
 
@@ -159,23 +160,36 @@ class NodeCacheArrow:
         self.backfill_state = BackfillState()
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
+        self._stop_event = threading.Event()
+        self._evict_thread: threading.Thread | None = None
+        self._evictor = None
         if RAY_AVAILABLE and not runtime.NO_RAY:
             self._evictor = _Evictor.options(name=f"evictor_{id(self)}").remote(self._evict_interval)
             self_ref = self
-            ray.get(self._evictor.start.remote(self_ref))
+            self._evictor.start.remote(self_ref)
         else:
             self._start_thread_evictor()
 
     def _start_thread_evictor(self) -> None:
-        import threading
-
         def loop() -> None:
-            while True:
-                time.sleep(self._evict_interval)
+            while not self._stop_event.is_set():
+                self._stop_event.wait(self._evict_interval)
                 self.evict_expired()
 
         t = threading.Thread(target=loop, daemon=True)
         t.start()
+        self._evict_thread = t
+
+    def close(self) -> None:
+        """Stop background eviction workers."""
+        self._stop_event.set()
+        if self._evict_thread is not None:
+            self._evict_thread.join(timeout=0)
+        if RAY_AVAILABLE and not runtime.NO_RAY and self._evictor is not None:
+            ray.get(self._evictor.stop.remote())
+
+    def __del__(self) -> None:  # pragma: no cover - cleanup
+        self.close()
 
     # --------------------------------------------------------------
     def _ensure(self, u: str, interval: int) -> _Slice:
@@ -418,11 +432,15 @@ if RAY_AVAILABLE:
     class _Evictor:
         def __init__(self, interval: int) -> None:
             self._interval = interval
+            self._stop_event = threading.Event()
 
         def start(self, cache: NodeCacheArrow) -> None:
-            while True:
-                time.sleep(self._interval)
+            while not self._stop_event.is_set():
+                self._stop_event.wait(self._interval)
                 cache.evict_expired()
+
+        def stop(self) -> None:
+            self._stop_event.set()
 
 else:
 

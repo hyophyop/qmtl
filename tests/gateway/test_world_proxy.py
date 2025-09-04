@@ -36,8 +36,13 @@ async def test_decide_ttl_cache(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/decide")
         r2 = await api_client.get("/worlds/abc/decide")
@@ -63,8 +68,13 @@ async def test_activation_etag_cache(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/activation")
         r2 = await api_client.get("/worlds/abc/activation")
@@ -90,8 +100,13 @@ async def test_decide_stale_on_backend_error(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/decide")
         client._decision_cache["abc"].expires_at = 0
@@ -116,8 +131,13 @@ async def test_decide_backend_error_no_cache(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         with pytest.raises(httpx.HTTPStatusError):
             await api_client.get("/worlds/abc/decide")
@@ -141,8 +161,13 @@ async def test_activation_stale_on_backend_error(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/activation")
         r2 = await api_client.get("/worlds/abc/activation")
@@ -166,8 +191,13 @@ async def test_activation_backend_error_no_cache(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         with pytest.raises(httpx.HTTPStatusError):
             await api_client.get("/worlds/abc/activation")
@@ -188,8 +218,13 @@ async def test_live_guard(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.post("/worlds/abc/apply", json={})
         r2 = await api_client.post("/worlds/abc/apply", json={}, headers={"X-Allow-Live": "true"})
@@ -216,7 +251,7 @@ async def test_live_guard_disabled(fake_redis):
         enforce_live_guard=False,
         enable_background=False,
     )
-    asgi = httpx.ASGITransport(app=app)
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r = await api_client.post("/worlds/abc/apply", json={})
     await asgi.aclose()
@@ -238,7 +273,7 @@ async def test_decide_ttl_envelope_fallback(fake_redis):
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/decide")
         r2 = await api_client.get("/worlds/abc/decide")
@@ -263,7 +298,7 @@ async def test_decide_ttl_zero_no_cache(fake_redis):
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
     app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client, enable_background=False)
-    asgi = httpx.ASGITransport(app=app)
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         r1 = await api_client.get("/worlds/abc/decide")
         r2 = await api_client.get("/worlds/abc/decide")
@@ -292,8 +327,13 @@ async def test_state_hash_probe_divergence(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         # initial full snapshot
         await api_client.get("/worlds/abc/activation")
@@ -330,8 +370,13 @@ async def test_status_reports_worldservice_breaker(fake_redis):
         client=httpx.AsyncClient(transport=transport),
         breaker=breaker,
     )
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         with pytest.raises(httpx.ConnectError):
             await api_client.get("/worlds/abc/decide")
@@ -357,8 +402,13 @@ async def test_identity_headers_forwarded(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     token = _make_jwt({"sub": "alice", "role": "admin"})
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         await api_client.get("/worlds/abc/decide", headers={"Authorization": f"Bearer {token}"})
@@ -379,8 +429,13 @@ async def test_identity_headers_absent_without_jwt(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         await api_client.get("/worlds/abc/decide")
     await asgi.aclose()
@@ -399,8 +454,13 @@ async def test_identity_headers_malformed_jwt(fake_redis):
 
     transport = httpx.MockTransport(handler)
     client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
-    app = create_app(redis_client=fake_redis, database=FakeDB(), world_client=client)
-    asgi = httpx.ASGITransport(app=app)
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+    asgi = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
         await api_client.get(
             "/worlds/abc/decide", headers={"Authorization": "Bearer not.a.jwt"}

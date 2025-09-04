@@ -148,7 +148,7 @@ def make_brokerage_model_for_compat(params: ExecCompatParams) -> BrokerageModel:
     - Fill model: UnifiedFillModel (covers market/limit/stop/stop-limit)
     - Buying power: injected by caller if needed; default allows all (via lambda)
     """
-    from qmtl.brokerage.simple import CashBuyingPowerModel
+    from qmtl.brokerage import CashBuyingPowerModel
 
     class _AllBP(CashBuyingPowerModel):
         def has_sufficient_buying_power(self, account: Account, order: BrOrder) -> bool:  # type: ignore[override]
