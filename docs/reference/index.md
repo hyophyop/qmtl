@@ -10,6 +10,7 @@
 - [enhanced_validation](/reference/enhanced_validation/)
 - [faq](/reference/faq/)
 - [lean_like_features](/reference/lean_like_features/)
+- [schema_registry](/reference/schema_registry/)
 - [schemas](/reference/schemas/)
 - [schemas](/reference/schemas/)
 - [templates](/reference/templates/)

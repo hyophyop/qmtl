@@ -6,6 +6,7 @@
 - [canary_rollout](/operations/canary_rollout/)
 - [ci](/operations/ci/)
 - [dashboards](/operations/dashboards/)
+- [docker](/operations/docker/)
 - [e2e_testing](/operations/e2e_testing/)
 - [monitoring](/operations/monitoring/)
 - [release](/operations/release/)

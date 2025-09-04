@@ -158,7 +158,7 @@ Run the tests in parallel using uv:
 uv run -m pytest -n auto tests/e2e
 ```
 
-See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide.
+See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide. For Docker stacks and commands, see [docs/operations/docker.md](docs/operations/docker.md).
 
 ## Running the Test Suite
 
