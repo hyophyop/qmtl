@@ -77,8 +77,10 @@ class DummyDag(DagManagerClient):
         super().__init__("dummy")
         self.called_with = None
 
-    async def get_queues_by_tag(self, tags, interval, match_mode="any"):
-        self.called_with = (tags, interval, match_mode)
+    async def get_queues_by_tag(
+        self, tags, interval, match_mode="any", world_id=None
+    ):
+        self.called_with = (tags, interval, match_mode, world_id)
         return [{"queue": "q1", "global": False}, {"queue": "q2", "global": False}]
 
 
@@ -102,7 +104,7 @@ def test_queues_by_tag_route(client):
         {"queue": "q1", "global": False},
         {"queue": "q2", "global": False},
     ]
-    assert dag.called_with == (["t1", "t2"], 60, "any")
+    assert dag.called_with == (["t1", "t2"], 60, "any", None)
 
 
 def test_queues_by_tag_route_all_mode(client):
@@ -116,7 +118,7 @@ def test_queues_by_tag_route_all_mode(client):
         {"queue": "q1", "global": False},
         {"queue": "q2", "global": False},
     ]
-    assert dag.called_with == (["t1", "t2"], 60, "all")
+    assert dag.called_with == (["t1", "t2"], 60, "all", None)
 
 
 def test_submit_tag_query_node(client):
@@ -148,7 +150,7 @@ def test_submit_tag_query_node(client):
             {"queue": "q2", "global": False},
         ]
     }
-    assert dag.called_with == (["t1"], 60, "any")
+    assert dag.called_with == (["t1"], 60, "any", None)
 
 
 def test_multiple_tag_query_nodes_handle_errors(fake_redis):
@@ -157,8 +159,10 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
             super().__init__("dummy")
             self.calls = []
 
-        async def get_queues_by_tag(self, tags, interval, match_mode="any"):
-            self.calls.append((tags, interval, match_mode))
+        async def get_queues_by_tag(
+            self, tags, interval, match_mode="any", world_id=None
+        ):
+            self.calls.append((tags, interval, match_mode, world_id))
             if "bad" in tags:
                 raise RuntimeError("boom")
             return [{"queue": f"{tags[0]}_q", "global": False}]

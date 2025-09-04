@@ -482,6 +482,8 @@ class Node:
         self._late_events: list[tuple[str, int, Any]] = []
         # Runtime reuse policy surface
         self.runtime_compat: str = runtime_compat  # "strict" | "loose"
+        # World identifier assigned by Runner/TagManagerService
+        self.world_id: str | None = None
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -519,6 +521,7 @@ class Node:
             self.code_hash,
             self.config_hash,
             self.schema_hash,
+            self.world_id or "",
         )
 
     # --- runtime cache handling -----------------------------------------

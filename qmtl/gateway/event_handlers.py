@@ -84,7 +84,7 @@ def create_event_router(
                             mode = normalize_match_mode(match_param)
                             try:
                                 queues = await dagmanager.get_queues_by_tag(
-                                    tags_list, interval_int, mode.value
+                                    tags_list, interval_int, mode.value, world_id
                                 )
                             except Exception:
                                 queues = []

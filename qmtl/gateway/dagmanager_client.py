@@ -107,7 +107,7 @@ class DagManagerClient:
             return False
 
     async def diff(
-        self, strategy_id: str, dag_json: str
+        self, strategy_id: str, dag_json: str, *, world_id: str | None = None
     ) -> dagmanager_pb2.DiffChunk | None:
         """Call ``DiffService.Diff`` with retries and collect the stream.
 
@@ -152,10 +152,18 @@ class DagManagerClient:
         else:
             self._breaker.reset()
             gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+            if result and world_id:
+                result.queue_map.update(
+                    {k: f"w/{world_id}/{v}" for k, v in result.queue_map.items()}
+                )
             return result
 
     async def get_queues_by_tag(
-        self, tags: list[str], interval: int, match_mode: str = "any"
+        self,
+        tags: list[str],
+        interval: int,
+        match_mode: str = "any",
+        world_id: str | None = None,
     ) -> list[dict[str, object]]:
         """Return queue descriptors matching ``tags`` and ``interval``.
 
@@ -185,7 +193,10 @@ class DagManagerClient:
                 try:
                     response = await self._tag_stub.GetQueues(request)
                     return [
-                        {"queue": q.queue, "global": getattr(q, "global")}
+                        {
+                            "queue": f"w/{world_id}/{q.queue}" if world_id else q.queue,
+                            "global": getattr(q, "global"),
+                        }
                         for q in response.queues
                     ]
                 except Exception:
