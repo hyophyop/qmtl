@@ -94,8 +94,9 @@ async def test_diff_retries(monkeypatch):
     monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
     monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
-    orig_sleep = asyncio.sleep
-    monkeypatch.setattr(asyncio, "sleep", lambda t: orig_sleep(0))
+    async def _nowait(self, timeout: float = 5.0) -> None:
+        return None
+    monkeypatch.setattr(DagManagerClient, "_wait_for_service", _nowait)
 
     client = DagManagerClient("127.0.0.1:1")
     result = await client.diff("sid", "{}")
