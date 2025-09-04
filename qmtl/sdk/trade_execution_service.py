@@ -7,6 +7,8 @@ import time
 
 import httpx
 
+from .http import HttpPoster
+
 
 class TradeExecutionService:
     """Post trade orders to a broker with retry logic."""
@@ -21,7 +23,7 @@ class TradeExecutionService:
         attempt = 0
         while True:
             try:
-                response = httpx.post(self.url, json=order, timeout=10.0)
+                response = HttpPoster.post(self.url, json=order)
                 response.raise_for_status()
                 return response
             except Exception:
