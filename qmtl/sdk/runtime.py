@@ -28,3 +28,6 @@ FAIL_ON_HISTORY_GAP: bool = str(os.getenv("QMTL_FAIL_ON_HISTORY_GAP", "")).strip
     "yes",
     "on",
 }
+
+# Default poll interval for explicit status queries (seconds).
+POLL_INTERVAL_SECONDS: float = 2.0 if TEST_MODE else 10.0

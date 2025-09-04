@@ -36,6 +36,8 @@ class ActivationManager:
         self.strategy_id = strategy_id
         self.state = ActivationState()
         self._started = False
+        self._poll_task: asyncio.Task | None = None
+        self._stop_event = asyncio.Event()
 
     def allow_side(self, side: str) -> bool:
         s = side.lower()
@@ -63,11 +65,17 @@ class ActivationManager:
         if self.client:
             await self.client.start()
             self._started = True
+            if self.gateway_url and self.world_id:
+                self._stop_event.clear()
+                self._poll_task = asyncio.create_task(self._poll_loop())
             return
         if not self.gateway_url:
             return
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
+            # Initial reconcile via HTTP so we don't rely solely on WS
+            if self.world_id:
+                await self._reconcile_activation()
             async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
                 payload = {
                     "topics": ["activation"],
@@ -83,6 +91,9 @@ class ActivationManager:
                         self.client = WebSocketClient(stream_url, on_message=self._on_message, token=token)
                         await self.client.start()
                         self._started = True
+                        if self.gateway_url and self.world_id:
+                            self._stop_event.clear()
+                            self._poll_task = asyncio.create_task(self._poll_loop())
         except Exception:
             # Safe default: keep sides gated OFF until activation arrives
             return
@@ -91,3 +102,32 @@ class ActivationManager:
         if self.client:
             await self.client.stop()
         self._started = False
+        if self._poll_task:
+            self._stop_event.set()
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            self._poll_task = None
+
+    async def _reconcile_activation(self) -> None:
+        if not self.gateway_url or not self.world_id:
+            return
+        url = self.gateway_url.rstrip("/") + f"/worlds/{self.world_id}/activation"
+        try:
+            async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    await self._on_message({"event": "activation_updated", "data": data})
+        except Exception:
+            pass
+
+    async def _poll_loop(self) -> None:
+        while not self._stop_event.is_set():
+            await self._reconcile_activation()
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=runtime.POLL_INTERVAL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
