@@ -247,7 +247,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - Caching & TTLs:
   - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (compute‑only, orders gated OFF)
   - Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
-- Circuit breakers & budgets: independent timeouts/retries for WorldService and DAG Manager backends (defaults: WS 300 ms, 2 retries with jitter; DM 500 ms, 1 retry)
+- Circuit breakers & budgets: Gateway periodically polls WorldService and DAG Manager status to drive circuit breakers.
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
 - Strategy submission and worlds:
