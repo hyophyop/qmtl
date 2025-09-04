@@ -21,6 +21,7 @@ nav:
       - HTTPX Usage: guides/httpx_usage.md
   - Operations:
       - Overview: operations/README.md
+      - Docker & Compose: operations/docker.md
       - Backfill: operations/backfill.md
       - Canary Rollout: operations/canary_rollout.md
       - E2E Testing: operations/e2e_testing.md
@@ -54,9 +55,14 @@ nav:
 plugins:
   - search
   - macros
-  - mkdocs-breadcrumbs-plugin
-  - tags:
-      tags_file: tags.md
+  - mkdocs-breadcrumbs-plugin:
+      exclude_paths:
+        - architecture/**
+        - archive/**
+        - guides/**
+        - operations/**
+        - reference/**
+  - tags
 theme:
   name: material
   features:
