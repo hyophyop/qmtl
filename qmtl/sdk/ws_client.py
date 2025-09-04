@@ -92,16 +92,32 @@ class WebSocketClient:
                     self._ws = ws
                     delay = self._base_delay
                     while not self._stop_event.is_set():
+                        recv_task = asyncio.create_task(ws.recv())
+                        stop_task = asyncio.create_task(self._stop_event.wait())
+                        done, pending = await asyncio.wait(
+                            {recv_task, stop_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                            timeout=runtime.WS_RECV_TIMEOUT_SECONDS,
+                        )
+
+                        if not done:
+                            for task in pending:
+                                task.cancel()
+                            continue
+
+                        if stop_task in done:
+                            recv_task.cancel()
+                            break
+
                         try:
-                            try:
-                                msg = await asyncio.wait_for(ws.recv(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
-                            except asyncio.TimeoutError:
-                                # No message within timeout; trigger reconnect loop
-                                break
+                            msg = recv_task.result()
                         except websockets.ConnectionClosed:
                             break
                         except Exception:
                             break
+                        finally:
+                            stop_task.cancel()
+
                         try:
                             data = json.loads(msg)
                         except json.JSONDecodeError:

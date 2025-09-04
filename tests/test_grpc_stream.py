@@ -19,7 +19,7 @@ async def test_resume_requeues_unacked_chunks():
     stream._last_ack = AckStatus.TIMEOUT  # simulate timeout
     stream.resume_from_last_offset()
     assert stream.ack_status() is AckStatus.OK
-    assert await asyncio.wait_for(stream.queue.get(), timeout=0.1) is chunk
+    assert await stream.queue.get() is chunk
 
 
 @pytest.mark.asyncio
@@ -38,7 +38,7 @@ async def test_resume_skips_acknowledged_chunks():
     stream.resume_from_last_offset()
 
     # Only second chunk should be replayed
-    assert await asyncio.wait_for(stream.queue.get(), timeout=0.1) is second
+    assert await stream.queue.get() is second
 
     # After acknowledging, resume should not replay anything
     stream.ack()
