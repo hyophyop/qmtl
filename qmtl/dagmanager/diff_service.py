@@ -292,6 +292,18 @@ class DiffService:
     ) -> None:
         CHUNK_SIZE = 100
         total = max(len(new_nodes), len(buffering_nodes))
+
+        def await_ack() -> None:
+            MAX_RETRY = 3
+            for _ in range(MAX_RETRY):
+                status = self.stream_sender.wait_for_ack()
+                if status is AckStatus.OK:
+                    return
+                resume = getattr(self.stream_sender, "resume_from_last_offset", None)
+                if callable(resume):
+                    resume()
+            raise TimeoutError("Client did not acknowledge diff chunk")
+
         if total == 0:
             # 그래도 최소 1개는 보내야 함 (empty chunk)
             self.stream_sender.send(
@@ -302,8 +314,9 @@ class DiffService:
                     buffering_nodes=[],
                 )
             )
-            self.stream_sender.wait_for_ack()
+            await_ack()
             return
+
         for i in range(0, total, CHUNK_SIZE):
             chunk_new = new_nodes[i:i+CHUNK_SIZE]
             chunk_buf = buffering_nodes[i:i+CHUNK_SIZE]
@@ -315,7 +328,7 @@ class DiffService:
                     buffering_nodes=chunk_buf,
                 )
             )
-            self.stream_sender.wait_for_ack()
+            await_ack()
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()

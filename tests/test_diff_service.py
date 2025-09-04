@@ -1,4 +1,5 @@
 import json
+import pytest
 from qmtl.dagmanager.diff_service import (
     DiffService,
     DiffRequest,
@@ -66,6 +67,28 @@ class FakeStream(StreamSender):
 
     def ack(self, status: AckStatus = AckStatus.OK):
         pass
+
+
+class TimeoutOnceStream(StreamSender):
+    """Stream that times out once before acknowledging."""
+
+    def __init__(self):
+        self.chunks = []
+        self.waits = 0
+        self.resumes = 0
+
+    def send(self, chunk):
+        self.chunks.append(chunk)
+
+    def wait_for_ack(self) -> AckStatus:
+        self.waits += 1
+        return AckStatus.TIMEOUT if self.waits == 1 else AckStatus.OK
+
+    def ack(self, status: AckStatus = AckStatus.OK):
+        pass
+
+    def resume_from_last_offset(self):
+        self.resumes += 1
 
 
 def _make_dag(nodes):
@@ -192,6 +215,21 @@ def test_sentinel_insert_and_stream():
     assert repo.sentinels == [("strategy-sentinel", ["A"])]
     assert stream.chunks[0] == chunk
     assert chunk.sentinel_id == "strategy-sentinel"
+
+
+def test_stream_resumes_after_timeout():
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = TimeoutOnceStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = _make_dag([
+        {"node_id": "A", "node_type": "N", "code_hash": "c1", "schema_hash": "s1"},
+    ])
+    service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    assert stream.resumes == 1
+    assert stream.waits == 2
 
 
 def test_diff_with_sdk_nodes():
@@ -376,6 +414,8 @@ def test_pre_scan_uses_custom_json_loader(monkeypatch):
     assert calls == ["{}"]
 
 
+@pytest.mark.filterwarnings("ignore:unclosed <socket.socket[^>]*>")
+@pytest.mark.filterwarnings("ignore:unclosed event loop")
 def test_stream_chunking_and_ack():
     repo = FakeRepo()
     queue = FakeQueue()
