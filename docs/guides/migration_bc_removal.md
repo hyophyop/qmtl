@@ -9,16 +9,85 @@ last_modified: 2025-09-04
 
 # Migration: Removing Legacy Modes and Backward Compatibility
 
-This guide summarizes changes and how to migrate your code.
+This guide summarizes the removal of legacy compatibility layers and shows how to migrate your code.
 
-- Runner API: replace `Runner.backtest/dryrun/live` with `Runner.run(world_id=..., gateway_url=...)` or `Runner.offline(...)`.
-- CLI: replace `qmtl sdk --mode <...>` with `qmtl sdk run --world-id <id> --gateway-url <url>` or `qmtl sdk offline`.
-- Gateway `/strategies`: stop sending `run_type`; optionally include `world_id` for correlation.
-- Brokerage imports: use `from qmtl.brokerage import PerShareFeeModel, VolumeShareSlippageModel` (canonical modules), not `qmtl.brokerage.simple` duplicates.
+## Runner API
 
-Quick check
-- Search your repo for `Runner.backtest|Runner.dryrun|Runner.live|--mode|run_type`.
-- Update example scripts to accept `--world-id/--gateway-url` or use `Runner.offline` for local runs.
+**Before**
+
+```python
+from qmtl import Runner
+
+runner = Runner(...)
+runner.backtest(strategy)
+```
+
+**After**
+
+```python
+from qmtl import Runner
+
+runner = Runner(...)
+runner.run(strategy, world_id="demo", gateway_url="http://localhost:8000")
+# or for local runs
+runner.offline(strategy)
+```
+
+## CLI
+
+**Before**
+
+```bash
+qmtl sdk --mode backtest --world-id demo --gateway-url http://localhost:8000
+```
+
+**After**
+
+```bash
+qmtl sdk run --world-id demo --gateway-url http://localhost:8000
+qmtl sdk offline  # local execution
+```
+
+## Gateway `/strategies`
+
+**Before**
+
+```json
+{
+  "run_type": "backtest",
+  "strategy": {...}
+}
+```
+
+**After**
+
+```json
+{
+  "world_id": "demo",
+  "strategy": {...}
+}
+```
+
+## Brokerage Imports
+
+**Before**
+
+```python
+from qmtl.brokerage.simple import PerShareFeeModel, VolumeShareSlippageModel
+```
+
+**After**
+
+```python
+from qmtl.brokerage import PerShareFeeModel, VolumeShareSlippageModel
+```
+
+## Checklist
+
+- [ ] Replace `Runner.backtest`, `Runner.dryrun`, and `Runner.live` with `Runner.run` or `Runner.offline`.
+- [ ] Update CLI usage from `--mode` to `run`/`offline` subcommands.
+- [ ] Drop `run_type` from Gateway `/strategies` requests and pass `world_id` if needed.
+- [ ] Import brokerage helpers from `qmtl.brokerage`, not `qmtl.brokerage.simple`.
 
 {{ nav_links() }}
 

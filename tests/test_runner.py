@@ -397,6 +397,7 @@ def test_load_history_called(monkeypatch):
 
 def test_cli_execution(monkeypatch):
     import sys
+    monkeypatch.setenv("QMTL_TEST_MODE", "1")
     from qmtl.sdk.cli import main
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -432,6 +433,10 @@ def test_cli_execution(monkeypatch):
         "w",
         "--gateway-url",
         "http://gw",
+        "--history-start",
+        "1",
+        "--history-end",
+        "2",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()

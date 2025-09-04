@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import AsyncIterable, Dict
 import asyncio
 import threading
+import time
 from collections import deque
 
 import grpc
@@ -39,11 +40,22 @@ class _GrpcStream(StreamSender):
         asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
 
     def wait_for_ack(self) -> AckStatus:
-        if self._ack.wait(timeout=1.0):
-            self._ack.clear()
-            return self._last_ack
-        self._last_ack = AckStatus.TIMEOUT
-        return self._last_ack
+        """Poll for client ACK with a short interval.
+
+        The call checks for an ACK every 50ms for up to ~1s. If no ACK is
+        received within this window the status is marked ``TIMEOUT`` and
+        returned so the caller can decide how to proceed.
+        """
+
+        start = time.monotonic()
+        while True:
+            if self._ack.is_set():
+                self._ack.clear()
+                return self._last_ack
+            if time.monotonic() - start > 1.0:
+                self._last_ack = AckStatus.TIMEOUT
+                return self._last_ack
+            time.sleep(0.05)
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:
         if self._pending:

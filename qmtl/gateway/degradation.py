@@ -42,20 +42,19 @@ class DegradationManager:
         self.world_ok = True
         self.local_queue: list[str] = []
         self._task: Optional[asyncio.Task] = None
+        self._stop_event = asyncio.Event()
         self._gauge = metrics.degrade_level.labels(service="gateway")
         self._gauge.set(self.level.value)
 
     async def start(self) -> None:
         if self._task is None:
+            self._stop_event = asyncio.Event()
             self._task = asyncio.create_task(self._loop())
 
     async def stop(self) -> None:
         if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+            self._stop_event.set()
+            await self._task
             self._task = None
 
     async def _check_dependencies(self) -> None:
@@ -127,12 +126,14 @@ class DegradationManager:
             self._gauge.set(new_level.value)
 
     async def _loop(self) -> None:
-        try:
-            while True:
-                await self.update()
-                await asyncio.sleep(self.check_interval)
-        except asyncio.CancelledError:
-            pass
+        while not self._stop_event.is_set():
+            await self.update()
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(), timeout=self.check_interval
+                )
+            except asyncio.TimeoutError:
+                pass
 
 
 __all__ = ["DegradationManager", "DegradationLevel"]

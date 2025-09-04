@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 from typing import Optional, Iterable
 import logging
 import httpx
@@ -212,7 +213,7 @@ class Runner:
         from .node import StreamInput
 
         tasks = []
-        now = int(time.time())
+        now = runtime.FIXED_NOW if runtime.FIXED_NOW is not None else int(time.time())
         for n in strategy.nodes:
             if not isinstance(n, StreamInput):
                 continue
@@ -742,6 +743,25 @@ class Runner:
         Runner._write_snapshots(strategy)
         await Runner._replay_history(strategy, None, None)
         return strategy
+
+    # ------------------------------------------------------------------
+    # Convenience context manager for tests
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    @asynccontextmanager
+    async def session(strategy_cls: type[Strategy], **kwargs):
+        """Run ``strategy_cls`` and ensure cleanup on exit.
+
+        Yields the initialized strategy and guarantees that
+        :meth:`shutdown_async` is invoked after the ``async with`` block
+        exits, simplifying test teardown.
+        """
+        strategy = await Runner.run_async(strategy_cls, **kwargs)
+        try:
+            yield strategy
+        finally:
+            await Runner.shutdown_async(strategy)
 
     # ------------------------------------------------------------------
     # Cleanup helpers for tests and graceful shutdown

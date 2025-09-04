@@ -54,6 +54,29 @@ class DagManagerClient:
             self._diff_stub = dagmanager_pb2_grpc.DiffServiceStub(self._channel)
             self._tag_stub = dagmanager_pb2_grpc.TagQueryStub(self._channel)
 
+    async def _wait_for_service(self, timeout: float = 5.0) -> None:
+        """Poll the DAG Manager health endpoint until it reports ready.
+
+        Raises
+        ------
+        RuntimeError
+            If the service does not report healthy within ``timeout`` seconds.
+        """
+        self._ensure_channel()
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            try:
+                reply = await self._health_stub.Status(
+                    dagmanager_pb2.StatusRequest()
+                )
+                if reply.neo4j == "ok" and reply.state == "running":
+                    return
+            except Exception:
+                pass
+            if asyncio.get_running_loop().time() > deadline:
+                raise RuntimeError("DAG Manager unavailable")
+            await asyncio.sleep(0.5)
+
     async def close(self) -> None:
         """Close the underlying gRPC channel."""
         if self._channel is not None:
@@ -95,7 +118,6 @@ class DagManagerClient:
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:
             self._ensure_channel()
-            backoff = 0.5
             retries = 5
             for attempt in range(retries):
                 try:
@@ -106,6 +128,11 @@ class DagManagerClient:
                         queue_map.update(dict(chunk.queue_map))
                         sentinel_id = chunk.sentinel_id
                         buffer_nodes.extend(chunk.buffer_nodes)
+                        await self._diff_stub.AckChunk(
+                            dagmanager_pb2.ChunkAck(
+                                sentinel_id=chunk.sentinel_id, chunk_id=0
+                            )
+                        )
                     return dagmanager_pb2.DiffChunk(
                         queue_map=queue_map,
                         sentinel_id=sentinel_id,
@@ -114,8 +141,7 @@ class DagManagerClient:
                 except Exception:
                     if attempt == retries - 1:
                         raise
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 4)
+                    await self._wait_for_service()
             raise RuntimeError("unreachable")
 
         try:
@@ -144,7 +170,7 @@ class DagManagerClient:
             ``"all"`` 은 모든 태그가 존재하는 큐만 반환한다.
 
         This delegates to DAG Manager which is expected to expose a
-        ``TagQuery`` RPC. Retries with exponential backoff are applied
+        ``TagQuery`` RPC. Retries poll the service health between attempts
         similar to :meth:`diff`.
         """
         request = dagmanager_pb2.TagQueryRequest(
@@ -154,7 +180,6 @@ class DagManagerClient:
         @self._breaker
         async def _call() -> list[dict[str, object]]:
             self._ensure_channel()
-            backoff = 0.5
             retries = 5
             for attempt in range(retries):
                 try:
@@ -166,8 +191,7 @@ class DagManagerClient:
                 except Exception:
                     if attempt == retries - 1:
                         raise
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 4)
+                    await self._wait_for_service()
             return []
 
         try:

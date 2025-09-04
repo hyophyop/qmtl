@@ -38,9 +38,11 @@ class FakeRepo(NodeRepository):
 class FakeDiff(DiffService):
     def __init__(self):
         self.calls = []
+        self.event = asyncio.Event()
 
     def diff(self, request: DiffRequest):
         self.calls.append(request)
+        self.event.set()
         return type("Chunk", (), {"queue_map": {}, "sentinel_id": request.strategy_id})()
 
 
@@ -64,7 +66,7 @@ async def test_scheduler_reprocesses_old_nodes():
     diff = FakeDiff()
     sched = BufferingScheduler(repo, diff, interval=0.01, delay_days=7)
     await sched.start()
-    await asyncio.sleep(0.03)
+    await asyncio.wait_for(diff.event.wait(), timeout=1)
     await sched.stop()
     assert diff.calls and diff.calls[0].strategy_id == "A"
     assert repo.cleared == ["A"]
