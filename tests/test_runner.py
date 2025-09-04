@@ -645,7 +645,8 @@ def test_backtest_on_missing_fail(monkeypatch):
             src = StreamInput(interval="60s", period=2, history_provider=GapProvider())
             node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval="60s", period=2)
             self.add_nodes([src, node])
-
+    from qmtl.sdk import runtime
+    monkeypatch.setattr(runtime, "FAIL_ON_HISTORY_GAP", True)
     with pytest.raises(RuntimeError):
         Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
 
