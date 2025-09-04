@@ -59,11 +59,11 @@ include = ["qmtl*"]
 
 [tool.setuptools.package-data]
 "qmtl.examples" = [
-    "*.py",
-    "*.yml",
-    "gitignore",
-"README.md",
-"data/*.csv",
-"*.csv",
-"notebooks/*.ipynb",
+  "*.py",
+  "*.yml",
+  "gitignore",
+  "README.md",
+  "data/*.csv",
+  "*.csv",
+  "notebooks/*.ipynb",
 ]

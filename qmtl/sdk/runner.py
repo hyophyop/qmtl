@@ -164,6 +164,11 @@ class Runner:
                     getattr(node, "node_id", "<unknown>")
                 )
                 break
+            if stop_on_ready:
+                # Avoid infinite loops when history providers fail to warm up
+                break
+        if node.pre_warmup:
+            await node.load_history(start, end)
 
     @staticmethod
     async def _ensure_history(
