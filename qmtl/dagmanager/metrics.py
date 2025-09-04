@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Deque, List
 import time
+import threading
 import argparse
 
 from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
@@ -163,12 +164,15 @@ def start_metrics_server(port: int = 8000) -> None:
     """Start a background HTTP server to expose metrics."""
     start_http_server(port, registry=global_registry)
 
+_stop_event = threading.Event()
 
-def _run_forever() -> None:
+
+def _run_forever(stop_event: threading.Event | None = None) -> None:
     """Block the main thread so the HTTP server stays alive."""
+    stop_event = stop_event or _stop_event
     try:
-        while True:
-            time.sleep(3600)
+        while not stop_event.wait(3600):
+            pass
     except KeyboardInterrupt:  # pragma: no cover - manual stop
         pass
 

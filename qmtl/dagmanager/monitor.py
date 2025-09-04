@@ -106,28 +106,38 @@ class MonitorLoop:
     monitor: Monitor
     interval: float = 5.0
     _task: Optional[asyncio.Task] = None
+    _stop_event: asyncio.Event = field(
+        default_factory=asyncio.Event, init=False, repr=False
+    )
 
     async def start(self) -> None:
         """Begin the monitoring loop."""
         if self._task is None:
+            self._stop_event.clear()
             self._task = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
         try:
-            while True:
+            while not self._stop_event.is_set():
                 await self.monitor.check_once()
-                await asyncio.sleep(self.interval)
+                try:
+                    await asyncio.wait_for(
+                        self._stop_event.wait(), timeout=self.interval
+                    )
+                except asyncio.TimeoutError:
+                    pass
         except asyncio.CancelledError:  # pragma: no cover - background task
             pass
 
     async def stop(self) -> None:
         """Cancel the running loop."""
         if self._task is not None:
-            self._task.cancel()
+            self._stop_event.set()
             try:
                 await self._task
             finally:
                 self._task = None
+                self._stop_event = asyncio.Event()
 
 
 __all__ = [
