@@ -169,6 +169,26 @@ tests if desired:
 uv pip wheel . &
 uv run -m pytest -W error
 wait
+
+### Test Teardown and Shutdown
+
+When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), call the shutdown helper in teardown to ensure no lingering tasks or sockets remain:
+
+```python
+# sync tests
+strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw", offline=True)
+try:
+    ...  # assertions
+finally:
+    Runner.shutdown(strategy)
+
+# async tests
+strategy = await Runner.run_async(MyStrategy, world_id="w", gateway_url="http://gw")
+...
+await Runner.shutdown_async(strategy)
+```
+
+The helpers are idempotent and safe to call even if no background services are active.
 ```
 
 > **테스트 작성 가이드**

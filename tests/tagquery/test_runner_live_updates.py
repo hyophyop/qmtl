@@ -129,6 +129,6 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     assert node.upstreams == ["q1"]
     assert node.execute
     assert hasattr(strat, "tag_query_manager")
-    await strat.tag_query_manager.stop()
-    await client.stop()
+    # Clean shutdown to avoid lingering tasks/sockets
+    await Runner.shutdown_async(strat)
     await transport.aclose()
