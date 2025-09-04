@@ -5,6 +5,8 @@ Continuous Integration runs on Python 3.11 via uv-managed virtualenvs. Tests run
 - Python: 3.11 (managed by `uv python install 3.11` + `uv venv`)
 - Dependency install: `uv pip install -e .[dev]`
 - Protobuf generation: `uv run python -m grpc_tools.protoc ...`
-- Tests: `PYTHONPATH=qmtl/proto uv run pytest -W error -q tests`
+- Tests: `PYTHONPATH=qmtl/proto uv run pytest -W error -n auto -q tests`
+
+Parallelization uses `pytest-xdist`; ensure it is installed in the CI image.
 
 See `.github/workflows/ci.yml` for the authoritative configuration.

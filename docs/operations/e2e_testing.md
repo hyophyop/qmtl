@@ -47,13 +47,32 @@ Manager gRPC endpoint is available on `50051`.
 Execute the end-to-end tests within the uv environment:
 
 ```bash
-uv run -m pytest tests/e2e
+uv run -m pytest -n auto tests/e2e
 ```
+
+To specifically validate WorldService-first wiring and event subscription,
+run the smoke test added under `tests/e2e/test_worldservice_smoke.py`:
+
+```bash
+uv run -m pytest -n auto tests/e2e/test_worldservice_smoke.py -q
+```
+
+The test performs:
+
+- Health check against the Gateway `/status` endpoint
+- Token issuance via `/events/subscribe` for two distinct `world_id`s and JWT claim check
+- WebSocket handshake to `/ws/evt` for both tokens
+- Strategy submissions per-world using the Gateway proxy
+
+It does not require ControlBus or a running WorldService.
 
 To execute the entire test suite run:
 
 ```bash
-uv run -m pytest -q tests
+uv run -m pytest -n auto -q tests
+
+Note: Parallel execution requires `pytest-xdist`. If not installed, add it with
+`uv pip install pytest-xdist` or include it in your dev extras.
 ```
 
 ## Backfills
