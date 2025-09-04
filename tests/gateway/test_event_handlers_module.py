@@ -20,9 +20,6 @@ class NoServerHub(WebSocketHub):
             self._clients.clear()
 
 
-pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-
-
 @pytest.mark.asyncio
 async def test_event_subscription_endpoints():
     hub = WebSocketHub()

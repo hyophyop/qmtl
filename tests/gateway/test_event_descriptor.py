@@ -28,9 +28,6 @@ class FakeDB(Database):
         return None
 
 
-pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-
-
 @pytest.mark.asyncio
 async def test_event_descriptor_scope_and_expiry(fake_redis):
     cfg = EventDescriptorConfig(

@@ -39,7 +39,7 @@ def make_diff_stub(total_failures: int = 0):
                 raise grpc.RpcError("fail")
             return gen()
 
-        async def AckChunk(self, ack):
+        async def AckChunk(self, request):
             return None
 
     return Stub

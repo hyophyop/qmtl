@@ -32,7 +32,6 @@ def app(fake_redis):
     return create_app(redis_client=fake_redis, database=db, enable_background=False)
 
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 @pytest.mark.asyncio
 async def test_ingest_and_status(app):
     transport = httpx.ASGITransport(app)
