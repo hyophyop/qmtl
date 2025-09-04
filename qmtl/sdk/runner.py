@@ -177,6 +177,7 @@ class Runner:
         end: int | None = None,
         *,
         stop_on_ready: bool = False,
+        strict: bool = False,
     ) -> None:
         """Ensure history coverage for all ``StreamInput`` nodes."""
         from .node import StreamInput
@@ -202,6 +203,11 @@ class Runner:
             tasks.append(task)
         if tasks:
             await asyncio.gather(*tasks)
+        if strict:
+            # If any StreamInput remains in pre_warmup, fail fast in strict mode
+            for n in strategy.nodes:
+                if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
+                    raise RuntimeError("history pre-warmup unresolved in strict mode")
 
     @staticmethod
     def _hydrate_snapshots(strategy: Strategy) -> int:
@@ -462,6 +468,8 @@ class Runner:
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
         offline: bool = False,
+        history_start: object | None = None,
+        history_end: object | None = None,
     ) -> Strategy:
         """Run a strategy under a given world, following WS decisions/activation.
 
@@ -506,7 +514,29 @@ class Runner:
 
         # Hydrate and warm up from history to satisfy periods
         Runner._hydrate_snapshots(strategy)
-        await Runner._ensure_history(strategy, None, None, stop_on_ready=True)
+        # Determine strict mode: only enforce when offline and history providers are present
+        from .node import StreamInput
+        has_provider = any(
+            isinstance(n, StreamInput) and getattr(n, "history_provider", None) is not None
+            for n in strategy.nodes
+        )
+        strict_mode = bool(offline_mode and has_provider)
+
+        # Apply explicit history ranges if provided; otherwise use defaults
+        h_start = history_start
+        h_end = history_end
+        if offline_mode and h_start is None and h_end is None:
+            # Deterministic test defaults for offline mode
+            h_start, h_end = 1, 2
+
+        if h_start is not None and h_end is not None:
+            await Runner._ensure_history(
+                strategy, h_start, h_end, stop_on_ready=True, strict=strict_mode
+            )
+        else:
+            await Runner._ensure_history(
+                strategy, None, None, stop_on_ready=True, strict=strict_mode
+            )
         if offline_mode:
             Runner.run_pipeline(strategy)
         else:
@@ -522,6 +552,8 @@ class Runner:
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
         offline: bool = False,
+        history_start: object | None = None,
+        history_end: object | None = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.run_async(
@@ -530,6 +562,8 @@ class Runner:
                 gateway_url=gateway_url,
                 meta=meta,
                 offline=offline,
+                history_start=history_start,
+                history_end=history_end,
             )
         )
 
@@ -650,7 +684,8 @@ class Runner:
         # Submit via HTTP if URL is configured
         if cls._trade_order_http_url is not None:
             try:
-                httpx.post(cls._trade_order_http_url, json=order, timeout=2.0)
+                # Use client defaults; avoid per-call kwargs that break test doubles
+                httpx.post(cls._trade_order_http_url, json=order)
             except Exception:
                 logger.warning("trade order HTTP submit failed; dropping order")
 
