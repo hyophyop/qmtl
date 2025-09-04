@@ -50,17 +50,24 @@ async def test_ws_client_updates_state():
 
 @pytest.mark.asyncio
 async def test_ws_client_reconnects(monkeypatch):
-    """Client reconnects with backoff on connection loss."""
+    """Client reconnects with backoff on heartbeat failure."""
 
     class DummyWS:
-        def __init__(self, messages: list[str]):
+        def __init__(self, messages: list[str], *, fail_ping: bool = False):
             self._messages = messages
             self.close_timeout = 0
+            self._fail_ping = fail_ping
 
         async def recv(self) -> str:
             if self._messages:
                 return self._messages.pop(0)
-            raise websockets.ConnectionClosed(1000, "")
+            await asyncio.sleep(3600)
+
+        def ping(self):
+            fut: asyncio.Future[None] = asyncio.Future()
+            if not self._fail_ping:
+                fut.set_result(None)
+            return fut
 
         async def close(self) -> None:  # pragma: no cover - no behavior
             pass
@@ -76,7 +83,7 @@ async def test_ws_client_reconnects(monkeypatch):
     def fake_connect(url: str, extra_headers=None):
         connects.append(url)
         if len(connects) == 1:
-            return DummyWS([])
+            return DummyWS([], fail_ping=True)
         return DummyWS([json.dumps({"event": "queue_update"})])
 
     monkeypatch.setattr(websockets, "connect", fake_connect)
@@ -91,9 +98,10 @@ async def test_ws_client_reconnects(monkeypatch):
         on_message=on_msg,
         max_retries=1,
         base_delay=0.01,
+        heartbeat_interval=0.05,
     )
     await client.start()
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.3)
     await client.stop()
 
     assert len(connects) == 2
@@ -155,6 +163,11 @@ async def test_ws_client_sends_token(monkeypatch):
         async def recv(self) -> str:
             await asyncio.sleep(0.01)
             raise websockets.ConnectionClosed(1000, "")
+
+        def ping(self):
+            fut: asyncio.Future[None] = asyncio.Future()
+            fut.set_result(None)
+            return fut
 
         async def close(self) -> None:
             pass

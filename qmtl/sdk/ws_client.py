@@ -34,6 +34,7 @@ class WebSocketClient:
         backoff_factor: float = 2.0,
         max_delay: float = 8.0,
         token: str | None = None,
+        heartbeat_interval: float | None = None,
     ) -> None:
         parts = urlparse(url)
         if parts.path in ("", "/"):
@@ -52,6 +53,11 @@ class WebSocketClient:
         self._backoff_factor = backoff_factor
         self._max_delay = max_delay
         self.token = token
+        self._heartbeat_interval = (
+            heartbeat_interval
+            if heartbeat_interval is not None
+            else runtime.WS_HEARTBEAT_INTERVAL_SECONDS
+        )
 
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
@@ -93,10 +99,18 @@ class WebSocketClient:
                     delay = self._base_delay
                     while not self._stop_event.is_set():
                         try:
+                            msg = await asyncio.wait_for(
+                                ws.recv(), timeout=self._heartbeat_interval
+                            )
+                        except asyncio.TimeoutError:
+                            # No message; send heartbeat ping and await pong.
                             try:
-                                msg = await asyncio.wait_for(ws.recv(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
+                                pong = ws.ping()
+                                await asyncio.wait_for(
+                                    pong, timeout=self._heartbeat_interval
+                                )
+                                continue
                             except asyncio.TimeoutError:
-                                # No message within timeout; trigger reconnect loop
                                 break
                         except websockets.ConnectionClosed:
                             break
@@ -106,6 +120,9 @@ class WebSocketClient:
                             data = json.loads(msg)
                         except json.JSONDecodeError:
                             continue
+                        event = data.get("event") or data.get("type")
+                        if event == "error":
+                            break
                         await self._handle(data)
             except asyncio.CancelledError:
                 raise
