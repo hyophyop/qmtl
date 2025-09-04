@@ -555,6 +555,42 @@ class Runner:
         return strategy
 
     # ------------------------------------------------------------------
+    # Cleanup helpers for tests and graceful shutdown
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def shutdown_async(strategy: Strategy | None = None) -> None:
+        """Stop background services started by Runner.
+
+        - Stops the strategy's TagQueryManager if present
+        - Stops the global ActivationManager if running
+        """
+        # Stop TagQueryManager attached to strategy
+        if strategy is not None:
+            mgr = getattr(strategy, "tag_query_manager", None)
+            if mgr is not None:
+                try:
+                    await mgr.stop()
+                except Exception:
+                    pass
+        # Stop ActivationManager if present
+        am = Runner._activation_manager
+        if am is not None:
+            try:
+                await am.stop()
+            except Exception:
+                pass
+
+    @staticmethod
+    def shutdown(strategy: Strategy | None = None) -> None:
+        """Synchronous wrapper around :meth:`shutdown_async`."""
+        try:
+            asyncio.run(Runner.shutdown_async(strategy))
+        except RuntimeError:
+            # Already inside an event loop (e.g., pytest); ignore
+            pass
+
+    # ------------------------------------------------------------------
     # Trade execution and postprocessing methods
     # ------------------------------------------------------------------
 
