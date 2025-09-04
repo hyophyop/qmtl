@@ -16,7 +16,7 @@ Related specs:
 - Worlds Proxy API in Gateway:
   - Implement GET "/worlds/{id}/decide" and "/worlds/{id}/activation" with TTL/etag caching and safe fallbacks when stale. Enforce live guard (header "X-Allow-Live: true" or CLI "--allow-live").
   - Implement POST "/worlds/{id}/evaluate" (read-only) and POST "/worlds/{id}/apply" (2-phase apply with "run_id", idempotent). Forward caller identity (JWT subject/claims) to WorldService.
-  - Config: add "worldservice_url", timeouts/retry budgets separate from DAG Manager. Metrics: cache hit ratio, proxy latency p95.
+  - Config: add "worldservice_url", status polling hooks separate from DAG Manager. Metrics: cache hit ratio, proxy latency p95.
   - Spec refs: architecture/gateway.md §S6; architecture/worldservice.md §2–§6; reference/api_world.md; reference/schemas.md.
 
 - Event Stream Descriptor endpoint:
@@ -50,7 +50,7 @@ Related specs:
   - Gateway event relay metrics: fanout rate, dropped subscribers, partition skew.
 
 - Circuit budgets & degradation policies (WorldService):
-  - Add independent timeouts/retries for WorldService proxy calls (defaults: WS 300 ms 2x; DM 500 ms 1x). Integrate with existing "AsyncCircuitBreaker". Surface states in "/status".
+  - Add status polling hooks for WorldService proxy calls. Integrate with existing "AsyncCircuitBreaker". Surface states in "/status".
 
 
 ---
@@ -70,7 +70,7 @@ Related specs:
 - Gateway additions/changes:
   - "qmtl/gateway/api.py": add "/worlds/*", "/events/subscribe", integrate WS endpoints; identity propagation and live guard.
   - "qmtl/gateway/ws.py": extend to ActivationUpdated/PolicyUpdated; integrate with FastAPI lifecycle.
-  - "qmtl/gateway/config.py": add "worldservice_url", "controlbus" settings, timeouts/retries.
+  - "qmtl/gateway/config.py": add "worldservice_url", "controlbus" settings, status polling hooks.
   - "qmtl/gateway/dagmanager_client.py": keep; ensure NodeID recompute occurs before Diff (new helper module if needed).
   - New: "qmtl/gateway/controlbus_consumer.py" (subscribe, dedupe, metrics) — config-driven; optional in dev.
   - New: "qmtl/common/nodeid.py" (deterministic NodeID computation, SHA-3 fallback).

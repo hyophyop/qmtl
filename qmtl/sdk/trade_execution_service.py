@@ -28,6 +28,32 @@ class TradeExecutionService:
                 return response
             except Exception:
                 attempt += 1
+                status = self.poll_order_status(order)
+                if status is not None:
+                    return status
                 if attempt > self.max_retries:
                     raise
-                time.sleep(self.backoff * attempt)
+
+    def poll_order_status(self, order: Any) -> httpx.Response | None:
+        """Query broker for the status of ``order`` until completion.
+
+        Returns the status response when the order is reported as completed,
+        otherwise ``None`` if the order is not found or still pending.
+        """
+        order_id = getattr(order, "id", None)
+        if order_id is None:
+            order_id = order.get("id") if isinstance(order, dict) else None
+        if order_id is None:
+            return None
+        deadline = time.time() + (self.backoff * self.max_retries)
+        while time.time() < deadline:
+            try:
+                resp = httpx.get(f"{self.url}/{order_id}", timeout=10.0)
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("status") in {"filled", "done", "completed"}:
+                    return resp
+            except Exception:
+                pass
+            time.sleep(self.backoff)
+        return None

@@ -28,12 +28,6 @@ class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
         return self.settlement.available_cash(account) >= required
 
 
-# Deprecated PerShareFeeModel was removed; use qmtl.brokerage.fees.PerShareFeeModel
-
-
-# Deprecated VolumeShareSlippageModel was removed; use qmtl.brokerage.slippage.VolumeShareSlippageModel
-
-
 class ImmediateFillModel(FillModel):
     """Fill the entire order at the given price."""
 

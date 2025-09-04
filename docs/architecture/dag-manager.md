@@ -206,7 +206,7 @@ sequenceDiagram
 
 ---
 
-Note: Control updates (e.g., queue/tag changes, traffic weights) are published to the internal ControlBus and consumed by Gateways for WebSocket relay to SDKs. The legacy callback interface has been removed.
+Note: Control updates (e.g., queue/tag changes, traffic weights) are published to the internal ControlBus. Gateways relay these updates to SDKs via WebSocket; no callback interface is supported.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
@@ -231,8 +231,7 @@ Note: Control updates (e.g., queue/tag changes, traffic weights) are published t
 | --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
 | Neo4j leader down     | Diff 거절         | `raft_leader_is_null`         | Automat. leader election               | PagerDuty  |
 | Kafka ZK session loss | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
-| Diff Stream stall     | Gateway timeout | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie   |
-
+| Diff Stream stall     | Gateway status polling failure | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie |
 ---
 
 각 행은 Runbook 마크다운 파일과 대응되는 ID를 가지며, Grafana Dashboard URL과

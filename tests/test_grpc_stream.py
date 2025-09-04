@@ -44,3 +44,16 @@ async def test_resume_skips_acknowledged_chunks():
     stream.ack()
     stream.resume_from_last_offset()
     assert stream.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_ack_timeout():
+    stream = _GrpcStream(asyncio.get_running_loop())
+    chunk = DiffChunk(queue_map={}, sentinel_id="s")
+
+    stream.send(chunk)
+    await stream.queue.get()
+
+    # No ACK is sent; the wait should eventually time out
+    status = stream.wait_for_ack()
+    assert status is AckStatus.TIMEOUT

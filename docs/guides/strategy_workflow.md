@@ -172,20 +172,21 @@ wait
 
 ### Test Teardown and Shutdown
 
-When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), call the shutdown helper in teardown to ensure no lingering tasks or sockets remain:
+When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), prefer the session context manager to ensure everything is cleaned up:
 
 ```python
-# sync tests
+async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw", offline=True) as strategy:
+    ...  # assertions
+```
+
+If you cannot use ``async with`` (e.g., in synchronous tests), fall back to the explicit helpers:
+
+```python
 strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw", offline=True)
 try:
     ...  # assertions
 finally:
     Runner.shutdown(strategy)
-
-# async tests
-strategy = await Runner.run_async(MyStrategy, world_id="w", gateway_url="http://gw")
-...
-await Runner.shutdown_async(strategy)
 ```
 
 The helpers are idempotent and safe to call even if no background services are active.
@@ -194,7 +195,7 @@ The helpers are idempotent and safe to call even if no background services are a
 
 Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
 
-- HTTP clients: short default timeout (≈1.5s)
+- HTTP clients: 짧은 폴링 주기 및 명시적 상태 확인
 - WebSocket client: shorter receive timeout and overall max runtime (≈5s)
 
 Example:
