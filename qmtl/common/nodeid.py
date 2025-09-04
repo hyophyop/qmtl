@@ -11,6 +11,7 @@ def compute_node_id(
     code_hash: str,
     config_hash: str,
     schema_hash: str,
+    world_id: str,
     existing_ids: Iterable[str] | None = None,
 ) -> str:
     """Return deterministic node ID with SHA-256 and SHA-3 fallback.
@@ -19,11 +20,13 @@ def compute_node_id(
     ----------
     node_type, code_hash, config_hash, schema_hash : str
         Components defining the node.
+    world_id : str
+        Identifier of the world this node belongs to.
     existing_ids : Iterable[str] | None
         Previously generated IDs to detect collisions. If the computed SHA-256
         hash already exists in this set, SHA-3-256 is used instead.
     """
-    data = f"{node_type}:{code_hash}:{config_hash}:{schema_hash}".encode()
+    data = f"{world_id}:{node_type}:{code_hash}:{config_hash}:{schema_hash}".encode()
     try:
         sha = hashlib.sha256(data).hexdigest()
     except Exception:  # pragma: no cover - unlikely

@@ -15,12 +15,21 @@ class TagManagerService:
     def __init__(self, gateway_url: str | None) -> None:
         self.gateway_url = gateway_url
 
-    def init(self, strategy) -> TagQueryManager:
+    def init(
+        self,
+        strategy,
+        *,
+        world_id: str | None = None,
+        strategy_id: str | None = None,
+    ) -> TagQueryManager:
         """Initialize and attach a :class:`TagQueryManager` to ``strategy``."""
-        manager = TagQueryManager(self.gateway_url)
+        manager = TagQueryManager(
+            self.gateway_url, world_id=world_id, strategy_id=strategy_id
+        )
         for n in strategy.nodes:
             if isinstance(n, TagQueryNode):
                 manager.register(n)
+            n.world_id = world_id
         setattr(strategy, "tag_query_manager", manager)
         return manager
 
