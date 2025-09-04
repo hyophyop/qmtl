@@ -28,9 +28,6 @@ class FakeDB(Database):
         return None
 
 
-pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-
-
 @pytest.mark.asyncio
 async def test_event_descriptor_scope_and_expiry(fake_redis):
     cfg = EventDescriptorConfig(
@@ -41,15 +38,14 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
         fallback_url="wss://gateway/ws",
     )
     app = create_app(redis_client=fake_redis, database=FakeDB(), event_config=cfg, enable_background=False)
-    transport = httpx.ASGITransport(app=app, lifespan="on")
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        payload = {
-            "world_id": "w1",
-            "strategy_id": "s1",
-            "topics": ["activation"],
-        }
-        resp = await client.post("/events/subscribe", json=payload)
-    await transport.aclose()
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = {
+                "world_id": "w1",
+                "strategy_id": "s1",
+                "topics": ["activation"],
+            }
+            resp = await client.post("/events/subscribe", json=payload)
     assert resp.status_code == 200
     data = resp.json()
     assert data["stream_url"] == cfg.stream_url

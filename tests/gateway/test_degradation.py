@@ -164,8 +164,6 @@ def make_app(fake_redis):
     app.state.degradation.stop = nop
     return app
 
-
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_status_includes_level(fake_redis):
     app = make_app(fake_redis)
     with TestClient(app) as client:
@@ -173,8 +171,6 @@ def test_status_includes_level(fake_redis):
         assert resp.status_code == 200
         assert resp.json()["degrade_level"] == "NORMAL"
 
-
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_minimal_blocks_submission(fake_redis):
     app = make_app(fake_redis)
     app.state.degradation.level = DegradationLevel.MINIMAL
@@ -187,8 +183,6 @@ def test_minimal_blocks_submission(fake_redis):
         resp = client.post("/strategies", json=payload.model_dump())
         assert resp.status_code == 503
 
-
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_static_returns_204(fake_redis):
     app = make_app(fake_redis)
     app.state.degradation.level = DegradationLevel.STATIC

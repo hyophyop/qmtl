@@ -1,9 +1,6 @@
 import pytest
 import pytest_asyncio
 from fakeredis.aioredis import FakeRedis
-import warnings
-
-warnings.filterwarnings("ignore", category=pytest.PytestUnraisableExceptionWarning)
 
 @pytest_asyncio.fixture
 async def fake_redis():
