@@ -91,22 +91,24 @@ class WebSocketClient:
                 async with websockets.connect(self.url, **connect_kwargs) as ws:
                     self._ws = ws
                     delay = self._base_delay
-                    while not self._stop_event.is_set():
-                        try:
+                    heartbeat = asyncio.create_task(self._heartbeat(ws))
+                    try:
+                        while not self._stop_event.is_set():
                             try:
-                                msg = await asyncio.wait_for(ws.recv(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
-                            except asyncio.TimeoutError:
-                                # No message within timeout; trigger reconnect loop
+                                msg = await ws.recv()
+                            except websockets.ConnectionClosed:
                                 break
-                        except websockets.ConnectionClosed:
-                            break
-                        except Exception:
-                            break
-                        try:
-                            data = json.loads(msg)
-                        except json.JSONDecodeError:
-                            continue
-                        await self._handle(data)
+                            except Exception:
+                                break
+                            try:
+                                data = json.loads(msg)
+                            except json.JSONDecodeError:
+                                continue
+                            await self._handle(data)
+                    finally:
+                        heartbeat.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await heartbeat
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -120,7 +122,7 @@ class WebSocketClient:
                 break
             if self.max_total_time is not None and loop.time() - start > self.max_total_time:
                 break
-            await asyncio.sleep(delay)
+            await self._poll_reconnect(delay)
             delay = min(delay * self._backoff_factor, self._max_delay)
 
     async def start(self) -> None:
@@ -141,3 +143,28 @@ class WebSocketClient:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+
+    async def _heartbeat(self, ws: websockets.WebSocketClientProtocol) -> None:
+        """Send periodic pings to ensure connection liveness."""
+        while not self._stop_event.is_set():
+            await asyncio.sleep(runtime.WS_RECV_TIMEOUT_SECONDS)
+            try:
+                await asyncio.wait_for(ws.ping(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
+            except Exception:
+                break
+
+    async def _poll_reconnect(self, delay: float) -> None:
+        """Poll server readiness before reconnecting."""
+        loop = asyncio.get_running_loop()
+        end = loop.time() + delay
+        connect_kwargs = {}
+        if self.token:
+            connect_kwargs["extra_headers"] = {
+                "Authorization": f"Bearer {self.token}"
+            }
+        while not self._stop_event.is_set() and loop.time() < end:
+            try:
+                async with websockets.connect(self.url, **connect_kwargs):
+                    return
+            except Exception:
+                await asyncio.sleep(0.1)

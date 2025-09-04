@@ -92,7 +92,7 @@ class BackfillEngine:
                         },
                     )
                     raise
-                await asyncio.sleep(0.1 * attempts)
+                await self.poll_source_ready()
 
     # --------------------------------------------------------------
     def submit(self, node: Node, start: int, end: int) -> asyncio.Task:
@@ -106,3 +106,16 @@ class BackfillEngine:
         """Wait for all scheduled backfill jobs to finish."""
         if self._tasks:
             await asyncio.gather(*self._tasks)
+
+    async def poll_source_ready(self) -> None:
+        """Poll the source for readiness before retrying."""
+        if hasattr(self.source, "ready"):
+            while True:
+                try:
+                    if await self.source.ready():
+                        return
+                except Exception:
+                    pass
+                await asyncio.sleep(0.05)
+        else:
+            await asyncio.sleep(0)
