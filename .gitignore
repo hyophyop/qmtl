@@ -89,5 +89,8 @@ uv.lock
 # Snapshots
 .qmtl_snapshots/
 
+# Test artifacts
+.artifacts/
+
 # MkDocs build artifacts
 site/
