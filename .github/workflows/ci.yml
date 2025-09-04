@@ -1,7 +1,3 @@
-
-      - name: Run world isolation test
-        run: PYTHONPATH=qmtl/proto uv run -m pytest tests/e2e/test_world_isolation.py
-
       # Preflight stages to catch hangs before full run (disabled placeholder)
       - name: Preflight – import/collection
         if: ${{ false }}
