@@ -76,7 +76,10 @@ class CommitLogConsumer:
     async def _poll_raw(
         self, timeout_ms: int | None = None
     ) -> list[tuple[str, int, str, Any]]:
-        result = await self._consumer.getmany(timeout_ms=timeout_ms)
+        if timeout_ms is None:
+            result = await self._consumer.getmany()
+        else:
+            result = await self._consumer.getmany(timeout_ms=timeout_ms)
         records: list[tuple[str, int, str, Any]] = []
         for messages in result.values():
             for msg in messages:

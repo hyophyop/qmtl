@@ -315,12 +315,21 @@ class Runner:
         )
         await consumer.start()
         try:
-            while not stop_event.is_set():
-                batch = await consumer.getmany(timeout_ms=200)
-                got = False
+            while True:
+                get_task = asyncio.create_task(consumer.getmany())
+                stop_task = asyncio.create_task(stop_event.wait())
+                done, pending = await asyncio.wait(
+                    {get_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+                for p in pending:
+                    p.cancel()
+                if stop_task in done:
+                    get_task.cancel()
+                    await asyncio.gather(get_task, return_exceptions=True)
+                    break
+                batch = get_task.result()
                 for _tp, messages in batch.items():
                     for msg in messages:
-                        got = True
                         try:
                             payload = json.loads(msg.value)
                         except Exception:
@@ -333,9 +342,6 @@ class Runner:
                             ts,
                             payload,
                         )
-                if not got:
-                    # No messages; loop to re-check stop_event promptly
-                    continue
         finally:
             await consumer.stop()
 

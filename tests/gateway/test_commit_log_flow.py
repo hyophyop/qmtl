@@ -47,7 +47,7 @@ class _FakeConsumer:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def getmany(self, timeout_ms: int | None = None):
+    async def getmany(self):
         if self._batches:
             return {None: self._batches.pop(0)}
         return {}

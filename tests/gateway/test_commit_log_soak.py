@@ -36,7 +36,7 @@ class C:
     async def stop(self):
         return None
 
-    async def getmany(self, timeout_ms=None):
+    async def getmany(self):
         if self._batches:
             return {None: self._batches.pop(0)}
         return {}

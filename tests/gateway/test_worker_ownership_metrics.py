@@ -87,7 +87,7 @@ class _FakeConsumer:
     async def stop(self) -> None:
         return None
 
-    async def getmany(self, timeout_ms: int | None = None):  # noqa: D401 - test shim
+    async def getmany(self):  # noqa: D401 - test shim
         if self._batches:
             return {None: self._batches.popleft()}
         return {}
