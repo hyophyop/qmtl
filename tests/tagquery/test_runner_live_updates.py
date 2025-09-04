@@ -103,32 +103,31 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
     monkeypatch.setattr(Runner, "_kafka_available", True)
 
-    strat = await Runner.run_async(TQStrategy, world_id="tq_live_updates", gateway_url="http://gw")
+    async with Runner.session(
+        TQStrategy, world_id="tq_live_updates", gateway_url="http://gw"
+    ) as strat:
+        await asyncio.sleep(0.1)
 
-    await asyncio.sleep(0.1)
-
-    await hub.send_queue_update(
-        ["t1"],
-        60,
-        [{"queue": "q1", "global": False}],
-        MatchMode.ANY,
-    )
-    await strat.tag_query_manager.handle_message(
-        {
-            "type": "queue_update",
-            "data": {
-                "tags": ["t1"],
-                "interval": 60,
-                "queues": [{"queue": "q1", "global": False}],
-                "match_mode": "any",
-            },
-        }
-    )
-    await asyncio.sleep(0.1)
-    node = strat.tq
-    assert node.upstreams == ["q1"]
-    assert node.execute
-    assert hasattr(strat, "tag_query_manager")
-    # Clean shutdown to avoid lingering tasks/sockets
-    await Runner.shutdown_async(strat)
+        await hub.send_queue_update(
+            ["t1"],
+            60,
+            [{"queue": "q1", "global": False}],
+            MatchMode.ANY,
+        )
+        await strat.tag_query_manager.handle_message(
+            {
+                "type": "queue_update",
+                "data": {
+                    "tags": ["t1"],
+                    "interval": 60,
+                    "queues": [{"queue": "q1", "global": False}],
+                    "match_mode": "any",
+                },
+            }
+        )
+        await asyncio.sleep(0.1)
+        node = strat.tq
+        assert node.upstreams == ["q1"]
+        assert node.execute
+        assert hasattr(strat, "tag_query_manager")
     await transport.aclose()

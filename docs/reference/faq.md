@@ -16,7 +16,8 @@ last_modified: 2025-08-21
 ## 테스트가 가끔 hang 되거나 자원이 해제되지 않는 것 같습니다. 어떻게 방지하나요?
 
 - 테스트 종료 시 백그라운드 서비스 정리:
-  - `Runner.shutdown(strategy)` 또는 `await Runner.shutdown_async(strategy)`를 호출하여 `TagQueryManager`/`ActivationManager`를 정리하세요.
+  - `async with Runner.session(...):`을 사용하면 `TagQueryManager`/`ActivationManager`가 자동으로 정리됩니다.
+  - 또는 `Runner.shutdown(strategy)`나 `await Runner.shutdown_async(strategy)`를 호출해 수동으로 정리하세요.
 - 보수적인 타임아웃 적용:
   - 테스트 실행 전에 `QMTL_TEST_MODE=1`을 설정하면 SDK의 기본 HTTP/WS 타임아웃이 짧게 설정되어 hang 가능성이 줄어듭니다.
 - ASGI/Transport 자원 정리:
