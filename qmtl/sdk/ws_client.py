@@ -9,6 +9,7 @@ from urllib.parse import urlparse, urlunparse
 
 import websockets
 import logging
+from . import runtime
 
 if TYPE_CHECKING:  # pragma: no cover - only for typing
     from .node import TagQueryNode
@@ -46,7 +47,7 @@ class WebSocketClient:
         self._stop_event = asyncio.Event()
         self._ws: websockets.WebSocketClientProtocol | None = None
         self.max_retries = max_retries
-        self.max_total_time = max_total_time
+        self.max_total_time = max_total_time if max_total_time is not None else runtime.WS_MAX_TOTAL_TIME_SECONDS
         self._base_delay = base_delay
         self._backoff_factor = backoff_factor
         self._max_delay = max_delay
@@ -93,7 +94,7 @@ class WebSocketClient:
                     while not self._stop_event.is_set():
                         try:
                             try:
-                                msg = await asyncio.wait_for(ws.recv(), timeout=30)
+                                msg = await asyncio.wait_for(ws.recv(), timeout=runtime.WS_RECV_TIMEOUT_SECONDS)
                             except asyncio.TimeoutError:
                                 # No message within timeout; trigger reconnect loop
                                 break

@@ -189,6 +189,20 @@ await Runner.shutdown_async(strategy)
 ```
 
 The helpers are idempotent and safe to call even if no background services are active.
+
+### Test Mode Budgets
+
+Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
+
+- HTTP clients: short default timeout (≈1.5s)
+- WebSocket client: shorter receive timeout and overall max runtime (≈5s)
+
+Example:
+
+```bash
+export QMTL_TEST_MODE=1
+uv run -m pytest -W error
+```
 ```
 
 > **테스트 작성 가이드**

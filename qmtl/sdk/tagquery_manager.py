@@ -7,6 +7,7 @@ from .node import MatchMode
 from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient
+from . import runtime
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .node import TagQueryNode
@@ -58,7 +59,7 @@ class TagQueryManager:
             return
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
             for (tags, interval, match_mode), nodes in self._nodes.items():
                 params = {
                     "tags": ",".join(tags),
@@ -109,7 +110,7 @@ class TagQueryManager:
 
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
                 payload = {
                     "topics": ["queues"],
                     "world_id": self.world_id or "",

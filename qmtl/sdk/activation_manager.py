@@ -13,6 +13,7 @@ from typing import Optional, Dict
 import httpx
 
 from .ws_client import WebSocketClient
+from . import runtime
 
 
 @dataclass
@@ -67,13 +68,13 @@ class ActivationManager:
             return
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
                 payload = {
                     "topics": ["activation"],
                     "world_id": self.world_id or "",
                     "strategy_id": self.strategy_id or "",
                 }
-                resp = await client.post(subscribe_url, json=payload, timeout=2.0)
+                resp = await client.post(subscribe_url, json=payload)
                 if resp.status_code == 200:
                     data = resp.json()
                     stream_url = data.get("stream_url")

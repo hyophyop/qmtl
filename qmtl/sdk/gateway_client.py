@@ -8,6 +8,7 @@ import httpx
 from opentelemetry.propagate import inject
 
 from qmtl.common import AsyncCircuitBreaker, crc32_of_list
+from . import runtime
 
 
 class GatewayClient:
@@ -40,9 +41,9 @@ class GatewayClient:
         headers: dict[str, str] = {}
         inject(headers)
         try:
-            client = httpx.AsyncClient(headers=headers, timeout=2.0)
+            client = httpx.AsyncClient(headers=headers, timeout=runtime.HTTP_TIMEOUT_SECONDS)
         except TypeError:
-            client = httpx.AsyncClient(timeout=2.0)
+            client = httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS)
         try:
             client.headers.update(headers)  # type: ignore[attr-defined]
         except Exception:
