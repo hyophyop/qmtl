@@ -103,7 +103,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
     monkeypatch.setattr(Runner, "_kafka_available", True)
 
-    strat = await Runner.live_async(TQStrategy, gateway_url="http://gw")
+    strat = await Runner.run_async(TQStrategy, world_id="tq_live_updates", gateway_url="http://gw")
 
     await asyncio.sleep(0.1)
 

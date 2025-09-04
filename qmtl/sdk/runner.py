@@ -142,6 +142,8 @@ class Runner:
         if provider is None:
             await node.load_history(start, end)
             return
+        # Guard against infinite warm-up if provider never clears pre_warmup
+        deadline = time.monotonic() + 60.0
         while node.pre_warmup:
             cov = await provider.coverage(
                 node_id=node.node_id, interval=node.interval
@@ -156,6 +158,12 @@ class Runner:
                 )
                 if stop_on_ready and not node.pre_warmup:
                     return
+            if time.monotonic() > deadline:
+                logger.warning(
+                    "history warm-up timed out for %s; proceeding with available data",
+                    getattr(node, "node_id", "<unknown>")
+                )
+                break
             if stop_on_ready:
                 # Avoid infinite loops when history providers fail to warm up
                 break
@@ -301,21 +309,27 @@ class Runner:
         )
         await consumer.start()
         try:
-            async for msg in consumer:
-                try:
-                    payload = json.loads(msg.value)
-                except Exception:
-                    payload = msg.value
-                ts = int(msg.timestamp / 1000)
-                Runner.feed_queue_data(
-                    node,
-                    node.kafka_topic,
-                    node.interval,
-                    ts,
-                    payload,
-                )
-                if stop_event.is_set():
-                    break
+            while not stop_event.is_set():
+                batch = await consumer.getmany(timeout_ms=200)
+                got = False
+                for _tp, messages in batch.items():
+                    for msg in messages:
+                        got = True
+                        try:
+                            payload = json.loads(msg.value)
+                        except Exception:
+                            payload = msg.value
+                        ts = int(msg.timestamp / 1000)
+                        Runner.feed_queue_data(
+                            node,
+                            node.kafka_topic,
+                            node.interval,
+                            ts,
+                            payload,
+                        )
+                if not got:
+                    # No messages; loop to re-check stop_event promptly
+                    continue
         finally:
             await consumer.stop()
 
@@ -599,7 +613,10 @@ class Runner:
 
         # Submit via HTTP if URL is configured
         if cls._trade_order_http_url is not None:
-            httpx.post(cls._trade_order_http_url, json=order)
+            try:
+                httpx.post(cls._trade_order_http_url, json=order, timeout=2.0)
+            except Exception:
+                logger.warning("trade order HTTP submit failed; dropping order")
 
         # Submit via Kafka if producer and topic are configured
         if cls._kafka_producer is not None and cls._trade_order_kafka_topic is not None:

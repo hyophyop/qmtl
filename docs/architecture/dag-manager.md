@@ -147,10 +147,9 @@ Sentinel weight updates are published as `sentinel_weight` events on the Control
 ### 3.1 토픽 이름 컨벤션
 
 ```
-{asset}_{node_type}_{short_hash}_{version}{_dry_run?}
+{asset}_{node_type}_{short_hash}_{version}
 ```
 
-* **dry_run** 플래그가 붙으면 `*_sim` 접미사.
 * `short_hash = first 6 code_hash` → 충돌 시 길이+2.
 * 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
 
@@ -298,8 +297,8 @@ add Kafka brokers to sustain ingest throughput.
 ## 11. Admin CLI Snippets (예)
 
 ```shell
-# diff dry_run
-qmtl dagmanager diff --file dag.json --dry_run
+# Diff example (non-destructive read)
+qmtl dagmanager diff --file dag.json
 # queue stats
 qmtl dagmanager queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel

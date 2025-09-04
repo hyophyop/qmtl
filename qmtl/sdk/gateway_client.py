@@ -40,9 +40,9 @@ class GatewayClient:
         headers: dict[str, str] = {}
         inject(headers)
         try:
-            client = httpx.AsyncClient(headers=headers)
+            client = httpx.AsyncClient(headers=headers, timeout=2.0)
         except TypeError:
-            client = httpx.AsyncClient()
+            client = httpx.AsyncClient(timeout=2.0)
         try:
             client.headers.update(headers)  # type: ignore[attr-defined]
         except Exception:

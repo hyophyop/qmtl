@@ -58,7 +58,7 @@ class TagQueryManager:
             return
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=2.0) as client:
             for (tags, interval, match_mode), nodes in self._nodes.items():
                 params = {
                     "tags": ",".join(tags),
@@ -109,7 +109,7 @@ class TagQueryManager:
 
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=2.0) as client:
                 payload = {
                     "topics": ["queues"],
                     "world_id": self.world_id or "",
