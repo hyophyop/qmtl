@@ -110,7 +110,9 @@ class _SecondLevelView:
     def __getitem__(self, key: int):
         if self._track_access:
             self._log.append((self._upstream, key))
-            sdk_metrics.observe_cache_read(self._upstream, key)
+            # Import here to avoid circular import
+            from .runner import Runner
+            sdk_metrics.observe_cache_read(self._upstream, key, world_id=Runner._current_world_id)
         return _SliceView(self._data[key])
 
 

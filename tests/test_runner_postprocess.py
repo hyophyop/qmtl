@@ -175,6 +175,7 @@ def test_handle_alpha_performance_updates_metrics():
     from qmtl.sdk import metrics as sdk_metrics
 
     sdk_metrics.reset_metrics()
-    Runner._handle_alpha_performance({"sharpe": 1.23, "max_drawdown": -0.5})
-    assert sdk_metrics.alpha_sharpe._val == 1.23
-    assert sdk_metrics.alpha_max_drawdown._val == -0.5
+    test_world_id = "test_world"
+    Runner._handle_alpha_performance({"sharpe": 1.23, "max_drawdown": -0.5}, world_id=test_world_id)
+    assert sdk_metrics.alpha_sharpe.labels(world_id=test_world_id)._value.get() == 1.23
+    assert sdk_metrics.alpha_max_drawdown.labels(world_id=test_world_id)._value.get() == -0.5

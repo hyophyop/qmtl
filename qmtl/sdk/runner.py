@@ -54,6 +54,7 @@ class Runner:
     _trade_order_http_url = None
     _trade_order_kafka_topic = None
     _activation_manager: ActivationManager | None = None
+    _current_world_id: str = "unknown"
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -290,6 +291,7 @@ class Runner:
         payload,
         *,
         on_missing: str = "skip",
+        world_id: str = "unknown",
     ):
         """Insert queue data into ``node`` and trigger its ``compute_fn``.
 
@@ -316,13 +318,13 @@ class Runner:
                     else:
                         result = node.compute_fn(node.cache.view())
                         # Postprocess the result
-                        Runner._postprocess_result(node, result)
+                        Runner._postprocess_result(node, result, world_id=world_id)
             except Exception:
-                sdk_metrics.observe_node_process_failure(node.node_id)
+                sdk_metrics.observe_node_process_failure(node.node_id, world_id=world_id)
                 raise
             finally:
                 duration_ms = (time.perf_counter() - start) * 1000
-                sdk_metrics.observe_node_process(node.node_id, duration_ms)
+                sdk_metrics.observe_node_process(node.node_id, duration_ms, world_id=world_id)
         return result
 
     # ------------------------------------------------------------------
@@ -360,6 +362,7 @@ class Runner:
                             node.interval,
                             ts,
                             payload,
+                            world_id=Runner._current_world_id,
                         )
                 if not got:
                     # No messages; loop to re-check stop_event promptly
@@ -550,6 +553,7 @@ class Runner:
                         ts,
                         payload,
                         on_missing=on_missing,
+                        world_id=Runner._current_world_id,
                     )
 
     @staticmethod
@@ -567,6 +571,7 @@ class Runner:
 
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
+        Runner._current_world_id = world_id
         strategy = Runner._prepare(strategy_cls)
         tag_service = TagManagerService(gateway_url)
         manager = tag_service.init(strategy, world_id=world_id)
@@ -844,16 +849,16 @@ class Runner:
         cls._trade_order_kafka_topic = topic
 
     @staticmethod
-    def _handle_alpha_performance(result: dict) -> None:
+    def _handle_alpha_performance(result: dict, world_id: str = "unknown") -> None:
         """Handle alpha performance metrics."""
         from . import metrics as sdk_metrics
 
         if isinstance(result, dict):
             if "sharpe" in result:
-                sdk_metrics.alpha_sharpe.set(result["sharpe"])
+                sdk_metrics.alpha_sharpe.labels(world_id=world_id).set(result["sharpe"])
                 sdk_metrics.alpha_sharpe._val = result["sharpe"]  # type: ignore[attr-defined]
             if "max_drawdown" in result:
-                sdk_metrics.alpha_max_drawdown.set(result["max_drawdown"])
+                sdk_metrics.alpha_max_drawdown.labels(world_id=world_id).set(result["max_drawdown"])
                 sdk_metrics.alpha_max_drawdown._val = result["max_drawdown"]  # type: ignore[attr-defined]
 
     @classmethod
@@ -886,7 +891,7 @@ class Runner:
             cls._kafka_producer.send(cls._trade_order_kafka_topic, order)
 
     @staticmethod
-    def _postprocess_result(node, result) -> None:
+    def _postprocess_result(node, result, world_id: str = "unknown") -> None:
         """Postprocess computation results from nodes."""
         if result is None:
             return
@@ -896,7 +901,7 @@ class Runner:
 
         # Check if this is an alpha performance node
         if "AlphaPerformance" in node_class_name:
-            Runner._handle_alpha_performance(result)
+            Runner._handle_alpha_performance(result, world_id=world_id)
 
         # Check if this is a trade order publisher node
         if "TradeOrderPublisher" in node_class_name:

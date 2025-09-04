@@ -146,11 +146,11 @@ def test_cache_view_metrics_increment():
     _ = view["u1"][60].latest()
 
     assert sdk_metrics.cache_read_total.labels(
-        upstream_id="u1", interval="60"
+        upstream_id="u1", interval="60", world_id="unknown"
     )._value.get() == 1
     assert (
         sdk_metrics.cache_last_read_timestamp.labels(
-            upstream_id="u1", interval="60"
+            upstream_id="u1", interval="60", world_id="unknown"
         )._value.get()
         > 0
     )

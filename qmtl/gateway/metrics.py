@@ -203,6 +203,7 @@ else:
     pretrade_attempts_total = Counter(
         "gw_pretrade_attempts_total",
         "Total number of pre-trade validation attempts observed by Gateway",
+        ["world_id"],
         registry=global_registry,
     )
 
@@ -212,7 +213,7 @@ else:
     pretrade_rejections_total = Counter(
         "gw_pretrade_rejections_total",
         "Total pre-trade rejections grouped by reason at Gateway",
-        ["reason"],
+        ["reason", "world_id"],
         registry=global_registry,
     )
 
@@ -222,6 +223,7 @@ else:
     pretrade_rejection_ratio = Gauge(
         "gw_pretrade_rejection_ratio",
         "Ratio of rejected to attempted pre-trade validations seen by Gateway",
+        ["world_id"],
         registry=global_registry,
     )
 
@@ -230,23 +232,26 @@ pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
 pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
 
 
-def record_pretrade_attempt() -> None:
-    pretrade_attempts_total.inc()
+def record_pretrade_attempt(world_id: str = "unknown") -> None:
+    w = str(world_id)
+    pretrade_attempts_total.labels(world_id=w).inc()
     pretrade_attempts_total._val = pretrade_attempts_total._value.get()  # type: ignore[attr-defined]
-    _update_pretrade_ratio()
+    _update_pretrade_ratio(world_id)
 
 
-def record_pretrade_rejection(reason: str) -> None:
-    pretrade_rejections_total.labels(reason=reason).inc()
-    pretrade_rejections_total._vals[reason] = pretrade_rejections_total._vals.get(reason, 0) + 1  # type: ignore[attr-defined]
-    _update_pretrade_ratio()
+def record_pretrade_rejection(reason: str, world_id: str = "unknown") -> None:
+    w = str(world_id)
+    pretrade_rejections_total.labels(reason=reason, world_id=w).inc()
+    pretrade_rejections_total._vals[(reason, w)] = pretrade_rejections_total._vals.get((reason, w), 0) + 1  # type: ignore[attr-defined]
+    _update_pretrade_ratio(world_id)
 
 
-def _update_pretrade_ratio() -> None:
-    total = pretrade_attempts_total._value.get()
-    rejected = sum(pretrade_rejections_total._vals.values())  # type: ignore[attr-defined]
+def _update_pretrade_ratio(world_id: str = "unknown") -> None:
+    w = str(world_id)
+    total = pretrade_attempts_total.labels(world_id=w)._value.get()
+    rejected = sum(val for key, val in pretrade_rejections_total._vals.items() if key[1] == w)  # type: ignore[attr-defined]
     ratio = (rejected / total) if total else 0.0
-    pretrade_rejection_ratio.set(ratio)
+    pretrade_rejection_ratio.labels(world_id=w).set(ratio)
     pretrade_rejection_ratio._val = ratio  # type: ignore[attr-defined]
 
 
@@ -407,6 +412,19 @@ def reset_metrics() -> None:
     ws_dropped_subscribers_total._val = 0  # type: ignore[attr-defined]
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
+    # Gateway pretrade metrics
+    try:
+        pretrade_attempts_total.clear()
+    except AttributeError:
+        pass
+    pretrade_attempts_total._val = 0  # type: ignore[attr-defined]
+    pretrade_rejections_total.clear()
+    pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
+    try:
+        pretrade_rejection_ratio.clear()
+    except AttributeError:
+        pass
+    pretrade_rejection_ratio._val = 0.0  # type: ignore[attr-defined]
 
 
 def get_pretrade_stats() -> dict:

@@ -40,7 +40,9 @@ class CacheView:
                 u, i = new_path
                 if isinstance(u, str) and isinstance(i, int):
                     self._access_log.append((u, i))
-                    sdk_metrics.observe_cache_read(u, i)
+                    # Import here to avoid circular import
+                    from .runner import Runner
+                    sdk_metrics.observe_cache_read(u, i, world_id=Runner._current_world_id)
             return CacheView(
                 self._data[key],
                 track_access=self._track_access,
