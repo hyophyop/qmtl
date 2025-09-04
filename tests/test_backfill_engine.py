@@ -13,7 +13,7 @@ class DummySource:
         self.delay = delay
         self.fail = fail
         self.calls = 0
-        self.started = asyncio.Event()
+        self.ready_calls = 0
 
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self.calls += 1
@@ -25,6 +25,11 @@ class DummySource:
         loop.call_later(self.delay, fut.set_result, None)
         await fut
         return self.df
+
+    async def ready(self) -> bool:
+        self.ready_calls += 1
+        await asyncio.sleep(0)
+        return True
 
 
 @pytest.mark.asyncio
@@ -63,6 +68,7 @@ async def test_retry_logic():
     engine.submit(node, 60, 60)
     await engine.wait()
     assert src.calls == 2
+    assert src.ready_calls >= 1
     assert node.cache.latest(node.node_id, 60) == (60, {"ts": 60, "v": 1})
 
 

@@ -397,6 +397,7 @@ def test_load_history_called(monkeypatch):
 
 def test_cli_execution(monkeypatch):
     import sys
+    monkeypatch.setenv("QMTL_TEST_MODE", "1")
     from qmtl.sdk.cli import main
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -432,6 +433,10 @@ def test_cli_execution(monkeypatch):
         "w",
         "--gateway-url",
         "http://gw",
+        "--history-start",
+        "1",
+        "--history-end",
+        "2",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()
@@ -640,7 +645,8 @@ def test_backtest_on_missing_fail(monkeypatch):
             src = StreamInput(interval="60s", period=2, history_provider=GapProvider())
             node = ProcessingNode(input=src, compute_fn=lambda v: v, name="n", interval="60s", period=2)
             self.add_nodes([src, node])
-
+    from qmtl.sdk import runtime
+    monkeypatch.setattr(runtime, "FAIL_ON_HISTORY_GAP", True)
     with pytest.raises(RuntimeError):
         Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
 

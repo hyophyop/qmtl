@@ -35,7 +35,7 @@ def app(fake_redis):
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 @pytest.mark.asyncio
 async def test_ingest_and_status(app):
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         payload = StrategySubmit(
             dag_json="{}",

@@ -150,7 +150,7 @@ Skew Metrics
 - `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
 
 Alerts
-- Decision failures, apply timeouts, stale activation cache at Gateway
+- Decision failures, explicit status polling failures, stale activation cache at Gateway
 
 ---
 
@@ -169,7 +169,7 @@ Alerts
 - ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
 
 Runner & SDK Integration (clarification)
-- SDK/Runner do not choose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
+- SDK/Runner do not expose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
 - `effective_mode` in DecisionEnvelope is computed by WS and treated as input by SDK. Unknown or stale decisions default to compute‑only with order gates OFF.
 
 ---

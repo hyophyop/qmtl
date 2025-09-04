@@ -66,6 +66,9 @@ async def test_ws_client_reconnects(monkeypatch):
                 return self._messages.pop(0)
             raise websockets.ConnectionClosed(1000, "")
 
+        async def ping(self) -> None:  # pragma: no cover - no behavior
+            return None
+
         async def close(self) -> None:  # pragma: no cover - no behavior
             pass
 
@@ -80,6 +83,8 @@ async def test_ws_client_reconnects(monkeypatch):
     def fake_connect(url: str, extra_headers=None):
         connects.append(url)
         if len(connects) == 1:
+            return DummyWS([])
+        if len(connects) == 2:
             return DummyWS([])
         return DummyWS([json.dumps({"event": "queue_update"})])
 
@@ -103,7 +108,7 @@ async def test_ws_client_reconnects(monkeypatch):
     await asyncio.wait_for(done.wait(), timeout=1)
     await client.stop()
 
-    assert len(connects) == 2
+    assert len(connects) >= 3
     assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
 
 
@@ -169,6 +174,9 @@ async def test_ws_client_sends_token(monkeypatch):
 
         async def recv(self) -> str:
             raise websockets.ConnectionClosed(1000, "")
+
+        async def ping(self) -> None:  # pragma: no cover - no behavior
+            return None
 
         async def close(self) -> None:
             pass

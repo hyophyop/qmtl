@@ -10,6 +10,20 @@ uv venv
 uv pip install -e qmtl[dev]
 ```
 
+## Running
+
+Run strategies against a Gateway-connected world service:
+
+```bash
+python strategies/my_strategy.py --world-id demo --gateway-url http://localhost:8000
+```
+
+For quick offline execution, omit the flags:
+
+```bash
+python strategies/my_strategy.py
+```
+
 ## Testing
 
 Run the test suite and treat warnings as errors:

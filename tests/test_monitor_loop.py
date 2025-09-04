@@ -7,11 +7,11 @@ from qmtl.dagmanager.monitor import MonitorLoop
 class DummyMonitor:
     def __init__(self):
         self.called = 0
+        self.event = asyncio.Event()
 
     async def check_once(self) -> None:
         self.called += 1
-        if self.called >= 2:
-            self.done.set()
+        self.event.set()
 
 
 @pytest.mark.asyncio
@@ -21,6 +21,8 @@ async def test_monitor_loop_runs_periodically():
     mon.done = done  # type: ignore[attr-defined]
     loop = MonitorLoop(mon, interval=0.01)  # type: ignore[arg-type]
     await loop.start()
-    await asyncio.wait_for(done.wait(), timeout=1)
+    await asyncio.wait_for(mon.event.wait(), timeout=1)
+    mon.event.clear()
+    await asyncio.wait_for(mon.event.wait(), timeout=1)
     await loop.stop()
     assert mon.called >= 2

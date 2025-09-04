@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality.
+This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality and align with the WorldService‑first `Runner.run` and local `Runner.offline` APIs.
 
 ## Key Enhancements Implemented
 

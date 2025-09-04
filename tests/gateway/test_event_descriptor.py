@@ -41,7 +41,7 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
         fallback_url="wss://gateway/ws",
     )
     app = create_app(redis_client=fake_redis, database=FakeDB(), event_config=cfg, enable_background=False)
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=app, lifespan="on")
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
             "world_id": "w1",

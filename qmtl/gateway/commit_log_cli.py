@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import signal
 from typing import Any
@@ -45,8 +46,11 @@ async def run(bootstrap: str, topic: str, group: str, poll_timeout_ms: int) -> N
     consumer = await _create_consumer(bootstrap, topic, group)
     clc = CommitLogConsumer(consumer, topic=topic, group_id=group)
 
+    processed = asyncio.Event()
+
     async def processor(records):  # pragma: no cover - runtime path
         logger.info("processed %d records", len(records))
+        processed.set()
 
     stop_event = asyncio.Event()
 
@@ -59,8 +63,20 @@ async def run(bootstrap: str, topic: str, group: str, poll_timeout_ms: int) -> N
 
     try:
         while not stop_event.is_set():  # pragma: no cover - runtime path
-            await clc.consume(processor, timeout_ms=poll_timeout_ms)
-            await asyncio.sleep(0.05)
+            processed.clear()
+            consume_task = asyncio.create_task(
+                clc.consume(processor, timeout_ms=poll_timeout_ms)
+            )
+            await asyncio.wait(
+                {consume_task, asyncio.create_task(stop_event.wait())},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if stop_event.is_set():
+                consume_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await consume_task
+                break
+            await processed.wait()
     finally:
         try:
             await clc.stop()

@@ -34,7 +34,7 @@
 - 월드 관점 상태: `evaluating`(평가 중) / `applying`(계획 적용 중) / `steady`(안정)만 추적(운영용). 복잡한 월드 FSM은 도입하지 않는다.
 - 2‑Phase 전환(요지)
   1) Freeze/Drain: 주문 차단(게이트 ON) 후 대기; 필요 시 포지션 청산/이월 규칙 적용
-  2) Switch: 활성 테이블 교체(Top‑K), Runner 모드 플래그 반영
+  2) Switch: 활성 테이블 교체(Top‑K), Runner 게이트 상태 반영
   3) Unfreeze: 주문 허용(게이트 OFF)
   - 모든 단계는 idempotent run_id로 추적하고 실패 시 롤백 포인트를 남긴다.
 
@@ -90,7 +90,7 @@ position_policy:
 
 ```python
 def decide_initial_mode(now, data_end, max_lag):
-    return "dryrun" if (now - data_end) <= max_lag else "backtest"
+    return "active" if (now - data_end) <= max_lag else "validate"
 
 def gate_metrics(m, policy):
     if m.sample_days < policy.min_sample_days: return "insufficient"
@@ -112,7 +112,7 @@ def apply_hysteresis(prev, checks, h):
 
 - Runner: 월드 결정(WS)에 따르는 단일 진입점 `run(world_id=...)`과 `offline()`만 제공한다. 월드 결정 결과는 “활성화 게이트”를 통해 주문 발동을 제어한다.
 - Gateway: 제출/상태/큐 조회 API 그대로 사용(./docs/architecture/gateway.md). 월드용 얇은 엔드포인트(활성 테이블 조회/적용, 감사 기록)만 확장한다.
-- DAG Manager: NodeID/토픽, TagQuery 동작은 변경하지 않는다(./docs/architecture/dag-manager.md). 드라이런 플래그는 기존 접미사/라우팅 규칙을 따른다.
+- DAG Manager: NodeID/토픽, TagQuery 동작은 변경하지 않는다(./docs/architecture/dag-manager.md).
 - 메트릭: SDK/Gateway/DAG Manager의 기존 Prometheus 메트릭을 재사용한다.
 
 ### 6.1 World‑First Runner Execution
@@ -125,15 +125,14 @@ def apply_hysteresis(prev, checks, h):
 - 실행 흐름(요지)
   1) Runner가 `--world`를 받으면 Gateway `GET /worlds/{id}/decide`를 호출해 `effective_mode`와 이유/파라미터를 얻는다.
   2) Runner는 별도 모드로 분기하지 않고, WS 결정에 따라 주문 게이트/검증만 제어한다.
-  3) Gateway가 불가하면 `--world-file`로 동일 결정을 로컬 계산한다. 둘 다 없으면 
-     사용자가 지정한 로컬 폴백(`offline|backtest`)로 전환한다.
+  3) Gateway가 불가하면 `--world-file`로 동일 결정을 로컬 계산한다. 둘 다 없으면
+     사용자가 지정한 로컬 폴백(`offline`)으로 전환한다.
 - 주문 게이트 상호작용
   - 모드와 별개로, 주문은 `Activation Table`의 활성 여부가 `true`일 때만 발동한다.
   - `OrderGateNode`는 Gateway `GET /worlds/{id}/activation` 또는 WS 신호를 구독해 활성 변경을 반영한다.
 - 즉시 라이브 세계관
-  - “컷오프 제한이 없는” 샘플 월드를 제공(게이트 완화, 히스테리시스/표본 최소값 낮춤). 
+  - “컷오프 제한이 없는” 샘플 월드를 제공(게이트 완화, 히스테리시스/표본 최소값 낮춤).
   - 그래도 `--allow-live` 플래그와 월드‑스코프 RBAC가 필요하다.
-호환성: 과거 `--mode` 플래그와 `backtest/dryrun/live` API는 제거되었다.
 
 ## 7. 주문 게이트(OrderGate) 설계(경량)
 
@@ -437,7 +436,7 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
 
 ### 15.5 개발 단위 매핑
 
-- sdk/
+- qmtl/sdk/
   - Runner: `run_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
   - api: `/worlds/*` 프록시, `/events/subscribe`, ControlBus 구독자, 캐시/서킷

@@ -14,6 +14,13 @@ TEST_MODE: bool = str(os.getenv("QMTL_TEST_MODE", "")).strip().lower() in {
     "on",
 }
 
+# When set, override wall-clock 'now' used by history warm-up.
+_fixed_now = os.getenv("QMTL_FIXED_NOW", "").strip()
+try:
+    FIXED_NOW: int | None = int(_fixed_now) if _fixed_now else None
+except ValueError:
+    FIXED_NOW = None
+
 # Default client-side timeouts used by SDK components. These are intentionally
 # small under TEST_MODE to surface issues quickly and prevent hangs.
 HTTP_TIMEOUT_SECONDS: float = 1.5 if TEST_MODE else 2.0

@@ -43,6 +43,7 @@ def test_run_hooks_offline(monkeypatch):
 
     def fake_alpha(result):
         collected.append(result)
+
     def fake_order(order):
         orders.append(order)
 
@@ -62,10 +63,16 @@ def test_run_hooks_offline(monkeypatch):
         "init",
         lambda self, strategy: DummyManager(),
     )
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
+    )
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
+    )
 
-    strategy = Runner.run(DummyStrategy, world_id="w", gateway_url="http://gw", offline=True)
+    strategy = Runner.run(
+        DummyStrategy, world_id="w", gateway_url="http://gw", offline=True
+    )
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)
@@ -87,15 +94,16 @@ class FakeKafkaProducer:
 def test_handle_trade_order_http_and_kafka(monkeypatch):
     posted: dict[str, Any] = {}
 
-    def fake_post(url, json):  # pragma: no cover - minimal stub
+    def fake_post(url, *, json):  # pragma: no cover - minimal stub
         posted["url"] = url
         posted["json"] = json
 
     import importlib
     import qmtl.sdk.runner as runner_module
+
     runner_module = importlib.reload(runner_module)
-    monkeypatch.setattr(runner_module.httpx, "post", fake_post)
-    assert runner_module.httpx.post is fake_post
+    monkeypatch.setattr(runner_module.HttpPoster, "post", fake_post)
+    assert runner_module.HttpPoster.post is fake_post
 
     runner = runner_module.Runner
     producer = FakeKafkaProducer()
@@ -120,6 +128,7 @@ def test_run_hooks_live_like(monkeypatch):
 
     def fake_alpha(result):
         collected.append(result)
+
     def fake_order(order):
         orders.append(order)
 
@@ -134,16 +143,24 @@ def test_run_hooks_live_like(monkeypatch):
         "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
         fake_gateway,
     )
-    monkeypatch.setattr("qmtl.sdk.runner.Runner.run_pipeline", staticmethod(lambda s: None))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner.run_pipeline", staticmethod(lambda s: None)
+    )
     monkeypatch.setattr(
         TagManagerService,
         "init",
         lambda self, strategy: DummyManager(),
     )
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha))
-    monkeypatch.setattr("qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order))
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
+    )
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
+    )
 
-    strategy = Runner.run(DummyStrategy, world_id="w", gateway_url="http://gw", offline=True)
+    strategy = Runner.run(
+        DummyStrategy, world_id="w", gateway_url="http://gw", offline=True
+    )
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)
