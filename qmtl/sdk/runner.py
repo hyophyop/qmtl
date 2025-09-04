@@ -201,7 +201,7 @@ class Runner:
         from .node import StreamInput
 
         tasks = []
-        now = int(time.time())
+        now = runtime.FIXED_NOW if runtime.FIXED_NOW is not None else int(time.time())
         for n in strategy.nodes:
             if not isinstance(n, StreamInput):
                 continue
