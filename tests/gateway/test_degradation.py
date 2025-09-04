@@ -143,7 +143,12 @@ async def test_flushes_local_queue(monkeypatch):
 
 def make_app(fake_redis):
     db = FakeDB()
-    app = create_app(redis_client=fake_redis, database=db, dag_client=DummyDag())
+    app = create_app(
+        redis_client=fake_redis,
+        database=db,
+        dag_client=DummyDag(),
+        enable_background=False,
+    )
     async def nop():
         return None
 
