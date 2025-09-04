@@ -1,16 +1,19 @@
 import asyncio
 import pytest
 
+import asyncio
+
 from qmtl.dagmanager.buffer_scheduler import BufferingScheduler
 from qmtl.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, NodeRecord
 from qmtl.dagmanager.topic import topic_name
 
 
 class FakeRepo(NodeRepository):
-    def __init__(self):
+    def __init__(self, done: asyncio.Event | None = None):
         self.records: dict[str, NodeRecord] = {}
         self.buffered: dict[str, int] = {}
         self.cleared: list[str] = []
+        self.done = done or asyncio.Event()
 
     def get_nodes(self, node_ids):
         return {nid: self.records[nid] for nid in node_ids if nid in self.records}
@@ -30,6 +33,7 @@ class FakeRepo(NodeRepository):
     def clear_buffering(self, node_id):
         self.cleared.append(node_id)
         self.buffered.pop(node_id, None)
+        self.done.set()
 
     def get_buffering_nodes(self, older_than_ms):
         return [n for n, t in self.buffered.items() if t < older_than_ms]
@@ -46,7 +50,8 @@ class FakeDiff(DiffService):
 
 @pytest.mark.asyncio
 async def test_scheduler_reprocesses_old_nodes():
-    repo = FakeRepo()
+    done = asyncio.Event()
+    repo = FakeRepo(done)
     repo.records["A"] = NodeRecord(
         "A",
         "N",
@@ -64,7 +69,7 @@ async def test_scheduler_reprocesses_old_nodes():
     diff = FakeDiff()
     sched = BufferingScheduler(repo, diff, interval=0.01, delay_days=7)
     await sched.start()
-    await asyncio.sleep(0.03)
+    await asyncio.wait_for(done.wait(), timeout=1)
     await sched.stop()
     assert diff.calls and diff.calls[0].strategy_id == "A"
     assert repo.cleared == ["A"]

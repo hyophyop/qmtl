@@ -105,8 +105,6 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
 
     strat = await Runner.run_async(TQStrategy, world_id="tq_live_updates", gateway_url="http://gw")
 
-    await asyncio.sleep(0.1)
-
     await hub.send_queue_update(
         ["t1"],
         60,
@@ -124,7 +122,6 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
             },
         }
     )
-    await asyncio.sleep(0.1)
     node = strat.tq
     assert node.upstreams == ["q1"]
     assert node.execute

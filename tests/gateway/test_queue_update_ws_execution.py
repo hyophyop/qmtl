@@ -46,7 +46,6 @@ async def test_node_unpauses_on_queue_update():
         [{"queue": "q1", "global": False}],
         MatchMode.ANY,
     )
-    await asyncio.sleep(0.2)
 
     assert node.execute
     assert node.upstreams == ["q1"]

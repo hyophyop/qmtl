@@ -1,5 +1,4 @@
 import asyncio
-import time
 import logging
 import pandas as pd
 import pytest
@@ -14,12 +13,17 @@ class DummySource:
         self.delay = delay
         self.fail = fail
         self.calls = 0
+        self.started = asyncio.Event()
 
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self.calls += 1
+        self.started.set()
         if self.calls <= self.fail:
             raise RuntimeError("fail")
-        await asyncio.sleep(self.delay)
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        loop.call_later(self.delay, fut.set_result, None)
+        await fut
         return self.df
 
 
@@ -35,7 +39,7 @@ async def test_concurrent_backfill_and_live_append():
     engine = BackfillEngine(src)
 
     engine.submit(node, 60, 180)
-    await asyncio.sleep(0)  # ensure task started
+    await src.started.wait()
     await asyncio.to_thread(node.feed, node.node_id, 60, 180, {"v": "live"})
     await asyncio.to_thread(node.feed, node.node_id, 60, 240, {"v": "live2"})
 

@@ -25,7 +25,7 @@ async def test_ws_client_updates_state():
     async def handler(websocket):
         for e in events:
             await websocket.send(json.dumps(e))
-        await asyncio.sleep(0.05)
+        await websocket.wait_closed()
 
     server = await websockets.serve(handler, "localhost", 0)
     port = server.sockets[0].getsockname()[1]
@@ -33,12 +33,16 @@ async def test_ws_client_updates_state():
     try:
         received: list[dict] = []
 
+        done = asyncio.Event()
+
         async def on_msg(data):
             received.append(data)
+            if (data.get("event") or data.get("type")) == "queue_update":
+                done.set()
 
         client = WebSocketClient(url, on_message=on_msg)
         await client.start()
-        await asyncio.sleep(0.2)
+        await asyncio.wait_for(done.wait(), timeout=1)
         await client.stop()
         assert client.queue_topics == {"n1": "t1"}
         assert client.sentinel_weights == {"s1": 0.75}
@@ -83,8 +87,11 @@ async def test_ws_client_reconnects(monkeypatch):
 
     received: list[dict] = []
 
+    done = asyncio.Event()
+
     async def on_msg(data: dict) -> None:
         received.append(data)
+        done.set()
 
     client = WebSocketClient(
         "ws://dummy",
@@ -93,7 +100,7 @@ async def test_ws_client_reconnects(monkeypatch):
         base_delay=0.01,
     )
     await client.start()
-    await asyncio.sleep(0.1)
+    await asyncio.wait_for(done.wait(), timeout=1)
     await client.stop()
 
     assert len(connects) == 2
@@ -102,8 +109,11 @@ async def test_ws_client_reconnects(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ws_client_stop_closes_session():
+    connected = asyncio.Event()
+
     async def handler(websocket):
-        await asyncio.sleep(1)
+        connected.set()
+        await websocket.wait_closed()
 
     server = await websockets.serve(handler, "localhost", 0)
     port = server.sockets[0].getsockname()[1]
@@ -111,7 +121,7 @@ async def test_ws_client_stop_closes_session():
     try:
         client = WebSocketClient(url)
         await client.start()
-        await asyncio.sleep(0.1)
+        await asyncio.wait_for(connected.wait(), timeout=1)
         start = asyncio.get_running_loop().time()
         await client.stop()
         assert asyncio.get_running_loop().time() - start < 0.5
@@ -127,16 +137,21 @@ async def test_ws_client_logs_invalid_weight(caplog):
     async def handler(websocket):
         for e in events:
             await websocket.send(json.dumps(e))
-        await asyncio.sleep(0.05)
+        await websocket.wait_closed()
 
     server = await websockets.serve(handler, "localhost", 0)
     port = server.sockets[0].getsockname()[1]
     url = f"ws://localhost:{port}"
     try:
-        client = WebSocketClient(url)
+        done = asyncio.Event()
+
+        async def on_msg(data):
+            done.set()
+
+        client = WebSocketClient(url, on_message=on_msg)
         with caplog.at_level(logging.WARNING):
             await client.start()
-            await asyncio.sleep(0.2)
+            await asyncio.wait_for(done.wait(), timeout=1)
             await client.stop()
         assert client.sentinel_weights == {}
         assert any("s1" in r.getMessage() and "bad" in r.getMessage() for r in caplog.records)
@@ -153,7 +168,6 @@ async def test_ws_client_sends_token(monkeypatch):
         close_timeout = 0
 
         async def recv(self) -> str:
-            await asyncio.sleep(0.01)
             raise websockets.ConnectionClosed(1000, "")
 
         async def close(self) -> None:
@@ -165,16 +179,19 @@ async def test_ws_client_sends_token(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
+    connected = asyncio.Event()
+
     def fake_connect(url: str, extra_headers=None):
         nonlocal headers
         headers = extra_headers
+        connected.set()
         return DummyWS()
 
     monkeypatch.setattr(websockets, "connect", fake_connect)
 
     client = WebSocketClient("ws://dummy", token="abc")
     await client.start()
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(connected.wait(), timeout=1)
     await client.stop()
 
     assert headers == {"Authorization": "Bearer abc"}

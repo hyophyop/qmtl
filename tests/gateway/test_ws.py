@@ -31,7 +31,7 @@ async def test_hub_broadcasts_progress_and_queue_map():
         hub._clients.add(ws)
     await hub.send_progress("s1", "queued")
     await hub.send_queue_map("s1", {partition_key("n1", None, None): "t1"})
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     await hub.stop()
     assert len(ws.messages) == 2
     types = {json.loads(m)["type"] for m in ws.messages}
@@ -50,8 +50,7 @@ async def test_hub_line_rate_500_msgs_per_sec():
     start = time.perf_counter()
     for i in range(total):
         await hub.send_progress("s", str(i))
-    while len(ws.messages) < total:
-        await asyncio.sleep(0)
+    await hub._queue.join()
     duration = time.perf_counter() - start
     await hub.stop()
     assert len(ws.messages) == total
@@ -74,7 +73,7 @@ async def test_hub_logs_send_errors(caplog):
 
     with caplog.at_level(logging.WARNING):
         await hub.send_progress("s1", "queued")
-        await asyncio.sleep(0.1)
+        await hub._queue.join()
     await hub.stop()
     assert any(
         "Failed to send message to client" in record.message for record in caplog.records
@@ -89,7 +88,7 @@ async def test_hub_sends_sentinel_weight():
     async with hub._lock:
         hub._clients.add(ws)
     await hub.send_sentinel_weight("s1", 0.5)
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     await hub.stop()
     msg = json.loads(ws.messages[0])
     assert msg["type"] == "sentinel_weight"
@@ -105,7 +104,7 @@ async def test_hub_sends_activation_and_policy():
         hub._clients.add(ws)
     await hub.send_activation_updated({"strategy_id": "s1"})
     await hub.send_policy_updated({"strategy_id": "s1", "limit": 1})
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     await hub.stop()
     types = {json.loads(m)["type"] for m in ws.messages}
     assert "activation_updated" in types
@@ -122,7 +121,7 @@ async def test_ws_metrics_fanout_and_drops():
     await hub.connect(ws1, {"t"})
     await hub.connect(ws2, {"t"})
     await hub.broadcast({"msg": 1}, topic="t")
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     assert metrics.event_fanout_total.labels(topic="t")._value.get() == 2
     assert metrics.ws_subscribers._vals["t"] == 2
 
@@ -138,7 +137,7 @@ async def test_ws_metrics_fanout_and_drops():
     bad = BadWS()
     await hub.connect(bad, {"t"})
     await hub.broadcast({"msg": 2}, topic="t")
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     assert metrics.ws_dropped_subscribers_total._value.get() == 1
     assert metrics.ws_subscribers._vals["t"] == 2
 
@@ -161,7 +160,7 @@ async def test_hub_topic_routing_filters_by_subscription():
         hub._topics[ws_policy] = {"policy"}
     await hub.send_activation_updated({"strategy_id": "s1"})
     await hub.send_policy_updated({"strategy_id": "s1"})
-    await asyncio.sleep(0.1)
+    await hub._queue.join()
     await hub.stop()
     act_types = {json.loads(m)["type"] for m in ws_activation.messages}
     pol_types = {json.loads(m)["type"] for m in ws_policy.messages}

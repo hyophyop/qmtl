@@ -110,7 +110,9 @@ async def test_monitor_gathers_alerts_concurrently():
             self, msg: str, *, topic: str | None = None, node: str | None = None
         ) -> None:  # type: ignore[override]
             assert cluster.elected == 1
-            await asyncio.sleep(0.05)
+            fut = asyncio.get_running_loop().create_future()
+            asyncio.get_running_loop().call_later(0.05, fut.set_result, None)
+            await fut
             await super().send(msg, topic=topic, node=node)
 
     class SlowSlack(FakeSlack):
@@ -121,7 +123,9 @@ async def test_monitor_gathers_alerts_concurrently():
                 assert kafka.retried == 1
             elif msg == "Diff stream stalled":
                 assert stream.resumed == 1
-            await asyncio.sleep(0.05)
+            fut = asyncio.get_running_loop().create_future()
+            asyncio.get_running_loop().call_later(0.05, fut.set_result, None)
+            await fut
             await super().send(msg, topic=topic, node=node)
 
     pd = SlowPagerDuty()

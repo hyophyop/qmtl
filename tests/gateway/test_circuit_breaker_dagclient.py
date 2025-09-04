@@ -8,17 +8,13 @@ from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 
 
 @pytest.fixture(autouse=True)
-def fast_sleep(monkeypatch):
-    """Shrink long asyncio sleeps to speed up retries."""
-    orig_sleep = asyncio.sleep
+def fast_delay(monkeypatch):
+    """Eliminate asyncio sleep calls to speed up retries."""
 
-    async def _fast_sleep(delay, *args, **kwargs):
-        if delay < 0.1:
-            await orig_sleep(delay)
-        else:
-            await orig_sleep(0)
+    async def _fast_delay(delay, *args, **kwargs):
+        return None
 
-    monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+    monkeypatch.setattr(asyncio, "sleep", _fast_delay)
 
 
 class DummyChannel:

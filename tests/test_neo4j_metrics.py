@@ -1,4 +1,5 @@
 import asyncio
+import asyncio
 import pytest
 
 from qmtl.dagmanager.neo4j_metrics import GraphCountCollector, GraphCountScheduler
@@ -46,10 +47,19 @@ def test_collector_sets_gauges() -> None:
 @pytest.mark.asyncio
 async def test_scheduler_runs() -> None:
     metrics.reset_metrics()
-    collector = GraphCountCollector(FakeDriver())  # type: ignore[arg-type]
+
+    done = asyncio.Event()
+
+    class EventCollector(GraphCountCollector):
+        def record_counts(self):  # type: ignore[override]
+            result = super().record_counts()
+            done.set()
+            return result
+
+    collector = EventCollector(FakeDriver())  # type: ignore[arg-type]
     sched = GraphCountScheduler(collector, interval=0.01)
     await sched.start()
-    await asyncio.sleep(0.03)
+    await asyncio.wait_for(done.wait(), timeout=1)
     await sched.stop()
     assert metrics.compute_nodes_total._value.get() == 3  # type: ignore[attr-defined]
     assert metrics.queues_total._value.get() == 7  # type: ignore[attr-defined]
