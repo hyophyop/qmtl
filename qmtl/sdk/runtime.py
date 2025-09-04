@@ -19,3 +19,12 @@ TEST_MODE: bool = str(os.getenv("QMTL_TEST_MODE", "")).strip().lower() in {
 HTTP_TIMEOUT_SECONDS: float = 1.5 if TEST_MODE else 2.0
 WS_RECV_TIMEOUT_SECONDS: float = 5.0 if TEST_MODE else 30.0
 WS_MAX_TOTAL_TIME_SECONDS: float | None = 5.0 if TEST_MODE else None
+
+# Strict gap handling (opt-in). When enabled, Runner will raise if
+# pre_warmup remains after history reconciliation.
+FAIL_ON_HISTORY_GAP: bool = str(os.getenv("QMTL_FAIL_ON_HISTORY_GAP", "")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}

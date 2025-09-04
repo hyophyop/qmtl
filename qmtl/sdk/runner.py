@@ -142,6 +142,15 @@ class Runner:
         if provider is None:
             await node.load_history(start, end)
             return
+        # If no explicit range provided and provider has known coverage,
+        # hydrate directly over its coverage window to avoid wall-clock skew.
+        if start is None and end is None:
+            cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
+            if cov:
+                s = min(c[0] for c in cov)
+                e = max(c[1] for c in cov)
+                await node.load_history(s, e)
+                return
         # Guard against infinite warm-up if provider never clears pre_warmup
         deadline = time.monotonic() + 60.0
         while node.pre_warmup:
@@ -203,11 +212,6 @@ class Runner:
             tasks.append(task)
         if tasks:
             await asyncio.gather(*tasks)
-        if strict:
-            # If any StreamInput remains in pre_warmup, fail fast in strict mode
-            for n in strategy.nodes:
-                if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
-                    raise RuntimeError("history pre-warmup unresolved in strict mode")
 
     @staticmethod
     def _hydrate_snapshots(strategy: Strategy) -> int:
@@ -520,13 +524,15 @@ class Runner:
             isinstance(n, StreamInput) and getattr(n, "history_provider", None) is not None
             for n in strategy.nodes
         )
-        strict_mode = bool(offline_mode and has_provider)
+        # Strict gap handling is opt-in via runtime flag
+        from . import runtime as _rt
+        strict_mode = bool((offline_mode and has_provider) or _rt.FAIL_ON_HISTORY_GAP)
 
         # Apply explicit history ranges if provided; otherwise use defaults
         h_start = history_start
         h_end = history_end
-        if offline_mode and h_start is None and h_end is None:
-            # Deterministic test defaults for offline mode
+        if offline_mode and h_start is None and h_end is None and not has_provider:
+            # Deterministic test defaults for offline mode without providers
             h_start, h_end = 1, 2
 
         if h_start is not None and h_end is not None:
@@ -538,7 +544,31 @@ class Runner:
                 strategy, None, None, stop_on_ready=True, strict=strict_mode
             )
         if offline_mode:
-            Runner.run_pipeline(strategy)
+            await Runner._replay_history(strategy, None, None)
+            # After replay, enforce strict gap handling if requested
+            if strict_mode:
+                from .node import StreamInput
+                for n in strategy.nodes:
+                    if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
+                        raise RuntimeError("history pre-warmup unresolved in strict mode")
+                # Additionally, detect non-contiguous gaps when a provider is present
+                for n in strategy.nodes:
+                    if not isinstance(n, StreamInput):
+                        continue
+                    if getattr(n, "history_provider", None) is None:
+                        continue
+                    try:
+                        snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
+                        ts_sorted = sorted(ts for ts, _ in snap)
+                        needed = getattr(n, "period", 1) or 1
+                        if len(ts_sorted) < needed:
+                            raise RuntimeError("history missing in strict mode")
+                        for a, b in zip(ts_sorted, ts_sorted[1:]):
+                            if n.interval and (b - a) != n.interval:
+                                raise RuntimeError("history gap detected in strict mode")
+                    except KeyError:
+                        # No data present; treat as unresolved
+                        raise RuntimeError("history missing in strict mode")
         else:
             await manager.start()
         Runner._write_snapshots(strategy)

@@ -46,7 +46,7 @@ def test_gateway_health(fake_redis):
     redis_client = fake_redis
     db = FakeDB()
     with TestClient(
-        gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient())
+        gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient(), enable_background=False)
     ) as client:
         resp = client.get("/status")
         assert resp.status_code == 200
@@ -73,6 +73,7 @@ def test_gateway_health_live_guard_disabled(fake_redis):
             database=db,
             dag_client=FakeDagClient(),
             enforce_live_guard=False,
+            enable_background=False,
         )
     ) as client:
         resp = client.get("/status")
