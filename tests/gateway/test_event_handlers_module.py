@@ -35,7 +35,7 @@ async def test_event_subscription_endpoints():
     )
     app = FastAPI()
     app.include_router(create_event_router(hub, cfg))
-    transport = httpx.ASGITransport(app=app, lifespan="on")
+    transport = httpx.ASGITransport(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/events/jwks")
         assert resp.status_code == 200

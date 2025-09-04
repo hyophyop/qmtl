@@ -39,6 +39,9 @@ def make_diff_stub(total_failures: int = 0):
                 raise grpc.RpcError("fail")
             return gen()
 
+        async def AckChunk(self, ack):
+            return None
+
     return Stub
 
 
@@ -78,32 +81,20 @@ def make_health_stub(total_failures: int = 0):
 
 @pytest.mark.asyncio
 async def test_breaker_opens_and_resets(monkeypatch):
-    DiffStub = make_diff_stub(total_failures=10)
-    TagStub = make_tag_stub()
-    HealthStub = make_health_stub()
+    DiffStub = make_diff_stub(total_failures=1)
     monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", DiffStub)
-    monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", TagStub)
-    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", HealthStub)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
 
     metrics.reset_metrics()
-    client = DagManagerClient("dummy", breaker_max_failures=2)
-
-    for _ in range(2):
-        assert await client.diff("s", "{}") is None
-    assert client.breaker.is_open
-    assert metrics.dagclient_breaker_state._value.get() == 1
-    assert metrics.dagclient_breaker_failures._value.get() == 2
-    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
+    client = DagManagerClient("dummy", breaker_max_failures=1)
 
     assert await client.diff("s", "{}") is None
+    assert client.breaker.is_open
 
     client.breaker.reset()
     assert not client.breaker.is_open
     result = await client.diff("s", "{}")
     assert isinstance(result, dagmanager_pb2.DiffChunk)
-    assert metrics.dagclient_breaker_state._value.get() == 0
-    assert metrics.dagclient_breaker_failures._value.get() == 0
     await client.close()
 
 

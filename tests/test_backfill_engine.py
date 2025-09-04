@@ -14,6 +14,7 @@ class DummySource:
         self.fail = fail
         self.calls = 0
         self.ready_calls = 0
+        self.started = asyncio.Event()
 
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self.calls += 1

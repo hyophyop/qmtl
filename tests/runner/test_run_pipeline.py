@@ -30,7 +30,7 @@ def _make_strategy(calls, results):
     class Strat(Strategy):
         def setup(self):
             src = StreamInput(interval="60s", period=2)
-            src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
+            self.src = src
 
             def n1_fn(view):
                 calls.append("n1")
@@ -57,7 +57,12 @@ def test_run_offline_pipeline(monkeypatch):
     monkeypatch.setattr(Runner, "_kafka_available", True)
     calls, results = [], []
 
-    Runner.run(_make_strategy(calls, results), world_id="w", gateway_url="http://gw", offline=True)
+    strat = Runner.run(
+        _make_strategy(calls, results), world_id="w", gateway_url="http://gw", offline=True
+    )
+    src = strat.src
+    src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
+    Runner.run_pipeline(strat)
 
     assert calls == ["n1", "n2", "n1", "n2"]
     assert results == [4, 6]
@@ -68,7 +73,12 @@ def test_run_no_kafka_pipeline(monkeypatch):
     monkeypatch.setattr(Runner, "_kafka_available", False)
     calls, results = [], []
 
-    Runner.run(_make_strategy(calls, results), world_id="w", gateway_url="http://gw")
+    strat = Runner.run(
+        _make_strategy(calls, results), world_id="w", gateway_url="http://gw"
+    )
+    src = strat.src
+    src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
+    Runner.run_pipeline(strat)
 
     assert calls == ["n1", "n2", "n1", "n2"]
     assert results == [4, 6]

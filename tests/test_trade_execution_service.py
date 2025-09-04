@@ -24,8 +24,7 @@ def test_service_retries_on_failure(monkeypatch):
         if calls["count"] == 1:
             raise httpx.HTTPError("boom")
         return DummyResponse()
-
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(runner_module.HttpPoster, "post", fake_post)
     monkeypatch.setattr(TradeExecutionService, "poll_order_status", lambda self, order: None)
     service = TradeExecutionService("http://broker", max_retries=2)
     service.post_order({"id": 1})

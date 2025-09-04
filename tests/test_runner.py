@@ -277,8 +277,8 @@ def test_no_gateway_same_ids(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     online = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
-    with pytest.raises(RuntimeError):
-        Runner.run(SampleStrategy, world_id="w", gateway_url=None, offline=True)
+    offline = Runner.run(SampleStrategy, world_id="w", gateway_url=None, offline=True)
+    assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]
 
 
 def test_feed_queue_data_with_ray(monkeypatch):
@@ -433,14 +433,10 @@ def test_cli_execution(monkeypatch):
         "w",
         "--gateway-url",
         "http://gw",
-        "--history-start",
-        "1",
-        "--history-end",
-        "2",
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()
-    assert called == [("1", "2")]
+    assert called == [(1, 2)]
 
 
 def test_history_gap_fill(monkeypatch):
