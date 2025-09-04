@@ -3,6 +3,7 @@ import zlib
 from collections import deque
 from types import SimpleNamespace
 
+import asyncio
 import pytest
 
 from qmtl.gateway import metrics
@@ -126,17 +127,25 @@ async def test_two_workers_single_commit_no_duplicates() -> None:
 
     key = 123
 
+    start = asyncio.Event()
+    finish = asyncio.Event()
+
     async def worker() -> bool:
         if not await manager.acquire(key):
             return False
         try:
-            await asyncio.sleep(0.05)
+            start.set()
+            await finish.wait()
             await writer.publish_bucket(100, 60, [("n1", "h1", {"a": 1})])
             return True
         finally:
             await manager.release(key)
 
-    results = await asyncio.gather(worker(), worker())
+    t1 = asyncio.create_task(worker())
+    await start.wait()
+    t2 = asyncio.create_task(worker())
+    finish.set()
+    results = await asyncio.gather(t1, t2)
     assert results.count(True) == 1
     assert len(producer.messages) == 1
 

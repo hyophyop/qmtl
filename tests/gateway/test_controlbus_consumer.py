@@ -9,8 +9,9 @@ from qmtl.sdk.node import MatchMode
 
 
 class FakeHub:
-    def __init__(self):
+    def __init__(self, done: asyncio.Event | None = None):
         self.events: list[tuple[str, dict]] = []
+        self._done = done
 
     async def start(self) -> None:
         """Start method required by lifespan context."""
@@ -22,9 +23,13 @@ class FakeHub:
 
     async def send_activation_updated(self, data: dict) -> None:
         self.events.append(("activation_updated", data))
+        if self._done and len(self.events) == 3:
+            self._done.set()
 
     async def send_policy_updated(self, data: dict) -> None:
         self.events.append(("policy_updated", data))
+        if self._done and len(self.events) == 3:
+            self._done.set()
 
     async def send_queue_update(
         self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY
@@ -40,6 +45,8 @@ class FakeHub:
                 },
             )
         )
+        if self._done and len(self.events) == 3:
+            self._done.set()
 
 
 class DummyDB(Database):
@@ -59,7 +66,8 @@ class DummyDB(Database):
 @pytest.mark.asyncio
 async def test_consumer_relays_and_deduplicates():
     metrics.reset_metrics()
-    hub = FakeHub()
+    done = asyncio.Event()
+    hub = FakeHub(done)
     consumer = ControlBusConsumer(
         brokers=[], topics=["activation", "policy", "queue"], group="g", ws_hub=hub
     )

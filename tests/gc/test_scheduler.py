@@ -5,7 +5,7 @@ from qmtl.dagmanager.gc_scheduler import GCScheduler
 
 
 class DummyGC:
-    def __init__(self):
+    def __init__(self, done: asyncio.Event):
         self.calls = 0
         self.event = asyncio.Event()
 
@@ -17,7 +17,8 @@ class DummyGC:
 
 @pytest.mark.asyncio
 async def test_gc_scheduler_runs_collect():
-    gc = DummyGC()
+    done = asyncio.Event()
+    gc = DummyGC(done)
     sched = GCScheduler(gc, interval=0.01)
     await sched.start()
     await asyncio.wait_for(gc.event.wait(), timeout=1)

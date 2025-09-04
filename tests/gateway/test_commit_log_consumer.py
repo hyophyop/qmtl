@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 from collections import deque
 
 import pytest
@@ -22,7 +21,7 @@ def test_commit_log_deduplicator_filters_duplicates_and_ttl():
     assert more == []
     assert metrics.commit_duplicate_total._value.get() == 2
     # after TTL expires the key is processed again
-    time.sleep(0.02)
+    dedup._seen.expire(dedup._seen.timer() + 0.02)
     again = list(dedup.filter([( "n1", 100, "h1", {"a": 5})]))
     assert again == [("n1", 100, "h1", {"a": 5})]
 
@@ -45,13 +44,17 @@ async def test_concurrent_workers_single_commit() -> None:
     metrics.reset_metrics()
     log: list[tuple[str, int, str, dict[str, int]]] = []
 
-    async def worker(record: tuple[str, int, str, dict[str, int]], delay: float) -> None:
-        await asyncio.sleep(delay)
+    async def worker(record: tuple[str, int, str, dict[str, int]], start: asyncio.Event) -> None:
+        await start.wait()
         log.append(record)
 
+    start = asyncio.Event()
     r1 = ("n1", 100, "h1", {"a": 1})
     r2 = ("n1", 100, "h1", {"a": 2})
-    await asyncio.gather(worker(r1, 0), worker(r2, 0.01))
+    t1 = asyncio.create_task(worker(r1, start))
+    t2 = asyncio.create_task(worker(r2, start))
+    start.set()
+    await asyncio.gather(t1, t2)
 
     dedup = CommitLogDeduplicator()
     out = list(dedup.filter(log))

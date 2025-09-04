@@ -91,9 +91,11 @@ async def test_check_dependencies_parallel(monkeypatch):
 
     start_times: dict[str, float] = {}
 
+    done: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
     async def record(name: str) -> bool:
         start_times[name] = asyncio.get_running_loop().time()
-        await asyncio.sleep(0.1)
+        await done
         return True
 
     async def record_redis() -> bool:
@@ -110,7 +112,13 @@ async def test_check_dependencies_parallel(monkeypatch):
     dag.status = AsyncMock(side_effect=record_dag)
 
     start = asyncio.get_running_loop().time()
-    await mgr.evaluate()
+    eval_task = asyncio.create_task(mgr.evaluate())
+    try:
+        await asyncio.wait_for(asyncio.shield(eval_task), timeout=0.01)
+    except asyncio.TimeoutError:
+        pass
+    done.set_result(None)
+    await eval_task
     duration = asyncio.get_running_loop().time() - start
 
     assert duration < 0.25
