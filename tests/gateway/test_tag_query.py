@@ -85,7 +85,7 @@ class DummyDag(DagManagerClient):
 @pytest.fixture
 def client(fake_redis):
     dag = DummyDag()
-    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
+    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag, enable_background=False)
     with TestClient(app) as c:
         yield c, dag
     asyncio.run(dag.close())
@@ -164,7 +164,7 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
             return [{"queue": f"{tags[0]}_q", "global": False}]
 
     dag = ErrorDag()
-    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag)
+    app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag, enable_background=False)
     with TestClient(app) as c:
         dag_json = {
             "nodes": [

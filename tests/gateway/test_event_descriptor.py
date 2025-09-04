@@ -40,7 +40,7 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
         stream_url="wss://gateway/ws/evt",
         fallback_url="wss://gateway/ws",
     )
-    app = create_app(redis_client=fake_redis, database=FakeDB(), event_config=cfg)
+    app = create_app(redis_client=fake_redis, database=FakeDB(), event_config=cfg, enable_background=False)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {
@@ -69,7 +69,7 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
 @pytest.mark.asyncio
 async def test_event_descriptor_secret_from_env(fake_redis, monkeypatch):
     monkeypatch.setenv("QMTL_EVENT_SECRET", "envsecret")
-    app = create_app(redis_client=fake_redis, database=FakeDB())
+    app = create_app(redis_client=fake_redis, database=FakeDB(), enable_background=False)
     cfg: EventDescriptorConfig = app.state.event_config
     assert cfg.keys[cfg.active_kid] == "envsecret"
 
