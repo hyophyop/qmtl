@@ -32,17 +32,16 @@ async def test_event_subscription_endpoints():
     )
     app = FastAPI()
     app.include_router(create_event_router(hub, cfg))
-    transport = httpx.ASGITransport(app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/events/jwks")
-        assert resp.status_code == 200
-        payload = {"world_id": "w", "strategy_id": "s", "topics": ["queues"]}
-        sub = await client.post("/events/subscribe", json=payload)
-        assert sub.status_code == 200
-        data = sub.json()
-        assert data["stream_url"] == "ws://test/ws"
-        assert data["topics"] == ["queues"]
-    await transport.aclose()
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/events/jwks")
+            assert resp.status_code == 200
+            payload = {"world_id": "w", "strategy_id": "s", "topics": ["queues"]}
+            sub = await client.post("/events/subscribe", json=payload)
+            assert sub.status_code == 200
+            data = sub.json()
+            assert data["stream_url"] == "ws://test/ws"
+            assert data["topics"] == ["queues"]
 
 
 def test_ws_fallback_endpoint_connects():

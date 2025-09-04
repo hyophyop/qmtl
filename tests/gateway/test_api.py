@@ -34,18 +34,17 @@ def app(fake_redis):
 
 @pytest.mark.asyncio
 async def test_ingest_and_status(app):
-    transport = httpx.ASGITransport(app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        payload = StrategySubmit(
-            dag_json="{}",
-            meta={"user": "alice"},
-            node_ids_crc32=crc32_of_list([]),
-        )
-        resp = await client.post("/strategies", json=payload.model_dump())
-        assert resp.status_code == 202
-        sid = resp.json()["strategy_id"]
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = StrategySubmit(
+                dag_json="{}",
+                meta={"user": "alice"},
+                node_ids_crc32=crc32_of_list([]),
+            )
+            resp = await client.post("/strategies", json=payload.model_dump())
+            assert resp.status_code == 202
+            sid = resp.json()["strategy_id"]
 
-        resp = await client.get(f"/strategies/{sid}/status")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "queued"
-    await transport.aclose()
+            resp = await client.get(f"/strategies/{sid}/status")
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "queued"

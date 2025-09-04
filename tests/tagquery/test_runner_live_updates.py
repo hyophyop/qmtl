@@ -8,6 +8,14 @@ from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.ws import WebSocketHub
 
 
+async def wait_for(condition, timeout: float = 1.0) -> None:
+    async def _wait() -> None:
+        while not condition():
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(_wait(), timeout)
+
+
 class DummyDag:
     async def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
@@ -106,7 +114,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     async with Runner.session(
         TQStrategy, world_id="tq_live_updates", gateway_url="http://gw"
     ) as strat:
-        await asyncio.sleep(0.1)
+        await wait_for(lambda: bool(strat.tag_query_manager._nodes))
 
         await hub.send_queue_update(
             ["t1"],
@@ -125,9 +133,9 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
                 },
             }
         )
-        await asyncio.sleep(0.1)
+
         node = strat.tq
-        assert node.upstreams == ["q1"]
+        await wait_for(lambda: node.upstreams == ["q1"])
         assert node.execute
         assert hasattr(strat, "tag_query_manager")
     await transport.aclose()
