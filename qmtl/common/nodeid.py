@@ -26,6 +26,7 @@ def compute_node_id(
         Previously generated IDs to detect collisions. If the computed SHA-256
         hash already exists in this set, SHA-3-256 is used instead.
     """
+    # Include world_id to guarantee isolation across worlds
     data = f"{world_id}:{node_type}:{code_hash}:{config_hash}:{schema_hash}".encode()
     try:
         sha = hashlib.sha256(data).hexdigest()

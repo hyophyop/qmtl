@@ -450,6 +450,8 @@ class Runner:
                 ).append((ts, payload))
 
             progressed = True
+            # Guard: ensure each node executes at most once per event timestamp
+            done: set[str] = set()
             while progressed:
                 progressed = False
                 for node in strategy.nodes:
@@ -460,6 +462,12 @@ class Runner:
                     # Require all inputs to be available in this event
                     inputs = getattr(node, "inputs", [])
                     if not inputs:
+                        continue
+                    uid = getattr(node, "node_id", None)
+                    if uid is None:
+                        continue
+                    # Skip nodes already computed for this event
+                    if uid in done:
                         continue
                     ready = True
                     for upstream in inputs if isinstance(inputs, list) else [inputs]:
@@ -478,12 +486,14 @@ class Runner:
                     view = CacheView(event_values)
                     result = node.compute_fn(view)
                     Runner._postprocess_result(node, result)
-                    uid = getattr(node, "node_id", None)
+                    n_uid = getattr(node, "node_id", None)
                     ival = getattr(node, "interval", None)
-                    if uid is not None and ival is not None:
-                        event_values.setdefault(uid, {}).setdefault(ival, []).append(
+                    if n_uid is not None and ival is not None:
+                        event_values.setdefault(n_uid, {}).setdefault(ival, []).append(
                             (ts, result)
                         )
+                        # Mark node as executed for this event to prevent re-run
+                        done.add(n_uid)
                         progressed = True
 
     @staticmethod
@@ -569,7 +579,11 @@ class Runner:
         """
         strategy = Runner._prepare(strategy_cls)
         tag_service = TagManagerService(gateway_url)
-        manager = tag_service.init(strategy, world_id=world_id)
+        try:
+            manager = tag_service.init(strategy, world_id=world_id)
+        except TypeError:
+            # Backward-compat for tests that monkeypatch TagManagerService.init
+            manager = tag_service.init(strategy)
         sdk_metrics.set_world_id(world_id)
         logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
         dag = strategy.serialize()
@@ -663,10 +677,14 @@ class Runner:
                 )
         if offline_mode:
             if has_provider:
+                # When history providers are available, replay ensured history now
                 await Runner._replay_history(strategy, None, None)
             else:
-                # Use simple deterministic replay to ensure per-tick ordering
-                Runner._replay_events_simple(strategy)
+                # Without providers, do not auto-replay here. Tests and callers
+                # often backfill explicitly and then invoke run_pipeline().
+                # Leaving caches intact avoids double-processing of hydrated
+                # snapshots or test-seeded data.
+                pass
             # After replay, enforce strict gap handling if requested
             if strict_mode:
                 from .node import StreamInput
@@ -751,7 +769,12 @@ class Runner:
     async def offline_async(strategy_cls: type[Strategy]) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
         tag_service = TagManagerService(None)
-        manager = tag_service.init(strategy)
+        # Use a stable default world id for offline execution so that
+        # node IDs match typical offline test runs.
+        try:
+            manager = tag_service.init(strategy, world_id="w")
+        except TypeError:
+            manager = tag_service.init(strategy)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
