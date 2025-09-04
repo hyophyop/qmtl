@@ -227,11 +227,19 @@ Note: Control updates (e.g., queue/tag changes, traffic weights) are published t
 
 ## 5. 장애 시나리오 & 복구 (확장)
 
-| 장애                    | 영향              | 탐지 메트릭                        | 복구 절차                                  | 알림         |
-| --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
-| Neo4j leader down     | Diff 거절         | `raft_leader_is_null`         | Automat. leader election               | PagerDuty  |
-| Kafka ZK session loss | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
-| Diff Stream stall     | Gateway timeout | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie   |
+Gateway와 DAG Manager는 주기적인 상태 확인 요청과 ACK 응답을 교환하여 스트림 건강을 모니터링한다. 하트비트 ACK이 누락되면 Gateway는 즉시 `status` 요청을 보내고, 마지막으로 확인된 ACK 오프셋에서 복구를 시작한다.
+
+```mermaid
+sequenceDiagram
+    Gateway->>DAGM: status()
+    DAGM-->>Gateway: ack
+```
+
+| 장애                    | 영향       | 탐지 메트릭            | 복구 절차                                 | 알림       |
+| --------------------- | ---------- | --------------------- | ---------------------------------------- | ---------- |
+| Neo4j leader down     | Diff 거절    | `raft_leader_is_null` | Automat. leader election                 | PagerDuty  |
+| Kafka ZK session loss | 토픽 생성 실패 | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
+| Diff Stream stall     | ACK 누락    | `ack_status=missing`  | `status` 재요청 후 마지막 ACK 오프셋에서 재개 | Opsgenie   |
 
 ---
 

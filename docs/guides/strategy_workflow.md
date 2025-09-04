@@ -192,10 +192,20 @@ The helpers are idempotent and safe to call even if no background services are a
 
 ### Test Mode Budgets
 
-Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
+Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side budgets that reduce the chance of hangs in flaky environments:
 
-- HTTP clients: short default timeout (≈1.5s)
-- WebSocket client: shorter receive timeout and overall max runtime (≈5s)
+- HTTP clients: issue explicit status requests and retry on missing ACK rather than relying on short timeouts.
+- WebSocket client: rely on application-level heartbeats and ACKs with a bounded retry window instead of receive timeouts.
+
+Example heartbeat loop:
+
+```python
+while True:
+    await ws.send({"op": "heartbeat"})
+    ack = await ws.recv()
+    if ack.get("op") != "ack":
+        raise RuntimeError("missing ACK")
+```
 
 Example:
 

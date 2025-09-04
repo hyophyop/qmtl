@@ -150,7 +150,7 @@ Skew Metrics
 - `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
 
 Alerts
-- Decision failures, apply timeouts, stale activation cache at Gateway
+- Decision failures, missing apply ACKs, stale activation cache at Gateway
 
 ---
 
@@ -158,6 +158,7 @@ Alerts
 
 - WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute‑only/inactive). Activation defaults to inactive.
 - Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
+- Heartbeat/ACK: Gateway periodically issues `status` probes and expects explicit ACK; missing responses trigger an immediate retry cycle without relying on fixed timeouts.
 - Policy parse errors: reject version; keep prior default.
 
 ---
