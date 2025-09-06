@@ -132,7 +132,7 @@ Content‑Type: application/json
 {
   "dag_json": "<base64>",
   "meta": { "user": "quant.alice", "desc": "BTC scalper" },
-  "world_id": "crypto_mom_1h"
+  "world_ids": ["crypto_mom_1h", "crypto_alt_1h"]  // or legacy single field: "world_id"
 }
 ```
 
@@ -172,7 +172,7 @@ Acceptance tests cover: (a) two workers competing for the same key yield exactly
 
 ### S4 · Architecture Alignment
 
-The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed from `(node_type, code_hash, config_hash, schema_hash)` using BLAKE3; in the unlikely event of a collision or for strengthening, use BLAKE3 XOF with a longer digest. Gateway must generate the same IDs before calling the DiffService.
+The architecture document (§3) defines the deterministic NodeID used across Gateway and DAG Manager. Each NodeID is computed as `blake3:<digest>` over the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id (stable across minor/patch), code_hash)`. Non-deterministic fields are excluded; the `blake3:` prefix is mandatory, and BLAKE3 XOF may be used for strengthening. Gateway must generate the same IDs before calling the DiffService.
 
 Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
 
@@ -251,7 +251,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
 - Strategy submission and worlds:
-  - SDKs include `world_id` when submitting a strategy; execution mode is determined by WorldService decisions.
+  - Clients may include `world_id` (single) **or** `world_ids[]` (multiple). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
 
 ### Event Stream Descriptor
 

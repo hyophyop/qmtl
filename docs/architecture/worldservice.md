@@ -44,11 +44,12 @@ WorldAuditLog (DB)
 
 ### 1‑A. WVG Data Model (normative)
 
-WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes:
+WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes (Global Strategy Graph=GSG):
 
 - WorldNodeRef (DB): `(world_id, node_id)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
-- Validation (DB): `eval_key = blake3(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)`, `result`, `metrics{}`, `timestamp`
+- Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' prefix required**), `result`, `metrics{}`, `timestamp`
 - DecisionEvent (DB/Event): `event_id`, `world_id`, `node_id`, `decision` (`stop|pause|resume|quarantine`), `reason_code`, `scope` (default `world-local`), `propagation_rule`, `ttl`, `timestamp`
+- **WvgEdgeOverride (DB):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다.
 
 SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycle and emits changes via ControlBus.
 
@@ -63,6 +64,10 @@ Policies
 - POST /worlds/{id}/policies  (upload new version)
 - GET /worlds/{id}/policies   (list) | GET /worlds/{id}/policies/{v}
 - POST /worlds/{id}/set-default?v=V
+
+Bindings
+- POST /worlds/{id}/bindings        (upsert WSB: bind `strategy_id` to world)
+- GET  /worlds/{id}/bindings        (list; filter by `strategy_id`)
 
 Decisions & Control
 - GET /worlds/{id}/decide?as_of=... → DecisionEnvelope
@@ -192,7 +197,8 @@ Alerts
 
 Runner & SDK Integration (clarification)
 - SDK/Runner do not expose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
-- `effective_mode` in DecisionEnvelope is computed by WS and treated as input by SDK. Unknown or stale decisions default to compute‑only with order gates OFF.
+- `effective_mode` in DecisionEnvelope is computed by WS and treated as input by SDK. Unknown or stale decisions default to compute-only with order gates OFF.
+- 제출 시 Gateway는 각 `world_id`에 대해 **WSB upsert**를 보장하며, WVG에 `WorldNodeRef(root)`를 생성/갱신한다.
 
 ---
 
