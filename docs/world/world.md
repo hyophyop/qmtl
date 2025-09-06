@@ -111,8 +111,8 @@ def apply_hysteresis(prev, checks, h):
 ## 6. 통합 지점(기존 기능 재사용)
 
 - Runner: 월드 결정(WS)에 따르는 단일 진입점 `run(world_id=...)`과 `offline()`만 제공한다. 월드 결정 결과는 “활성화 게이트”를 통해 주문 발동을 제어한다.
-- Gateway: 제출/상태/큐 조회 API 그대로 사용(./docs/architecture/gateway.md). 월드용 얇은 엔드포인트(활성 테이블 조회/적용, 감사 기록)만 확장한다.
-- DAG Manager: NodeID/토픽, TagQuery 동작은 변경하지 않는다(./docs/architecture/dag-manager.md).
+- Gateway: 제출/상태/큐 조회 API 그대로 사용(../architecture/gateway.md). 월드용 얇은 엔드포인트(활성 테이블 조회/적용, 감사 기록)만 확장한다.
+- DAG Manager: NodeID/토픽, TagQuery 동작은 변경하지 않는다(../architecture/dag-manager.md).
 - 메트릭: SDK/Gateway/DAG Manager의 기존 Prometheus 메트릭을 재사용한다.
 
 ### 6.1 World‑First Runner Execution

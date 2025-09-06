@@ -56,6 +56,7 @@ plugins:
   - search
   - macros
   - mkdocs-breadcrumbs-plugin:
+      log_level: WARNING
       exclude_paths:
         - architecture
         - architecture/**

@@ -83,6 +83,13 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ### 1.3 NodeID Generation
 - NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
 - Non-deterministic fields (timestamps, RNG seeds, environment variables) are **excluded** from the input. All separable parameters must be split into individual fields and serialized in canonical JSON with sorted keys and fixed numeric precision.
+- NodeID MUST NOT include `world_id`. World-local isolation belongs to the World View Graph (WVG) and queue namespaces (e.g., world `topic_prefix`).
+- TagQueryNode canonicalization:
+  - Do not include the runtime-resolved upstream queue set in `dependencies`.
+  - Include the query spec in `params_canon` instead (normalized `query_tags` sorted, `match_mode`, and `interval`).
+  - Dynamic queue discovery/expansion is handled via ControlBus events and does not affect NodeID.
+- `schema_compat_id` is used (not raw `schema_hash`) so that minor schema changes can be buffered without forcing a brand-new NodeID; full schema incompatibility still produces a new ID.
+- Presentation-only metadata (display `name`, classification `tags`) are not part of NodeID. Only functional parameters belong in `params_canon`.
 - Use BLAKE3; on collision-hardening use **BLAKE3 XOF** (longer output) with domain separation. All IDs must carry the `blake3:` prefix.
 - Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
 - **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
