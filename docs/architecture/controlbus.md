@@ -51,7 +51,7 @@ ActivationUpdated (versioned)
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z",
-  "state_hash": "sha256:..."
+  "state_hash": "blake3:..."
 }
 ```
 
@@ -75,7 +75,7 @@ PolicyUpdated (versioned)
   "version": 1,
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
-  "checksum": "sha256:...",
+  "checksum": "blake3:...",
   "status": "ACTIVE",
   "ts": "2025-08-28T09:00:00Z"
 }

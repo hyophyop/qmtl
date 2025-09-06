@@ -14,6 +14,11 @@ last_modified: 2025-08-29
 - ActivationUpdated (event): reference/schemas/event_activation_updated.schema.json
 - QueueUpdated (event): reference/schemas/event_queue_updated.schema.json
 - PolicyUpdated (event): reference/schemas/event_policy_updated.schema.json
+- Node (GSG): reference/schemas/node.schema.json
+- World: reference/schemas/world.schema.json
+- WorldNodeRef (WVG): reference/schemas/world_node_ref.schema.json
+- Validation (WVG): reference/schemas/validation.schema.json
+- DecisionEvent (WVG): reference/schemas/decision_event.schema.json
 
 ## Registry Integration (optional)
 

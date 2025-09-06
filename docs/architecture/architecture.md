@@ -66,6 +66,20 @@ graph LR
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
 
+### 전역-로컬 분리와 불변식 (GSG/WVG)
+
+- SSOT 경계: GSG(전역 DAG)는 DAG Manager(불변/append‑only), WVG(월드 오버레이)는 WorldService(가변)가 소유한다. Gateway는 프록시/캐시이며 SSOT가 아니다.
+- 불변식
+  - 전역 유일성: 동일 내용의 노드는 하나의 NodeID만 존재(MUST).
+  - 월드‑로컬 격리: 유효성·중단 결정은 기본 world‑local로 독립(MUST).
+  - 명시적 전파만 허용: 전파는 scope/규칙/TTL 명시 시에만 허용(MUST).
+  - 재현성: Validation은 컨텍스트 해시(EvalKey)로 캐시(SHOULD).
+- EvalKey (BLAKE3)
+```
+EvalKey = H(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
+```
+같은 노드여도 월드/데이터/정책/코드/자원이 다르면 재평가한다.
+
 ### World ID 전달 흐름
 
 `world_id`는 전략 실행 시 `Runner`로부터 `TagQueryManager`와 `ActivationManager`로 전달되어 큐 조회와 활성 이벤트 구독에 사용됩니다. 이 값은 다시 각 노드의 `world_id` 속성과 메트릭 레이블에 주입되어 월드별 데이터가 명확히 구분됩니다.
@@ -112,7 +126,7 @@ Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
 1. **결정적 노드 식별자(NodeID)** :
 
    * 구성: `(node_type, code_hash, config_hash, schema_hash)`
-   * 해시 알고리즘: SHA-256 → 충돌 감지 시 SHA-3 fallback
+   * 해시 알고리즘: BLAKE3 (필요 시 BLAKE3 XOF로 길이 확장)
 2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
    자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](../operations/canary_rollout.md)에서 설명한다.
 3. **CloudEvents 기반 이벤트 스펙 도입** : 표준 이벤트 정의를 통해 시스템 확장성과 언어 독립성을 확보

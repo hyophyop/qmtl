@@ -19,5 +19,12 @@ last_modified: 2025-08-29
 - data_currency: Freshness policy comparing `now` and `data_end` to choose initial mode.
 - state_hash: Optional hash of an activation set snapshot, used to detect divergence cheaply.
 
-{{ nav_links() }}
+- Global Strategy Graph (GSG): Content‑addressed, deduplicated global DAG of strategies and nodes; immutable/append‑only SSOT owned by DAG Manager.
+- World View Graph (WVG): Per‑world overlay referencing GSG nodes with world‑local metadata (status, validation, decisions); mutable SSOT owned by WorldService.
+- NodeID: Deterministic BLAKE3 hash of a node’s canonical form: `(node_type, interval, period, params(canonical, split), dependencies(sorted), schema_id, code_hash)`.
+- EvalKey: BLAKE3 hash for world‑local validation cache: `(NodeID, WorldID, ContractID, DatasetFingerprint, CodeVersion, ResourcePolicy)`.
+- WorldNodeRef: `(world_id, node_id)` scoped record storing world‑local status, `last_eval_key`, and annotations.
+- DecisionEvent: Operational action (`stop|pause|resume|quarantine`) for a `node_id` (strategy root allowed); default `scope=world-local`, optional propagation with TTL.
+- SSOT boundary: DAG Manager owns GSG only; WorldService owns WVG only. Gateway proxies/caches; it is not an SSOT.
 
+{{ nav_links() }}

@@ -42,6 +42,16 @@ WorldAuditLog (DB)
 - id, world_id, actor, event (create/update/apply/evaluate/activate/override)
 - request, result, created_at, correlation_id
 
+### 1‑A. WVG Data Model (normative)
+
+WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes:
+
+- WorldNodeRef (DB): `(world_id, node_id)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
+- Validation (DB): `eval_key = blake3(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)`, `result`, `metrics{}`, `timestamp`
+- DecisionEvent (DB/Event): `event_id`, `world_id`, `node_id`, `decision` (`stop|pause|resume|quarantine`), `reason_code`, `scope` (default `world-local`), `propagation_rule`, `ttl`, `timestamp`
+
+SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycle and emits changes via ControlBus.
+
 ---
 
 ## 2. API Surface (summary)
@@ -56,6 +66,7 @@ Policies
 
 Decisions & Control
 - GET /worlds/{id}/decide?as_of=... → DecisionEnvelope
+- POST /worlds/{id}/decisions       (post operational DecisionEvent; default scope=world-local)
 - GET /worlds/{id}/activation?strategy_id=...&side=... → ActivationEnvelope
 - PUT /worlds/{id}/activation          (manual override; optional TTL)
 - POST /worlds/{id}/evaluate           (plan only)
@@ -111,6 +122,17 @@ TTL & Staleness
 - Hysteresis: promote_after, demote_after, min_dwell to avoid flapping
 
 The evaluation returns DecisionEnvelope and an optional plan for apply.
+
+### 4‑A. Operational Decision Events (WVG)
+
+- Default scope is `world-local` (MUST). Non‑local scopes require explicit `scope`, `propagation_rule`, and `ttl`, and follow an approval workflow before consumption.
+- DecisionEvent targets a `node_id` (strategy root allowed). Effects are world‑scoped unless propagation explicitly applies.
+- Storage: DecisionEvents are recorded in WS (DB) and published on ControlBus with an `etag`.
+
+### 4‑B. EvalKey and Validation Caching
+
+- EvalKey = `blake3(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)`
+- Any change in the components invalidates cache and triggers re‑validation.
 
 ---
 

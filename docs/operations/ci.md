@@ -64,3 +64,12 @@ def test_long_running_case():
 
 - Mark long/external tests as `slow` and, if needed, exclude them from preflight with `-k 'not slow'`.
 - Avoid unbounded network waits; always set client timeouts in tests.
+
+## Architecture Invariants (advisory checks)
+
+Add lightweight checks (unit/integration) that fail fast when core invariants are violated:
+
+- GSG NodeID uniqueness: no duplicate `node_id` across inserted nodes; NodeID computed via BLAKE3 canonicalization.
+- World‑local isolation: a `stop` DecisionEvent in World A must not affect World B state.
+- EvalKey invalidation: changing `DatasetFingerprint`/`ContractID`/`CodeVersion` or `ResourcePolicy` produces a new `eval_key` and re‑validation.
+- Scope defaults: DecisionEvent without `scope` is treated as `world-local`.

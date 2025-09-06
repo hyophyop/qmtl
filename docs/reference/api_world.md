@@ -40,6 +40,25 @@ Response (DecisionEnvelope)
 ```
 Schema: reference/schemas/decision_envelope.schema.json
 
+### POST /worlds/{id}/decisions
+Posts an operational DecisionEvent (stop/pause/resume/quarantine). Default scope is `world-local`. Non‑local scopes require explicit `scope`, `propagation_rule`, and `ttl` and may be subject to approval.
+
+Request (DecisionEvent)
+```json
+{
+  "event_id": "...",
+  "world_id": "crypto_mom_1h",
+  "node_id": "blake3:...",
+  "decision": "stop",
+  "reason_code": "VAL_FAIL",
+  "scope": "world-local",
+  "propagation_rule": "none",
+  "ttl": "P0D",
+  "timestamp": "2025-08-28T09:00:00Z"
+}
+```
+Schema: reference/schemas/decision_event.schema.json
+
 ### GET /worlds/{id}/activation
 Returns activation for a strategy/side.
 
@@ -68,7 +87,7 @@ Example: `/worlds/{id}/activation/state_hash`
 
 Response
 ```json
-{ "state_hash": "sha256:..." }
+{ "state_hash": "blake3:..." }
 ```
 
 ### POST /worlds/{id}/evaluate
