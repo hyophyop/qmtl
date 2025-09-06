@@ -81,7 +81,7 @@ D. 월드 레벨 리스크 엔진(필수)
 	•	선정과 병렬: Top‑K로 ‘무엇을’ 고르고, 리스크 엔진으로 ‘얼마나’ 할지를 결정. (선정=구성, 리스크=용량 배분/제약)
 
 E. 멀티‑월드·공유 노드의 안전 운영
-	•	World‑SILO 기본, SHARED 선택: 노드 ID에 world_id 포함, 공용 지표/원시 데이터만 share_scope=GLOBAL 허용(점진 도입).
+	•	World‑SILO 기본, SHARED 선택: NodeID는 글로벌(GSG)이며 world_id를 포함하지 않는다. 공용 지표/원시 데이터는 share_scope=GLOBAL로 허용하고, 월드 격리는 Kafka topic_prefix/WVG(World View Graph)에서 수행한다(점진 도입).
 	•	Mark‑&‑Sweep + 드레인: 월드별 활성 알파 집합을 기준으로 역방향 마킹 후, **드레인 시간(최대 period×interval)**을 보장하고 비표시 노드만 정리. 버전드 DAG + 롤백 포인트 필수.  ￼
 	•	초안의 가지치기/파티셔닝 원칙을 안전장치 포함으로 강화.  ￼
 

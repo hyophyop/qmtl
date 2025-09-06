@@ -1,3 +1,3 @@
 # Index of templates
 
-- [template](/templates/template/)
+- [template](template.md)

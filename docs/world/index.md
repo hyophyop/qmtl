@@ -1,6 +1,6 @@
 # Index of world
 
-- [realm_rename_eval](/world/realm_rename_eval/)
-- [world](/world/world/)
-- [world_refined](/world/world_refined/)
-- [world_todo](/world/world_todo/)
+- [realm_rename_eval](realm_rename_eval.md)
+- [world](world.md)
+- [world_refined](world_refined.md)
+- [world_todo](world_todo.md)
