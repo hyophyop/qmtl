@@ -68,15 +68,20 @@ graph LR
 
 ### 전역-로컬 분리와 불변식 (GSG/WVG)
 
+본 문서에서는 약어를 다음과 같이 사용한다.
+- Global Strategy Graph (GSG): 내용 주소화된 전역 DAG로, 동일 내용 노드의 전역 유일성(uniqueness)을 보장하는 불변/append‑only 그래프. DAG Manager가 SSOT이다. 상세 용어는 Architecture Glossary를 참조한다(architecture/glossary.md).
+- World View Graph (WVG): 각 월드(World)가 GSG를 참조하여 구성하는 월드‑로컬 오버레이 그래프. 유효성/상태/결정 등 월드 의존 메타데이터를 보관하며 WorldService가 SSOT이다. 상세 용어는 Architecture Glossary를 참조한다(architecture/glossary.md).
+
 - SSOT 경계: GSG(전역 DAG)는 DAG Manager(불변/append‑only), WVG(월드 오버레이)는 WorldService(가변)가 소유한다. Gateway는 프록시/캐시이며 SSOT가 아니다.
 - 불변식
   - 전역 유일성: 동일 내용의 노드는 하나의 NodeID만 존재(MUST).
   - 월드‑로컬 격리: 유효성·중단 결정은 기본 world‑local로 독립(MUST).
   - 명시적 전파만 허용: 전파는 scope/규칙/TTL 명시 시에만 허용(MUST).
   - 재현성: Validation은 컨텍스트 해시(EvalKey)로 캐시(SHOULD).
-- EvalKey (BLAKE3)
+- 월드-로컬 에지 오버라이드: 특정 월드에서 비활성화할 에지는 **WVG**의 `WvgEdgeOverride`로 기록(MAY).
+- EvalKey (BLAKE3, namespaced)
 ```
-EvalKey = H(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
+EvalKey = blake3:(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
 ```
 같은 노드여도 월드/데이터/정책/코드/자원이 다르면 재평가한다.
 
@@ -109,6 +114,14 @@ Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
 
 위 호출에서 `TagQueryManager`는 `GET /queues/by_tag` 요청에 `world_id`를 포함하고, `ActivationManager`는 `/worlds/{world_id}/activation`을 주기적으로 조회하여 주문 게이트와 메트릭에 반영합니다.
 
+#### WorldStrategyBinding (WSB)
+
+- **정의:** `WSB = (world_id, strategy_id)` 바인딩 레코드. 제출 시 각 월드에 대해 멱등적으로 생성된다.
+- **제출 방식:** Gateway의 `/strategies`는 이제 `world_ids[]`(복수) **또는** `world_id`(단수, 하위호환)를 받는다. SDK는 여전히 단일 `world_id` 실행을 권장하며, 다중 월드 운용 시에는 월드마다 프로세스를 분리한다.
+- **동작:** Gateway는 DAG Diff 이후 WorldService에 **WSB upsert**를 호출하여 해당 월드의 WVG에 `WorldNodeRef(root)`를 생성/갱신한다. Activation 및 Decision은 **항상 WVG(월드-로컬)** 에 기록된다.
+
+---
+
 ---
 
 ## 2. 전략 상태 전이 시나리오와 원인-결과 연쇄
@@ -123,10 +136,13 @@ Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
 
 ## 3. 구조적 기술 설계 및 메타 모델링 개선 제안
 
-1. **결정적 노드 식별자(NodeID)** :
+1. **결정적 노드 식별자(NodeID)** — *GSG Canonical ID*
 
-   * 구성: `(node_type, code_hash, config_hash, schema_hash)`
-   * 해시 알고리즘: BLAKE3 (필요 시 BLAKE3 XOF로 길이 확장)
+   - **정의:** NodeID = `blake3:<digest>` of the **canonical serialization** of  
+     `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
+   - **규칙:** 비결정적 필드(타임스탬프/난수 시드/환경변수 등)는 **입력에서 제외**. 모든 분리 가능한 파라미터는 `params`에서 **개별 필드**로 분리하고 키 정렬·정밀도 고정(JSON canonical form).
+   - **네임스페이스:** 해시 문자열은 반드시 `blake3:` **접두사**를 갖는다. 충돌 방지·강화를 위해 필요 시 **BLAKE3 XOF**로 길이 확장하고, 도메인 분리를 유지한다.
+   - **스키마 호환성:** NodeID 입력에는 `schema_compat_id`(Schema Registry의 major‑compat 식별자)를 사용한다. Minor/Patch 수준 변경에서는 동일 `schema_compat_id`를 유지하므로 Back‑compat 스키마 변경 시에도 `node_id`는 보존된다.
 2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
    자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](../operations/canary_rollout.md)에서 설명한다.
 3. **CloudEvents 기반 이벤트 스펙 도입** : 표준 이벤트 정의를 통해 시스템 확장성과 언어 독립성을 확보
@@ -240,13 +256,9 @@ TimeScaleDB의 Continuous Aggregates 원리를 연산 캐시 계층에 적용하
   ```python
   price_stream = StreamInput(
             tags=["BTC", "price"],  # 다중 태그로 큐 자동 매핑
-            interval="60s",    # 1분 간격 데이터
-            period=30       # 최소 30개 필요
+            interval="60s",         # 1분 간격 데이터
+            period=30                 # 최소 30개 필요
         )
-      tags=["BTC", "price"],  # 여러 태그 지정
-      interval="60s",
-      period=30
-  )
   ```
 * **큐 해석 규칙**
 
@@ -278,6 +290,7 @@ QMTL 실행은 월드(WorldService)의 결정에 의해 제어된다. Runner는 
 Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `period × interval` 데이터가 충족될 때까지 pre‑warmup 상태이며, 해당 조건 충족 이후에만 결과가 생성된다.
 
 핵심 동작 원칙:
+- 제출 시 `(world_id, strategy_id)` 바인딩(WSB)이 WorldService에 생성/보장된다.
 - 호출자는 `Runner.run(strategy_cls, world_id=..., gateway_url=...)`만 사용한다.
 - WS의 `effective_mode`는 내부 정책 결과이며, Runner는 이를 입력으로만 취급한다.
 - 활성 정보가 미상·만료 상태이거나 결정 TTL이 만료되면, Runner는 안전기본(compute‑only, 주문 게이트 OFF)로 유지한다.
@@ -488,8 +501,7 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
    수신해 각 노드의 버퍼를 자동 초기화한다.
 6. **Minor‑schema 버퍼링** — `schema_minor_change`는 재사용하되 7일 후 자동
    full‑recompute가 실행된다.
-7. **SSA DAG Lint** — SDK 빌드 시 DAG를 SSA 중간 표현으로 변환해 해시 불일치를
-   탐지한다.
+7. **GSG Canonicalize & SSA DAG Lint** — DAG를 canonical JSON + SSA로 변환해 **NodeID 재계산**이 일치하는지 검증한다(분리 가능한 파라미터 개별 필드화 포함).
 8. **Golden‑Signal Alert** — Prometheus Rule CRD로 `diff_duration_ms_p95`,
    `nodecache_resident_bytes`, `sentinel_gap_count`에 대한 Alert가 관리된다.
 9. **극단 장애 플레이북** — Neo4j 전체 장애, Kafka 메타데이터 손상, Redis AOF

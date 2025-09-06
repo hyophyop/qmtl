@@ -39,7 +39,7 @@ last_modified: 2025-08-21
 - **Ownership** — DAG Manager는 ComputeNode와 Queue 메타데이터의 단일 소스로서 토픽 생성·버전 롤아웃·GC를 전담한다. Gateway는 제출 파이프라인을 조정하지만 그래프 상태를 소유하지 않으며, WorldService는 월드·결정 상태를 유지한다.
 - **Commit Log** — 모든 큐는 Redpanda/Kafka의 append-only 토픽으로 구현되며, DAG Manager는 `QueueUpdated` 등 제어 이벤트를 ControlBus 토픽에 발행한다. 토픽 생성·삭제 이력도 관리 로그에 기록되어 장애 시점 복원과 감사(audit)을 지원한다.
 
-> Terminology / SSOT boundary: "GSG(전역 DAG)"의 SSOT는 DAG Manager이며 불변(append‑only)이다. 월드‑로컬 객체(WVG: WorldNodeRef, Validation, DecisionEvent)는 WorldService의 SSOT이며 DAG Manager는 저장하지 않는다(읽기/쓰기 금지).
+> Terminology / SSOT boundary: Global Strategy Graph(GSG, 전역 DAG)의 SSOT는 DAG Manager이며 불변(append‑only)이다. 월드‑로컬 객체(World View Graph=WVG: WorldNodeRef, Validation, DecisionEvent)는 WorldService의 SSOT이며 DAG Manager는 저장하지 않는다(읽기/쓰기 금지). 용어 정의는 Architecture Glossary(architecture/glossary.md) 참고.
 
 ### 0-A.1 Commit-Log Message Keys and Partitioning
 
@@ -60,7 +60,7 @@ last_modified: 2025-08-21
 
 | Label             | 필수 속성                                                           | 선택 속성                                   | 설명                      |
 | ----------------- | --------------------------------------------------------------- | --------------------------------------- | ----------------------- |
-| `ComputeNode`     | `node_id`(pk), `interval`, `period`, `code_hash`, `schema_hash`, `schema_id` | `created_at`, `tags[]`, `owner`         | DAG 연산 노드 (지표·전처리·매매 등) |
+| `ComputeNode`     | `node_id`(pk), `node_type`, `interval`, `period`, `code_hash`, `schema_compat_id`, `params_canon` | `created_at`, `tags[]`, `owner`, `schema_hash`         | DAG 연산 노드 (지표·전처리·매매 등) |
 | `Queue`           | `topic`, `created_at`, `ttl`, `retention_ms`                    | `brokers`, `tag`, `lag_alert_threshold` | Kafka/Redpanda 토픽       |
 | `VersionSentinel` | `version`, `commit_hash`, `created_at`                          | `release_tag`, `traffic_weight`         | 버전 경계 · 롤백 포인트          |
 | `Artifact`        | `path`, `checksum`, `size`                                      | `framework`, `dtype`                    | 모델·파라미터 파일 등 binary     |
@@ -81,10 +81,11 @@ ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
 CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ```
 ### 1.3 NodeID Generation
-- NodeID = BLAKE3 hash of `(node_type, code_hash, config_hash, schema_hash)`.
-- On collision detection increase digest strength via BLAKE3 XOF (longer output) and maintain domain separation.
-- Uniqueness enforced via `compute_pk` constraint.
-- `schema_id` references the Schema Registry entry for the node's message format.
+- NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
+- Non-deterministic fields (timestamps, RNG seeds, environment variables) are **excluded** from the input. All separable parameters must be split into individual fields and serialized in canonical JSON with sorted keys and fixed numeric precision.
+- Use BLAKE3; on collision-hardening use **BLAKE3 XOF** (longer output) with domain separation. All IDs must carry the `blake3:` prefix.
+- Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
+- **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
 
 ---
 
@@ -101,13 +102,13 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
    * 파이썬 `orjson` → DAG dict → topo sort → node\_id list.
 2. **DB Fetch** Batch `MATCH (c:ComputeNode WHERE c.node_id IN $list)` → 기존 노드 맵.
-3. **Hash Compare**
+3. **Hash Compare**
 
-   | 케이스                             | 처리               | 큐 정책                                             |
-   | ------------------------------- | ---------------- | ------------------------------------------------ |
-   | code\_hash & schema\_hash 완전 동일 | **재사용**          | 기존 Queue join                                    |
-   | Back‑compat 스키마 변경              | **재사용 + 버퍼링 모드** | 큐 lag = history size, 7일 이후 자동 full‑recompute |
-   | Breaking 스키마 or code 변경         | **신규 노드·큐**      | `topic_suffix=_v{n}`, TTL inherit                |
+   | 케이스                 | 처리               | 큐 정책                                             |
+   | -------------------- | ---------------- | ------------------------------------------------ |
+   | `node_id` 동일          | **재사용**          | 기존 Queue join                                    |
+   | Back‑compat 스키마 변경    | **재사용 + 버퍼링 모드** | 큐 lag = history size, 7일 이후 자동 full‑recompute |
+   | `node_id` 상이           | **신규 노드·큐**      | `topic_suffix=_v{n}`, TTL inherit                |
 4. **Sentinel 삽입** `CREATE (:VersionSentinel{...})‑[:HAS]->(new_nodes)` (옵션)
 5. **Queue Upsert**
 
@@ -152,7 +153,7 @@ Sentinel weight updates are published as `sentinel_weight` events on the Control
 {asset}_{node_type}_{short_hash}_{version}
 ```
 
-* `short_hash = first 6 code_hash` → 충돌 시 길이+2.
+* `short_hash = first 8 of node_id digest` → 충돌 시 길이+2.
 * 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
 
 ### 3.2 QoS & 레플리카 설정
@@ -269,7 +270,7 @@ add Kafka brokers to sustain ingest throughput.
 | 취약점                  | 레벨     | 설명                           | 완화                                       |
 | -------------------- | ------ | ---------------------------- | ---------------------------------------- |
 | Graph Bloat          | Medium | 수천 version 누적                | Sentinel TTL·archive, offline compaction |
-| Hash Collision       | Low    | SHA256 collision improb.     | SHA‑3 512 fallback + audit log           |
+| Hash Collision       | Low    | BLAKE3 collision improbable  | Strengthen via **BLAKE3 XOF** (longer digest) + domain separation + audit log |
 | Queue Name collision | Low    | broker lower-case uniqueness | Append `_v{n}` suffix                    |
 | Stats Flood          | Medium | GetQueueStats abuse          | rate‑limit (5/s), authz scope            |
 
