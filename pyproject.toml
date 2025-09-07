@@ -25,6 +25,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx",
     "opentelemetry-instrumentation-grpc",
     "cachetools",
+    "blake3",
 ]
 
 [project.optional-dependencies]

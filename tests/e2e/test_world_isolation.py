@@ -13,11 +13,11 @@ from qmtl.sdk.metrics import node_processed_total, generate_latest, global_regis
 
 @pytest.mark.asyncio
 async def test_world_isolation(monkeypatch):
-    # 동일 전략 노드가 다른 world에서 서로 다른 ID를 갖는다
+    # 동일 전략 노드가 world에 관계없이 동일한 ID를 갖는다
     base = ("T", "code", "cfg", "schema")
-    nid1 = compute_node_id(*base, "w1")
-    nid2 = compute_node_id(*base, "w2")
-    assert nid1 != nid2
+    nid1 = compute_node_id(*base)
+    nid2 = compute_node_id(*base)
+    assert nid1 == nid2
 
     # world별 구독 토픽이 분리된다
     client = DagManagerClient("dummy")
@@ -44,13 +44,12 @@ async def test_world_isolation(monkeypatch):
     assert am1.allow_side("long") is True
     assert am2.allow_side("long") is False
 
-    # 메트릭 라벨이 world별로 분리된다
+    # 메트릭은 동일한 node_id에 집계된다
     node_processed_total.clear()
     node_processed_total.labels(node_id=nid1).inc()
     node_processed_total.labels(node_id=nid2).inc()
     metrics_text = generate_latest(global_registry).decode()
-    assert f'node_id="{nid1}"' in metrics_text
-    assert f'node_id="{nid2}"' in metrics_text
+    assert f'node_processed_total{{node_id="{nid1}"}} 2.0' in metrics_text
 
     # /events/subscribe 응답에 world 스코프가 포함된다
     cfg = EventDescriptorConfig(keys={"a": "secret"}, active_kid="a")
