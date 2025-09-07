@@ -94,3 +94,15 @@ Also Refs #119 for broader tracking
   `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and add `# Priority: gpt5pro` to the
   module header. Automated tooling should create an implementation branch/issue and record
   history in `docs/alphadocs_history.log`.
+
+## Automated Issue Runner (codex exec)
+
+- Purpose: when an issue list is present, automatically run Codex to iteratively execute and validate work under `qmtl/` using the reusable prompt at `codex_prompts/qmtl_issue_runner.prompt.md`.
+- Issue list location: set `ISSUE_SCOPE_FILE` to a Markdown/YAML/JSON file describing issues. Conventionally use `docs/issues/scope.md` in this repo.
+- Trigger condition: if `ISSUE_SCOPE_FILE` is set (or the default file exists), run the command below; otherwise skip.
+- Local run:
+  - `ISSUE_SCOPE_FILE=docs/issues/scope.md codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --color never - < codex_prompts/qmtl_issue_runner.prompt.md`
+- JSON logs (optional):
+  - `ISSUE_SCOPE_FILE=docs/issues/scope.md codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --json --output-last-message .codex_last.txt - < codex_prompts/qmtl_issue_runner.prompt.md`
+- CI hint: gate execution with a file check to auto-trigger only when an issue list exists:
+  - `test -n "$ISSUE_SCOPE_FILE" || ISSUE_SCOPE_FILE=docs/issues/scope.md; [ -f "$ISSUE_SCOPE_FILE" ] && codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --color never - < codex_prompts/qmtl_issue_runner.prompt.md || echo "No issue list; skipping Codex issue runner."`

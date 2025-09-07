@@ -229,7 +229,12 @@ def create_app(
         enforce_live_guard,
     )
     app.include_router(api_router)
-    event_router = create_event_router(ws_hub_local, event_cfg)
+    # Expose event endpoints (subscribe/JWKS and WS bridge). Pass world and
+    # dag clients so that initial snapshots/state hashes can be sent on
+    # connection when topics are scoped.
+    event_router = create_event_router(
+        ws_hub_local, event_cfg, world_client=world_client_local, dagmanager=dagmanager
+    )
     app.include_router(event_router)
 
     return app

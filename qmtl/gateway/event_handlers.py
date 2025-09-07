@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from qmtl.sdk.node import MatchMode
@@ -18,6 +19,16 @@ from .event_descriptor import (
 )
 from .models import EventSubscribeRequest, EventSubscribeResponse
 from .ws import WebSocketHub
+from .event_models import (
+    QueueUpdateData,
+    SentinelWeightData,
+    ActivationUpdatedData,
+    PolicyUpdatedData,
+    CloudEvent,
+)
+from . import metrics as gw_metrics
+
+logger = logging.getLogger(__name__)
 
 
 def create_event_router(
@@ -61,10 +72,40 @@ def create_event_router(
                         "policy": "policy",
                     }
                     topics_set = {normalize[t] for t in raw_topics if t in normalize}
+                else:
+                    # Missing token
+                    raise ValueError("missing token")
             except Exception:
+                gw_metrics.ws_auth_failures_total.inc()
+                logger.warning(
+                    "ws_auth_failed",
+                    extra={
+                        "event": "ws_auth_failed",
+                        "remote": getattr(websocket.client, "host", None),
+                    },
+                )
                 await websocket.close(code=1008)
                 return
+            logger.info(
+                "ws_connected",
+                extra={
+                    "event": "ws_connected",
+                    "strategy_id": (claims or {}).get("strategy_id"),
+                    "world_id": (claims or {}).get("world_id"),
+                    "topics": sorted(list(topics_set or set())),
+                },
+            )
+            gw_metrics.ws_connections_total.inc()
             await ws_hub.connect(websocket, topics=topics_set)
+            # Attach world/strategy filters for scope-based gating
+            try:
+                await ws_hub.set_filters(
+                    websocket,
+                    world_id=(claims or {}).get("world_id"),
+                    strategy_id=(claims or {}).get("strategy_id"),
+                )
+            except Exception:
+                pass
 
             # Enqueue initial snapshot or state hash per topic
             if topics_set:
@@ -127,10 +168,50 @@ def create_event_router(
 
             try:
                 while True:
-                    await websocket.receive_text()
+                    raw = await websocket.receive_text()
+                    # Treat any incoming message as a heartbeat; try to parse ack structure
+                    payload: dict[str, Any] | None = None
+                    try:
+                        payload = json.loads(raw)
+                    except Exception:
+                        payload = None
+                    if isinstance(payload, dict):
+                        msg_type = payload.get("type") or payload.get("event")
+                        if msg_type == "ack":
+                            gw_metrics.ws_acks_total.inc()
+                            logger.info(
+                                "ws_ack",
+                                extra={
+                                    "event": "ws_ack",
+                                    "last_id": payload.get("last_id"),
+                                },
+                            )
+                            # Echo back an acknowledgement
+                            try:
+                                await websocket.send_text(
+                                    json.dumps(
+                                        {
+                                            "type": "ack",
+                                            "ts": datetime.now(timezone.utc).isoformat(),
+                                            "last_id": payload.get("last_id"),
+                                        }
+                                    )
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            gw_metrics.ws_heartbeats_total.inc()
+                            logger.debug(
+                                "ws_heartbeat",
+                                extra={"event": "ws_heartbeat"},
+                            )
+                    else:
+                        gw_metrics.ws_heartbeats_total.inc()
             except WebSocketDisconnect:
                 pass
             finally:
+                gw_metrics.ws_disconnects_total.inc()
+                logger.info("ws_disconnected", extra={"event": "ws_disconnected"})
                 await ws_hub.disconnect(websocket)
 
     @router.post("/events/subscribe", response_model=EventSubscribeResponse)
@@ -163,5 +244,15 @@ def create_event_router(
     @router.get("/events/jwks")
     async def events_jwks() -> dict[str, Any]:
         return jwks(event_config)
+
+    @router.get("/events/schema")
+    async def events_schema() -> dict[str, Any]:
+        """Return JSON Schemas for WS event payloads."""
+        return {
+            "queue_update": CloudEvent[QueueUpdateData].model_json_schema(),
+            "sentinel_weight": CloudEvent[SentinelWeightData].model_json_schema(),
+            "activation_updated": CloudEvent[ActivationUpdatedData].model_json_schema(),
+            "policy_updated": CloudEvent[PolicyUpdatedData].model_json_schema(),
+        }
 
     return router
