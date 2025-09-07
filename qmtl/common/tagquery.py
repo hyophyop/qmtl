@@ -32,13 +32,13 @@ def normalize_match_mode(match_mode: str | None) -> MatchMode:
 def normalize_queues(raw: Iterable[Any]) -> list[str]:
     queues: list[str] = []
     for q in raw:
-        if isinstance(q, dict):
-            if q.get("global"):
-                continue
-            # Only accept unified 'queue' key; legacy 'topic' is not supported
-            val = q.get("queue")
-            if val:
-                queues.append(str(val))
-        else:
-            queues.append(str(q))
+        if not isinstance(q, dict):
+            # Canonical shape is a descriptor object; skip legacy strings
+            continue
+        if q.get("global"):
+            continue
+        # Only accept unified 'queue' key; legacy 'topic' is not supported
+        val = q.get("queue")
+        if val:
+            queues.append(str(val))
     return queues

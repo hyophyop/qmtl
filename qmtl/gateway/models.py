@@ -24,6 +24,18 @@ class StatusResponse(BaseModel):
     status: str
 
 
+class QueueDescriptor(BaseModel):
+    queue: str
+    global_: bool = Field(alias="global")
+
+    class Config:
+        populate_by_name = True
+
+
+class QueuesByTagResponse(BaseModel):
+    queues: list[QueueDescriptor] = Field(default_factory=list)
+
+
 class EventSubscribeRequest(BaseModel):
     world_id: str
     strategy_id: str

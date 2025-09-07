@@ -28,10 +28,10 @@ async def test_resolve_tags_normalizes_and_filters(monkeypatch):
                     return None
 
                 def json(self):
-                    # Mixed payload: strings, objects, and a global queue that must be filtered
+                    # All entries are descriptor objects; global=True must be filtered
                     return {
                         "queues": [
-                            "q1",
+                            {"queue": "q1", "global": False},
                             {"queue": "q2", "global": False},
                             {"queue": "q3", "global": True},
                         ]

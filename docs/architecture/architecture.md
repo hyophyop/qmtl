@@ -399,7 +399,7 @@ sequenceDiagram
     participant N as TagQueryNode
     R->>M: register TagQueryNode
     M->>G: GET /queues/by_tag
-    G-->>M: queue list
+    G-->>M: queue descriptors
     M->>N: update_queues(list)
     G-->>M: queue_update (WebSocket)
     M->>N: update_queues(list)

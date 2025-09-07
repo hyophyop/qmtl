@@ -12,9 +12,8 @@ last_modified: 2025-09-07
 - Overview: `TagQueryNode` selects upstream queues by tag set and interval. The Runner wires a per‑strategy `TagQueryManager` that resolves the initial queue list and applies live updates via WebSocket.
 - Endpoint: Gateway exposes `GET /queues/by_tag` with params `tags` (comma‑separated), `interval` (seconds), `match_mode` (`any`|`all`), and optional `world_id`.
 - Matching: `match_mode=any` selects queues containing any tag; `all` requires all tags. Tags are normalized and sorted for stable keys.
-- Normalization: Responses may contain:
-  - Strings: queue IDs, e.g. `"q1"`
-  - Objects: `{"queue": "<id>", "global": <bool>}`. Entries with `global=true` are ignored by the SDK for node execution.
+- Normalization: Gateway returns an array of descriptor objects:
+  - `{"queue": "<id>", "global": <bool>}`. Entries with `global=true` are ignored by the SDK for node execution.
 
 ## Runner Integration
 

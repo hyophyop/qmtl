@@ -119,7 +119,11 @@ paths:
                 properties:
                   queues:
                     type: array
-                    items: { type: string }
+                    items:
+                      type: object
+                      properties:
+                        queue: { type: string }
+                        global: { type: boolean }
 ```
 Clients must specify ``match_mode`` to control tag matching behavior.
 
