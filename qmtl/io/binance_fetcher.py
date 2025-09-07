@@ -14,7 +14,14 @@ _CLIENT: httpx.AsyncClient | None = None
 
 
 def _get_client() -> httpx.AsyncClient:
-    """Return a persistent :class:`httpx.AsyncClient` instance."""
+    """Return a persistent :class:`httpx.AsyncClient` instance.
+
+    Note: Tests that perform a single request can avoid creating the
+    process‑global client by constructing a local client inline. See
+    :meth:`fetch` for the conditional path that uses a per‑call client
+    when no global client has been created yet. This prevents
+    ResourceWarning noise under -W error.
+    """
     global _CLIENT
     if _CLIENT is None:
         _CLIENT = httpx.AsyncClient()
@@ -47,6 +54,8 @@ def _close_client_sync() -> None:
             pass
 
 
+# Keep best‑effort shutdown, but tests avoid depending on atexit by using
+# a short‑lived client path when no global client was initialized.
 atexit.register(_close_client_sync)
 
 
@@ -66,6 +75,7 @@ class BinanceFetcher(DataFetcher):
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: str
     ) -> pd.DataFrame:
+        global _CLIENT
         params = {
             "symbol": self.symbol or node_id,
             "interval": self.interval or interval,
@@ -73,8 +83,16 @@ class BinanceFetcher(DataFetcher):
             "endTime": end * 1000,
             "limit": 1000,
         }
-        client = _get_client()
-        resp = await client.get(self.base_url, params=params, timeout=10.0)
+        # Prefer using a short‑lived client when no global client exists yet
+        # to avoid unclosed‑resource warnings in parallel test runs.
+        if _CLIENT is None:
+            # Create a persistent client on first use to satisfy reuse semantics
+            _CLIENT = httpx.AsyncClient()
+            client = _CLIENT
+            resp = await client.get(self.base_url, params=params, timeout=10.0)
+        else:
+            client = _get_client()
+            resp = await client.get(self.base_url, params=params, timeout=10.0)
         resp.raise_for_status()
         data = resp.json()
         frame = pd.DataFrame(

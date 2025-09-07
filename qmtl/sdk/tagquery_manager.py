@@ -39,6 +39,12 @@ class TagQueryManager:
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
         self._poll_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        # Best-effort idempotency for queue_update events: remember last
+        # applied queue set per (tags, interval, match_mode) key to drop
+        # duplicates that may occur during reconnects/retries.
+        self._last_queue_sets: Dict[
+            Tuple[Tuple[str, ...], int, MatchMode], frozenset[str]
+        ] = {}
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -102,6 +108,12 @@ class TagQueryManager:
             except (TypeError, ValueError):
                 return
             key = (tuple(sorted(tags)), interval, match_mode)
+            # Idempotency: drop duplicate updates with identical queue sets
+            qset = frozenset(queues)
+            last = self._last_queue_sets.get(key)
+            if last is not None and last == qset:
+                return
+            self._last_queue_sets[key] = qset
             for n in self._nodes.get(key, []):
                 n.update_queues(list(queues))
 

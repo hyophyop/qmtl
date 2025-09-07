@@ -25,6 +25,13 @@ Gateway’s WS bridge relays ControlBus updates to SDKs. This page documents the
 - Ordering: Per-topic ordering is preserved best-effort in a single-process hub. If cross-partition reordering is possible upstream, consumers should reassemble by `time` or the hub-assigned monotonic `seq_no` now included in each CloudEvent.
 - Scoping: Server-side filters apply `world_id` and optional `strategy_id` from the JWT to avoid leaking events across worlds.
 
+### Recovery & Idempotency
+
+- WS-only runners recover from temporary disconnects without duplicate state changes:
+  - Server drops duplicate CloudEvents by `id` within a sliding window.
+  - SDK drops duplicate `queue_update` payloads per `(tags, interval, match_mode)` key when the effective queue set is unchanged.
+- Consumers should treat WS messages as level-triggered updates rather than strictly edge-triggered; on reconnection, ignore redundant updates and proceed.
+
 ### Rate limiting
 
 - Per-connection rate limiting is available via a simple token bucket in the WS hub. It is disabled by default. To enable, set `QMTL_WS_RATE_LIMIT` (tokens/messages per second) in the Gateway process environment, e.g. `QMTL_WS_RATE_LIMIT=200`.
