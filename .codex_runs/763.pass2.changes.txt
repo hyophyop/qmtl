@@ -1,5 +1,0 @@
-# git status --porcelain
-
-# git diff --name-only
-
-# git diff --stat

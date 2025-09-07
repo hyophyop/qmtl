@@ -31,6 +31,8 @@ bash scripts/run_codex_issues.sh \
 - 검증 로그(옵션 `--verify`): `.codex_runs/<ISSUE>.pass<idx>.verify.txt`
  - 콘솔 로그: `.codex_runs/<ISSUE>.pass<idx>.console.txt` (보존용·의사결정에 사용하지 않음)
 
+> 주의: `.codex_runs/`와 `.codex_worktrees/`는 리포에 커밋하지 않습니다. `.gitignore`에 두 경로가 포함되어 있어야 하며, 오케스트레이터의 커밋 로직은 해당 디렉터리를 스테이징에서 자동 제외합니다.
+
 ## 스크립트 주요 옵션
 - `--parallel N`: 동시에 실행할 이슈 개수(기본 auto). CPU/이슈 수에 맞춰 자동 제한.
 - `--verify`, `--verify-full`: 프리플라이트/풀 테스트와 문서 빌드 수행.
