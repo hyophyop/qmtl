@@ -107,12 +107,18 @@ Also Refs #119 for broader tracking
 
 - Options: add `--verify` (and `--verify-full`) to run preflight/full tests and docs build per issue; use `--cleanup-worktrees` to remove worktrees after completion.
 
+### PR workflow (per‑issue tracking)
+
+- Default: the orchestrator creates a Draft PR per issue on the first pass and reuses a stable branch name (`issue/<ID>-codex`) for follow‑ups. The latest `.last.txt` is posted as a PR comment each pass.
+- Merge: add `--merge` to automatically mark ready and squash‑merge when the issue reaches Done.
+- PRs are created only when there are actual file changes (no empty commits for tracking).
+- Artifacts are never committed: `.codex_runs/` and `.codex_worktrees/` are ignored and excluded from staging.
+
 ### Orchestrator ↔ Worker Contract (no WIP sharing)
 
 - Black-box worker: The orchestrator treats each Codex run as a black box and bases scheduling decisions only on artifacts produced per pass.
-- Artifacts only: Decisions use `.codex_runs/<ISSUE>.pass<N>.{last,changes,verify}.txt`; streaming console output is ignored (but saved to `.console.txt` for auditing).
-- Strict footer format (in the worker’s final message):
-  - `Result status: Done | Needs follow-up | Blocked` (single line)
-  - If status is `Needs follow-up`, include a `Next-run Instructions` section with bullet points
-  - `Suggested commit message` section with one short paragraph; starts with `Fixes #<ISSUE_ID>` when Done, otherwise `Refs #<ISSUE_ID>`
+- Artifact-driven status: The orchestrator determines `Done | Needs follow-up | Blocked` using the recorded changes (`.changes.txt`), verification outcome (`.verify.txt` when `--verify` is used), and the presence of a `Next-run Instructions` section in `.last.txt`. The worker’s status line is advisory.
+- Worker footer (concise):
+  - `Suggested commit message` (Done: starts with `Fixes #<ISSUE_ID>`; otherwise `Refs #<ISSUE_ID>`)
+  - Optional `Next-run Instructions` when follow-up is needed
 - Parallel-safe: Orchestrator runs issues concurrently in isolated worktrees and re-triggers follow-ups based only on artifacts; no in-memory WIP is shared across runs.

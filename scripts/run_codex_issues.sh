@@ -14,44 +14,22 @@ Usage: scripts/run_codex_issues.sh -f ISSUE_SCOPE_FILE -i "ID1 ID2 ..." [options
 
 Required:
   -f, --file PATH           Path to issue scope file (Markdown/YAML/JSON)
-  -i, --ids  "LIST"         Space-separated issue IDs to run (e.g., "752 753 754")
+  -i, --ids  "LIST"         Space-separated issue IDs (e.g., "761 762 763")
 
-Options:
+Options (minimal):
   -p, --prompt PATH         Prompt file (default: codex_prompts/qmtl_issue_runner.prompt.md)
-  -C, --repo   PATH         Repo root to use as working dir (default: .)
-  -o, --outdir PATH         Output dir for last messages/logs (default: .codex_runs)
-  --max-followups N         Max follow-up runs per issue (default: 1)
-  --verify                  After the final pass for each issue, run preflight tests and docs build
-  --verify-full             After the final pass, also run the full test suite (-W error -n auto)
-  --cleanup-on-done         Delete saved last-message artifacts for issues that finish as Done
-  --cleanup-scope           If the issue scope file was generated temporarily, delete it at the end
-  --bypass                  Pass Codex flag to bypass approvals and sandbox (DANGEROUS)
-  --json                    Enable Codex JSON streaming (stores last message file regardless)
-  --pr                      Create a PR per Done issue (requires `gh` or GITHUB_TOKEN)
-  --merge                   Merge the PR after creation (squash by default)
-  --merge-method M          merge|squash|rebase (default: squash)
-  --git-base BRANCH         Base branch for feature branches/PRs (default: current)
-  --git-remote NAME         Remote name (default: origin)
-  --require-clean           Require clean working tree before each issue (default)
-  --stash-wip               Stash local changes before starting each issue and pop after
-  --parallel N              Max concurrent issues (default: auto)
-  --worktrees-dir PATH      Where to create git worktrees (default: .codex_worktrees)
-  --cleanup-worktrees       Remove created worktrees after completion
+  -C, --repo   PATH         Repo root as working dir (default: .)
+  -o, --outdir PATH         Output dir for artifacts (default: .codex_runs)
+  --parallel N|auto         Max concurrent issues (default: auto)
+  --verify                  Run preflight tests and docs build per issue
+  --merge                   Auto-merge per-issue PR when status is Done (squash)
   -h, --help                Show this help
 
-ENV overrides:
-  ISSUE_SCOPE_FILE, ISSUE_IDS, PROMPT_FILE, REPO_DIR, OUT_DIR, MAX_FOLLOWUPS, CODEX_JSON,
-  VERIFY, VERIFY_FULL, CLEANUP_ON_DONE, CLEANUP_SCOPE, BYPASS,
-  ENABLE_PR, ENABLE_MERGE, MERGE_METHOD, GIT_BASE, GIT_REMOTE, REQUIRE_CLEAN, STASH_WIP,
-  PARALLEL, WORKTREES_DIR, CLEANUP_WORKTREES
-
-Notes:
-  - Always runs in parallel using per-issue git worktrees; use --parallel to cap concurrency.
-  - Requires `codex` CLI. Uses: codex -s danger-full-access -a never -c shell_environment_policy.inherit=all exec ...
-  - The prompt expects env vars ISSUE_SCOPE_FILE, ISSUE_ID, and optional FOLLOW_UP_INSTRUCTIONS.
-  - Child processes are invoked with RUN_AS_CHILD=1 (internal) to run a single issue in the worktree.
-  - CONTRACT: Orchestrator ignores streaming console output when making decisions; it uses only
-    the artifacts written per pass: *.last.txt, *.changes.txt, *.verify.txt (console is saved as *.console.txt).
+Behavior (opinionated defaults):
+  - Creates a Draft PR per issue on first pass and updates it on follow-ups.
+  - Uses stable branch names: issue/<ID>-codex.
+  - Posts the latest .last.txt as a PR comment each pass.
+  - Artifacts (.codex_runs/, .codex_worktrees/) are never committed.
 USAGE
 }
 
@@ -61,22 +39,22 @@ PROMPT_FILE=${PROMPT_FILE:-codex_prompts/qmtl_issue_runner.prompt.md}
 REPO_DIR=${REPO_DIR:-.}
 OUT_DIR=${OUT_DIR:-.codex_runs}
 MAX_FOLLOWUPS=${MAX_FOLLOWUPS:-1}
-CODEX_JSON=${CODEX_JSON:-0}
 VERIFY=${VERIFY:-0}
-VERIFY_FULL=${VERIFY_FULL:-0}
-CLEANUP_ON_DONE=${CLEANUP_ON_DONE:-0}
-CLEANUP_SCOPE=${CLEANUP_SCOPE:-0}
-BYPASS=${BYPASS:-0}
-ENABLE_PR=${ENABLE_PR:-0}
 ENABLE_MERGE=${ENABLE_MERGE:-0}
-MERGE_METHOD=${MERGE_METHOD:-squash}
 GIT_BASE=${GIT_BASE:-}
 GIT_REMOTE=${GIT_REMOTE:-origin}
 REQUIRE_CLEAN=${REQUIRE_CLEAN:-1}
 STASH_WIP=${STASH_WIP:-0}
 PARALLEL=${PARALLEL:-auto}
 WORKTREES_DIR=${WORKTREES_DIR:-.codex_worktrees}
-CLEANUP_WORKTREES=${CLEANUP_WORKTREES:-0}
+CLEANUP_WORKTREES=${CLEANUP_WORKTREES:-1}
+CLEANUP_ON_DONE=${CLEANUP_ON_DONE:-0}
+CLEANUP_SCOPE=${CLEANUP_SCOPE:-0}
+# Opinionated defaults
+STABLE_BRANCHES=1
+ALLOW_EMPTY_PR=0
+PR_DRAFT_ALWAYS=1
+MERGE_METHOD=squash
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -85,23 +63,9 @@ while [[ $# -gt 0 ]]; do
     -p|--prompt) PROMPT_FILE="$2"; shift 2;;
     -C|--repo) REPO_DIR="$2"; shift 2;;
     -o|--outdir) OUT_DIR="$2"; shift 2;;
-    --max-followups) MAX_FOLLOWUPS="$2"; shift 2;;
     --verify) VERIFY=1; shift;;
-    --verify-full) VERIFY=1; VERIFY_FULL=1; shift;;
-    --cleanup-on-done) CLEANUP_ON_DONE=1; shift;;
-    --cleanup-scope) CLEANUP_SCOPE=1; shift;;
-    --bypass) BYPASS=1; shift;;
-    --json) CODEX_JSON=1; shift;;
-    --pr) ENABLE_PR=1; shift;;
     --merge) ENABLE_MERGE=1; shift;;
-    --merge-method) MERGE_METHOD="$2"; shift 2;;
-    --git-base) GIT_BASE="$2"; shift 2;;
-    --git-remote) GIT_REMOTE="$2"; shift 2;;
-    --require-clean) REQUIRE_CLEAN=1; shift;;
-    --stash-wip) STASH_WIP=1; REQUIRE_CLEAN=0; shift;;
     --parallel) PARALLEL="$2"; shift 2;;
-    --worktrees-dir) WORKTREES_DIR="$2"; shift 2;;
-    --cleanup-worktrees) CLEANUP_WORKTREES=1; shift;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2;;
   esac
@@ -130,20 +94,11 @@ run_codex_once() {
   local pass_idx="$1"; shift
   local out_last="$OUT_DIR/${issue_id}.pass${pass_idx}.last.txt"
   local out_console="$OUT_DIR/${issue_id}.pass${pass_idx}.console.txt"
-  local json_args=""
-  if [[ "$CODEX_JSON" == 1 ]]; then
-    json_args="--json"
-  fi
   local approval_args=("-a" "never")
-  local bypass_args=""
-  if [[ "$BYPASS" == 1 ]]; then
-    approval_args=()
-    bypass_args="--dangerously-bypass-approvals-and-sandbox"
-  fi
   echo "[run] ISSUE_ID=$issue_id pass=$pass_idx"
   ISSUE_SCOPE_FILE="$ISSUE_SCOPE_FILE" ISSUE_ID="$issue_id" \
   codex -s danger-full-access ${approval_args[@]:-} -c shell_environment_policy.inherit=all \
-        exec ${bypass_args:+$bypass_args} -C "$REPO_DIR" ${json_args:+$json_args} --color never \
+        exec -C "$REPO_DIR" --color never \
         --output-last-message "$out_last" - < "$PROMPT_FILE" 2>&1 | tee "$out_console"
 }
 
@@ -168,11 +123,6 @@ verify_run() {
     echo;
     echo "[verify] docs build";
     uv run mkdocs build || exit 11
-    if [[ "$VERIFY_FULL" == 1 ]]; then
-      echo;
-      echo "[verify] full tests";
-      uv run -m pytest -W error -n auto || exit 12
-    fi
   } > "$verify_file" 2>&1 || return $?
   return 0
 }
@@ -242,16 +192,27 @@ start_feature_branch() {
   if [[ -z "$base_branch" ]]; then
     base_branch=$(current_branch)
   fi
-  local branch="issue/${issue_id}-codex-$(date +%Y%m%d%H%M%S)"
+  local branch
+  if [[ "$STABLE_BRANCHES" == 1 ]]; then
+    branch="issue/${issue_id}-codex"
+  else
+    branch="issue/${issue_id}-codex-$(date +%Y%m%d%H%M%S)"
+  fi
   git -C "$REPO_DIR" fetch "$GIT_REMOTE" "$base_branch" >/dev/null 2>&1 || true
-  git -C "$REPO_DIR" checkout -B "$branch" "$GIT_REMOTE/$base_branch" >/dev/null 2>&1 || git -C "$REPO_DIR" checkout -b "$branch" || true
+  # Try to reuse existing branch when stable-branches enabled
+  if [[ "$STABLE_BRANCHES" == 1 ]] && git -C "$REPO_DIR" rev-parse --verify -q "$branch" >/dev/null; then
+    git -C "$REPO_DIR" checkout "$branch" >/dev/null 2>&1 || true
+    git -C "$REPO_DIR" rebase "$GIT_REMOTE/$base_branch" >/dev/null 2>&1 || true
+  else
+    git -C "$REPO_DIR" checkout -B "$branch" "$GIT_REMOTE/$base_branch" >/dev/null 2>&1 || git -C "$REPO_DIR" checkout -b "$branch" || true
+  fi
   echo "$branch"
 }
 
 commit_changes_for_issue() {
-  local issue_id="$1"; shift
-  local last_file="$1"; shift
-  local status_line="$2"; shift || true
+  local issue_id="$1"; shift || true
+  local last_file="$1"; shift || true
+  local status_line="$1"; shift || true
   local msg_file="$OUT_DIR/${issue_id}.commitmsg.txt"
   awk '
     BEGIN{take=0}
@@ -286,7 +247,12 @@ commit_changes_for_issue() {
     git -C "$REPO_DIR" commit -F "$msg_file" || return 30
     echo "$msg_file"
   else
-    echo ""
+    if [[ "$ALLOW_EMPTY_PR" == 1 ]]; then
+      git -C "$REPO_DIR" commit --allow-empty -F "$msg_file" || return 30
+      echo "$msg_file"
+    else
+      echo ""
+    fi
   fi
 }
 
@@ -294,13 +260,24 @@ create_pr_and_maybe_merge() {
   local issue_id="$1"; shift
   local branch="$1"; shift
   local base_branch="$GIT_BASE"
+  local draft_mode=${1:-0}
+  shift || true
   if [[ -z "$base_branch" ]]; then
     base_branch=$(current_branch)
   fi
   git -C "$REPO_DIR" push -u "$GIT_REMOTE" "$branch" || return 40
   local pr_url=""
   if command -v gh >/dev/null 2>&1; then
-    pr_url=$(gh -R "$(derive_owner_repo)" pr create --head "$branch" --base "$base_branch" --fill --title "Issue #$issue_id" --body "Automated PR for issue #$issue_id" 2>/dev/null || true)
+    # If a PR already exists for this branch, reuse it
+    local existing
+    existing=$(gh -R "$(derive_owner_repo)" pr view "$branch" --json url --jq .url 2>/dev/null || true)
+    if [[ -n "$existing" ]]; then
+      pr_url="$existing"
+    else
+      local draft_flag=()
+      [[ "$draft_mode" == 1 ]] && draft_flag+=(--draft)
+      pr_url=$(gh -R "$(derive_owner_repo)" pr create --head "$branch" --base "$base_branch" ${draft_flag[@]} --title "Issue #$issue_id" --body "Automated PR for issue #$issue_id" 2>/dev/null || true)
+    fi
   elif [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
     local owner_repo
     owner_repo=$(derive_owner_repo)
@@ -318,10 +295,15 @@ create_pr_and_maybe_merge() {
 merge_pr_if_requested() {
   local pr_url="$1"; shift
   local branch="$1"; shift
+  local ready_first=${1:-0}
+  shift || true
   if [[ "$ENABLE_MERGE" != 1 || -z "$pr_url" ]]; then
     return 0
   fi
   if command -v gh >/dev/null 2>&1; then
+    if [[ "$ready_first" == 1 ]]; then
+      gh pr ready "$pr_url" -R "$(derive_owner_repo)" >/dev/null 2>&1 || true
+    fi
     gh pr merge "$pr_url" -R "$(derive_owner_repo)" -d -${MERGE_METHOD:0:1} || true
   elif [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
     local owner_repo pr_number
@@ -364,21 +346,9 @@ if [[ "${RUN_AS_CHILD:-0}" != "1" ]]; then
     echo "[parallel] spawned worktree $wt_dir (branch $wt_branch) for issue $id"
 
     # Build child args
-    child_args=(
-      -f "$ABS_SCOPE" -i "$id" -p "$ABS_PROMPT" -C "$wt_dir" -o "$ABS_OUT_DIR"
-    )
+    child_args=( -f "$ABS_SCOPE" -i "$id" -p "$ABS_PROMPT" -C "$wt_dir" -o "$ABS_OUT_DIR" )
     [[ "$VERIFY" == 1 ]] && child_args+=(--verify)
-    [[ "$VERIFY_FULL" == 1 ]] && child_args+=(--verify-full)
-    [[ "$BYPASS" == 1 ]] && child_args+=(--bypass)
-    [[ "$CODEX_JSON" == 1 ]] && child_args+=(--json)
-    [[ "$ENABLE_PR" == 1 ]] && child_args+=(--pr)
     [[ "$ENABLE_MERGE" == 1 ]] && child_args+=(--merge)
-    [[ -n "$MERGE_METHOD" ]] && child_args+=(--merge-method "$MERGE_METHOD")
-    [[ -n "$GIT_BASE" ]] && child_args+=(--git-base "$GIT_BASE")
-    [[ -n "$GIT_REMOTE" ]] && child_args+=(--git-remote "$GIT_REMOTE")
-    [[ "$REQUIRE_CLEAN" == 1 ]] && child_args+=(--require-clean)
-    [[ "$STASH_WIP" == 1 ]] && child_args+=(--stash-wip)
-    [[ "$CLEANUP_ON_DONE" == 1 ]] && child_args+=(--cleanup-on-done)
 
     RUN_AS_CHILD=1 bash "$0" "${child_args[@]}" &
     pids+=("$!")
@@ -444,15 +414,58 @@ for id in $ISSUE_IDS; do
     fi
   fi
 
+  # Orchestrator-owned status decision (artifact-driven)
   status="unknown"
-  if grep -qiE '^Result[[:space:]]+status:.*done' "$OUT_DIR/${id}.pass${pass}.last.txt" 2>/dev/null; then
-    status="Done"
-  elif grep -qiE '^Result[[:space:]]+status:.*blocked' "$OUT_DIR/${id}.pass${pass}.last.txt" 2>/dev/null; then
-    status="Blocked"
-  elif needs_followup "$OUT_DIR/${id}.pass${pass}.last.txt"; then
-    status="Needs follow-up"
+  changes_file="$OUT_DIR/${id}.pass${pass}.changes.txt"
+  # Count changed files from the recorded diff section
+  changed_count=$(awk '
+    /^# git diff --name-only/ {take=1; next}
+    take && NF==0 {exit}
+    take && $0 !~ /^#/ {print}
+  ' "$changes_file" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+
+  has_next_instr=0
+  if grep -qiE '^Next[[:punct:] ]*run[[:punct:] ]*instructions' "$OUT_DIR/${id}.pass${pass}.last.txt" 2>/dev/null; then
+    has_next_instr=1
+  fi
+
+  if [[ "$VERIFY" == 1 ]]; then
+    if [[ "$verify_status" == "passed" ]]; then
+      status="Done"
+    else
+      status="Needs follow-up"
+    fi
+  else
+    if [[ "$has_next_instr" == 1 ]]; then
+      status="Needs follow-up"
+    elif (( changed_count > 0 )); then
+      status="Done"
+    else
+      status="Blocked"
+    fi
   fi
   summaries+=("$id:$status:pass=$pass:last=$OUT_DIR/${id}.pass${pass}.last.txt:verify=$verify_status")
+
+  # Create or update PRs according to flags
+  # Draft PRs are created only when there are actual changes (no empty commits)
+    feature_branch=$(start_feature_branch "$id")
+    commit_msg_file=$(commit_changes_for_issue "$id" "$OUT_DIR/${id}.pass${pass}.last.txt" "$status") || true
+    if [[ -n "$commit_msg_file" ]]; then
+      pr_url=$(create_pr_and_maybe_merge "$id" "$feature_branch" 1)
+      if [[ -n "$pr_url" ]]; then
+        # Post a short progress comment
+        if command -v gh >/dev/null 2>&1; then
+          gh -R "$(derive_owner_repo)" pr comment "$pr_url" -F "$OUT_DIR/${id}.pass${pass}.last.txt" >/dev/null 2>&1 || true
+        fi
+        # Merge if requested and Done
+        if [[ "$ENABLE_MERGE" == 1 && "$status" == "Done" ]]; then
+          merge_pr_if_requested "$pr_url" "$feature_branch" 1
+        fi
+      fi
+    else
+      echo "[info] No changes for issue $id; skipping PR creation"
+    fi
+  
 
   if [[ "$CLEANUP_ON_DONE" == 1 && "$status" == "Done" ]]; then
     rm -f \
@@ -462,21 +475,7 @@ for id in $ISSUE_IDS; do
       "$OUT_DIR/${id}.pass"*".console.txt" 2>/dev/null || true
   fi
 
-  if [[ "$ENABLE_PR" == 1 && "$status" == "Done" ]]; then
-    feature_branch=$(start_feature_branch "$id")
-    commit_msg_file=$(commit_changes_for_issue "$id" "$OUT_DIR/${id}.pass${pass}.last.txt" "$status") || true
-    if [[ -n "$commit_msg_file" ]]; then
-      pr_url=$(create_pr_and_maybe_merge "$id" "$feature_branch")
-      if [[ -n "$pr_url" ]]; then
-        echo "[pr] $pr_url"
-        merge_pr_if_requested "$pr_url" "$feature_branch"
-      else
-        echo "[warn] PR was not created for issue $id" >&2
-      fi
-    else
-      echo "[info] No changes to commit for issue $id"
-    fi
-  fi
+  # Note: PR is always present per issue; above block handles merge when Done
 done
 
 echo "\nSummary:"

@@ -25,6 +25,20 @@ bash scripts/run_codex_issues.sh \
   --verify --parallel 2 -o .codex_runs
 ```
 
+### PR 전략: 기본값 = 이슈별 Draft PR
+
+- 기본 동작: 각 이슈에 대해 Draft PR을 생성하고, 후속 패스에서 동일 브랜치를 업데이트합니다(issue/<ID>-codex). 각 패스의 `.last.txt`는 PR 코멘트로 추가됩니다.
+- PR 생성은 "변경이 있을 때만" 수행합니다. 빈 커밋으로 PR을 만들지 않습니다.
+- 완료(Done) 상태에서 자동 머지하려면 `--merge`를 추가하세요.
+
+예시(자동 머지 포함):
+
+```
+bash scripts/run_codex_issues.sh \
+  -f docs/issues/scope.md -i "761 762 763" \
+  --parallel auto -o .codex_runs --merge
+```
+
 ## 산출물
 - 마지막 메시지: `.codex_runs/<ISSUE>.pass<idx>.last.txt`
 - 변경 요약: `.codex_runs/<ISSUE>.pass<idx>.changes.txt`
@@ -62,18 +76,18 @@ fi
 ## 오케스트레이터/워커 경계 및 출력 계약
 
 - 블랙박스 원칙: 워커(Codex 실행)는 블랙박스로 취급하며, 오케스트레이터는 산출물만 소비합니다.
-- 산출물만 소비: 스케줄링 의사결정은 `.last/.changes/.verify` 파일만 사용합니다. `.console.txt`는 감사/디버그용 보존 파일입니다.
-- 엄격한 푸터 형식(워커 최종 메시지):
-  - 단일 라인 상태: `Result status: Done | Needs follow-up | Blocked`
-  - `Needs follow-up`인 경우에만 `Next-run Instructions` 헤딩과 불릿 목록 포함
-  - `Suggested commit message` 헤딩과 한 단락 메시지(완료 시 `Fixes #<ISSUE_ID>`, 그 외 `Refs #<ISSUE_ID>`)
+- 아티팩트 기반 판정: 상태(Done/Needs follow‑up/Blocked)는 오케스트레이터가 `.changes/.verify`와 `Next-run Instructions` 유무를 바탕으로 결정합니다. 워커의 상태 라인은 참고용입니다.
+- 워커 푸터(간결):
+  - `Suggested commit message` 섹션(완료 시 `Fixes #<ISSUE_ID>`, 그 외 `Refs #<ISSUE_ID>`)
+  - 선택: `Next-run Instructions`(후속 작업이 필요할 때만)
 - 예시 푸터:
 
 ```
 Suggested commit message
 Fixes #755: chore(dag-manager): add idempotent neo4j migrations and docs
 
-Result status: Done
+Result status: Done  
+(참고용; 최종 판정은 오케스트레이터가 수행)
 ```
 
 > 참고: 오케스트레이터는 `.last.txt`에 `Result status:`가 없더라도 `Next-run Instructions` 섹션이 있으면 후속 실행이 필요하다고 판단하도록 보완되어 있습니다.

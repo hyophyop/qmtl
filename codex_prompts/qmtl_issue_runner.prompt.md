@@ -82,30 +82,25 @@ Success means: for each issue, changes are implemented with minimal diffs, docs 
 - The orchestrator ignores streaming console output for scheduling; it relies on artifacts and the footer described below.
 
 ### Output Footer Contract (required)
-At the very end of your final message for this run, include exactly:
+At the very end of your final message for this run, include:
 
-1) Single status line:
+1) Always include a commit message section:
 ```
-Result status: Done | Needs follow-up | Blocked
+Suggested commit message
+<one short paragraph. If Done: starts with Fixes #<ISSUE_ID>; otherwise Refs #<ISSUE_ID>>
 ```
 
-2) Only when status is "Needs follow-up", add a section:
+2) Only when follow-up is needed, add a section:
 ```
 Next-run Instructions
 - <bullet 1>
 - <bullet 2>
 ```
 
-3) Always include a commit message section:
-```
-Suggested commit message
-<one short paragraph. If Done: starts with Fixes #<ISSUE_ID>; otherwise Refs #<ISSUE_ID>>
-```
+Note: Do not emit a status line. The orchestrator computes the final status from artifacts and this footer.
 
 Example footer:
 ```
 Suggested commit message
 Fixes #755: chore(dag-manager): add idempotent neo4j migrations and docs
-
-Result status: Done
 ```
