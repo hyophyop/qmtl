@@ -10,6 +10,7 @@ import logging
 from opentelemetry import trace
 
 from qmtl.common.tracing import setup_tracing
+from cachetools import TTLCache
 from qmtl.common import AsyncCircuitBreaker
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class Runner:
     _trade_order_http_url = None
     _trade_order_kafka_topic = None
     _activation_manager: ActivationManager | None = None
+    _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
+    _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -898,12 +901,37 @@ class Runner:
             service.post_order(order)
             return
 
+        # Validate basic shape for built-in HTTP/Kafka adapters
+        if not isinstance(order, dict) or not order.get("side"):
+            logger.debug("ignoring non-order payload: %s", order)
+            return
+
+        # Idempotency: suppress duplicate orders derived from the same signal
+        # Key composed from side/quantity/timestamp and optional symbol to avoid replay dupes
+        try:
+            qty = order.get("quantity")
+            ts = order.get("timestamp")
+            sym = order.get("symbol") or ""
+            key = f"{order.get('side')}|{qty}|{ts}|{sym}"
+        except Exception:
+            key = None  # fall back to no dedup on malformed data
+        cache = cls._order_dedup
+        if key and cache is not None:
+            if cache.get(key):
+                logger.info("duplicate order suppressed (idempotent): %s", key)
+                return
+            cache[key] = True
+
         # Submit via HTTP if URL is configured
         if cls._trade_order_http_url is not None:
-            try:
-                HttpPoster.post(cls._trade_order_http_url, json=order)
-            except Exception:
-                logger.warning("trade order HTTP submit failed; dropping order")
+            # Light retry for transient failures; idempotency relies on upstream consumer
+            for attempt in range(2):
+                try:
+                    HttpPoster.post(cls._trade_order_http_url, json=order)
+                    break
+                except Exception:
+                    if attempt == 1:
+                        logger.warning("trade order HTTP submit failed; dropping order")
 
         # Submit via Kafka if producer and topic are configured
         if cls._kafka_producer is not None and cls._trade_order_kafka_topic is not None:
@@ -925,3 +953,20 @@ class Runner:
         # Check if this is a trade order publisher node
         if "TradeOrderPublisher" in node_class_name:
             Runner._handle_trade_order(result)
+
+    # ----------------------------
+    # Utilities for tests/ops
+    # ----------------------------
+    @classmethod
+    def reset_trade_order_dedup(cls) -> None:
+        """Clear idempotency cache for tests."""
+        cache = cls._order_dedup
+        if cache is not None:
+            cache.clear()
+
+    @classmethod
+    def set_trade_mode(cls, mode: str) -> None:
+        """Set trade mode: 'simulate' or 'live' (informational)."""
+        if mode not in {"simulate", "live"}:
+            raise ValueError("mode must be 'simulate' or 'live'")
+        cls._trade_mode = mode

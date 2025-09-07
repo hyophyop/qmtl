@@ -240,6 +240,26 @@ from qmtl.sdk.execution_modeling import (
 from qmtl.transforms import TradeSignalGeneratorNode, alpha_history_node
 from qmtl.transforms.alpha_performance import alpha_performance_node
 
+## Timing Controls
+
+실전 시장 시간대를 반영한 타이밍 제어를 통해 비현실적인 체결을 방지할 수 있습니다. 기본 `TimingController`는 고정된 미국 주식 시간(프리마켓 04:00, 정규장 09:30–16:00, 애프터마켓 20:00)을 사용합니다. 서머타임(DST) 또는 조기폐장과 같은 경계 조건을 시뮬레이션하려면 `MarketHours`를 커스터마이즈하세요.
+
+```python
+from datetime import time
+from qmtl.sdk.timing_controls import MarketHours, TimingController
+
+# 조기폐장(13:00) 시나리오
+hours = MarketHours(
+    pre_market_start=time(4, 0),
+    regular_start=time(9, 30),
+    regular_end=time(13, 0),   # 조기폐장
+    post_market_end=time(17, 0),
+)
+controller = TimingController(market_hours=hours, allow_pre_post_market=True)
+```
+
+검증 유틸리티 `validate_backtest_timing(strategy)`를 사용하면 주말/폐장 시간 체결 시도를 빠르게 찾아낼 수 있습니다. 필요 시 `require_regular_hours=True`로 정규장 외 체결을 차단할 수 있습니다.
+
 history = alpha_history_node(alpha, window=30)
 signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
 

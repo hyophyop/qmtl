@@ -37,4 +37,16 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         raise
     if not isinstance(data, dict):
         raise TypeError("DAG Manager config must be a mapping")
+    # Transitional aliases: allow *_url/*_uri and map to *_dsn if canonical absent
+    aliases = {
+        "neo4j_url": "neo4j_dsn",
+        "neo4j_uri": "neo4j_dsn",
+        "kafka_url": "kafka_dsn",
+        "kafka_uri": "kafka_dsn",
+        "controlbus_url": "controlbus_dsn",
+        "controlbus_uri": "controlbus_dsn",
+    }
+    for alias, canonical in aliases.items():
+        if canonical not in data and alias in data:
+            data[canonical] = data.pop(alias)
     return DagManagerConfig(**data)
