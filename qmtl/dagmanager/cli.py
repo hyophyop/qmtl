@@ -20,7 +20,7 @@ from .diff_service import (
 from .monitor import AckStatus
 from .topic import topic_name
 from .neo4j_export import export_schema, connect
-from .neo4j_init import init_schema
+from .neo4j_init import init_schema, rollback as neo4j_rollback
 from ..gateway.dagmanager_client import DagManagerClient
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 
@@ -192,6 +192,11 @@ async def _main(argv: list[str] | None = None) -> None:
     p_init.add_argument("--user", default="neo4j", help="Neo4j username")
     p_init.add_argument("--password", default="neo4j", help="Neo4j password")
 
+    p_rb = sub.add_parser("neo4j-rollback", help="Drop Neo4j constraints/indexes created by init")
+    p_rb.add_argument("--uri", default="bolt://localhost:7687", help="Neo4j connection URI")
+    p_rb.add_argument("--user", default="neo4j", help="Neo4j username")
+    p_rb.add_argument("--password", default="neo4j", help="Neo4j password")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "diff":
@@ -206,6 +211,8 @@ async def _main(argv: list[str] | None = None) -> None:
         _cmd_export_schema(args)
     elif args.cmd == "neo4j-init":
         _cmd_neo4j_init(args)
+    elif args.cmd == "neo4j-rollback":
+        neo4j_rollback(args.uri, args.user, args.password)
 
 
 def main(argv: list[str] | None = None) -> None:

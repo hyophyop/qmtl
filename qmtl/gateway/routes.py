@@ -228,6 +228,12 @@ def create_api_router(
                     queue_map_http[nid] = []
                 else:
                     queue_map_http[nid] = result
+            # Ensure non-empty sentinel when diff is unavailable: derive a deterministic id
+            if not sentinel_id:
+                from qmtl.common import crc32_of_list
+
+                crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
+                sentinel_id = f"dryrun:{crc:08x}"
 
         return StrategyAck(strategy_id="dryrun", queue_map=queue_map_http, sentinel_id=sentinel_id)
 

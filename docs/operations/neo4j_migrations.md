@@ -1,66 +1,31 @@
----
-title: "Neo4j Schema Migrations"
-tags: []
-author: "QMTL Team"
-last_modified: 2025-09-07
----
+# Neo4j Migrations & Rollback
 
-{{ nav_links() }}
+This page describes how to initialize, inspect, and roll back the DAG Manager’s Neo4j schema.
 
-# Neo4j Schema Migrations
+## Initialize (idempotent)
 
-This page documents how the DAG Manager initializes and maintains the Neo4j
-graph schema in an idempotent, re‑runnable manner.
+All DDL uses `IF NOT EXISTS`, so re-running is safe:
 
-## Goals
-
-- Idempotent CLI: `qmtl dagmanager neo4j-init` can be safely re‑run.
-- Operational safety: constraints and indexes are created using
-  `IF NOT EXISTS` guards to avoid errors when schema already exists.
-- Minimal downtime: migrations only add constraints/indexes and do not drop
-  existing ones.
-
-## What the CLI does
-
-The command connects to Neo4j and applies a small set of schema statements.
-The current set is defined in code and validated by tests:
-
-```cypher
-CREATE CONSTRAINT compute_pk IF NOT EXISTS
-ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
-
-CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ```
-
-See Architecture → DAG Manager → “Indexes & Constraints” for background and
-additional context.
-
-## Usage
-
-```bash
-# default bolt endpoint, neo4j/neo4j
-qmtl dagmanager neo4j-init
-
-# custom connection parameters
 qmtl dagmanager neo4j-init \
-  --uri bolt://db.example:7687 \
-  --user neo4j \
-  --password 's3cret'
+  --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
-Re‑running the command is safe thanks to `IF NOT EXISTS` guards. To preview the
-effective statements for audit purposes:
+## Export current schema
 
-```bash
-qmtl dagmanager export-schema --uri bolt://localhost:7687 --out schema.cql
+```
+qmtl dagmanager export-schema \
+  --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 
-## Performance note
+## Rollback (drop created objects)
 
-Representative DAG lookups are expected to stay within p95 ≤ 50 ms on a
-moderate dataset. If lookups exceed this budget, consider adding targeted
-indexes based on your workload. Keep additions minimal and aligned with the
-data model documented under Architecture.
+Drops the constraints and indexes created by `neo4j-init` using `DROP ... IF EXISTS`:
 
-{{ nav_links() }}
+```
+qmtl dagmanager neo4j-rollback \
+  --uri bolt://localhost:7687 --user neo4j --password neo4j
+```
+
+Use with caution in lower environments; production rollback should follow a controlled migration plan.
 

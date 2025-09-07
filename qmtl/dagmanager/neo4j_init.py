@@ -20,6 +20,21 @@ def get_schema_queries() -> list[str]:
     return SCHEMA_QUERIES.copy()
 
 
+def get_drop_queries() -> list[str]:
+    """Return Cypher statements that safely drop created constraints/indexes.
+
+    Uses explicit names matching those in :data:`SCHEMA_QUERIES` and guards
+    every operation with ``IF EXISTS`` to keep rollback idempotent.
+    """
+    return [
+        "DROP CONSTRAINT compute_pk IF EXISTS",
+        "DROP INDEX kafka_topic IF EXISTS",
+        "DROP INDEX compute_tags IF EXISTS",
+        "DROP INDEX queue_interval IF EXISTS",
+        "DROP INDEX compute_buffering_since IF EXISTS",
+    ]
+
+
 def apply_schema(driver) -> None:
     """Execute initialization statements using *driver*."""
     with driver.session() as session:
@@ -32,5 +47,28 @@ def init_schema(uri: str, user: str, password: str) -> None:
     driver = connect(uri, user, password)
     try:
         apply_schema(driver)
+    finally:
+        driver.close()
+
+
+def rollback_schema(driver) -> None:
+    """Drop constraints/indexes created by :func:`apply_schema`.
+
+    Every statement is idempotent and safe to re-run. Errors from individual
+    statements are not suppressed here so they can surface to callers.
+    """
+    with driver.session() as session:
+        for stmt in get_drop_queries():
+            session.run(stmt)
+
+
+def rollback(uri: str, user: str, password: str) -> None:
+    """Connect to Neo4j and drop created schema objects.
+
+    Convenience wrapper that mirrors :func:`init_schema`.
+    """
+    driver = connect(uri, user, password)
+    try:
+        rollback_schema(driver)
     finally:
         driver.close()

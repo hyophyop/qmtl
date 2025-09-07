@@ -1,0 +1,446 @@
+[2025-09-07T11:56:57] OpenAI Codex v0.25.0 (research preview)
+--------
+workdir: /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+model: gpt-5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: auto
+--------
+[2025-09-07T11:56:57] User instructions:
+# QMTL Issue Runner (Codex exec prompt)
+
+You are Codex CLI running non‑interactively via `codex exec`. Your job is to take the selected issue (via `ISSUE_ID`) scoped to this repository and complete it end‑to‑end under the `qmtl/` subtree, following the local development and testing standards.
+
+Success means: for each issue, changes are implemented with minimal diffs, docs updated when needed, tests pass, and a concise final summary is produced. If something fails, keep iterating within this session until either all acceptance criteria pass or there is a hard external blocker you must report.
+
+## Operating Constraints
+- Repo root working dir is the project base (caller may pass `-C <repo>`). Treat paths as repo‑relative.
+- Sandbox/approvals: assume `--sandbox danger-full-access` and `-a never`. Do not ask for user confirmation; proceed safely and deterministically.
+- Editing: apply file edits directly using your patch tool (not copy/paste instructions). Keep changes minimal and focused.
+- Search: prefer `rg` for fast, targeted searches; fall back to `grep` if missing.
+- Command etiquette: group related actions, print short preambles, keep outputs tidy. Avoid noisy commands.
+
+## Project Conventions (must follow)
+- Environment: manage Python with `uv`.
+  - Install dev deps if needed: `uv pip install -e .[dev]`
+  - Build docs locally with: `uv run mkdocs build`
+- Architecture boundaries: only reusable feature extraction or data‑processing utilities belong in `qmtl/`. Alpha/strategy logic must live in the root `strategies/` directory.
+- Documentation: docs live under `docs/`; each Markdown starts with a single `#` heading. Update `mkdocs.yml` nav when adding/moving files. Validate with `uv run mkdocs build`.
+- Testing:
+  - Preflight hang scan first (fast):
+    - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q -k 'not slow' --timeout=60 --timeout-method=thread --maxfail=1`
+  - Full suite after preflight passes:
+    - `uv run -m pytest -W error -n auto`
+  - If shared resources cause flakiness, prefer `--dist loadscope` or cap workers (e.g., `-n 2`).
+  - Mark expected long tests with `@pytest.mark.timeout(...)` and tag truly long/external tests as `slow` to exclude from preflight.
+- Examples under `qmtl/examples/` follow same conventions; keep functions pure and side‑effect free.
+
+## Inputs You Will Use
+- The caller provides an issue scope file path via env: `ISSUE_SCOPE_FILE`.
+  - Read it early with a safe shell command (e.g., `cat "$ISSUE_SCOPE_FILE"`).
+  - The file may be Markdown (with headings), YAML, or JSON. Parse pragmatically.
+  - Each issue should end up with: id/title, summary, acceptance criteria, affected paths, and any explicit tests.
+- Required: `ISSUE_ID` selects exactly one issue to process in this run.
+  - Read the scope file and select the matching issue; if not found, print a brief error and stop.
+- Optional: `FOLLOW_UP_INSTRUCTIONS` provides hints for a subsequent run.
+  - Use these to refine your plan or tests on the next pass.
+- If `ISSUE_SCOPE_FILE` is missing, print a brief error and stop.
+
+## Workflow to Follow (per issue)
+1) Intake
+- Parse the issue. Extract acceptance criteria and target files/areas.
+- State assumptions if anything is ambiguous and proceed with conservative defaults.
+
+2) Plan
+- Maintain a concise, ordered plan with exactly one in‑progress step at a time. Keep it updated as you advance.
+
+3) Implement
+- Make surgical edits using your patch tool. Preserve style and avoid unrelated refactors.
+- If an issue references `docs/alphadocs/ideas/gpt5pro/...`, add to the module header: `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and `# Priority: gpt5pro`, and record in `docs/alphadocs_history.log`.
+- Never place strategy/alpha modules inside `qmtl/`.
+
+4) Validate
+- Run the hang preflight command listed above. If it fails due to missing deps, install the minimal extras and re‑run.
+- On success, run the full test suite. If flaky, retry with capped workers.
+- For doc changes, run `uv run mkdocs build` and fix warnings/errors.
+
+5) Iterate
+- If tests or docs fail, fix at the root cause and re‑run validation. Repeat until the issue is satisfied or you hit a hard external blocker (which you must report succinctly).
+
+6) Summarize
+- For each issue, output:
+  - Changed files list with brief rationale per file
+  - Any new/updated docs and nav changes
+  - Validation results (preflight + full tests, and docs build)
+  - A suggested commit message starting with an auto‑closing keyword when appropriate (e.g., `Fixes #<number>`)
+
+## Guardrails
+- Do not introduce new licenses or headers.
+- Do not over‑optimize or refactor unrelated code.
+- Prefer simple, robust fixes over cleverness.
+- Keep diffs small; if a large change is unavoidable, split into logical steps.
+
+## Kickoff
+- Confirm repo readiness (presence of `pyproject.toml`, `qmtl/`, and `docs/`). Install dev deps if missing.
+- Read and parse `$ISSUE_SCOPE_FILE`.
+- Select the single issue indicated by `ISSUE_ID`. If not found, stop with a brief error.
+- Create a short, actionable plan and execute strictly for that one issue.
+
+## Output Expectation
+- Keep console output minimal but informative. Use brief preambles before grouped actions.
+- The orchestrator ignores streaming console output for scheduling; it relies on artifacts and the footer described below.
+
+### Output Footer Contract (required)
+At the very end of your final message for this run, include exactly:
+
+1) Single status line:
+```
+Result status: Done | Needs follow-up | Blocked
+```
+
+2) Only when status is "Needs follow-up", add a section:
+```
+Next-run Instructions
+- <bullet 1>
+- <bullet 2>
+```
+
+3) Always include a commit message section:
+```
+Suggested commit message
+<one short paragraph. If Done: starts with Fixes #<ISSUE_ID>; otherwise Refs #<ISSUE_ID>>
+```
+
+Example footer:
+```
+Suggested commit message
+Fixes #755: chore(dag-manager): add idempotent neo4j migrations and docs
+
+Result status: Done
+```
+
+[2025-09-07T11:57:02] codex
+
+I'll inspect the repo and load the issue scope using the provided env vars.
+[2025-09-07T11:57:03] exec bash -lc 'ls -la; echo ' 'echo "ISSUE_SCOPE_FILE=$ISSUE_SCOPE_FILE"; echo "ISSUE_ID=$ISSUE_ID"; echo "FOLLOW_UP_INSTRUCTIONS=${FOLLOW_UP_INSTRUCTIONS:-}"
+' in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:03] bash -lc 'ls -la; echo ' 'echo "ISSUE_SCOPE_FILE=$ISSUE_SCOPE_FILE"; echo "ISSUE_ID=$ISSUE_ID"; echo "FOLLOW_UP_INSTRUCTIONS=${FOLLOW_UP_INSTRUCTIONS:-}"
+' succeeded in 47ms:
+total 192
+drwxr-xr-x   26 501  staff    832 Sep  7 20:56 .
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 ..
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 .codex_runs
+-rw-r--r--    1 501  staff     76 Sep  7 20:56 .git
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 .github
+-rw-r--r--    1 501  staff    957 Sep  7 20:56 .gitignore
+drwxr-xr-x    6 501  staff    192 Sep  7 20:56 .kiro
+-rw-r--r--    1 501  staff   6560 Sep  7 20:56 AGENTS.md
+-rw-r--r--    1 501  staff   6099 Sep  7 20:56 BACKTEST_ENHANCEMENTS_SUMMARY.md
+-rw-r--r--    1 501  staff   2284 Sep  7 20:56 CHANGELOG.md
+-rw-r--r--    1 501  staff   1924 Sep  7 20:56 CONTRIBUTING.md
+-rw-r--r--    1 501  staff    108 Sep  7 20:56 Dockerfile
+-rw-r--r--    1 501  staff    105 Sep  7 20:56 MANIFEST.in
+-rw-r--r--    1 501  staff  10804 Sep  7 20:56 README.md
+-rw-r--r--    1 501  staff   2241 Sep  7 20:56 alert_rules.yml
+drwxr-xr-x    3 501  staff     96 Sep  7 20:56 codex_prompts
+drwxr-xr-x   15 501  staff    480 Sep  7 20:56 docs
+-rw-r--r--    1 501  staff   1255 Sep  7 20:56 main.py
+-rw-r--r--    1 501  staff   2876 Sep  7 20:56 mkdocs.yml
+[2025-09-07T11:57:03] tokens used: 9224
+
+[2025-09-07T11:57:05] thinking
+
+**Reviewing shell command execution**
+
+I noticed that the echo command didn’t display the environment variable values due to an incorrect execution. I could see the output from the ls command, but oddly, the echoes didn’t run as expected. It seems like the nested echo string was built incorrectly. I think I need to run the command again, but this time I’ll make sure everything is clean and properly structured. Let’s give it another shot!
+[2025-09-07T11:57:06] exec bash -lc "printf \"ISSUE_SCOPE_FILE=%s\\n\" \""'${ISSUE_SCOPE_FILE:-}"; printf "ISSUE_ID=%s'"\\n\" \""'${ISSUE_ID:-}"; printf "FOLLOW_UP_INSTRUCTIONS=%s'"\\n\" \""'${FOLLOW_UP_INSTRUCTIONS:-}"' in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:06] bash -lc "printf \"ISSUE_SCOPE_FILE=%s\\n\" \""'${ISSUE_SCOPE_FILE:-}"; printf "ISSUE_ID=%s'"\\n\" \""'${ISSUE_ID:-}"; printf "FOLLOW_UP_INSTRUCTIONS=%s'"\\n\" \""'${FOLLOW_UP_INSTRUCTIONS:-}"' succeeded in 21ms:
+ISSUE_SCOPE_FILE=/Users/munseungjin/workspace/research/qmtl/docs/issues/scope.md
+ISSUE_ID=761
+FOLLOW_UP_INSTRUCTIONS=
+[2025-09-07T11:57:06] tokens used: 994
+[2025-09-07T11:57:10] exec bash -lc "sed -n '1,200p' \""'$ISSUE_SCOPE_FILE"' in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:10] bash -lc "sed -n '1,200p' \""'$ISSUE_SCOPE_FILE"' succeeded in 19ms:
+# QMTL Issue Scope
+
+The following issues are tracked for automated Codex runs. Each entry includes a concrete scope with acceptance criteria and target paths limited to `qmtl/` and project docs.
+
+- ID: 761
+  Title: Docs — Sync Neo4j schema section with implemented indexes and idempotency
+  Summary: The code in `qmtl/dagmanager/neo4j_init.py` applies additional indexes (`compute_tags`, `queue_interval`, `compute_buffering_since`) that are not reflected in `docs/architecture/dag-manager.md` §1.2. Bring the documentation in sync and note that all DDL uses `IF NOT EXISTS` for idempotency. Include a short usage note for `qmtl dagmanager neo4j-init` and `export-schema`.
+  Acceptance:
+    - Section §1.2 lists all currently applied constraints/indexes, including: `compute_pk`, `kafka_topic`, `compute_tags`, `queue_interval`, `compute_buffering_since`.
+    - A brief note explains idempotency (`IF NOT EXISTS`) and links the relevant CLI.
+    - `uv run mkdocs build` succeeds with no new warnings/errors.
+  Affected:
+    - docs/architecture/dag-manager.md
+
+- ID: 762
+  Title: DAG Manager — Add safe Neo4j schema rollback (CLI + helpers)
+  Summary: Provide a safe rollback path to drop the constraints/indexes created by `neo4j-init`. Add helpers in `neo4j_init.py` to generate and apply `DROP ... IF EXISTS` statements, and expose a `qmtl dagmanager neo4j-rollback` CLI subcommand.
+  Acceptance:
+    - `qmtl/dagmanager/neo4j_init.py` exposes `get_drop_queries()` and `rollback_schema(driver)` (and a convenience `rollback(uri, user, password)` or reuse connect()) that drop only the items created by init.
+    - `qmtl/dagmanager/cli.py` adds a `neo4j-rollback` subcommand with `--uri/--user/--password`.
+[2025-09-07T11:57:10] tokens used: 247
+
+[2025-09-07T11:57:12] thinking
+
+**Updating documentation for issue 761**
+
+I’m focused on updating the documentation for issue 761, specifically section 1.2 of the dag-manager.md file to include the indexes 'compute_tags', 'queue_interval', and 'compute_buffering_since'. I'll also add an idempotency note and usage notes for 'qmtl dagmanager neo4j-init' and 'export-schema'. Additionally, I need to ensure that the mkdocs build succeeds. To confirm the schema items, I’ll check the qmtl/dagmanager/neo4j_init.py file.
+[2025-09-07T11:57:14] exec bash -lc "sed -n '1,220p' qmtl/dagmanager/neo4j_init.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:14] bash -lc "sed -n '1,220p' qmtl/dagmanager/neo4j_init.py" succeeded in 12ms:
+from .neo4j_export import connect
+
+
+SCHEMA_QUERIES = [
+    # Uniqueness and lookup for core access paths
+    "CREATE CONSTRAINT compute_pk IF NOT EXISTS ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE",
+    "CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic)",
+    # Performance-focused indexes for common queries
+    # Tag-based queue lookups: any/all membership checks over c.tags
+    "CREATE INDEX compute_tags IF NOT EXISTS FOR (c:ComputeNode) ON (c.tags)",
+    # Interval filtered lookups on queues
+    "CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval)",
+    # Buffering window scans for GC/monitoring
+    "CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since)",
+]
+
+
+def get_schema_queries() -> list[str]:
+    """Return Cypher statements needed to initialize Neo4j schema."""
+    return SCHEMA_QUERIES.copy()
+[2025-09-07T11:57:14] tokens used: 1169
+[2025-09-07T11:57:17] exec bash -lc "sed -n '1,240p' docs/architecture/dag-manager.md" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:17] bash -lc "sed -n '1,240p' docs/architecture/dag-manager.md" succeeded in 11ms:
+---
+title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
+{{ nav_links() }}
+
+# QMTL DAG Manager — 상세 설계서 (Extended Edition)
+
+> **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
+
+## 관련 문서
+- [Architecture Overview](README.md)
+- [QMTL Architecture](architecture.md)
+- [Gateway](gateway.md)
+- [Lean Brokerage Model](lean_brokerage_model.md)
+
+---
+[2025-09-07T11:57:17] tokens used: 11755
+[2025-09-07T11:57:24] exec bash -lc "sed -n '1,220p' qmtl/dagmanager/cli.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:24] bash -lc "sed -n '1,220p' qmtl/dagmanager/cli.py" succeeded in 17ms:
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+from pathlib import Path
+from typing import Dict, Iterable
+
+import grpc
+import sys
+
+from .diff_service import (
+    DiffRequest,
+    DiffService,
+    NodeRepository,
+    QueueManager,
+    NodeRecord,
+    StreamSender,
+)
+from .monitor import AckStatus
+[2025-09-07T11:57:24] tokens used: 3166
+
+[2025-09-07T11:57:38] thinking
+
+**Planning documentation changes**
+
+The guidelines emphasize brevity, but with larger changes, an expansion might be necessary. Since my changes are small, I still need to ensure a footer is included for proper formatting. I'll summarize the intake and plan, and provide proposed change details, keeping it concise.  
+
+For the suggested patch snippet, I’ll edit section 1.2's code block and replace it with an expanded version, adding an idempotency note and maybe a "CLI Usage" section with two commands, while maintaining the documentation style.
+**Creating a patch for documentation**
+
+I’m ready to write a patch that involves locating specific lines in the documentation. First, I’ll focus on section 1.2, titled "인덱스 & 제약 조건." Within the code block, I'll add three new index lines related to ComputeNode and Queue.
+
+Then, I’ll include a note indicating that all DDL will use "IF NOT EXISTS" to be idempotent and add CLI command examples for initializing and exporting the schema. I also want to verify the entry points in the pyproject file to ensure everything is set correctly.
+[2025-09-07T11:57:43] codex
+**Creating a patch for documentation**
+
+I’m ready to write a patch that involves locating specific lines in the documentation. First, I’ll focus on section 1.2, titled "인덱스 & 제약 조건." Within the code block, I'll add three new index lines related to ComputeNode and Queue.
+
+Then, I’ll include a note indicating that all DDL will use "IF NOT EXISTS" to be idempotent and add CLI command examples for initializing and exporting the schema. I also want to verify the entry points in the pyproject file to ensure everything is set correctly.
+[2025-09-07T11:57:44] exec bash -lc "rg -n \"entry_points|console_scripts|qmtl dagmanager\" -n pyproject.toml; sed -n '1,220p' pyproject.toml" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:44] bash -lc "rg -n \"entry_points|console_scripts|qmtl dagmanager\" -n pyproject.toml; sed -n '1,220p' pyproject.toml" succeeded in 16ms:
+[project]
+name = "qmtl"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "prometheus-client",
+    "boto3",
+    "xarray",
+    "networkx",
+    "numpy",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+    "redis",
+    "asyncpg",
+    "aiosqlite",
+    "websockets",
+    "grpcio>=1.74.0",
+    "grpcio",
+    "PyYAML",
+[2025-09-07T11:57:44] tokens used: 3466
+[2025-09-07T11:57:46] exec bash -lc "sed -n '1,260p' qmtl/cli.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:46] bash -lc "sed -n '1,260p' qmtl/cli.py" exited 1 in 13ms:
+sed: qmtl/cli.py: No such file or directory
+[2025-09-07T11:57:46] tokens used: 719
+[2025-09-07T11:57:47] exec bash -lc "rg -n \"def main\\(|argparse|dagmanager\" qmtl -n || true" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:47] bash -lc "rg -n \"def main\\(|argparse|dagmanager\" qmtl -n || true" succeeded in 25ms:
+qmtl/gateway/commit_log_cli.py:3:import argparse
+qmtl/gateway/commit_log_cli.py:18:def build_parser() -> argparse.ArgumentParser:
+qmtl/gateway/commit_log_cli.py:19:    p = argparse.ArgumentParser(prog="qmtl-commitlog-consumer", description="Run CommitLog consumer")
+qmtl/gateway/commit_log_cli.py:111:def main(argv: list[str] | None = None) -> int:
+qmtl/gateway/routes.py:17:from .dagmanager_client import DagManagerClient
+qmtl/gateway/routes.py:30:    dagmanager: DagManagerClient,
+qmtl/gateway/routes.py:43:            redis_conn, database_obj, dagmanager, world_client
+qmtl/gateway/routes.py:57:            redis_conn, database_obj, dagmanager, world_client
+qmtl/gateway/routes.py:75:        from qmtl.dagmanager.schema_validator import validate_dag
+qmtl/gateway/routes.py:132:                    dagmanager.get_queues_by_tag(
+qmtl/gateway/routes.py:150:            diff_task = dagmanager.diff(strategy_id, json.dumps(dag), world_id=payload.world_id)
+qmtl/gateway/routes.py:182:        from qmtl.dagmanager.schema_validator import validate_dag
+qmtl/gateway/routes.py:195:                dagmanager.diff("dryrun", json.dumps(dag), world_id=payload.world_id),
+qmtl/gateway/routes.py:219:                        dagmanager.get_queues_by_tag(
+qmtl/gateway/routes.py:252:        queues = await dagmanager.get_queues_by_tag(
+qmtl/gateway/cli.py:3:import argparse
+qmtl/gateway/cli.py:27:    parser = argparse.ArgumentParser(prog="qmtl gw")
+qmtl/gateway/cli.py:131:def main(argv: list[str] | None = None) -> None:
+qmtl/gateway/dagmanager_client.py:10:from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
+qmtl/gateway/dagmanager_client.py:53:            self._health_stub = dagmanager_pb2_grpc.HealthCheckStub(self._channel)
+[2025-09-07T11:57:47] tokens used: 202
+
+[2025-09-07T11:57:54] thinking
+
+**Exploring project structure**
+
+I'm trying to look for a specific script called `qmtl` in the pyproject file. It seems like it should be set up to run from `qmtl.cli:main`. I also think about checking the `qmtl/__init__.py` file, but I wonder if there's a `qmtl/cli.py` file that I could look into. However, it seems I couldn't find it. So, let’s list the contents of the `qmtl` directory to see what's there!
+[2025-09-07T11:57:58] exec bash -lc "ls -la qmtl | sed -n '1,200p'" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:57:58] bash -lc "ls -la qmtl | sed -n '1,200p'" succeeded in 28ms:
+total 40
+drwxr-xr-x  24 501  staff   768 Sep  7 20:56 .
+drwxr-xr-x  26 501  staff   832 Sep  7 20:56 ..
+-rw-r--r--   1 501  staff  2172 Sep  7 20:56 __init__.py
+-rw-r--r--   1 501  staff    82 Sep  7 20:56 __main__.py
+drwxr-xr-x  16 501  staff   512 Sep  7 20:56 brokerage
+drwxr-xr-x  13 501  staff   416 Sep  7 20:56 cli
+drwxr-xr-x  12 501  staff   384 Sep  7 20:56 common
+-rw-r--r--   1 501  staff  2068 Sep  7 20:56 config.py
+drwxr-xr-x  26 501  staff   832 Sep  7 20:56 dagmanager
+drwxr-xr-x  40 501  staff  1280 Sep  7 20:56 examples
+drwxr-xr-x  29 501  staff   928 Sep  7 20:56 gateway
+drwxr-xr-x   9 501  staff   288 Sep  7 20:56 generators
+drwxr-xr-x  22 501  staff   704 Sep  7 20:56 indicators
+drwxr-xr-x   7 501  staff   224 Sep  7 20:56 io
+drwxr-xr-x   4 501  staff   128 Sep  7 20:56 kafka
+drwxr-xr-x   4 501  staff   128 Sep  7 20:56 pipeline
+drwxr-xr-x   6 501  staff   192 Sep  7 20:56 proto
+-rw-r--r--   1 501  staff  6251 Sep  7 20:56 scaffold.py
+drwxr-xr-x   4 501  staff   128 Sep  7 20:56 schema
+[2025-09-07T11:57:58] tokens used: 3155
+[2025-09-07T11:58:00] exec bash -lc "sed -n '1,200p' qmtl/cli/__init__.py; sed -n '1,260p' qmtl/cli/main.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:58:00] bash -lc "sed -n '1,200p' qmtl/cli/__init__.py; sed -n '1,260p' qmtl/cli/main.py" exited 1 in 20ms:
+"""Top level command line interface for qmtl.
+
+This module exposes a ``main`` function that parses the first level of
+subcommands and dispatches remaining arguments to dedicated modules.  Each
+subcommand implementation lives in ``qmtl.cli.<name>`` and provides a
+``run(argv)`` entry point which is responsible for its own argument parsing
+and execution.
+"""
+
+from __future__ import annotations
+
+import argparse
+from importlib import import_module
+from typing import List
+
+
+DISPATCH = {
+    "gw": "qmtl.cli.gateway",
+    "dagmanager": "qmtl.cli.dagmanager",
+    "dagmanager-server": "qmtl.cli.dagmanager_server",
+[2025-09-07T11:58:00] tokens used: 873
+[2025-09-07T11:58:01] exec bash -lc "sed -n '1,220p' qmtl/cli/dagmanager.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-761
+[2025-09-07T11:58:01] bash -lc "sed -n '1,220p' qmtl/cli/dagmanager.py" succeeded in 15ms:
+from __future__ import annotations
+
+from typing import List
+
+
+def run(argv: List[str] | None = None) -> None:
+    """Entry point for the ``dagmanager`` subcommand."""
+
+    from qmtl.dagmanager.cli import main as dagm_main
+
+    dagm_main(argv)
+
+[2025-09-07T11:58:01] tokens used: 795
+[2025-09-07T11:58:11] codex
+
+I’ve loaded the repo and parsed the issue scope. Issue 761 is a docs-only sync: extend the Neo4j schema section to reflect what the code currently applies, add a short idempotency note, and mention the CLI usage for initializing and exporting schema.
+
+Proposed doc change (docs/architecture/dag-manager.md §1.2)
+- Update the code block to list all constraints/indexes currently applied by `qmtl/dagmanager/neo4j_init.py`:
+  - compute_pk, kafka_topic, compute_tags, queue_interval, compute_buffering_since
+- Add a short note that all DDLs use IF NOT EXISTS (idempotent).
+- Add a brief usage note for `qmtl dagmanager neo4j-init` and `qmtl dagmanager export-schema`.
+
+Exact replacement for the §1.2 code block and the following note
+- Replace the existing code block:
+  ```cypher
+  CREATE CONSTRAINT compute_pk IF NOT EXISTS
+  ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+  CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+  ```
+- With:
+  ```cypher
+  CREATE CONSTRAINT compute_pk IF NOT EXISTS
+  ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+
+  CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+  CREATE INDEX compute_tags IF NOT EXISTS FOR (c:ComputeNode) ON (c.tags);
+  CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval);
+  CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since);
+  ```
+- Immediately below the code block, insert:
+  - Idempotency note (Korean, consistent with the doc):
+    - 모든 DDL은 IF NOT EXISTS를 사용해 idempotent하게 적용됩니다.
+  - Usage note:
+    - 초기화: `qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password ******`
+    - 스키마 내보내기: `qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password ****** --out schema.cypher`
+
+Why these items
+- They exactly match SCHEMA_QUERIES in `qmtl/dagmanager/neo4j_init.py`: `compute_pk`, `kafka_topic`, `compute_tags`, `queue_interval`, `compute_buffering_since`.
+- The CLI endpoints already exist in `qmtl/dagmanager/cli.py` and are exposed via `qmtl dagmanager` through `qmtl/cli`.
+
+Changed files
+- docs/architecture/dag-manager.md: Sync §1.2 schema list, add idempotency note and CLI usage.
+
+Validation
+- Could not apply changes or run `uv run mkdocs build` due to a read-only sandbox in this run. The changes are doc-only and should build cleanly without nav edits.
+
+Suggested commit message
+Refs #761: docs(dag-manager): sync Neo4j schema indexes and idempotency; add CLI usage for neo4j-init/export-schema
+
+Result status: Blocked
+[2025-09-07T11:58:15] tokens used: 1382
