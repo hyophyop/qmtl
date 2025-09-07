@@ -16,6 +16,8 @@ class StrategySubmit(BaseModel):
 class StrategyAck(BaseModel):
     strategy_id: str
     queue_map: dict[str, object] = Field(default_factory=dict)
+    # Include sentinel identifier for parity with dry-run/diff outputs
+    sentinel_id: str | None = None
 
 
 class StatusResponse(BaseModel):
