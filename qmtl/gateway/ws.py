@@ -51,7 +51,7 @@ class WebSocketHub:
         except Exception:
             pass
 
-    async def start(self) -> int:
+    async def start(self, *, start_server: bool = False) -> int:
         """Start the internal sender loop and a lightweight WS server.
 
         Returns the bound port for the ephemeral WebSocket server. FastAPI
@@ -63,7 +63,16 @@ class WebSocketHub:
 
         # Lazily start an ephemeral ws server to satisfy tests that
         # connect directly to the hub.
+        # Disabled by default to avoid leaking sockets in parallel tests.
+        # Can be enabled via parameter or the QMTL_WS_ENABLE_SERVER=1 env var.
         if self._server is None:
+            if not start_server:
+                try:
+                    import os as _os
+                    if _os.getenv("QMTL_WS_ENABLE_SERVER", "0") != "1":
+                        return int(self._port or 0)
+                except Exception:
+                    return int(self._port or 0)
             try:
                 import websockets
 
