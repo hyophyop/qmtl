@@ -17,6 +17,7 @@ nav:
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Migration (BC Removal): guides/migration_bc_removal.md
+      - Migration (NodeID BLAKE3): guides/migration_nodeid_blake3.md
       - Python Environment: guides/python_environment.md
       - HTTPX Usage: guides/httpx_usage.md
   - Operations:

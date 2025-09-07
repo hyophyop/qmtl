@@ -1,10 +1,14 @@
 import base64
 import json
-import hashlib
+
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.common import compute_node_id, crc32_of_list
+from qmtl.common import (
+    compute_legacy_node_id,
+    compute_node_id,
+    crc32_of_list,
+)
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
 
@@ -37,11 +41,11 @@ def client_and_redis(fake_redis):
 
 
 def test_compute_node_id_collision():
-    data = ("A", "B", "C", "D", "w1")
+    data = ("A", "B", "C", "D")
     first = compute_node_id(*data)
     second = compute_node_id(*data, existing_ids={first})
     assert first != second
-    assert second == hashlib.sha3_256(b"w1:A:B:C:D").hexdigest()
+    assert second.startswith("blake3:")
 
 
 @pytest.mark.asyncio
@@ -67,6 +71,28 @@ async def test_node_id_mismatch(client_and_redis):
 
 
 @pytest.mark.asyncio
+async def test_legacy_node_id_accepted(client_and_redis):
+    client, _ = client_and_redis
+    legacy_id = compute_legacy_node_id("N", "c", "cfg", "s", "w1")
+    node = {
+        "node_type": "N",
+        "code_hash": "c",
+        "config_hash": "cfg",
+        "schema_hash": "s",
+        "node_id": legacy_id,
+    }
+    dag = {"nodes": [node]}
+    payload = StrategySubmit(
+        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+        meta=None,
+        world_id="w1",
+        node_ids_crc32=crc32_of_list([legacy_id]),
+    )
+    resp = client.post("/strategies", json=payload.model_dump())
+    assert resp.status_code == 202
+
+
+@pytest.mark.asyncio
 async def test_sentinel_inserted(client_and_redis):
     client, redis = client_and_redis
     dag = {"nodes": []}
@@ -87,7 +113,9 @@ async def test_sentinel_inserted(client_and_redis):
 async def test_sentinel_skip(fake_redis):
     redis = fake_redis
     db = FakeDB()
-    app = create_app(redis_client=redis, database=db, insert_sentinel=False, enable_background=False)
+    app = create_app(
+        redis_client=redis, database=db, insert_sentinel=False, enable_background=False
+    )
     with TestClient(app) as client:
         dag = {"nodes": []}
         payload = StrategySubmit(

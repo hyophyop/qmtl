@@ -80,7 +80,11 @@ def create_api_router(
                 detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
             )
 
-        from qmtl.common import crc32_of_list, compute_node_id
+        from qmtl.common import (
+            crc32_of_list,
+            compute_node_id,
+            compute_legacy_node_id,
+        )
 
         crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
         if crc != payload.node_ids_crc32:
@@ -102,8 +106,11 @@ def create_api_router(
             )
             if not all(required):
                 continue
-            expected = compute_node_id(*required, payload.world_id or "")
-            if node.get("node_id") != expected:
+            expected = compute_node_id(*required)
+            legacy = compute_legacy_node_id(
+                *required, payload.world_id or ""
+            )
+            if node.get("node_id") not in {expected, legacy}:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
                 )

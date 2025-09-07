@@ -521,7 +521,6 @@ class Node:
             self.code_hash,
             self.config_hash,
             self.schema_hash,
-            self.world_id or "",
         )
 
     # --- runtime cache handling -----------------------------------------

@@ -7,6 +7,7 @@
 - `TagQueryNode.resolve()` has been removed. Use `TagQueryManager.resolve_tags()` to fetch queue mappings before execution.
 - Added `Node.add_tag()` to attach tags after node creation.
 - Added migration guide for removing legacy Runner/CLI/Gateway surfaces. See [docs/guides/migration_bc_removal.md](docs/guides/migration_bc_removal.md).
+- NodeID now uses BLAKE3 with a `blake3:` prefix and no longer includes `world_id`. Legacy SHA-based IDs remain temporarily supported. See [docs/guides/migration_nodeid_blake3.md](docs/guides/migration_nodeid_blake3.md).
 
 ---
 

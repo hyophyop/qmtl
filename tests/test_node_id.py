@@ -3,7 +3,8 @@ from qmtl.sdk import SourceNode, ProcessingNode, StreamInput, Strategy
 def test_node_id_generation():
     node = SourceNode(compute_fn=lambda x: x, name="n", interval="1s", period=1)
     node_id = node.node_id
-    assert len(node_id) == 64
+    assert node_id.startswith("blake3:")
+    assert len(node_id) == 71
     assert node_id == node.node_id  # deterministic
 
 
@@ -20,4 +21,4 @@ def test_strategy_serialize():
     dag = s.serialize()
     assert "nodes" in dag
     ids = [n["node_id"] for n in dag["nodes"]]
-    assert all(len(i) == 64 for i in ids)
+    assert all(i.startswith("blake3:") for i in ids)
