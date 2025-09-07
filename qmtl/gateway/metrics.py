@@ -226,6 +226,18 @@ ws_acks_total = Counter(
     registry=global_registry,
 )
 
+ws_refreshes_total = Counter(
+    "ws_refreshes_total",
+    "Total number of WebSocket token refresh requests",
+    registry=global_registry,
+)
+
+ws_refresh_failures_total = Counter(
+    "ws_refresh_failures_total",
+    "Total number of failed WebSocket token refresh attempts",
+    registry=global_registry,
+)
+
 sentinel_skew_seconds = Gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
@@ -457,6 +469,8 @@ def reset_metrics() -> None:
     ws_auth_failures_total._value.set(0)  # type: ignore[attr-defined]
     ws_heartbeats_total._value.set(0)  # type: ignore[attr-defined]
     ws_acks_total._value.set(0)  # type: ignore[attr-defined]
+    ws_refreshes_total._value.set(0)  # type: ignore[attr-defined]
+    ws_refresh_failures_total._value.set(0)  # type: ignore[attr-defined]
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
     pretrade_attempts_total.clear()

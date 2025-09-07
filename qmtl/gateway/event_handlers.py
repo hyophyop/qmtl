@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 import logging
+import contextlib
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from qmtl.sdk.node import MatchMode
@@ -199,6 +200,64 @@ def create_event_router(
                                 )
                             except Exception:
                                 pass
+                        elif msg_type == "refresh":
+                            gw_metrics.ws_refreshes_total.inc()
+                            token = payload.get("token")
+                            try:
+                                new_claims = validate_event_token(token, event_config)
+                                raw_topics = new_claims.get("topics") or []
+                                normalize = {
+                                    "queues": "queue",
+                                    "queue": "queue",
+                                    "activation": "activation",
+                                    "policy": "policy",
+                                }
+                                new_topics_set = {
+                                    normalize[t] for t in raw_topics if t in normalize
+                                }
+                                topics_set = new_topics_set
+                                claims = new_claims
+                                await ws_hub.set_topics(websocket, topics=new_topics_set)
+                                try:
+                                    await ws_hub.set_filters(
+                                        websocket,
+                                        world_id=new_claims.get("world_id"),
+                                        strategy_id=new_claims.get("strategy_id"),
+                                    )
+                                except Exception:
+                                    pass
+                                logger.info(
+                                    "ws_refresh",
+                                    extra={
+                                        "event": "ws_refresh",
+                                        "strategy_id": new_claims.get("strategy_id"),
+                                        "world_id": new_claims.get("world_id"),
+                                        "topics": sorted(list(new_topics_set)),
+                                    },
+                                )
+                                try:
+                                    await websocket.send_text(
+                                        json.dumps(
+                                            {
+                                                "type": "refresh_ack",
+                                                "ts": datetime.now(timezone.utc).isoformat(),
+                                            }
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                            except Exception:
+                                gw_metrics.ws_refresh_failures_total.inc()
+                                logger.warning(
+                                    "ws_refresh_failed",
+                                    extra={
+                                        "event": "ws_refresh_failed",
+                                        "remote": getattr(websocket.client, "host", None),
+                                    },
+                                )
+                                with contextlib.suppress(Exception):
+                                    await websocket.close(code=1008)
+                                break
                         else:
                             gw_metrics.ws_heartbeats_total.inc()
                             logger.debug(
