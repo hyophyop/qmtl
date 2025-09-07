@@ -70,11 +70,25 @@ def create_api_router(
         except Exception:
             dag = json.loads(payload.dag_json)
 
+        # Schema validation (non-breaking): accept legacy DAGs without a version
+        # but standardize error reporting when an explicit unsupported version is given.
+        from qmtl.dagmanager.schema_validator import validate_dag
+        ok, _version, verrors = validate_dag(dag)
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
+            )
+
         from qmtl.common import crc32_of_list, compute_node_id
 
         crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
         if crc != payload.node_ids_crc32:
-            raise HTTPException(status_code=400, detail="node id checksum mismatch")
+            # Standardize error payload while keeping message readable
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "E_CHECKSUM_MISMATCH", "message": "node id checksum mismatch"},
+            )
 
         mismatches: list[dict[str, str | int]] = []
         for idx, node in enumerate(dag.get("nodes", [])):
@@ -94,11 +108,16 @@ def create_api_router(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
                 )
         if mismatches:
-            raise HTTPException(status_code=400, detail={"node_id_mismatch": mismatches})
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "E_NODE_ID_MISMATCH", "node_id_mismatch": mismatches},
+            )
 
         strategy_id, existed = await manager.submit(payload)
         if existed:
-            raise HTTPException(status_code=409, detail={"strategy_id": strategy_id})
+            raise HTTPException(
+                status_code=409, detail={"code": "E_DUPLICATE", "strategy_id": strategy_id}
+            )
 
         queue_map: dict[str, list[str] | str] = {}
         node_ids: list[str] = []
@@ -125,10 +144,92 @@ def create_api_router(
             else:
                 queue_map[nid] = result
 
-        resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map)
+        # Try to fetch sentinel id quickly via Diff; fall back to deterministic value
+        sentinel_id = f"{strategy_id}-sentinel"
+        try:
+            diff_task = dagmanager.diff(strategy_id, json.dumps(dag), world_id=payload.world_id)
+            chunk = await asyncio.wait_for(diff_task, timeout=0.1)
+            if chunk and getattr(chunk, "sentinel_id", ""):
+                sentinel_id = chunk.sentinel_id
+        except Exception:
+            pass
+
+        resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map, sentinel_id=sentinel_id)
         duration_ms = (time.perf_counter() - start) * 1000
         gw_metrics.observe_gateway_latency(duration_ms)
         return resp
+
+    @router.post(
+        "/strategies/dry-run",
+        status_code=status.HTTP_200_OK,
+        response_model=StrategyAck,
+    )
+    async def post_strategies_dry_run(payload: StrategySubmit) -> StrategyAck:
+        """Dry-run submission that returns the same response shape as /strategies.
+
+        Parity requirement: queue_map and sentinel_id semantics match the real
+        submission endpoint. Implementation prefers DAG Manager diff results and
+        maps them to the HTTP queue_map shape; falls back to per-node tag
+        queries when diff is unavailable.
+        """
+        try:
+            dag_bytes = base64.b64decode(payload.dag_json)
+            dag = json.loads(dag_bytes.decode())
+        except Exception:
+            dag = json.loads(payload.dag_json)
+
+        # Schema validation parity with /strategies
+        from qmtl.dagmanager.schema_validator import validate_dag
+        ok, _version, verrors = validate_dag(dag)
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
+            )
+
+        # Preferred path: use diff to compute sentinel and queue mapping
+        sentinel_id = ""
+        queue_map_http: dict[str, list[dict[str, object]]] = {}
+        try:
+            chunk = await asyncio.wait_for(
+                dagmanager.diff("dryrun", json.dumps(dag), world_id=payload.world_id),
+                timeout=0.5,
+            )
+            if chunk is not None:
+                sentinel_id = getattr(chunk, "sentinel_id", "") or ""
+                # Transform partition-key map to HTTP queue_map shape
+                # Key format: "<node_id>:<interval>:<bucket>" → group by node_id
+                for key, topic in dict(chunk.queue_map).items():
+                    node_id = str(key).split(":", 1)[0]
+                    queue_map_http.setdefault(node_id, []).append(
+                        {"queue": topic, "global": False}
+                    )
+        except Exception:
+            # Fallback: reuse TagQueryNode queries to provide parity with /strategies
+            queue_map_http = {}
+            node_ids: list[str] = []
+            queries: list[Coroutine[Any, Any, list[str]]] = []
+            for node in dag.get("nodes", []):
+                if node.get("node_type") == "TagQueryNode":
+                    tags = node.get("tags", [])
+                    interval = int(node.get("interval", 0))
+                    match_mode = node.get("match_mode", "any")
+                    node_ids.append(node["node_id"])
+                    queries.append(
+                        dagmanager.get_queues_by_tag(
+                            tags, interval, match_mode, payload.world_id
+                        )
+                    )
+            results = []
+            if queries:
+                results = await asyncio.gather(*queries, return_exceptions=True)
+            for nid, result in zip(node_ids, results):
+                if isinstance(result, Exception):
+                    queue_map_http[nid] = []
+                else:
+                    queue_map_http[nid] = result
+
+        return StrategyAck(strategy_id="dryrun", queue_map=queue_map_http, sentinel_id=sentinel_id)
 
     @router.get(
         "/strategies/{strategy_id}/status", response_model=StatusResponse
@@ -226,7 +327,10 @@ def create_api_router(
     @router.post("/worlds/{world_id}/apply")
     async def post_world_apply(world_id: str, payload: dict, request: Request) -> Any:
         if enforce_live_guard and request.headers.get("X-Allow-Live") != "true":
-            raise HTTPException(status_code=403, detail="live trading not allowed")
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "E_PERMISSION_DENIED", "message": "live trading not allowed"},
+            )
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
