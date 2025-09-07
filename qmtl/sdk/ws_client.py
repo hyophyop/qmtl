@@ -136,13 +136,25 @@ class WebSocketClient:
         self._stop_event.set()
         if self._ws is not None:
             self._ws.close_timeout = 0
+            # Initiate close and wait for transport teardown to avoid
+            # ResourceWarning: unclosed socket warnings under -W error.
             await self._ws.close()
+            try:
+                await self._ws.wait_closed()  # type: ignore[attr-defined]
+            except Exception:
+                pass
             self._ws = None
         if self._task is not None:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
-            self._task = None
+            # Prefer graceful exit over cancellation to let the context
+            # manager close the socket cleanly.
+            try:
+                await asyncio.wait_for(self._task, timeout=1.0)
+            except asyncio.TimeoutError:
+                self._task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._task
+            finally:
+                self._task = None
 
     async def _heartbeat(self, ws: websockets.WebSocketClientProtocol) -> None:
         """Send periodic pings to ensure connection liveness."""
