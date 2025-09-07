@@ -32,6 +32,24 @@ class WebSocketHub:
         self._server: Optional[Any] = None
         self._port: Optional[int] = None
         self._known_topics: Set[str] = set()
+        # Best-effort idempotency window for duplicate event IDs
+        # Tracks the last N CloudEvent ids to drop duplicates during reconnect/retry.
+        from collections import deque
+        self._seen_ids_order = deque(maxlen=10000)
+        self._seen_ids: Set[str] = set()
+        # Optional monotonic sequence for events to aid client-side reordering
+        self._seq_no: int = 0
+        # Per-connection token bucket (tokens/sec). 0 disables rate limiting.
+        self._rate_limit_per_sec: int = 0
+        self._rl_state: Dict[Any, tuple[float, float]] = {}
+        # Optional env override for rate limit (tokens/sec)
+        try:
+            import os as _os
+            _rl = _os.getenv("QMTL_WS_RATE_LIMIT")
+            if _rl:
+                self._rate_limit_per_sec = int(_rl)
+        except Exception:
+            pass
 
     async def start(self) -> int:
         """Start the internal sender loop and a lightweight WS server.
@@ -123,6 +141,7 @@ class WebSocketHub:
             self._clients.discard(websocket)
             self._topics.pop(websocket, None)
             self._filters.pop(websocket, None)
+            self._rl_state.pop(websocket, None)
         metrics.record_ws_drop()
         await self._recalc_subscriber_metrics()
 
@@ -171,6 +190,25 @@ class WebSocketHub:
                 msg, topic = item  # type: ignore[misc]
             else:
                 msg, topic = item, None
+            # Idempotency: drop duplicates by CloudEvent.id when present
+            try:
+                parsed_any = json.loads(msg if isinstance(msg, str) else msg)
+                if isinstance(parsed_any, dict):
+                    ev_id = parsed_any.get("id")
+                    if isinstance(ev_id, str):
+                        if ev_id in self._seen_ids:
+                            metrics.record_event_dropped(topic or "unknown")
+                            logger.debug(
+                                "duplicate_drop",
+                                extra={"event": "duplicate_drop", "id": ev_id, "topic": topic},
+                            )
+                            self._queue.task_done()
+                            continue
+                        self._seen_ids_order.append(ev_id)
+                        # Keep membership set in sync with deque window
+                        self._seen_ids = set(self._seen_ids_order)
+            except Exception:
+                pass
             async with self._lock:
                 if topic is None:
                     clients = list(self._clients)
@@ -205,6 +243,20 @@ class WebSocketHub:
                 metrics.record_event_fanout(topic, len(clients))
             if clients:
                 async def _send(ws_any: Any, data: str):
+                    # Simple per-connection rate limit using a token bucket.
+                    if self._rate_limit_per_sec > 0:
+                        now = asyncio.get_event_loop().time()
+                        tokens, last = self._rl_state.get(ws_any, (float(self._rate_limit_per_sec), now))
+                        # Refill proportional to elapsed time
+                        elapsed = max(0.0, now - last)
+                        refill = elapsed * float(self._rate_limit_per_sec)
+                        tokens = min(float(self._rate_limit_per_sec), tokens + refill)
+                        if tokens < 1.0:
+                            # Drop under rate limit; structured log for ops visibility
+                            logger.debug("ws_rate_limited_drop", extra={"event": "ws_rate_limited_drop"})
+                            return None
+                        tokens -= 1.0
+                        self._rl_state[ws_any] = (tokens, now)
                     if hasattr(ws_any, "send_text"):
                         return await ws_any.send_text(data)
                     if hasattr(ws_any, "send"):
@@ -238,13 +290,25 @@ class WebSocketHub:
         If ``topic`` is provided, only clients subscribed to that topic will
         receive the message. Otherwise the message is broadcast to all.
         """
+        # Inject hub-assigned monotonic seq_no if absent
+        if "seq_no" not in data:
+            try:
+                self._seq_no += 1
+                data["seq_no"] = self._seq_no
+            except Exception:
+                pass
         # Apply simple backpressure policy: if queue is full, drop newest message
         item = (json.dumps(data), topic)
         try:
             self._queue.put_nowait(item)
         except asyncio.QueueFull:
             # Drop and log; rely on upstream dedupe/idempotency for recovery.
-            logger.warning("event_queue_full_drop", extra={"event": "event_queue_full_drop"})
+            logger.warning("event_queue_full_drop", extra={"event": "event_queue_full_drop", "topic": topic})
+            if topic:
+                try:
+                    metrics.record_event_dropped(topic)
+                except Exception:
+                    pass
             # Best-effort: remove one oldest item then enqueue
             with contextlib.suppress(Exception):
                 _ = self._queue.get_nowait()

@@ -276,6 +276,11 @@ Token (JWT) claims (delegated WS or future use):
 - `world_id`, `strategy_id`, `topics`: subscription scope
 - `jti`, `iat`, `exp`: idempotency and keying. Key ID (`kid`) is conveyed in the JWT header.
 
+Token refresh
+- Clients may refresh an expiring token on the same connection by sending `{ "type": "refresh", "token": "<jwt>" }`.
+- On success Gateway updates scopes/topics in-place and returns `{ "type": "refresh_ack" }`.
+- Failures emit `ws_refresh_failed` and close the socket with policy code 1008.
+
 ### Degrade & Fail‑Safe Policy (Summary)
 
 - WorldService unavailable:

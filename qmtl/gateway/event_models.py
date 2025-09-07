@@ -56,6 +56,9 @@ class CloudEvent(BaseModel, Generic[T]):
     datacontenttype: Literal["application/json"] = "application/json"
     data: T
     correlation_id: Optional[StrictStr] = None
+    # Optional hub-assigned monotonic sequence number to aid reordering
+    # across upstream partitions. Not guaranteed to be globally unique.
+    seq_no: Optional[StrictInt] = None
 
 
 __all__ = [
@@ -66,4 +69,3 @@ __all__ = [
     "PolicyUpdatedData",
     "CloudEvent",
 ]
-
