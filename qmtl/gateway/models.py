@@ -10,6 +10,8 @@ class StrategySubmit(BaseModel):
     dag_json: str = Field(..., description="Base64 encoded DAG JSON")
     meta: Optional[dict] = Field(default=None)
     world_id: Optional[str] = None
+    # Optional multi-world submission (backward compatible with world_id)
+    world_ids: Optional[list[str]] = None
     node_ids_crc32: int
 
 

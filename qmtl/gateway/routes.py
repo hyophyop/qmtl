@@ -126,35 +126,74 @@ def create_api_router(
                 status_code=409, detail={"code": "E_DUPLICATE", "strategy_id": strategy_id}
             )
 
-        queue_map: dict[str, list[str] | str] = {}
+        # Persist world↔strategy bindings (WSB) for all requested worlds
+        worlds: list[str] = []
+        wid_list = getattr(payload, "world_ids", None)
+        if wid_list:
+            worlds = list(dict.fromkeys([w for w in (wid_list or []) if w]))
+        elif payload.world_id:
+            worlds = [payload.world_id]
+        for w in worlds:
+            try:
+                await database_obj.upsert_wsb(w, strategy_id)
+            except Exception:
+                # Best-effort: do not fail ingestion on binding errors
+                pass
+
+        queue_map: dict[str, list[dict[str, object]]] = {}
         node_ids: list[str] = []
         queries: list[Coroutine[Any, Any, list[str]]] = []
+        query_targets: list[tuple[str, str | None]] = []  # (node_id, world_id)
         for node in dag.get("nodes", []):
             if node.get("node_type") == "TagQueryNode":
                 tags = node.get("tags", [])
                 interval = int(node.get("interval", 0))
                 match_mode = node.get("match_mode", "any")
-                node_ids.append(node["node_id"])
-                queries.append(
-                    dagmanager.get_queues_by_tag(
-                        tags, interval, match_mode, payload.world_id
+                nid = node["node_id"]
+                node_ids.append(nid)
+                if worlds:
+                    for w in worlds:
+                        queries.append(
+                            dagmanager.get_queues_by_tag(
+                                tags, interval, match_mode, w
+                            )
+                        )
+                        query_targets.append((nid, w))
+                else:
+                    queries.append(
+                        dagmanager.get_queues_by_tag(
+                            tags, interval, match_mode, payload.world_id
+                        )
                     )
-                )
+                    query_targets.append((nid, payload.world_id))
 
         results = []
         if queries:
             results = await asyncio.gather(*queries, return_exceptions=True)
 
-        for nid, result in zip(node_ids, results):
-            if isinstance(result, Exception):
-                queue_map[nid] = []
-            else:
-                queue_map[nid] = result
+        if queries:
+            # Merge per-world results into node-scoped queue lists with de-duplication
+            merged: dict[str, list[dict[str, object]]] = {}
+            seen: dict[str, set[str]] = {}
+            for (nid, _w), result in zip(query_targets, results):
+                if isinstance(result, Exception):
+                    merged.setdefault(nid, [])
+                    continue
+                merged.setdefault(nid, [])
+                seen.setdefault(nid, set())
+                for q in result:
+                    qname = q.get("queue") if isinstance(q, dict) else str(q)
+                    if qname not in seen[nid]:
+                        merged[nid].append(q)
+                        seen[nid].add(qname)
+            queue_map.update(merged)
 
         # Try to fetch sentinel id quickly via Diff; fall back to deterministic value
         sentinel_id = f"{strategy_id}-sentinel"
         try:
-            diff_task = dagmanager.diff(strategy_id, json.dumps(dag), world_id=payload.world_id)
+            # Use first world for diff context if provided; sentinel is world-agnostic
+            diff_world = worlds[0] if worlds else (payload.world_id or None)
+            diff_task = dagmanager.diff(strategy_id, json.dumps(dag), world_id=diff_world)
             chunk = await asyncio.wait_for(diff_task, timeout=0.1)
             if chunk and getattr(chunk, "sentinel_id", ""):
                 sentinel_id = chunk.sentinel_id
@@ -194,47 +233,91 @@ def create_api_router(
                 detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
             )
 
+        # Worlds scope
+        worlds: list[str] = []
+        wid_list = getattr(payload, "world_ids", None)
+        if wid_list:
+            worlds = list(dict.fromkeys([w for w in (wid_list or []) if w]))
+        elif payload.world_id:
+            worlds = [payload.world_id]
+
         # Preferred path: use diff to compute sentinel and queue mapping
         sentinel_id = ""
         queue_map_http: dict[str, list[dict[str, object]]] = {}
         try:
-            chunk = await asyncio.wait_for(
-                dagmanager.diff("dryrun", json.dumps(dag), world_id=payload.world_id),
-                timeout=0.5,
-            )
-            if chunk is not None:
-                sentinel_id = getattr(chunk, "sentinel_id", "") or ""
-                # Transform partition-key map to HTTP queue_map shape
-                # Key format: "<node_id>:<interval>:<bucket>" → group by node_id
-                for key, topic in dict(chunk.queue_map).items():
-                    node_id = str(key).split(":", 1)[0]
-                    queue_map_http.setdefault(node_id, []).append(
-                        {"queue": topic, "global": False}
-                    )
+            if len(worlds) <= 1:
+                chunk = await asyncio.wait_for(
+                    dagmanager.diff(
+                        "dryrun", json.dumps(dag), world_id=(worlds[0] if worlds else None)
+                    ),
+                    timeout=0.5,
+                )
+                if chunk is not None:
+                    sentinel_id = getattr(chunk, "sentinel_id", "") or ""
+                    # Transform partition-key map to HTTP queue_map shape
+                    for key, topic in dict(chunk.queue_map).items():
+                        node_id = str(key).split(":", 1)[0]
+                        queue_map_http.setdefault(node_id, []).append(
+                            {"queue": topic, "global": False}
+                        )
+            else:
+                # Merge per-world diffs
+                tasks = [
+                    dagmanager.diff("dryrun", json.dumps(dag), world_id=w) for w in worlds
+                ]
+                chunks = await asyncio.gather(*tasks, return_exceptions=True)
+                for ch in chunks:
+                    if isinstance(ch, Exception) or ch is None:
+                        continue
+                    if not sentinel_id:
+                        sentinel_id = getattr(ch, "sentinel_id", "") or ""
+                    for key, topic in dict(ch.queue_map).items():
+                        node_id = str(key).split(":", 1)[0]
+                        lst = queue_map_http.setdefault(node_id, [])
+                        if topic not in [d.get("queue") for d in lst]:
+                            lst.append({"queue": topic, "global": False})
         except Exception:
             # Fallback: reuse TagQueryNode queries to provide parity with /strategies
             queue_map_http = {}
             node_ids: list[str] = []
             queries: list[Coroutine[Any, Any, list[str]]] = []
+            query_targets: list[tuple[str, str | None]] = []
             for node in dag.get("nodes", []):
                 if node.get("node_type") == "TagQueryNode":
                     tags = node.get("tags", [])
                     interval = int(node.get("interval", 0))
                     match_mode = node.get("match_mode", "any")
-                    node_ids.append(node["node_id"])
-                    queries.append(
-                        dagmanager.get_queues_by_tag(
-                            tags, interval, match_mode, payload.world_id
+                    nid = node.get("node_id")
+                    node_ids.append(nid)
+                    if worlds:
+                        for w in worlds:
+                            queries.append(
+                                dagmanager.get_queues_by_tag(
+                                    tags, interval, match_mode, w
+                                )
+                            )
+                            query_targets.append((nid, w))
+                    else:
+                        queries.append(
+                            dagmanager.get_queues_by_tag(
+                                tags, interval, match_mode, payload.world_id
+                            )
                         )
-                    )
+                        query_targets.append((nid, payload.world_id))
             results = []
             if queries:
                 results = await asyncio.gather(*queries, return_exceptions=True)
-            for nid, result in zip(node_ids, results):
+            for (nid, _w), result in zip(query_targets, results):
                 if isinstance(result, Exception):
-                    queue_map_http[nid] = []
-                else:
-                    queue_map_http[nid] = result
+                    queue_map_http.setdefault(nid, [])
+                    continue
+                lst = queue_map_http.setdefault(nid, [])
+                seen = {d.get("queue") for d in lst}
+                for q in result:
+                    qname = q.get("queue") if isinstance(q, dict) else str(q)
+                    if qname not in seen:
+                        lst.append(q)
+                        seen.add(qname)
             # Ensure non-empty sentinel when diff is unavailable: derive a deterministic id
             if not sentinel_id:
                 from qmtl.common import crc32_of_list
