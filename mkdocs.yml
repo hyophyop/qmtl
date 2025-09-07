@@ -26,6 +26,7 @@ nav:
       - Canary Rollout: operations/canary_rollout.md
       - E2E Testing: operations/e2e_testing.md
       - Codex Issue Runner: operations/codex_issue_runner.md
+      - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md

@@ -1,0 +1,402 @@
+[2025-09-07T11:59:33] OpenAI Codex v0.25.0 (research preview)
+--------
+workdir: /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+model: gpt-5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: auto
+--------
+[2025-09-07T11:59:33] User instructions:
+# QMTL Issue Runner (Codex exec prompt)
+
+You are Codex CLI running non‑interactively via `codex exec`. Your job is to take the selected issue (via `ISSUE_ID`) scoped to this repository and complete it end‑to‑end under the `qmtl/` subtree, following the local development and testing standards.
+
+Success means: for each issue, changes are implemented with minimal diffs, docs updated when needed, tests pass, and a concise final summary is produced. If something fails, keep iterating within this session until either all acceptance criteria pass or there is a hard external blocker you must report.
+
+## Operating Constraints
+- Repo root working dir is the project base (caller may pass `-C <repo>`). Treat paths as repo‑relative.
+- Sandbox/approvals: assume `--sandbox danger-full-access` and `-a never`. Do not ask for user confirmation; proceed safely and deterministically.
+- Editing: apply file edits directly using your patch tool (not copy/paste instructions). Keep changes minimal and focused.
+- Search: prefer `rg` for fast, targeted searches; fall back to `grep` if missing.
+- Command etiquette: group related actions, print short preambles, keep outputs tidy. Avoid noisy commands.
+
+## Project Conventions (must follow)
+- Environment: manage Python with `uv`.
+  - Install dev deps if needed: `uv pip install -e .[dev]`
+  - Build docs locally with: `uv run mkdocs build`
+- Architecture boundaries: only reusable feature extraction or data‑processing utilities belong in `qmtl/`. Alpha/strategy logic must live in the root `strategies/` directory.
+- Documentation: docs live under `docs/`; each Markdown starts with a single `#` heading. Update `mkdocs.yml` nav when adding/moving files. Validate with `uv run mkdocs build`.
+- Testing:
+  - Preflight hang scan first (fast):
+    - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q -k 'not slow' --timeout=60 --timeout-method=thread --maxfail=1`
+  - Full suite after preflight passes:
+    - `uv run -m pytest -W error -n auto`
+  - If shared resources cause flakiness, prefer `--dist loadscope` or cap workers (e.g., `-n 2`).
+  - Mark expected long tests with `@pytest.mark.timeout(...)` and tag truly long/external tests as `slow` to exclude from preflight.
+- Examples under `qmtl/examples/` follow same conventions; keep functions pure and side‑effect free.
+
+## Inputs You Will Use
+- The caller provides an issue scope file path via env: `ISSUE_SCOPE_FILE`.
+  - Read it early with a safe shell command (e.g., `cat "$ISSUE_SCOPE_FILE"`).
+  - The file may be Markdown (with headings), YAML, or JSON. Parse pragmatically.
+  - Each issue should end up with: id/title, summary, acceptance criteria, affected paths, and any explicit tests.
+- Required: `ISSUE_ID` selects exactly one issue to process in this run.
+  - Read the scope file and select the matching issue; if not found, print a brief error and stop.
+- Optional: `FOLLOW_UP_INSTRUCTIONS` provides hints for a subsequent run.
+  - Use these to refine your plan or tests on the next pass.
+- If `ISSUE_SCOPE_FILE` is missing, print a brief error and stop.
+
+## Workflow to Follow (per issue)
+1) Intake
+- Parse the issue. Extract acceptance criteria and target files/areas.
+- State assumptions if anything is ambiguous and proceed with conservative defaults.
+
+2) Plan
+- Maintain a concise, ordered plan with exactly one in‑progress step at a time. Keep it updated as you advance.
+
+3) Implement
+- Make surgical edits using your patch tool. Preserve style and avoid unrelated refactors.
+- If an issue references `docs/alphadocs/ideas/gpt5pro/...`, add to the module header: `# Source: docs/alphadocs/ideas/gpt5pro/<doc>.md` and `# Priority: gpt5pro`, and record in `docs/alphadocs_history.log`.
+- Never place strategy/alpha modules inside `qmtl/`.
+
+4) Validate
+- Run the hang preflight command listed above. If it fails due to missing deps, install the minimal extras and re‑run.
+- On success, run the full test suite. If flaky, retry with capped workers.
+- For doc changes, run `uv run mkdocs build` and fix warnings/errors.
+
+5) Iterate
+- If tests or docs fail, fix at the root cause and re‑run validation. Repeat until the issue is satisfied or you hit a hard external blocker (which you must report succinctly).
+
+6) Summarize
+- For each issue, output:
+  - Changed files list with brief rationale per file
+  - Any new/updated docs and nav changes
+  - Validation results (preflight + full tests, and docs build)
+  - A suggested commit message starting with an auto‑closing keyword when appropriate (e.g., `Fixes #<number>`)
+
+## Guardrails
+- Do not introduce new licenses or headers.
+- Do not over‑optimize or refactor unrelated code.
+- Prefer simple, robust fixes over cleverness.
+- Keep diffs small; if a large change is unavoidable, split into logical steps.
+
+## Kickoff
+- Confirm repo readiness (presence of `pyproject.toml`, `qmtl/`, and `docs/`). Install dev deps if missing.
+- Read and parse `$ISSUE_SCOPE_FILE`.
+- Select the single issue indicated by `ISSUE_ID`. If not found, stop with a brief error.
+- Create a short, actionable plan and execute strictly for that one issue.
+
+## Output Expectation
+- Keep console output minimal but informative. Use brief preambles before grouped actions.
+- The orchestrator ignores streaming console output for scheduling; it relies on artifacts and the footer described below.
+
+### Output Footer Contract (required)
+At the very end of your final message for this run, include exactly:
+
+1) Single status line:
+```
+Result status: Done | Needs follow-up | Blocked
+```
+
+2) Only when status is "Needs follow-up", add a section:
+```
+Next-run Instructions
+- <bullet 1>
+- <bullet 2>
+```
+
+3) Always include a commit message section:
+```
+Suggested commit message
+<one short paragraph. If Done: starts with Fixes #<ISSUE_ID>; otherwise Refs #<ISSUE_ID>>
+```
+
+Example footer:
+```
+Suggested commit message
+Fixes #755: chore(dag-manager): add idempotent neo4j migrations and docs
+
+Result status: Done
+```
+
+[2025-09-07T11:59:45] codex
+
+I’ll verify the repo layout, then read the selected issue from the scope file to plan the fix.
+[2025-09-07T11:59:49] exec bash -lc "pwd; ls -la; echo '---'; test -f pyproject.toml && echo 'pyproject.toml present' || echo 'pyproject.toml missing'; test -d qmtl && echo 'qmtl/ present' || echo 'qmtl/ missing'; test -d docs && echo 'docs/ present' || echo 'docs/ missing'; echo '---'; echo ISSUE_SCOPE_FILE="'$ISSUE_SCOPE_FILE; echo ISSUE_ID=$ISSUE_ID; echo FOLLOW_UP_INSTRUCTIONS=$FOLLOW_UP_INSTRUCTIONS; test -n "$ISSUE_SCOPE_FILE" && { echo '"'Reading issue scope:'; sed -n '1,200p' \""'$ISSUE_SCOPE_FILE"; } || echo '"'ISSUE_SCOPE_FILE env not set'" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T11:59:49] bash -lc "pwd; ls -la; echo '---'; test -f pyproject.toml && echo 'pyproject.toml present' || echo 'pyproject.toml missing'; test -d qmtl && echo 'qmtl/ present' || echo 'qmtl/ missing'; test -d docs && echo 'docs/ present' || echo 'docs/ missing'; echo '---'; echo ISSUE_SCOPE_FILE="'$ISSUE_SCOPE_FILE; echo ISSUE_ID=$ISSUE_ID; echo FOLLOW_UP_INSTRUCTIONS=$FOLLOW_UP_INSTRUCTIONS; test -n "$ISSUE_SCOPE_FILE" && { echo '"'Reading issue scope:'; sed -n '1,200p' \""'$ISSUE_SCOPE_FILE"; } || echo '"'ISSUE_SCOPE_FILE env not set'" succeeded in 37ms:
+/Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+total 192
+drwxr-xr-x   26 501  staff    832 Sep  7 20:56 .
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 ..
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 .codex_runs
+-rw-r--r--    1 501  staff     76 Sep  7 20:56 .git
+drwxr-xr-x    5 501  staff    160 Sep  7 20:56 .github
+-rw-r--r--    1 501  staff    957 Sep  7 20:56 .gitignore
+drwxr-xr-x    6 501  staff    192 Sep  7 20:56 .kiro
+-rw-r--r--    1 501  staff   6560 Sep  7 20:56 AGENTS.md
+-rw-r--r--    1 501  staff   6099 Sep  7 20:56 BACKTEST_ENHANCEMENTS_SUMMARY.md
+-rw-r--r--    1 501  staff   2284 Sep  7 20:56 CHANGELOG.md
+-rw-r--r--    1 501  staff   1924 Sep  7 20:56 CONTRIBUTING.md
+-rw-r--r--    1 501  staff    108 Sep  7 20:56 Dockerfile
+-rw-r--r--    1 501  staff    105 Sep  7 20:56 MANIFEST.in
+-rw-r--r--    1 501  staff  10804 Sep  7 20:56 README.md
+-rw-r--r--    1 501  staff   2241 Sep  7 20:56 alert_rules.yml
+drwxr-xr-x    3 501  staff     96 Sep  7 20:56 codex_prompts
+drwxr-xr-x   15 501  staff    480 Sep  7 20:56 docs
+-rw-r--r--    1 501  staff   1255 Sep  7 20:56 main.py
+[2025-09-07T11:59:49] tokens used: 9469
+
+[2025-09-07T11:59:52] thinking
+
+**Inspecting the issue**
+
+I'm looking at the details of the issue, and it seems the read-only sandbox is preventing any edits. However, I can still inspect the target files to suggest a minimal patch. I’ll open up qmtl/gateway/routes.py to see what I can propose. I want to ensure that whatever suggestion I make is clear and actionable, even if I can't change anything directly. Let’s see what we find in that file!
+[2025-09-07T11:59:54] exec bash -lc "sed -n '1,200p' qmtl/gateway/routes.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T11:59:54] bash -lc "sed -n '1,200p' qmtl/gateway/routes.py" succeeded in 10ms:
+from __future__ import annotations
+
+import asyncio
+import base64
+import json
+import time
+import uuid
+from datetime import datetime, timezone, timedelta
+from typing import Any, Coroutine, Optional
+
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
+
+from qmtl.sdk.node import MatchMode
+
+from . import metrics as gw_metrics
+from .dagmanager_client import DagManagerClient
+from .degradation import DegradationManager
+from .gateway_health import get_health as gateway_health
+from .models import StrategyAck, StrategySubmit, StatusResponse
+[2025-09-07T11:59:54] tokens used: 2184
+[2025-09-07T11:59:55] exec bash -lc "sed -n '200,400p' qmtl/gateway/routes.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T11:59:55] bash -lc "sed -n '200,400p' qmtl/gateway/routes.py" succeeded in 13ms:
+                # Transform partition-key map to HTTP queue_map shape
+                # Key format: "<node_id>:<interval>:<bucket>" → group by node_id
+                for key, topic in dict(chunk.queue_map).items():
+                    node_id = str(key).split(":", 1)[0]
+                    queue_map_http.setdefault(node_id, []).append(
+                        {"queue": topic, "global": False}
+                    )
+        except Exception:
+            # Fallback: reuse TagQueryNode queries to provide parity with /strategies
+            queue_map_http = {}
+            node_ids: list[str] = []
+            queries: list[Coroutine[Any, Any, list[str]]] = []
+            for node in dag.get("nodes", []):
+                if node.get("node_type") == "TagQueryNode":
+                    tags = node.get("tags", [])
+                    interval = int(node.get("interval", 0))
+                    match_mode = node.get("match_mode", "any")
+                    node_ids.append(node["node_id"])
+                    queries.append(
+                        dagmanager.get_queues_by_tag(
+[2025-09-07T11:59:55] tokens used: 1931
+[2025-09-07T12:00:02] exec bash -lc "rg -n \"gateway|dry-run|StrategyAck|routes.py|DagManagerClient|TagQueryNode\" -S tests | sed -n '1,120p'" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T12:00:02] bash -lc "rg -n \"gateway|dry-run|StrategyAck|routes.py|DagManagerClient|TagQueryNode\" -S tests | sed -n '1,120p'" succeeded in 53ms:
+tests/sdk/test_gateway_client.py:5:from qmtl.sdk.gateway_client import GatewayClient
+tests/sdk/test_gateway_client.py:55:async def test_post_gateway_circuit_breaker(monkeypatch):
+tests/sdk/test_gateway_client.py:61:        gateway_url="http://gw",
+tests/sdk/test_gateway_client.py:69:        gateway_url="http://gw",
+tests/sdk/test_gateway_client.py:83:            gateway_url="http://gw",
+tests/sdk/test_gateway_client.py:90:        gateway_url="http://gw",
+tests/sdk/test_gateway_client.py:104:        gateway_url="http://gw",
+tests/sdk/test_gateway_client.py:112:        gateway_url="http://gw",
+tests/sdk/test_tag_manager_service.py:4:from qmtl.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
+tests/sdk/test_tag_manager_service.py:15:        self.tq = TagQueryNode(["t"], interval="60s", period=2)
+tests/test_tag_query_node.py:3:from qmtl.sdk import TagQueryNode
+tests/test_tag_query_node.py:7:    node = TagQueryNode(["t"], interval="60s", period=2)
+tests/test_tag_query_node.py:24:    node = TagQueryNode(["t"], interval="60s", period=1)
+tests/strategy/test_conflict.py:7:from qmtl.gateway.api import create_app, Database
+tests/strategy/test_conflict.py:8:from qmtl.gateway.models import StrategySubmit
+tests/test_world_scope.py:5:from qmtl.gateway.dagmanager_client import DagManagerClient
+tests/test_world_scope.py:15:    client = DagManagerClient("dummy")
+tests/test_world_scope.py:23:    monkeypatch.setattr(DagManagerClient, "_ensure_channel", fake_ensure)
+tests/gateway/test_worker_ownership_metrics.py:9:from qmtl.gateway import metrics
+tests/gateway/test_worker_ownership_metrics.py:10:from qmtl.gateway.commit_log import CommitLogWriter
+[2025-09-07T12:00:02] tokens used: 2121
+
+[2025-09-07T12:00:04] thinking
+
+**Planning a dry-run test**
+
+I’ve noticed there’s no existing dry-run test in place, so it’s a good idea to add one. I'll create a file called `test_gateway_dryrun.py` for this purpose. Also, I should inspect the `qmtl/common` utilities to help compute CRC32 for the node IDs. Let’s dive into `qmtl/common` to see what we can do there. Getting everything organized is key!
+[2025-09-07T12:00:06] exec bash -lc "ls -la qmtl/common; rg -n \"crc32|crc32_of_list|compute_node_id\" -S qmtl | sed -n '1,120p'" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T12:00:06] bash -lc "ls -la qmtl/common; rg -n \"crc32|crc32_of_list|compute_node_id\" -S qmtl | sed -n '1,120p'" succeeded in 49ms:
+total 80
+drwxr-xr-x  12 501  staff   384 Sep  7 20:56 .
+drwxr-xr-x  24 501  staff   768 Sep  7 20:56 ..
+-rw-r--r--   1 501  staff   602 Sep  7 20:56 __init__.py
+-rw-r--r--   1 501  staff  2284 Sep  7 20:56 circuit_breaker.py
+-rw-r--r--   1 501  staff   732 Sep  7 20:56 cloudevents.py
+-rw-r--r--   1 501  staff  2132 Sep  7 20:56 four_dim_cache.py
+-rw-r--r--   1 501  staff  2032 Sep  7 20:56 metrics_shared.py
+-rw-r--r--   1 501  staff  1214 Sep  7 20:56 nodeid.py
+-rw-r--r--   1 501  staff  1275 Sep  7 20:56 pretrade.py
+-rw-r--r--   1 501  staff  3355 Sep  7 20:56 reconnect.py
+-rw-r--r--   1 501  staff  1119 Sep  7 20:56 tagquery.py
+-rw-r--r--   1 501  staff  2957 Sep  7 20:56 tracing.py
+qmtl/gateway/routes.py:83:        from qmtl.common import crc32_of_list, compute_node_id
+qmtl/gateway/routes.py:85:        crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
+qmtl/gateway/routes.py:86:        if crc != payload.node_ids_crc32:
+qmtl/gateway/routes.py:105:            expected = compute_node_id(*required, payload.world_id or "")
+qmtl/gateway/worker.py:70:        key = zlib.crc32(key_str.encode())
+qmtl/gateway/models.py:13:    node_ids_crc32: int
+qmtl/dagmanager/__init__.py:1:from qmtl.common import compute_node_id
+[2025-09-07T12:00:06] tokens used: 1614
+[2025-09-07T12:00:09] exec bash -lc "sed -n '1,160p' qmtl/common/__init__.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T12:00:09] bash -lc "sed -n '1,160p' qmtl/common/__init__.py" succeeded in 12ms:
+import zlib
+from typing import Iterable
+
+
+def crc32_of_list(items: Iterable[str]) -> int:
+    """Return CRC32 for an iterable of strings in order."""
+    crc = 0
+    for item in items:
+        crc = zlib.crc32(item.encode(), crc)
+    return crc & 0xFFFFFFFF
+
+
+from .reconnect import ReconnectingRedis, ReconnectingNeo4j
+from .circuit_breaker import AsyncCircuitBreaker
+from .four_dim_cache import FourDimCache
+from .nodeid import compute_node_id
+
+__all__ = [
+    "crc32_of_list",
+    "ReconnectingRedis",
+[2025-09-07T12:00:09] tokens used: 1001
+
+[2025-09-07T12:00:17] thinking
+
+**Updating README for clarity**
+
+I see that we can use payload.node_ids_crc32, but I noticed that the dry-run feature doesn’t check for CRC. So, the acceptances don’t require verifying mismatches, which is a bit puzzling. I guess I should include a fallback sentinel in the process. It’s also important to mention the sentinel parity and fallback rule in the README. I’ll get started on updating README.md to ensure everything is clear there.
+[2025-09-07T12:00:19] exec bash -lc "sed -n '1,240p' README.md" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T12:00:19] bash -lc "sed -n '1,240p' README.md" succeeded in 9ms:
+<!-- markdownlint-disable MD012 MD013 MD025 -->
+
+# qmtl
+
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its architecture is built around three components:
+
+1. **Gateway** – accepts strategy submissions from SDKs and forwards DAGs to the DAG Manager for deduplication and scheduling.
+2. **WorldService** – the single source of truth for policy and activation state.
+3. **ControlBus** – an internal event bus bridged to clients through a tokenized WebSocket.
+
+SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/architecture/architecture.md) for full details.
+
+Use the DAG Manager CLI to preview DAG structures:
+
+```bash
+qmtl dagmanager diff --file dag.json --dry_run
+```
+
+Initialize a Neo4j database with the required constraints and indexes:
+
+[2025-09-07T12:00:19] tokens used: 346
+[2025-09-07T12:00:25] exec bash -lc "sed -n '1,200p' qmtl/gateway/models.py" in /Users/munseungjin/workspace/research/qmtl/.codex_worktrees/issue-763
+[2025-09-07T12:00:25] bash -lc "sed -n '1,200p' qmtl/gateway/models.py" succeeded in 11ms:
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+
+class StrategySubmit(BaseModel):
+    dag_json: str = Field(..., description="Base64 encoded DAG JSON")
+    meta: Optional[dict] = Field(default=None)
+    world_id: Optional[str] = None
+    node_ids_crc32: int
+
+
+class StrategyAck(BaseModel):
+    strategy_id: str
+    queue_map: dict[str, object] = Field(default_factory=dict)
+    # Include sentinel identifier for parity with dry-run/diff outputs
+    sentinel_id: str | None = None
+[2025-09-07T12:00:25] tokens used: 2723
+
+[2025-09-07T12:00:48] thinking
+
+**Preparing code patches**
+
+I want to focus on showing code snippets in the final response to suggest the necessary patch. While the guidelines say to avoid large code blocks, it's important that I highlight the changes. I’ll structure the message with a list of changed files and rationales, keeping it minimal. I’ll also include a suggested commit message beginning with "Refs #763" if not marked as done. Since I couldn’t run tests because of read-only settings, I’ll mention that too.
+**Finalizing patch summary**
+
+I’m going to add a helper function while ensuring that adding tests doesn't require new dependencies. For my final response, I’ll summarize the intake for Issue 763 clearly. While I’d like to consider using the update_plan tool, it seems it’s not accessible now, so I’ll skip that. I'll provide minimal patch details, noting I can't run validations due to the sandbox limitations. Lastly, I’ll include a footer with the status of "Needs follow-up" and concise next-run instructions.
+**Structuring final response**
+
+I need to ensure my final answer follows the guidelines for tone, which means using structured headers and bullet points. I’ll include details about the changed files along with their rationales. It’s important to provide minimal code snippets to keep it concise. Additionally, I’ll reference the specific locations in routes.py where the new code lines should be added. This way, I can deliver clear, organized information that will be helpful for the user.
+[2025-09-07T12:00:58] codex
+**Finalizing patch summary**
+
+I’m going to add a helper function while ensuring that adding tests doesn't require new dependencies. For my final response, I’ll summarize the intake for Issue 763 clearly. While I’d like to consider using the update_plan tool, it seems it’s not accessible now, so I’ll skip that. I'll provide minimal patch details, noting I can't run validations due to the sandbox limitations. Lastly, I’ll include a footer with the status of "Needs follow-up" and concise next-run instructions.
+[2025-09-07T12:00:58] codex
+**Structuring final response**
+
+I need to ensure my final answer follows the guidelines for tone, which means using structured headers and bullet points. I’ll include details about the changed files along with their rationales. It’s important to provide minimal code snippets to keep it concise. Additionally, I’ll reference the specific locations in routes.py where the new code lines should be added. This way, I can deliver clear, organized information that will be helpful for the user.
+[2025-09-07T12:00:58] codex
+
+I parsed the issue scope and located the dry-run handler in qmtl/gateway/routes.py. The current logic sets an empty sentinel_id when Diff is unavailable; we’ll add a deterministic fallback derived from the DAG node-IDs checksum while keeping the current queue_map shapes unchanged.
+
+**Changes Proposed**
+- qmtl/gateway/routes.py: Ensure sentinel_id is never empty for dry-run.
+  - Add a tiny pure helper and use it as a fallback when Diff fails or returns no sentinel:
+    - Add at module level:
+      - def _derive_dryrun_sentinel(node_ids_crc32: int) -> str: return f"dryrun:{node_ids_crc32}"
+    - In /strategies/dry-run handler:
+      - After the existing try/except around dagmanager.diff(...), if sentinel_id is falsy, set sentinel_id = _derive_dryrun_sentinel(payload.node_ids_crc32)
+  - Rationale: Meets acceptance criteria by deriving a deterministic non-empty sentinel without changing queue_map behavior.
+- tests/test_gateway_dryrun.py: Add a lightweight unit test for the helper.
+  - Rationale: Pure-function test avoids booting FastAPI while asserting the format.
+- README.md: Document the fallback rule briefly under “TagQuery Node Resolution”.
+  - Rationale: Clarifies parity and the deterministic sentinel rule when Diff is unavailable.
+
+**Minimal Diff Sketch**
+- qmtl/gateway/routes.py (add helper near top, before create_api_router):
+  - def _derive_dryrun_sentinel(node_ids_crc32: int) -> str:
+      return f"dryrun:{node_ids_crc32}"
+- qmtl/gateway/routes.py (/strategies/dry-run handler, after try/except around diff):
+  - if not sentinel_id:
+      sentinel_id = _derive_dryrun_sentinel(payload.node_ids_crc32)
+- tests/test_gateway_dryrun.py (new):
+  - from qmtl.gateway.routes import _derive_dryrun_sentinel
+  - def test_derive_dryrun_sentinel():
+      assert _derive_dryrun_sentinel(0) == "dryrun:0"
+      assert _derive_dryrun_sentinel(123456) == "dryrun:123456"
+- README.md (“TagQuery Node Resolution” section; add one paragraph):
+  - The /strategies/dry-run endpoint always returns a non-empty sentinel_id. When DAG Manager Diff is unavailable, the gateway derives a deterministic fallback sentinel in the form dryrun:<crc32_of_node_ids>, where the CRC32 is computed over the ordered DAG node IDs (same value sent as node_ids_crc32).
+
+**Validation**
+- Preflight tests: Not executed due to read-only sandbox and non-interactive mode.
+- Full test suite: Not executed for the same reason.
+- MkDocs build: Not executed for the same reason.
+
+**Why blocked**
+- The current session runs with a read-only filesystem and cannot apply changes or run tests (“approval_policy: never” and “sandbox_mode: read-only”). The proposed diff is minimal and self-contained for the next writable run.
+
+Suggested commit message
+Refs #763: gateway(dry-run): derive deterministic sentinel_id fallback and add unit test; document rule in README
+
+Result status: Needs follow-up
+
+Next-run Instructions
+- Switch to workspace-write or full-access sandbox.
+- Edit qmtl/gateway/routes.py: add _derive_dryrun_sentinel and set sentinel_id fallback when Diff is absent/empty.
+- Add tests/test_gateway_dryrun.py to assert the helper returns “dryrun:<crc32>”.
+- Update README “TagQuery Node Resolution” with the described fallback rule.
+- Run preflight tests: PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q -k 'not slow' --timeout=60 --timeout-method=thread --maxfail=1
+- Run full tests: uv run -m pytest -W error -n auto
+- Build docs: uv run mkdocs build
+[2025-09-07T12:01:01] tokens used: 2863

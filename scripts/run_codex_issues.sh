@@ -144,7 +144,7 @@ run_codex_once() {
   ISSUE_SCOPE_FILE="$ISSUE_SCOPE_FILE" ISSUE_ID="$issue_id" \
   codex -s danger-full-access ${approval_args[@]:-} -c shell_environment_policy.inherit=all \
         exec ${bypass_args:+$bypass_args} -C "$REPO_DIR" ${json_args:+$json_args} --color never \
-        --output-last-message "$out_last" - < "$PROMPT_FILE" |& tee "$out_console"
+        --output-last-message "$out_last" - < "$PROMPT_FILE" 2>&1 | tee "$out_console"
 }
 
 record_changes() {

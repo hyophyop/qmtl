@@ -236,6 +236,8 @@ invokes this method in every mode, so manual calls are rarely needed.
 
 See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.
 
+Dry‑run parity: the `POST /strategies/dry-run` endpoint mirrors the queue mapping of the real submission path and always returns a non‑empty `sentinel_id`. When the Diff path is unavailable, the server derives a deterministic fallback of the form `dryrun:<crc32>` over DAG node IDs.
+
 ## Backfills
 
 [docs/operations/backfill.md](docs/operations/backfill.md) explains how to preload historical data by

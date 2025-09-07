@@ -75,10 +75,27 @@ last_modified: 2025-08-21
 
 ### 1.2 인덱스 & 제약 조건
 
+아래 제약/인덱스는 초기화시 항상 idempotent(재실행 안전)하도록 `IF NOT EXISTS`를 사용합니다. 운영 환경에서 재배포/재시작 시에도 스키마 초기화 커맨드를 반복 호출할 수 있습니다.
+
 ```cypher
-CREATE CONSTRAINT compute_pk IF NOT EXISTS
-ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+// 기본 제약/인덱스
+CREATE CONSTRAINT compute_pk IF NOT EXISTS ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
 CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+
+// 성능 최적화 인덱스 (태그 조회, 주기 필터, 버퍼 스캔)
+CREATE INDEX compute_tags IF NOT EXISTS FOR (c:ComputeNode) ON (c.tags);
+CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval);
+CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since);
+```
+
+CLI 사용법:
+
+```
+# 스키마 초기화 (idempotent)
+qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+
+# 현재 스키마 내보내기
+qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 ### 1.3 NodeID Generation
 - NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.

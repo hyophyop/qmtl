@@ -1,0 +1,46 @@
+I’ve loaded the repo and parsed the issue scope. Issue 761 is a docs-only sync: extend the Neo4j schema section to reflect what the code currently applies, add a short idempotency note, and mention the CLI usage for initializing and exporting schema.
+
+Proposed doc change (docs/architecture/dag-manager.md §1.2)
+- Update the code block to list all constraints/indexes currently applied by `qmtl/dagmanager/neo4j_init.py`:
+  - compute_pk, kafka_topic, compute_tags, queue_interval, compute_buffering_since
+- Add a short note that all DDLs use IF NOT EXISTS (idempotent).
+- Add a brief usage note for `qmtl dagmanager neo4j-init` and `qmtl dagmanager export-schema`.
+
+Exact replacement for the §1.2 code block and the following note
+- Replace the existing code block:
+  ```cypher
+  CREATE CONSTRAINT compute_pk IF NOT EXISTS
+  ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+  CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+  ```
+- With:
+  ```cypher
+  CREATE CONSTRAINT compute_pk IF NOT EXISTS
+  ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+
+  CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+  CREATE INDEX compute_tags IF NOT EXISTS FOR (c:ComputeNode) ON (c.tags);
+  CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval);
+  CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since);
+  ```
+- Immediately below the code block, insert:
+  - Idempotency note (Korean, consistent with the doc):
+    - 모든 DDL은 IF NOT EXISTS를 사용해 idempotent하게 적용됩니다.
+  - Usage note:
+    - 초기화: `qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password ******`
+    - 스키마 내보내기: `qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password ****** --out schema.cypher`
+
+Why these items
+- They exactly match SCHEMA_QUERIES in `qmtl/dagmanager/neo4j_init.py`: `compute_pk`, `kafka_topic`, `compute_tags`, `queue_interval`, `compute_buffering_since`.
+- The CLI endpoints already exist in `qmtl/dagmanager/cli.py` and are exposed via `qmtl dagmanager` through `qmtl/cli`.
+
+Changed files
+- docs/architecture/dag-manager.md: Sync §1.2 schema list, add idempotency note and CLI usage.
+
+Validation
+- Could not apply changes or run `uv run mkdocs build` due to a read-only sandbox in this run. The changes are doc-only and should build cleanly without nav edits.
+
+Suggested commit message
+Refs #761: docs(dag-manager): sync Neo4j schema indexes and idempotency; add CLI usage for neo4j-init/export-schema
+
+Result status: Blocked

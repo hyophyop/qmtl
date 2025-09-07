@@ -1,0 +1,51 @@
+I parsed the issue scope and located the dry-run handler in qmtl/gateway/routes.py. The current logic sets an empty sentinel_id when Diff is unavailable; we’ll add a deterministic fallback derived from the DAG node-IDs checksum while keeping the current queue_map shapes unchanged.
+
+**Changes Proposed**
+- qmtl/gateway/routes.py: Ensure sentinel_id is never empty for dry-run.
+  - Add a tiny pure helper and use it as a fallback when Diff fails or returns no sentinel:
+    - Add at module level:
+      - def _derive_dryrun_sentinel(node_ids_crc32: int) -> str: return f"dryrun:{node_ids_crc32}"
+    - In /strategies/dry-run handler:
+      - After the existing try/except around dagmanager.diff(...), if sentinel_id is falsy, set sentinel_id = _derive_dryrun_sentinel(payload.node_ids_crc32)
+  - Rationale: Meets acceptance criteria by deriving a deterministic non-empty sentinel without changing queue_map behavior.
+- tests/test_gateway_dryrun.py: Add a lightweight unit test for the helper.
+  - Rationale: Pure-function test avoids booting FastAPI while asserting the format.
+- README.md: Document the fallback rule briefly under “TagQuery Node Resolution”.
+  - Rationale: Clarifies parity and the deterministic sentinel rule when Diff is unavailable.
+
+**Minimal Diff Sketch**
+- qmtl/gateway/routes.py (add helper near top, before create_api_router):
+  - def _derive_dryrun_sentinel(node_ids_crc32: int) -> str:
+      return f"dryrun:{node_ids_crc32}"
+- qmtl/gateway/routes.py (/strategies/dry-run handler, after try/except around diff):
+  - if not sentinel_id:
+      sentinel_id = _derive_dryrun_sentinel(payload.node_ids_crc32)
+- tests/test_gateway_dryrun.py (new):
+  - from qmtl.gateway.routes import _derive_dryrun_sentinel
+  - def test_derive_dryrun_sentinel():
+      assert _derive_dryrun_sentinel(0) == "dryrun:0"
+      assert _derive_dryrun_sentinel(123456) == "dryrun:123456"
+- README.md (“TagQuery Node Resolution” section; add one paragraph):
+  - The /strategies/dry-run endpoint always returns a non-empty sentinel_id. When DAG Manager Diff is unavailable, the gateway derives a deterministic fallback sentinel in the form dryrun:<crc32_of_node_ids>, where the CRC32 is computed over the ordered DAG node IDs (same value sent as node_ids_crc32).
+
+**Validation**
+- Preflight tests: Not executed due to read-only sandbox and non-interactive mode.
+- Full test suite: Not executed for the same reason.
+- MkDocs build: Not executed for the same reason.
+
+**Why blocked**
+- The current session runs with a read-only filesystem and cannot apply changes or run tests (“approval_policy: never” and “sandbox_mode: read-only”). The proposed diff is minimal and self-contained for the next writable run.
+
+Suggested commit message
+Refs #763: gateway(dry-run): derive deterministic sentinel_id fallback and add unit test; document rule in README
+
+Result status: Needs follow-up
+
+Next-run Instructions
+- Switch to workspace-write or full-access sandbox.
+- Edit qmtl/gateway/routes.py: add _derive_dryrun_sentinel and set sentinel_id fallback when Diff is absent/empty.
+- Add tests/test_gateway_dryrun.py to assert the helper returns “dryrun:<crc32>”.
+- Update README “TagQuery Node Resolution” with the described fallback rule.
+- Run preflight tests: PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q -k 'not slow' --timeout=60 --timeout-method=thread --maxfail=1
+- Run full tests: uv run -m pytest -W error -n auto
+- Build docs: uv run mkdocs build
