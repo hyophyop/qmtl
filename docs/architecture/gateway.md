@@ -20,6 +20,10 @@ spec_version: v1.2
 - [ControlBus](controlbus.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 
+추가 참고
+- 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
+- 레퍼런스: [Brokerage API](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
+
 > This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
 > Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
 
