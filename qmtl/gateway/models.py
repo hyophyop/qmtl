@@ -4,6 +4,11 @@ from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
+try:
+    # Pydantic v2 style config
+    from pydantic import ConfigDict  # type: ignore
+except Exception:  # pragma: no cover - fallback for older environments
+    ConfigDict = None  # type: ignore
 
 
 class StrategySubmit(BaseModel):
@@ -27,9 +32,12 @@ class StatusResponse(BaseModel):
 class QueueDescriptor(BaseModel):
     queue: str
     global_: bool = Field(alias="global")
-
-    class Config:
-        populate_by_name = True
+    # Use Pydantic v2 config; avoid deprecated class-based Config
+    if 'ConfigDict' in globals() and ConfigDict is not None:  # type: ignore
+        model_config = ConfigDict(populate_by_name=True)  # type: ignore
+    else:  # pragma: no cover - legacy fallback
+        class Config:  # type: ignore
+            populate_by_name = True
 
 
 class QueuesByTagResponse(BaseModel):
