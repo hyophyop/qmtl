@@ -5,7 +5,15 @@ import importlib.util
 
 
 def load_check_doc_sync() -> callable:
-    script_path = Path(__file__).resolve().parents[2] / "qmtl" / "scripts" / "check_doc_sync.py"
+    base = Path(__file__).resolve()
+    candidates: list[Path] = []
+    # Prefer qmtl/scripts under various repo layouts
+    for p in base.parents:
+        candidates.append(p / "qmtl" / "scripts" / "check_doc_sync.py")
+        candidates.append(p / "scripts" / "check_doc_sync.py")
+    script_path = next((c for c in candidates if c.exists()), None)
+    if script_path is None:
+        raise FileNotFoundError("check_doc_sync.py not found in expected locations")
     spec = importlib.util.spec_from_file_location("check_doc_sync", script_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
