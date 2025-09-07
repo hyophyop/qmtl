@@ -30,14 +30,21 @@ async def _close_client() -> None:
 
 
 def _close_client_sync() -> None:
-    """Synchronously close the client at interpreter shutdown."""
+    """Best-effort close of the global client without leaking event loops."""
     try:
-        asyncio.run(_close_client())
-    except RuntimeError:
-        # Event loop already running; best-effort close
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(_close_client())
-        loop.close()
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop.is_running():
+            # Schedule async close and return; avoid creating a new loop
+            loop.create_task(_close_client())
+        else:
+            loop.run_until_complete(_close_client())
+    except Exception:
+        # As a last resort, fall back to asyncio.run in environments
+        # where no loop is set; ignore failures during interpreter teardown.
+        try:
+            asyncio.run(_close_client())
+        except Exception:
+            pass
 
 
 atexit.register(_close_client_sync)
