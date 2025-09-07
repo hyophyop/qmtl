@@ -130,6 +130,20 @@ Response
 ```
 Initial message MUST be a full snapshot or include a `state_hash` per topic. Tokens are short‑lived JWTs with claims: `aud`, `sub`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. Key ID (`kid`) is conveyed in the JWT header.
 
+Heartbeats and acknowledgements
+- Clients should send periodic heartbeats. Sending any message counts as a heartbeat; optionally send `{ "type": "ack", "last_id": "<cloudevents id>" }` to acknowledge delivery.
+- Gateway logs connection/auth failures, retries, and normal closes with structured fields and exposes counters under `/metrics`.
+
+Scope filtering
+- Subscriptions are scoped by `world_id` and `topics`. The WS bridge applies scope filters server‑side so clients receive only events for the authorized world.
+
+Backpressure and rate limits
+- Gateway applies backpressure to its internal fan‑out queue. Under sustained overload, newest messages may be dropped and a counter is incremented. Normal operating conditions target zero drops.
+- Clients should implement retries and idempotent handling using CloudEvents `id` (idempotency key) and `correlation_id`.
+
+Ordering and loss guarantees
+- Events preserve per‑topic ordering on best effort. If reordering is possible (e.g., across partitions), consumers must reassemble by `time` or apply a monotonic `seq_no` if present. Gateway documents no loss on the normal path; snapshots/state hashes enable recovery.
+
 ### GET /events/jwks
 Returns a JWKS document describing the current and previous signing keys for event stream tokens.
 
@@ -150,3 +164,11 @@ Response (example)
 - 503: degraded Gateway (temporary); clients should retry with backoff
 
 {{ nav_links() }}
+
+### GET /events/schema
+Returns JSON Schemas for WebSocket CloudEvent envelopes per topic.
+
+Response (example keys)
+```json
+{ "queue_update": { "$schema": "https://json-schema.org/...", ... }, "activation_updated": { ... } }
+```

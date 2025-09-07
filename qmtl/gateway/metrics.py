@@ -195,6 +195,37 @@ ws_dropped_subscribers_total = Counter(
     registry=global_registry,
 )
 
+# WebSocket control-plane metrics
+ws_connections_total = Counter(
+    "ws_connections_total",
+    "Total number of WebSocket connections accepted",
+    registry=global_registry,
+)
+
+ws_disconnects_total = Counter(
+    "ws_disconnects_total",
+    "Total number of WebSocket connections closed by server",
+    registry=global_registry,
+)
+
+ws_auth_failures_total = Counter(
+    "ws_auth_failures_total",
+    "Total number of WebSocket authentication failures",
+    registry=global_registry,
+)
+
+ws_heartbeats_total = Counter(
+    "ws_heartbeats_total",
+    "Total number of heartbeats received from clients",
+    registry=global_registry,
+)
+
+ws_acks_total = Counter(
+    "ws_acks_total",
+    "Total number of acknowledgements received from clients",
+    registry=global_registry,
+)
+
 sentinel_skew_seconds = Gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
@@ -421,6 +452,11 @@ def reset_metrics() -> None:
     ws_subscribers._vals = {}  # type: ignore[attr-defined]
     ws_dropped_subscribers_total._value.set(0)  # type: ignore[attr-defined]
     ws_dropped_subscribers_total._val = 0  # type: ignore[attr-defined]
+    ws_connections_total._value.set(0)  # type: ignore[attr-defined]
+    ws_disconnects_total._value.set(0)  # type: ignore[attr-defined]
+    ws_auth_failures_total._value.set(0)  # type: ignore[attr-defined]
+    ws_heartbeats_total._value.set(0)  # type: ignore[attr-defined]
+    ws_acks_total._value.set(0)  # type: ignore[attr-defined]
     sentinel_skew_seconds.clear()
     sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
     pretrade_attempts_total.clear()

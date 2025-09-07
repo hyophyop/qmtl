@@ -201,11 +201,12 @@ class ControlBusConsumer:
             interval = msg.data.get("interval", 0)
             queues = msg.data.get("queues", [])
             match_mode = msg.data.get("match_mode", MatchMode.ANY.value)
+            world_id = msg.data.get("world_id")
             try:
                 mode = MatchMode(match_mode)
             except ValueError:
                 mode = MatchMode.ANY
-            await self.ws_hub.send_queue_update(tags, interval, queues, mode)
+            await self.ws_hub.send_queue_update(tags, interval, queues, mode, world_id)
         else:
             logger.warning("Unhandled ControlBus topic %s", msg.topic)
 
