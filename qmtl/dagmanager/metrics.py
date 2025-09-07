@@ -56,6 +56,19 @@ class _ValueProxy:
 queue_create_error_total._raw_value = queue_create_error_total._value  # type: ignore[attr-defined]
 queue_create_error_total._value = _ValueProxy(queue_create_error_total._raw_value)  # type: ignore[attr-defined]
 
+# Diff request counters for throughput and failure-rate alerting
+diff_requests_total = Counter(
+    "diff_requests_total",
+    "Total number of DAG diff requests processed",
+    registry=global_registry,
+)
+
+diff_failures_total = Counter(
+    "diff_failures_total",
+    "Total number of failed DAG diff requests",
+    registry=global_registry,
+)
+
 sentinel_gap_count = Gauge(
     "sentinel_gap_count",
     "Number of missing sentinel events detected",

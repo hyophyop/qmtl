@@ -20,6 +20,20 @@ prometheus:
             severity: warning
           annotations:
             summary: Diff processing slow
+        - alert: DiffFailureRateHigh
+          expr: sum(rate(diff_failures_total[5m])) / clamp_min(sum(rate(diff_requests_total[5m])), 1e-6) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: DAG diff failure rate above 5%
+        - alert: DiffThroughputLow
+          expr: sum(rate(diff_requests_total[5m])) < 0.01
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: DAG diff throughput below 0.6/min
         - alert: NodeCacheMemoryHigh
           expr: nodecache_resident_bytes{node_id="all",scope="total"} > 5e9
           for: 5m

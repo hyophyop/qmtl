@@ -16,6 +16,8 @@ from .metrics import (
     observe_diff_duration,
     queue_create_error_total,
     sentinel_gap_count,
+    diff_requests_total,
+    diff_failures_total,
 )
 from .kafka_admin import KafkaAdmin, partition_key
 from .topic import TopicConfig, topic_name
@@ -343,12 +345,18 @@ class DiffService:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
             self._stream_send(queue_map, sentinel_id, new_nodes, instructions)
+            # success path accounted as processed request
+            diff_requests_total.inc()
             return DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,
                 new_nodes=new_nodes,
                 buffering_nodes=instructions,
             )
+        except Exception:
+            # record failure for alerting, then propagate
+            diff_failures_total.inc()
+            raise
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
             observe_diff_duration(duration_ms)
@@ -551,4 +559,3 @@ class KafkaQueueManager(QueueManager):
         )
         self.admin.create_topic_if_needed(topic, self.config)
         return topic
-
