@@ -17,7 +17,12 @@ from . import metrics as gw_metrics
 from .dagmanager_client import DagManagerClient
 from .degradation import DegradationManager
 from .gateway_health import get_health as gateway_health
-from .models import StrategyAck, StrategySubmit, StatusResponse
+from .models import (
+    StrategyAck,
+    StrategySubmit,
+    StatusResponse,
+    QueuesByTagResponse,
+)
 from .strategy_manager import StrategyManager
 from .ws import WebSocketHub
 from .world_client import WorldServiceClient
@@ -248,11 +253,12 @@ def create_api_router(
 
     # Legacy DAG/Gateway callback routes have been removed in favor of
     # ControlBus-driven updates; see qmtl.gateway.ws and event handlers.
-    @router.get("/queues/by_tag")
+    @router.get("/queues/by_tag", response_model=QueuesByTagResponse)
     async def queues_by_tag(
         tags: str, interval: int, match_mode: str = "any", world_id: str = ""
-    ) -> dict:
+    ) -> QueuesByTagResponse:
         from qmtl.common.tagquery import split_tags, normalize_match_mode
+
         tag_list = split_tags(tags)
         mode = normalize_match_mode(match_mode).value
         queues = await dagmanager.get_queues_by_tag(
