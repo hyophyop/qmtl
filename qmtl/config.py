@@ -54,6 +54,38 @@ def load_config(path: str) -> UnifiedConfig:
     if not isinstance(dm_data, dict):
         raise TypeError("dagmanager section must be a mapping")
 
+    # Apply transitional aliases for connection-string keys to *_dsn
+    # Canonical keys take precedence if both are provided.
+    def _apply_aliases(section: dict, aliases: dict[str, str], *, logger_prefix: str) -> dict:
+        out = dict(section)
+        for alias, canonical in aliases.items():
+            if canonical in out:
+                continue
+            if alias in out:
+                logger.warning("%s: key '%s' is deprecated; use '%s' instead", logger_prefix, alias, canonical)
+                out[canonical] = out.pop(alias)
+        return out
+
+    gw_aliases = {
+        "redis_url": "redis_dsn",
+        "redis_uri": "redis_dsn",
+        "database_url": "database_dsn",
+        "database_uri": "database_dsn",
+        "controlbus_url": "controlbus_dsn",
+        "controlbus_uri": "controlbus_dsn",
+    }
+    dm_aliases = {
+        "neo4j_url": "neo4j_dsn",
+        "neo4j_uri": "neo4j_dsn",
+        "kafka_url": "kafka_dsn",
+        "kafka_uri": "kafka_dsn",
+        "controlbus_url": "controlbus_dsn",
+        "controlbus_uri": "controlbus_dsn",
+    }
+
+    gw_data = _apply_aliases(gw_data, gw_aliases, logger_prefix="gateway")
+    dm_data = _apply_aliases(dm_data, dm_aliases, logger_prefix="dagmanager")
+
     # Deprecated breaker keys are no longer filtered; invalid keys should be surfaced
 
     gateway_cfg = GatewayConfig(**gw_data)
