@@ -13,6 +13,7 @@ nav:
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Execution State: architecture/execution_state.md
       - Brokerage API: reference/api/brokerage.md
+      - Portfolio & Position API: reference/api/portfolio.md
   - Guides:
       - Overview: guides/README.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
@@ -48,6 +49,7 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
       - Brokerage API: reference/api/brokerage.md
+      - Portfolio & Position API: reference/api/portfolio.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
   - World:
