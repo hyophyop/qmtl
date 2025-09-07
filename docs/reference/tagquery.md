@@ -1,0 +1,33 @@
+---
+title: "TagQuery Reference"
+tags: []
+author: "QMTL Team"
+last_modified: 2025-09-07
+---
+
+{{ nav_links() }}
+
+# TagQuery Reference
+
+- Overview: `TagQueryNode` selects upstream queues by tag set and interval. The Runner wires a per‑strategy `TagQueryManager` that resolves the initial queue list and applies live updates via WebSocket.
+- Endpoint: Gateway exposes `GET /queues/by_tag` with params `tags` (comma‑separated), `interval` (seconds), `match_mode` (`any`|`all`), and optional `world_id`.
+- Matching: `match_mode=any` selects queues containing any tag; `all` requires all tags. Tags are normalized and sorted for stable keys.
+- Normalization: Responses may contain:
+  - Strings: queue IDs, e.g. `"q1"`
+  - Objects: `{"queue": "<id>", "global": <bool>}`. Entries with `global=true` are ignored by the SDK for node execution.
+
+## Runner Integration
+
+- Boot sequence: `Runner.run(..., world_id=..., gateway_url=...)` attaches `TagQueryManager`, applies the Gateway `queue_map` to nodes, and calls `resolve_tags()` once before starting live subscriptions.
+- Live updates: After boot, `TagQueryManager.start()` subscribes to `/events/subscribe` and periodically reconciles via `GET /queues/by_tag` to heal divergence.
+- Offline mode: When `offline=True` or Gateway/Kafka are unavailable, `resolve_tags(offline=True)` initializes `TagQueryNode` with an empty queue set; nodes remain compute‑only until data is fed.
+
+## Timing & Timeouts
+
+- HTTP timeout: `qmtl.sdk.runtime.HTTP_TIMEOUT_SECONDS` (default 2.0s; 1.5s in tests).
+- WebSocket receive timeout: `qmtl.sdk.runtime.WS_RECV_TIMEOUT_SECONDS` (default 30s; 5s in tests).
+- Reconcile poll interval: `qmtl.sdk.runtime.POLL_INTERVAL_SECONDS` (default 10s; 2s in tests).
+- Test mode: Set `QMTL_TEST_MODE=1` to activate conservative time budgets for CI and local tests.
+
+{{ nav_links() }}
+
