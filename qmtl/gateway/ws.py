@@ -145,6 +145,15 @@ class WebSocketHub:
         metrics.record_ws_drop()
         await self._recalc_subscriber_metrics()
 
+    async def set_topics(
+        self, websocket: WebSocket, topics: Optional[Set[str]]
+    ) -> None:
+        """Update topic subscriptions for an existing WebSocket client."""
+        async with self._lock:
+            if websocket in self._clients:
+                self._topics[websocket] = topics
+        await self._recalc_subscriber_metrics()
+
     async def _recalc_subscriber_metrics(self) -> None:
         """Recompute subscriber gauge metrics."""
         counts: Dict[str, int] = {}
