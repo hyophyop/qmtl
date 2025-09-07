@@ -15,23 +15,31 @@ This document outlines a high-level Portfolio/Position API and helper functions 
 ## Objects
 
 Position
-- symbol: str
-- quantity: int
-- avg_cost: float
-- market_price: float
-- market_value: float (property)
-- unrealized_pnl: float (property)
+- symbol: ``str``
+- quantity: ``float``
+- avg_cost: ``float``
+- market_price: ``float``
+- market_value: ``float`` *(property)*
+- unrealized_pnl: ``float`` *(property)*
 
-Portfolio (conceptual)
-- cash: float
-- positions: Dict[str, Position]
-- get_position(symbol) -> Position | None
+Portfolio
+- cash: ``float``
+- positions: ``Dict[str, Position]``
+- get_position(symbol) -> ``Position | None``
+- apply_fill(symbol, quantity, price, commission=0.0)
+- total_value *(property)*
 
 ## Helpers
 
-order_value(symbol, value): place order worth a target notional value.
-order_percent(symbol, percent): place order sized at percent of current portfolio value.
-order_target_percent(symbol, percent): reach target weight for symbol (rebalancing helper).
+``order_value(symbol, value, price)``
+: Return quantity for order worth a target notional ``value``.
 
-These helpers are intended for strategy-level ergonomics and should integrate with the existing order/exec model.
+``order_percent(portfolio, symbol, percent, price)``
+: Size order at ``percent`` of current portfolio value.
+
+``order_target_percent(portfolio, symbol, percent, price)``
+: Reach target weight for ``symbol`` (rebalancing helper).
+
+These helpers return signed quantities and can be combined with existing order
+generation routines.
 
