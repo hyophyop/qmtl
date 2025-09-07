@@ -94,3 +94,7 @@ uv.lock
 
 # MkDocs build artifacts
 site/
+
+# Codex orchestrator artifacts
+.codex_runs/
+.codex_worktrees/

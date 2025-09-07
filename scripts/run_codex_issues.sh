@@ -280,6 +280,8 @@ commit_changes_for_issue() {
   fi
   rm -f "$msg_file.tmp" 2>/dev/null || true
   git -C "$REPO_DIR" add -A
+  # Guard: never stage orchestrator artifacts
+  git -C "$REPO_DIR" reset -q -- .codex_runs .codex_worktrees 2>/dev/null || true
   if ! git -C "$REPO_DIR" diff --cached --quiet; then
     git -C "$REPO_DIR" commit -F "$msg_file" || return 30
     echo "$msg_file"
