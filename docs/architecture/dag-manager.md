@@ -3,6 +3,7 @@ title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
+spec_version: v1.1
 ---
 
 {{ nav_links() }}

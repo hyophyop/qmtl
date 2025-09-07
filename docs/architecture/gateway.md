@@ -3,6 +3,7 @@ title: "QMTL Gateway — Comprehensive Technical Specification"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
+spec_version: v1.2
 ---
 
 {{ nav_links() }}

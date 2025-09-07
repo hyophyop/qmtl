@@ -35,6 +35,9 @@ jobs:
       - name: Build docs (mkdocs)
         run: uv run mkdocs build --strict
 
+      - name: Check design drift (docs ↔ code)
+        run: uv run python scripts/check_design_drift.py
+
       - name: Preflight – import/collection
         run: uv run -m pytest --collect-only -q
 
@@ -46,4 +49,3 @@ jobs:
 
       - name: Run tests (warnings are errors)
         run: PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
-
