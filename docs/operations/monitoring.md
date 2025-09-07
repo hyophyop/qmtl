@@ -20,6 +20,8 @@ Prometheus can load `alert_rules.yml` to activate alerts for the DAG Manager and
 The following alerts are available for inspiration when extending `alert_rules.yml`:
 
 - **DiffDurationHigh** – triggers when `diff_duration_ms_p95` exceeds 200 ms.
+- **DiffFailureRateHigh** – fires when `diff_failures_total` over `diff_requests_total` exceeds 5% (5m rate).
+- **DiffThroughputLow** – warns when `diff_requests_total` 5m rate drops below 0.6/min.
 - **NodeCacheMemoryHigh** – warns if total `nodecache_resident_bytes` (scope="total") exceeds 5 GB.
 - **QueueCreateErrors** – fires when `queue_create_error_total` increases.
 - **SentinelGap** – indicates a missing diff sentinel via `sentinel_gap_count`.
@@ -57,6 +59,13 @@ Both breakers open after three consecutive failures and are not configurable.
 The DAG Manager's Neo4j breaker also uses a fixed threshold of 3.
 
 Kafka consumer lag per topic is exported via `queue_lag_seconds{topic}` along with `queue_lag_threshold_seconds{topic}` to express the configured alert boundary.
+
+For DAG diff processing, the following counters standardize naming and enable SLA-based alerting:
+
+- `diff_requests_total` — total diff requests processed (throughput baseline).
+- `diff_failures_total` — total failed diff requests (for failure rate calculation).
+
+Suggested Prometheus rules combine these into three core alert groups: latency (`diff_duration_ms_p95`), failure-rate (`rate(diff_failures_total)/rate(diff_requests_total)`), and throughput (`rate(diff_requests_total)`). See `alert_rules.yml` for working examples.
 
 Unlike time-based breakers, QMTL requires an explicit success signal to
 close a tripped breaker. Calls that verify remote health should inspect
@@ -126,4 +135,3 @@ Gateway submission and downstream gRPC calls to the DAG Manager.
 
 
 {{ nav_links() }}
-

@@ -122,7 +122,11 @@ def test_gc_sets_orphan_gauge():
 def test_metrics_server_exposes_http():
     metrics.reset_metrics()
     metrics.diff_duration_ms_p95.set(42)
-    port = 9101
+    # Pick a free port to avoid collisions in shared CI runners
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        port = s.getsockname()[1]
     metrics.start_metrics_server(port)
     while True:
         try:
