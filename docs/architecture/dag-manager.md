@@ -18,6 +18,10 @@ spec_version: v1.1
 - [Gateway](gateway.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 
+추가 참고
+- 레퍼런스: [Commit‑Log 설계](../reference/commit_log.md), [TagQuery 사양](../reference/tagquery.md)
+- 운영 가이드: [타이밍 컨트롤](../operations/timing_controls.md)
+
 ---
 
 ## 0. 역할 요약 & 설계 철학

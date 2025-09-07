@@ -66,6 +66,58 @@ graph LR
 
 이 구조는 DAG의 구성요소 단위 재사용을 통해 시간복잡도와 자원 소비를 최소화하며, DAG 전체가 아닌 부분 연산 재활용을 통해 글로벌 최적화를 달성한다.
 
+### 1.1 노드 계열 개요: 리스크 · 타이밍 · 실행 · 오더 퍼블리싱
+
+아래 다이어그램은 최신 노드군의 역할과 실행 시퀀스를 요약한다. 리스크/타이밍 게이트는 실행 전단에서 신호를 억제하거나 지연하며, 실행/퍼블리싱 단계는 브로커리지 모델·커밋 로그를 통해 주문을 기록·전달한다.
+
+```mermaid
+flowchart LR
+    subgraph Inputs
+        D1[StreamInput/Features]
+    end
+    subgraph Pre‑Trade Controls
+        R[RiskControlNode\n(portfolio/position limits)]
+        T[TimingGateNode\n(session/time rules)]
+    end
+    subgraph Execution Layer
+        X[ExecutionNode\n(order type, TIF, slippage/fees)]
+        P[OrderPublishNode\n(commit‑log / gateway proxy)]
+    end
+
+    D1 --> R --> T --> X --> P
+```
+
+참고 문서
+- 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
+- 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
+
+### 1.2 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
+
+SDK/Runner가 전략을 제출하고, Gateway가 DAG Manager/WorldService를 중개하며, ControlBus 이벤트를 통해 활성/큐 변경이 실시간 반영되는 전체 플로우를 도식화한다.
+
+```mermaid
+sequenceDiagram
+    participant SDK as SDK/Runner
+    participant GW as Gateway
+    participant DM as DAG Manager
+    participant WS as WorldService
+    participant CB as ControlBus
+
+    SDK->>GW: POST /strategies (DAG submit)
+    GW->>DM: Diff + Topic Plan
+    DM-->>GW: queue_map + VersionSentinel
+    GW-->>SDK: 202 Ack + queue_map
+    SDK->>SDK: Execute nodes (RiskControl/TimingGate/Execution)
+    SDK-->>GW: OrderPublish (optional, live)
+    GW->>WS: Worlds proxy (activation/query)
+    WS-->>CB: ActivationUpdated
+    DM-->>CB: QueueUpdated
+    CB-->>GW: events (activation/queues)
+    GW-->>SDK: WS stream relay
+```
+
+관련 구현·사양은 아래 문서를 참고한다: [Gateway 사양](gateway.md), [DAG Manager 사양](dag-manager.md), [WorldService](worldservice.md). 운영·사용 관점의 예시는 [operations/](../operations/) 및 [reference/](../reference/) 하위 문서에 정리되어 있다.
+
 ### 전역-로컬 분리와 불변식 (GSG/WVG)
 
 본 문서에서는 약어를 다음과 같이 사용한다.
