@@ -95,14 +95,24 @@ Also Refs #119 for broader tracking
   module header. Automated tooling should create an implementation branch/issue and record
   history in `docs/alphadocs_history.log`.
 
-## Automated Issue Runner (codex exec)
+## Automated Issue Runner (parallel orchestrator)
 
-- Purpose: when an issue list is present, automatically run Codex to iteratively execute and validate work under `qmtl/` using the reusable prompt at `codex_prompts/qmtl_issue_runner.prompt.md`.
+- Purpose: when an issue list is present, orchestrate per‑issue Codex runs to implement and validate work under `qmtl/` using `scripts/run_codex_issues.sh` with the prompt `codex_prompts/qmtl_issue_runner.prompt.md`. Runs can be concurrent via isolated git worktrees.
 - Issue list location: set `ISSUE_SCOPE_FILE` to a Markdown/YAML/JSON file describing issues. Conventionally use `docs/issues/scope.md` in this repo.
-- Trigger condition: if `ISSUE_SCOPE_FILE` is set (or the default file exists), run the command below; otherwise skip.
-- Local run:
-  - `ISSUE_SCOPE_FILE=docs/issues/scope.md codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --color never - < codex_prompts/qmtl_issue_runner.prompt.md`
-- JSON logs (optional):
-  - `ISSUE_SCOPE_FILE=docs/issues/scope.md codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --json --output-last-message .codex_last.txt - < codex_prompts/qmtl_issue_runner.prompt.md`
-- CI hint: gate execution with a file check to auto-trigger only when an issue list exists:
-  - `test -n "$ISSUE_SCOPE_FILE" || ISSUE_SCOPE_FILE=docs/issues/scope.md; [ -f "$ISSUE_SCOPE_FILE" ] && codex exec -C . -s danger-full-access -a never -c shell_environment_policy.inherit=all --color never - < codex_prompts/qmtl_issue_runner.prompt.md || echo "No issue list; skipping Codex issue runner."`
+- Trigger condition: if `ISSUE_SCOPE_FILE` exists, run the orchestrator; otherwise skip.
+- Local parallel run:
+  - `bash scripts/run_codex_issues.sh -f docs/issues/scope.md -i "755 756 757" --parallel auto -o .codex_runs`
+- CI hint: auto-trigger only when an issue list exists; extract IDs from the scope file:
+  - `test -n "$ISSUE_SCOPE_FILE" || ISSUE_SCOPE_FILE=docs/issues/scope.md; if [ -f "$ISSUE_SCOPE_FILE" ]; then IDS=$(awk '/^- ID:/{print $3}' "$ISSUE_SCOPE_FILE" | paste -sd ' ' -); bash scripts/run_codex_issues.sh -f "$ISSUE_SCOPE_FILE" -i "$IDS" --parallel auto -o .codex_runs; else echo "No issue list; skipping Codex issue runner."; fi`
+
+- Options: add `--verify` (and `--verify-full`) to run preflight/full tests and docs build per issue; use `--cleanup-worktrees` to remove worktrees after completion.
+
+### Orchestrator ↔ Worker Contract (no WIP sharing)
+
+- Black-box worker: The orchestrator treats each Codex run as a black box and bases scheduling decisions only on artifacts produced per pass.
+- Artifacts only: Decisions use `.codex_runs/<ISSUE>.pass<N>.{last,changes,verify}.txt`; streaming console output is ignored (but saved to `.console.txt` for auditing).
+- Strict footer format (in the worker’s final message):
+  - `Result status: Done | Needs follow-up | Blocked` (single line)
+  - If status is `Needs follow-up`, include a `Next-run Instructions` section with bullet points
+  - `Suggested commit message` section with one short paragraph; starts with `Fixes #<ISSUE_ID>` when Done, otherwise `Refs #<ISSUE_ID>`
+- Parallel-safe: Orchestrator runs issues concurrently in isolated worktrees and re-triggers follow-ups based only on artifacts; no in-memory WIP is shared across runs.

@@ -1,6 +1,6 @@
 # QMTL Issue Runner (Codex exec prompt)
 
-You are Codex CLI running non‑interactively via `codex exec`. Your job is to take a set of issues scoped to this repository and iteratively complete them end‑to‑end under the `qmtl/` subtree, following the local development and testing standards.
+You are Codex CLI running non‑interactively via `codex exec`. Your job is to take the selected issue (via `ISSUE_ID`) scoped to this repository and complete it end‑to‑end under the `qmtl/` subtree, following the local development and testing standards.
 
 Success means: for each issue, changes are implemented with minimal diffs, docs updated when needed, tests pass, and a concise final summary is produced. If something fails, keep iterating within this session until either all acceptance criteria pass or there is a hard external blocker you must report.
 
@@ -31,6 +31,10 @@ Success means: for each issue, changes are implemented with minimal diffs, docs 
   - Read it early with a safe shell command (e.g., `cat "$ISSUE_SCOPE_FILE"`).
   - The file may be Markdown (with headings), YAML, or JSON. Parse pragmatically.
   - Each issue should end up with: id/title, summary, acceptance criteria, affected paths, and any explicit tests.
+- Required: `ISSUE_ID` selects exactly one issue to process in this run.
+  - Read the scope file and select the matching issue; if not found, print a brief error and stop.
+- Optional: `FOLLOW_UP_INSTRUCTIONS` provides hints for a subsequent run.
+  - Use these to refine your plan or tests on the next pass.
 - If `ISSUE_SCOPE_FILE` is missing, print a brief error and stop.
 
 ## Workflow to Follow (per issue)
@@ -70,9 +74,38 @@ Success means: for each issue, changes are implemented with minimal diffs, docs 
 ## Kickoff
 - Confirm repo readiness (presence of `pyproject.toml`, `qmtl/`, and `docs/`). Install dev deps if missing.
 - Read and parse `$ISSUE_SCOPE_FILE`.
-- Create a short, actionable plan ordered by issue priority.
-- Start executing the first issue and iterate until all issues are complete or a hard blocker is documented.
+- Select the single issue indicated by `ISSUE_ID`. If not found, stop with a brief error.
+- Create a short, actionable plan and execute strictly for that one issue.
 
 ## Output Expectation
 - Keep console output minimal but informative. Use brief preambles before grouped actions.
-- End with a clear final message indicating overall status per issue (Done/Blocked) and any follow‑ups.
+- The orchestrator ignores streaming console output for scheduling; it relies on artifacts and the footer described below.
+
+### Output Footer Contract (required)
+At the very end of your final message for this run, include exactly:
+
+1) Single status line:
+```
+Result status: Done | Needs follow-up | Blocked
+```
+
+2) Only when status is "Needs follow-up", add a section:
+```
+Next-run Instructions
+- <bullet 1>
+- <bullet 2>
+```
+
+3) Always include a commit message section:
+```
+Suggested commit message
+<one short paragraph. If Done: starts with Fixes #<ISSUE_ID>; otherwise Refs #<ISSUE_ID>>
+```
+
+Example footer:
+```
+Suggested commit message
+Fixes #755: chore(dag-manager): add idempotent neo4j migrations and docs
+
+Result status: Done
+```
