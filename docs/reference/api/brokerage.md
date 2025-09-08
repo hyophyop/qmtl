@@ -86,8 +86,8 @@ fee = IBKRFeeModel(minimum=1.0)
 
 ## Time-in-Force and Order Types
 
-- Time-in-Force: DAY, GTC, IOC, FOK. IOC partially fills up to immediate liquidity; FOK requires full fill.
-- Order types: market, limit, stop, stop-limit. Limit/StopLimit use `limit_price` and `stop_price` on Order.
+- Time-in-Force: DAY, GTC, GTD, IOC, FOK. IOC partially fills up to immediate liquidity; FOK requires full fill. GTD orders expire at the provided `expire_at` timestamp.
+- Order types: market, limit, stop, stop-limit, market-on-open, market-on-close, trailing-stop. Limit/StopLimit use `limit_price` and `stop_price` on Order; trailing-stop uses `trail_amount`.
 
 ## Profiles
 

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from .interfaces import FillModel
@@ -14,7 +15,14 @@ from .order import Order, Fill, OrderType, TimeInForce
 class ImmediateFillModel(FillModel):
     """Fill the entire order at the given price."""
 
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
         return Fill(symbol=order.symbol, quantity=order.quantity, price=market_price)
 
 
@@ -31,11 +39,17 @@ class BaseFillModel(FillModel):
 
     liquidity_cap: Optional[int] = None
 
-    def _apply_tif(self, order: Order, desired_qty: int) -> int:
+    def _apply_tif(
+        self,
+        order: Order,
+        desired_qty: int,
+        ts: Optional[datetime] = None,
+    ) -> int:
         """Apply simple TIF semantics to the computed desired quantity.
 
         - FOK: require full fill, otherwise 0
         - IOC: fill up to `liquidity_cap` (if set) or desired quantity
+        - GTD: expire after ``order.expire_at``
         - DAY/GTC: take desired quantity
         """
 
@@ -43,12 +57,21 @@ class BaseFillModel(FillModel):
             return 0
 
         if order.tif == TimeInForce.FOK:
-            return desired_qty if (self.liquidity_cap is None or desired_qty <= self.liquidity_cap) else 0
+            return (
+                desired_qty
+                if (self.liquidity_cap is None or desired_qty <= self.liquidity_cap)
+                else 0
+            )
 
         if order.tif == TimeInForce.IOC:
             if self.liquidity_cap is None:
                 return desired_qty
             return min(desired_qty, self.liquidity_cap)
+
+        if order.tif == TimeInForce.GTD:
+            if order.expire_at is not None and ts is not None and ts > order.expire_at:
+                return 0
+            return desired_qty
 
         # DAY/GTC
         return desired_qty
@@ -57,8 +80,15 @@ class BaseFillModel(FillModel):
 class MarketFillModel(BaseFillModel):
     """Market orders fill immediately at the given market price."""
 
-    def fill(self, order: Order, market_price: float) -> Fill:
-        qty = self._apply_tif(order, abs(order.quantity))
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
+        qty = self._apply_tif(order, abs(order.quantity), ts)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -66,7 +96,14 @@ class MarketFillModel(BaseFillModel):
 class LimitFillModel(BaseFillModel):
     """Limit orders fill when price crosses the limit."""
 
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
         if order.limit_price is None:
             # No limit specified, cannot fill
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
@@ -82,7 +119,7 @@ class LimitFillModel(BaseFillModel):
         if not can_fill:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        qty = self._apply_tif(order, abs(order.quantity))
+        qty = self._apply_tif(order, abs(order.quantity), ts)
         qty = qty if order.quantity >= 0 else -qty
         # Fill at min/max of market and limit to be conservative
         price = min(market_price, order.limit_price) if order.quantity > 0 else max(market_price, order.limit_price)
@@ -92,7 +129,14 @@ class LimitFillModel(BaseFillModel):
 class StopMarketFillModel(BaseFillModel):
     """Stop orders trigger at the stop price and then execute at market."""
 
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
         if order.stop_price is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
@@ -107,7 +151,7 @@ class StopMarketFillModel(BaseFillModel):
         if not triggered:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        qty = self._apply_tif(order, abs(order.quantity))
+        qty = self._apply_tif(order, abs(order.quantity), ts)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -115,7 +159,14 @@ class StopMarketFillModel(BaseFillModel):
 class StopLimitFillModel(BaseFillModel):
     """Stop-limit triggers at stop, then uses limit for execution."""
 
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
         if order.stop_price is None or order.limit_price is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
@@ -130,7 +181,90 @@ class StopLimitFillModel(BaseFillModel):
 
         # After trigger, behave like limit
         lfm = LimitFillModel(liquidity_cap=self.liquidity_cap)
-        return lfm.fill(order, market_price)
+        return lfm.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+
+
+class MarketOnOpenFillModel(BaseFillModel):
+    """Market-on-open orders fill at the regular session open."""
+
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
+        if ts is None or exchange_hours is None:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+        if ts.time() != exchange_hours.market_hours.regular_start:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = qty if order.quantity >= 0 else -qty
+        return Fill(symbol=order.symbol, quantity=qty, price=market_price)
+
+
+class MarketOnCloseFillModel(BaseFillModel):
+    """Market-on-close orders fill at the regular session close."""
+
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
+        if ts is None or exchange_hours is None:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+        close_time = exchange_hours.early_closes.get(
+            ts.date(), exchange_hours.market_hours.regular_end
+        )
+        if ts.time() != close_time:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = qty if order.quantity >= 0 else -qty
+        return Fill(symbol=order.symbol, quantity=qty, price=market_price)
+
+
+class TrailingStopFillModel(BaseFillModel):
+    """Trailing stop orders adjust their stop with favorable price moves."""
+
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
+        if order.trail_amount is None:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+
+        if order.stop_price is None:
+            if order.quantity > 0:
+                order.stop_price = market_price + order.trail_amount
+            else:
+                order.stop_price = market_price - order.trail_amount
+        else:
+            if order.quantity > 0:
+                new_stop = market_price + order.trail_amount
+                if new_stop < order.stop_price:
+                    order.stop_price = new_stop
+            else:
+                new_stop = market_price - order.trail_amount
+                if new_stop > order.stop_price:
+                    order.stop_price = new_stop
+
+        triggered = (
+            market_price >= order.stop_price if order.quantity > 0 else market_price <= order.stop_price
+        )
+        if not triggered:
+            return Fill(symbol=order.symbol, quantity=0, price=market_price)
+
+        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = qty if order.quantity >= 0 else -qty
+        return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
 
 class UnifiedFillModel(FillModel):
@@ -147,15 +281,31 @@ class UnifiedFillModel(FillModel):
         self._limit = LimitFillModel(liquidity_cap=liquidity_cap)
         self._stop = StopMarketFillModel(liquidity_cap=liquidity_cap)
         self._stop_limit = StopLimitFillModel(liquidity_cap=liquidity_cap)
+        self._moo = MarketOnOpenFillModel(liquidity_cap=liquidity_cap)
+        self._moc = MarketOnCloseFillModel(liquidity_cap=liquidity_cap)
+        self._trailing = TrailingStopFillModel(liquidity_cap=liquidity_cap)
 
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours=None,
+    ) -> Fill:
         if order.type == OrderType.MARKET:
-            return self._market.fill(order, market_price)
+            return self._market.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
         if order.type == OrderType.LIMIT:
-            return self._limit.fill(order, market_price)
+            return self._limit.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
         if order.type == OrderType.STOP:
-            return self._stop.fill(order, market_price)
+            return self._stop.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
         if order.type == OrderType.STOP_LIMIT:
-            return self._stop_limit.fill(order, market_price)
+            return self._stop_limit.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+        if order.type == OrderType.MOO:
+            return self._moo.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+        if order.type == OrderType.MOC:
+            return self._moc.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+        if order.type == OrderType.TRAILING_STOP:
+            return self._trailing.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
         # Fallback: no fill
         return Fill(symbol=order.symbol, quantity=0, price=market_price)

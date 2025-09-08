@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+from datetime import datetime
 
 
 class OrderType(str, Enum):
@@ -16,6 +17,9 @@ class OrderType(str, Enum):
     LIMIT = "limit"
     STOP = "stop"
     STOP_LIMIT = "stop_limit"
+    MOO = "market_on_open"
+    MOC = "market_on_close"
+    TRAILING_STOP = "trailing_stop"
 
 
 class TimeInForce(str, Enum):
@@ -23,6 +27,7 @@ class TimeInForce(str, Enum):
 
     DAY = "day"
     GTC = "gtc"
+    GTD = "gtd"
     IOC = "ioc"
     FOK = "fok"
 
@@ -39,6 +44,8 @@ class Order:
         tif: Time-in-Force policy.
         limit_price: Limit price for limit/stop-limit orders.
         stop_price: Stop trigger for stop/stop-limit orders.
+        expire_at: Expiration timestamp for GTD orders.
+        trail_amount: Trailing offset for trailing stop orders.
     """
 
     symbol: str
@@ -48,6 +55,8 @@ class Order:
     tif: TimeInForce = TimeInForce.DAY
     limit_price: Optional[float] = None
     stop_price: Optional[float] = None
+    expire_at: Optional[datetime] = None
+    trail_amount: Optional[float] = None
 
 
 @dataclass
