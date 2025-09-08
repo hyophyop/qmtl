@@ -46,12 +46,14 @@ class PreTradeGateNode(ProcessingNode):
         activation_map: Mapping[str, Activation],
         brokerage: BrokerageModel,
         account: Account,
+        backpressure_guard: Callable[[], bool] | None = None,
         name: str | None = None,
     ) -> None:
         self.order = order
         self.activation_map = activation_map
         self.brokerage = brokerage
         self.account = account
+        self.backpressure_guard = backpressure_guard
         super().__init__(
             order,
             compute_fn=self._compute,
@@ -65,6 +67,14 @@ class PreTradeGateNode(ProcessingNode):
         if not data:
             return None
         ts, order = data[-1]
+        # Optional backpressure guard: deny early if overloaded
+        if self.backpressure_guard is not None:
+            try:
+                if self.backpressure_guard():
+                    return {"rejected": True, "reason": "backpressure"}
+            except Exception:
+                pass
+
         result = check_pretrade(
             activation_map=self.activation_map,
             brokerage=self.brokerage,
