@@ -2,7 +2,7 @@
 title: "Live & Brokerage Connectors"
 tags: [api]
 author: "QMTL Team"
-last_modified: 2025-09-08
+last_modified: 2025-09-09
 ---
 
 {{ nav_links() }}
@@ -35,6 +35,16 @@ Interface: `post_order(order)`, `poll_order_status(order)`, `cancel_order(order_
 - `HttpBrokerageClient` wraps `TradeExecutionService` (HTTP POST + light retries). Status polling calls `GET {url}/{id}`, cancel attempts `DELETE {url}/{id}`.
 - `FakeBrokerageClient` is an in-memory immediate-fill stub.
 - `CcxtBrokerageClient` (optional) uses the CCXT unified API. Requires `ccxt` and minimal fields: `symbol`, `side` (`BUY|SELL`), `type` (`market|limit`), `quantity`, optional `limit_price` and `time_in_force`.
+
+### OCO (Cancel-on-Fill)
+
+Some strategies need to manage take-profit and stop-loss legs as a linked One-Cancels-Other (OCO) pair.
+
+| Connector             | OCO support              |
+| --------------------- | ----------------------- |
+| `FakeBrokerageClient` | Emulated cancel-on-fill |
+| `HttpBrokerageClient` | Manual cancel required  |
+| `CcxtBrokerageClient` | Exchange-dependent      |
 
 ### Binance (CCXT Sandbox)
 
