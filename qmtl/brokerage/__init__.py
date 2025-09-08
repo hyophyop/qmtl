@@ -35,7 +35,7 @@ from .slippage import (
 )
 from .symbols import SymbolPropertiesProvider, SymbolProperties
 from .exchange_hours import ExchangeHoursProvider
-from .shortable import ShortableProvider, StaticShortableProvider
+from .shortable import ShortableProvider, StaticShortableProvider, ShortableLot
 from .settlement import SettlementModel
 from .profile import BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile
 from .interest import MarginInterestModel
@@ -81,6 +81,7 @@ __all__ = [
     "ExchangeHoursProvider",
     "ShortableProvider",
     "StaticShortableProvider",
+    "ShortableLot",
     "SettlementModel",
     "MarginInterestModel",
     "BrokerageProfile",

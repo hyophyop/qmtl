@@ -51,13 +51,19 @@ class BrokerageModel:
             raise ValueError("Market is closed per exchange hours policy")
 
     def _validate_shortable(self, order: Order, ts: Optional[datetime]) -> None:
-        if self.shortable is None:
+        if self.shortable is None or order.quantity >= 0:
             return
-        if order.quantity < 0:
-            # Simplified: treat any sell as potentially short without positions context
-            from datetime import date as _date
-            if not self.shortable.is_shortable(order.symbol, on=_date.today() if ts is None else ts.date()):
-                raise ValueError(f"Symbol {order.symbol} not shortable")
+        # Simplified: treat any sell as short without positions context
+        from datetime import date as _date
+
+        day = _date.today() if ts is None else ts.date()
+        available = self.shortable.available_qty(order.symbol, on=day)
+        if available is None or available <= 0:
+            raise ValueError(f"Symbol {order.symbol} not shortable")
+        if -order.quantity > available:
+            raise ValueError(
+                f"Insufficient shortable quantity for {order.symbol}: requested {-order.quantity}, available {available}"
+            )
 
     def can_submit_order(self, account: Account, order: Order, *, ts: Optional[datetime] = None) -> bool:
         """Return True if the order passes symbol/hour/buying power checks."""
@@ -92,7 +98,14 @@ class BrokerageModel:
             fill.fee = 0.0
             return fill
 
-        fee = self.fee_model.calculate(order, fill.price)
+        borrow_fee = 0.0
+        if self.shortable is not None and fill.quantity < 0:
+            from datetime import date as _date
+            borrow_fee = self.shortable.borrow(
+                order.symbol, -fill.quantity, on=_date.today() if ts is None else ts.date()
+            )
+
+        fee = self.fee_model.calculate(order, fill.price) + borrow_fee
         fill.fee = fee
         cost = fill.price * fill.quantity + fee
         currency = (

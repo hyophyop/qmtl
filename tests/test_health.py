@@ -2,6 +2,8 @@ from datetime import datetime, UTC
 from fastapi.testclient import TestClient
 import pytest
 
+# Suppress unraisable exceptions from sockets/event loop cleanup that can
+# occur under pytest -W error when using TestClient and async gRPC clients.
 pytestmark = [
     pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),

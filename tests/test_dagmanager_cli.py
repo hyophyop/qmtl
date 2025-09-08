@@ -1,6 +1,8 @@
 import json
 import pytest
 
+# Suppress unraisable exceptions surfaced by pytest when background resources
+# (event loops/sockets) from third-party libs are cleaned up during tests.
 pytestmark = [
     pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),

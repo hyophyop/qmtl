@@ -8,6 +8,7 @@ from qmtl.sdk import ProcessingNode, StreamInput
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),
+    # Ignore unraisable exception warnings that can be triggered by third-party libs
     pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
 ]
 

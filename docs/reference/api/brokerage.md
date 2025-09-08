@@ -2,7 +2,7 @@
 title: "Brokerage API"
 tags: [api]
 author: "QMTL Team"
-last_modified: 2025-09-07
+last_modified: 2025-09-08
 ---
 
 {{ nav_links() }}
@@ -20,6 +20,7 @@ Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration
 - Slippage models: NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
 - Fee models: PerShareFeeModel, PercentFeeModel, MakerTakerFeeModel, TieredExchangeFeeModel, BorrowFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
 - Providers: SymbolPropertiesProvider (tick/lot/min), ExchangeHoursProvider (regular/pre/post), ShortableProvider
+  (daily shortable quantities via ``StaticShortableProvider`` + ``ShortableLot``)
 - Profiles: BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile()
 
 ## Execution Flow
@@ -56,6 +57,8 @@ from qmtl.brokerage import (
     NullSlippageModel,
     SymbolPropertiesProvider,
     ExchangeHoursProvider,
+    StaticShortableProvider,
+    ShortableLot,
 )
 
 model = BrokerageModel(
@@ -65,6 +68,7 @@ model = BrokerageModel(
     MarketFillModel(),
     symbols=SymbolPropertiesProvider(),
     hours=ExchangeHoursProvider(allow_pre_post_market=False, require_regular_hours=True),
+    shortable=StaticShortableProvider({"AAPL": ShortableLot(quantity=1000, fee=0.01)}),
 )
 
 # Optional: tiered IBKR-like fees
