@@ -29,6 +29,9 @@ def test_compute_rebalance_quantity_progresses_toward_target():
     assert math.isclose(qty, 5.0)
     p.apply_fill("AAPL", quantity=qty, price=50.0)
 
+    # Update market price for subsequent sizing
+    p.positions["AAPL"].market_price = 60.0
+
     # Now target 50% weight at new price $60
     # Portfolio value: cash 1_000 - 250 = 750 + market 5 * 60 = 300 => 1,050
     # Desired value 50% * 1,050 = 525; current value 5 * 60 = 300; delta = 225 -> 3.75 shares

@@ -35,6 +35,7 @@ nav:
       - World Activation Runbook: operations/activation.md
       - Risk Management: operations/risk_management.md
       - Timing Controls: operations/timing_controls.md
+      - Exchange Calendars: operations/exchange_calendars.md
       - Release: operations/release.md
       - CI: operations/ci.md
   - Reference:
