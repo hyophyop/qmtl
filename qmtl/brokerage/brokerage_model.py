@@ -77,7 +77,15 @@ class BrokerageModel:
         # Buying power validation
         return self.buying_power_model.has_sufficient_buying_power(account, order)
 
-    def execute_order(self, account: Account, order: Order, market_price: float, *, ts: Optional[datetime] = None) -> Fill:
+    def execute_order(
+        self,
+        account: Account,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        bar_volume: Optional[int] = None,
+    ) -> Fill:
         """Execute ``order`` and update ``account`` cash balance.
 
         Applies slippage, fills via fill model, computes fees, and debits/credits cash.
@@ -90,7 +98,11 @@ class BrokerageModel:
 
         price_with_slippage = self.slippage_model.apply(order, market_price)
         fill = self.fill_model.fill(
-            order, price_with_slippage, ts=ts, exchange_hours=self.hours
+            order,
+            price_with_slippage,
+            ts=ts,
+            exchange_hours=self.hours,
+            bar_volume=bar_volume,
         )
 
         if fill.quantity == 0:

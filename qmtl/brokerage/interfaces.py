@@ -47,5 +47,12 @@ class FillModel(ABC):
         *,
         ts: Optional[datetime] = None,
         exchange_hours: Optional[ExchangeHoursProvider] = None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
-        """Return fill details for ``order`` at ``market_price``."""
+        """Return fill details for ``order`` at ``market_price``.
+
+        Parameters
+        ----------
+        bar_volume : Optional[int]
+            Recent bar volume used for volume-based partial fill modeling.
+        """
