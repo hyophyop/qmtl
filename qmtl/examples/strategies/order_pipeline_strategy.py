@@ -6,6 +6,8 @@ from qmtl.transforms import (
     TradeSignalGeneratorNode,
     TradeOrderPublisherNode,
 )
+from qmtl.pipeline.execution_nodes import RouterNode
+from qmtl.pipeline.micro_batch import MicroBatchNode
 
 
 class OrderPipelineStrategy(Strategy):
@@ -27,7 +29,15 @@ class OrderPipelineStrategy(Strategy):
             history, long_threshold=0.0, short_threshold=0.0
         )
         orders = TradeOrderPublisherNode(signal)
-        self.add_nodes([price, alpha, history, signal, orders])
+
+        # Route orders by symbol: simple example mapping suffix to exchange name
+        def route_fn(order: dict) -> str:
+            sym = order.get("symbol", "") or ""
+            return "binance" if str(sym).upper().endswith("USDT") else "ibkr"
+
+        routed = RouterNode(orders, route_fn=route_fn)
+        batches = MicroBatchNode(routed)
+        self.add_nodes([price, alpha, history, signal, orders, routed, batches])
 
 
 if __name__ == "__main__":

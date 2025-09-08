@@ -28,6 +28,7 @@ nav:
       - Testing & Pytest: guides/testing.md
       - HTTPX Usage: guides/httpx_usage.md
       - CCXT Spot Node Set: guides/ccxt_spot_nodeset.md
+      - Router/MicroBatch/Test Kit: guides/router_microbatch_testkit.md
   - Operations:
       - Overview: operations/README.md
       - Docker & Compose: operations/docker.md

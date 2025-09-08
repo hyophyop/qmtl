@@ -1,11 +1,13 @@
 ---
-title: ""
+title: "Lean Brokerage Model — Integration Guide"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
 ---
 
 {{ nav_links() }}
+
+# Lean Brokerage Model — Integration Guide
 
 ## 관련 문서
 - [Architecture Overview](README.md)
