@@ -2,7 +2,7 @@
 title: "Brokerage API"
 tags: [api]
 author: "QMTL Team"
-last_modified: 2025-09-04
+last_modified: 2025-09-07
 ---
 
 {{ nav_links() }}
@@ -18,7 +18,7 @@ Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration
 - Interfaces: BuyingPowerModel, FillModel, SlippageModel, FeeModel
 - Fill models: MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel (IOC/FOK supported via TIF)
 - Slippage models: NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
-- Fee models: PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
+- Fee models: PerShareFeeModel, PercentFeeModel, MakerTakerFeeModel, TieredExchangeFeeModel, BorrowFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
 - Providers: SymbolPropertiesProvider (tick/lot/min), ExchangeHoursProvider (regular/pre/post), ShortableProvider
 - Profiles: BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile()
 
@@ -52,6 +52,7 @@ from qmtl.brokerage import (
     CashBuyingPowerModel,
     MarketFillModel,
     PerShareFeeModel,
+    MakerTakerFeeModel,
     NullSlippageModel,
     SymbolPropertiesProvider,
     ExchangeHoursProvider,
@@ -59,7 +60,7 @@ from qmtl.brokerage import (
 
 model = BrokerageModel(
     CashBuyingPowerModel(),
-    PerShareFeeModel(fee_per_share=0.005, minimum=1.0),
+    MakerTakerFeeModel(maker_rate=0.0002, taker_rate=0.0007),
     NullSlippageModel(),
     MarketFillModel(),
     symbols=SymbolPropertiesProvider(),
@@ -70,6 +71,18 @@ model = BrokerageModel(
 from qmtl.brokerage import IBKRFeeModel
 fee = IBKRFeeModel(minimum=1.0)
 ```
+
+### Fee Model Matrix
+
+| Model | Basis | Notes |
+| --- | --- | --- |
+| PercentFeeModel | % of notional | Rate with minimum |
+| PerShareFeeModel | per share | Optional min/max |
+| MakerTakerFeeModel | % of notional | Separate maker/taker rates |
+| TieredExchangeFeeModel | % of notional | Rate determined by notional tiers |
+| BorrowFeeModel | % of notional | Applied on short sales |
+| IBKRFeeModel | per share | Tiered per-share schedule |
+| CompositeFeeModel | n/a | Sum multiple fee models |
 
 ## Time-in-Force and Order Types
 
@@ -89,6 +102,5 @@ model = profile.build()
 
 - See `tests/test_brokerage_orders_tif.py` for TIF and crossing logic.
 - See `tests/test_brokerage_extras.py` for shortable/profile usage.
-```
 
 {{ nav_links() }}

@@ -14,7 +14,15 @@ from .fill_models import (
     StopLimitFillModel,
     UnifiedFillModel,
 )
-from .fees import PerShareFeeModel, PercentFeeModel, CompositeFeeModel, IBKRFeeModel
+from .fees import (
+    PerShareFeeModel,
+    PercentFeeModel,
+    CompositeFeeModel,
+    IBKRFeeModel,
+    MakerTakerFeeModel,
+    TieredExchangeFeeModel,
+    BorrowFeeModel,
+)
 from .slippage import (
     NullSlippageModel,
     ConstantSlippageModel,
@@ -46,6 +54,9 @@ __all__ = [
     "PercentFeeModel",
     "CompositeFeeModel",
     "IBKRFeeModel",
+    "MakerTakerFeeModel",
+    "TieredExchangeFeeModel",
+    "BorrowFeeModel",
     "NullSlippageModel",
     "ConstantSlippageModel",
     "SpreadBasedSlippageModel",
