@@ -37,6 +37,9 @@ def compute_rebalance_quantity(
     price: float
         Current execution price used for sizing.
     """
+    pos = portfolio.get_position(symbol)
+    if pos is not None:
+        pos.market_price = price
     return pf.order_target_percent(portfolio, symbol, target_weight, price)
 
 

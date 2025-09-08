@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .interfaces import FeeModel
-from .order import Order
+from .order import Order, OrderType
 
 
 @dataclass
@@ -95,3 +95,54 @@ class IBKRFeeModel(FeeModel):
             total = self.minimum
         total += self.exchange_fees
         return total
+
+
+@dataclass
+class MakerTakerFeeModel(FeeModel):
+    """Apply different percentage rates for maker vs taker liquidity."""
+
+    maker_rate: float = 0.0
+    taker_rate: float = 0.001
+    minimum: float = 0.0
+
+    def calculate(self, order: Order, fill_price: float) -> float:
+        rate = self.taker_rate if order.type == OrderType.MARKET else self.maker_rate
+        notional = abs(order.quantity) * fill_price
+        fee = notional * rate
+        return fee if fee >= self.minimum else self.minimum
+
+
+@dataclass
+class TieredExchangeFeeModel(FeeModel):
+    """Percentage-of-notional fees with rate tiers based on notional size."""
+
+    tiers: list[tuple[float, float]] | None = None
+    minimum: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.tiers is None:
+            # Default two-tier schedule: <=50k notional 0.1%, otherwise 0.05%
+            self.tiers = [(50_000.0, 0.001)]
+
+    def calculate(self, order: Order, fill_price: float) -> float:
+        notional = abs(order.quantity) * fill_price
+        rate = self.tiers[-1][1]
+        for threshold, tier_rate in self.tiers:
+            if notional <= threshold:
+                rate = tier_rate
+                break
+        fee = notional * rate
+        return fee if fee >= self.minimum else self.minimum
+
+
+@dataclass
+class BorrowFeeModel(FeeModel):
+    """Simple borrow fee applied on short sales."""
+
+    rate: float = 0.0001
+
+    def calculate(self, order: Order, fill_price: float) -> float:
+        if order.quantity >= 0:
+            return 0.0
+        notional = abs(order.quantity) * fill_price
+        return notional * self.rate
