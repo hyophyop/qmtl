@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Mapping
+from typing import Mapping, Callable
 
 from qmtl.sdk.node import Node, ProcessingNode, StreamInput, CacheView
 from qmtl.sdk.pretrade import check_pretrade
@@ -85,9 +85,17 @@ class PreTradeGateNode(ProcessingNode):
 class SizingNode(ProcessingNode):
     """Convert sizing instructions to absolute quantity."""
 
-    def __init__(self, order: Node, *, portfolio: Portfolio, name: str | None = None) -> None:
+    def __init__(
+        self,
+        order: Node,
+        *,
+        portfolio: Portfolio,
+        name: str | None = None,
+        weight_fn: Callable[[dict], float] | None = None,
+    ) -> None:
         self.order = order
         self.portfolio = portfolio
+        self.weight_fn = weight_fn
         super().__init__(
             order,
             compute_fn=self._compute,
@@ -116,6 +124,18 @@ class SizingNode(ProcessingNode):
         else:
             return order
         order = dict(order)
+        # Apply soft gating weight if provided
+        if self.weight_fn is not None:
+            try:
+                factor = float(self.weight_fn(order))
+                if factor < 0.0:
+                    factor = 0.0
+                if factor > 1.0:
+                    factor = 1.0
+                qty *= factor
+            except Exception:
+                # Ignore weighting errors
+                pass
         order["quantity"] = qty
         return order
 

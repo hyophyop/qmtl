@@ -67,7 +67,8 @@ Tip
 - [SizingNode](../../qmtl/transforms/execution_nodes.py#L80)
   - Inputs: Order intent, Portfolio snapshot (t−1)
   - Output: Sized order (quantity) using helpers (value/percent/target_percent)
-  - Backed by: `qmtl/sdk/portfolio.py`
+  - Soft Gating: optionally applies an activation weight (`0..1`) via a `weight_fn` callback; Node Sets pass a function backed by SDK `ActivationManager.weight_for_side(…)` using the intent’s inferred side.
+  - Backed by: `qmtl/sdk/portfolio.py`, `qmtl/sdk/activation_manager.py`
 
 - ExecutionNode
   - Inputs: Sized order, Market data (OHLCV/quotes), Brokerage profile
