@@ -1,5 +1,14 @@
 from datetime import datetime, UTC
 from fastapi.testclient import TestClient
+import pytest
+
+# Suppress unraisable exceptions from sockets/event loop cleanup that can
+# occur under pytest -W error when using TestClient and async gRPC clients.
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+    pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
+    pytest.mark.filterwarnings('ignore:unclosed event loop'),
+]
 
 from qmtl.gateway.api import create_app as gw_create_app
 from qmtl.dagmanager.api import create_app as dag_api_create_app

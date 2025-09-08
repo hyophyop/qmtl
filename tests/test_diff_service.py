@@ -1,5 +1,12 @@
 import json
 import pytest
+
+# Suppress unraisable exceptions from third-party libs (sockets/event loops)
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+    pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
+    pytest.mark.filterwarnings('ignore:unclosed event loop'),
+]
 from qmtl.dagmanager.diff_service import (
     DiffService,
     DiffRequest,
