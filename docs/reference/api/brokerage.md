@@ -19,8 +19,9 @@ Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration
 - Fill models: MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel (IOC/FOK supported via TIF)
 - Slippage models: NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
 - Fee models: PerShareFeeModel, PercentFeeModel, MakerTakerFeeModel, TieredExchangeFeeModel, BorrowFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
-- Providers: SymbolPropertiesProvider (tick/lot/min), ExchangeHoursProvider (regular/pre/post), ShortableProvider
-  (daily shortable quantities via ``StaticShortableProvider`` + ``ShortableLot``)
+- Providers: SymbolPropertiesProvider (asset-class aware tick/lot/multiplier database),
+  ExchangeHoursProvider (regular/pre/post), ShortableProvider (daily shortable quantities
+  via ``StaticShortableProvider`` + ``ShortableLot``)
 - Profiles: BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile()
 
 ## Execution Flow
@@ -66,7 +67,7 @@ model = BrokerageModel(
     MakerTakerFeeModel(maker_rate=0.0002, taker_rate=0.0007),
     NullSlippageModel(),
     MarketFillModel(),
-    symbols=SymbolPropertiesProvider(),
+    symbols=SymbolPropertiesProvider(),  # loads built-in JSON/CSV symbol DB
     hours=ExchangeHoursProvider(allow_pre_post_market=False, require_regular_hours=True),
     shortable=StaticShortableProvider({"AAPL": ShortableLot(quantity=1000, fee=0.01)}),
 )
