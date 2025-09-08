@@ -12,10 +12,12 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from qmtl.sdk.node import MatchMode
+from qmtl.common.cloudevents import format_event
 
 from . import metrics as gw_metrics
 from .dagmanager_client import DagManagerClient
 from .degradation import DegradationManager
+from .event_descriptor import validate_event_token
 from .gateway_health import get_health as gateway_health
 from .models import (
     StrategyAck,
@@ -61,6 +63,67 @@ def create_api_router(
         return await gateway_health(
             redis_conn, database_obj, dagmanager, world_client
         )
+
+    @router.post("/fills", status_code=status.HTTP_202_ACCEPTED)
+    async def post_fills(request: Request) -> dict[str, str]:
+        auth = request.headers.get("authorization")
+        if not auth or not auth.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
+        token = auth.split(" ", 1)[1]
+        try:
+            claims = validate_event_token(token, request.app.state.event_config)
+        except Exception:
+            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
+        payload = await request.json()
+        if payload.get("specversion") == "1.0":
+            for field in ("type", "source", "id", "time"):
+                if field not in payload:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"code": "E_INVALID_CE", "field": field},
+                    )
+            data = payload.get("data") or {}
+            envelope = payload
+        else:
+            data = payload
+            envelope = format_event("qmtl.gateway", "qmtl.trade.fill", data)
+        world_id = data.get("world_id")
+        strategy_id = data.get("strategy_id")
+        if claims.get("world_id") and world_id != claims.get("world_id"):
+            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_WORLD"})
+        if claims.get("strategy_id") and strategy_id != claims.get("strategy_id"):
+            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_STRATEGY"})
+        try:
+            await redis_conn.rpush("trade.fills", json.dumps(envelope))
+        except Exception:
+            pass
+        return {"status": "accepted"}
+
+    @router.post("/fills/replay", status_code=status.HTTP_202_ACCEPTED)
+    async def post_fills_replay(request: Request) -> dict[str, str]:
+        auth = request.headers.get("authorization")
+        if not auth or not auth.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
+        token = auth.split(" ", 1)[1]
+        try:
+            claims = validate_event_token(token, request.app.state.event_config)
+        except Exception:
+            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
+        params = await request.json()
+        from_ts = params.get("from_ts")
+        to_ts = params.get("to_ts")
+        if from_ts is None or to_ts is None:
+            raise HTTPException(status_code=400, detail={"code": "E_INVALID_RANGE"})
+        if "world_id" in params and claims.get("world_id") and params["world_id"] != claims.get("world_id"):
+            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_WORLD"})
+        if "strategy_id" in params and claims.get("strategy_id") and params["strategy_id"] != claims.get("strategy_id"):
+            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_STRATEGY"})
+        replay_event = format_event("qmtl.gateway", "qmtl.trade.fill.replay", params)
+        try:
+            await redis_conn.rpush("trade.fills", json.dumps(replay_event))
+        except Exception:
+            pass
+        return {"status": "queued"}
 
     @router.post(
         "/strategies",
