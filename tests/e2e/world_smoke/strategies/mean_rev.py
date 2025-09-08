@@ -1,6 +1,12 @@
-# tests/e2e/world_smoke/strategies/mean_rev.py
+"""Minimal world-smoke strategy runner aligned to WS-first APIs.
+
+This script writes per-world artifacts and, when QMTL is importable,
+executes a no-op Strategy via Runner.offline to exercise the SDK path
+without relying on deprecated dry-run modes.
+"""
+
 import os, json, time, pathlib, random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 ARTIFACT_DIR = pathlib.Path(os.environ.get("ARTIFACT_DIR", ".artifacts/world_smoke"))
 
@@ -52,39 +58,32 @@ def run_sdk_mode(world_id: str, duration_sec: int = 5):
 def run_qmtl_mode(world_id: str, duration_sec: int = 5):
     """
     QMTL Runner가 있을 때의 간단 실행.
-    구현체마다 차이가 있을 수 있어 try/except 보호 및 최소 동작만.
+    WS-first API에 맞춰 Runner.offline을 사용합니다.
+    QMTL이 import 불가하면 SDK fallback으로 대체합니다.
     """
     try:
-        from qmtl.sdk.runner import Runner  # type: ignore
-        from qmtl.sdk.node import Node  # type: ignore
+        from qmtl.sdk import Runner, Strategy  # type: ignore
     except Exception:
         run_sdk_mode(world_id, duration_sec)
         return
+
+    class _NoopStrategy(Strategy):  # minimal offline-compatible strategy
+        def setup(self) -> None:  # noqa: D401
+            # 의도적으로 실행 노드를 추가하지 않습니다.
+            # Runner.offline은 실행 가능한 노드가 없으면 곧바로 종료합니다.
+            return None
 
     run_id = f"{world_id}-{int(time.time())}"
     out_dir = ARTIFACT_DIR / world_id / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 최소한의 더미 노드 구성: tick 카운터를 흘리는 노드
-    def ticker_fn(ctx, inputs):
-        # ctx.world 접근 가능하다면 기록
-        return {
-            "count": (inputs.get("count", 0) if isinstance(inputs, dict) else 0) + 1,
-            "world": getattr(getattr(ctx, "world", None), "id", world_id),
-        }
-
-    # 참고: 현재 리포의 Runner API는 dryrun 대신 offline/run을 제공합니다.
-    # 본 스크립트는 존재하지 않는 API 호출 시 __main__에서 SDK fallback으로 전환됩니다.
-    src = Node(name=f"counter-{world_id}", compute_fn=ticker_fn, interval="1s", period=1, inputs=[])
-    strategy = [src]  # 실제 프로젝트의 Strategy 객체로 교체 가능
-
-    r = Runner()
+    # 오프라인 모드로 간단 실행 (실제 노드 실행 없음)
     try:
-        # Dry-run으로 짧게 실행 (API가 없으면 AttributeError 유발)
-        r.dryrun(strategy, world_id=world_id, duration=timedelta(seconds=duration_sec))  # type: ignore[attr-defined]
-    except TypeError:
-        # world_id 인자 미지원 버전 대비
-        r.dryrun(strategy, duration=timedelta(seconds=duration_sec))  # type: ignore[attr-defined]
+        Runner.offline(_NoopStrategy)
+    except Exception:
+        # 어떤 이유로든 실패하면 SDK fallback 수행
+        run_sdk_mode(world_id, duration_sec)
+        return
 
     # 실행 메타 저장
     (out_dir / "run.json").write_text(
@@ -92,15 +91,17 @@ def run_qmtl_mode(world_id: str, duration_sec: int = 5):
             {
                 "world_id": world_id,
                 "run_id": run_id,
-                "mode": "qmtl-dry-run",
+                "mode": "qmtl-offline",
                 "ts": _now_iso(),
             },
             indent=2,
         )
     )
     (out_dir / "log.txt").write_text(
-        f"[{_now_iso()}] QMTL dry-run finished; world={world_id}\n"
+        f"[{_now_iso()}] QMTL offline finished; world={world_id}\n"
     )
+    # 타임라인 유사 대기
+    time.sleep(max(1, duration_sec))
 
 
 if __name__ == "__main__":
@@ -111,4 +112,3 @@ if __name__ == "__main__":
     except Exception:
         # 어떠한 이유로든 실패하면 SDK fallback이라도 수행
         run_sdk_mode(world_id, duration)
-

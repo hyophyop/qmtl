@@ -11,6 +11,7 @@ nav:
       - World Service: architecture/worldservice.md
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
+      - Exchange Node Sets: architecture/exchange_node_sets.md
       - Execution State: architecture/execution_state.md
       - Brokerage API: reference/api/brokerage.md
       - Live & Brokerage Connectors: reference/api/connectors.md
@@ -52,6 +53,7 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
       - Brokerage API: reference/api/brokerage.md
+      - Order & Fill Events: reference/api/order_events.md
       - Portfolio & Position API: reference/api/portfolio.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md

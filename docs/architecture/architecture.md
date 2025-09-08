@@ -18,6 +18,7 @@ last_modified: 2025-08-24
 - [Lean Brokerage Model](lean_brokerage_model.md)
 - [WorldService](worldservice.md)
 - [ControlBus](controlbus.md)
+- [Exchange Node Sets](exchange_node_sets.md)
 
 ---
 
@@ -89,7 +90,7 @@ flowchart LR
 
 참고 문서
 - 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
-- 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
+- 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md), [Order & Fill Event Schemas](../reference/api/order_events.md)
 
 ### 1.2 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
 
