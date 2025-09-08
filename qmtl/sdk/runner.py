@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from contextlib import asynccontextmanager
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Mapping
 import logging
 
 from opentelemetry import trace
@@ -26,6 +27,11 @@ from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 from .http import HttpPoster
 from . import snapshot as snap
+from .pretrade import check_pretrade, PreTradeCheckResult, Activation
+from qmtl.common.pretrade import RejectionReason
+from .timing_controls import TimingController
+from qmtl.brokerage import BrokerageModel
+from qmtl.brokerage.order import Account
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -57,6 +63,11 @@ class Runner:
     _activation_manager: ActivationManager | None = None
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
+    _pretrade_chain: bool = os.getenv("QMTL_PRETRADE_CHAIN", "").lower() == "on"
+    _pretrade_activation_map: Mapping[str, Activation] | None = None
+    _pretrade_brokerage: BrokerageModel | None = None
+    _pretrade_account: Account | None = None
+    _pretrade_timing_controller: TimingController | None = None
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -77,6 +88,26 @@ class Runner:
     def set_activation_manager(cls, am: ActivationManager | None) -> None:
         """Inject or clear the activation manager (for tests or custom wiring)."""
         cls._activation_manager = am
+
+    @classmethod
+    def set_pretrade_chain(cls, enabled: bool) -> None:
+        """Enable or disable the default pre-trade validation chain."""
+        cls._pretrade_chain = bool(enabled)
+
+    @classmethod
+    def set_pretrade_context(
+        cls,
+        *,
+        activation_map: Mapping[str, Activation] | None = None,
+        brokerage: BrokerageModel | None = None,
+        account: Account | None = None,
+        timing_controller: TimingController | None = None,
+    ) -> None:
+        """Configure pre-trade chain dependencies."""
+        cls._pretrade_activation_map = activation_map
+        cls._pretrade_brokerage = brokerage
+        cls._pretrade_account = account
+        cls._pretrade_timing_controller = timing_controller
 
     # ------------------------------------------------------------------
 
@@ -907,14 +938,70 @@ class Runner:
     @classmethod
     def _handle_trade_order(cls, order: dict) -> None:
         """Handle trade order submission via HTTP and/or Kafka."""
-        # Gating: check world activation before submitting
         am = cls._activation_manager
         side = (order.get("side") or "").lower() if isinstance(order, dict) else ""
-        if am is not None and side:
-            allowed = am.allow_side(side)
-            if not allowed:
-                logger.info("Order gated off by activation: side=%s", side)
-                return
+
+        if cls._pretrade_chain:
+            sdk_metrics.record_pretrade_attempt()
+            if am is not None and side:
+                if getattr(am, "state", None) and am.state.stale:
+                    sdk_metrics.record_pretrade_rejection(
+                        RejectionReason.ACTIVATION_UNKNOWN.value
+                    )
+                    logger.info("Order gated off by activation: stale state")
+                    return
+                if not am.allow_side(side):
+                    sdk_metrics.record_pretrade_rejection(
+                        RejectionReason.ACTIVATION_DISABLED.value
+                    )
+                    logger.info("Order gated off by activation: side=%s", side)
+                    return
+            amap = cls._pretrade_activation_map
+            brokerage = cls._pretrade_brokerage
+            account = cls._pretrade_account
+            if amap and brokerage and account and isinstance(order, dict):
+                symbol = order.get("symbol")
+                quantity = int(order.get("quantity", 0))
+                price = float(order.get("price", 0.0))
+                try:
+                    res = check_pretrade(
+                        activation_map=amap,
+                        brokerage=brokerage,
+                        account=account,
+                        symbol=symbol,
+                        quantity=quantity,
+                        price=price,
+                        record_metrics=False,
+                    )
+                except Exception:
+                    res = PreTradeCheckResult(True, None)
+                if not res.allowed:
+                    if res.reason:
+                        sdk_metrics.record_pretrade_rejection(res.reason.value)
+                    return
+            tc = cls._pretrade_timing_controller
+            if tc is not None and isinstance(order, dict):
+                ts = order.get("timestamp")
+                if ts is not None:
+                    from datetime import datetime, timezone
+
+                    dt = (
+                        datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+                        if ts and ts > 1e12
+                        else datetime.fromtimestamp(ts or 0, tz=timezone.utc)
+                    )
+                    valid, _, _ = tc.validate_timing(dt)
+                    if not valid:
+                        sdk_metrics.record_pretrade_rejection(
+                            RejectionReason.MARKET_CLOSED.value
+                        )
+                        return
+        else:
+            if am is not None and side:
+                allowed = am.allow_side(side)
+                if not allowed:
+                    logger.info("Order gated off by activation: side=%s", side)
+                    return
 
         # Submit via trade execution service if available
         service = cls._trade_execution_service

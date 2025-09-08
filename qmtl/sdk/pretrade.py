@@ -29,12 +29,14 @@ def check_pretrade(
     tif: TimeInForce = TimeInForce.DAY,
     limit_price: float | None = None,
     stop_price: float | None = None,
+    record_metrics: bool = True,
 ) -> PreTradeCheckResult:
     """Run activation + brokerage checks and record metrics.
 
     Returns a structured result with standardized reason codes when rejected.
     """
-    sdk_metrics.record_pretrade_attempt()
+    if record_metrics:
+        sdk_metrics.record_pretrade_attempt()
 
     # Activation gating
     allowed, reason = gate_order(activation_map, symbol)
@@ -44,7 +46,8 @@ def check_pretrade(
             if (reason and "disabled" in reason)
             else RejectionReason.ACTIVATION_UNKNOWN
         )
-        sdk_metrics.record_pretrade_rejection(code.value)
+        if record_metrics:
+            sdk_metrics.record_pretrade_rejection(code.value)
         return PreTradeCheckResult(False, code)
 
     # Brokerage checks
@@ -61,11 +64,13 @@ def check_pretrade(
         ok = brokerage.can_submit_order(account, order)
     except Exception as exc:  # Hours/shortable/symbol checks raise
         code = categorize_exception(exc)
-        sdk_metrics.record_pretrade_rejection(code.value)
+        if record_metrics:
+            sdk_metrics.record_pretrade_rejection(code.value)
         return PreTradeCheckResult(False, code)
     if not ok:
         code = RejectionReason.INSUFFICIENT_BUYING_POWER
-        sdk_metrics.record_pretrade_rejection(code.value)
+        if record_metrics:
+            sdk_metrics.record_pretrade_rejection(code.value)
         return PreTradeCheckResult(False, code)
 
     return PreTradeCheckResult(True, None)
