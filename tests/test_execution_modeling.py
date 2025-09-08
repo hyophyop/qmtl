@@ -3,7 +3,13 @@
 import pytest
 import math
 from qmtl.sdk.execution_modeling import (
-    ExecutionModel, MarketData, OrderType, OrderSide, ExecutionFill,
+    ExecutionModel,
+    MarketData,
+    OrderType,
+    OrderSide,
+    ExecutionFill,
+    TimeInForce,
+    OrderStatus,
     create_market_data_from_ohlcv,
 )
 from qmtl.transforms.alpha_performance import (
@@ -395,3 +401,79 @@ def test_integration_execution_workflow():
     assert metrics["total_trades"] == 1
     assert metrics["total_volume"] == 1000
     assert metrics["total_execution_cost"] > 0
+
+
+def test_gtc_limit_order_partial_fills():
+    """GTC limit orders should persist and fill across bars."""
+    model = ExecutionModel(max_partial_fill=40)
+
+    md1 = MarketData(timestamp=0, bid=99.0, ask=99.0, last=99.0, volume=1000)
+    order = model.submit_order(
+        order_id="gtc1",
+        symbol="AAPL",
+        side=OrderSide.BUY,
+        quantity=100,
+        order_type=OrderType.LIMIT,
+        requested_price=100.0,
+        tif=TimeInForce.GTC,
+        market_data=md1,
+        timestamp=0,
+    )
+
+    assert order.status == OrderStatus.PARTIALLY_FILLED
+    assert order.remaining == 60
+    assert len(order.fills) == 1
+
+    md2 = MarketData(timestamp=1, bid=98.5, ask=99.0, last=99.0, volume=1000)
+    fills = model.update_open_orders(md2, 1)
+    assert len(fills) == 1
+    assert order.remaining == 20
+    assert order.status == OrderStatus.PARTIALLY_FILLED
+
+    md3 = MarketData(timestamp=2, bid=98.5, ask=99.0, last=99.0, volume=1000)
+    fills = model.update_open_orders(md3, 2)
+    assert len(fills) == 1
+    assert order.status == OrderStatus.FILLED
+    assert order.order_id not in model.open_orders
+    assert order.remaining == 0
+    assert len(order.fills) == 3
+
+
+def test_ioc_and_fok_time_in_force():
+    """IOC and FOK orders handle immediate fill or cancel correctly."""
+    model = ExecutionModel(max_partial_fill=50)
+    md = MarketData(timestamp=0, bid=99.0, ask=99.0, last=99.0, volume=1000)
+
+    ioc = model.submit_order(
+        order_id="ioc1",
+        symbol="AAPL",
+        side=OrderSide.BUY,
+        quantity=100,
+        order_type=OrderType.LIMIT,
+        requested_price=100.0,
+        tif=TimeInForce.IOC,
+        market_data=md,
+        timestamp=0,
+    )
+
+    assert ioc.status == OrderStatus.EXPIRED
+    assert len(ioc.fills) == 1
+    assert ioc.remaining == 50
+    assert ioc.order_id not in model.open_orders
+
+    fok = model.submit_order(
+        order_id="fok1",
+        symbol="AAPL",
+        side=OrderSide.BUY,
+        quantity=100,
+        order_type=OrderType.LIMIT,
+        requested_price=100.0,
+        tif=TimeInForce.FOK,
+        market_data=md,
+        timestamp=0,
+    )
+
+    assert fok.status == OrderStatus.EXPIRED
+    assert len(fok.fills) == 0
+    assert fok.remaining == 100
+    assert fok.order_id not in model.open_orders

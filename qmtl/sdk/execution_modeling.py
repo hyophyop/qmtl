@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
-from dataclasses import dataclass
+from typing import Dict, List, Tuple
+from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,43 @@ class OrderSide(str, Enum):
     """Order sides."""
     BUY = "buy"
     SELL = "sell"
+
+
+class TimeInForce(str, Enum):
+    """Time-in-force policies."""
+    GTC = "gtc"
+    IOC = "ioc"
+    FOK = "fok"
+
+
+class OrderStatus(str, Enum):
+    """Order lifecycle states."""
+    NEW = "new"
+    PARTIALLY_FILLED = "partially_filled"
+    FILLED = "filled"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+@dataclass
+class OpenOrder:
+    """Represents an order that may persist across bars."""
+
+    order_id: str
+    symbol: str
+    side: OrderSide
+    quantity: float
+    order_type: OrderType
+    requested_price: float
+    tif: TimeInForce = TimeInForce.GTC
+    status: OrderStatus = OrderStatus.NEW
+    remaining: float | None = None
+    fills: List[ExecutionFill] = field(default_factory=list)
+    submitted_time: int = 0
+
+    def __post_init__(self) -> None:
+        if self.remaining is None:
+            self.remaining = self.quantity
 
 
 @dataclass
@@ -89,6 +126,7 @@ class ExecutionModel:
         market_impact_coeff: float = 0.1,  # Market impact coefficient
         latency_ms: int = 100,  # 100ms execution latency
         partial_fill_probability: float = 0.05,  # 5% chance of partial fill
+        max_partial_fill: float | None = None,  # cap per-bar fill qty
     ):
         """Initialize execution model with realistic parameters.
         
@@ -113,6 +151,8 @@ class ExecutionModel:
         self.market_impact_coeff = market_impact_coeff
         self.latency_ms = latency_ms
         self.partial_fill_probability = partial_fill_probability
+        self.max_partial_fill = max_partial_fill
+        self.open_orders: Dict[str, OpenOrder] = {}
     
     def calculate_commission(self, trade_value: float) -> float:
         """Calculate commission for a trade."""
@@ -209,6 +249,111 @@ class ExecutionModel:
             slippage=slippage,
             market_impact=market_impact
         )
+
+    def _price_crossed(self, order: OpenOrder, market_data: MarketData) -> bool:
+        """Check if market prices satisfy the order's limit."""
+        if order.order_type == OrderType.MARKET:
+            return True
+        if order.side == OrderSide.BUY:
+            return market_data.ask <= order.requested_price
+        return market_data.bid >= order.requested_price
+
+    def _process_fill(
+        self,
+        order: OpenOrder,
+        market_data: MarketData,
+        timestamp: int,
+        *,
+        allow_partial: bool = True,
+    ) -> List[ExecutionFill]:
+        """Attempt to fill an order and update its state."""
+        fills: List[ExecutionFill] = []
+        if not self._price_crossed(order, market_data):
+            return fills
+
+        if allow_partial:
+            qty = (
+                order.remaining
+                if self.max_partial_fill is None
+                else min(order.remaining, self.max_partial_fill)
+            )
+        else:
+            qty = order.remaining
+            if self.max_partial_fill is not None and self.max_partial_fill < qty:
+                return fills
+
+        fill = self.simulate_execution(
+            order.order_id,
+            order.symbol,
+            order.side,
+            qty,
+            order.order_type,
+            order.requested_price,
+            market_data,
+            timestamp,
+        )
+        order.fills.append(fill)
+        order.remaining -= qty
+        if order.remaining <= 0:
+            order.status = OrderStatus.FILLED
+        else:
+            order.status = OrderStatus.PARTIALLY_FILLED
+        fills.append(fill)
+        return fills
+
+    def submit_order(
+        self,
+        order_id: str,
+        symbol: str,
+        side: OrderSide,
+        quantity: float,
+        order_type: OrderType,
+        requested_price: float,
+        tif: TimeInForce,
+        market_data: MarketData,
+        timestamp: int,
+    ) -> OpenOrder:
+        """Submit a new order and process immediate fills based on TIF."""
+        order = OpenOrder(
+            order_id=order_id,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            order_type=order_type,
+            requested_price=requested_price,
+            tif=tif,
+            submitted_time=timestamp,
+        )
+
+        allow_partial = tif != TimeInForce.FOK
+        self._process_fill(order, market_data, timestamp, allow_partial=allow_partial)
+
+        if tif == TimeInForce.IOC and order.remaining > 0:
+            order.status = OrderStatus.EXPIRED
+        elif tif == TimeInForce.FOK and order.remaining > 0:
+            order.status = OrderStatus.EXPIRED
+            order.fills.clear()
+            order.remaining = quantity
+
+        if order.tif == TimeInForce.GTC and order.status in (
+            OrderStatus.NEW,
+            OrderStatus.PARTIALLY_FILLED,
+        ):
+            self.open_orders[order.order_id] = order
+
+        return order
+
+    def update_open_orders(
+        self, market_data: MarketData, timestamp: int
+    ) -> List[ExecutionFill]:
+        """Process all outstanding GTC orders with new market data."""
+        fills: List[ExecutionFill] = []
+        for order_id in list(self.open_orders.keys()):
+            order = self.open_orders[order_id]
+            fills.extend(self._process_fill(order, market_data, timestamp))
+            if order.status == OrderStatus.FILLED:
+                del self.open_orders[order_id]
+        return fills
     
     def validate_order(
         self,
