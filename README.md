@@ -232,6 +232,11 @@ See [qmtl/examples/README.md](qmtl/examples/README.md) for additional scripts su
 and updates all registered nodes. `Runner` creates a manager automatically and
 invokes this method in every mode, so manual calls are rarely needed.
 
+Resolved mappings are cached to `.qmtl_tagmap.json` (override with
+`QMTL_TAGQUERY_CACHE`) along with a CRC so dry-runs and backtests can
+reproduce the live mapping deterministically. `resolve_tags(offline=True)`
+hydrates nodes from this snapshot when the Gateway is unavailable.
+
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
 See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.

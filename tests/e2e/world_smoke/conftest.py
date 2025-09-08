@@ -3,11 +3,11 @@ import os
 import pytest
 from pathlib import Path
 
-# Enable optional fixture modules for in-process and dockerized stacks
-pytest_plugins = (
-    "tests.e2e.world_smoke.fixtures_inprocess",
-    "tests.e2e.world_smoke.fixtures_docker",
-)
+"""World smoke fixtures and helpers.
+
+Plugin registrations moved to repository top-level ``conftest.py`` to comply
+with pytest's deprecation of non-top-level ``pytest_plugins``.
+"""
 
 
 @pytest.fixture(scope="session")

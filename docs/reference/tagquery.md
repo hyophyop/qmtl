@@ -19,7 +19,12 @@ last_modified: 2025-09-07
 
 - Boot sequence: `Runner.run(..., world_id=..., gateway_url=...)` attaches `TagQueryManager`, applies the Gateway `queue_map` to nodes, and calls `resolve_tags()` once before starting live subscriptions.
 - Live updates: After boot, `TagQueryManager.start()` subscribes to `/events/subscribe` and periodically reconciles via `GET /queues/by_tag` to heal divergence.
-- Offline mode: When `offline=True` or Gateway/Kafka are unavailable, `resolve_tags(offline=True)` initializes `TagQueryNode` with an empty queue set; nodes remain compute‑only until data is fed.
+- Offline mode: When `offline=True` or Gateway/Kafka are unavailable, `resolve_tags(offline=True)` hydrates queue mappings from a local cache file (`.qmtl_tagmap.json` by default). If no snapshot exists, nodes fall back to an empty queue set and remain compute-only until data is fed.
+
+## Caching & Determinism
+
+- Each resolve call writes a snapshot of tag→queue mappings to `.qmtl_tagmap.json` (override via `QMTL_TAGQUERY_CACHE`).
+- The snapshot stores a CRC32 checksum to detect corruption and ensure dry-runs and backtests replay the exact queue set.
 
 ## Timing & Timeouts
 

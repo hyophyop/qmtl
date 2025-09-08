@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+from pathlib import Path
+import zlib
 import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
+import tempfile
 
 from .node import MatchMode
 from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient
-from . import runtime
 from . import runtime
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -29,6 +33,7 @@ class TagQueryManager:
         ws_client: WebSocketClient | None = None,
         world_id: str | None = None,
         strategy_id: str | None = None,
+        cache_path: str | os.PathLike[str] | None = None,
     ) -> None:
         self.gateway_url = gateway_url
         self.client = ws_client
@@ -45,6 +50,55 @@ class TagQueryManager:
         self._last_queue_sets: Dict[
             Tuple[Tuple[str, ...], int, MatchMode], frozenset[str]
         ] = {}
+        if cache_path is None:
+            cache_path = os.getenv("QMTL_TAGQUERY_CACHE", ".qmtl_tagmap.json")
+        self.cache_path = Path(cache_path)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _key_str(key: Tuple[Tuple[str, ...], int, MatchMode]) -> str:
+        tags, interval, mode = key
+        return f"{','.join(tags)}|{interval}|{mode.value}"
+
+    @staticmethod
+    def _compute_crc(mappings: Dict[str, list[str]]) -> int:
+        payload = json.dumps(mappings, sort_keys=True).encode()
+        return zlib.crc32(payload) & 0xFFFFFFFF
+
+    def _load_cache(self) -> Dict[str, list[str]]:
+        try:
+            data = json.loads(self.cache_path.read_text())
+            mappings = data.get("mappings", {})
+            crc = data.get("crc32")
+            if crc != self._compute_crc(mappings):
+                return {}
+            return {str(k): list(v) for k, v in mappings.items()}
+        except Exception:
+            return {}
+
+    def _write_cache(self, mappings: Dict[str, list[str]]) -> None:
+        obj = {
+            "version": 1,
+            "mappings": mappings,
+            "crc32": self._compute_crc(mappings),
+        }
+        # Best-effort atomic write to reduce risk of partial files
+        try:
+            payload = json.dumps(obj, sort_keys=True)
+            parent = self.cache_path.parent
+            parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile("w", dir=parent, delete=False) as tf:
+                tmp_name = tf.name
+                tf.write(payload)
+            os.replace(tmp_name, self.cache_path)
+        except Exception:
+            # Swallow errors: cache is an optimization only
+            try:
+                # Clean up temporary file if replace failed
+                if "tmp_name" in locals() and os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
@@ -61,14 +115,17 @@ class TagQueryManager:
 
     # ------------------------------------------------------------------
     async def resolve_tags(self, *, offline: bool = False) -> None:
-        """Resolve all registered nodes via the Gateway API."""
+        """Resolve all registered nodes via the Gateway API or cache."""
         if offline or not self.gateway_url:
-            for nodes in self._nodes.values():
+            cache = self._load_cache()
+            for key, nodes in self._nodes.items():
+                queues = cache.get(self._key_str(key), [])
                 for n in nodes:
-                    n.update_queues([])
+                    n.update_queues(list(queues))
             return
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
+        cache: Dict[str, list[str]] = {}
         async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
             for (tags, interval, match_mode), nodes in self._nodes.items():
                 params = {
@@ -84,8 +141,11 @@ class TagQueryManager:
                 except httpx.RequestError:
                     raw = []
                 queues = normalize_queues(raw)
+                cache[self._key_str((tags, interval, match_mode))] = list(queues)
                 for n in nodes:
                     n.update_queues(list(queues))
+        if cache:
+            self._write_cache(cache)
 
     # ------------------------------------------------------------------
     async def handle_message(self, data: dict) -> None:
