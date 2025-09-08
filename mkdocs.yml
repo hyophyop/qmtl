@@ -26,6 +26,7 @@ nav:
       - Python Environment: guides/python_environment.md
       - Testing & Pytest: guides/testing.md
       - HTTPX Usage: guides/httpx_usage.md
+      - CCXT Spot Node Set: guides/ccxt_spot_nodeset.md
   - Operations:
       - Overview: operations/README.md
       - Docker & Compose: operations/docker.md
@@ -42,7 +43,6 @@ nav:
       - DAG Snapshot: operations/dag_snapshot.md
       - Release: operations/release.md
       - CI: operations/ci.md
-      - Fill Replay: operations/fills_replay.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -60,6 +60,7 @@ nav:
       - Brokerage API: reference/api/brokerage.md
       - Brokerage Assumptions: reference/brokerage_assumptions.md
       - Order & Fill Events: reference/api/order_events.md
+      - Fills Webhook: reference/api/fills_webhook.md
       - Bracket Order Helper: reference/bracket_order.md
       - Portfolio & Position API: reference/api/portfolio.md
       - Inventory: reference/_inventory.md

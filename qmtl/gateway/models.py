@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
 try:
     # Pydantic v2 style config
     from pydantic import ConfigDict  # type: ignore
@@ -58,3 +58,26 @@ class EventSubscribeResponse(BaseModel):
     topics: list[str]
     expires_at: datetime
     fallback_url: str | None = None
+
+
+class ExecutionFillEvent(BaseModel):
+    order_id: StrictStr
+    client_order_id: StrictStr | None = None
+    correlation_id: StrictStr | None = None
+    symbol: StrictStr
+    side: StrictStr
+    quantity: StrictFloat
+    price: StrictFloat
+    commission: StrictFloat | None = None
+    slippage: StrictFloat | None = None
+    market_impact: StrictFloat | None = None
+    tif: StrictStr | None = None
+    fill_time: StrictInt | None = None
+    status: StrictStr | None = None
+    seq: StrictInt | None = None
+    etag: StrictStr | None = None
+    if 'ConfigDict' in globals() and ConfigDict is not None:  # type: ignore
+        model_config = ConfigDict(extra='ignore')  # type: ignore
+    else:  # pragma: no cover - legacy fallback
+        class Config:  # type: ignore
+            extra = 'ignore'

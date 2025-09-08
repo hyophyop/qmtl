@@ -9,76 +9,72 @@ from qmtl.gateway.event_descriptor import EventDescriptorConfig, sign_event_toke
 
 
 class FakeDB(Database):
+    def __init__(self):
+        self.records = {}
+        self.events = []
+
     async def insert_strategy(self, strategy_id: str, meta: dict | None) -> None:
-        return None
+        self.records[strategy_id] = {"meta": meta, "status": "queued"}
+
+    async def set_status(self, strategy_id: str, status: str) -> None:
+        if strategy_id in self.records:
+            self.records[strategy_id]["status"] = status
+
+    async def get_status(self, strategy_id: str) -> str | None:
+        rec = self.records.get(strategy_id)
+        return rec.get("status") if rec else None
+
+    async def append_event(self, strategy_id: str, event: str) -> None:  # pragma: no cover - not used
+        self.events.append((strategy_id, event))
 
 
-@pytest.fixture
-def app_and_cfg(fake_redis):
-    cfg = EventDescriptorConfig(keys={"k1": "s1"}, active_kid="k1")
+class FakeProducer:
+    def __init__(self):
+        self.messages = []
+
+    async def send_and_wait(self, topic, value, key=None, headers=None):
+        self.messages.append((topic, value, key, headers))
+
+
+@pytest.mark.asyncio
+async def test_fills_webhook_produces_kafka(fake_redis):
+    cfg = EventDescriptorConfig(keys={"k1": "secret"}, active_kid="k1", ttl=60, stream_url="", fallback_url="")
+    producer = FakeProducer()
     app = create_app(
         redis_client=fake_redis,
         database=FakeDB(),
-        event_config=cfg,
         enable_background=False,
+        event_config=cfg,
+        fill_producer=producer,
     )
-    return app, cfg
-
-
-def _make_token(cfg: EventDescriptorConfig) -> str:
+    now = int(time.time())
     claims = {
-        "aud": "controlbus",
-        "exp": int(time.time()) + 60,
+        "aud": "fills",
+        "sub": "s1",
         "world_id": "w1",
         "strategy_id": "s1",
+        "jti": "1",
+        "iat": now,
+        "exp": now + 60,
     }
-    return sign_event_token(claims, cfg)
-
-
-@pytest.mark.asyncio
-async def test_fills_webhook_accepts_bare_and_cloudevent(app_and_cfg, fake_redis):
-    app, cfg = app_and_cfg
-    token = _make_token(cfg)
-    await fake_redis.delete("trade.fills")
-    bare = {"world_id": "w1", "strategy_id": "s1"}
+    token = sign_event_token(claims, cfg)
+    payload = {
+        "order_id": "exch-7890",
+        "symbol": "BTC/USDT",
+        "side": "BUY",
+        "quantity": 1.0,
+        "price": 100.0,
+        "extra": "drop-me",
+    }
     async with httpx.ASGITransport(app=app) as transport:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(
-                "/fills", headers={"Authorization": f"Bearer {token}"}, json=bare
-            )
+            resp = await client.post("/fills", json=payload, headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 202
-            ce = {
-                "specversion": "1.0",
-                "type": "qmtl.trade.fill",
-                "source": "broker/x",
-                "id": "1",
-                "time": "2025-01-01T00:00:00Z",
-                "data": {"world_id": "w1", "strategy_id": "s1"},
-            }
-            resp = await client.post(
-                "/fills", headers={"Authorization": f"Bearer {token}"}, json=ce
-            )
-            assert resp.status_code == 202
-    items = await fake_redis.lrange("trade.fills", 0, -1)
-    assert len(items) == 2
-    # ensure stored data is JSON
-    for raw in items:
-        json.loads(raw)
-
-
-@pytest.mark.asyncio
-async def test_fills_replay_publishes_event(app_and_cfg, fake_redis):
-    app, cfg = app_and_cfg
-    token = _make_token(cfg)
-    await fake_redis.delete("trade.fills")
-    payload = {"from_ts": 1, "to_ts": 2, "world_id": "w1", "strategy_id": "s1"}
-    async with httpx.ASGITransport(app=app) as transport:
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(
-                "/fills/replay", headers={"Authorization": f"Bearer {token}"}, json=payload
-            )
-            assert resp.status_code == 202
-    items = await fake_redis.lrange("trade.fills", 0, -1)
-    assert len(items) == 1
-    event = json.loads(items[0])
-    assert event["data"]["from_ts"] == 1
+    assert producer.messages
+    topic, value, key, headers = producer.messages[0]
+    assert topic == "trade.fills"
+    assert key == b"w1|s1|BTC/USDT|exch-7890"
+    data = json.loads(value)
+    assert data["order_id"] == "exch-7890"
+    assert "extra" not in data
+    assert any(h[0] == "rfp" for h in headers or [])

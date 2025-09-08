@@ -238,6 +238,24 @@ ws_refresh_failures_total = Counter(
     registry=global_registry,
 )
 
+# ------------------------------------------------------------
+# Fills webhook metrics
+# ------------------------------------------------------------
+
+fills_accepted_total = Counter(
+    "fills_accepted_total",
+    "Total number of accepted execution fill events",
+    ["world_id", "strategy_id"],
+    registry=global_registry,
+)
+
+fills_rejected_total = Counter(
+    "fills_rejected_total",
+    "Total number of rejected execution fill events",
+    ["world_id", "strategy_id", "reason"],
+    registry=global_registry,
+)
+
 sentinel_skew_seconds = Gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
