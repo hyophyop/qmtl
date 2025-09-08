@@ -184,6 +184,36 @@ class ExecutionNode(ProcessingNode):
             return asdict(fill)
         return fill
 
+class RouterNode(ProcessingNode):
+    """Route orders to a target based on a user-provided function.
+
+    The router adds a `route` field to the order payload. Downstream nodes can
+    branch based on this field to direct orders to the appropriate exchange or
+    connector.
+    """
+
+    def __init__(self, order: Node, *, route_fn: callable, name: str | None = None) -> None:
+        if not callable(route_fn):
+            raise ValueError("route_fn must be callable")
+        self.order = order
+        self.route_fn = route_fn
+        super().__init__(
+            order,
+            compute_fn=self._compute,
+            name=name or f"{order.name}_router",
+            interval=order.interval,
+            period=1,
+        )
+
+    def _compute(self, view: CacheView) -> dict | None:
+        data = view[self.order][self.order.interval]
+        if not data:
+            return None
+        _, order = data[-1]
+        route = self.route_fn(order)
+        out = dict(order)
+        out["route"] = route
+        return out
 
 class FillIngestNode(StreamInput):
     """Stream node for external execution fills."""
