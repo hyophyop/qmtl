@@ -57,9 +57,15 @@ class IBKRFeeModel(FeeModel):
         Sorted ascending by share threshold; (threshold, fee_per_share).
         The highest tier applies beyond the last threshold.
     minimum : float
-        Minimum fee per order.
-    exchange_fees : float
-        Flat per-order exchange/regulatory surcharge (very simplified).
+        Minimum broker fee per order.
+    exchange_fee_remove : float
+        Per-share venue fee when removing liquidity.
+    exchange_fee_add : float
+        Per-share venue fee (or rebate if negative) when adding liquidity.
+    regulatory_fee_remove : float
+        Per-share regulatory fee when removing liquidity.
+    regulatory_fee_add : float
+        Per-share regulatory fee when adding liquidity.
 
     Notes
     -----
@@ -68,7 +74,10 @@ class IBKRFeeModel(FeeModel):
 
     tiers: list[tuple[int, float]] = None
     minimum: float = 1.0
-    exchange_fees: float = 0.0
+    exchange_fee_remove: float = 0.0
+    exchange_fee_add: float = 0.0
+    regulatory_fee_remove: float = 0.0
+    regulatory_fee_add: float = 0.0
 
     def __post_init__(self) -> None:
         if self.tiers is None:
@@ -79,22 +88,30 @@ class IBKRFeeModel(FeeModel):
     def calculate(self, order: Order, fill_price: float) -> float:
         shares = abs(order.quantity)
         remaining = shares
-        total = 0.0
+        broker_fee = 0.0
         last_rate = 0.0020
         prev_thresh = 0
         for thresh, rate in self.tiers:
             band = max(0, min(remaining, thresh - prev_thresh))
             if band > 0:
-                total += band * rate
+                broker_fee += band * rate
                 remaining -= band
                 prev_thresh = thresh
         if remaining > 0:
-            total += remaining * last_rate
-        # Apply minimum and exchange surcharges
-        if total < self.minimum:
-            total = self.minimum
-        total += self.exchange_fees
-        return total
+            broker_fee += remaining * last_rate
+        if broker_fee < self.minimum:
+            broker_fee = self.minimum
+        adds_liquidity = (
+            order.adds_liquidity
+            if hasattr(order, "adds_liquidity") and order.adds_liquidity is not None
+            else order.type != OrderType.MARKET
+        )
+        per_share = (
+            self.exchange_fee_add + self.regulatory_fee_add
+            if adds_liquidity
+            else self.exchange_fee_remove + self.regulatory_fee_remove
+        )
+        return broker_fee + shares * per_share
 
 
 @dataclass

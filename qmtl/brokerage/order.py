@@ -48,6 +48,9 @@ class Order:
         stop_price: Stop trigger for stop/stop-limit orders.
         expire_at: Expiration timestamp for GTD orders.
         trail_amount: Trailing offset for trailing stop orders.
+        adds_liquidity: Whether the order adds (maker) or removes (taker)
+            liquidity. If ``None``, market orders are treated as removing
+            liquidity and other types as adding.
     """
 
     symbol: str
@@ -59,6 +62,7 @@ class Order:
     stop_price: Optional[float] = None
     expire_at: Optional[datetime] = None
     trail_amount: Optional[float] = None
+    adds_liquidity: Optional[bool] = None
 
 
 @dataclass

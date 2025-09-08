@@ -18,7 +18,7 @@ Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration
 - Interfaces: BuyingPowerModel, FillModel, SlippageModel, FeeModel
 - Fill models: MarketFillModel, LimitFillModel, StopMarketFillModel, StopLimitFillModel (IOC/FOK supported via TIF)
 - Slippage models: NullSlippageModel, ConstantSlippageModel, SpreadBasedSlippageModel, VolumeShareSlippageModel
-- Fee models: PerShareFeeModel, PercentFeeModel, MakerTakerFeeModel, TieredExchangeFeeModel, BorrowFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share)
+- Fee models: PerShareFeeModel, PercentFeeModel, MakerTakerFeeModel, TieredExchangeFeeModel, BorrowFeeModel, CompositeFeeModel, IBKRFeeModel (tiered per-share with venue/regulatory fees and liquidity rebates)
 - Providers: SymbolPropertiesProvider (tick/lot/min), ExchangeHoursProvider (regular/pre/post), ShortableProvider
   (daily shortable quantities via ``StaticShortableProvider`` + ``ShortableLot``)
 - Profiles: BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile()
@@ -73,7 +73,7 @@ model = BrokerageModel(
 
 # Optional: tiered IBKR-like fees
 from qmtl.brokerage import IBKRFeeModel
-fee = IBKRFeeModel(minimum=1.0)
+fee = IBKRFeeModel(minimum=1.0, exchange_fee_remove=0.0008, exchange_fee_add=-0.0002, regulatory_fee_remove=0.0001)
 ```
 
 ### Fee Model Matrix
@@ -85,7 +85,7 @@ fee = IBKRFeeModel(minimum=1.0)
 | MakerTakerFeeModel | % of notional | Separate maker/taker rates |
 | TieredExchangeFeeModel | % of notional | Rate determined by notional tiers |
 | BorrowFeeModel | % of notional | Applied on short sales |
-| IBKRFeeModel | per share | Tiered per-share schedule |
+| IBKRFeeModel | per share | Tiered per-share schedule with venue/regulatory fees & liquidity rebates |
 | CompositeFeeModel | n/a | Sum multiple fee models |
 
 ## Time-in-Force and Order Types
