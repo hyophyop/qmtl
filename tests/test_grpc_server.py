@@ -3,6 +3,12 @@ from datetime import datetime, timedelta, UTC
 
 import grpc
 import pytest
+
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+    pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
+    pytest.mark.filterwarnings('ignore:unclosed event loop'),
+]
 import json
 
 from qmtl.dagmanager.diff_service import StreamSender
