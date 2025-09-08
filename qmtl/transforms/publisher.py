@@ -6,6 +6,7 @@ from typing import Any
 
 from qmtl.sdk.node import Node
 from qmtl.sdk.cache_view import CacheView
+from qmtl.sdk import metrics as sdk_metrics
 
 
 def publisher_node(signal: Any) -> Any:
@@ -86,4 +87,8 @@ class TradeOrderPublisherNode(Node):
             order["client_order_id"] = signal["client_order_id"]
         elif "newClientOrderId" in signal:
             order["client_order_id"] = signal["newClientOrderId"]
+        try:
+            sdk_metrics.record_order_published()
+        except Exception:
+            pass
         return order

@@ -150,6 +150,64 @@ node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
 node_process_failure_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
+# Order lifecycle metrics (SDK-side)
+if "orders_published_total" in global_registry._names_to_collectors:
+    orders_published_total = global_registry._names_to_collectors[
+        "orders_published_total"
+    ]
+else:
+    orders_published_total = Counter(
+        "orders_published_total",
+        "Total orders published by SDK",
+        ["world_id"],
+        registry=global_registry,
+    )
+
+if "fills_ingested_total" in global_registry._names_to_collectors:
+    fills_ingested_total = global_registry._names_to_collectors[
+        "fills_ingested_total"
+    ]
+else:
+    fills_ingested_total = Counter(
+        "fills_ingested_total",
+        "Total fills ingested by SDK",
+        ["world_id"],
+        registry=global_registry,
+    )
+
+if "orders_rejected_total" in global_registry._names_to_collectors:
+    orders_rejected_total = global_registry._names_to_collectors[
+        "orders_rejected_total"
+    ]
+else:
+    orders_rejected_total = Counter(
+        "orders_rejected_total",
+        "Total pre-trade rejections at SDK",
+        ["world_id", "reason"],
+        registry=global_registry,
+    )
+
+orders_published_total._vals = {}  # type: ignore[attr-defined]
+fills_ingested_total._vals = {}  # type: ignore[attr-defined]
+orders_rejected_total._vals = {}  # type: ignore[attr-defined]
+
+def record_order_published() -> None:
+    w = _WORLD_ID
+    orders_published_total.labels(world_id=w).inc()
+    orders_published_total._vals[w] = orders_published_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+
+def record_fill_ingested() -> None:
+    w = _WORLD_ID
+    fills_ingested_total.labels(world_id=w).inc()
+    fills_ingested_total._vals[w] = fills_ingested_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+
+def record_order_rejected(reason: str) -> None:
+    w = _WORLD_ID
+    orders_rejected_total.labels(world_id=w, reason=reason).inc()
+    key = (w, reason)
+    orders_rejected_total._vals[key] = orders_rejected_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+
+# ---------------------------------------------------------------------------
 # Alpha performance metrics
 if "alpha_sharpe" in global_registry._names_to_collectors:
     alpha_sharpe = global_registry._names_to_collectors["alpha_sharpe"]
