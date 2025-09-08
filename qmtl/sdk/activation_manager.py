@@ -7,8 +7,8 @@ orders remain gated OFF (no long/short) until an activation is received.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Optional, Dict
+from dataclasses import dataclass, field
+from typing import Optional
 
 import httpx
 
@@ -17,10 +17,19 @@ from . import runtime
 
 
 @dataclass
+class SideState:
+    active: bool = False
+    weight: float = 1.0
+    freeze: bool = False
+    drain: bool = False
+
+
+@dataclass
 class ActivationState:
-    long_active: bool = False
-    short_active: bool = False
+    long: SideState = field(default_factory=SideState)
+    short: SideState = field(default_factory=SideState)
     etag: Optional[str] = None
+    effective_mode: Optional[str] = None
     stale: bool = True
 
 
@@ -44,11 +53,16 @@ class ActivationManager:
         if self.state.stale:
             return False
         s = side.lower()
+        st: SideState | None = None
         if s in {"buy", "long"}:
-            return self.state.long_active
-        if s in {"sell", "short"}:
-            return self.state.short_active
-        return False
+            st = self.state.long
+        elif s in {"sell", "short"}:
+            st = self.state.short
+        if st is None:
+            return False
+        if st.freeze or st.drain:
+            return False
+        return bool(st.active)
 
     def is_stale(self) -> bool:
         return self.state.stale
@@ -59,12 +73,31 @@ class ActivationManager:
         if event == "activation_updated" or payload.get("type") == "ActivationUpdated":
             side = (payload.get("side") or "").lower()
             active = bool(payload.get("active", False))
+            weight = payload.get("weight")
+            freeze = bool(payload.get("freeze", False))
+            drain = bool(payload.get("drain", False))
+            eff_mode = payload.get("effective_mode")
             self.state.etag = payload.get("etag") or self.state.etag
+            if eff_mode:
+                self.state.effective_mode = eff_mode
             self.state.stale = False
+            target: SideState | None = None
             if side == "long":
-                self.state.long_active = active
+                target = self.state.long
             elif side == "short":
-                self.state.short_active = active
+                target = self.state.short
+            if target is not None:
+                target.active = active
+                target.freeze = freeze
+                target.drain = drain
+                if weight is not None:
+                    try:
+                        target.weight = float(weight)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    # Default weight when absent per spec: 1.0 if active else 0.0
+                    target.weight = 1.0 if active else 0.0
 
     async def start(self) -> None:
         if self._started:
