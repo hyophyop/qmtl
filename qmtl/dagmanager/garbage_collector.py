@@ -57,9 +57,12 @@ class S3ArchiveClient:
 
     def __init__(self, bucket: str, *, client=None) -> None:
         self.bucket = bucket
-        import boto3
+        if client is None:
+            import boto3
 
-        self._client = client or boto3.client("s3")
+            self._client = boto3.client("s3")
+        else:
+            self._client = client
 
     def archive(self, queue: str) -> None:
         """Store queue dump in ``self.bucket`` under a timestamped key."""

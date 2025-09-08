@@ -1,7 +1,7 @@
 import pytest
 from types import SimpleNamespace
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+import httpx
 
 from qmtl.common import compute_node_id
 from qmtl.gateway.dagmanager_client import DagManagerClient
@@ -43,6 +43,8 @@ async def test_world_isolation(monkeypatch):
     await am2._on_message({"event": "activation_updated", "data": {"side": "long", "active": False}})
     assert am1.allow_side("long") is True
     assert am2.allow_side("long") is False
+    await am1.stop()
+    await am2.stop()
 
     # 메트릭은 동일한 node_id에 집계된다
     node_processed_total.clear()
@@ -56,14 +58,14 @@ async def test_world_isolation(monkeypatch):
     router = create_event_router(None, cfg)
     app = FastAPI()
     app.include_router(router)
-    tc = TestClient(app)
-    for wid in ("w1", "w2"):
-        resp = tc.post(
-            "/events/subscribe",
-            json={"world_id": wid, "strategy_id": "s1", "topics": ["activation"]},
-        )
-        assert resp.status_code == 200
-        token = resp.json()["token"]
-        claims = validate_event_token(token, cfg)
-        assert claims["world_id"] == wid
-    tc.close()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        for wid in ("w1", "w2"):
+            resp = await ac.post(
+                "/events/subscribe",
+                json={"world_id": wid, "strategy_id": "s1", "topics": ["activation"]},
+            )
+            assert resp.status_code == 200
+            token = resp.json()["token"]
+            claims = validate_event_token(token, cfg)
+            assert claims["world_id"] == wid
