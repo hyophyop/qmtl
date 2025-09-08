@@ -49,6 +49,7 @@ nav:
       - Templates: reference/templates.md
       - World API: reference/api_world.md
       - Enhanced Validation: reference/enhanced_validation.md
+      - Node Schema Validation: reference/node_schema_validation.md
       - Backtest Validation: reference/backtest_validation.md
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md

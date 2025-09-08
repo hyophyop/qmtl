@@ -39,6 +39,7 @@ def validate_node_params(
     period: int | None,
     config: dict | None,
     schema: dict | None,
+    expected_schema: dict | None,
 ) -> tuple[str | None, list[str], int | None, int | None]:
     """Validate common ``Node`` constructor arguments."""
     interval_val = parse_interval(interval) if interval is not None else None
@@ -62,6 +63,8 @@ def validate_node_params(
         raise InvalidParameterError("config must be a dictionary")
     if schema is not None and not isinstance(schema, dict):
         raise InvalidParameterError("schema must be a dictionary")
+    if expected_schema is not None and not isinstance(expected_schema, dict):
+        raise InvalidParameterError("expected_schema must be a dictionary")
 
     if interval_val is not None and period_val is not None and period_val < 1:
         raise InvalidParameterError(

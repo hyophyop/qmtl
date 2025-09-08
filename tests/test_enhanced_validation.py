@@ -136,13 +136,23 @@ class TestParameterValidation:
     def test_valid_config_and_schema(self):
         """Test that valid config and schema are accepted."""
         node = SourceNode(
-            config={"key": "value"}, 
-            schema={"type": "object"}, 
-            interval="1s", 
+            config={"key": "value"},
+            schema={"type": "object"},
+            interval="1s",
             period=1
         )
         assert node.config == {"key": "value"}
         assert node.schema == {"type": "object"}
+
+    def test_invalid_expected_schema_parameter_type(self):
+        """Test that non-dict expected_schema parameter raises error."""
+        with pytest.raises(InvalidParameterError, match="expected_schema must be a dictionary"):
+            SourceNode(expected_schema="not_a_dict", interval="1s", period=1)
+
+    def test_valid_expected_schema(self):
+        """Test that valid expected_schema is accepted."""
+        node = SourceNode(interval="1s", period=1, expected_schema={"a": "int64"})
+        assert node.expected_schema == {"a": "int64"}
 
 
 class TestIntervalValidation:
