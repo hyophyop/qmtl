@@ -2,12 +2,13 @@
 
 __all__ = [
     "QMTLValidationError",
-    "NodeValidationError", 
+    "NodeValidationError",
     "InvalidParameterError",
     "InvalidTagError",
     "InvalidIntervalError",
     "InvalidPeriodError",
     "InvalidNameError",
+    "InvalidSchemaError",
 ]
 
 
@@ -44,3 +45,9 @@ class InvalidPeriodError(NodeValidationError):
 class InvalidNameError(NodeValidationError):
     """Raised when name validation fails."""
     pass
+
+
+class InvalidSchemaError(NodeValidationError):
+    """Raised when dataframe schema validation fails."""
+    pass
+
