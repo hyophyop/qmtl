@@ -55,6 +55,7 @@ nav:
       - Brokerage API: reference/api/brokerage.md
       - Brokerage Assumptions: reference/brokerage_assumptions.md
       - Order & Fill Events: reference/api/order_events.md
+      - Bracket Order Helper: reference/bracket_order.md
       - Portfolio & Position API: reference/api/portfolio.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
