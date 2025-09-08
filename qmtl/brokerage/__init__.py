@@ -42,6 +42,7 @@ from .settlement import SettlementModel
 from .profile import BrokerageProfile, SecurityInitializer, ibkr_equities_like_profile
 from .interest import MarginInterestModel
 from .brokerage_model import BrokerageModel
+from .ccxt_profile import make_ccxt_brokerage
 
 __all__ = [
     "Order",
@@ -93,4 +94,5 @@ __all__ = [
     "SecurityInitializer",
     "ibkr_equities_like_profile",
     "BrokerageModel",
+    "make_ccxt_brokerage",
 ]

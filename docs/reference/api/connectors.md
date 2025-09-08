@@ -9,7 +9,7 @@ last_modified: 2025-09-09
 
 # Live & Brokerage Connectors
 
-This page standardizes the SDK interfaces for connecting to live brokers and live data feeds. It complements the execution models in Brokerage API and the Gateway WS design.
+This page standardizes the SDK interfaces for connecting to live brokers and live data feeds. It complements the execution models in Brokerage API and the Gateway WS design. For shaping fee models for crypto exchanges from CCXT metadata, see `make_ccxt_brokerage()` in Brokerage API.
 
 Key goals:
 - Provide thin, testable abstractions that are easy to adopt.

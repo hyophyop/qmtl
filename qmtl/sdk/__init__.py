@@ -54,6 +54,7 @@ from .portfolio import (
     order_target_percent,
     order_value,
 )
+from .exchanges import CcxtExchange, normalize_exchange_id, ensure_ccxt_exchange
 
 __all__ = [
     "Node",
@@ -98,6 +99,9 @@ __all__ = [
     "parse_period",
     "validate_tag",
     "validate_name",
+    "CcxtExchange",
+    "normalize_exchange_id",
+    "ensure_ccxt_exchange",
     "QMTLValidationError",
     "NodeValidationError",
     "InvalidParameterError",
