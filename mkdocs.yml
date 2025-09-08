@@ -26,6 +26,7 @@ nav:
       - Python Environment: guides/python_environment.md
       - Testing & Pytest: guides/testing.md
       - HTTPX Usage: guides/httpx_usage.md
+      - CCXT Spot Node Set: guides/ccxt_spot_nodeset.md
   - Operations:
       - Overview: operations/README.md
       - Docker & Compose: operations/docker.md

@@ -199,5 +199,26 @@ def make_ccxt_brokerage(
     return model
 
 
-__all__ = ["make_ccxt_brokerage"]
+def make_ccxt_spot_brokerage(
+    exchange_id: str,
+    *,
+    symbol: str | None = None,
+    sandbox: bool = False,
+    detect_fees: bool = True,
+    defaults: tuple[float, float] | None = None,
+) -> BrokerageModel:
+    """Convenience wrapper for spot exchanges with spread-based slippage."""
+
+    return make_ccxt_brokerage(
+        exchange_id,
+        product="spot",
+        symbol=symbol,
+        sandbox=sandbox,
+        detect_fees=detect_fees,
+        defaults=defaults,
+        use_spread_slippage=True,
+    )
+
+
+__all__ = ["make_ccxt_brokerage", "make_ccxt_spot_brokerage"]
 
