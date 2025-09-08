@@ -5,14 +5,19 @@ import base64
 import json
 import time
 import uuid
+import hmac
+import hashlib
+import os
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Coroutine, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from qmtl.sdk.node import MatchMode
-from qmtl.common.cloudevents import format_event
+from qmtl.sdk.snapshot import runtime_fingerprint
 
 from . import metrics as gw_metrics
 from .dagmanager_client import DagManagerClient
@@ -24,10 +29,14 @@ from .models import (
     StrategySubmit,
     StatusResponse,
     QueuesByTagResponse,
+    ExecutionFillEvent,
 )
 from .strategy_manager import StrategyManager
 from .ws import WebSocketHub
 from .world_client import WorldServiceClient
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_api_router(
@@ -39,6 +48,7 @@ def create_api_router(
     degradation: DegradationManager,
     world_client: Optional[WorldServiceClient],
     enforce_live_guard: bool,
+    fill_producer: Any | None = None,
 
 ) -> APIRouter:
 
@@ -63,67 +73,6 @@ def create_api_router(
         return await gateway_health(
             redis_conn, database_obj, dagmanager, world_client
         )
-
-    @router.post("/fills", status_code=status.HTTP_202_ACCEPTED)
-    async def post_fills(request: Request) -> dict[str, str]:
-        auth = request.headers.get("authorization")
-        if not auth or not auth.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
-        token = auth.split(" ", 1)[1]
-        try:
-            claims = validate_event_token(token, request.app.state.event_config)
-        except Exception:
-            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
-        payload = await request.json()
-        if payload.get("specversion") == "1.0":
-            for field in ("type", "source", "id", "time"):
-                if field not in payload:
-                    raise HTTPException(
-                        status_code=400,
-                        detail={"code": "E_INVALID_CE", "field": field},
-                    )
-            data = payload.get("data") or {}
-            envelope = payload
-        else:
-            data = payload
-            envelope = format_event("qmtl.gateway", "qmtl.trade.fill", data)
-        world_id = data.get("world_id")
-        strategy_id = data.get("strategy_id")
-        if claims.get("world_id") and world_id != claims.get("world_id"):
-            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_WORLD"})
-        if claims.get("strategy_id") and strategy_id != claims.get("strategy_id"):
-            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_STRATEGY"})
-        try:
-            await redis_conn.rpush("trade.fills", json.dumps(envelope))
-        except Exception:
-            pass
-        return {"status": "accepted"}
-
-    @router.post("/fills/replay", status_code=status.HTTP_202_ACCEPTED)
-    async def post_fills_replay(request: Request) -> dict[str, str]:
-        auth = request.headers.get("authorization")
-        if not auth or not auth.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
-        token = auth.split(" ", 1)[1]
-        try:
-            claims = validate_event_token(token, request.app.state.event_config)
-        except Exception:
-            raise HTTPException(status_code=401, detail={"code": "E_UNAUTHORIZED"})
-        params = await request.json()
-        from_ts = params.get("from_ts")
-        to_ts = params.get("to_ts")
-        if from_ts is None or to_ts is None:
-            raise HTTPException(status_code=400, detail={"code": "E_INVALID_RANGE"})
-        if "world_id" in params and claims.get("world_id") and params["world_id"] != claims.get("world_id"):
-            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_WORLD"})
-        if "strategy_id" in params and claims.get("strategy_id") and params["strategy_id"] != claims.get("strategy_id"):
-            raise HTTPException(status_code=403, detail={"code": "E_SCOPE_STRATEGY"})
-        replay_event = format_event("qmtl.gateway", "qmtl.trade.fill.replay", params)
-        try:
-            await redis_conn.rpush("trade.fills", json.dumps(replay_event))
-        except Exception:
-            pass
-        return {"status": "queued"}
 
     @router.post(
         "/strategies",
@@ -502,6 +451,98 @@ def create_api_router(
         headers, cid = _build_world_headers(request)
         data = await client.post_apply(world_id, payload, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.post("/fills", status_code=status.HTTP_202_ACCEPTED)
+    async def post_fills(request: Request) -> Response:
+        raw = await request.body()
+        try:
+            payload = json.loads(raw.decode())
+        except Exception:
+            gw_metrics.fills_rejected_total.labels(
+                world_id="unknown", strategy_id="unknown", reason="invalid_json"
+            ).inc()
+            raise HTTPException(status_code=400, detail={"code": "E_INVALID_JSON"})
+
+        world_id = "unknown"
+        strategy_id = "unknown"
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+            try:
+                claims = validate_event_token(
+                    token, request.app.state.event_config, audience="fills"
+                )
+                world_id = claims.get("world_id", world_id)
+                strategy_id = claims.get("strategy_id", strategy_id)
+            except Exception:
+                gw_metrics.fills_rejected_total.labels(
+                    world_id=world_id, strategy_id=strategy_id, reason="auth"
+                ).inc()
+                raise HTTPException(status_code=401, detail={"code": "E_AUTH"})
+        else:
+            signature = request.headers.get("X-Signature")
+            secret = os.getenv("QMTL_FILL_SECRET")
+            if not signature or not secret:
+                gw_metrics.fills_rejected_total.labels(
+                    world_id=world_id, strategy_id=strategy_id, reason="auth"
+                ).inc()
+                raise HTTPException(status_code=401, detail={"code": "E_AUTH"})
+            expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, signature):
+                gw_metrics.fills_rejected_total.labels(
+                    world_id=world_id, strategy_id=strategy_id, reason="auth"
+                ).inc()
+                raise HTTPException(status_code=401, detail={"code": "E_AUTH"})
+            world_id = request.headers.get(
+                "X-World-ID", payload.get("world_id", world_id)
+            )
+            strategy_id = request.headers.get(
+                "X-Strategy-ID", payload.get("strategy_id", strategy_id)
+            )
+
+        if not world_id or not strategy_id:
+            gw_metrics.fills_rejected_total.labels(
+                world_id=world_id, strategy_id=strategy_id, reason="missing_ids"
+            ).inc()
+            raise HTTPException(status_code=400, detail={"code": "E_MISSING_IDS"})
+
+        try:
+            event = ExecutionFillEvent.model_validate(payload)
+        except ValidationError as e:
+            gw_metrics.fills_rejected_total.labels(
+                world_id=world_id, strategy_id=strategy_id, reason="schema"
+            ).inc()
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "E_SCHEMA_INVALID", "errors": e.errors()},
+            )
+
+        clean = event.model_dump()
+        unknown = [k for k in payload.keys() if k not in clean]
+        if unknown:
+            logger.info(
+                "fill_unknown_fields", extra={"event": "fill_unknown_fields", "fields": unknown}
+            )
+
+        key = f"{world_id}|{strategy_id}|{event.symbol}|{event.order_id}".encode()
+        value = json.dumps(clean).encode()
+        headers = [("rfp", runtime_fingerprint().encode())]
+        if fill_producer is not None:
+            try:
+                await fill_producer.send_and_wait(
+                    "trade.fills", value, key=key, headers=headers
+                )
+            except TypeError:
+                await fill_producer.send_and_wait("trade.fills", value, key=key)
+
+        gw_metrics.fills_accepted_total.labels(
+            world_id=world_id, strategy_id=strategy_id
+        ).inc()
+        logger.info(
+            "fill_accepted",
+            extra={"event": "fill_accepted", "world_id": world_id, "strategy_id": strategy_id},
+        )
+        return Response(status_code=status.HTTP_202_ACCEPTED)
 
     @router.get("/metrics")
     async def metrics_endpoint() -> Response:

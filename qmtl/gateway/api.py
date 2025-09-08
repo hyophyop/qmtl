@@ -48,6 +48,7 @@ def create_app(
     ] = None,
     world_client: Optional[WorldServiceClient] = None,
     event_config: EventDescriptorConfig | None = None,
+    fill_producer: Any | None = None,
     *,
     insert_sentinel: bool = True,
     database_backend: str = "postgres",
@@ -227,6 +228,7 @@ def create_app(
         degradation,
         world_client_local,
         enforce_live_guard,
+        fill_producer,
     )
     app.include_router(api_router)
     # Expose event endpoints (subscribe/JWKS and WS bridge). Pass world and
