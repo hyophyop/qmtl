@@ -47,12 +47,19 @@ class CacheView:
             # Guard against nested CacheView: unwrap to underlying data
             if isinstance(value, CacheView):
                 value = object.__getattribute__(value, "_data")
-            return CacheView(
-                value,
-                track_access=self._track_access,
-                access_log=self._access_log,
-                path=new_path,
-            )
+            # If the leaf is a Sequence (our typical cache leaf: list[(ts, v)]),
+            # return the raw value for compatibility with existing expectations.
+            if isinstance(value, Sequence):
+                return value
+            # Otherwise, wrap mappings to allow further navigation; return scalars directly.
+            if isinstance(value, Mapping):
+                return CacheView(
+                    value,
+                    track_access=self._track_access,
+                    access_log=self._access_log,
+                    path=new_path,
+                )
+            return value
         if isinstance(data, Sequence):
             return data[key]
         raise TypeError("unsupported operation")
