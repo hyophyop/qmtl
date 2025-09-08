@@ -76,19 +76,6 @@ nav:
 plugins:
   - search
   - macros
-  - mkdocs-breadcrumbs-plugin:
-      log_level: WARNING
-      exclude_paths:
-        - architecture
-        - architecture/**
-        - archive
-        - archive/**
-        - guides
-        - guides/**
-        - operations
-        - operations/**
-        - reference
-        - reference/**
   - tags
 theme:
   name: material
