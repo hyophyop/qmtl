@@ -3,9 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import Dict
 
-import grpc
-
-from opentelemetry.instrumentation.grpc import aio_client_interceptors
 
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 from ..common import AsyncCircuitBreaker
@@ -44,6 +41,9 @@ class DagManagerClient:
 
     def _ensure_channel(self) -> None:
         if self._channel is None:
+            import grpc
+            from opentelemetry.instrumentation.grpc import aio_client_interceptors
+
             try:
                 self._channel = grpc.aio.insecure_channel(
                     self._target, interceptors=aio_client_interceptors()

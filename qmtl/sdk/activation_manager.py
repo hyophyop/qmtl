@@ -38,7 +38,7 @@ class ActivationManager:
         self.state = ActivationState()
         self._started = False
         self._poll_task: asyncio.Task | None = None
-        self._stop_event = asyncio.Event()
+        self._stop_event: asyncio.Event | None = None
 
     def allow_side(self, side: str) -> bool:
         if self.state.stale:
@@ -73,7 +73,7 @@ class ActivationManager:
             await self.client.start()
             self._started = True
             if self.gateway_url and self.world_id:
-                self._stop_event.clear()
+                self._stop_event = asyncio.Event()
                 self._poll_task = asyncio.create_task(self._poll_loop())
             return
         if not self.gateway_url:
@@ -99,7 +99,7 @@ class ActivationManager:
                         await self.client.start()
                         self._started = True
                         if self.gateway_url and self.world_id:
-                            self._stop_event.clear()
+                            self._stop_event = asyncio.Event()
                             self._poll_task = asyncio.create_task(self._poll_loop())
         except Exception:
             # Safe default: keep sides gated OFF until activation arrives
@@ -110,13 +110,15 @@ class ActivationManager:
             await self.client.stop()
         self._started = False
         if self._poll_task:
-            self._stop_event.set()
+            if self._stop_event is not None:
+                self._stop_event.set()
             self._poll_task.cancel()
             try:
                 await self._poll_task
             except asyncio.CancelledError:
                 pass
             self._poll_task = None
+            self._stop_event = None
 
     async def _reconcile_activation(self) -> None:
         if not self.gateway_url or not self.world_id:
@@ -132,6 +134,7 @@ class ActivationManager:
             pass
 
     async def _poll_loop(self) -> None:
+        assert self._stop_event is not None
         while not self._stop_event.is_set():
             await self._reconcile_activation()
             try:
