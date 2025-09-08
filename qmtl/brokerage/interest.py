@@ -4,20 +4,52 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Iterable, Tuple, Union
+
+RateTiers = Iterable[Tuple[float, float]]
 
 
 @dataclass
 class MarginInterestModel:
-    """Simple daily interest calculator for borrow/cash balances.
+    """Daily interest calculator supporting tiered rates.
 
-    Positive balances accrue at `cash_rate`; negative balances incur `borrow_rate`.
-    Rates are annual; calculation assumes 365-day convention.
+    ``cash_rate`` and ``borrow_rate`` may be specified as a single float or an
+    iterable of ``(threshold, rate)`` tuples. Thresholds represent balance
+    amounts at which the accompanying rate begins to apply. For example:
+
+    ``[(0, 0.01), (10_000, 0.02)]`` applies a 1% rate up to 10k and 2% above.
+
+    Rates are annual; calculation assumes a 365-day convention.
     """
 
-    cash_rate: float = 0.0
-    borrow_rate: float = 0.05
+    cash_rate: Union[float, RateTiers] = 0.0
+    borrow_rate: Union[float, RateTiers] = 0.05
 
-    def daily_interest(self, balance: float, now: datetime) -> float:
-        rate = self.cash_rate if balance >= 0 else self.borrow_rate
+    def _resolve_rate(self, tiers: Union[float, RateTiers], amount: float) -> float:
+        if isinstance(tiers, (int, float)):
+            return float(tiers)
+        rate = 0.0
+        for threshold, r in sorted(tiers):
+            if amount >= threshold:
+                rate = r
+            else:
+                break
+        return rate
+
+    def rate_for(self, balance: float) -> float:
+        amt = abs(balance)
+        return self._resolve_rate(self.cash_rate, amt) if balance >= 0 else self._resolve_rate(self.borrow_rate, amt)
+
+    def daily_interest(self, balance: float, now: datetime) -> float:  # noqa: ARG002
+        rate = self.rate_for(balance)
         return balance * (rate / 365.0)
+
+    def accrue_daily(self, cashbook: "Cashbook", currency: str, now: datetime) -> float:
+        from .cashbook import Cashbook  # local import to avoid circular
+
+        balance = cashbook.get(currency).balance
+        interest = self.daily_interest(balance, now)
+        if interest:
+            cashbook.adjust(currency, interest)
+        return interest
 

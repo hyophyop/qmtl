@@ -102,6 +102,57 @@ profile = ibkr_equities_like_profile()
 model = profile.build()
 ```
 
+## Interest
+
+Use `MarginInterestModel` to accrue daily interest on cash balances. Positive
+balances earn at `cash_rate`, negative balances pay at `borrow_rate`. Rates can
+be constants or tiered schedules.
+
+```python
+from datetime import datetime, timezone
+from qmtl.brokerage import MarginInterestModel, Cashbook
+
+# Flat rates
+m = MarginInterestModel(cash_rate=0.01, borrow_rate=0.10)
+cb = Cashbook()
+cb.set("USD", 1_000.0)
+interest = m.accrue_daily(cb, "USD", datetime.now(timezone.utc))
+
+# Tiered rates by balance
+m = MarginInterestModel(
+    cash_rate=[(0, 0.01), (10_000, 0.02)],
+    borrow_rate=[(0, 0.10), (5_000, 0.08)],
+)
+```
+
+## Initializer Overrides
+
+`SecurityInitializer` can apply per-symbol or per-asset-class profile
+overrides and an optional post-build hook.
+
+```python
+from qmtl.brokerage import BrokerageProfile, SecurityInitializer,
+    CashBuyingPowerModel, PerShareFeeModel, SpreadBasedSlippageModel, ImmediateFillModel
+
+equities = ibkr_equities_like_profile()
+free_fee = BrokerageProfile(
+    buying_power=CashBuyingPowerModel(),
+    fee=PerShareFeeModel(fee_per_share=0.0),
+    slippage=SpreadBasedSlippageModel(spread_fraction=0.1),
+    fill=ImmediateFillModel(),
+)
+
+init = SecurityInitializer(
+    equities,
+    profiles_by_symbol={"SPY": free_fee},
+    profiles_by_asset_class={"forex": free_fee},
+    classify=lambda s: "forex" if s == "EURUSD" else "equity",
+)
+
+spy_model = init.for_symbol("SPY")  # uses free_fee
+eurusd_model = init.for_symbol("EURUSD")  # uses free_fee via asset-class
+```
+
 ## Testing and Examples
 
 - See `tests/test_brokerage_orders_tif.py` for TIF and crossing logic.
