@@ -52,3 +52,10 @@ jobs:
 
       - name: Run tests (warnings are errors)
         run: PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
+
+      - name: WorldService in-process smoke
+        env:
+          USE_INPROC_WS_STACK: "1"
+          WS_MODE: service
+        run: |
+          uv run -m pytest -q tests/e2e/world_smoke -q

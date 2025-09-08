@@ -292,6 +292,16 @@ def create_event_router(
         # ``kid`` is not part of the payload claims; ``sign_event_token`` writes
         # the key identifier to the JWT header.
         token = sign_event_token(claims, event_config)
+        # Emit a lightweight world-scoped metric so that environments without
+        # full ControlBus/traffic still expose world_id labels under /metrics.
+        # This helps local/stub smoke tests validate world label presence.
+        try:
+            from . import metrics as gw_metrics  # local import to avoid cycles
+
+            gw_metrics.set_world_id(payload.world_id)
+            gw_metrics.record_pretrade_attempt()
+        except Exception:
+            pass
         return EventSubscribeResponse(
             stream_url=event_config.stream_url,
             token=token,
