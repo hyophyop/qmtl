@@ -7,6 +7,7 @@ from pathlib import Path
 import zlib
 import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
+import tempfile
 
 from .node import MatchMode
 from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
@@ -81,10 +82,23 @@ class TagQueryManager:
             "mappings": mappings,
             "crc32": self._compute_crc(mappings),
         }
+        # Best-effort atomic write to reduce risk of partial files
         try:
-            self.cache_path.write_text(json.dumps(obj, sort_keys=True))
+            payload = json.dumps(obj, sort_keys=True)
+            parent = self.cache_path.parent
+            parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile("w", dir=parent, delete=False) as tf:
+                tmp_name = tf.name
+                tf.write(payload)
+            os.replace(tmp_name, self.cache_path)
         except Exception:
-            pass
+            # Swallow errors: cache is an optimization only
+            try:
+                # Clean up temporary file if replace failed
+                if "tmp_name" in locals() and os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
