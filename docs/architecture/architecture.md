@@ -117,7 +117,7 @@ sequenceDiagram
     GW-->>SDK: WS stream relay
 ```
 
-관련 구현·사양은 아래 문서를 참고한다: [Gateway 사양](gateway.md), [DAG Manager 사양](dag-manager.md), [WorldService](worldservice.md). 운영·사용 관점의 예시는 [operations/](../operations/) 및 [reference/](../reference/) 하위 문서에 정리되어 있다.
+관련 구현·사양은 아래 문서를 참고한다: [Gateway 사양](gateway.md), [DAG Manager 사양](dag-manager.md), [WorldService](worldservice.md). 운영·사용 관점의 예시는 [operations/](../operations/README.md) 및 [reference/](../reference/README.md) 하위 문서에 정리되어 있다.
 
 ### 전역-로컬 분리와 불변식 (GSG/WVG)
 

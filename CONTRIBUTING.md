@@ -82,3 +82,9 @@ await asyncio.wait_for(event.wait(), timeout=5)
 ## Documentation
 
 When adding new markdown files under `docs/`, copy `docs/templates/template.md` and update the front matter fields (`title`, `tags`, `author`, `last_modified`).
+
+- Link to source files using the macros provided in `main.py` to keep MkDocs strict builds green across environments:
+  - Use `{{ code_url('relative/path/from/repo/root.py#L123') }}` inside markdown links, e.g., `[SizingNode]({{ code_url('qmtl/transforms/execution_nodes.py#L80') }})`.
+  - Or use `{{ code_link('qmtl/transforms/execution_nodes.py#L80', text='SizingNode') }}` for brevity.
+  - Do not link directly to files outside `docs/` via relative paths (e.g., `../../qmtl/...`), as MkDocs treats those as missing documentation files in `--strict` mode.
+- When linking to a docs directory (index), point to the explicit file: `../operations/README.md` or `../reference/README.md`.

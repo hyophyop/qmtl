@@ -6,7 +6,7 @@ import os
 
 from qmtl.sdk import Strategy, StreamInput, Node
 from qmtl.transforms import alpha_history_node, TradeSignalGeneratorNode
-from qmtl.brokerage.ccxt_spot_nodeset import CcxtSpotNodeSet
+from qmtl.nodesets.recipes import make_ccxt_spot_nodeset
 
 
 class CcxtSpotNodeSetStrategy(Strategy):
@@ -29,7 +29,7 @@ class CcxtSpotNodeSetStrategy(Strategy):
             history, long_threshold=0.0, short_threshold=0.0, size=1.0
         )
 
-        nodes = CcxtSpotNodeSet.attach(
+        nodeset = make_ccxt_spot_nodeset(
             signal,
             "demo-world",
             exchange_id="binance",
@@ -37,5 +37,4 @@ class CcxtSpotNodeSetStrategy(Strategy):
             apiKey=os.getenv("BINANCE_API_KEY"),
             secret=os.getenv("BINANCE_API_SECRET"),
         )
-
-        self.add_nodes([price, alpha, history, signal, *nodes])
+        self.add_nodes([price, alpha, history, signal, nodeset])

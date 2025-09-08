@@ -22,15 +22,18 @@ nav:
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Strategy Callbacks: guides/strategy_callbacks.md
+      - Build NodeSet (SDK): guides/build_nodeset_sdk.md
+      - CCXT Spot Recipe: guides/ccxt_spot_recipe.md
+      - Node Set Adapters: guides/nodeset_adapters.md
+      - Advanced:
+          - Node Set Portfolio Scope: guides/nodeset_portfolio_scope.md
+          - Node Set Test Kit: guides/nodeset_testkit.md
+          - Router/MicroBatch/Test Kit: guides/router_microbatch_testkit.md
       - Migration (BC Removal): guides/migration_bc_removal.md
       - Migration (NodeID BLAKE3): guides/migration_nodeid_blake3.md
       - Python Environment: guides/python_environment.md
       - Testing & Pytest: guides/testing.md
       - HTTPX Usage: guides/httpx_usage.md
-      - Node Set Portfolio Scope: guides/nodeset_portfolio_scope.md
-      - Node Set Test Kit: guides/nodeset_testkit.md
-      - CCXT Spot Node Set: guides/ccxt_spot_nodeset.md
-      - Router/MicroBatch/Test Kit: guides/router_microbatch_testkit.md
   - Operations:
       - Overview: operations/README.md
       - Docker & Compose: operations/docker.md

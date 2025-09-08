@@ -231,6 +231,6 @@ Gateway and DAG Manager using your customized `qmtl.yml`.
 > - [faq.md](../reference/faq.md): 자주 묻는 질문
 > - [monitoring.md](../operations/monitoring.md): 모니터링 및 운영
 > - [canary_rollout.md](../operations/canary_rollout.md): 점진적 배포 전략
-> - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
+> - [qmtl/examples/]({{ code_url('qmtl/examples/') }}): 다양한 전략 예제
 
 {{ nav_links() }}

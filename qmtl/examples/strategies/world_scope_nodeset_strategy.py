@@ -33,18 +33,5 @@ class WorldScopeNodeSetStrategy(Strategy):
         opts = NodeSetOptions(portfolio_scope="world")
         nodeset = NodeSetBuilder(options=opts).attach(signal, world_id="demo", scope="world")
 
-        self.add_nodes(
-            [
-                price,
-                alpha,
-                signal,
-                nodeset.pretrade,
-                nodeset.sizing,
-                nodeset.execution,
-                nodeset.fills,
-                nodeset.portfolio,
-                nodeset.risk,
-                nodeset.timing,
-            ]
-        )
-
+        # Add the execution chain as a single unit (no need to pick internals)
+        self.add_nodes([price, alpha, signal, *nodeset])
