@@ -224,10 +224,27 @@ Freeze/Drain Semantics
 
 ## Portfolio Scoping
 
-- Strategy‑Scoped (default): `scope = (world_id, strategy_id)`
-- World‑Scoped (optional): `scope = (world_id)` to share cash/limits across strategies
+- Exchange Node Sets accept a ``portfolio_scope`` option controlling how
+  portfolio state is keyed and shared.
+- ``strategy`` (default): snapshots and fills are keyed by
+  ``(world_id, strategy_id, symbol)`` and each strategy maintains isolated
+  cash and risk limits.
+- ``world``: snapshots and fills are keyed by ``(world_id, symbol)`` so all
+  strategies in the same world draw from a shared portfolio.
 
-Node Sets must declare scope explicitly. World‑scope increases coupling but enables cross‑strategy limits.
+When ``portfolio_scope="world"``, ``RiskControlNode`` evaluates leverage and
+concentration across the combined positions of every participating strategy.
+This enables cross‑strategy limits such as capping aggregate symbol exposure
+or total leverage.
+
+Example:
+
+```python
+builder = make_ccxt_node_set(portfolio_scope="world")
+```
+
+Deterministic key composition ensures snapshots and fills are unique under
+either scope.
 
 ## Gateway Webhook & Security (Enhancements)
 

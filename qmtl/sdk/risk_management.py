@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+class PortfolioScope(str, Enum):
+    """Scope for portfolio risk calculations."""
+
+    STRATEGY = "strategy"
+    WORLD = "world"
 
 
 class RiskViolationType(str, Enum):
@@ -61,6 +68,44 @@ class PositionInfo:
     def exposure(self) -> float:
         """Absolute market value exposure."""
         return abs(self.market_value)
+
+
+def aggregate_portfolios(portfolios: Sequence[Tuple[float, Dict[str, PositionInfo]]]) -> Tuple[float, Dict[str, PositionInfo]]:
+    """Aggregate positions across multiple strategies.
+
+    Parameters
+    ----------
+    portfolios:
+        Iterable of ``(portfolio_value, positions)`` tuples for each strategy.
+
+    Returns
+    -------
+    Tuple[float, Dict[str, PositionInfo]]
+        Combined portfolio value and merged positions keyed by symbol.
+    """
+
+    total_value = 0.0
+    aggregated: Dict[str, PositionInfo] = {}
+
+    for value, positions in portfolios:
+        total_value += value
+        for symbol, pos in positions.items():
+            existing = aggregated.get(symbol)
+            if existing:
+                existing.quantity += pos.quantity
+                existing.market_value += pos.market_value
+                existing.unrealized_pnl += pos.unrealized_pnl
+            else:
+                aggregated[symbol] = PositionInfo(
+                    symbol=symbol,
+                    quantity=pos.quantity,
+                    market_value=pos.market_value,
+                    unrealized_pnl=pos.unrealized_pnl,
+                    entry_price=pos.entry_price,
+                    current_price=pos.current_price,
+                )
+
+    return total_value, aggregated
 
 
 class RiskManager:
@@ -167,7 +212,7 @@ class RiskManager:
                     return False, violation, 0.0
         
         return True, None, proposed_quantity
-    
+
     def validate_portfolio_risk(
         self,
         positions: Dict[str, PositionInfo],
@@ -232,6 +277,24 @@ class RiskManager:
         self.violations.extend(violations)
         
         return violations
+
+    def validate_world_risk(
+        self,
+        strategies: Sequence[Tuple[float, Dict[str, PositionInfo]]],
+        timestamp: int,
+    ) -> List[RiskViolation]:
+        """Validate risk metrics across multiple strategies.
+
+        Parameters
+        ----------
+        strategies:
+            Iterable of ``(portfolio_value, positions)`` for each strategy in the world.
+        timestamp:
+            Timestamp for the risk evaluation.
+        """
+
+        total_value, aggregated = aggregate_portfolios(strategies)
+        return self.validate_portfolio_risk(aggregated, total_value, timestamp)
     
     def _check_volatility_limit(self, timestamp: int) -> List[RiskViolation]:
         """Check portfolio volatility against limits."""
@@ -338,6 +401,16 @@ class RiskManager:
         """Calculate current portfolio drawdown."""
         if not self.portfolio_value_history or self.peak_portfolio_value <= 0:
             return 0.0
-        
+
         current_value = self.portfolio_value_history[-1][1]
         return (self.peak_portfolio_value - current_value) / self.peak_portfolio_value
+
+
+__all__ = [
+    "PortfolioScope",
+    "RiskViolationType",
+    "RiskViolation",
+    "PositionInfo",
+    "aggregate_portfolios",
+    "RiskManager",
+]
