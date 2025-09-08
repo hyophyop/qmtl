@@ -54,7 +54,7 @@ def compute_rebalance_quantity(
     desired_value = total_value * target_weight
     delta_value = desired_value - current_value
     return pf.order_value(symbol, delta_value, price)
- 
+
 
 
 __all__ = ["compute_rebalance_quantity"]

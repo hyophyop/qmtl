@@ -38,6 +38,23 @@ class Strategy:
 
         self.nodes.extend(nodes)
 
+    # ------------------------------------------------------------------
+    # Lifecycle hooks ---------------------------------------------------
+    def on_start(self) -> None:  # pragma: no cover - default no-op
+        """Called once when the strategy begins running."""
+
+    def on_signal(self, signal) -> None:  # pragma: no cover - default no-op
+        """Handle a generated trading signal."""
+
+    def on_fill(self, order, fill) -> None:  # pragma: no cover - default no-op
+        """Handle an order fill event."""
+
+    def on_error(self, error: Exception) -> None:  # pragma: no cover - default no-op
+        """Handle an unrecoverable error during execution."""
+
+    def on_finish(self) -> None:  # pragma: no cover - default no-op
+        """Called when the strategy run completes."""
+
     def setup(self):
         raise NotImplementedError
 
@@ -47,3 +64,19 @@ class Strategy:
         return {
             "nodes": [node.to_dict() for node in self.nodes],
         }
+
+
+def buy_signal(condition: bool, target_percent: float = 1.0) -> dict:
+    """Convenience helper to create a BUY/HOLD signal.
+
+    Parameters
+    ----------
+    condition:
+        If ``True`` a BUY action is returned; otherwise ``HOLD``.
+    target_percent:
+        Target portfolio percentage when buying.
+    """
+
+    if condition:
+        return {"action": "BUY", "target_percent": float(target_percent)}
+    return {"action": "HOLD"}

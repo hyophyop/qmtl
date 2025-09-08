@@ -19,6 +19,7 @@ nav:
       - Overview: guides/README.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Strategy Callbacks: guides/strategy_callbacks.md
       - Migration (BC Removal): guides/migration_bc_removal.md
       - Migration (NodeID BLAKE3): guides/migration_nodeid_blake3.md
       - Python Environment: guides/python_environment.md

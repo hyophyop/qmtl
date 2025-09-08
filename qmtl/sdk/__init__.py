@@ -12,7 +12,7 @@ from .node import (
 from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
 from .cache_view import CacheView
-from .strategy import Strategy
+from .strategy import Strategy, buy_signal
 from .runner import Runner
 from .tagquery_manager import TagQueryManager
 from .cli import main as _cli
@@ -66,6 +66,7 @@ __all__ = [
     "BackfillState",
     "CacheView",
     "Strategy",
+    "buy_signal",
     "Runner",
     "TagQueryManager",
     "WebSocketClient",
