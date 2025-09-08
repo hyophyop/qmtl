@@ -43,7 +43,12 @@ class Portfolio:
 
     @property
     def total_value(self) -> float:
-        """Total portfolio value including cash."""
+        """Total portfolio value including cash.
+
+        Positions are valued using their stored ``market_price``. Callers are
+        responsible for keeping each position's ``market_price`` updated with
+        the latest quotes before relying on this property.
+        """
         return self.cash + sum(p.market_value for p in self.positions.values())
 
     def apply_fill(self, symbol: str, quantity: float, price: float, commission: float = 0.0) -> None:
