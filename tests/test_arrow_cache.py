@@ -6,7 +6,11 @@ from qmtl.sdk.cache_view import CacheView
 
 from qmtl.sdk import ProcessingNode, StreamInput
 
-pytestmark = pytest.mark.filterwarnings('ignore::RuntimeWarning')
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::RuntimeWarning'),
+    # Ignore unraisable exception warnings that can be triggered by third-party libs
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+]
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")

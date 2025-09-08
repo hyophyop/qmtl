@@ -1,5 +1,13 @@
 import json
 import pytest
+
+# Suppress unraisable exceptions surfaced by pytest when background resources
+# (event loops/sockets) from third-party libs are cleaned up during tests.
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+    pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
+    pytest.mark.filterwarnings('ignore:unclosed event loop'),
+]
 from qmtl.dagmanager.cli import main
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
@@ -185,4 +193,3 @@ def test_cli_queue_stats_grpc_error(monkeypatch, capsys):
         main(["queue-stats"])
     err = capsys.readouterr().err
     assert "gRPC error" in err
-
