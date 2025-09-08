@@ -28,6 +28,7 @@ DISPATCH = {
     "doc-sync": "qmtl.cli.doc_sync",
     "check-imports": "qmtl.cli.check_imports",
     "taglint": "qmtl.cli.taglint",
+    "report": "qmtl.cli.report",
     "init": "qmtl.cli.init",
 }
 

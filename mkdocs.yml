@@ -51,6 +51,7 @@ nav:
       - Enhanced Validation: reference/enhanced_validation.md
       - Node Schema Validation: reference/node_schema_validation.md
       - Backtest Validation: reference/backtest_validation.md
+      - Report CLI: reference/report_cli.md
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
       - Brokerage API: reference/api/brokerage.md
