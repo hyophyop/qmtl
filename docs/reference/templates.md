@@ -12,6 +12,8 @@ last_modified: 2025-08-21
 # Strategy Templates
 
 QMTL ships with starter strategies that can be used when running `qmtl init`.
+For a step-by-step introduction and a minimal working example, see the
+[SDK 사용 가이드](../guides/sdk_tutorial.md).
 List them with:
 
 ```bash
@@ -49,6 +51,7 @@ graph LR
 ```
 
 *Single EMA indicator.* Shows how to attach one indicator to a price stream.
+Recommended as the [MVP 전략 예제](../guides/sdk_tutorial.md) starting point.
 
 ```bash
 qmtl init --path my_proj --strategy single_indicator
