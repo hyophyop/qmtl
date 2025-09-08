@@ -53,6 +53,7 @@ nav:
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
       - Brokerage API: reference/api/brokerage.md
+      - Brokerage Assumptions: reference/brokerage_assumptions.md
       - Order & Fill Events: reference/api/order_events.md
       - Portfolio & Position API: reference/api/portfolio.md
       - Inventory: reference/_inventory.md
