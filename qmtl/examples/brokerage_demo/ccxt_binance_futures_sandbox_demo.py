@@ -10,7 +10,7 @@ Environment variables:
 
 Notes:
 - This demo submits a small LIMIT order; adjust price/qty per testnet filters.
-- Demonstrates reduceOnly and positionSide parameters.
+- Demonstrates `reduce_only`, `position_side`, and per-order leverage changes.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def main() -> None:
         symbol=symbol,
         leverage=5,
         margin_mode="cross",
-        hedge_mode=False,
+        hedge_mode=True,
         apiKey=api_key,
         secret=api_secret,
         sandbox=True,
@@ -47,7 +47,8 @@ def main() -> None:
         "limit_price": 10000.0,
         "time_in_force": "GTC",
         "reduce_only": False,
-        # When hedge_mode=True, you can also set: "position_side": "LONG" or "SHORT"
+        "position_side": "LONG",
+        "leverage": 10,
     }
     resp = client.post_order(order)
     print("create_order:", resp)

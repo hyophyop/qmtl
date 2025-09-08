@@ -77,7 +77,7 @@ See runnable example: `qmtl/examples/brokerage_demo/ccxt_binance_sandbox_demo.py
 
 ### Futures (Binance USDT‑M Testnet)
 
-Use `FuturesCcxtBrokerageClient` targeting `binanceusdm` and enable `sandbox=True`. You can optionally set `leverage`, `margin_mode` (cross/isolated), and `hedge_mode` (dual‑side) if supported.
+Use `FuturesCcxtBrokerageClient` targeting `binanceusdm` and enable `sandbox=True`. You can optionally set `leverage`, `margin_mode` (cross/isolated), and `hedge_mode` (dual‑side) if supported. The client maps futures extras like `position_side` and `reduce_only`, and it can apply per-order leverage changes on exchanges that allow it.
 
 ```python
 from qmtl.sdk import FuturesCcxtBrokerageClient
@@ -87,7 +87,7 @@ client = FuturesCcxtBrokerageClient(
     symbol="BTC/USDT",
     leverage=5,
     margin_mode="cross",
-    hedge_mode=False,
+    hedge_mode=True,
     apiKey="<TESTNET_KEY>",
     secret="<TESTNET_SECRET>",
     sandbox=True,
@@ -101,6 +101,8 @@ resp = client.post_order({
     "limit_price": 10000.0,
     "time_in_force": "GTC",
     "reduce_only": False,
+    "position_side": "LONG",  # requires hedge_mode=True
+    "leverage": 10,  # optional per-order adjustment
 })
 ```
 

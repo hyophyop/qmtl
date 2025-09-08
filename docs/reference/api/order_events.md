@@ -121,4 +121,18 @@ Webhook and internal event transport MAY wrap payloads in CloudEvents 1.0:
 
 Consumers MUST accept both bare and CloudEvents-wrapped forms.
 
+## Gateway `/fills` Webhook
+
+The Gateway exposes a `/fills` endpoint for broker callbacks. Payloads may be
+sent as a raw `ExecutionFillEvent` or wrapped in a CloudEvents 1.0 envelope.
+Requests must include a HMAC-signed JWT whose `world_id` and `strategy_id`
+claims match the payload. Out-of-scope requests are rejected.
+
+### Replay Endpoint
+
+Operators can trigger re-delivery by calling `POST /fills/replay` with
+`from_ts` and `to_ts` fields plus optional `world_id`/`strategy_id` filters.
+Matching fills are published to `trade.fills`, enabling idempotent consumer
+rebuilds.
+
 {{ nav_links() }}
