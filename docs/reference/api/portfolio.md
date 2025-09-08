@@ -27,7 +27,10 @@ Portfolio
 - positions: ``Dict[str, Position]``
 - get_position(symbol) -> ``Position | None``
 - apply_fill(symbol, quantity, price, commission=0.0)
-- total_value *(property)*
+- total_value *(property)*: Aggregates positions using each holding's
+  ``market_price``. For sizing at a newly observed price, either mark the
+  relevant position(s) to that price first or use a helper that computes
+  with mark-to-market adjustments.
 
 ## Helpers
 
@@ -42,4 +45,3 @@ Portfolio
 
 These helpers return signed quantities and can be combined with existing order
 generation routines.
-

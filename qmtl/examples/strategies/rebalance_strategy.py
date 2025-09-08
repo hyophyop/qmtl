@@ -26,6 +26,13 @@ def compute_rebalance_quantity(
 ) -> float:
     """Return quantity required to reach ``target_weight`` for ``symbol``.
 
+    Notes on mark-to-market:
+    - ``Portfolio.total_value`` aggregates each position's ``market_price``.
+    - When sizing at a new price (e.g., after a price move), ensure the
+      portfolio value reflects that price, otherwise target weights can be
+      mis-estimated. This helper computes using a mark-to-market adjustment
+      for ``symbol`` at the provided ``price`` without mutating the portfolio.
+
     Parameters
     ----------
     portfolio: pf.Portfolio

@@ -46,8 +46,9 @@ class Portfolio:
         """Total portfolio value including cash.
 
         Positions are valued using their stored ``market_price``. Callers are
-        responsible for keeping each position's ``market_price`` updated with
-        the latest quotes before relying on this property.
+        responsible for updating each position's price with the latest quotes
+        before relying on this property, or using a helper that performs
+        mark-to-market adjustments for sizing decisions.
         """
         return self.cash + sum(p.market_value for p in self.positions.values())
 
