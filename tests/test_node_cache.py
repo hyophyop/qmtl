@@ -1,4 +1,5 @@
 import pytest
+import pytest
 import xarray as xr
 from qmtl.sdk import ProcessingNode, StreamInput, Runner, NodeCache
 
@@ -12,6 +13,7 @@ def test_input_window_hash_changes():
     assert h1 != h2
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_cache_warmup_and_compute():
     calls = []
 

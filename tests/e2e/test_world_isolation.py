@@ -11,6 +11,7 @@ from qmtl.sdk.activation_manager import ActivationManager
 from qmtl.sdk.metrics import node_processed_total, generate_latest, global_registry
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 @pytest.mark.asyncio
 async def test_world_isolation(monkeypatch):
     # 동일 전략 노드가 world에 관계없이 동일한 ID를 갖는다
@@ -69,3 +70,4 @@ async def test_world_isolation(monkeypatch):
             token = resp.json()["token"]
             claims = validate_event_token(token, cfg)
             assert claims["world_id"] == wid
+    await transport.aclose()

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Callable, Mapping, Optional
 
 from .brokerage_model import BrokerageModel
 from .interfaces import BuyingPowerModel, FillModel, SlippageModel, FeeModel
@@ -33,6 +34,15 @@ class BrokerageProfile:
             hours=self.hours,
         )
 
+    def override(self, **kwargs: object) -> "BrokerageProfile":
+        """Return a copy of this profile with selected fields overridden.
+
+        Examples
+        --------
+        >>> profile.override(fee=new_fee_model)
+        """
+        return replace(self, **kwargs)
+
 
 def ibkr_equities_like_profile() -> BrokerageProfile:
     """Construct a simple IBKR-like profile for US equities."""
@@ -47,15 +57,50 @@ def ibkr_equities_like_profile() -> BrokerageProfile:
 
 
 class SecurityInitializer:
-    """Applies a profile to build brokerage model per security.
+    """Build brokerage models with per-symbol or per-asset-class overrides.
 
-    Placeholder for future asset-class-specific wiring.
+    Parameters
+    ----------
+    profile:
+        Default profile used when no overrides match ``symbol``.
+    profiles_by_symbol:
+        Exact symbol bindings to profiles.
+    profiles_by_asset_class:
+        Profiles keyed by asset class string, used when ``classify`` returns a
+        matching key.
+    classify:
+        Optional callable mapping ``symbol`` to an asset class string.
+    override:
+        Optional hook executed with the built :class:`BrokerageModel` and
+        ``symbol``. May mutate or return a replacement model.
     """
 
-    def __init__(self, profile: BrokerageProfile) -> None:
-        self.profile = profile
+    def __init__(
+        self,
+        profile: BrokerageProfile,
+        *,
+        profiles_by_symbol: Mapping[str, BrokerageProfile] | None = None,
+        profiles_by_asset_class: Mapping[str, BrokerageProfile] | None = None,
+        classify: Optional[Callable[[str], str]] = None,
+        override: Optional[Callable[[BrokerageModel, str], Optional[BrokerageModel]]] = None,
+    ) -> None:
+        self.default_profile = profile
+        self.profiles_by_symbol = dict(profiles_by_symbol or {})
+        self.profiles_by_asset_class = dict(profiles_by_asset_class or {})
+        self.classify = classify
+        self.override = override
 
     def for_symbol(self, symbol: str) -> BrokerageModel:
-        # In future, override tick/lot per symbol here
-        return self.profile.build()
+        profile = self.profiles_by_symbol.get(symbol)
+        if profile is None and self.classify is not None:
+            asset_class = self.classify(symbol)
+            profile = self.profiles_by_asset_class.get(asset_class)
+        if profile is None:
+            profile = self.default_profile
+        model = profile.build()
+        if self.override is not None:
+            replacement = self.override(model, symbol)
+            if replacement is not None:
+                model = replacement
+        return model
 
