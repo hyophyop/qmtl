@@ -31,11 +31,16 @@ class SentinelWeightData(BaseModel):
 class ActivationUpdatedData(BaseModel):
     world_id: StrictStr
     strategy_id: Optional[StrictStr] = None
+    side: Optional[Literal["long", "short"]] = None
     active: Optional[bool] = None
     weight: Optional[StrictFloat] = None
+    freeze: Optional[bool] = None
+    drain: Optional[bool] = None
+    effective_mode: Optional[Literal["compute-only", "paper", "live"]] = None
     etag: Optional[StrictStr] = None
     run_id: Optional[StrictStr] = None
     ts: Optional[StrictStr] = None
+    state_hash: Optional[StrictStr] = None
 
 
 class PolicyUpdatedData(BaseModel):

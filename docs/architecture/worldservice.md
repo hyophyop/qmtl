@@ -105,11 +105,21 @@ ActivationEnvelope
   "side": "long",
   "active": true,
   "weight": 1.0,
+  "freeze": false,
+  "drain": false,
+  "effective_mode": "paper",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
+
+Field semantics and precedence
+- `freeze=true` overrides `drain`; both imply orders gated OFF.
+- `drain=true` blocks new orders but allows existing opens to complete naturally.
+- When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
+- `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
+- `effective_mode` communicates compute mode to SDK/UI (`compute-only|paper|live`).
 
 Idempotency: consumers must treat older etag/run_id as no‑ops. Unknown or expired decisions/activations should default to “inactive/safe”.
 

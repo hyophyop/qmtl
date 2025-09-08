@@ -73,6 +73,9 @@ Response (ActivationEnvelope)
   "side": "long",
   "active": true,
   "weight": 1.0,
+  "freeze": false,
+  "drain": false,
+  "effective_mode": "paper",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
