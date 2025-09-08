@@ -59,12 +59,12 @@ Tip
 
 ## Node Contracts
 
-- PreTradeGateNode
+- [PreTradeGateNode](../../qmtl/transforms/execution_nodes.py#L34)
   - Inputs: Activation (from WS via Gateway), Symbol/Hours/Shortable providers, Account/BuyingPower
   - Output: Either a pass‑through order intent or a structured rejection with `RejectionReason`
   - Backed by: `qmtl/sdk/pretrade.py`, `qmtl/common/pretrade.py`, `qmtl/brokerage/*`
 
-- SizingNode
+- [SizingNode](../../qmtl/transforms/execution_nodes.py#L80)
   - Inputs: Order intent, Portfolio snapshot (t−1)
   - Output: Sized order (quantity) using helpers (value/percent/target_percent)
   - Backed by: `qmtl/sdk/portfolio.py`

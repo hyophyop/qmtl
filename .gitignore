@@ -29,6 +29,9 @@ MANIFEST
 venv/
 ENV/
 env/
+# common alt venv names
+.venv*/
+.env*/
 
 # PyInstaller
 *.manifest
@@ -88,6 +91,7 @@ uv.lock
 
 # Snapshots
 .qmtl_snapshots/
+.qmtl_tagmap.json
 
 # Test artifacts
 .artifacts/

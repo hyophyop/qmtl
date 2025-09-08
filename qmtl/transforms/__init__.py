@@ -20,6 +20,7 @@ from .trade_signal import (
     TradeSignalGeneratorNode,
 )
 from .publisher import publisher_node, TradeOrderPublisherNode
+from .execution_nodes import PreTradeGateNode, SizingNode
 from .microstructure import (
     gap_depth_weighted_sum_node,
     order_flow_imbalance_node,
@@ -69,6 +70,8 @@ __all__ = [
     "TradeSignalGeneratorNode",
     "publisher_node",
     "TradeOrderPublisherNode",
+    "PreTradeGateNode",
+    "SizingNode",
     "volume_features",
     "avg_volume_node",
     "volume_stats",
