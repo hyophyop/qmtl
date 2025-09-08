@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Optional
 
 from .order import Account, Order, Fill
+from .exchange_hours import ExchangeHoursProvider
 
 
 class BuyingPowerModel(ABC):
@@ -37,5 +40,12 @@ class FillModel(ABC):
     """Determine fill quantity and base price."""
 
     @abstractmethod
-    def fill(self, order: Order, market_price: float) -> Fill:
+    def fill(
+        self,
+        order: Order,
+        market_price: float,
+        *,
+        ts: Optional[datetime] = None,
+        exchange_hours: Optional[ExchangeHoursProvider] = None,
+    ) -> Fill:
         """Return fill details for ``order`` at ``market_price``."""

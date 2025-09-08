@@ -13,6 +13,9 @@ from .fill_models import (
     StopMarketFillModel,
     StopLimitFillModel,
     UnifiedFillModel,
+    MarketOnOpenFillModel,
+    MarketOnCloseFillModel,
+    TrailingStopFillModel,
 )
 from .fees import (
     PerShareFeeModel,
@@ -67,6 +70,9 @@ __all__ = [
     "StopMarketFillModel",
     "StopLimitFillModel",
     "UnifiedFillModel",
+    "MarketOnOpenFillModel",
+    "MarketOnCloseFillModel",
+    "TrailingStopFillModel",
     "SymbolProperties",
     "SymbolPropertiesProvider",
     "ExchangeHoursProvider",

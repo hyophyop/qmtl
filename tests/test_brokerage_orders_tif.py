@@ -1,6 +1,6 @@
 import pytest
 
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 
 from qmtl.brokerage import (
     Account,
@@ -15,6 +15,7 @@ from qmtl.brokerage import (
     NullSlippageModel,
     SymbolPropertiesProvider,
     ExchangeHoursProvider,
+    UnifiedFillModel,
 )
 
 
@@ -108,3 +109,80 @@ def test_exchange_hours_provider_blocks_when_closed():
     ts = datetime.combine(datetime.now(timezone.utc).date(), time(3, 0))
     with pytest.raises(ValueError, match="Market is closed"):
         brk.can_submit_order(account, order, ts=ts)
+
+
+def test_gtd_order_respects_expiration():
+    account = Account(cash=1_000_000)
+    brk = make_brokerage(fill=MarketFillModel())
+    now = datetime.now(timezone.utc)
+    expired = Order(
+        symbol="AAPL",
+        quantity=100,
+        price=100.0,
+        type=OrderType.MARKET,
+        tif=TimeInForce.GTD,
+        expire_at=now - timedelta(seconds=1),
+    )
+    fill_expired = brk.execute_order(account, expired, market_price=100.0, ts=now)
+    assert fill_expired.quantity == 0
+
+    valid = Order(
+        symbol="AAPL",
+        quantity=100,
+        price=100.0,
+        type=OrderType.MARKET,
+        tif=TimeInForce.GTD,
+        expire_at=now + timedelta(days=1),
+    )
+    fill_valid = brk.execute_order(account, valid, market_price=100.0, ts=now)
+    assert fill_valid.quantity == 100
+
+
+def test_market_on_open_and_close_fill_only_at_boundaries():
+    hours = ExchangeHoursProvider()
+    brk = make_brokerage(hours=hours, fill=UnifiedFillModel())
+    account = Account(cash=1_000_000)
+
+    open_ts = datetime.combine(datetime.now(timezone.utc).date(), hours.market_hours.regular_start)
+    later_ts = open_ts + timedelta(minutes=5)
+
+    order_moo = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOO)
+    fill_late = brk.execute_order(account, order_moo, market_price=100.0, ts=later_ts)
+    assert fill_late.quantity == 0
+    order_moo2 = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOO)
+    fill_open = brk.execute_order(account, order_moo2, market_price=100.0, ts=open_ts)
+    assert fill_open.quantity == 100
+
+    close_time = hours.early_closes.get(open_ts.date(), hours.market_hours.regular_end)
+    close_ts = datetime.combine(open_ts.date(), close_time)
+    before_close = close_ts - timedelta(minutes=1)
+    order_moc = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOC)
+    fill_before_close = brk.execute_order(account, order_moc, market_price=100.0, ts=before_close)
+    assert fill_before_close.quantity == 0
+    order_moc2 = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOC)
+    fill_close = brk.execute_order(account, order_moc2, market_price=100.0, ts=close_ts)
+    assert fill_close.quantity == 100
+
+
+def test_trailing_stop_tracks_and_triggers():
+    account = Account(cash=1_000_000)
+    brk = make_brokerage(fill=UnifiedFillModel())
+    order = Order(
+        symbol="AAPL",
+        quantity=-100,
+        price=100.0,
+        type=OrderType.TRAILING_STOP,
+        trail_amount=5.0,
+    )
+
+    fill1 = brk.execute_order(account, order, market_price=100.0)
+    assert fill1.quantity == 0
+    assert order.stop_price == 95.0
+
+    fill2 = brk.execute_order(account, order, market_price=110.0)
+    assert fill2.quantity == 0
+    assert order.stop_price == 105.0
+
+    fill3 = brk.execute_order(account, order, market_price=104.0)
+    assert fill3.quantity == -100
+    assert fill3.price == 104.0

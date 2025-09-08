@@ -83,7 +83,9 @@ class BrokerageModel:
             raise ValueError("Order rejected by pre-trade checks")
 
         price_with_slippage = self.slippage_model.apply(order, market_price)
-        fill = self.fill_model.fill(order, price_with_slippage)
+        fill = self.fill_model.fill(
+            order, price_with_slippage, ts=ts, exchange_hours=self.hours
+        )
 
         if fill.quantity == 0:
             # Nothing executed
