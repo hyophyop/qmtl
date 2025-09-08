@@ -33,6 +33,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-xdist",
+    "jsonschema>=4.0.0",
     "fakeredis",
     "grpcio-tools>=1.74.0",
     "pyarrow",
