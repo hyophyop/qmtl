@@ -38,6 +38,13 @@ from .exceptions import (
 from . import metrics
 from .trade_execution_service import TradeExecutionService
 from .event_service import EventRecorderService
+from .portfolio import (
+    Portfolio,
+    Position,
+    order_percent,
+    order_target_percent,
+    order_value,
+)
 
 __all__ = [
     "Node",
@@ -63,6 +70,11 @@ __all__ = [
     "metrics",
     "TradeExecutionService",
     "EventRecorderService",
+    "Portfolio",
+    "Position",
+    "order_value",
+    "order_percent",
+    "order_target_percent",
     "parse_interval",
     "parse_period",
     "validate_tag",
