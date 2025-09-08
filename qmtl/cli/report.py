@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 from typing import List
+import sys
 
 from qmtl.transforms.alpha_performance import alpha_performance_node
 
@@ -30,10 +31,22 @@ def run(argv: List[str] | None = None) -> None:
     parser.add_argument("--transaction-cost", dest="transaction_cost", type=float, default=0.0, help="Transaction cost per period")
     args = parser.parse_args(argv)
 
-    data = json.loads(Path(args.input).read_text())
+    try:
+        text = Path(args.input).read_text()
+    except OSError as e:
+        print(f"Failed to read input file '{args.input}': {e}", file=sys.stderr)
+        raise SystemExit(1)
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON in '{args.input}': {e}", file=sys.stderr)
+        raise SystemExit(1)
+
     returns = data.get("returns")
     if returns is None:
-        raise SystemExit("Input JSON must contain a 'returns' key")
+        print("Input JSON must contain a 'returns' key", file=sys.stderr)
+        raise SystemExit(1)
 
     metrics = alpha_performance_node(returns, risk_free_rate=args.risk_free, transaction_cost=args.transaction_cost)
     report_md = _build_report(metrics)
