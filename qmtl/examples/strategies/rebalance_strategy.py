@@ -45,14 +45,12 @@ def compute_rebalance_quantity(
         Current execution price used for sizing.
     """
     current = portfolio.get_position(symbol)
-
     # Mark the position to the provided price for the calculations below.
     current_value = current.quantity * price if current else 0.0
     total_value = portfolio.cash + sum(
         (p.quantity * price if p.symbol == symbol else p.market_value)
         for p in portfolio.positions.values()
     )
-
     desired_value = total_value * target_weight
     delta_value = desired_value - current_value
     return pf.order_value(symbol, delta_value, price)
