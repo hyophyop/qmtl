@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .interfaces import BuyingPowerModel
-from .order import Account, Order
+from .order import Account, Order, AccountType
 from .settlement import SettlementModel
 from .symbols import SymbolPropertiesProvider
 
@@ -17,13 +17,19 @@ class CashBuyingPowerModel(BuyingPowerModel):
         self.symbols = symbols
 
     def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
+        if order.quantity <= 0:
+            return True
         currency = (
             self.symbols.get(order.symbol).currency
             if self.symbols is not None
             else account.base_currency
         )
         required = order.price * order.quantity
-        return account.cashbook.get(currency).balance >= required
+        leverage = account.leverage if account.type == AccountType.MARGIN else 1.0
+        balance = account.cashbook.get(currency).balance * leverage
+        free = balance - required
+        required_free = account.required_free_buying_power_percent * balance
+        return free >= required_free
 
 
 class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
@@ -38,10 +44,16 @@ class CashWithSettlementBuyingPowerModel(BuyingPowerModel):
         self.symbols = symbols
 
     def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
+        if order.quantity <= 0:
+            return True
         currency = (
             self.symbols.get(order.symbol).currency
             if self.symbols is not None
             else account.base_currency
         )
         required = order.price * order.quantity
-        return self.settlement.available_cash(account, currency) >= required
+        leverage = account.leverage if account.type == AccountType.MARGIN else 1.0
+        balance = self.settlement.available_cash(account, currency) * leverage
+        free = balance - required
+        required_free = account.required_free_buying_power_percent * balance
+        return free >= required_free

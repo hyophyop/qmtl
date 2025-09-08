@@ -2,7 +2,7 @@
 
 # Source: docs/architecture/lean_brokerage_model.md
 
-from .order import Order, Fill, Account, OrderType, TimeInForce
+from .order import Order, Fill, Account, OrderType, TimeInForce, AccountType
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .buying_power import CashBuyingPowerModel, CashWithSettlementBuyingPowerModel
 from .cashbook import Cashbook, CashEntry
@@ -47,6 +47,7 @@ __all__ = [
     "Account",
     "OrderType",
     "TimeInForce",
+    "AccountType",
     "BuyingPowerModel",
     "FeeModel",
     "SlippageModel",
