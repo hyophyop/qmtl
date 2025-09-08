@@ -17,6 +17,33 @@ class Strategy:
         )
 
     def add_nodes(self, nodes):
+        """Register nodes to this strategy.
+
+        Accepts a single node, an iterable of nodes, or nested iterables
+        (including `NodeSet`, which is iterable). Any iterable is flattened
+        so callers can pass a Node Set directly without unpacking.
+        """
+
+        from .node import Node as _Node  # local import to avoid cycles
+
+        def _flatten(obj):
+            # Single node
+            if isinstance(obj, _Node):
+                return [obj]
+            # Treat None as empty
+            if obj is None:
+                return []
+            # If it's an iterable (e.g., list/tuple/NodeSet), flatten it
+            try:
+                iterator = iter(obj)
+            except TypeError:
+                raise TypeError("add_nodes expects a Node or an iterable of Nodes/NodeSets")
+            out = []
+            for item in iterator:
+                out.extend(_flatten(item))
+            return out
+
+        nodes = _flatten(nodes)
         for node in nodes:
             if node.interval is None:
                 if self.default_interval is None:

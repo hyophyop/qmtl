@@ -7,7 +7,7 @@ See Exchange Node Sets architecture for the end‑to‑end design: ../architectu
 ## Usage
 
 ```python
-from qmtl.nodesets import NodeSetBuilder
+from qmtl.nodesets.base import NodeSetBuilder
 from qmtl.nodesets.options import NodeSetOptions
 from qmtl.sdk import Strategy, StreamInput, Node
 from qmtl.transforms import TradeSignalGeneratorNode
@@ -34,23 +34,13 @@ class WorldScopeNodeSetStrategy(Strategy):
         opts = NodeSetOptions(portfolio_scope="world")
         nodeset = NodeSetBuilder(options=opts).attach(signal, world_id="demo", scope="world")
 
-        # Add the execution chain behind the signal
-        self.add_nodes([
-            price,
-            alpha,
-            signal,
-            nodeset.pretrade,
-            nodeset.sizing,
-            nodeset.execution,
-            nodeset.fills,
-            nodeset.portfolio,
-            nodeset.risk,
-            nodeset.timing,
-        ])
+        # Add the execution chain behind the signal as a unit
+        # (NodeSet is iterable; no need to cherry-pick internals)
+        self.add_nodes([price, alpha, signal, *nodeset])
 ```
 
 Notes
 - strategy (default) scopes portfolio snapshots and fills by `(world_id, strategy_id, symbol)`.
 - world scopes by `(world_id, symbol)` so multiple strategies share cash/limits.
+- Prefer using the Node Set as a black box (attach then add); internal nodes are implementation details and may change.
 - In the current scaffold, this option establishes the contract; concrete exchange Node Sets enforce the behavior as they are implemented.
-

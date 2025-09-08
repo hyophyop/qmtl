@@ -13,6 +13,9 @@ last_modified: 2025-09-08
 
 This document specifies how post-signal trade execution is composed as a reusable, exchange‑specific "Node Set" that can be attached behind a strategy’s signal node while preserving QMTL’s DAG semantics and the WS/DM responsibility boundaries.
 
+Intent
+- Provide ready‑made, exchange‑backed “trading system” recipes (e.g., CCXT spot) as black‑box Node Sets so strategies can attach execution quickly without re‑wiring common components. SDK composition remains available for custom pipelines.
+
 ## Motivation
 
 After a strategy emits trade signals, realistic execution requires feedback between multiple concerns (activation, pre‑trade checks, sizing, execution, fills, portfolio, risk, timing). Naively wiring these as a loop creates graph cycles. QMTL maintains DAG invariants by modeling feedback with delayed edges and event‑sourced state topics.
@@ -57,14 +60,46 @@ Key
 Tip
 - For crypto exchanges, a generic profile can be built from CCXT via `make_ccxt_brokerage()` to quickly wire an execution model with detected maker/taker fees. See Reference → Brokerage API.
 
+## Usage
+
+- Treat a Node Set as a convenience wrapper on top of the DAG: attach it behind your signal and add the returned set to your strategy. Do not cherry‑pick internal nodes; they are implementation details and may change.
+- Example (scaffold):
+
+```python
+from qmtl.nodesets.base import NodeSetBuilder
+
+nodeset = NodeSetBuilder().attach(signal, world_id="demo")
+strategy.add_nodes([price, alpha, signal, nodeset])  # NodeSet accepted directly
+```
+
+- Example (CCXT spot): see the guide at guides/ccxt_spot_recipe.md. You can
+  instantiate via the registry:
+
+```python
+from qmtl.nodesets.registry import make
+nodeset = make("ccxt_spot", signal, "demo-world", exchange_id="binance")
+```
+
+Branching inside
+- Node Sets may contain internal branching/join nodes when needed (e.g., execution step joining sized orders with market data). Keep the Node Set a black box to the strategy; expose multi-input needs via an Adapter’s port specs.
+
+Override components
+- You can override any component when attaching to mix custom nodes:
+
+```python
+builder = NodeSetBuilder()
+custom_exec = make_my_execution_node(...)
+nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
+```
+
 ## Node Contracts
 
-- [PreTradeGateNode](../../qmtl/transforms/execution_nodes.py#L34)
+- [PreTradeGateNode]({{ code_url('qmtl/transforms/execution_nodes.py#L34') }})
   - Inputs: Activation (from WS via Gateway), Symbol/Hours/Shortable providers, Account/BuyingPower
   - Output: Either a pass‑through order intent or a structured rejection with `RejectionReason`
   - Backed by: `qmtl/sdk/pretrade.py`, `qmtl/common/pretrade.py`, `qmtl/brokerage/*`
 
-- [SizingNode](../../qmtl/transforms/execution_nodes.py#L80)
+- [SizingNode]({{ code_url('qmtl/transforms/execution_nodes.py#L80') }})
   - Inputs: Order intent, Portfolio snapshot (t−1)
   - Output: Sized order (quantity) using helpers (value/percent/target_percent)
   - Soft Gating: optionally applies an activation weight (`0..1`) via a `weight_fn` callback; Node Sets pass a function backed by SDK `ActivationManager.weight_for_side(…)` using the intent’s inferred side.
@@ -263,6 +298,10 @@ either scope.
 - simulate: ExecutionNode simulates fills; OrderPublishNode is a no‑op.
 - paper: ExecutionNode simulates, but OrderPublishNode may also post to a paper endpoint for parity.
 - live: OrderPublishNode routes orders; FillIngestNode consumes real fills; PortfolioNode mirrors live PnL.
+
+## API Stability
+
+- Node Set internals (specific node classes and wiring) are not part of the public API surface; treat the Node Set as a black box. Prefer the builder/attach interface and add the whole set to your DAG. This allows us to evolve internal nodes without breaking strategies.
 
 ## Order & Fill Events (Reference)
 
