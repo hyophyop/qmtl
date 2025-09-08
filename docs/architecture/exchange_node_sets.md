@@ -54,6 +54,9 @@ Key
 - The feedback is not a literal cycle: P consumes portfolio/risk snapshots at t−1 (or from a compacted state topic). This preserves acyclicity while enabling feedback.
 - In simulate/paper modes, `ExecutionNode` produces fills directly; in live mode, fills arrive via `FillIngestNode` from the exchange/broker (webhook or polling).
 
+Tip
+- For crypto exchanges, a generic profile can be built from CCXT via `make_ccxt_brokerage()` to quickly wire an execution model with detected maker/taker fees. See Reference → Brokerage API.
+
 ## Node Contracts
 
 - PreTradeGateNode
@@ -116,7 +119,7 @@ Both options are compatible with the Commit‑Log design; they do not change DM�
   - Scheduler Watermarks: Bucket processing advances only after upstream state topics commit up to a watermark for `t−1`. This can be implemented as a soft rule at the node/scheduler interface without changing DM invariants.
 
 - Exactly‑Once Boundaries
-  - Order submission: at‑least‑once with idempotent keys on producer (client) and consumer (executor). Keys should include `(world_id|strategy_id|symbol|side|ts|client_order_id)`.
+- Order submission: at‑least‑once with idempotent keys on producer (client) and consumer (executor). Keys should include `(world_id|strategy_id|symbol|side|ts|client_order_id)`.
   - Fill ingestion: at‑least‑once with per‑partition monotonic `seq` (or `etag`) on events. Consumers de‑duplicate by `(order_id, seq)`.
 
 - Activation Weights → Sizing (Soft Gating)

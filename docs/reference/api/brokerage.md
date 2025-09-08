@@ -103,6 +103,34 @@ profile = ibkr_equities_like_profile()
 model = profile.build()
 ```
 
+### CCXT-based Profiles (Crypto)
+
+Quickly spin up a crypto brokerage model by detecting maker/taker fees from CCXT. Falls back to conservative defaults when CCXT/network is unavailable.
+
+```python
+from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
+
+# Detect fees from ccxt (symbol-specific when provided). Hours=None assumes 24/7.
+model = make_ccxt_brokerage(
+    "binance",               # CCXT id (use "binanceusdm" for Binance USDT‑M futures)
+    product="spot",          # or "futures"
+    symbol="BTC/USDT",       # optional; improves fee selection if markets differ
+    sandbox=False,            # True to route to testnet if supported
+)
+
+# Explicit fallback/defaults without ccxt
+model_default = make_ccxt_brokerage(
+    "binance",
+    detect_fees=False,
+    defaults=(0.0002, 0.0007),   # maker, taker
+)
+```
+
+Notes:
+- Fee detection priority: market-level (symbol) → exchange.fees["trading"] → defaults.
+- Negative maker rates (rebates) are preserved if reported by the exchange.
+- For futures-specific behavior (leverage/margin/hedge), see ``FuturesCcxtBrokerageClient`` under Connectors; this factory only shapes fees/slippage.
+
 ## Interest
 
 Use `MarginInterestModel` to accrue daily interest on cash balances. Positive
