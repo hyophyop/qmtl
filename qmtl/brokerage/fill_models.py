@@ -22,59 +22,57 @@ class ImmediateFillModel(FillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         return Fill(symbol=order.symbol, quantity=order.quantity, price=market_price)
 
 
 @dataclass
 class BaseFillModel(FillModel):
-    """Base fill model with optional liquidity cap for IOC partials.
+    """Base fill model with optional liquidity or volume caps for partial fills.
 
     Parameters
     ----------
     liquidity_cap : Optional[int]
-        If set, represents the max shares that can be filled immediately.
-        This enables simple IOC partial behavior without a full order book.
+        Absolute share cap that can be filled immediately.
+    volume_limit : Optional[float]
+        Fractional cap of the latest bar volume that can be filled.
     """
 
     liquidity_cap: Optional[int] = None
+    volume_limit: Optional[float] = None
 
     def _apply_tif(
         self,
         order: Order,
         desired_qty: int,
         ts: Optional[datetime] = None,
+        bar_volume: Optional[int] = None,
     ) -> int:
-        """Apply simple TIF semantics to the computed desired quantity.
-
-        - FOK: require full fill, otherwise 0
-        - IOC: fill up to `liquidity_cap` (if set) or desired quantity
-        - GTD: expire after ``order.expire_at``
-        - DAY/GTC: take desired quantity
-        """
+        """Apply simple TIF semantics to the computed desired quantity."""
 
         if desired_qty <= 0:
             return 0
 
+        available = desired_qty
+        if self.volume_limit is not None and bar_volume is not None:
+            available = min(available, int(self.volume_limit * bar_volume))
+        if self.liquidity_cap is not None:
+            available = min(available, self.liquidity_cap)
+
         if order.tif == TimeInForce.FOK:
-            return (
-                desired_qty
-                if (self.liquidity_cap is None or desired_qty <= self.liquidity_cap)
-                else 0
-            )
+            return desired_qty if desired_qty <= available else 0
 
         if order.tif == TimeInForce.IOC:
-            if self.liquidity_cap is None:
-                return desired_qty
-            return min(desired_qty, self.liquidity_cap)
+            return available
 
         if order.tif == TimeInForce.GTD:
             if order.expire_at is not None and ts is not None and ts > order.expire_at:
                 return 0
-            return desired_qty
+            return min(desired_qty, available)
 
         # DAY/GTC
-        return desired_qty
+        return min(desired_qty, available)
 
 
 class MarketFillModel(BaseFillModel):
@@ -87,8 +85,9 @@ class MarketFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -103,6 +102,7 @@ class LimitFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if order.limit_price is None:
             # No limit specified, cannot fill
@@ -119,7 +119,7 @@ class LimitFillModel(BaseFillModel):
         if not can_fill:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         # Fill at min/max of market and limit to be conservative
         price = min(market_price, order.limit_price) if order.quantity > 0 else max(market_price, order.limit_price)
@@ -136,6 +136,7 @@ class StopMarketFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if order.stop_price is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
@@ -151,7 +152,7 @@ class StopMarketFillModel(BaseFillModel):
         if not triggered:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -166,6 +167,7 @@ class StopLimitFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if order.stop_price is None or order.limit_price is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
@@ -180,8 +182,8 @@ class StopLimitFillModel(BaseFillModel):
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
         # After trigger, behave like limit
-        lfm = LimitFillModel(liquidity_cap=self.liquidity_cap)
-        return lfm.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+        lfm = LimitFillModel(liquidity_cap=self.liquidity_cap, volume_limit=self.volume_limit)
+        return lfm.fill(order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume)
 
 
 class MarketOnOpenFillModel(BaseFillModel):
@@ -194,12 +196,13 @@ class MarketOnOpenFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if ts is None or exchange_hours is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
         if ts.time() != exchange_hours.market_hours.regular_start:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -214,6 +217,7 @@ class MarketOnCloseFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if ts is None or exchange_hours is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
@@ -222,7 +226,7 @@ class MarketOnCloseFillModel(BaseFillModel):
         )
         if ts.time() != close_time:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -237,6 +241,7 @@ class TrailingStopFillModel(BaseFillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if order.trail_amount is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
@@ -262,7 +267,7 @@ class TrailingStopFillModel(BaseFillModel):
         if not triggered:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        qty = self._apply_tif(order, abs(order.quantity), ts)
+        qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
         qty = qty if order.quantity >= 0 else -qty
         return Fill(symbol=order.symbol, quantity=qty, price=market_price)
 
@@ -276,14 +281,30 @@ class UnifiedFillModel(FillModel):
     the ``liquidity_cap`` knob on ``BaseFillModel`` derivatives.
     """
 
-    def __init__(self, *, liquidity_cap: Optional[int] = None) -> None:
-        self._market = MarketFillModel(liquidity_cap=liquidity_cap)
-        self._limit = LimitFillModel(liquidity_cap=liquidity_cap)
-        self._stop = StopMarketFillModel(liquidity_cap=liquidity_cap)
-        self._stop_limit = StopLimitFillModel(liquidity_cap=liquidity_cap)
-        self._moo = MarketOnOpenFillModel(liquidity_cap=liquidity_cap)
-        self._moc = MarketOnCloseFillModel(liquidity_cap=liquidity_cap)
-        self._trailing = TrailingStopFillModel(liquidity_cap=liquidity_cap)
+    def __init__(
+        self, *, liquidity_cap: Optional[int] = None, volume_limit: Optional[float] = None
+    ) -> None:
+        self._market = MarketFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._limit = LimitFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._stop = StopMarketFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._stop_limit = StopLimitFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._moo = MarketOnOpenFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._moc = MarketOnCloseFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
+        self._trailing = TrailingStopFillModel(
+            liquidity_cap=liquidity_cap, volume_limit=volume_limit
+        )
 
     def fill(
         self,
@@ -292,20 +313,35 @@ class UnifiedFillModel(FillModel):
         *,
         ts: Optional[datetime] = None,
         exchange_hours=None,
+        bar_volume: Optional[int] = None,
     ) -> Fill:
         if order.type == OrderType.MARKET:
-            return self._market.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._market.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.LIMIT:
-            return self._limit.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._limit.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.STOP:
-            return self._stop.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._stop.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.STOP_LIMIT:
-            return self._stop_limit.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._stop_limit.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.MOO:
-            return self._moo.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._moo.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.MOC:
-            return self._moc.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._moc.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         if order.type == OrderType.TRAILING_STOP:
-            return self._trailing.fill(order, market_price, ts=ts, exchange_hours=exchange_hours)
+            return self._trailing.fill(
+                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+            )
         # Fallback: no fill
         return Fill(symbol=order.symbol, quantity=0, price=market_price)

@@ -85,6 +85,30 @@ def test_ioc_partial_fill_with_liquidity_cap():
     assert fill.quantity == 30
 
 
+def test_volume_limited_partial_fill_ioc():
+    account = Account(cash=1_000_000)
+    order = Order(symbol="AAPL", quantity=1_000, price=100.0, type=OrderType.MARKET, tif=TimeInForce.IOC)
+    brk = make_brokerage(fill=MarketFillModel(volume_limit=0.1))
+    fill = brk.execute_order(account, order, market_price=100.0, bar_volume=5_000)
+    assert fill.quantity == 500
+
+
+def test_volume_limited_full_fill_when_order_small():
+    account = Account(cash=1_000_000)
+    order = Order(symbol="AAPL", quantity=200, price=100.0, type=OrderType.MARKET, tif=TimeInForce.IOC)
+    brk = make_brokerage(fill=MarketFillModel(volume_limit=0.1))
+    fill = brk.execute_order(account, order, market_price=100.0, bar_volume=5_000)
+    assert fill.quantity == 200
+
+
+def test_volume_limited_no_fill_when_zero_volume():
+    account = Account(cash=1_000_000)
+    order = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MARKET, tif=TimeInForce.IOC)
+    brk = make_brokerage(fill=MarketFillModel(volume_limit=0.1))
+    fill = brk.execute_order(account, order, market_price=100.0, bar_volume=0)
+    assert fill.quantity == 0
+
+
 def test_symbol_properties_validation_enforces_tick_and_lot():
     symbols = SymbolPropertiesProvider()
     brk = make_brokerage(symbols=symbols, fill=MarketFillModel())
