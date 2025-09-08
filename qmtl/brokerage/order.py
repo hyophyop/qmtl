@@ -34,6 +34,13 @@ class TimeInForce(str, Enum):
     FOK = "fok"
 
 
+class AccountType(str, Enum):
+    """Supported account types."""
+
+    CASH = "cash"
+    MARGIN = "margin"
+
+
 @dataclass
 class Order:
     """Order representation.
@@ -78,10 +85,21 @@ class Fill:
 class Account:
     """Account holding cash across multiple currencies via a cashbook."""
 
-    def __init__(self, cash: float = 0.0, base_currency: str = "USD") -> None:
+    def __init__(
+        self,
+        cash: float = 0.0,
+        base_currency: str = "USD",
+        *,
+        account_type: AccountType = AccountType.CASH,
+        leverage: float = 1.0,
+        required_free_buying_power_percent: float = 0.0,
+    ) -> None:
         self.base_currency = base_currency
         self.cashbook = Cashbook()
         self.cashbook.set(base_currency, cash)
+        self.type = account_type
+        self.leverage = leverage
+        self.required_free_buying_power_percent = required_free_buying_power_percent
 
     @property
     def cash(self) -> float:  # backwards compatibility for single-currency tests
