@@ -70,6 +70,11 @@ Tip
   - Soft Gating: optionally applies an activation weight (`0..1`) via a `weight_fn` callback; Node Sets pass a function backed by SDK `ActivationManager.weight_for_side(…)` using the intent’s inferred side.
   - Backed by: `qmtl/sdk/portfolio.py`, `qmtl/sdk/activation_manager.py`
 
+- MicroBatchNode
+  - Purpose: reduce per-item overhead by emitting a list of payloads for the latest bucket.
+  - Usage: place after order publish (or fill ingest) to micro-batch downstream handling.
+  - Backed by: `qmtl/pipeline/micro_batch.py`
+
 - ExecutionNode
   - Inputs: Sized order, Market data (OHLCV/quotes), Brokerage profile
   - Outputs: Execution fills (simulate/paper) or OrderPayload (live)
