@@ -131,6 +131,8 @@ Notes:
 - Negative maker rates (rebates) are preserved if reported by the exchange.
 - For futures-specific behavior (leverage/margin/hedge), see ``FuturesCcxtBrokerageClient`` under Connectors; this factory only shapes fees/slippage.
 
+See runnable example: `qmtl/examples/brokerage_demo/ccxt_fee_profile_demo.py` (covers spot and futures, maker vs taker).
+
 ## Interest
 
 Use `MarginInterestModel` to accrue daily interest on cash balances. Positive
