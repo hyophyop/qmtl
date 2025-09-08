@@ -31,6 +31,30 @@ If `pytest-xdist` is missing, install it with:
 uv pip install pytest-xdist
 ```
 
+## Testing Conventions
+
+- Fast preflight (hang detection) before running the full suite:
+
+  ```bash
+  PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q \
+    --timeout=60 --timeout-method=thread --maxfail=1
+  ```
+
+  - Optional: `uv run -m pytest --collect-only -q` to catch import-time issues.
+  - After preflight: `uv run -m pytest -W error -n auto` for the full run.
+
+- Pytest plugins must be registered only in the repository top-level `conftest.py`:
+
+  ```python
+  # conftest.py (repo root)
+  pytest_plugins = (
+      "tests.e2e.world_smoke.fixtures_inprocess",
+      "tests.e2e.world_smoke.fixtures_docker",
+  )
+  ```
+
+  Do not declare `pytest_plugins` in nested `conftest.py` files; pytest 8 rejects non-top-level declarations. If you need shared fixtures for a subtree, put them in a normal module and register from the root `conftest.py` as above.
+
 ## HTTPX Usage (tests and examples)
 
 QMTL targets httpx 0.28.x. To avoid regressions across environments:

@@ -5,8 +5,9 @@ from pathlib import Path
 
 """World smoke fixtures and helpers.
 
-Plugin registrations moved to repository top-level ``conftest.py`` to comply
-with pytest's deprecation of non-top-level ``pytest_plugins``.
+Plugin registrations are defined in the repository top-level ``conftest.py``
+to comply with pytest 8's restriction that ``pytest_plugins`` may only be
+declared at the test root. Do not add ``pytest_plugins`` here.
 """
 
 
