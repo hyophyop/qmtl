@@ -12,6 +12,7 @@ nav:
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Exchange Node Sets: architecture/exchange_node_sets.md
+      - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
       - Brokerage API: reference/api/brokerage.md
       - Live & Brokerage Connectors: reference/api/connectors.md
