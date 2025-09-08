@@ -7,6 +7,7 @@ from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .buying_power import CashBuyingPowerModel, CashWithSettlementBuyingPowerModel
 from .cashbook import Cashbook, CashEntry
 from .oco import OCOOrder
+from .bracket import BracketOrder
 from .fill_models import (
     ImmediateFillModel,
     BaseFillModel,
@@ -50,6 +51,7 @@ __all__ = [
     "TimeInForce",
     "AccountType",
     "OCOOrder",
+    "BracketOrder",
     "BuyingPowerModel",
     "FeeModel",
     "SlippageModel",
