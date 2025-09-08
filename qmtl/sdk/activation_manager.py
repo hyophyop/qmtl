@@ -67,6 +67,33 @@ class ActivationManager:
     def is_stale(self) -> bool:
         return self.state.stale
 
+    def weight_for_side(self, side: str) -> float:
+        """Return weight [0..1] for the given side, honoring freeze/drain.
+
+        Safe default is 0.0 when stale or side is unknown/disabled.
+        """
+        if self.state.stale:
+            return 0.0
+        s = side.lower()
+        st: SideState | None = None
+        if s in {"buy", "long"}:
+            st = self.state.long
+        elif s in {"sell", "short"}:
+            st = self.state.short
+        if st is None:
+            return 0.0
+        if st.freeze or st.drain:
+            return 0.0
+        if not st.active:
+            return 0.0
+        w = float(st.weight)
+        # Clamp to [0,1]
+        if w < 0.0:
+            return 0.0
+        if w > 1.0:
+            return 1.0
+        return w
+
     async def _on_message(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
