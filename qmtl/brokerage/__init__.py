@@ -5,6 +5,7 @@
 from .order import Order, Fill, Account, OrderType, TimeInForce
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
 from .buying_power import CashBuyingPowerModel, CashWithSettlementBuyingPowerModel
+from .cashbook import Cashbook, CashEntry
 from .fill_models import (
     ImmediateFillModel,
     BaseFillModel,
@@ -52,6 +53,8 @@ __all__ = [
     "FillModel",
     "CashBuyingPowerModel",
     "CashWithSettlementBuyingPowerModel",
+    "Cashbook",
+    "CashEntry",
     "ImmediateFillModel",
     "PerShareFeeModel",
     "PercentFeeModel",

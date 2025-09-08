@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Optional
 from datetime import datetime
 
+from .cashbook import Cashbook
+
 
 class OrderType(str, Enum):
     """Supported order types."""
@@ -69,8 +71,18 @@ class Fill:
     fee: float = 0.0
 
 
-@dataclass
 class Account:
-    """Account holding cash for trading (simplified)."""
+    """Account holding cash across multiple currencies via a cashbook."""
 
-    cash: float
+    def __init__(self, cash: float = 0.0, base_currency: str = "USD") -> None:
+        self.base_currency = base_currency
+        self.cashbook = Cashbook()
+        self.cashbook.set(base_currency, cash)
+
+    @property
+    def cash(self) -> float:  # backwards compatibility for single-currency tests
+        return self.cashbook.get(self.base_currency).balance
+
+    @cash.setter
+    def cash(self, value: float) -> None:
+        self.cashbook.set(self.base_currency, value)
