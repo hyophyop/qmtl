@@ -26,6 +26,13 @@ def compute_rebalance_quantity(
 ) -> float:
     """Return quantity required to reach ``target_weight`` for ``symbol``.
 
+    Notes on mark-to-market:
+    - ``Portfolio.total_value`` aggregates each position's ``market_price``.
+    - When sizing at a new price (e.g., after a price move), ensure the
+      portfolio value reflects that price, otherwise target weights can be
+      mis-estimated. This helper computes using a mark-to-market adjustment
+      for ``symbol`` at the provided ``price`` without mutating the portfolio.
+
     Parameters
     ----------
     portfolio: pf.Portfolio
@@ -37,10 +44,17 @@ def compute_rebalance_quantity(
     price: float
         Current execution price used for sizing.
     """
-    pos = portfolio.get_position(symbol)
-    if pos is not None:
-        pos.market_price = price
-    return pf.order_target_percent(portfolio, symbol, target_weight, price)
+    current = portfolio.get_position(symbol)
+    # Mark the position to the provided price for the calculations below.
+    current_value = current.quantity * price if current else 0.0
+    total_value = portfolio.cash + sum(
+        (p.quantity * price if p.symbol == symbol else p.market_value)
+        for p in portfolio.positions.values()
+    )
+    desired_value = total_value * target_weight
+    delta_value = desired_value - current_value
+    return pf.order_value(symbol, delta_value, price)
+ 
 
 
 __all__ = ["compute_rebalance_quantity"]
