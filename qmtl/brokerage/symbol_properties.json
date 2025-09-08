@@ -1,0 +1,5 @@
+[
+  {"symbol": "AAPL", "asset_class": "equity"},
+  {"symbol": "ES", "asset_class": "futures", "tick_size": 0.25, "contract_multiplier": 50, "currency": "USD"},
+  {"symbol": "AAPL2201C150", "asset_class": "option", "lot_size": 100, "min_qty": 100, "contract_multiplier": 100, "tick_size": 0.05, "currency": "USD"}
+]
