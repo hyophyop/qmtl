@@ -109,6 +109,102 @@ Two patterns are supported to keep the DAG acyclic:
 
 Both options are compatible with the Commit‑Log design; they do not change DM’s SSOT or WS’s SSOT.
 
+## Execution Semantics (Enhancements)
+
+- DelayedEdge Contract
+  - Nodes consuming portfolio/risk must declare an explicit time offset (e.g., `lag=1`) and only read snapshots from the previous bucket. This guarantees deterministic evaluation order at bucket barriers and prevents hidden cycles.
+  - Scheduler Watermarks: Bucket processing advances only after upstream state topics commit up to a watermark for `t−1`. This can be implemented as a soft rule at the node/scheduler interface without changing DM invariants.
+
+- Exactly‑Once Boundaries
+  - Order submission: at‑least‑once with idempotent keys on producer (client) and consumer (executor). Keys should include `(world_id|strategy_id|symbol|side|ts|client_order_id)`.
+  - Fill ingestion: at‑least‑once with per‑partition monotonic `seq` (or `etag`) on events. Consumers de‑duplicate by `(order_id, seq)`.
+
+- Activation Weights → Sizing (Soft Gating)
+  - When WS publishes weights, `SizingNode` multiplies the desired size by the activation weight (e.g., 0.0..1.0) to smoothly scale exposure instead of binary ON/OFF.
+
+## Bucket Watermark Sequence
+
+The scheduler advances bucket processing only after state topics (e.g., `trade.portfolio`) have committed up to `t−1`. Nodes that consume feedback must respect the `lag=1` contract and read snapshots ≤ watermark.
+
+```mermaid
+sequenceDiagram
+    participant PF as PortfolioNode
+    participant ST as StateTopic (trade.portfolio)
+    participant SCH as Scheduler/Runner
+    participant PT as PreTrade/Sizing (bucket t)
+    participant EX as Execution/OrderPublish
+    participant FI as FillIngest (live only)
+
+    Note over PF,ST: previous bucket (t-1)
+    PF->>ST: publish snapshot (as_of=t-1)
+    ST-->>SCH: offsets committed (WM=t-1)
+    SCH-->>PT: watermark(t-1) ready
+    PT->>EX: build sized orders using state ≤ t-1
+    EX-->>FI: route orders (live)
+    FI->>PF: apply fills for t → next snapshot
+    Note over PT,SCH: If WM < t-1, PT blocks/denies with backpressure reason
+```
+
+## Freeze/Drain Scenarios
+
+WorldService may signal temporary trading halts via activation decisions. Node Sets must enforce the mode while keeping data/portfolio state consistent.
+
+### Freeze (Immediate Halt and Cancel)
+
+Semantics
+- Block new orders immediately.
+- Cancel all open orders ASAP (best‑effort) and stop re‑entry until unfreeze.
+
+```mermaid
+sequenceDiagram
+    participant WS as WorldService
+    participant GW as Gateway (events)
+    participant AM as ActivationManager (SDK)
+    participant PT as PreTradeGateNode
+    participant EX as ExecutionNode
+    participant FI as FillIngestNode
+    participant PF as PortfolioNode
+
+    WS-->>GW: ActivationUpdated{ freeze:true }
+    GW-->>AM: relay ActivationUpdated
+    AM-->>PT: state: deny new orders
+    PT--xEX: new orders blocked (reason=freeze)
+    AM-->>EX: policy: cancel_open_orders
+    EX->>GW: submit cancels (per order_id)
+    GW-->>FI: cancel acks via trade.fills
+    FI->>PF: apply cancel events
+    Note over PT: remains blocked until unfreeze
+```
+
+### Drain (Natural Exit)
+
+Semantics
+- Block new orders.
+- Do not force cancel; allow in‑flight orders to fill/expire naturally.
+
+```mermaid
+sequenceDiagram
+    participant WS as WorldService
+    participant GW as Gateway (events)
+    participant AM as ActivationManager (SDK)
+    participant PT as PreTradeGateNode
+    participant EX as ExecutionNode
+    participant FI as FillIngestNode
+    participant PF as PortfolioNode
+
+    WS-->>GW: ActivationUpdated{ drain:true }
+    GW-->>AM: relay ActivationUpdated
+    AM-->>PT: state: deny new orders
+    PT--xEX: new orders blocked (reason=drain)
+    FI-->>PF: continue to apply fills/expirations for open orders
+    Note over PF: exposure decays to zero as orders complete
+```
+
+Notes
+- Unfreeze: WS emits ActivationUpdated{ freeze:false, drain:false }; `PT` resumes, `EX` accepts new orders from next bucket (honoring the DelayedEdge contract).
+- Late fills: Fills arriving after freeze/drain are still applied to maintain accounting integrity; they SHOULD be tagged for audit.
+- Variants: A policy may specify `drain:"cancel"` to cancel all open orders but keep gates closed—operationally a softer freeze.
+
 ## WorldService and DAG Manager Boundaries
 
 - WorldService
@@ -120,12 +216,21 @@ Both options are compatible with the Commit‑Log design; they do not change DM�
 
 This preserves current responsibilities while enabling rich execution flows.
 
+Freeze/Drain Semantics
+- WS may signal `freeze` (block new orders) or `drain` (allow fills/cancellations only). Node Sets enforce these modes: PreTradeGateNode denies new orders; ExecutionNode cancels open orders when policy specifies.
+
 ## Portfolio Scoping
 
 - Strategy‑Scoped (default): `scope = (world_id, strategy_id)`
 - World‑Scoped (optional): `scope = (world_id)` to share cash/limits across strategies
 
 Node Sets must declare scope explicitly. World‑scope increases coupling but enables cross‑strategy limits.
+
+## Gateway Webhook & Security (Enhancements)
+
+- CloudEvents Envelope: The optional `/fills` webhook SHOULD accept CloudEvents‑wrapped payloads for standardized metadata (`type`, `source`, `id`, `time`).
+- Authentication & RBAC: JWT/HMAC with claims scoped to `world_id`/`strategy_id`; unauthorized or out‑of‑scope events are rejected.
+- Replay Endpoint: Operators MAY request re‑delivery for a time window to reconstruct state safely.
 
 ## Operating Modes
 
@@ -150,5 +255,40 @@ See Reference → Order & Fill Events for JSON Schemas and topic guidance.
 4) Gateway optional webhook `/fills` → Kafka producer with RBAC/signature checks.
 5) Runner optional pre‑trade chain toggle for simple strategies.
 
-{{ nav_links() }}
+## Reliability & Operations (Enhancements)
 
+- Backpressure Guard: If FillIngest or PortfolioNode lag exceeds thresholds, PreTradeGateNode can temporarily deny new orders with a standardized reason code.
+- DLQ/Quarantine: Schema validation failures or unauthorized events route to `trade.fills.dlq` for operator review and replay.
+- Circuit Breakers: Node Set builders expose circuit breaker and retry options for BrokerageClient; degrade to `paper` when persistent failures occur.
+
+## Observability & Dev Experience (Enhancements)
+
+- Correlated Tracing: Propagate a single `correlation_id` (derived from `client_order_id`) across `order → publish → ack → fill → portfolio.apply` and emit OpenTelemetry spans.
+- Standard Metrics: Counters for pre‑trade rejections (by `RejectionReason`), routing failures, webhook throughput/latency, portfolio apply lag, backpressure trips.
+- Schema→Code Generation: Generate pydantic/dataclasses from JSON Schemas (Order/Fill/Portfolio) for connectors/nodes to ensure type safety.
+- Node Set Test Kit: Provide deterministic golden tests for IOC/FOK, partial fills, reordering, downgrade/upgrade paths, and fake webhook simulation.
+- Version Tagging: Include Node Set version in NodeID input hashing to ensure safe reuse boundaries across exchange API changes.
+
+## Related Issues
+
+- RFC: Exchange Node Sets and Feedback Without Cycles (#820)
+- Implement Execution-Layer Nodes (PreTrade/Sizing/Execution/FillIngest/Portfolio/Risk/Timing) (#821)
+- Node Set: CCXT Generic (Spot) (#822)
+- Node Set: Binance Futures (USDT‑M) (#823)
+- Gateway: /fills Webhook → Kafka (trade.fills) (#824)
+- RFC: Delayed Edges, Watermarks, and Exactly-Once Boundaries (#828)
+- Gateway Webhook: CloudEvents Envelope and Replay Endpoint (#829)
+- Node Set Test Kit and Fake Webhook Simulator (#830)
+- Schema → Code Generation for Order/Fill/Portfolio (#831)
+- Observability — Order Lifecycle Tracing and Metrics (#832)
+- Reliability — Backpressure Guard and DLQ for Fills (#833)
+- RouterNode — Multi-Exchange/Symbol Routing (#834)
+- Micro-batching for Order Publish and Fill Ingest (#835)
+- Activation Weight Propagation and Sizing Integration (#836)
+- Scaffold: Exchange Node Set Kit (Builders, Contracts, Stubs) (#837)
+- Example Strategy: Signal → CCXT Generic Spot Node Set (#838)
+- WS Activation Schema — Freeze/Drain/Weights/Effective Mode (#839)
+
+Links: https://github.com/hyophyop/qmtl/issues
+
+{{ nav_links() }}

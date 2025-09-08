@@ -30,7 +30,9 @@ class CacheView:
         self._path = path
 
     def __getitem__(self, key: Any) -> Any:
-        if isinstance(self._data, Mapping):
+        # Use direct attribute access to avoid any accidental recursion
+        data = object.__getattribute__(self, "_data")
+        if isinstance(data, Mapping):
             from .node import Node  # local import to avoid circular dependency
             if isinstance(key, Node):
                 key = key.node_id
@@ -41,36 +43,46 @@ class CacheView:
                 if isinstance(u, str) and isinstance(i, int):
                     self._access_log.append((u, i))
                     sdk_metrics.observe_cache_read(u, i)
+            value = data[key]
+            # Guard against nested CacheView: unwrap to underlying data
+            if isinstance(value, CacheView):
+                value = object.__getattribute__(value, "_data")
             return CacheView(
-                self._data[key],
+                value,
                 track_access=self._track_access,
                 access_log=self._access_log,
                 path=new_path,
             )
-        if isinstance(self._data, Sequence):
-            return self._data[key]
+        if isinstance(data, Sequence):
+            return data[key]
         raise TypeError("unsupported operation")
 
     def __getattr__(self, name: str) -> Any:
-        if isinstance(self._data, Mapping) and name in self._data:
+        # Avoid treating private/dunder attributes as mapping access
+        if name.startswith("_") or (name.startswith("__") and name.endswith("__")):
+            raise AttributeError(name)
+        data = object.__getattribute__(self, "_data")
+        if isinstance(data, Mapping) and name in data:
             return self.__getitem__(name)
         raise AttributeError(name)
 
     def latest(self) -> Any:
-        if isinstance(self._data, Sequence):
-            return self._data[-1] if self._data else None
+        data = object.__getattribute__(self, "_data")
+        if isinstance(data, Sequence):
+            return data[-1] if data else None
         raise AttributeError("latest")
 
     def table(self):  # Arrow-friendly convenience for Arrow backend adapters
         from typing import Sequence as _Seq
-        if isinstance(self._data, _Seq):
+        data = object.__getattribute__(self, "_data")
+        if isinstance(data, _Seq):
             try:  # pragma: no cover - exercised via Arrow tests
                 import pyarrow as pa
                 import pickle
             except Exception as e:  # pragma: no cover - optional dependency
                 raise AttributeError("table") from e
-            ts = [int(t) for t, _ in self._data]
-            vals = [pickle.dumps(v) for _, v in self._data]
+            ts = [int(t) for t, _ in data]
+            vals = [pickle.dumps(v) for _, v in data]
             return pa.table({
                 "t": pa.array(ts, pa.int64()),
                 "v": pa.array(vals, pa.binary()),
@@ -84,4 +96,3 @@ class CacheView:
     def access_log(self) -> list[tuple[str, int]]:
         """Return list of accessed ``(upstream_id, interval)`` pairs."""
         return list(self._access_log)
-

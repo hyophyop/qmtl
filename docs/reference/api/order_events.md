@@ -34,6 +34,7 @@ OrderPayload
 {
   "world_id": "arch_world",
   "strategy_id": "strat_001",
+  "correlation_id": "ord-20230907-0001", 
   "symbol": "BTC/USDT",
   "side": "BUY",             // BUY | SELL
   "type": "limit",           // market | limit | stop | stop_limit
@@ -66,6 +67,7 @@ ExecutionFillEvent
 {
   "order_id": "exch-7890",
   "client_order_id": "c-abc123",
+  "correlation_id": "ord-20230907-0001",
   "symbol": "BTC/USDT",
   "side": "BUY",
   "quantity": 0.005,
@@ -75,7 +77,9 @@ ExecutionFillEvent
   "market_impact": 0.0,
   "tif": "GTC",
   "fill_time": 1694102401100,
-  "status": "partially_filled"
+  "status": "partially_filled",
+  "seq": 12,
+  "etag": "w1-s1-7890-12"
 }
 ```
 
@@ -99,5 +103,22 @@ PortfolioSnapshot (compacted)
 - `client_order_id` is optional but recommended for idempotency and reconciliation.
 - Providers may add fields in `metadata` or `raw`; downstream consumers should ignore unknown keys.
 
-{{ nav_links() }}
+### CloudEvents Envelope (Optional)
 
+Webhook and internal event transport MAY wrap payloads in CloudEvents 1.0:
+
+```json
+{
+  "specversion": "1.0",
+  "type": "qmtl.trade.fill",
+  "source": "broker/binanceusdm",
+  "id": "exch-7890-12",
+  "time": "2025-09-08T00:00:01.100Z",
+  "datacontenttype": "application/json",
+  "data": { /* ExecutionFillEvent */ }
+}
+```
+
+Consumers MUST accept both bare and CloudEvents-wrapped forms.
+
+{{ nav_links() }}
