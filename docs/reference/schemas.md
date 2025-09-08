@@ -20,6 +20,38 @@ last_modified: 2025-08-29
 - Validation (WVG): reference/schemas/validation.schema.json
 - DecisionEvent (WVG): reference/schemas/decision_event.schema.json
 
+## Node I/O Schemas
+
+Standard DataFrame contracts ensure consistent columns, dtypes and timezone
+handling between nodes. All schemas require a timezone-aware ``ts`` column in
+UTC.
+
+| Schema | Columns |
+| ------ | ------- |
+| ``bar`` | ``ts`` (UTC ``datetime64[ns]``), ``open`` ``float64``, ``high`` ``float64``, ``low`` ``float64``, ``close`` ``float64``, ``volume`` ``float64`` |
+| ``quote`` | ``ts`` (UTC ``datetime64[ns]``), ``bid`` ``float64``, ``ask`` ``float64``, ``bid_size`` ``float64``, ``ask_size`` ``float64`` |
+| ``trade`` | ``ts`` (UTC ``datetime64[ns]``), ``price`` ``float64``, ``size`` ``float64`` |
+
+Example:
+
+```python
+import pandas as pd
+from qmtl.schema import validate_schema
+
+df = pd.DataFrame(
+    {
+        "ts": pd.date_range("2024-01-01", periods=1, tz="UTC"),
+        "open": [1.0],
+        "high": [1.0],
+        "low": [1.0],
+        "close": [1.0],
+        "volume": [1.0],
+    }
+)
+
+validate_schema(df, "bar")
+```
+
 ## Registry Integration (optional)
 
 When `QMTL_SCHEMA_REGISTRY_URL` is set, components can resolve `schema_id`s via
