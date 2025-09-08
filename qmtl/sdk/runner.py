@@ -581,164 +581,172 @@ class Runner:
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
-        tag_service = TagManagerService(gateway_url)
         try:
-            manager = tag_service.init(strategy, world_id=world_id)
-        except TypeError:
-            # Backward-compat for tests that monkeypatch TagManagerService.init
-            manager = tag_service.init(strategy)
-        sdk_metrics.set_world_id(world_id)
-        logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
-        dag = strategy.serialize()
-        logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
+            strategy.on_start()
 
-        queue_map = {}
-        if gateway_url:
-            queue_map = await Runner._gateway_client.post_strategy(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta,
-                world_id=world_id,
-            )
-            if isinstance(queue_map, dict) and "error" in queue_map:
-                raise RuntimeError(queue_map["error"])
-
-        tag_service.apply_queue_map(strategy, queue_map or {})
-        if not any(n.execute for n in strategy.nodes):
-            logger.info("No executable nodes; exiting strategy")
-            return strategy
-
-        offline_mode = offline or not Runner._kafka_available or not gateway_url
-        await manager.resolve_tags(offline=offline_mode)
-
-        # Start activation manager to gate orders by world activation
-        if gateway_url and not offline_mode:
+            tag_service = TagManagerService(gateway_url)
             try:
-                if Runner._activation_manager is None:
-                    Runner._activation_manager = ActivationManager(
-                        gateway_url, world_id=world_id, strategy_id=None
-                    )
-                await Runner._activation_manager.start()
-            except Exception:
-                logger.warning(
-                    "Activation manager failed to start; proceeding with gates OFF by default"
+                manager = tag_service.init(strategy, world_id=world_id)
+            except TypeError:
+                # Backward-compat for tests that monkeypatch TagManagerService.init
+                manager = tag_service.init(strategy)
+            sdk_metrics.set_world_id(world_id)
+            logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
+            dag = strategy.serialize()
+            logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
+
+            queue_map = {}
+            if gateway_url:
+                queue_map = await Runner._gateway_client.post_strategy(
+                    gateway_url=gateway_url,
+                    dag=dag,
+                    meta=meta,
+                    world_id=world_id,
                 )
+                if isinstance(queue_map, dict) and "error" in queue_map:
+                    raise RuntimeError(queue_map["error"])
 
-        # Hydrate and warm up from history to satisfy periods
-        Runner._hydrate_snapshots(strategy)
-        # Determine strict mode: only enforce when offline and history providers are present
-        from .node import StreamInput
+            tag_service.apply_queue_map(strategy, queue_map or {})
+            if not any(n.execute for n in strategy.nodes):
+                logger.info("No executable nodes; exiting strategy")
+                strategy.on_finish()
+                return strategy
 
-        has_provider = any(
-            isinstance(n, StreamInput)
-            and getattr(n, "history_provider", None) is not None
-            for n in strategy.nodes
-        )
-        # Strict gap handling is opt-in via env/flag only
-        from . import runtime as _rt
+            offline_mode = offline or not Runner._kafka_available or not gateway_url
+            await manager.resolve_tags(offline=offline_mode)
 
-        strict_mode = bool(_rt.FAIL_ON_HISTORY_GAP)
+            # Start activation manager to gate orders by world activation
+            if gateway_url and not offline_mode:
+                try:
+                    if Runner._activation_manager is None:
+                        Runner._activation_manager = ActivationManager(
+                            gateway_url, world_id=world_id, strategy_id=None
+                        )
+                    await Runner._activation_manager.start()
+                except Exception:
+                    logger.warning(
+                        "Activation manager failed to start; proceeding with gates OFF by default"
+                    )
 
-        # Apply explicit history ranges if provided; otherwise use defaults
-        h_start = history_start
-        h_end = history_end
-        if offline_mode and h_start is None and h_end is None and not has_provider:
-            # Deterministic test defaults for offline mode without providers
-            h_start, h_end = 1, 2
-
-        # Decide whether to ensure history:
-        ensure_history = has_provider or (h_start is not None and h_end is not None)
-        if not ensure_history and offline_mode:
-            # If no providers and offline, skip ensure_history when we already
-            # have data in cache (e.g., tests pre-fill snapshots). Otherwise, call
-            # ensure_history with deterministic defaults to satisfy tests that
-            # assert load_history invocations.
+            # Hydrate and warm up from history to satisfy periods
+            Runner._hydrate_snapshots(strategy)
+            # Determine strict mode: only enforce when offline and history providers are present
             from .node import StreamInput
 
-            has_cached = False
-            for n in strategy.nodes:
-                if isinstance(n, StreamInput):
-                    try:
-                        snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
-                        if snap:
-                            has_cached = True
-                            break
-                    except KeyError:
-                        continue
-            if not has_cached:
-                h_start, h_end = 1, 2
-                ensure_history = True
+            has_provider = any(
+                isinstance(n, StreamInput)
+                and getattr(n, "history_provider", None) is not None
+                for n in strategy.nodes
+            )
+            # Strict gap handling is opt-in via env/flag only
+            from . import runtime as _rt
 
-        if ensure_history:
-            if h_start is not None and h_end is not None:
-                await Runner._ensure_history(
-                    strategy, h_start, h_end, stop_on_ready=True, strict=strict_mode
-                )
-            else:
-                await Runner._ensure_history(
-                    strategy, None, None, stop_on_ready=True, strict=strict_mode
-                )
-        if offline_mode:
-            if has_provider:
-                # When history providers are available, replay ensured history now
-                await Runner._replay_history(strategy, None, None)
-            else:
-                # Without providers, do not auto-replay here. Tests and callers
-                # often backfill explicitly and then invoke run_pipeline().
-                # Leaving caches intact avoids double-processing of hydrated
-                # snapshots or test-seeded data.
-                pass
-            # After replay, enforce strict gap handling if requested
-            if strict_mode:
+            strict_mode = bool(_rt.FAIL_ON_HISTORY_GAP)
+
+            # Apply explicit history ranges if provided; otherwise use defaults
+            h_start = history_start
+            h_end = history_end
+            if offline_mode and h_start is None and h_end is None and not has_provider:
+                # Deterministic test defaults for offline mode without providers
+                h_start, h_end = 1, 2
+
+            # Decide whether to ensure history:
+            ensure_history = has_provider or (h_start is not None and h_end is not None)
+            if not ensure_history and offline_mode:
+                # If no providers and offline, skip ensure_history when we already
+                # have data in cache (e.g., tests pre-fill snapshots). Otherwise, call
+                # ensure_history with deterministic defaults to satisfy tests that
+                # assert load_history invocations.
                 from .node import StreamInput
 
+                has_cached = False
                 for n in strategy.nodes:
-                    if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
-                        raise RuntimeError(
-                            "history pre-warmup unresolved in strict mode"
-                        )
-                # Additionally, detect non-contiguous gaps when a provider is present
-                for n in strategy.nodes:
-                    if not isinstance(n, StreamInput):
-                        continue
-                    if getattr(n, "history_provider", None) is None:
-                        continue
-                    try:
-                        snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
-                        ts_sorted = sorted(ts for ts, _ in snap)
-                        # Compare against provider coverage density
-                        cov = await n.history_provider.coverage(
-                            node_id=n.node_id, interval=n.interval
-                        )  # type: ignore[attr-defined]
-                        if cov:
-                            s = min(c[0] for c in cov)
-                            e = max(c[1] for c in cov)
-                            if n.interval:
-                                expected = int((e - s) // n.interval) + 1
-                                actual = len([t for t in ts_sorted if s <= t <= e])
-                                if actual < expected:
-                                    raise RuntimeError(
-                                        "history gap detected in strict mode"
-                                    )
-                        else:
-                            # No coverage reported but we have data; fall back to contiguous check
-                            for a, b in zip(ts_sorted, ts_sorted[1:]):
-                                if n.interval and (b - a) != n.interval:
-                                    raise RuntimeError(
-                                        "history gap detected in strict mode"
-                                    )
-                        # If coverage present, also ensure we have at least 'period' samples
-                        if cov:
-                            needed = getattr(n, "period", 1) or 1
-                            if len(ts_sorted) < needed:
-                                raise RuntimeError("history missing in strict mode")
-                    except KeyError:
-                        # No data present; treat as unresolved
-                        raise RuntimeError("history missing in strict mode")
-        else:
-            await manager.start()
-        Runner._write_snapshots(strategy)
-        return strategy
+                    if isinstance(n, StreamInput):
+                        try:
+                            snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
+                            if snap:
+                                has_cached = True
+                                break
+                        except KeyError:
+                            continue
+                if not has_cached:
+                    h_start, h_end = 1, 2
+                    ensure_history = True
+
+            if ensure_history:
+                if h_start is not None and h_end is not None:
+                    await Runner._ensure_history(
+                        strategy, h_start, h_end, stop_on_ready=True, strict=strict_mode
+                    )
+                else:
+                    await Runner._ensure_history(
+                        strategy, None, None, stop_on_ready=True, strict=strict_mode
+                    )
+            if offline_mode:
+                if has_provider:
+                    # When history providers are available, replay ensured history now
+                    await Runner._replay_history(strategy, None, None)
+                else:
+                    # Without providers, do not auto-replay here. Tests and callers
+                    # often backfill explicitly and then invoke run_pipeline().
+                    # Leaving caches intact avoids double-processing of hydrated
+                    # snapshots or test-seeded data.
+                    pass
+                # After replay, enforce strict gap handling if requested
+                if strict_mode:
+                    from .node import StreamInput
+
+                    for n in strategy.nodes:
+                        if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
+                            raise RuntimeError(
+                                "history pre-warmup unresolved in strict mode"
+                            )
+                    # Additionally, detect non-contiguous gaps when a provider is present
+                    for n in strategy.nodes:
+                        if not isinstance(n, StreamInput):
+                            continue
+                        if getattr(n, "history_provider", None) is None:
+                            continue
+                        try:
+                            snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
+                            ts_sorted = sorted(ts for ts, _ in snap)
+                            # Compare against provider coverage density
+                            cov = await n.history_provider.coverage(
+                                node_id=n.node_id, interval=n.interval
+                            )  # type: ignore[attr-defined]
+                            if cov:
+                                s = min(c[0] for c in cov)
+                                e = max(c[1] for c in cov)
+                                if n.interval:
+                                    expected = int((e - s) // n.interval) + 1
+                                    actual = len([t for t in ts_sorted if s <= t <= e])
+                                    if actual < expected:
+                                        raise RuntimeError(
+                                            "history gap detected in strict mode"
+                                        )
+                            else:
+                                # No coverage reported but we have data; fall back to contiguous check
+                                for a, b in zip(ts_sorted, ts_sorted[1:]):
+                                    if n.interval and (b - a) != n.interval:
+                                        raise RuntimeError(
+                                            "history gap detected in strict mode"
+                                        )
+                            # If coverage present, also ensure we have at least 'period' samples
+                            if cov:
+                                needed = getattr(n, "period", 1) or 1
+                                if len(ts_sorted) < needed:
+                                    raise RuntimeError("history missing in strict mode")
+                        except KeyError:
+                            # No data present; treat as unresolved
+                            raise RuntimeError("history missing in strict mode")
+            else:
+                await manager.start()
+            Runner._write_snapshots(strategy)
+            strategy.on_finish()
+            return strategy
+        except Exception as e:
+            strategy.on_error(e)
+            raise
 
     @staticmethod
     def run(
