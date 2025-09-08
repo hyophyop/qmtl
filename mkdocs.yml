@@ -13,6 +13,7 @@ nav:
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Execution State: architecture/execution_state.md
       - Brokerage API: reference/api/brokerage.md
+      - Live & Brokerage Connectors: reference/api/connectors.md
       - Portfolio & Position API: reference/api/portfolio.md
   - Guides:
       - Overview: guides/README.md

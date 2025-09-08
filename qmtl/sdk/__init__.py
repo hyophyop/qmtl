@@ -38,6 +38,14 @@ from .exceptions import (
 from . import metrics
 from .trade_execution_service import TradeExecutionService
 from .event_service import EventRecorderService
+from .brokerage_client import (
+    BrokerageClient,
+    HttpBrokerageClient,
+    FakeBrokerageClient,
+    CcxtBrokerageClient,
+    FuturesCcxtBrokerageClient,
+)
+from .live_data_feed import LiveDataFeed, WebSocketFeed
 from .portfolio import (
     Portfolio,
     Position,
@@ -70,6 +78,13 @@ __all__ = [
     "metrics",
     "TradeExecutionService",
     "EventRecorderService",
+    "BrokerageClient",
+    "HttpBrokerageClient",
+    "FakeBrokerageClient",
+    "CcxtBrokerageClient",
+    "FuturesCcxtBrokerageClient",
+    "LiveDataFeed",
+    "WebSocketFeed",
     "Portfolio",
     "Position",
     "order_value",

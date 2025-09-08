@@ -8,6 +8,7 @@
 - Added `Node.add_tag()` to attach tags after node creation.
 - Added migration guide for removing legacy Runner/CLI/Gateway surfaces. See [docs/guides/migration_bc_removal.md](docs/guides/migration_bc_removal.md).
 - NodeID now uses BLAKE3 with a `blake3:` prefix and no longer includes `world_id`. Legacy SHA-based IDs remain temporarily supported. See [docs/guides/migration_nodeid_blake3.md](docs/guides/migration_nodeid_blake3.md).
+- Live connectors: added standard `BrokerageClient` and `LiveDataFeed` SDK interfaces with reference implementations (`HttpBrokerageClient`, `CcxtBrokerageClient`, `WebSocketFeed`) and a `FakeBrokerageClient` for demos. See [docs/reference/api/connectors.md](docs/reference/api/connectors.md) and example `qmtl/examples/strategies/paper_live_switch_strategy.py`.
 
 ---
 
