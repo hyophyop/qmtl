@@ -15,6 +15,11 @@ import xarray as xr
 import httpx
 import time
 
+try:  # Optional pandas dependency
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - pandas not installed
+    pd = None  # type: ignore
+
 from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .exceptions import NodeValidationError, InvalidParameterError
@@ -424,6 +429,7 @@ class Node:
         tags: list[str] | None = None,
         config: dict | None = None,
         schema: dict | None = None,
+        expected_schema: dict | None = None,
         *,
         allowed_lateness: int = 0,
         on_late: str = "recompute",
@@ -452,6 +458,7 @@ class Node:
             period,
             config,
             schema,
+            expected_schema,
         )
 
         if isinstance(interval_val, str):
@@ -466,6 +473,7 @@ class Node:
         self.tags = validated_tags
         self.config = config or {}
         self.schema = schema or {}
+        self.expected_schema = expected_schema or {}
         self.execute = True
         self.kafka_topic: str | None = None
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
@@ -541,6 +549,25 @@ class Node:
         # Validate parameters (centralized in node_validation for consistency)
         from .node_validation import validate_feed_params
         validate_feed_params(upstream_id, interval, timestamp, on_missing)
+
+        # Optional DataFrame schema validation
+        mode = getattr(self, "_schema_enforcement", "fail").lower()
+        if (
+            self.expected_schema
+            and pd is not None
+            and isinstance(payload, pd.DataFrame)
+            and mode != "off"
+        ):
+            from .schema_validation import validate_schema
+
+            try:
+                validate_schema(payload, self.expected_schema)
+            except NodeValidationError as e:
+                msg = f"{self.name or self.node_id}: {e}"
+                if mode == "warn":
+                    logger.warning(msg)
+                elif mode == "fail":
+                    raise NodeValidationError(msg) from e
         
         with tracer.start_as_current_span(
             "node.feed", attributes={"node.id": self.node_id}
@@ -613,6 +640,7 @@ class Node:
             "code_hash": self.code_hash,
             "schema_hash": self.schema_hash,
             "pre_warmup": self.pre_warmup,
+            "expected_schema": self.expected_schema,
         }
 
 

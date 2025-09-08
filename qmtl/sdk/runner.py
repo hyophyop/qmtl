@@ -575,12 +575,15 @@ class Runner:
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
+        schema_enforcement: str = "fail",
     ) -> Strategy:
         """Run a strategy under a given world, following WS decisions/activation.
 
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
+        for n in strategy.nodes:
+            setattr(n, "_schema_enforcement", schema_enforcement)
         try:
             strategy.on_start()
 
@@ -758,6 +761,7 @@ class Runner:
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
+        schema_enforcement: str = "fail",
     ) -> Strategy:
         return asyncio.run(
             Runner.run_async(
@@ -768,17 +772,26 @@ class Runner:
                 offline=offline,
                 history_start=history_start,
                 history_end=history_end,
+                schema_enforcement=schema_enforcement,
             )
         )
 
     @staticmethod
-    def offline(strategy_cls: type[Strategy]) -> Strategy:
+    def offline(
+        strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
+    ) -> Strategy:
         """Execute ``strategy_cls`` locally without Gateway interaction."""
-        return asyncio.run(Runner.offline_async(strategy_cls))
+        return asyncio.run(
+            Runner.offline_async(strategy_cls, schema_enforcement=schema_enforcement)
+        )
 
     @staticmethod
-    async def offline_async(strategy_cls: type[Strategy]) -> Strategy:
+    async def offline_async(
+        strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
+    ) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
+        for n in strategy.nodes:
+            setattr(n, "_schema_enforcement", schema_enforcement)
         tag_service = TagManagerService(None)
         # Use a stable default world id for offline execution so that
         # node IDs match typical offline test runs.
