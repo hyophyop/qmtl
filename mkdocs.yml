@@ -27,6 +27,8 @@ nav:
       - Python Environment: guides/python_environment.md
       - Testing & Pytest: guides/testing.md
       - HTTPX Usage: guides/httpx_usage.md
+      - Node Set Portfolio Scope: guides/nodeset_portfolio_scope.md
+      - Node Set Test Kit: guides/nodeset_testkit.md
       - CCXT Spot Node Set: guides/ccxt_spot_nodeset.md
       - Router/MicroBatch/Test Kit: guides/router_microbatch_testkit.md
   - Operations:
