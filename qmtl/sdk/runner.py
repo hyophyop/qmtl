@@ -55,6 +55,7 @@ class Runner:
     _trade_order_http_url = None
     _trade_order_kafka_topic = None
     _activation_manager: ActivationManager | None = None
+    _enable_trade_submission: bool = True
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
 
@@ -891,6 +892,15 @@ class Runner:
         """Set Kafka topic for trade order submission."""
         cls._trade_order_kafka_topic = topic
 
+    @classmethod
+    def set_enable_trade_submission(cls, enabled: bool) -> None:
+        """Enable/disable trade order submission and pre-trade chain.
+
+        When disabled, Runner will not forward publisher outputs to execution
+        services or sinks. This is useful for dry runs and tests.
+        """
+        cls._enable_trade_submission = bool(enabled)
+
     @staticmethod
     def _handle_alpha_performance(result: dict) -> None:
         """Handle alpha performance metrics."""
@@ -972,7 +982,7 @@ class Runner:
             Runner._handle_alpha_performance(result)
 
         # Check if this is a trade order publisher node
-        if "TradeOrderPublisher" in node_class_name:
+        if "TradeOrderPublisher" in node_class_name and Runner._enable_trade_submission:
             Runner._handle_trade_order(result)
 
     # ----------------------------
