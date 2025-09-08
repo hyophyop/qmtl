@@ -34,6 +34,7 @@ from qmtl.sdk.execution_modeling import (
 )
 from qmtl.sdk.risk_management import RiskManager, PositionInfo
 from qmtl.sdk.timing_controls import TimingController
+from qmtl.sdk import metrics as sdk_metrics
 
 
 class PreTradeGateNode(ProcessingNode):
@@ -251,6 +252,10 @@ class PortfolioNode(ProcessingNode):
         if not data:
             return None
         _, fill = data[-1]
+        try:
+            sdk_metrics.record_fill_ingested()
+        except Exception:
+            pass
         symbol = fill["symbol"]
         qty = float(fill["quantity"])
         price = float(fill.get("fill_price", fill.get("price", 0.0)))
