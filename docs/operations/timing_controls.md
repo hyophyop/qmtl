@@ -17,13 +17,16 @@ This document outlines the timing utilities available in QMTL for managing marke
 
 ```python
 from qmtl.sdk.timing_controls import MarketHours, MarketSession
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 
 hours = MarketHours(
     pre_market_start=time(4, 0),
     regular_start=time(9, 30),
     regular_end=time(16, 0),
-    post_market_end=time(20, 0)
+    post_market_end=time(20, 0),
+    lunch_start=time(11, 30),
+    lunch_end=time(12, 30),
+    early_closes={date(2024, 12, 24): time(13, 0)},
 )
 
 # Wednesday 10:00 AM UTC
@@ -31,6 +34,10 @@ ts = datetime(2024, 1, 3, 10, 0, tzinfo=timezone.utc)
 session = hours.get_session(ts)
 assert session is MarketSession.REGULAR
 ```
+
+Lunch breaks and one-off early closes can be configured using `lunch_start`,
+`lunch_end`, and the `early_closes` mapping. See [Exchange Calendars](exchange_calendars.md)
+for example hours across major markets.
 
 ## TimingController
 
