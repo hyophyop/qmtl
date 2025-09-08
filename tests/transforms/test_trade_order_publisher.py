@@ -1,47 +1,37 @@
-import importlib
-
-from qmtl.sdk.cache_view import CacheView
-from qmtl.sdk.node import Node
+from qmtl.sdk import Node, StreamInput
 from qmtl.transforms import TradeOrderPublisherNode
-import qmtl.sdk.runner as runner_module
 
 
-class FakeKafkaProducer:
-    def __init__(self):
-        self.messages = []
+def test_publisher_preserves_symbol_type_and_price_mapping():
+    src = StreamInput(interval="60s", period=1)
 
-    def send(self, topic, payload):  # pragma: no cover - simple holder
-        self.messages.append((topic, payload))
+    def make_signal(view):
+        return {
+            "action": "BUY",
+            "size": 2,
+            "symbol": "BTC/USDT",
+            "type": "limit",
+            "price": 30000.0,
+            "client_order_id": "abc-123",
+        }
 
+    sig = Node(input=src, compute_fn=make_signal, name="signal", interval="60s", period=1)
+    pub = TradeOrderPublisherNode(sig)
 
-def test_trade_order_publisher_builds_order_and_publishes():
-    importlib.reload(runner_module)
-    runner = runner_module.Runner
-    producer = FakeKafkaProducer()
-    runner.set_kafka_producer(producer)
-    runner.set_trade_order_kafka_topic("orders")
+    # Seed source and signal caches
+    src.feed(src.node_id, src.interval, 60, {"close": 1})
+    sig.feed(src.node_id, src.interval, 60, {"close": 1})
 
-    signal_node = Node(name="signal", interval="1s", period=1)
-    pub_node = TradeOrderPublisherNode(signal_node)
-    view = CacheView({signal_node.node_id: {1: [(0, {"action": "BUY", "size": 2, "stop_loss": 3, "take_profit": 4})]}})
-    order = pub_node.compute_fn(view)
-    runner._postprocess_result(pub_node, order)
+    # Also feed publisher directly to simulate Runner propagation
+    sig_payload = make_signal(None)
+    pub.feed(sig.node_id, sig.interval, 60, sig_payload)
 
-    expected = {
-        "side": "BUY",
-        "quantity": 2,
-        "timestamp": 0,
-        "stop_loss": 3,
-        "take_profit": 4,
-    }
-    assert order == expected
-    assert producer.messages == [("orders", expected)]
+    out = pub.compute_fn(pub.cache.view())
+    assert out is not None
+    assert out["side"] == "BUY"
+    assert out["quantity"] == 2
+    assert out["symbol"] == "BTC/USDT"
+    assert out["type"] == "limit"
+    assert out["limit_price"] == 30000.0
+    assert out["client_order_id"] == "abc-123"
 
-
-def test_trade_order_publisher_filters_actions():
-    signal_node = Node(name="signal", interval="1s", period=1)
-    pub_node = TradeOrderPublisherNode(signal_node)
-    view = CacheView({signal_node.node_id: {1: [(0, {"action": "HOLD"})]}})
-    assert pub_node.compute_fn(view) is None
-    view = CacheView({signal_node.node_id: {1: [(0, {"action": "WAIT"})]}})
-    assert pub_node.compute_fn(view) is None

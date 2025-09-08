@@ -37,19 +37,37 @@ async def _close_client() -> None:
 
 
 def _close_client_sync() -> None:
-    """Best-effort close of the global client without leaking event loops."""
+    """Best-effort close of the global client without leaking event loops.
+
+    Avoid implicitly creating an event loop via ``get_event_loop()`` which can
+    trigger ResourceWarning("unclosed event loop") under pytest -W error.
+    """
     try:
-        loop = asyncio.get_event_loop_policy().get_event_loop()
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None:
         if loop.is_running():
-            # Schedule async close and return; avoid creating a new loop
-            loop.create_task(_close_client())
+            try:
+                loop.create_task(_close_client())
+            except Exception:
+                pass
         else:
-            loop.run_until_complete(_close_client())
+            try:
+                loop.run_until_complete(_close_client())
+            except Exception:
+                pass
+        return
+
+    tmp = asyncio.new_event_loop()
+    try:
+        tmp.run_until_complete(_close_client())
     except Exception:
-        # As a last resort, fall back to asyncio.run in environments
-        # where no loop is set; ignore failures during interpreter teardown.
+        pass
+    finally:
         try:
-            asyncio.run(_close_client())
+            tmp.close()
         except Exception:
             pass
 

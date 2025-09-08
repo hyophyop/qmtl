@@ -29,7 +29,17 @@ def publisher_node(signal: Any) -> Any:
 
 
 class TradeOrderPublisherNode(Node):
-    """Convert trade signals into order payloads."""
+    """Convert trade signals into standardized order payloads.
+
+    Forwarded fields (when present):
+    - action → side (BUY/SELL)
+    - size → quantity
+    - symbol
+    - type (e.g., market/limit)
+    - limit_price (or price → limit_price)
+    - stop_loss, take_profit
+    - client_order_id (or newClientOrderId → client_order_id)
+    """
 
     def __init__(
         self,
@@ -59,8 +69,21 @@ class TradeOrderPublisherNode(Node):
             "quantity": signal.get("size", 1.0),
             "timestamp": ts,
         }
+        # Optional fields for richer connectors
+        if "symbol" in signal:
+            order["symbol"] = signal["symbol"]
+        if "type" in signal:
+            order["type"] = signal["type"]
+        if "limit_price" in signal:
+            order["limit_price"] = signal["limit_price"]
+        elif "price" in signal:
+            order["limit_price"] = signal["price"]
         if "stop_loss" in signal:
             order["stop_loss"] = signal["stop_loss"]
         if "take_profit" in signal:
             order["take_profit"] = signal["take_profit"]
+        if "client_order_id" in signal:
+            order["client_order_id"] = signal["client_order_id"]
+        elif "newClientOrderId" in signal:
+            order["client_order_id"] = signal["newClientOrderId"]
         return order
