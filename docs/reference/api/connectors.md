@@ -105,19 +105,27 @@ Runnable demo: `qmtl/examples/brokerage_demo/ccxt_binance_futures_sandbox_demo.p
 ## LiveDataFeed
 
 ```python
-from qmtl.sdk import WebSocketFeed
+from qmtl.sdk import WebSocketFeed, FakeLiveDataFeed
 
 async def on_msg(evt: dict) -> None:
     if evt.get("event") == "queue_update":
         ...
 
+# real WebSocket connection
 feed = WebSocketFeed("wss://gateway/ws", on_message=on_msg, token="<jwt>")
 await feed.start()
 ...
 await feed.stop()
+
+# in‑memory testing/demos
+fake = FakeLiveDataFeed(on_message=on_msg)
+await fake.start()
+await fake.emit({"event": "queue_update"})
+await fake.stop()
 ```
 
 - `WebSocketFeed` wraps SDK’s `WebSocketClient` with reconnection, heartbeat and a simple `start/stop` API.
+- `FakeLiveDataFeed` is an in-memory stub that forwards messages pushed via `emit`.
 - Timeouts/backoffs come from `runtime`: `WS_RECV_TIMEOUT_SECONDS` (30s default) and internal exponential backoff.
 
 ## Configuration (YAML/Env)

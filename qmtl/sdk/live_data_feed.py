@@ -9,6 +9,7 @@ same reconnection and heartbeat behavior.
 """
 
 import asyncio
+import contextlib
 from abc import ABC, abstractmethod
 from typing import Awaitable, Callable, Optional
 
@@ -73,5 +74,48 @@ class WebSocketFeed(LiveDataFeed):
         await self._client.stop()
 
 
-__all__ = ["LiveDataFeed", "WebSocketFeed"]
+class FakeLiveDataFeed(LiveDataFeed):
+    """In-memory live feed for tests and demos.
+
+    Messages pushed via :meth:`emit` are forwarded to ``on_message`` in a
+    background task while the feed is running. Any pending task is cancelled on
+    ``stop``.
+    """
+
+    def __init__(
+        self,
+        *,
+        on_message: Optional[Callable[[dict], Awaitable[None]]] = None,
+    ) -> None:
+        self._on_message = on_message
+        self._queue: asyncio.Queue[dict] = asyncio.Queue()
+        self._task: asyncio.Task | None = None
+        self._stopped = asyncio.Event()
+
+    async def start(self) -> None:
+        self._stopped.clear()
+        if self._on_message is None:
+            return
+
+        async def _worker() -> None:
+            while not self._stopped.is_set():
+                msg = await self._queue.get()
+                await self._on_message(msg)
+
+        self._task = asyncio.create_task(_worker())
+
+    async def stop(self) -> None:
+        self._stopped.set()
+        if self._task:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
+    async def emit(self, message: dict) -> None:
+        """Queue a message to deliver to ``on_message``."""
+        await self._queue.put(message)
+
+
+__all__ = ["LiveDataFeed", "WebSocketFeed", "FakeLiveDataFeed"]
 

@@ -45,7 +45,7 @@ from .brokerage_client import (
     CcxtBrokerageClient,
     FuturesCcxtBrokerageClient,
 )
-from .live_data_feed import LiveDataFeed, WebSocketFeed
+from .live_data_feed import LiveDataFeed, WebSocketFeed, FakeLiveDataFeed
 from .portfolio import (
     Portfolio,
     Position,
@@ -85,6 +85,7 @@ __all__ = [
     "FuturesCcxtBrokerageClient",
     "LiveDataFeed",
     "WebSocketFeed",
+    "FakeLiveDataFeed",
     "Portfolio",
     "Position",
     "order_value",

@@ -66,3 +66,4 @@ async def test_world_isolation(monkeypatch):
         token = resp.json()["token"]
         claims = validate_event_token(token, cfg)
         assert claims["world_id"] == wid
+    tc.close()
