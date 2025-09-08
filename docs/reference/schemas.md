@@ -19,6 +19,10 @@ last_modified: 2025-08-29
 - WorldNodeRef (WVG): reference/schemas/world_node_ref.schema.json
 - Validation (WVG): reference/schemas/validation.schema.json
 - DecisionEvent (WVG): reference/schemas/decision_event.schema.json
+- OrderPayload: reference/schemas/order_payload.schema.json
+- OrderAck: reference/schemas/order_ack.schema.json
+- ExecutionFillEvent: reference/schemas/execution_fill_event.schema.json
+- PortfolioSnapshot: reference/schemas/portfolio_snapshot.schema.json
 
 ## Node I/O Schemas
 

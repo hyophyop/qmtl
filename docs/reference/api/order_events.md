@@ -27,7 +27,10 @@ This page standardizes minimal JSON shapes for orders, acks/status, and fills us
 
 Partitioning: Choose keys to keep per‑strategy (or per‑world) order while allowing horizontal scale. Compaction is only for snapshots.
 
-## Schemas (informal)
+## Schemas
+
+Formal JSON Schemas are available in `reference/schemas` and can be
+registered programmatically with `qmtl.schema.register_order_schemas`.
 
 OrderPayload
 ```json
