@@ -47,9 +47,9 @@ class CacheView:
             # Guard against nested CacheView: unwrap to underlying data
             if isinstance(value, CacheView):
                 value = object.__getattribute__(value, "_data")
-            # If the leaf is a Sequence (our typical cache leaf: list[(ts, v)]),
-            # wrap it in a CacheView so callers can use `.latest()` while still
-            # supporting index access (e.g., `[-1]`).
+            # If the leaf is a Sequence (typical cache leaf: list[(ts, v)]),
+            # wrap it so callers can use `.latest()` while still supporting
+            # index access (e.g., `[-1]`).
             if isinstance(value, Sequence):
                 return CacheView(
                     value,
@@ -57,7 +57,7 @@ class CacheView:
                     access_log=self._access_log,
                     path=new_path,
                 )
-            # Otherwise, wrap mappings to allow further navigation; return scalars directly.
+            # Wrap mappings to allow further navigation; return scalars directly.
             if isinstance(value, Mapping):
                 return CacheView(
                     value,

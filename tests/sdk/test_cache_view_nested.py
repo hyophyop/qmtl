@@ -6,9 +6,8 @@ from qmtl.sdk.cache_view import CacheView
 def test_attr_access_for_mapping_key():
     data = {"foo": {1: [(0, "x")]}}
     view = CacheView(data)
-    # Attribute maps to key lookup; nested index resolves to tuple
-    last = view.foo[1][-1]
-    assert last == (0, "x")
+    # Attribute maps to key lookup; leaf supports .latest()
+    assert view.foo[1].latest() == (0, "x")
 
 
 def test_nested_cacheview_is_unwrapped():
