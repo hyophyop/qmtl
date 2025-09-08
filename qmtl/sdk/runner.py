@@ -314,7 +314,7 @@ class Runner:
                 with tracer.start_as_current_span(
                     "node.process", attributes={"node.id": node.node_id}
                 ):
-                    if Runner._ray_available and ray is not None:
+                    if Runner._ray_available and not runtime.NO_RAY and ray is not None:
                         Runner._execute_compute_fn(node.compute_fn, node.cache.view())
                     else:
                         result = node.compute_fn(node.cache.view())
