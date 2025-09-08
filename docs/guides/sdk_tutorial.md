@@ -7,6 +7,14 @@ last_modified: 2025-08-24
 
 {{ nav_links() }}
 
+# **러닝 경로 요약**
+
+1. [MVP 전략 예제](../../qmtl/examples/templates/single_indicator.py)
+   - `qmtl init --path mvp --strategy single_indicator --with-sample-data`
+   - `uv run python strategy.py` 실행 후 `uv run qmtl report run.log`로 리포트 생성
+2. [전략 템플릿 모음](../reference/templates.md)
+3. [아키텍처 상세](../architecture/architecture.md)
+
 # SDK 사용 가이드
 
 본 문서는 QMTL SDK를 이용해 전략을 구현하고 실행하는 기본 절차를 소개합니다. 보다 상세한 아키텍처 설명과 예시는 [architecture.md](../architecture/architecture.md)와 `qmtl/examples/` 디렉터리를 참고하세요.

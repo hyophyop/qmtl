@@ -233,6 +233,34 @@ class TestRiskManager:
         assert concentration_violations[0].symbol == "AAPL"
         assert concentration_violations[0].current_value == 0.30  # 30%
         assert concentration_violations[0].limit_value == 0.20   # 20%
+
+    def test_validate_world_risk_concentration_violation(self):
+        """Test world-scoped risk evaluation across strategies."""
+        risk_manager = RiskManager(max_concentration_pct=0.40)
+
+        strat_a_positions = {
+            "AAPL": PositionInfo("AAPL", 100, 10000, 0, 100, 100),
+        }
+        strat_b_positions = {
+            "AAPL": PositionInfo("AAPL", 100, 10000, 0, 100, 100),
+        }
+
+        # Each strategy individually holds 100% AAPL exposure on a $10k portfolio.
+        # Combined world exposure remains 100% of the $20k aggregate, breaching the 40% limit.
+        violations = risk_manager.validate_world_risk(
+            strategies=[
+                (10000, strat_a_positions),
+                (10000, strat_b_positions),
+            ],
+            timestamp=0,
+        )
+
+        concentration_violations = [
+            v for v in violations if v.violation_type == RiskViolationType.CONCENTRATION_LIMIT
+        ]
+        assert concentration_violations
+        assert concentration_violations[0].current_value == 1.0
+        assert concentration_violations[0].limit_value == 0.40
     
     def test_validate_portfolio_risk_drawdown_violation(self):
         """Test portfolio risk validation with drawdown violation."""
