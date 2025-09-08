@@ -1,4 +1,9 @@
-"""Example strategy demonstrating order publication pipeline."""
+"""Example strategy demonstrating order publication pipeline.
+
+This example explicitly shows a fan-in (multi-upstream) node: a node that reads
+from two upstreams at once. We combine the alpha history with the raw price
+stream to gate long signals when the short-term price trend is down.
+"""
 
 from qmtl.sdk import Strategy, StreamInput, Node, Runner, TradeExecutionService
 from qmtl.transforms import (
@@ -25,8 +30,36 @@ class OrderPipelineStrategy(Strategy):
 
         alpha = Node(input=price, compute_fn=compute_alpha, name="alpha")
         history = alpha_history_node(alpha, window=30)
+
+        # Fan-in example: combine two upstream nodes [history, price]
+        # to gate long signals when short-term price momentum is negative.
+        def alpha_with_trend_gate(view):
+            hist_data = view[history][history.interval]
+            price_data = view[price][price.interval]
+            if not hist_data or not price_data:
+                return None
+            # Latest alpha history window produced upstream (list[float])
+            hist_series = hist_data[-1][1]
+            # Simple 2-sample momentum on close price
+            closes = [row[1]["close"] for row in price_data]
+            if len(closes) < 2:
+                return hist_series
+            trend_up = closes[-1] >= closes[-2]
+            if trend_up:
+                return hist_series
+            # Gate: zero-out positive alpha entries when trend is down
+            return [v if v <= 0.0 else 0.0 for v in hist_series]
+
+        combined = Node(
+            input=[history, price],  # multiple upstreams (fan-in)
+            compute_fn=alpha_with_trend_gate,
+            name="alpha_with_trend_gate",
+            interval=history.interval,
+            period=history.period,
+        )
+
         signal = TradeSignalGeneratorNode(
-            history, long_threshold=0.0, short_threshold=0.0
+            combined, long_threshold=0.0, short_threshold=0.0
         )
         orders = TradeOrderPublisherNode(signal)
 
@@ -37,7 +70,7 @@ class OrderPipelineStrategy(Strategy):
 
         routed = RouterNode(orders, route_fn=route_fn)
         batches = MicroBatchNode(routed)
-        self.add_nodes([price, alpha, history, signal, orders, routed, batches])
+        self.add_nodes([price, alpha, history, combined, signal, orders, routed, batches])
 
 
 if __name__ == "__main__":
