@@ -193,3 +193,26 @@ def test_cli_queue_stats_grpc_error(monkeypatch, capsys):
         main(["queue-stats"])
     err = capsys.readouterr().err
     assert "gRPC error" in err
+
+
+def test_cli_snapshot_freeze_and_verify(tmp_path, capsys):
+    dag = {"nodes": [{"node_id": "n1", "code_hash": "c", "schema_hash": "s"}]}
+    dag_path = tmp_path / "dag.json"
+    dag_path.write_text(json.dumps(dag))
+    snap_path = tmp_path / "snap.json"
+    main(["snapshot", "--file", str(dag_path), "--freeze", "--snapshot", str(snap_path)])
+    assert snap_path.exists()
+    main(["snapshot", "--file", str(dag_path), "--verify", "--snapshot", str(snap_path)])
+    out = capsys.readouterr().out
+    assert "Snapshot OK" in out
+
+
+def test_cli_snapshot_verify_fail(tmp_path, capsys):
+    dag_path = tmp_path / "dag.json"
+    dag_path.write_text("{}")
+    snap_path = tmp_path / "snap.json"
+    snap_path.write_text(json.dumps({"dag_hash": "bad", "dag": {}}))
+    with pytest.raises(SystemExit):
+        main(["snapshot", "--file", str(dag_path), "--verify", "--snapshot", str(snap_path)])
+    err = capsys.readouterr().err
+    assert "Snapshot mismatch" in err

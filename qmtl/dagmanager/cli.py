@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import hashlib
 from pathlib import Path
 from typing import Dict, Iterable
 
@@ -144,6 +145,40 @@ async def _cmd_redo_diff(args: argparse.Namespace) -> None:
         await channel.close()
 
 
+def _dag_hash(dag_json: str) -> str:
+    """Return a stable hash for the given DAG JSON string."""
+    try:
+        data = json.loads(dag_json)
+    except json.JSONDecodeError as e:
+        print(f"Invalid DAG JSON: {e}", file=sys.stderr)
+        raise SystemExit(1)
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _cmd_snapshot(args: argparse.Namespace) -> None:
+    dag_text = _read_file(args.file)
+    digest = _dag_hash(dag_text)
+    snap_path = Path(args.snapshot)
+    if args.freeze:
+        snap = {"dag_hash": digest, "dag": json.loads(dag_text)}
+        snap_path.write_text(json.dumps(snap, indent=2, sort_keys=True))
+        print(digest)
+        return
+    if args.verify:
+        try:
+            existing = json.loads(snap_path.read_text())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            print(f"Failed to read snapshot '{snap_path}': {e}", file=sys.stderr)
+            raise SystemExit(1)
+        if existing.get("dag_hash") != digest:
+            print("Snapshot mismatch", file=sys.stderr)
+            raise SystemExit(1)
+        print("Snapshot OK")
+        return
+    print(digest)
+
+
 def _cmd_export_schema(args: argparse.Namespace) -> None:
     driver = connect(args.uri, args.user, args.password)
     try:
@@ -169,6 +204,13 @@ async def _main(argv: list[str] | None = None) -> None:
     p_diff = sub.add_parser("diff", help="Run diff")
     p_diff.add_argument("--file", required=True)
     p_diff.add_argument("--dry_run", action="store_true")
+
+    p_snap = sub.add_parser("snapshot", help="Create or verify DAG snapshot")
+    p_snap.add_argument("--file", required=True)
+    p_snap.add_argument("--snapshot", default="dag.snapshot.json")
+    g = p_snap.add_mutually_exclusive_group()
+    g.add_argument("--freeze", action="store_true", help="Write snapshot file")
+    g.add_argument("--verify", action="store_true", help="Verify against snapshot file")
 
     p_stats = sub.add_parser("queue-stats", help="Get queue statistics")
     p_stats.add_argument("--tag", default="")
@@ -201,6 +243,8 @@ async def _main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "diff":
         await _cmd_diff(args)
+    elif args.cmd == "snapshot":
+        _cmd_snapshot(args)
     elif args.cmd == "queue-stats":
         await _cmd_queue_stats(args)
     elif args.cmd == "gc":
