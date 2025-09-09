@@ -22,6 +22,7 @@ from .models import EventSubscribeRequest, EventSubscribeResponse
 from .ws import WebSocketHub
 from .event_models import (
     QueueUpdateData,
+    TagQueryUpsertData,
     SentinelWeightData,
     ActivationUpdatedData,
     PolicyUpdatedData,
@@ -318,6 +319,7 @@ def create_event_router(
     async def events_schema() -> dict[str, Any]:
         """Return JSON Schemas for WS event payloads."""
         return {
+            "tagquery.upsert": CloudEvent[TagQueryUpsertData].model_json_schema(),
             "queue_update": CloudEvent[QueueUpdateData].model_json_schema(),
             "sentinel_weight": CloudEvent[SentinelWeightData].model_json_schema(),
             "activation_updated": CloudEvent[ActivationUpdatedData].model_json_schema(),

@@ -22,6 +22,12 @@ class QueueUpdateData(BaseModel):
     world_id: Optional[StrictStr] = None
 
 
+class TagQueryUpsertData(BaseModel):
+    tags: List[StrictStr]
+    interval: StrictInt
+    queues: List[QueueRef]
+
+
 class SentinelWeightData(BaseModel):
     sentinel_id: StrictStr
     weight: StrictFloat
@@ -69,6 +75,7 @@ class CloudEvent(BaseModel, Generic[T]):
 __all__ = [
     "QueueRef",
     "QueueUpdateData",
+    "TagQueryUpsertData",
     "SentinelWeightData",
     "ActivationUpdatedData",
     "PolicyUpdatedData",
