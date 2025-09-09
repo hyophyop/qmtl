@@ -30,6 +30,9 @@ class ActivationState:
     long: SideState = field(default_factory=SideState)
     short: SideState = field(default_factory=SideState)
     etag: Optional[str] = None
+    run_id: Optional[str] = None
+    ts: Optional[str] = None
+    state_hash: Optional[str] = None
     effective_mode: Optional[str] = None
     stale: bool = True
 
@@ -106,6 +109,9 @@ class ActivationManager:
             drain = bool(payload.get("drain", False))
             eff_mode = payload.get("effective_mode")
             self.state.etag = payload.get("etag") or self.state.etag
+            self.state.run_id = payload.get("run_id") or self.state.run_id
+            self.state.ts = payload.get("ts") or self.state.ts
+            self.state.state_hash = payload.get("state_hash") or self.state.state_hash
             ver = payload.get("version")
             if ver is not None:
                 try:

@@ -4,6 +4,7 @@ from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException, Response
 import json
+from datetime import datetime, timezone
 try:
     from blake3 import blake3 as _blake3
 except Exception:  # pragma: no cover - fallback
@@ -141,9 +142,25 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
     @app.put('/worlds/{world_id}/activation', response_model=ActivationResponse)
     async def put_activation(world_id: str, payload: ActivationRequest) -> ActivationResponse:
         version = await store.update_activation(world_id, {payload.side: {'active': payload.active}})
-        if bus:
-            await bus.publish_activation_update(world_id, {'side': payload.side, 'active': payload.active}, version=version)
         data = await store.get_activation(world_id)
+        if bus:
+            # Compute state hash similar to the `/state_hash` endpoint
+            state_payload = json.dumps(data, sort_keys=True).encode()
+            if _blake3 is not None:
+                state_hash = 'blake3:' + _blake3(state_payload).hexdigest()
+            else:  # pragma: no cover - fallback
+                import hashlib as _hashlib
+                state_hash = 'sha256:' + _hashlib.sha256(state_payload).hexdigest()
+            ts = datetime.now(timezone.utc).isoformat()
+            await bus.publish_activation_update(
+                world_id,
+                etag=str(version),
+                run_id="",
+                ts=ts,
+                state_hash=state_hash,
+                payload={"side": payload.side, "active": payload.active, "version": version},
+                version=version,
+            )
         return ActivationResponse(version=version, state=data.get('state'))
 
     @app.post('/worlds/{world_id}/evaluate', response_model=ApplyResponse)
@@ -165,7 +182,23 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         await store.set_decisions(world_id, active)
         version = await store.default_policy_version(world_id)
         if bus:
-            await bus.publish_policy_update(world_id, active, version=version)
+            # Hash the active strategy list for a checksum
+            sorted_active = sorted(active)
+            digest_payload = json.dumps(sorted_active).encode()
+            if _blake3 is not None:
+                checksum = 'blake3:' + _blake3(digest_payload).hexdigest()
+            else:  # pragma: no cover - fallback
+                import hashlib as _hashlib
+                checksum = 'sha256:' + _hashlib.sha256(digest_payload).hexdigest()
+            ts = datetime.now(timezone.utc).isoformat()
+            await bus.publish_policy_update(
+                world_id,
+                policy_version=version,
+                checksum=checksum,
+                status="ACTIVE",
+                ts=ts,
+                version=version,
+            )
         return ApplyResponse(active=active)
 
     @app.get('/worlds/{world_id}/{topic}/state_hash')

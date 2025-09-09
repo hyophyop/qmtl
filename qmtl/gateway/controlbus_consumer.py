@@ -159,18 +159,25 @@ class ControlBusConsumer:
     def _parse_kafka_message(self, message: Any) -> ControlBusMessage:
         key = message.key.decode() if message.key else ""
         headers = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in (message.headers or [])}
-        etag = headers.get("etag", "")
-        run_id = headers.get("run_id", "")
-        data: dict[str, Any]
         content_type = headers.get("content_type")
+        data: dict[str, Any]
         if content_type == PROTO_CONTENT_TYPE:
             # Placeholder proto path: decode via helper (still JSON today)
-            data = decode_cb(message.value if isinstance(message.value, (bytes, bytearray)) else str(message.value).encode())
+            event = decode_cb(
+                message.value if isinstance(message.value, (bytes, bytearray)) else str(message.value).encode()
+            )
         else:
             try:
-                data = json.loads(message.value.decode()) if isinstance(message.value, (bytes, bytearray)) else json.loads(message.value)
+                event = (
+                    json.loads(message.value.decode())
+                    if isinstance(message.value, (bytes, bytearray))
+                    else json.loads(message.value)
+                )
             except Exception:  # pragma: no cover - malformed message
-                data = {}
+                event = {}
+        data = event.get("data", {}) if isinstance(event, dict) else {}
+        etag = data.get("etag", "")
+        run_id = data.get("run_id", "")
         timestamp_ms = getattr(message, "timestamp", None)
         return ControlBusMessage(
             topic=message.topic,
@@ -183,7 +190,10 @@ class ControlBusConsumer:
 
     async def _handle_message(self, msg: ControlBusMessage) -> None:
         key = (msg.topic, msg.key)
-        marker = (msg.etag, msg.run_id)
+        if msg.topic == "policy":
+            marker = (msg.data.get("checksum"), msg.data.get("policy_version"))
+        else:
+            marker = (msg.etag, msg.run_id)
         if self._last_seen.get(key) == marker:
             gw_metrics.record_event_dropped(msg.topic)
             return

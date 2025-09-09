@@ -57,7 +57,9 @@ class PolicyUpdatedData(BaseModel):
     version: StrictInt
     world_id: StrictStr
     policy_version: Optional[StrictInt] = None
-    state_hash: Optional[StrictStr] = None
+    checksum: Optional[StrictStr] = None
+    status: Optional[StrictStr] = None
+    ts: Optional[StrictStr] = None
 
 
 T = TypeVar("T", bound=BaseModel)
