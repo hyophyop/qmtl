@@ -629,24 +629,27 @@ def create_api_router(
             ).inc()
             raise HTTPException(status_code=400, detail={"code": "E_MISSING_IDS"})
 
-        # CloudEvents envelope support: unwrap data and capture CE metadata
+        # Require CloudEvents 1.0 envelope; reject bare JSON
+        if not (isinstance(payload, dict) and payload.get("specversion") and isinstance(payload.get("data"), dict)):
+            gw_metrics.fills_rejected_total.labels(
+                world_id=world_id, strategy_id=strategy_id, reason="ce_required"
+            ).inc()
+            raise HTTPException(status_code=400, detail={"code": "E_CE_REQUIRED", "message": "CloudEvents 1.0 envelope required with 'data' object"})
+        data_obj = payload.get("data")
+        # Collect standard CE headers for Kafka
         ce_headers: list[tuple[str, bytes]] = []
-        if isinstance(payload, dict) and payload.get("specversion") and payload.get("data"):
-            data_obj = payload.get("data")
-            # Collect standard CE headers for Kafka
-            for hk, rk in (
-                ("ce_id", "id"),
-                ("ce_type", "type"),
-                ("ce_source", "source"),
-                ("ce_time", "time"),
-            ):
-                val = payload.get(rk)
-                if isinstance(val, str):
-                    ce_headers.append((hk, val.encode()))
-            payload = data_obj
+        for hk, rk in (
+            ("ce_id", "id"),
+            ("ce_type", "type"),
+            ("ce_source", "source"),
+            ("ce_time", "time"),
+        ):
+            val = payload.get(rk)
+            if isinstance(val, str):
+                ce_headers.append((hk, val.encode()))
 
         try:
-            event = ExecutionFillEvent.model_validate(payload)
+            event = ExecutionFillEvent.model_validate(data_obj)
         except ValidationError as e:
             gw_metrics.fills_rejected_total.labels(
                 world_id=world_id, strategy_id=strategy_id, reason="schema"

@@ -59,12 +59,19 @@ async def test_fills_webhook_produces_kafka(fake_redis):
     }
     token = sign_event_token(claims, cfg)
     payload = {
-        "order_id": "exch-7890",
-        "symbol": "BTC/USDT",
-        "side": "BUY",
-        "quantity": 1.0,
-        "price": 100.0,
-        "extra": "drop-me",
+        "specversion": "1.0",
+        "id": "evt-1",
+        "type": "trade.fill",
+        "source": "test://fills",
+        "time": "2025-01-01T00:00:00Z",
+        "data": {
+            "order_id": "exch-7890",
+            "symbol": "BTC/USDT",
+            "side": "BUY",
+            "quantity": 1.0,
+            "price": 100.0,
+            "extra": "drop-me",
+        },
     }
     async with httpx.ASGITransport(app=app) as transport:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
