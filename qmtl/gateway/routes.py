@@ -127,10 +127,26 @@ def create_api_router(
             legacy = compute_legacy_node_id(
                 *required, payload.world_id or ""
             )
-            if node.get("node_id") not in {expected, legacy}:
+            nid = node.get("node_id")
+            if nid not in {expected, legacy}:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
                 )
+            elif nid == legacy and nid != expected:
+                # Legacy acceptance path: increment a deprecation counter and log once per request
+                try:
+                    gw_metrics.node_id_legacy_accept_total.inc()
+                    # keep a concise log to aid migration tracking
+                    logger.warning(
+                        "legacy_nodeid_accepted",
+                        extra={
+                            "event": "legacy_nodeid_accepted",
+                            "index": idx,
+                            "node_type": node.get("node_type"),
+                        },
+                    )
+                except Exception:
+                    pass
         if mismatches:
             raise HTTPException(
                 status_code=400,

@@ -50,6 +50,13 @@ commit_invalid_total = Counter(
     registry=global_registry,
 )
 
+# Legacy NodeID acceptance counter (temporary during migration)
+node_id_legacy_accept_total = Counter(
+    "node_id_legacy_accept_total",
+    "Number of times a legacy world-coupled NodeID was accepted",
+    registry=global_registry,
+)
+
 owner_reassign_total = Counter(
     "owner_reassign_total",
     "Total number of lease owner changes mid-bucket",
