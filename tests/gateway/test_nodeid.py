@@ -5,7 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from qmtl.common import (
-    compute_legacy_node_id,
     compute_node_id,
     crc32_of_list,
 )
@@ -71,25 +70,26 @@ async def test_node_id_mismatch(client_and_redis):
 
 
 @pytest.mark.asyncio
-async def test_legacy_node_id_accepted(client_and_redis):
+async def test_legacy_node_id_rejected(client_and_redis):
     client, _ = client_and_redis
-    legacy_id = compute_legacy_node_id("N", "c", "cfg", "s", "w1")
+    # Manually craft a world-coupled legacy-like id (not using helper)
+    legacy_like = "legacy:world"
     node = {
         "node_type": "N",
         "code_hash": "c",
         "config_hash": "cfg",
         "schema_hash": "s",
-        "node_id": legacy_id,
+        "node_id": legacy_like,
     }
     dag = {"nodes": [node]}
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
         world_id="w1",
-        node_ids_crc32=crc32_of_list([legacy_id]),
+        node_ids_crc32=crc32_of_list([legacy_like]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
-    assert resp.status_code == 202
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
