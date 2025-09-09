@@ -75,8 +75,9 @@ async def test_activation_etag_cache(fake_redis):
     )
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-            r1 = await api_client.get("/worlds/abc/activation")
-            r2 = await api_client.get("/worlds/abc/activation")
+            params = {"strategy_id": "s", "side": "long"}
+            r1 = await api_client.get("/worlds/abc/activation", params=params)
+            r2 = await api_client.get("/worlds/abc/activation", params=params)
     await client._client.aclose()
     assert r1.json() == {"a": 1}
     assert r2.json() == {"a": 1}
@@ -165,8 +166,9 @@ async def test_activation_stale_on_backend_error(fake_redis):
     )
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
-            r1 = await api_client.get("/worlds/abc/activation")
-            r2 = await api_client.get("/worlds/abc/activation")
+            params = {"strategy_id": "s", "side": "long"}
+            r1 = await api_client.get("/worlds/abc/activation", params=params)
+            r2 = await api_client.get("/worlds/abc/activation", params=params)
     await client._client.aclose()
     assert r1.json() == {"a": 1}
     assert r2.json() == {"a": 1}
@@ -195,7 +197,7 @@ async def test_activation_backend_error_no_cache(fake_redis):
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
             with pytest.raises(httpx.HTTPStatusError):
-                await api_client.get("/worlds/abc/activation")
+                await api_client.get("/worlds/abc/activation", params={"strategy_id": "s", "side": "long"})
     await client._client.aclose()
     assert metrics.worlds_stale_responses_total._value.get() == 0
 
@@ -326,7 +328,7 @@ async def test_state_hash_probe_divergence(fake_redis):
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
             # initial full snapshot
-            await api_client.get("/worlds/abc/activation")
+            await api_client.get("/worlds/abc/activation", params={"strategy_id": "s", "side": "long"})
             # unchanged hash
             h1 = await api_client.get("/worlds/abc/activation/state_hash")
             assert h1.json() == {"state_hash": "h1"}
@@ -336,7 +338,7 @@ async def test_state_hash_probe_divergence(fake_redis):
             # divergence
             h3 = await api_client.get("/worlds/abc/activation/state_hash")
             assert h3.json() == {"state_hash": "h2"}
-            await api_client.get("/worlds/abc/activation")
+            await api_client.get("/worlds/abc/activation", params={"strategy_id": "s", "side": "long"})
     await client._client.aclose()
     assert calls["snap"] == 2
 

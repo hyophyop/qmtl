@@ -440,7 +440,7 @@ def create_api_router(
     @router.delete(
         "/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
     )
-    async def delete_world(world_id: str, request: Request) -> Any:
+    async def delete_world(world_id: str, request: Request) -> Response:
         client: WorldServiceClient | None = world_client
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
@@ -538,7 +538,9 @@ def create_api_router(
         if client is None:
             raise HTTPException(status_code=503, detail="world service disabled")
         headers, cid = _build_world_headers(request)
-        data, stale = await client.get_activation(world_id, headers=headers)
+        strategy_id = request.query_params.get("strategy_id", "")
+        side = request.query_params.get("side", "")
+        data, stale = await client.get_activation(world_id, strategy_id, side, headers=headers)
         resp_headers = {"X-Correlation-ID": cid}
         if stale:
             resp_headers["Warning"] = "110 - Response is stale"

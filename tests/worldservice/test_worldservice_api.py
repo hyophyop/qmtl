@@ -80,9 +80,18 @@ async def test_world_crud_policy_apply_and_events():
             r = await client.post("/worlds/w1/apply", json=payload)
             assert r.json() == {"active": ["s1"]}
 
+            # Decision envelope
+            d = await client.get("/worlds/w1/decide")
+            assert d.json()["ttl"] == "300s"
+
             # Activation update
-            r = await client.put("/worlds/w1/activation", json={"side": "long", "active": True})
-            assert r.json()["version"] == 1
+            payload_act = {"strategy_id": "s1", "side": "long", "active": True, "weight": 1.0}
+            r = await client.put("/worlds/w1/activation", json=payload_act)
+            assert r.json()["active"] is True
+
+            # Read back activation
+            r = await client.get("/worlds/w1/activation", params={"strategy_id": "s1", "side": "long"})
+            assert r.json()["active"] is True
 
             # Audit log contains entries
             audit = await client.get("/worlds/w1/audit")
