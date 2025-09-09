@@ -83,9 +83,9 @@ async def test_consumer_relays_and_deduplicates():
     )
     await consumer.start()
     ts = time.time() * 1000
-    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
-    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
-    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2}, timestamp_ms=ts)
+    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": 1}, timestamp_ms=ts)
+    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": 1}, timestamp_ms=ts)
+    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2, "version": 1}, timestamp_ms=ts)
     msg3 = ControlBusMessage(
         topic="queue",
         key="t",
@@ -96,6 +96,7 @@ async def test_consumer_relays_and_deduplicates():
             "interval": 60,
             "queues": [{"queue": "q", "global": False}],
             "match_mode": "any",
+            "version": 1,
         },
         timestamp_ms=ts,
     )
@@ -106,8 +107,8 @@ async def test_consumer_relays_and_deduplicates():
     await consumer._queue.join()
     await consumer.stop()
     assert hub.events == [
-        ("activation_updated", {"id": 1}),
-        ("policy_updated", {"id": 2}),
+        ("activation_updated", {"id": 1, "version": 1}),
+        ("policy_updated", {"id": 2, "version": 1}),
         (
             "queue_update",
             {
@@ -115,11 +116,17 @@ async def test_consumer_relays_and_deduplicates():
                 "interval": 60,
                 "queues": [{"queue": "q", "global": False}],
                 "match_mode": MatchMode.ANY,
+                "version": 1,
             },
         ),
         (
             "tagquery.upsert",
-            {"tags": ["x"], "interval": 60, "queues": [{"queue": "q", "global": False}]},
+            {
+                "tags": ["x"],
+                "interval": 60,
+                "queues": [{"queue": "q", "global": False}],
+                "version": 1,
+            },
         ),
     ]
     assert metrics.event_relay_events_total.labels(topic="activation")._value.get() == 1

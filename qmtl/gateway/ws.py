@@ -341,7 +341,7 @@ class WebSocketHub:
         event = format_event(
             "qmtl.gateway",
             "progress",
-            {"strategy_id": strategy_id, "status": status},
+            {"strategy_id": strategy_id, "status": status, "version": 1},
         )
         await self.broadcast(event)
 
@@ -351,7 +351,7 @@ class WebSocketHub:
         event = format_event(
             "qmtl.gateway",
             "queue_map",
-            {"strategy_id": strategy_id, "queue_map": queue_map},
+            {"strategy_id": strategy_id, "queue_map": queue_map, "version": 1},
         )
         await self.broadcast(event)
 
@@ -376,6 +376,7 @@ class WebSocketHub:
                 "queues": queues,
                 "match_mode": match_mode.value,
                 **({"world_id": world_id} if world_id else {}),
+                "version": 1,
             },
         )
         await self.broadcast(event, topic="queue")
@@ -387,7 +388,7 @@ class WebSocketHub:
         event = format_event(
             "qmtl.gateway",
             "tagquery.upsert",
-            {"tags": tags, "interval": interval, "queues": queues},
+            {"tags": tags, "interval": interval, "queues": queues, "version": 1},
         )
         await self.broadcast(event, topic="queue")
 
@@ -396,17 +397,19 @@ class WebSocketHub:
         event = format_event(
             "qmtl.gateway",
             "sentinel_weight",
-            {"sentinel_id": sentinel_id, "weight": weight},
+            {"sentinel_id": sentinel_id, "weight": weight, "version": 1},
         )
         await self.broadcast(event, topic="activation")
 
     async def send_activation_updated(self, payload: dict) -> None:
         """Broadcast activation updates."""
+        payload.setdefault("version", 1)
         event = format_event("qmtl.gateway", "activation_updated", payload)
         await self.broadcast(event, topic="activation")
 
     async def send_policy_updated(self, payload: dict) -> None:
         """Broadcast policy updates."""
+        payload.setdefault("version", 1)
         event = format_event("qmtl.gateway", "policy_updated", payload)
         await self.broadcast(event, topic="policy")
 

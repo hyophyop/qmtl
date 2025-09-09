@@ -139,6 +139,7 @@ def create_event_router(
                                     "interval": interval_int,
                                     "queues": queues,
                                     "match_mode": mode.value,
+                                    "version": 1,
                                 },
                             )
                             await websocket.send_text(json.dumps(event))
@@ -147,6 +148,8 @@ def create_event_router(
                     if "activation" in topics_set:
                         try:
                             act_data, _ = await world_client.get_activation(world_id)
+                            if isinstance(act_data, dict):
+                                act_data.setdefault("version", 1)
                             event = format_event(
                                 "qmtl.gateway", "activation_updated", act_data
                             )
@@ -161,6 +164,7 @@ def create_event_router(
                             payload = {"world_id": world_id}
                             if isinstance(hash_data, dict):
                                 payload.update(hash_data)
+                            payload["version"] = 1
                             event = format_event(
                                 "qmtl.gateway", "policy_state_hash", payload
                             )

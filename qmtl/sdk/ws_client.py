@@ -56,6 +56,11 @@ class WebSocketClient:
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        if event != "ack":
+            ver = payload.get("version")
+            if ver != 1:
+                logging.warning("unsupported event version: %s for %s", ver, event)
+                return
         if event == "queue_created":
             qid = payload.get("queue_id")
             topic = payload.get("topic")

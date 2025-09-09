@@ -71,6 +71,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
                     "interval": interval,
                     "queues": queues,
                     "match_mode": match_mode.value,
+                    "version": 1,
                 },
             })
 
@@ -130,6 +131,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
                     "interval": 60,
                     "queues": [{"queue": "q1", "global": False}],
                     "match_mode": "any",
+                    "version": 1,
                 },
             }
         )
