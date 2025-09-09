@@ -13,6 +13,7 @@ def test_nodeset_attach_passes_through():
     # Feed through the chain; each stub passes the payload as-is
     order = {"symbol": "AAPL", "price": 10.0, "quantity": 2.0}
     nodes = list(ns)
+    assert len(nodes) == 8
     # pretrade
     out = Runner.feed_queue_data(nodes[0], signal.node_id, 1, 0, order)
     assert out == order
@@ -22,15 +23,18 @@ def test_nodeset_attach_passes_through():
     # execution
     out = Runner.feed_queue_data(nodes[2], nodes[1].node_id, 1, 0, out)
     assert out == order
-    # fills
+    # order publish
     out = Runner.feed_queue_data(nodes[3], nodes[2].node_id, 1, 0, out)
     assert out == order
-    # portfolio
+    # fills
     out = Runner.feed_queue_data(nodes[4], nodes[3].node_id, 1, 0, out)
     assert out == order
-    # risk
+    # portfolio
     out = Runner.feed_queue_data(nodes[5], nodes[4].node_id, 1, 0, out)
     assert out == order
-    # timing
+    # risk
     out = Runner.feed_queue_data(nodes[6], nodes[5].node_id, 1, 0, out)
+    assert out == order
+    # timing
+    out = Runner.feed_queue_data(nodes[7], nodes[6].node_id, 1, 0, out)
     assert out == order

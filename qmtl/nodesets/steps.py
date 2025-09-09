@@ -4,7 +4,7 @@ from __future__ import annotations
 
 Each step factory returns a callable that takes an upstream Node and returns a
 new Node wired to it. The canonical order is:
-pretrade → sizing → execution → fills → portfolio → risk → timing.
+pretrade → sizing → execution → order_publish → fills → portfolio → risk → timing.
 
 `compose(signal, steps)` applies the provided steps left-to-right and returns a
 NodeSet. Missing trailing steps are filled with defaults; extra steps raise.
@@ -18,6 +18,7 @@ from qmtl.nodesets.stubs import (
     StubPreTradeGateNode,
     StubSizingNode,
     StubExecutionNode,
+    StubOrderPublishNode,
     StubFillIngestNode,
     StubPortfolioNode,
     StubRiskControlNode,
@@ -61,6 +62,27 @@ def execution(*, compute_fn=None, name: str | None = None) -> Step:
     return _mk
 
 
+def order_publish(*, compute_fn=None, name: str | None = None) -> Step:
+    """Order publish step."""
+
+    if compute_fn is None:
+        return lambda upstream: StubOrderPublishNode(upstream, name=name)
+
+    def _mk(upstream: Node) -> Node:
+        def _bound(view):
+            return compute_fn(view, upstream)
+
+        return Node(
+            input=upstream,
+            compute_fn=_bound,
+            name=name or f"{upstream.name}_publish",
+            interval=upstream.interval,
+            period=1,
+        )
+
+    return _mk
+
+
 def fills(*, name: str | None = None) -> Step:
     return lambda upstream: StubFillIngestNode(upstream, name=name)
 
@@ -88,14 +110,15 @@ def compose(
 ) -> NodeSet:
     """Compose a Node Set behind `signal` using the given steps.
 
-    If `steps` is None or shorter than 7, missing trailing steps are filled with
-    defaults in the canonical order. If more than 7 steps are provided, raises.
+    If `steps` is None or shorter than 8, missing trailing steps are filled with
+    defaults in the canonical order. If more than 8 steps are provided, raises.
     """
 
     default_steps: list[Step] = [
         pretrade(),
         sizing(),
         execution(),
+        order_publish(),
         fills(),
         portfolio(),
         risk(),
@@ -103,8 +126,8 @@ def compose(
     ]
 
     steps = list(steps or [])
-    if len(steps) > 7:
-        raise ValueError("compose accepts at most 7 steps (pretrade..timing)")
+    if len(steps) > 8:
+        raise ValueError("compose accepts at most 8 steps (pretrade..timing)")
 
     # Overlay provided steps over defaults by position
     for i, st in enumerate(steps):
@@ -132,6 +155,7 @@ __all__ = [
     "pretrade",
     "sizing",
     "execution",
+    "order_publish",
     "fills",
     "portfolio",
     "risk",

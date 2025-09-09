@@ -10,6 +10,7 @@ from .stubs import (
     StubPreTradeGateNode,
     StubSizingNode,
     StubExecutionNode,
+    StubOrderPublishNode,
     StubFillIngestNode,
     StubPortfolioNode,
     StubRiskControlNode,
@@ -112,6 +113,7 @@ class NodeSetBuilder:
         pretrade: Node | None = None,
         sizing: Node | None = None,
         execution: Node | None = None,
+        order_publish: Node | None = None,
         fills: Node | None = None,
         portfolio: Node | None = None,
         risk: Node | None = None,
@@ -128,12 +130,13 @@ class NodeSetBuilder:
         pre = pretrade or StubPreTradeGateNode(signal)
         siz = sizing or StubSizingNode(pre)
         exe = execution or StubExecutionNode(siz)
-        fil = fills or StubFillIngestNode(exe)
+        pub = order_publish or StubOrderPublishNode(exe)
+        fil = fills or StubFillIngestNode(pub)
         pf = portfolio or StubPortfolioNode(fil)
         rk = risk or StubRiskControlNode(pf)
         tm = timing or StubTimingGateNode(rk)
         return NodeSet(
-            _nodes=(pre, siz, exe, fil, pf, rk, tm),
+            _nodes=(pre, siz, exe, pub, fil, pf, rk, tm),
             name="nodeset",
             modes=("simulate",),
             portfolio_scope=scope,

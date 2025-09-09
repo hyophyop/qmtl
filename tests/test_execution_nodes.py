@@ -8,6 +8,7 @@ from qmtl.pipeline.execution_nodes import (
     PreTradeGateNode,
     SizingNode,
     ExecutionNode,
+    OrderPublishNode,
     PortfolioNode,
     RiskControlNode,
     TimingGateNode,
@@ -100,3 +101,16 @@ def test_timing_gate_node_blocks_closed_market():
     saturday = int(datetime(2024, 1, 6, 15, 0, tzinfo=timezone.utc).timestamp())
     out = Runner.feed_queue_data(node, src.node_id, 1, saturday, order)
     assert out["rejected"]
+
+
+def test_order_publish_node_calls_publisher():
+    src = Node(name="src", interval=1, period=1)
+    calls: list[dict] = []
+
+    def _pub(o):
+        calls.append(o)
+
+    node = OrderPublishNode(src, submit_order=_pub)
+    order = {"symbol": "AAPL", "price": 10.0, "quantity": 1.0}
+    out = Runner.feed_queue_data(node, src.node_id, 1, 0, order)
+    assert out == order and calls == [order]
