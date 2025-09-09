@@ -639,6 +639,22 @@ def create_api_router(
             ).inc()
             raise HTTPException(status_code=400, detail={"code": "E_MISSING_IDS"})
 
+        # CloudEvents envelope support: unwrap data and capture CE metadata
+        ce_headers: list[tuple[str, bytes]] = []
+        if isinstance(payload, dict) and payload.get("specversion") and payload.get("data"):
+            data_obj = payload.get("data")
+            # Collect standard CE headers for Kafka
+            for hk, rk in (
+                ("ce_id", "id"),
+                ("ce_type", "type"),
+                ("ce_source", "source"),
+                ("ce_time", "time"),
+            ):
+                val = payload.get(rk)
+                if isinstance(val, str):
+                    ce_headers.append((hk, val.encode()))
+            payload = data_obj
+
         try:
             event = ExecutionFillEvent.model_validate(payload)
         except ValidationError as e:
@@ -660,6 +676,8 @@ def create_api_router(
         key = f"{world_id}|{strategy_id}|{event.symbol}|{event.order_id}".encode()
         value = json.dumps(clean).encode()
         headers = [("rfp", runtime_fingerprint().encode())]
+        if ce_headers:
+            headers.extend(ce_headers)
         if fill_producer is not None:
             try:
                 await fill_producer.send_and_wait(
@@ -676,6 +694,29 @@ def create_api_router(
             extra={"event": "fill_accepted", "world_id": world_id, "strategy_id": strategy_id},
         )
         return Response(status_code=status.HTTP_202_ACCEPTED)
+
+    @router.get("/fills/replay")
+    async def get_fills_replay(
+        request: Request,
+        start: int | None = None,
+        end: int | None = None,
+        world_id: str | None = None,
+        strategy_id: str | None = None,
+    ) -> Any:
+        """Replay fills for a time window (stub).
+
+        Returns 202 Accepted with a correlation id. Implementations may stream
+        results asynchronously or trigger an offline job.
+        """
+        cid = uuid.uuid4().hex
+        return JSONResponse(
+            {
+                "status": "accepted",
+                "correlation_id": cid,
+                "message": "replay not implemented in this build",
+            },
+            status_code=status.HTTP_202_ACCEPTED,
+        )
 
     @router.get("/metrics")
     async def metrics_endpoint() -> Response:
