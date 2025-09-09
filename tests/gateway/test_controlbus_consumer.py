@@ -1,9 +1,11 @@
 import asyncio
 import time
+from contextlib import asynccontextmanager
 import pytest
+from fastapi import FastAPI
 
 from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
-from qmtl.gateway.api import create_app, Database
+from qmtl.gateway.api import Database
 from qmtl.gateway import metrics
 from qmtl.sdk.node import MatchMode
 
@@ -83,9 +85,25 @@ async def test_consumer_relays_and_deduplicates():
     )
     await consumer.start()
     ts = time.time() * 1000
-    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": 1}, timestamp_ms=ts)
-    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": 1}, timestamp_ms=ts)
-    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2, "version": 1}, timestamp_ms=ts)
+    act_payload = {
+        "id": 1,
+        "version": 1,
+        "etag": "e1",
+        "run_id": "r1",
+        "ts": "2024-01-01T00:00:00Z",
+        "state_hash": "h1",
+    }
+    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data=act_payload, timestamp_ms=ts)
+    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data=act_payload, timestamp_ms=ts)
+    pol_payload = {
+        "id": 2,
+        "version": 1,
+        "policy_version": 1,
+        "checksum": "c1",
+        "status": "ACTIVE",
+        "ts": "2024-01-01T00:00:00Z",
+    }
+    msg2 = ControlBusMessage(topic="policy", key="a", etag="", run_id="", data=pol_payload, timestamp_ms=ts)
     msg3 = ControlBusMessage(
         topic="queue",
         key="t",
@@ -107,8 +125,8 @@ async def test_consumer_relays_and_deduplicates():
     await consumer._queue.join()
     await consumer.stop()
     assert hub.events == [
-        ("activation_updated", {"id": 1, "version": 1}),
-        ("policy_updated", {"id": 2, "version": 1}),
+        ("activation_updated", act_payload),
+        ("policy_updated", pol_payload),
         (
             "queue_update",
             {
@@ -116,7 +134,6 @@ async def test_consumer_relays_and_deduplicates():
                 "interval": 60,
                 "queues": [{"queue": "q", "global": False}],
                 "match_mode": MatchMode.ANY,
-                "version": 1,
             },
         ),
         (
@@ -125,7 +142,6 @@ async def test_consumer_relays_and_deduplicates():
                 "tags": ["x"],
                 "interval": 60,
                 "queues": [{"queue": "q", "global": False}],
-                "version": 1,
             },
         ),
     ]
@@ -150,14 +166,15 @@ class StartStopConsumer(ControlBusConsumer):
 
 @pytest.mark.asyncio
 async def test_app_starts_and_stops_consumer(fake_redis):
-    hub = FakeHub()
     consumer = StartStopConsumer()
-    app = create_app(
-        redis_client=fake_redis,
-        database=DummyDB(),
-        ws_hub=hub,
-        controlbus_consumer=consumer,
-    )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        await consumer.start()
+        yield
+        await consumer.stop()
+
+    app = FastAPI(lifespan=lifespan)
     async with app.router.lifespan_context(app):
         assert consumer.started
     assert consumer.stopped

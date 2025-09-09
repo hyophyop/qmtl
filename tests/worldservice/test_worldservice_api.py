@@ -6,14 +6,58 @@ from qmtl.worldservice.controlbus_producer import ControlBusProducer
 
 
 class DummyBus(ControlBusProducer):
-    def __init__(self):
-        self.events: list[tuple[str, str, int | None, object]] = []
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict]] = []
 
-    async def publish_policy_update(self, world_id: str, strategies: list[str], *, version: int = 1) -> None:  # type: ignore[override]
-        self.events.append(("policy", world_id, version, list(strategies)))
+    async def publish_policy_update(
+        self,
+        world_id: str,
+        policy_version: int,
+        checksum: str,
+        status: str,
+        ts: str,
+        *,
+        version: int = 1,
+    ) -> None:  # type: ignore[override]
+        self.events.append(
+            (
+                "policy",
+                world_id,
+                {
+                    "policy_version": policy_version,
+                    "checksum": checksum,
+                    "status": status,
+                    "ts": ts,
+                    "version": version,
+                },
+            )
+        )
 
-    async def publish_activation_update(self, world_id: str, payload: dict, *, version: int = 1) -> None:  # type: ignore[override]
-        self.events.append(("activation", world_id, version, payload))
+    async def publish_activation_update(
+        self,
+        world_id: str,
+        *,
+        etag: str,
+        run_id: str,
+        ts: str,
+        state_hash: str,
+        payload: dict | None = None,
+        version: int = 1,
+    ) -> None:  # type: ignore[override]
+        self.events.append(
+            (
+                "activation",
+                world_id,
+                {
+                    **(payload or {}),
+                    "etag": etag,
+                    "run_id": run_id,
+                    "ts": ts,
+                    "state_hash": state_hash,
+                    "version": version,
+                },
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -44,5 +88,11 @@ async def test_world_crud_policy_apply_and_events():
             audit = await client.get("/worlds/w1/audit")
             assert any(e["event"] == "activation_updated" for e in audit.json())
 
-    assert ("policy", "w1", 1, ["s1"]) in bus.events
-    assert ("activation", "w1", 1, {"side": "long", "active": True}) in bus.events
+    policy_evt = next(e for e in bus.events if e[0] == "policy")
+    assert policy_evt[1] == "w1"
+    assert policy_evt[2]["policy_version"] == 1
+
+    activation_evt = next(e for e in bus.events if e[0] == "activation")
+    assert activation_evt[1] == "w1"
+    assert activation_evt[2]["side"] == "long"
+    assert activation_evt[2]["active"] is True

@@ -4,6 +4,8 @@ import contextlib
 import json
 from typing import Any, Dict, Iterable
 
+from qmtl.common.cloudevents import format_event
+
 
 class ControlBusProducer:
     """Publish updates to the internal ControlBus."""
@@ -30,29 +32,56 @@ class ControlBusProducer:
             await self._producer.stop()
         self._producer = None
 
-    async def publish_policy_update(self, world_id: str, strategies: Iterable[str], *, version: int = 1) -> None:
+    async def publish_policy_update(
+        self,
+        world_id: str,
+        policy_version: int,
+        checksum: str,
+        status: str,
+        ts: str,
+        *,
+        version: int = 1,
+    ) -> None:
         if self._producer is None:
             return
         payload: Dict[str, Any] = {
-            "type": "PolicyUpdated",
             "world_id": world_id,
-            "strategies": list(strategies),
+            "policy_version": policy_version,
+            "checksum": checksum,
+            "status": status,
+            "ts": ts,
             "version": version,
         }
-        data = json.dumps(payload).encode()
+        event = format_event("qmtl.worldservice", "policy_updated", payload)
+        data = json.dumps(event).encode()
         key = world_id.encode()
         await self._producer.send_and_wait(self.topic, data, key=key)
 
-    async def publish_activation_update(self, world_id: str, payload: Dict[str, Any], *, version: int = 1) -> None:
+    async def publish_activation_update(
+        self,
+        world_id: str,
+        *,
+        etag: str,
+        run_id: str,
+        ts: str,
+        state_hash: str,
+        payload: Dict[str, Any] | None = None,
+        version: int = 1,
+    ) -> None:
         if self._producer is None:
             return
-        evt: Dict[str, Any] = {
-            "type": "ActivationUpdated",
+        body: Dict[str, Any] = {
             "world_id": world_id,
-            **payload,
+            "etag": etag,
+            "run_id": run_id,
+            "ts": ts,
+            "state_hash": state_hash,
             "version": version,
         }
-        data = json.dumps(evt).encode()
+        if payload:
+            body.update(payload)
+        event = format_event("qmtl.worldservice", "activation_updated", body)
+        data = json.dumps(event).encode()
         key = world_id.encode()
         await self._producer.send_and_wait(self.topic, data, key=key)
 
