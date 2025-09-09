@@ -28,9 +28,10 @@ def test_ccxt_nodeset_exec_carries_symbol_and_defaults():
     signal.feed(price.node_id, price.interval, 60, {"close": 1})
 
     # Execute the stubbed chain: pretrade -> sizing -> exec (CCXT)
-    pre = ns.pretrade
-    siz = ns.sizing
-    exe = ns.execution
+    nodes = list(ns)
+    pre = nodes[0]
+    siz = nodes[1]
+    exe = nodes[2]
 
     pre.feed(signal.node_id, signal.interval, 60, make_signal(None))
     pre_out = pre.compute_fn(pre.cache.view())

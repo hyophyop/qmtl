@@ -59,7 +59,7 @@ pf = portfolio()(fil)
 rk = risk()(pf)
 tm = timing()(rk)
 
-nodeset = NodeSet(pretrade=pre, sizing=siz, execution=exe, fills=fil, portfolio=pf, risk=rk, timing=tm)
+nodeset = NodeSet((pre, siz, exe, fil, pf, rk, tm))
 strategy.add_nodes([price, alpha, history, signal_node, quotes, nodeset])
 ```
 
@@ -73,4 +73,3 @@ Note
 The example strategy at
 [`qmtl/examples/strategies/ccxt_spot_nodeset_strategy.py`]({{ code_url('qmtl/examples/strategies/ccxt_spot_nodeset_strategy.py') }})
 shows a complete setup.
-

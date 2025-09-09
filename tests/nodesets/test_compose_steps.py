@@ -7,8 +7,6 @@ def test_compose_default_order_and_props():
     signal = Node(input=price, compute_fn=lambda v: {"action": "HOLD"})
     ns = compose(signal, steps=[pretrade(), sizing(), execution(), fills(), portfolio(), risk(), timing()])
     nodes = list(ns)
-    assert nodes[0] is ns.pretrade
-    assert nodes[-1] is ns.timing
-    assert ns.head is ns.pretrade and ns.tail is ns.timing
+    assert ns.head is nodes[0]
+    assert ns.tail is nodes[-1]
     assert len(nodes) == 7
-

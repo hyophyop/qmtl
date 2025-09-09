@@ -46,8 +46,8 @@ class CcxtSpotAdapter(NodeSetAdapter):
             secret=self.secret,
             time_in_force=self.time_in_force,
             reduce_only=self.reduce_only,
+            descriptor=self.descriptor,
         )
 
 
 __all__ = ["CcxtSpotAdapter"]
-
