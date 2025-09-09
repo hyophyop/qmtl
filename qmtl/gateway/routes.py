@@ -128,6 +128,15 @@ def create_api_router(
                 *required, payload.world_id or ""
             )
             nid = node.get("node_id")
+            # Compute canonical NodeID from NodeSpec for comparison (non-enforcing)
+            try:
+                from qmtl.common.nodespec import canonical_node_id as _canon_id
+
+                canon = _canon_id(node)
+                if isinstance(nid, str) and nid in {expected, legacy} and nid != canon:
+                    gw_metrics.nodeid_canon_mismatch_total.inc()
+            except Exception:
+                pass
             if nid not in {expected, legacy}:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
