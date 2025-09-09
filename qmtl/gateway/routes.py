@@ -100,7 +100,6 @@ def create_api_router(
         from qmtl.common import (
             crc32_of_list,
             compute_node_id,
-            compute_legacy_node_id,
         )
 
         crc = crc32_of_list(n.get("node_id") for n in dag.get("nodes", []))
@@ -124,38 +123,20 @@ def create_api_router(
             if not all(required):
                 continue
             expected = compute_node_id(*required)
-            legacy = compute_legacy_node_id(
-                *required, payload.world_id or ""
-            )
             nid = node.get("node_id")
             # Compute canonical NodeID from NodeSpec for comparison (non-enforcing)
             try:
                 from qmtl.common.nodespec import canonical_node_id as _canon_id
 
                 canon = _canon_id(node)
-                if isinstance(nid, str) and nid in {expected, legacy} and nid != canon:
+                if isinstance(nid, str) and nid == expected and nid != canon:
                     gw_metrics.nodeid_canon_mismatch_total.inc()
             except Exception:
                 pass
-            if nid not in {expected, legacy}:
+            if nid != expected:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
                 )
-            elif nid == legacy and nid != expected:
-                # Legacy acceptance path: increment a deprecation counter and log once per request
-                try:
-                    gw_metrics.node_id_legacy_accept_total.inc()
-                    # keep a concise log to aid migration tracking
-                    logger.warning(
-                        "legacy_nodeid_accepted",
-                        extra={
-                            "event": "legacy_nodeid_accepted",
-                            "index": idx,
-                            "node_type": node.get("node_type"),
-                        },
-                    )
-                except Exception:
-                    pass
         if mismatches:
             raise HTTPException(
                 status_code=400,
@@ -382,7 +363,7 @@ def create_api_router(
     # ControlBus-driven updates; see qmtl.gateway.ws and event handlers.
     @router.get("/queues/by_tag", response_model=QueuesByTagResponse)
     async def queues_by_tag(
-        tags: str, interval: int, match_mode: str = "any", world_id: str = ""
+        tags: str, interval: int, match_mode: str, world_id: str = ""
     ) -> QueuesByTagResponse:
         from qmtl.common.tagquery import split_tags, normalize_match_mode
 
