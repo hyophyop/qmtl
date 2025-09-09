@@ -437,7 +437,9 @@ def create_api_router(
         data = await client.put_world(world_id, payload, headers=headers)
         return JSONResponse(data, headers={"X-Correlation-ID": cid})
 
-    @router.delete("/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete(
+        "/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+    )
     async def delete_world(world_id: str, request: Request) -> Any:
         client: WorldServiceClient | None = world_client
         if client is None:

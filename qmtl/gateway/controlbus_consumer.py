@@ -175,7 +175,14 @@ class ControlBusConsumer:
                 )
             except Exception:  # pragma: no cover - malformed message
                 event = {}
-        data = event.get("data", {}) if isinstance(event, dict) else {}
+        if not isinstance(event, dict):
+            data = {}
+        elif content_type == PROTO_CONTENT_TYPE:
+            # For proto placeholder, keep full event as data for downstream consumers
+            data = event
+        else:
+            # For JSON, prefer nested payload when present; otherwise pass through
+            data = event.get("data", event)
         etag = (data.get("etag") or headers.get("etag") or "")
         run_id = (data.get("run_id") or headers.get("run_id") or "")
         timestamp_ms = getattr(message, "timestamp", None)
