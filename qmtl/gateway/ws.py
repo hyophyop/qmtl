@@ -361,7 +361,10 @@ class WebSocketHub:
         interval: int,
         queues: list[dict[str, object]],
         match_mode: MatchMode = MatchMode.ANY,
+        *,
         world_id: str | None = None,
+        etag: str | None = None,
+        ts: str | None = None,
     ) -> None:
         """Broadcast queue update events.
 
@@ -376,6 +379,8 @@ class WebSocketHub:
                 "queues": queues,
                 "match_mode": match_mode.value,
                 **({"world_id": world_id} if world_id else {}),
+                **({"etag": etag} if etag is not None else {}),
+                **({"ts": ts} if ts is not None else {}),
                 "version": 1,
             },
         )

@@ -176,8 +176,8 @@ class ControlBusConsumer:
             except Exception:  # pragma: no cover - malformed message
                 event = {}
         data = event.get("data", {}) if isinstance(event, dict) else {}
-        etag = data.get("etag", "")
-        run_id = data.get("run_id", "")
+        etag = (data.get("etag") or headers.get("etag") or "")
+        run_id = (data.get("run_id") or headers.get("run_id") or "")
         timestamp_ms = getattr(message, "timestamp", None)
         return ControlBusMessage(
             topic=message.topic,
@@ -218,11 +218,13 @@ class ControlBusConsumer:
             interval = msg.data.get("interval", 0)
             queues = msg.data.get("queues", [])
             match_mode = msg.data.get("match_mode", MatchMode.ANY.value)
+            etag = msg.data.get("etag", msg.etag)
+            ts = msg.data.get("ts")
             try:
                 mode = MatchMode(match_mode)
             except ValueError:
                 mode = MatchMode.ANY
-            await self.ws_hub.send_queue_update(tags, interval, queues, mode)
+            await self.ws_hub.send_queue_update(tags, interval, queues, mode, etag=etag, ts=ts)
             key = (tuple(sorted(tags)), int(interval))
             if key not in self._known_tag_intervals:
                 self._known_tag_intervals.add(key)

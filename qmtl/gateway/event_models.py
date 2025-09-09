@@ -21,6 +21,8 @@ class QueueUpdateData(BaseModel):
     match_mode: Literal["any", "all"] = "any"
     world_id: Optional[StrictStr] = None
     version: StrictInt
+    etag: StrictStr
+    ts: StrictStr
 
 
 class TagQueryUpsertData(BaseModel):

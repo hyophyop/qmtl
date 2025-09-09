@@ -28,3 +28,24 @@ def test_consumer_parse_kafka_message_proto_path():
     out = c._parse_kafka_message(msg)
     assert out.data == evt
 
+
+def test_consumer_parse_queue_event_etag_ts():
+    c = ControlBusConsumer(brokers=None, topics=["queue"], group="g")
+    evt = {
+        "type": "QueueUpdated",
+        "tags": ["x"],
+        "interval": 60,
+        "queues": [],
+        "match_mode": "any",
+        "version": 1,
+        "etag": "q:x:60:1",
+        "ts": "2020-01-01T00:00:00Z",
+    }
+    payload, headers = encode(evt)
+    msg = _Msg(payload, headers)
+    msg.topic = "queue"
+    out = c._parse_kafka_message(msg)
+    assert out.etag == "q:x:60:1"
+    assert out.data["etag"] == "q:x:60:1"
+    assert out.data["ts"] == "2020-01-01T00:00:00Z"
+
