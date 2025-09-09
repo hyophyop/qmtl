@@ -63,6 +63,13 @@ owner_reassign_total = Counter(
     registry=global_registry,
 )
 
+# Canonical NodeID mismatch (scaffold metric during migration)
+nodeid_canon_mismatch_total = Counter(
+    "nodeid_canon_mismatch_total",
+    "Number of nodes where canonical NodeID (spec) differs from 4-field ID",
+    registry=global_registry,
+)
+
 dagclient_breaker_state = Gauge(
     "dagclient_breaker_state",
     "DAG Manager circuit breaker state (1=open, 0=closed)",
