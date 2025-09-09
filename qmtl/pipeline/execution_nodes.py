@@ -50,6 +50,7 @@ class PreTradeGateNode(ProcessingNode):
         brokerage: BrokerageModel,
         account: Account,
         backpressure_guard: Callable[[], bool] | None = None,
+        require_portfolio_watermark: bool = False,
         name: str | None = None,
     ) -> None:
         self.order = order
@@ -57,6 +58,7 @@ class PreTradeGateNode(ProcessingNode):
         self.brokerage = brokerage
         self.account = account
         self.backpressure_guard = backpressure_guard
+        self.require_portfolio_watermark = require_portfolio_watermark
         super().__init__(
             order,
             compute_fn=self._compute,
@@ -77,18 +79,19 @@ class PreTradeGateNode(ProcessingNode):
                     return {"rejected": True, "reason": "backpressure"}
             except Exception:
                 pass
-        # DelayedEdge/Watermark gating: require portfolio snapshot up to t-1
-        try:
-            interval = self.order.interval or 0
-            if interval:
-                from qmtl.sdk.watermark import is_ready
+        # Optional watermark gating: require portfolio snapshot up to t-1
+        if self.require_portfolio_watermark:
+            try:
+                interval = self.order.interval or 0
+                if interval:
+                    from qmtl.sdk.watermark import is_ready
 
-                world = getattr(self.order, "world_id", None) or "default"
-                required = int(ts) - int(interval)
-                if not is_ready("trade.portfolio", world, required):
-                    return {"rejected": True, "reason": "watermark"}
-        except Exception:
-            pass
+                    world = getattr(self.order, "world_id", None) or "default"
+                    required = int(ts) - int(interval)
+                    if not is_ready("trade.portfolio", world, required):
+                        return {"rejected": True, "reason": "watermark"}
+            except Exception:
+                pass
 
         result = check_pretrade(
             activation_map=self.activation_map,
