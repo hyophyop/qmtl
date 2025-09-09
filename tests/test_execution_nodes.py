@@ -14,6 +14,7 @@ from qmtl.pipeline.execution_nodes import (
     TimingGateNode,
 )
 from qmtl.sdk.order_gate import Activation
+from qmtl.sdk.watermark import set_watermark
 from qmtl.brokerage.order import Account
 from qmtl.sdk.portfolio import Portfolio
 from qmtl.sdk.execution_modeling import ExecutionFill
@@ -44,6 +45,7 @@ class DummyExecModel:
 
 def test_pretrade_gate_allows():
     src = Node(name="src", interval=1, period=1)
+    set_watermark("trade.portfolio", "default", 10**9)
     node = PreTradeGateNode(
         src,
         activation_map={"AAPL": Activation(True)},

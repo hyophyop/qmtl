@@ -34,8 +34,15 @@ class BindingRequest(BaseModel):
 
 
 class ActivationRequest(BaseModel):
+    strategy_id: str
     side: str
     active: bool
+    weight: float | None = None
+    freeze: bool | None = None
+    drain: bool | None = None
+    effective_mode: str | None = None
+    run_id: str | None = None
+    ts: str | None = None
 
 
 class ApplyRequest(BaseModel):
@@ -53,17 +60,32 @@ class DecisionsRequest(BaseModel):
     strategies: List[str]
 
 
-class DecisionsResponse(BaseModel):
-    strategies: List[str]
-
-
 class BindingsResponse(BaseModel):
     strategies: List[str]
 
 
-class ActivationResponse(BaseModel):
-    version: int
-    state: Dict | None = None
+class DecisionEnvelope(BaseModel):
+    world_id: str
+    policy_version: int
+    effective_mode: str
+    reason: str | None = None
+    as_of: str
+    ttl: str
+    etag: str
+
+
+class ActivationEnvelope(BaseModel):
+    world_id: str
+    strategy_id: str
+    side: str
+    active: bool
+    weight: float
+    freeze: bool | None = None
+    drain: bool | None = None
+    effective_mode: str | None = None
+    etag: str
+    run_id: str | None = None
+    ts: str
 
 
 def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None = None) -> FastAPI:
@@ -131,44 +153,63 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         strategies = await store.list_bindings(world_id)
         return BindingsResponse(strategies=strategies)
 
-    @app.get('/worlds/{world_id}/decide', response_model=DecisionsResponse)
-    async def get_decide(world_id: str) -> DecisionsResponse:
+    @app.get('/worlds/{world_id}/decide', response_model=DecisionEnvelope)
+    async def get_decide(world_id: str, response: Response) -> DecisionEnvelope:
+        version = await store.default_policy_version(world_id)
+        now = datetime.now(timezone.utc)
         strategies = await store.get_decisions(world_id)
-        return DecisionsResponse(strategies=strategies)
+        effective_mode = 'active' if strategies else 'validate'
+        reason = 'policy_evaluated' if strategies else 'no_active_strategies'
+        ttl = '300s'
+        etag = f"w:{world_id}:v{version}:{int(now.timestamp())}"
+        response.headers["Cache-Control"] = "max-age=300"
+        return DecisionEnvelope(
+            world_id=world_id,
+            policy_version=version,
+            effective_mode=effective_mode,
+            reason=reason,
+            as_of=now.replace(microsecond=0).isoformat().replace('+00:00', 'Z'),
+            ttl=ttl,
+            etag=etag,
+        )
 
-    @app.post('/worlds/{world_id}/decisions', response_model=DecisionsResponse)
-    async def post_decisions(world_id: str, payload: DecisionsRequest) -> DecisionsResponse:
+    @app.post('/worlds/{world_id}/decisions')
+    async def post_decisions(world_id: str, payload: DecisionsRequest) -> Dict:
         await store.set_decisions(world_id, payload.strategies)
-        return DecisionsResponse(strategies=payload.strategies)
+        return {"strategies": payload.strategies}
 
-    @app.get('/worlds/{world_id}/activation', response_model=ActivationResponse)
-    async def get_activation(world_id: str) -> ActivationResponse:
-        data = await store.get_activation(world_id)
-        return ActivationResponse(version=data['version'], state=data.get('state'))
+    @app.get('/worlds/{world_id}/activation', response_model=ActivationEnvelope)
+    async def get_activation(world_id: str, strategy_id: str, side: str, response: Response) -> ActivationEnvelope:
+        data = await store.get_activation(world_id, strategy_id=strategy_id, side=side)
+        if "etag" not in data:
+            raise HTTPException(status_code=404, detail='activation not found')
+        response.headers["ETag"] = data["etag"]
+        filtered = {k: v for k, v in data.items() if k != 'version'}
+        return ActivationEnvelope(world_id=world_id, strategy_id=strategy_id, side=side, **filtered)
 
-    @app.put('/worlds/{world_id}/activation', response_model=ActivationResponse)
-    async def put_activation(world_id: str, payload: ActivationRequest) -> ActivationResponse:
-        version = await store.update_activation(world_id, {payload.side: {'active': payload.active}})
-        data = await store.get_activation(world_id)
+    @app.put('/worlds/{world_id}/activation', response_model=ActivationEnvelope)
+    async def put_activation(world_id: str, payload: ActivationRequest, response: Response) -> ActivationEnvelope:
+        version, data = await store.update_activation(world_id, payload.model_dump(exclude_unset=True))
         if bus:
-            # Compute state hash similar to the `/state_hash` endpoint
-            state_payload = json.dumps(data, sort_keys=True).encode()
+            # Compute state hash similar to the `/state_hash` endpoint for audit
+            full_state = await store.get_activation(world_id)
+            state_payload = json.dumps(full_state, sort_keys=True).encode()
             if _blake3 is not None:
                 state_hash = 'blake3:' + _blake3(state_payload).hexdigest()
             else:  # pragma: no cover - fallback
                 import hashlib as _hashlib
                 state_hash = 'sha256:' + _hashlib.sha256(state_payload).hexdigest()
-            ts = datetime.now(timezone.utc).isoformat()
             await bus.publish_activation_update(
                 world_id,
-                etag=str(version),
-                run_id="",
-                ts=ts,
+                etag=data.get('etag', str(version)),
+                run_id=str(data.get('run_id') or ''),
+                ts=str(data.get('ts')),
                 state_hash=state_hash,
-                payload={"side": payload.side, "active": payload.active, "version": version},
+                payload={key: val for key, val in {**data, 'strategy_id': payload.strategy_id, 'side': payload.side}.items() if key not in ('etag', 'run_id', 'ts')},
                 version=version,
             )
-        return ActivationResponse(version=version, state=data.get('state'))
+        response.headers["ETag"] = data["etag"]
+        return ActivationEnvelope(world_id=world_id, strategy_id=payload.strategy_id, side=payload.side, **data)
 
     @app.post('/worlds/{world_id}/evaluate', response_model=ApplyResponse)
     async def post_evaluate(world_id: str, payload: ApplyRequest) -> ApplyResponse:

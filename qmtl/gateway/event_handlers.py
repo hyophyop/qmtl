@@ -147,13 +147,16 @@ def create_event_router(
                 if world_id and world_client is not None:
                     if "activation" in topics_set:
                         try:
-                            act_data, _ = await world_client.get_activation(world_id)
-                            if isinstance(act_data, dict):
-                                act_data.setdefault("version", 1)
-                            event = format_event(
-                                "qmtl.gateway", "activation_updated", act_data
-                            )
-                            await websocket.send_text(json.dumps(event))
+                            strategy_id = (claims or {}).get("strategy_id") if claims else None
+                            if strategy_id:
+                                for side in ("long", "short"):
+                                    act_data, _ = await world_client.get_activation(world_id, strategy_id, side)
+                                    if isinstance(act_data, dict):
+                                        act_data.setdefault("version", 1)
+                                    event = format_event(
+                                        "qmtl.gateway", "activation_updated", act_data
+                                    )
+                                    await websocket.send_text(json.dumps(event))
                         except Exception:
                             pass
                     if "policy" in topics_set:

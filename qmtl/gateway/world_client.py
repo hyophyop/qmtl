@@ -178,15 +178,23 @@ class WorldServiceClient:
         return data, False
 
     async def get_activation(
-        self, world_id: str, headers: Optional[Dict[str, str]] = None
+        self,
+        world_id: str,
+        strategy_id: str,
+        side: str,
+        headers: Optional[Dict[str, str]] = None,
     ) -> tuple[Any, bool]:
-        etag, cached = self._activation_cache.get(world_id, (None, None))
+        key = f"{world_id}:{strategy_id}:{side}"
+        etag, cached = self._activation_cache.get(key, (None, None))
         req_headers = dict(headers or {})
         if etag:
             req_headers["If-None-Match"] = etag
         try:
             resp = await self._request(
-                "GET", f"{self._base}/worlds/{world_id}/activation", headers=req_headers
+                "GET",
+                f"{self._base}/worlds/{world_id}/activation",
+                headers=req_headers,
+                params={"strategy_id": strategy_id, "side": side},
             )
         except Exception:
             if cached is not None:
@@ -203,7 +211,7 @@ class WorldServiceClient:
         data = resp.json()
         new_etag = resp.headers.get("ETag")
         if new_etag:
-            self._activation_cache[world_id] = (new_etag, data)
+            self._activation_cache[key] = (new_etag, data)
         return data, False
 
 

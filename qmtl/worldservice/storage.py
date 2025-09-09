@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set
+from datetime import datetime, timezone
 
 from .policy_engine import Policy
 
@@ -122,18 +123,37 @@ class Storage:
     async def get_decisions(self, world_id: str) -> List[str]:
         return list(self.decisions.get(world_id, []))
 
-    async def get_activation(self, world_id: str) -> Dict:
+    async def get_activation(self, world_id: str, strategy_id: str | None = None, side: str | None = None) -> Dict:
         act = self.activations.get(world_id)
         if not act:
             return {"version": 0, "state": {}}
-        return {"version": act.version, **act.state}
+        if strategy_id is not None and side is not None:
+            data = act.state.get(strategy_id, {}).get(side, {})
+            return {"version": act.version, **data}
+        return {"version": act.version, "state": act.state}
 
-    async def update_activation(self, world_id: str, payload: Dict) -> int:
+    async def update_activation(self, world_id: str, payload: Dict) -> tuple[int, Dict]:
         act = self.activations.setdefault(world_id, WorldActivation())
         act.version += 1
-        act.state.update(payload)
-        self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "activation_updated", "version": act.version, **payload})
-        return act.version
+        strategy_id = payload["strategy_id"]
+        side = payload["side"]
+        entry = {
+            "active": payload.get("active", False),
+            "weight": payload.get("weight", 1.0),
+            "freeze": payload.get("freeze", False),
+            "drain": payload.get("drain", False),
+            "effective_mode": payload.get("effective_mode"),
+            "run_id": payload.get("run_id"),
+            "ts": payload.get("ts")
+            or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+        etag = f"act:{world_id}:{strategy_id}:{side}:{act.version}"
+        entry["etag"] = etag
+        act.state.setdefault(strategy_id, {})[side] = entry
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {"event": "activation_updated", "version": act.version, "strategy_id": strategy_id, "side": side, **entry}
+        )
+        return act.version, entry
 
     async def get_audit(self, world_id: str) -> List[Dict]:
         return list(self.audit.get(world_id, WorldAuditLog()).entries)

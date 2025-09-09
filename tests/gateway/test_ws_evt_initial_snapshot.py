@@ -8,12 +8,12 @@ from qmtl.gateway.ws import WebSocketHub
 
 
 class StubWorldClient:
-    async def get_activation(self, world_id, headers=None):
+    async def get_activation(self, world_id, strategy_id, side, headers=None):
         return (
             {
                 "world_id": world_id,
-                "strategy_id": "s1",
-                "side": "long",
+                "strategy_id": strategy_id,
+                "side": side,
                 "active": True,
                 "weight": 1.0,
                 "etag": "e1",
@@ -64,6 +64,7 @@ def test_initial_snapshots_sent_on_connect():
             "/ws/evt?tags=t1,t2&interval=60&match_mode=any",
             headers={"Authorization": f"Bearer {token}"},
         ) as ws:
-            events = [ws.receive_json(), ws.receive_json(), ws.receive_json()]
-    types = {e["type"] for e in events}
-    assert types == {"queue_update", "activation_updated", "policy_state_hash"}
+            events = [ws.receive_json(), ws.receive_json(), ws.receive_json(), ws.receive_json()]
+    types = [e["type"] for e in events]
+    assert types.count("activation_updated") == 2
+    assert set(types) >= {"queue_update", "activation_updated", "policy_state_hash"}

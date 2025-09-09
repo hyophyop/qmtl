@@ -196,13 +196,16 @@ class ActivationManager:
     async def _reconcile_activation(self) -> None:
         if not self.gateway_url or not self.world_id:
             return
-        url = self.gateway_url.rstrip("/") + f"/worlds/{self.world_id}/activation"
+        base = self.gateway_url.rstrip("/") + f"/worlds/{self.world_id}/activation"
+        if not self.strategy_id:
+            return
         try:
             async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    await self._on_message({"event": "activation_updated", "data": data})
+                for side in ("long", "short"):
+                    resp = await client.get(base, params={"strategy_id": self.strategy_id, "side": side})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        await self._on_message({"event": "activation_updated", "data": data})
         except Exception:
             pass
 
