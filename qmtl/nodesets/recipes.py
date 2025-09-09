@@ -16,7 +16,7 @@ from qmtl.sdk.brokerage_client import (
     FakeBrokerageClient,
 )
 from qmtl.nodesets.base import NodeSet
-from qmtl.pipeline.execution_nodes import SizingNode as RealSizingNode
+from qmtl.pipeline.execution_nodes import SizingNode as RealSizingNode, PortfolioNode as RealPortfolioNode
 from qmtl.sdk.portfolio import Portfolio
 from qmtl.nodesets.steps import (
     pretrade,
@@ -29,6 +29,9 @@ from qmtl.nodesets.steps import (
     timing,
     compose,
 )
+
+
+_WORLD_PORTFOLIOS: dict[str, Portfolio] = {}
 
 
 def make_ccxt_spot_nodeset(
@@ -84,6 +87,9 @@ def make_ccxt_spot_nodeset(
         return order
 
     # Build the full chain via compose with our parameterized execution step.
+    # Select portfolio instance; world-shared to honor portfolio_scope when used in future extensions
+    portfolio_obj = _WORLD_PORTFOLIOS.setdefault(world_id, Portfolio())
+
     def _sizing_step(upstream: Node) -> Node:
         # Activation-weight soft gating: consult Runner's ActivationManager when available.
         def _weight(order: dict) -> float:
@@ -106,7 +112,10 @@ def make_ccxt_spot_nodeset(
 
         # Use a lightweight local portfolio for sizing helpers; portfolio state may be
         # updated by a downstream PortfolioNode in richer recipes.
-        return RealSizingNode(upstream, portfolio=Portfolio(), weight_fn=_weight)
+        return RealSizingNode(upstream, portfolio=portfolio_obj, weight_fn=_weight)
+
+    def _portfolio_step(upstream: Node) -> Node:
+        return RealPortfolioNode(upstream, portfolio=portfolio_obj)
 
     return compose(
         signal_node,
@@ -116,7 +125,7 @@ def make_ccxt_spot_nodeset(
             execution(compute_fn=_exec),
             order_publish(compute_fn=_publish),
             fills(),
-            portfolio(),
+            _portfolio_step,
             risk(),
             timing(),
         ],
