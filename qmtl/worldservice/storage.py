@@ -82,6 +82,12 @@ class Storage:
             return []
         return [{"version": v} for v in sorted(wp.versions.keys())]
 
+    async def get_policy(self, world_id: str, version: int) -> Optional[Policy]:
+        wp = self.policies.get(world_id)
+        if not wp:
+            return None
+        return wp.versions.get(version)
+
     async def set_default_policy(self, world_id: str, version: int) -> None:
         wp = self.policies.setdefault(world_id, WorldPolicies())
         if version not in wp.versions:

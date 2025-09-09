@@ -107,6 +107,13 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
     async def get_policies(world_id: str) -> List[Dict]:
         return await store.list_policies(world_id)
 
+    @app.get('/worlds/{world_id}/policies/{version}')
+    async def get_policy(world_id: str, version: int) -> Dict:
+        policy = await store.get_policy(world_id, version)
+        if not policy:
+            raise HTTPException(status_code=404, detail='policy not found')
+        return policy.model_dump()
+
     @app.post('/worlds/{world_id}/set-default')
     async def post_set_default(world_id: str, payload: PolicyVersionResponse) -> PolicyVersionResponse:
         await store.set_default_policy(world_id, payload.version)
