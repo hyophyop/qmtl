@@ -16,6 +16,8 @@ from qmtl.sdk.brokerage_client import (
     FakeBrokerageClient,
 )
 from qmtl.nodesets.base import NodeSet
+from qmtl.pipeline.execution_nodes import SizingNode as RealSizingNode
+from qmtl.sdk.portfolio import Portfolio
 from qmtl.nodesets.steps import (
     pretrade,
     sizing,
@@ -82,11 +84,35 @@ def make_ccxt_spot_nodeset(
         return order
 
     # Build the full chain via compose with our parameterized execution step.
+    def _sizing_step(upstream: Node) -> Node:
+        # Activation-weight soft gating: consult Runner's ActivationManager when available.
+        def _weight(order: dict) -> float:
+            try:
+                from qmtl.sdk.runner import Runner  # late import to avoid cycles
+
+                am = Runner._activation_manager
+                if am is None:
+                    return 1.0
+                qty = float(order.get("quantity", 0.0))
+                side = "buy" if qty >= 0 else "sell"
+                w = float(am.weight_for_side(side))
+                if w < 0.0:
+                    return 0.0
+                if w > 1.0:
+                    return 1.0
+                return w
+            except Exception:
+                return 1.0
+
+        # Use a lightweight local portfolio for sizing helpers; portfolio state may be
+        # updated by a downstream PortfolioNode in richer recipes.
+        return RealSizingNode(upstream, portfolio=Portfolio(), weight_fn=_weight)
+
     return compose(
         signal_node,
         steps=[
             pretrade(),
-            sizing(),
+            _sizing_step,
             execution(compute_fn=_exec),
             order_publish(compute_fn=_publish),
             fills(),
