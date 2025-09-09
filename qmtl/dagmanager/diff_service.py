@@ -234,6 +234,16 @@ class DiffService:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
         buffering_nodes: List[NodeInfo] = []
+
+        def _asset_from_tags(tags: list[str]) -> str:
+            # Prefer a short, stable asset name derived from tags
+            for t in tags:
+                if not t:
+                    continue
+                s = ''.join(ch for ch in str(t).lower() if ch.isalnum() or ch in ('_', '-'))
+                if s:
+                    return s
+            return 'asset'
         for n in nodes:
             rec = existing.get(n.node_id)
             key = partition_key(n.node_id, n.interval, n.bucket)
@@ -244,7 +254,7 @@ class DiffService:
                 continue
             try:
                 topic = self.queue_manager.upsert(
-                    "asset",
+                    _asset_from_tags(n.tags),
                     n.node_type,
                     n.code_hash,
                     "v1",
