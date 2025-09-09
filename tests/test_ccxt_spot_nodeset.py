@@ -8,7 +8,8 @@ def test_attach_nodeset_simulate():
     price = StreamInput(interval="60s", period=1)
     signal = Node(input=price, compute_fn=lambda view: {"action": "BUY", "size": 1, "symbol": "BTC/USDT"})
     ns = make_ccxt_spot_nodeset(signal, "world", exchange_id="binance")
-    assert ns.execution is not None and ns.pretrade is not None
+    nodes = list(ns)
+    assert len(nodes) == 7 and ns.head is nodes[0]
 
 
 def test_attach_nodeset_sandbox_requires_credentials():

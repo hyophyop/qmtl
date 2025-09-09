@@ -12,17 +12,25 @@ def test_nodeset_attach_passes_through():
     ns = builder.attach(signal, world_id="w1")
     # Feed through the chain; each stub passes the payload as-is
     order = {"symbol": "AAPL", "price": 10.0, "quantity": 2.0}
-    out = Runner.feed_queue_data(ns.pretrade, signal.node_id, 1, 0, order)
+    nodes = list(ns)
+    # pretrade
+    out = Runner.feed_queue_data(nodes[0], signal.node_id, 1, 0, order)
     assert out == order
-    out = Runner.feed_queue_data(ns.sizing, ns.pretrade.node_id, 1, 0, out)
+    # sizing
+    out = Runner.feed_queue_data(nodes[1], nodes[0].node_id, 1, 0, out)
     assert out == order
-    out = Runner.feed_queue_data(ns.execution, ns.sizing.node_id, 1, 0, out)
+    # execution
+    out = Runner.feed_queue_data(nodes[2], nodes[1].node_id, 1, 0, out)
     assert out == order
-    out = Runner.feed_queue_data(ns.fills, ns.execution.node_id, 1, 0, out)
+    # fills
+    out = Runner.feed_queue_data(nodes[3], nodes[2].node_id, 1, 0, out)
     assert out == order
-    out = Runner.feed_queue_data(ns.portfolio, ns.fills.node_id, 1, 0, out)
+    # portfolio
+    out = Runner.feed_queue_data(nodes[4], nodes[3].node_id, 1, 0, out)
     assert out == order
-    out = Runner.feed_queue_data(ns.risk, ns.portfolio.node_id, 1, 0, out)
+    # risk
+    out = Runner.feed_queue_data(nodes[5], nodes[4].node_id, 1, 0, out)
     assert out == order
-    out = Runner.feed_queue_data(ns.timing, ns.risk.node_id, 1, 0, out)
+    # timing
+    out = Runner.feed_queue_data(nodes[6], nodes[5].node_id, 1, 0, out)
     assert out == order

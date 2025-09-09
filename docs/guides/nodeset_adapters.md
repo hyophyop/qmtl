@@ -70,7 +70,7 @@ class MyNodeSetAdapter(NodeSetAdapter):
         pf = portfolio()(fil)
         rk = risk()(pf)
         tm = timing()(rk)
-        return NodeSet(pretrade=pre, sizing=siz, execution=exe, fills=fil, portfolio=pf, risk=rk, timing=tm)
+        return NodeSet((pre, siz, exe, fil, pf, rk, tm))
 ```
 
 Notes

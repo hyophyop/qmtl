@@ -1,6 +1,9 @@
 # Build NodeSet (SDK)
 
 Compose execution chains programmatically using a small Steps DSL and treat the result as a black‑box `NodeSet`.
+Avoid depending on internal step nodes directly; prefer the metadata helpers
+`describe()` and `capabilities()` when you need to inspect a Node Set in tools
+or UIs.
 
 ## Compose with steps
 
@@ -14,6 +17,10 @@ signal = Node(input=alpha, compute_fn=lambda v: {"action": "BUY", "size": 1, "sy
 
 # Default chain (all stubs)
 nodeset = compose(signal, steps=[pretrade(), sizing(), execution(), fills(), portfolio(), risk(), timing()])
+
+# Optional metadata (stable; internals remain a black box)
+info = nodeset.describe()
+caps = nodeset.capabilities()
 ```
 
 ## Custom execution step
@@ -106,7 +113,7 @@ pf = portfolio()(fil)
 rk = risk()(pf)
 tm = timing()(rk)
 
-nodeset = NodeSet(pretrade=pre, sizing=siz, execution=exe, fills=fil, portfolio=pf, risk=rk, timing=tm)
+nodeset = NodeSet((pre, siz, exe, fil, pf, rk, tm))
 ```
 
 Tips

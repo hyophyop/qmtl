@@ -15,6 +15,7 @@ This document specifies how post-signal trade execution is composed as a reusabl
 
 Intent
 - Provide ready‑made, exchange‑backed “trading system” recipes (e.g., CCXT spot) as black‑box Node Sets so strategies can attach execution quickly without re‑wiring common components. SDK composition remains available for custom pipelines.
+- Treat Node Sets as true black boxes: expose only ports and metadata via `describe()`/`capabilities()`. Avoid accessing internal step nodes from strategies.
 
 ## Motivation
 
@@ -70,6 +71,10 @@ from qmtl.nodesets.base import NodeSetBuilder
 
 nodeset = NodeSetBuilder().attach(signal, world_id="demo")
 strategy.add_nodes([price, alpha, signal, nodeset])  # NodeSet accepted directly
+
+# Optional: metadata (not internals)
+info = nodeset.describe()        # { name, entry, exit, nodes[], ports? }
+caps = nodeset.capabilities()    # { modes: [...], portfolio_scope: ... }
 ```
 
 - Example (CCXT spot): see the guide at guides/ccxt_spot_recipe.md. You can

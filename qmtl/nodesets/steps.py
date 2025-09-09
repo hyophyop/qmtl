@@ -10,7 +10,7 @@ pretrade → sizing → execution → fills → portfolio → risk → timing.
 NodeSet. Missing trailing steps are filled with defaults; extra steps raise.
 """
 
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from qmtl.sdk import Node
 from qmtl.nodesets.base import NodeSet
@@ -77,7 +77,15 @@ def timing(*, name: str | None = None) -> Step:
     return lambda upstream: StubTimingGateNode(upstream, name=name)
 
 
-def compose(signal: Node, steps: Sequence[Step] | None = None) -> NodeSet:
+def compose(
+    signal: Node,
+    steps: Sequence[Step] | None = None,
+    *,
+    name: str | None = None,
+    modes: Sequence[str] | None = None,
+    portfolio_scope: str | None = None,
+    descriptor: Any | None = None,
+) -> NodeSet:
     """Compose a Node Set behind `signal` using the given steps.
 
     If `steps` is None or shorter than 7, missing trailing steps are filled with
@@ -111,13 +119,11 @@ def compose(signal: Node, steps: Sequence[Step] | None = None) -> NodeSet:
         upstream = node
 
     return NodeSet(
-        pretrade=nodes[0],
-        sizing=nodes[1],
-        execution=nodes[2],
-        fills=nodes[3],
-        portfolio=nodes[4],
-        risk=nodes[5],
-        timing=nodes[6],
+        _nodes=tuple(nodes),
+        name=name or "nodeset",
+        modes=tuple(modes) if modes is not None else None,
+        portfolio_scope=portfolio_scope,  # type: ignore[arg-type]
+        descriptor=descriptor,
     )
 
 

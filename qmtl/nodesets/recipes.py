@@ -29,6 +29,7 @@ def make_ccxt_spot_nodeset(
     secret: str | None = None,
     time_in_force: str = "GTC",
     reduce_only: bool = False,
+    descriptor: Any | None = None,
 ) -> NodeSet:
     """Compose a minimal CCXT spot execution Node Set behind ``signal_node``.
 
@@ -76,6 +77,10 @@ def make_ccxt_spot_nodeset(
             risk(),
             timing(),
         ],
+        name="ccxt_spot",
+        modes=("simulate", "paper", "live"),
+        portfolio_scope="strategy",
+        descriptor=descriptor,
     )
 
 

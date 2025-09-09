@@ -17,7 +17,8 @@ def test_nodeset_attach_minimal():
     ns = attach_minimal(NodeSetBuilder(), sig, world_id="w1")
     order = {"symbol": "AAPL", "price": 10.0, "quantity": 1.0}
     # Each stub in the scaffold passes through the payload
-    assert ns.pretrade is not None and ns.execution is not None
+    first = ns.head
+    assert first is not None and len(list(ns)) == 7
 ```
 
 ## Create a fake fill webhook event
@@ -35,4 +36,3 @@ def test_fake_fill_webhook_shape():
 Notes
 - The test kit emits CloudEvents‑shaped payloads for consistency with Gateway webhook ingestion.
 - Minimal scaffolding uses stub nodes to establish contracts; concrete Node Sets replace them as implementations land.
-
