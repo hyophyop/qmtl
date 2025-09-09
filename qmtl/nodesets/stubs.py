@@ -73,6 +73,27 @@ class StubExecutionNode(ProcessingNode):
         return order
 
 
+class StubOrderPublishNode(ProcessingNode):
+    """Pass-through order publish stub."""
+
+    def __init__(self, order: Node, *, name: str | None = None) -> None:
+        self.order = order
+        super().__init__(
+            order,
+            compute_fn=self._compute,
+            name=name or f"{order.name}_publish",
+            interval=order.interval,
+            period=1,
+        )
+
+    def _compute(self, view: CacheView) -> dict | None:
+        data = view[self.order][self.order.interval]
+        if not data:
+            return None
+        _, order = data[-1]
+        return order
+
+
 class StubFillIngestNode(ProcessingNode):
     """Placeholder for a live fills stream; pass-through for scaffolding."""
 
@@ -161,6 +182,7 @@ __all__ = [
     "StubPreTradeGateNode",
     "StubSizingNode",
     "StubExecutionNode",
+    "StubOrderPublishNode",
     "StubFillIngestNode",
     "StubPortfolioNode",
     "StubRiskControlNode",

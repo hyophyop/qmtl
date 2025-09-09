@@ -35,6 +35,8 @@ from qmtl.sdk.execution_modeling import (
 from qmtl.sdk.risk_management import RiskManager, PositionInfo
 from qmtl.sdk.timing_controls import TimingController
 from qmtl.sdk import metrics as sdk_metrics
+from qmtl.gateway.commit_log import CommitLogWriter
+import asyncio
 
 
 class PreTradeGateNode(ProcessingNode):
@@ -194,6 +196,66 @@ class ExecutionNode(ProcessingNode):
         if isinstance(fill, ExecutionFill):
             return asdict(fill)
         return fill
+
+
+class OrderPublishNode(ProcessingNode):
+    """Publish orders to Gateway or commit log and pass them downstream."""
+
+    def __init__(
+        self,
+        order: Node,
+        *,
+        commit_log_writer: CommitLogWriter | None = None,
+        submit_order: Callable[[dict], None] | None = None,
+        name: str | None = None,
+    ) -> None:
+        self.order = order
+        self.commit_log_writer = commit_log_writer
+        self.submit_order = submit_order
+        super().__init__(
+            order,
+            compute_fn=self._compute,
+            name=name or f"{order.name}_publish",
+            interval=order.interval,
+            period=1,
+        )
+
+    def _publish_commit_log(self, ts: int, order: dict) -> None:
+        if self.commit_log_writer is None:
+            return
+        try:
+            coro = self.commit_log_writer.publish_bucket(
+                ts,
+                self.order.interval,
+                [(self.node_id, "", order)],
+            )
+            try:
+                asyncio.get_running_loop().create_task(coro)
+            except RuntimeError:
+                asyncio.run(coro)
+        except Exception:
+            pass
+
+    def _publish_gateway(self, order: dict) -> None:
+        if self.submit_order is None:
+            return
+        try:
+            self.submit_order(order)
+        except Exception:
+            pass
+
+    def _compute(self, view: CacheView) -> dict | None:
+        data = view[self.order][self.order.interval]
+        if not data:
+            return None
+        ts, order = data[-1]
+        self._publish_commit_log(ts, order)
+        self._publish_gateway(order)
+        try:
+            sdk_metrics.record_order_published()
+        except Exception:
+            pass
+        return order
 
 class RouterNode(ProcessingNode):
     """Route orders to a target based on a user-provided function.
@@ -356,6 +418,7 @@ __all__ = [
     "PreTradeGateNode",
     "SizingNode",
     "ExecutionNode",
+    "OrderPublishNode",
     "FillIngestNode",
     "PortfolioNode",
     "RiskControlNode",

@@ -16,7 +16,17 @@ from qmtl.sdk.brokerage_client import (
     FakeBrokerageClient,
 )
 from qmtl.nodesets.base import NodeSet
-from qmtl.nodesets.steps import pretrade, sizing, execution, fills, portfolio, risk, timing, compose
+from qmtl.nodesets.steps import (
+    pretrade,
+    sizing,
+    execution,
+    order_publish,
+    fills,
+    portfolio,
+    risk,
+    timing,
+    compose,
+)
 
 
 def make_ccxt_spot_nodeset(
@@ -52,8 +62,7 @@ def make_ccxt_spot_nodeset(
         client = FakeBrokerageClient()
 
     # Execution with CCXT client; applies default opts inline
-    def _exec(view: CacheView, upstream: Node) -> dict | None:  # capture client/time_in_force/reduce_only
-        # Sized order arrives on `upstream` as provided by the Steps DSL.
+    def _exec(view: CacheView, upstream: Node) -> dict | None:  # capture time_in_force/reduce_only
         data = view[upstream][upstream.interval]
         if not data:
             return None
@@ -62,6 +71,13 @@ def make_ccxt_spot_nodeset(
         order.setdefault("time_in_force", time_in_force)
         if reduce_only:
             order["reduce_only"] = True
+        return order
+
+    def _publish(view: CacheView, upstream: Node) -> dict | None:  # capture client
+        data = view[upstream][upstream.interval]
+        if not data:
+            return None
+        _, order = data[-1]
         client.post_order(order)
         return order
 
@@ -72,6 +88,7 @@ def make_ccxt_spot_nodeset(
             pretrade(),
             sizing(),
             execution(compute_fn=_exec),
+            order_publish(compute_fn=_publish),
             fills(),
             portfolio(),
             risk(),

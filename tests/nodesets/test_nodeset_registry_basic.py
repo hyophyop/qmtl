@@ -12,4 +12,4 @@ def test_nodeset_registry_make_ccxt_spot_simulate():
     ns = make("ccxt_spot", signal, "world", exchange_id="binance")
     nodes = list(ns)
     assert ns.head is nodes[0] and ns.tail is nodes[-1]
-    assert len(nodes) == 7
+    assert len(nodes) == 8
