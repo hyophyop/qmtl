@@ -23,12 +23,12 @@ class FakeHub:
 
     async def send_activation_updated(self, data: dict) -> None:
         self.events.append(("activation_updated", data))
-        if self._done and len(self.events) == 3:
+        if self._done and len(self.events) == 4:
             self._done.set()
 
     async def send_policy_updated(self, data: dict) -> None:
         self.events.append(("policy_updated", data))
-        if self._done and len(self.events) == 3:
+        if self._done and len(self.events) == 4:
             self._done.set()
 
     async def send_queue_update(
@@ -45,7 +45,17 @@ class FakeHub:
                 },
             )
         )
-        if self._done and len(self.events) == 3:
+        if self._done and len(self.events) == 4:
+            self._done.set()
+
+    async def send_tagquery_upsert(self, tags, interval, queues) -> None:
+        self.events.append(
+            (
+                "tagquery.upsert",
+                {"tags": tags, "interval": interval, "queues": queues},
+            )
+        )
+        if self._done and len(self.events) == 4:
             self._done.set()
 
 
@@ -98,15 +108,19 @@ async def test_consumer_relays_and_deduplicates():
     assert hub.events == [
         ("activation_updated", {"id": 1}),
         ("policy_updated", {"id": 2}),
-            (
-                "queue_update",
-                {
-                    "tags": ["x"],
-                    "interval": 60,
-                    "queues": [{"queue": "q", "global": False}],
-                    "match_mode": MatchMode.ANY,
-                },
-            ),
+        (
+            "queue_update",
+            {
+                "tags": ["x"],
+                "interval": 60,
+                "queues": [{"queue": "q", "global": False}],
+                "match_mode": MatchMode.ANY,
+            },
+        ),
+        (
+            "tagquery.upsert",
+            {"tags": ["x"], "interval": 60, "queues": [{"queue": "q", "global": False}]},
+        ),
     ]
     assert metrics.event_relay_events_total.labels(topic="activation")._value.get() == 1
     assert metrics.event_relay_events_total.labels(topic="policy")._value.get() == 1

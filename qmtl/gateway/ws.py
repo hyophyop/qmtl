@@ -380,6 +380,17 @@ class WebSocketHub:
         )
         await self.broadcast(event, topic="queue")
 
+    async def send_tagquery_upsert(
+        self, tags: list[str], interval: int, queues: list[dict[str, object]]
+    ) -> None:
+        """Broadcast tag query upsert events."""
+        event = format_event(
+            "qmtl.gateway",
+            "tagquery.upsert",
+            {"tags": tags, "interval": interval, "queues": queues},
+        )
+        await self.broadcast(event, topic="queue")
+
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         """Broadcast sentinel weight updates."""
         event = format_event(

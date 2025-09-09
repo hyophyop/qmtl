@@ -152,7 +152,27 @@ class TagQueryManager:
         """Apply WebSocket ``data`` to registered nodes."""
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
-        if event == "queue_update":
+        if event == "tagquery.upsert":
+            tags = payload.get("tags") or []
+            interval = payload.get("interval")
+            raw = payload.get("queues", [])
+            queues = normalize_queues(raw)
+            if isinstance(tags, str):
+                tags = split_tags(tags)
+            try:
+                interval = int(interval)
+            except (TypeError, ValueError):
+                return
+            qset = frozenset(queues)
+            for mode in (MatchMode.ANY, MatchMode.ALL):
+                key = (tuple(sorted(tags)), interval, mode)
+                last = self._last_queue_sets.get(key)
+                if last is not None and last == qset:
+                    continue
+                self._last_queue_sets[key] = qset
+                for n in self._nodes.get(key, []):
+                    n.update_queues(list(queues))
+        elif event == "queue_update":
             tags = payload.get("tags") or []
             interval = payload.get("interval")
             raw = payload.get("queues", [])

@@ -48,6 +48,8 @@ class ControlBusConsumer:
         self._broker_task: asyncio.Task | None = None
         self._consumer: Any | None = None
         self._last_seen: dict[tuple[str, str], tuple[str, str]] = {}
+        # Track discovered tag+interval combinations to emit upsert events
+        self._known_tag_intervals: set[tuple[tuple[str, ...], int]] = set()
 
     async def start(self) -> None:
         """Start the background consumer task."""
@@ -206,6 +208,10 @@ class ControlBusConsumer:
             except ValueError:
                 mode = MatchMode.ANY
             await self.ws_hub.send_queue_update(tags, interval, queues, mode)
+            key = (tuple(sorted(tags)), int(interval))
+            if key not in self._known_tag_intervals:
+                self._known_tag_intervals.add(key)
+                await self.ws_hub.send_tagquery_upsert(tags, interval, queues)
         else:
             logger.warning("Unhandled ControlBus topic %s", msg.topic)
 
