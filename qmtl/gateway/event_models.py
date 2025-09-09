@@ -35,6 +35,7 @@ class SentinelWeightData(BaseModel):
 
 
 class ActivationUpdatedData(BaseModel):
+    version: Optional[StrictInt] = None
     world_id: StrictStr
     strategy_id: Optional[StrictStr] = None
     side: Optional[Literal["long", "short"]] = None
@@ -50,6 +51,7 @@ class ActivationUpdatedData(BaseModel):
 
 
 class PolicyUpdatedData(BaseModel):
+    version: Optional[StrictInt] = None
     world_id: StrictStr
     policy_version: Optional[StrictInt] = None
     state_hash: Optional[StrictStr] = None

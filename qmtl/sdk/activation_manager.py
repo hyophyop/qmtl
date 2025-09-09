@@ -26,6 +26,7 @@ class SideState:
 
 @dataclass
 class ActivationState:
+    version: int = 0
     long: SideState = field(default_factory=SideState)
     short: SideState = field(default_factory=SideState)
     etag: Optional[str] = None
@@ -105,6 +106,12 @@ class ActivationManager:
             drain = bool(payload.get("drain", False))
             eff_mode = payload.get("effective_mode")
             self.state.etag = payload.get("etag") or self.state.etag
+            ver = payload.get("version")
+            if ver is not None:
+                try:
+                    self.state.version = int(ver)
+                except (TypeError, ValueError):
+                    pass
             if eff_mode:
                 self.state.effective_mode = eff_mode
             self.state.stale = False

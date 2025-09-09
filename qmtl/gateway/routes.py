@@ -410,6 +410,123 @@ def create_api_router(
         headers["X-Correlation-ID"] = cid
         return headers, cid
 
+
+    @router.post("/worlds")
+    async def create_world(payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.create_world(payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.get("/worlds")
+    async def list_worlds(request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.list_worlds(headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.get("/worlds/{world_id}")
+    async def get_world(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.get_world(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.put("/worlds/{world_id}")
+    async def put_world(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.put_world(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.delete("/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_world(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        await client.delete_world(world_id, headers=headers)
+        return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"X-Correlation-ID": cid})
+
+    @router.post("/worlds/{world_id}/policies")
+    async def post_world_policy(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.post_policy(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.get("/worlds/{world_id}/policies")
+    async def get_world_policies(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.get_policies(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.post("/worlds/{world_id}/set-default")
+    async def post_world_set_default(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.set_default_policy(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.post("/worlds/{world_id}/bindings")
+    async def post_world_bindings(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.post_bindings(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.get("/worlds/{world_id}/bindings")
+    async def get_world_bindings(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.get_bindings(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.post("/worlds/{world_id}/decisions")
+    async def post_world_decisions(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.post_decisions(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.put("/worlds/{world_id}/activation")
+    async def put_world_activation(world_id: str, payload: dict, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.put_activation(world_id, payload, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
+
+    @router.get("/worlds/{world_id}/audit")
+    async def get_world_audit(world_id: str, request: Request) -> Any:
+        client: WorldServiceClient | None = world_client
+        if client is None:
+            raise HTTPException(status_code=503, detail="world service disabled")
+        headers, cid = _build_world_headers(request)
+        data = await client.get_audit(world_id, headers=headers)
+        return JSONResponse(data, headers={"X-Correlation-ID": cid})
     @router.get("/worlds/{world_id}/decide")
     async def get_world_decide(world_id: str, request: Request) -> Any:
         client: WorldServiceClient | None = world_client
