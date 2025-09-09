@@ -77,6 +77,18 @@ class PreTradeGateNode(ProcessingNode):
                     return {"rejected": True, "reason": "backpressure"}
             except Exception:
                 pass
+        # DelayedEdge/Watermark gating: require portfolio snapshot up to t-1
+        try:
+            interval = self.order.interval or 0
+            if interval:
+                from qmtl.sdk.watermark import is_ready
+
+                world = getattr(self.order, "world_id", None) or "default"
+                required = int(ts) - int(interval)
+                if not is_ready("trade.portfolio", world, required):
+                    return {"rejected": True, "reason": "watermark"}
+        except Exception:
+            pass
 
         result = check_pretrade(
             activation_map=self.activation_map,
@@ -313,7 +325,7 @@ class PortfolioNode(ProcessingNode):
         data = view[self.fills][self.fills.interval]
         if not data:
             return None
-        _, fill = data[-1]
+        ts, fill = data[-1]
         try:
             sdk_metrics.record_fill_ingested()
         except Exception:
@@ -323,6 +335,15 @@ class PortfolioNode(ProcessingNode):
         price = float(fill.get("fill_price", fill.get("price", 0.0)))
         commission = float(fill.get("commission", 0.0))
         self.portfolio.apply_fill(symbol, qty, price, commission)
+        # Update watermark for portfolio snapshots
+        try:
+            from qmtl.sdk.watermark import set_watermark
+
+            world = getattr(self.fills, "world_id", None) or "default"
+            fill_ts = int(fill.get("timestamp", ts)) if isinstance(fill, dict) else int(ts)
+            set_watermark("trade.portfolio", world, fill_ts)
+        except Exception:
+            pass
         snapshot = {
             "cash": self.portfolio.cash,
             "positions": {
