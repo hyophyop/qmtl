@@ -124,10 +124,12 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                 if getattr(chunk, 'new_nodes', None) and self._bus:
                     for node in chunk.new_nodes:
                         if node.tags and node.interval is not None:
+                            qname = chunk.queue_map.get(node.node_id, "")
                             payload = {
                                 "tags": node.tags,
                                 "interval": node.interval,
-                                "queues": [chunk.queue_map.get(node.node_id, "")],
+                                # Emit descriptor objects to align with Gateway/SDK schema
+                                "queues": ([{"queue": qname, "global": False}] if qname else []),
                                 "match_mode": "any",
                             }
                             await self._bus.publish_queue_update(
@@ -183,7 +185,7 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
                         payload = {
                             "tags": [qi.tag],
                             "interval": qi.interval,
-                            "queues": [qi.name],
+                            "queues": [{"queue": qi.name, "global": False}],
                             "match_mode": "any",
                         }
                         await self._bus.publish_queue_update(
