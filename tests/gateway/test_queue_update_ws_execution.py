@@ -5,6 +5,7 @@ from qmtl.gateway.ws import WebSocketHub
 from qmtl.sdk import TagQueryNode, Runner, MatchMode
 from qmtl.sdk.ws_client import WebSocketClient
 from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 class DummyDag:
@@ -18,15 +19,18 @@ class DummyHub(WebSocketHub):
         self.client = client
 
     async def send_queue_update(self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY):  # type: ignore[override]
-        await self.client._handle({
-            "type": "queue_update",
-            "data": {
-                "tags": tags,
-                "interval": interval,
-                "queues": queues,
-                "match_mode": match_mode.value,
-            },
-        })
+        await self.client._handle(
+            {
+                "type": "queue_update",
+                "data": {
+                    "tags": tags,
+                    "interval": interval,
+                    "queues": queues,
+                    "match_mode": match_mode.value,
+                    "version": EVENT_SCHEMA_VERSION,
+                },
+            }
+        )
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,7 @@ import pytest
 
 from qmtl.sdk import TagQueryNode, Runner
 from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 @pytest.mark.asyncio
@@ -20,6 +21,7 @@ async def test_update_warmup_and_removal():
                 "interval": 60,
                 "queues": [{"queue": "q1", "global": False}],
                 "match_mode": "any",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -45,6 +47,7 @@ async def test_update_warmup_and_removal():
                     {"queue": "q2", "global": False},
                 ],
                 "match_mode": "any",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -66,6 +69,7 @@ async def test_update_warmup_and_removal():
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
                 "match_mode": "any",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )

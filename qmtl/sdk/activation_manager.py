@@ -14,6 +14,7 @@ import httpx
 
 from .ws_client import WebSocketClient
 from . import runtime
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 @dataclass
@@ -97,6 +98,8 @@ class ActivationManager:
     async def _on_message(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        if payload.get("version") != EVENT_SCHEMA_VERSION:
+            return
         if event == "activation_updated" or payload.get("type") == "ActivationUpdated":
             side = (payload.get("side") or "").lower()
             active = bool(payload.get("active", False))

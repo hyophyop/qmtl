@@ -4,6 +4,7 @@ import pytest
 
 from qmtl.sdk import TagQueryNode, MatchMode
 from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 @pytest.mark.asyncio
@@ -51,6 +52,7 @@ async def test_resolve_and_update(monkeypatch):
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
                 "match_mode": "any",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -64,6 +66,7 @@ async def test_resolve_and_update(monkeypatch):
                 "interval": 60,
                 "queues": [],
                 "match_mode": "any",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -123,6 +126,7 @@ async def test_match_mode_routes_updates():
                 "interval": 60,
                 "queues": [{"queue": "q1", "global": False}],
                 "match_mode": "all",
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -136,6 +140,7 @@ async def test_match_mode_routes_updates():
                 "tags": ["t1"],
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
+                "version": EVENT_SCHEMA_VERSION,
             },
         }
     )
@@ -198,15 +203,18 @@ async def test_start_uses_event_descriptor(monkeypatch):
 
         async def start(self):
             self.started = True
-            await self.on_message({
-                "event": "queue_update",
-            "data": {
-                "tags": ["t1"],
-                "interval": 60,
-                "queues": [{"queue": "q3", "global": False}],
-                "match_mode": "any",
-            },
-            })
+            await self.on_message(
+                {
+                    "event": "queue_update",
+                    "data": {
+                        "tags": ["t1"],
+                        "interval": 60,
+                        "queues": [{"queue": "q3", "global": False}],
+                        "match_mode": "any",
+                        "version": EVENT_SCHEMA_VERSION,
+                    },
+                }
+            )
 
         async def stop(self):
             self.started = False

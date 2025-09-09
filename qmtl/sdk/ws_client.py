@@ -9,6 +9,7 @@ from urllib.parse import urlparse, urlunparse
 
 import websockets
 import logging
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 from . import runtime
 
 if TYPE_CHECKING:  # pragma: no cover - only for typing
@@ -56,6 +57,18 @@ class WebSocketClient:
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        if event in {
+            "queue_created",
+            "queue_update",
+            "sentinel_weight",
+            "activation_updated",
+            "policy_updated",
+            "policy_state_hash",
+        }:
+            version = payload.get("version")
+            if version != EVENT_SCHEMA_VERSION:
+                logging.warning("Unsupported event version %r for %s", version, event)
+                return
         if event == "queue_created":
             qid = payload.get("queue_id")
             topic = payload.get("topic")

@@ -12,6 +12,7 @@ from qmtl.sdk.node import MatchMode
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,11 @@ class ControlBusConsumer:
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
         if not self.ws_hub:
+            return
+
+        version = msg.data.get("version")
+        if version != EVENT_SCHEMA_VERSION:
+            logger.warning("Unsupported event version %r", version)
             return
 
         if msg.topic == "activation":

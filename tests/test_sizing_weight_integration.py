@@ -5,10 +5,16 @@ from qmtl.sdk.runner import Runner
 from qmtl.pipeline.execution_nodes import SizingNode
 from qmtl.sdk.portfolio import Portfolio
 from qmtl.sdk.activation_manager import ActivationManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 async def _emit(am: ActivationManager, side: str, **fields) -> None:
-    await am._on_message({"event": "activation_updated", "data": {"side": side, **fields}})  # type: ignore
+    await am._on_message(
+        {
+            "event": "activation_updated",
+            "data": {"side": side, "version": EVENT_SCHEMA_VERSION, **fields},
+        }
+    )  # type: ignore
 
 
 def _weight_fn_from_am(am: ActivationManager):

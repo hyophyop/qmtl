@@ -8,6 +8,8 @@ from typing import Any, Generic, List, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
 
+from ..common.cloudevents import EVENT_SCHEMA_VERSION
+
 
 class QueueRef(BaseModel):
     queue: StrictStr
@@ -15,6 +17,7 @@ class QueueRef(BaseModel):
 
 
 class QueueUpdateData(BaseModel):
+    version: StrictInt = Field(EVENT_SCHEMA_VERSION)
     tags: List[StrictStr]
     interval: StrictInt
     queues: List[QueueRef]
@@ -23,12 +26,14 @@ class QueueUpdateData(BaseModel):
 
 
 class SentinelWeightData(BaseModel):
+    version: StrictInt = Field(EVENT_SCHEMA_VERSION)
     sentinel_id: StrictStr
     weight: StrictFloat
     world_id: Optional[StrictStr] = None
 
 
 class ActivationUpdatedData(BaseModel):
+    version: StrictInt = Field(EVENT_SCHEMA_VERSION)
     world_id: StrictStr
     strategy_id: Optional[StrictStr] = None
     side: Optional[Literal["long", "short"]] = None
@@ -44,6 +49,7 @@ class ActivationUpdatedData(BaseModel):
 
 
 class PolicyUpdatedData(BaseModel):
+    version: StrictInt = Field(EVENT_SCHEMA_VERSION)
     world_id: StrictStr
     policy_version: Optional[StrictInt] = None
     state_hash: Optional[StrictStr] = None

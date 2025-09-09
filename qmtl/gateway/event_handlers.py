@@ -11,7 +11,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from qmtl.sdk.node import MatchMode
 
-from ..common.cloudevents import format_event
+from ..common.cloudevents import format_event, EVENT_SCHEMA_VERSION
 from .event_descriptor import (
     EventDescriptorConfig,
     jwks,
@@ -134,6 +134,7 @@ def create_event_router(
                                 "qmtl.gateway",
                                 "queue_update",
                                 {
+                                    "version": EVENT_SCHEMA_VERSION,
                                     "tags": tags_list,
                                     "interval": interval_int,
                                     "queues": queues,
@@ -147,7 +148,9 @@ def create_event_router(
                         try:
                             act_data, _ = await world_client.get_activation(world_id)
                             event = format_event(
-                                "qmtl.gateway", "activation_updated", act_data
+                                "qmtl.gateway",
+                                "activation_updated",
+                                {"version": EVENT_SCHEMA_VERSION, **act_data},
                             )
                             await websocket.send_text(json.dumps(event))
                         except Exception:
@@ -157,7 +160,10 @@ def create_event_router(
                             hash_data = await world_client.get_state_hash(
                                 world_id, "policy"
                             )
-                            payload = {"world_id": world_id}
+                            payload = {
+                                "version": EVENT_SCHEMA_VERSION,
+                                "world_id": world_id,
+                            }
                             if isinstance(hash_data, dict):
                                 payload.update(hash_data)
                             event = format_event(

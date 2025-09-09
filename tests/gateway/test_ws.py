@@ -8,6 +8,7 @@ import pytest
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway import metrics
 from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 class DummyWS:
@@ -92,7 +93,11 @@ async def test_hub_sends_sentinel_weight():
     await hub.stop()
     msg = json.loads(ws.messages[0])
     assert msg["type"] == "sentinel_weight"
-    assert msg["data"] == {"sentinel_id": "s1", "weight": 0.5}
+    assert msg["data"] == {
+        "sentinel_id": "s1",
+        "weight": 0.5,
+        "version": EVENT_SCHEMA_VERSION,
+    }
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.gateway.event_handlers import create_event_router
 from qmtl.gateway.event_descriptor import EventDescriptorConfig, validate_event_token
 from qmtl.sdk.activation_manager import ActivationManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 from qmtl.sdk.metrics import node_processed_total, generate_latest, global_registry
 
 
@@ -40,8 +41,18 @@ async def test_world_isolation(monkeypatch):
     # 활성 이벤트가 세계마다 독립적으로 처리된다
     am1 = ActivationManager(world_id="w1", strategy_id="s1")
     am2 = ActivationManager(world_id="w2", strategy_id="s1")
-    await am1._on_message({"event": "activation_updated", "data": {"side": "long", "active": True}})
-    await am2._on_message({"event": "activation_updated", "data": {"side": "long", "active": False}})
+    await am1._on_message(
+        {
+            "event": "activation_updated",
+            "data": {"side": "long", "active": True, "version": EVENT_SCHEMA_VERSION},
+        }
+    )
+    await am2._on_message(
+        {
+            "event": "activation_updated",
+            "data": {"side": "long", "active": False, "version": EVENT_SCHEMA_VERSION},
+        }
+    )
     assert am1.allow_side("long") is True
     assert am2.allow_side("long") is False
     await am1.stop()

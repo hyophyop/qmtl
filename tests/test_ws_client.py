@@ -6,19 +6,31 @@ import pytest
 import websockets
 
 from qmtl.sdk.ws_client import WebSocketClient
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 @pytest.mark.asyncio
 async def test_ws_client_updates_state():
     events = [
-        {"event": "queue_created", "queue_id": "n1", "topic": "t1"},
-        {"event": "sentinel_weight", "sentinel_id": "s1", "weight": 0.75},
+        {
+            "event": "queue_created",
+            "queue_id": "n1",
+            "topic": "t1",
+            "version": EVENT_SCHEMA_VERSION,
+        },
+        {
+            "event": "sentinel_weight",
+            "sentinel_id": "s1",
+            "weight": 0.75,
+            "version": EVENT_SCHEMA_VERSION,
+        },
         {
             "event": "queue_update",
             "tags": ["t"],
             "interval": 60,
             "queues": [{"queue": "q1", "global": False}],
             "match_mode": "any",
+            "version": EVENT_SCHEMA_VERSION,
         },
     ]
 
@@ -47,6 +59,11 @@ async def test_ws_client_updates_state():
         assert client.queue_topics == {"n1": "t1"}
         assert client.sentinel_weights == {"s1": 0.75}
         assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
+        assert all(
+            d.get("version") == EVENT_SCHEMA_VERSION
+            for d in received
+            if (d.get("event") or d.get("type")) in {"queue_created", "sentinel_weight", "queue_update"}
+        )
     finally:
         server.close()
         await server.wait_closed()
@@ -86,7 +103,7 @@ async def test_ws_client_reconnects(monkeypatch):
             return DummyWS([])
         if len(connects) == 2:
             return DummyWS([])
-        return DummyWS([json.dumps({"event": "queue_update"})])
+        return DummyWS([json.dumps({"event": "queue_update", "version": EVENT_SCHEMA_VERSION})])
 
     monkeypatch.setattr(websockets, "connect", fake_connect)
 
@@ -137,7 +154,14 @@ async def test_ws_client_stop_closes_session():
 
 @pytest.mark.asyncio
 async def test_ws_client_logs_invalid_weight(caplog):
-    events = [{"event": "sentinel_weight", "sentinel_id": "s1", "weight": "bad"}]
+    events = [
+        {
+            "event": "sentinel_weight",
+            "sentinel_id": "s1",
+            "weight": "bad",
+            "version": EVENT_SCHEMA_VERSION,
+        }
+    ]
 
     async def handler(websocket):
         for e in events:

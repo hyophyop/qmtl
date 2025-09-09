@@ -1,9 +1,13 @@
 import pytest
 from qmtl.sdk.activation_manager import ActivationManager
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 async def _emit(am: ActivationManager, side: str, **fields) -> None:
-    payload = {"event": "activation_updated", "data": {"side": side, **fields}}
+    payload = {
+        "event": "activation_updated",
+        "data": {"side": side, "version": EVENT_SCHEMA_VERSION, **fields},
+    }
     await am._on_message(payload)  # type: ignore[attr-defined]
 
 

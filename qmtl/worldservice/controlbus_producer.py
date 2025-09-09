@@ -4,6 +4,8 @@ import contextlib
 import json
 from typing import Any, Iterable
 
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
+
 
 class ControlBusProducer:
     """Publish policy updates to the internal ControlBus."""
@@ -33,7 +35,11 @@ class ControlBusProducer:
     async def publish_policy_update(self, world_id: str, strategies: Iterable[str]) -> None:
         if self._producer is None:
             return
-        payload = {"world_id": world_id, "strategies": list(strategies)}
+        payload = {
+            "world_id": world_id,
+            "strategies": list(strategies),
+            "version": EVENT_SCHEMA_VERSION,
+        }
         data = json.dumps(payload).encode()
         key = world_id.encode()
         await self._producer.send_and_wait(self.topic, data, key=key)

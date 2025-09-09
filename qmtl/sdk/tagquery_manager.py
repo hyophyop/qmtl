@@ -14,6 +14,7 @@ from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_que
 
 from .ws_client import WebSocketClient
 from . import runtime
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .node import TagQueryNode
@@ -152,6 +153,9 @@ class TagQueryManager:
         """Apply WebSocket ``data`` to registered nodes."""
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        version = payload.get("version")
+        if version != EVENT_SCHEMA_VERSION:
+            return
         if event == "queue_update":
             tags = payload.get("tags") or []
             interval = payload.get("interval")

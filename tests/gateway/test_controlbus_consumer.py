@@ -6,6 +6,7 @@ from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessa
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway import metrics
 from qmtl.sdk.node import MatchMode
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 class FakeHub:
@@ -42,6 +43,7 @@ class FakeHub:
                     "interval": interval,
                     "queues": queues,
                     "match_mode": match_mode,
+                    "version": EVENT_SCHEMA_VERSION,
                 },
             )
         )
@@ -73,9 +75,9 @@ async def test_consumer_relays_and_deduplicates():
     )
     await consumer.start()
     ts = time.time() * 1000
-    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
-    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1}, timestamp_ms=ts)
-    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2}, timestamp_ms=ts)
+    msg1 = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": EVENT_SCHEMA_VERSION}, timestamp_ms=ts)
+    dup = ControlBusMessage(topic="activation", key="a", etag="e1", run_id="r1", data={"id": 1, "version": EVENT_SCHEMA_VERSION}, timestamp_ms=ts)
+    msg2 = ControlBusMessage(topic="policy", key="a", etag="e2", run_id="r2", data={"id": 2, "version": EVENT_SCHEMA_VERSION}, timestamp_ms=ts)
     msg3 = ControlBusMessage(
         topic="queue",
         key="t",
@@ -86,6 +88,7 @@ async def test_consumer_relays_and_deduplicates():
             "interval": 60,
             "queues": [{"queue": "q", "global": False}],
             "match_mode": "any",
+            "version": EVENT_SCHEMA_VERSION,
         },
         timestamp_ms=ts,
     )
@@ -96,8 +99,8 @@ async def test_consumer_relays_and_deduplicates():
     await consumer._queue.join()
     await consumer.stop()
     assert hub.events == [
-        ("activation_updated", {"id": 1}),
-        ("policy_updated", {"id": 2}),
+        ("activation_updated", {"id": 1, "version": EVENT_SCHEMA_VERSION}),
+        ("policy_updated", {"id": 2, "version": EVENT_SCHEMA_VERSION}),
             (
                 "queue_update",
                 {
@@ -105,6 +108,7 @@ async def test_consumer_relays_and_deduplicates():
                     "interval": 60,
                     "queues": [{"queue": "q", "global": False}],
                     "match_mode": MatchMode.ANY,
+                    "version": EVENT_SCHEMA_VERSION,
                 },
             ),
     ]

@@ -10,7 +10,7 @@ from fastapi import WebSocket
 
 from qmtl.sdk.node import MatchMode
 
-from ..common.cloudevents import format_event
+from ..common.cloudevents import format_event, EVENT_SCHEMA_VERSION
 from . import metrics
 
 
@@ -371,6 +371,7 @@ class WebSocketHub:
             "qmtl.gateway",
             "queue_update",
             {
+                "version": EVENT_SCHEMA_VERSION,
                 "tags": tags,
                 "interval": interval,
                 "queues": queues,
@@ -385,18 +386,26 @@ class WebSocketHub:
         event = format_event(
             "qmtl.gateway",
             "sentinel_weight",
-            {"sentinel_id": sentinel_id, "weight": weight},
+            {
+                "version": EVENT_SCHEMA_VERSION,
+                "sentinel_id": sentinel_id,
+                "weight": weight,
+            },
         )
         await self.broadcast(event, topic="activation")
 
     async def send_activation_updated(self, payload: dict) -> None:
         """Broadcast activation updates."""
-        event = format_event("qmtl.gateway", "activation_updated", payload)
+        event = format_event(
+            "qmtl.gateway", "activation_updated", {"version": EVENT_SCHEMA_VERSION, **payload}
+        )
         await self.broadcast(event, topic="activation")
 
     async def send_policy_updated(self, payload: dict) -> None:
         """Broadcast policy updates."""
-        event = format_event("qmtl.gateway", "policy_updated", payload)
+        event = format_event(
+            "qmtl.gateway", "policy_updated", {"version": EVENT_SCHEMA_VERSION, **payload}
+        )
         await self.broadcast(event, topic="policy")
 
 

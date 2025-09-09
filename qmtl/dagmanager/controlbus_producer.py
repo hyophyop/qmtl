@@ -4,6 +4,8 @@ import contextlib
 import json
 from typing import Any, Iterable
 
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
+
 
 class ControlBusProducer:
     """Publish control events to the internal bus (e.g. Kafka)."""
@@ -38,6 +40,7 @@ class ControlBusProducer:
             "interval": interval,
             "queues": list(queues),
             "match_mode": match_mode,
+            "version": EVENT_SCHEMA_VERSION,
         }
         data = json.dumps(payload).encode()
         key = ",".join(tags).encode()

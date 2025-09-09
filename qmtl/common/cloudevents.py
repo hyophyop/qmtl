@@ -5,6 +5,9 @@ from typing import Any
 from uuid import uuid4
 
 
+EVENT_SCHEMA_VERSION = 1
+
+
 def format_event(
     source: str, event_type: str, data: dict[str, Any], *, correlation_id: str | None = None
 ) -> dict[str, Any]:
@@ -23,4 +26,4 @@ def format_event(
         "correlation_id": correlation_id,
     }
 
-__all__ = ["format_event"]
+__all__ = ["format_event", "EVENT_SCHEMA_VERSION"]

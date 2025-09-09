@@ -6,6 +6,7 @@ import pytest
 from qmtl.sdk import Strategy, TagQueryNode, Runner, MatchMode
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.ws import WebSocketHub
+from qmtl.common.cloudevents import EVENT_SCHEMA_VERSION
 
 
 async def wait_for(condition, timeout: float = 1.0) -> None:
@@ -64,15 +65,18 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
             self.client = client
 
         async def send_queue_update(self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY):  # type: ignore[override]
-            await self.client._handle({
-                "type": "queue_update",
-                "data": {
-                    "tags": tags,
-                    "interval": interval,
-                    "queues": queues,
-                    "match_mode": match_mode.value,
-                },
-            })
+            await self.client._handle(
+                {
+                    "type": "queue_update",
+                    "data": {
+                        "tags": tags,
+                        "interval": interval,
+                        "queues": queues,
+                        "match_mode": match_mode.value,
+                        "version": EVENT_SCHEMA_VERSION,
+                    },
+                }
+            )
 
     client = DummyWS("ws://dummy")
 
@@ -130,6 +134,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
                     "interval": 60,
                     "queues": [{"queue": "q1", "global": False}],
                     "match_mode": "any",
+                    "version": EVENT_SCHEMA_VERSION,
                 },
             }
         )
