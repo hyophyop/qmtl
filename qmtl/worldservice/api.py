@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException, Response
+import json
+try:
+    from blake3 import blake3 as _blake3
+except Exception:  # pragma: no cover - fallback
+    _blake3 = None
 from pydantic import BaseModel
 
 from .policy_engine import Policy, evaluate_policy
@@ -162,6 +167,25 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         if bus:
             await bus.publish_policy_update(world_id, active, version=version)
         return ApplyResponse(active=active)
+
+    @app.get('/worlds/{world_id}/{topic}/state_hash')
+    async def get_state_hash(world_id: str, topic: str) -> Dict:
+        """Return a lightweight state hash for a topic.
+
+        Currently supports 'activation' by hashing the serialized state dict.
+        """
+        topic = (topic or '').lower()
+        if topic != 'activation':
+            raise HTTPException(status_code=400, detail='unsupported topic')
+        data = await store.get_activation(world_id)
+        # Normalize deterministically
+        payload = json.dumps(data, sort_keys=True).encode()
+        if _blake3 is not None:
+            digest = 'blake3:' + _blake3(payload).hexdigest()
+        else:  # pragma: no cover
+            import hashlib as _hashlib
+            digest = 'sha256:' + _hashlib.sha256(payload).hexdigest()
+        return {"state_hash": digest}
 
     @app.get('/worlds/{world_id}/audit')
     async def get_audit(world_id: str) -> List[Dict]:
