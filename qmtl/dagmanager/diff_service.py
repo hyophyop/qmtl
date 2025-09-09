@@ -20,7 +20,7 @@ from .metrics import (
     diff_failures_total,
 )
 from .kafka_admin import KafkaAdmin, partition_key
-from .topic import TopicConfig, topic_name
+from .topic import TopicConfig, topic_name, get_config
 from qmtl.common import AsyncCircuitBreaker
 from .monitor import AckStatus
 
@@ -549,6 +549,17 @@ class KafkaQueueManager(QueueManager):
         dry_run: bool = False,
     ) -> str:
         existing = self.admin.client.list_topics().keys()
+        # Choose TopicConfig by topic type per spec. Default to 'indicator'.
+        topic_type = "indicator"
+        nt = (node_type or "").lower()
+        if any(k in nt for k in ("exec", "trade", "order", "portfolio")):
+            topic_type = "trade_exec"
+        elif any(k in nt for k in ("raw", "price", "ohlcv")):
+            topic_type = "raw"
+        try:
+            applied_cfg = get_config(topic_type)
+        except Exception:
+            applied_cfg = self.config
         topic = topic_name(
             asset,
             node_type,
@@ -557,5 +568,5 @@ class KafkaQueueManager(QueueManager):
             dry_run=dry_run,
             existing=existing,
         )
-        self.admin.create_topic_if_needed(topic, self.config)
+        self.admin.create_topic_if_needed(topic, applied_cfg or self.config)
         return topic
