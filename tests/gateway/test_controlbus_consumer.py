@@ -34,7 +34,14 @@ class FakeHub:
             self._done.set()
 
     async def send_queue_update(
-        self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY
+        self,
+        tags,
+        interval,
+        queues,
+        match_mode: MatchMode = MatchMode.ANY,
+        *,
+        etag: str | None = None,
+        ts: str | None = None,
     ) -> None:
         self.events.append(
             (
@@ -44,6 +51,9 @@ class FakeHub:
                     "interval": interval,
                     "queues": queues,
                     "match_mode": match_mode,
+                    "etag": etag,
+                    "ts": ts,
+                    "version": 1,
                 },
             )
         )
@@ -54,7 +64,7 @@ class FakeHub:
         self.events.append(
             (
                 "tagquery.upsert",
-                {"tags": tags, "interval": interval, "queues": queues},
+                {"tags": tags, "interval": interval, "queues": queues, "version": 1},
             )
         )
         if self._done and len(self.events) == 4:
@@ -115,6 +125,8 @@ async def test_consumer_relays_and_deduplicates():
             "queues": [{"queue": "q", "global": False}],
             "match_mode": "any",
             "version": 1,
+            "etag": "e3",
+            "ts": "2020-01-01T00:00:00Z",
         },
         timestamp_ms=ts,
     )
@@ -134,6 +146,9 @@ async def test_consumer_relays_and_deduplicates():
                 "interval": 60,
                 "queues": [{"queue": "q", "global": False}],
                 "match_mode": MatchMode.ANY,
+                "etag": "e3",
+                "ts": "2020-01-01T00:00:00Z",
+                "version": 1,
             },
         ),
         (
@@ -142,6 +157,7 @@ async def test_consumer_relays_and_deduplicates():
                 "tags": ["x"],
                 "interval": 60,
                 "queues": [{"queue": "q", "global": False}],
+                "version": 1,
             },
         ),
     ]

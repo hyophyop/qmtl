@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 
@@ -33,15 +34,22 @@ class ControlBusProducer:
     async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any", *, version: int = 1) -> None:
         if self._producer is None:
             return
+        tags_list = list(tags)
+        tags_hash = ".".join(sorted(tags_list))
+        etag = f"q:{tags_hash}:{interval}:{version}"
+        ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         payload = {
-            "tags": list(tags),
+            "type": "QueueUpdated",
+            "tags": tags_list,
             "interval": interval,
             "queues": list(queues),
             "match_mode": match_mode,
             "version": version,
+            "etag": etag,
+            "ts": ts,
         }
         data = json.dumps(payload).encode()
-        key = ",".join(tags).encode()
+        key = ",".join(tags_list).encode()
         await self._producer.send_and_wait(self.topic, data, key=key)
 
 

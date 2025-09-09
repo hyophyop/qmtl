@@ -63,17 +63,30 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
             super().__init__()
             self.client = client
 
-        async def send_queue_update(self, tags, interval, queues, match_mode: MatchMode = MatchMode.ANY):  # type: ignore[override]
-            await self.client._handle({
-                "type": "queue_update",
-                "data": {
-                    "tags": tags,
-                    "interval": interval,
-                    "queues": queues,
-                    "match_mode": match_mode.value,
-                    "version": 1,
-                },
-            })
+        async def send_queue_update(
+            self,
+            tags,
+            interval,
+            queues,
+            match_mode: MatchMode = MatchMode.ANY,
+            *,
+            etag: str | None = None,
+            ts: str | None = None,
+        ) -> None:  # type: ignore[override]
+            await self.client._handle(
+                {
+                    "type": "queue_update",
+                    "data": {
+                        "tags": tags,
+                        "interval": interval,
+                        "queues": queues,
+                        "match_mode": match_mode.value,
+                        "etag": etag,
+                        "ts": ts,
+                        "version": 1,
+                    },
+                }
+            )
 
     client = DummyWS("ws://dummy")
 
@@ -122,6 +135,8 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
             60,
             [{"queue": "q1", "global": False}],
             MatchMode.ANY,
+            etag="q:t1:60:1",
+            ts="2020-01-01T00:00:00Z",
         )
         await strat.tag_query_manager.handle_message(
             {
@@ -131,6 +146,8 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
                     "interval": 60,
                     "queues": [{"queue": "q1", "global": False}],
                     "match_mode": "any",
+                    "etag": "q:t1:60:1",
+                    "ts": "2020-01-01T00:00:00Z",
                     "version": 1,
                 },
             }
