@@ -129,7 +129,8 @@ paths:
                         queue: { type: string }
                         global: { type: boolean }
 ```
-Clients must specify ``match_mode`` to control tag matching behavior.
+Clients SHOULD specify ``match_mode`` to control tag matching behavior. When
+omitted, Gateway defaults to ``any`` for backward compatibility.
 
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 
