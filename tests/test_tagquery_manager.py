@@ -51,6 +51,7 @@ async def test_resolve_and_update(monkeypatch):
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
                 "match_mode": "any",
+                "version": 1,
             },
         }
     )
@@ -64,6 +65,7 @@ async def test_resolve_and_update(monkeypatch):
                 "interval": 60,
                 "queues": [],
                 "match_mode": "any",
+                "version": 1,
             },
         }
     )
@@ -123,6 +125,7 @@ async def test_match_mode_routes_updates():
                 "interval": 60,
                 "queues": [{"queue": "q1", "global": False}],
                 "match_mode": "all",
+                "version": 1,
             },
         }
     )
@@ -136,6 +139,7 @@ async def test_match_mode_routes_updates():
                 "tags": ["t1"],
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
+                "version": 1,
             },
         }
     )
@@ -205,6 +209,7 @@ async def test_start_uses_event_descriptor(monkeypatch):
                 "interval": 60,
                 "queues": [{"queue": "q3", "global": False}],
                 "match_mode": "any",
+                "version": 1,
             },
             })
 

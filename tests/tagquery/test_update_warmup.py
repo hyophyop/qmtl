@@ -20,6 +20,7 @@ async def test_update_warmup_and_removal():
                 "interval": 60,
                 "queues": [{"queue": "q1", "global": False}],
                 "match_mode": "any",
+                "version": 1,
             },
         }
     )
@@ -45,6 +46,7 @@ async def test_update_warmup_and_removal():
                     {"queue": "q2", "global": False},
                 ],
                 "match_mode": "any",
+                "version": 1,
             },
         }
     )
@@ -66,6 +68,7 @@ async def test_update_warmup_and_removal():
                 "interval": 60,
                 "queues": [{"queue": "q2", "global": False}],
                 "match_mode": "any",
+                "version": 1,
             },
         }
     )

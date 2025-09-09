@@ -30,22 +30,28 @@ class ControlBusProducer:
             await self._producer.stop()
         self._producer = None
 
-    async def publish_policy_update(self, world_id: str, strategies: Iterable[str], *, version: int | None = None) -> None:
+    async def publish_policy_update(self, world_id: str, strategies: Iterable[str], *, version: int = 1) -> None:
         if self._producer is None:
             return
-        payload: Dict[str, Any] = {"type": "PolicyUpdated", "world_id": world_id, "strategies": list(strategies)}
-        if version is not None:
-            payload["version"] = version
+        payload: Dict[str, Any] = {
+            "type": "PolicyUpdated",
+            "world_id": world_id,
+            "strategies": list(strategies),
+            "version": version,
+        }
         data = json.dumps(payload).encode()
         key = world_id.encode()
         await self._producer.send_and_wait(self.topic, data, key=key)
 
-    async def publish_activation_update(self, world_id: str, payload: Dict[str, Any], *, version: int | None = None) -> None:
+    async def publish_activation_update(self, world_id: str, payload: Dict[str, Any], *, version: int = 1) -> None:
         if self._producer is None:
             return
-        evt: Dict[str, Any] = {"type": "ActivationUpdated", "world_id": world_id, **payload}
-        if version is not None:
-            evt["version"] = version
+        evt: Dict[str, Any] = {
+            "type": "ActivationUpdated",
+            "world_id": world_id,
+            **payload,
+            "version": version,
+        }
         data = json.dumps(evt).encode()
         key = world_id.encode()
         await self._producer.send_and_wait(self.topic, data, key=key)

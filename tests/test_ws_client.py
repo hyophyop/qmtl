@@ -11,14 +11,25 @@ from qmtl.sdk.ws_client import WebSocketClient
 @pytest.mark.asyncio
 async def test_ws_client_updates_state():
     events = [
-        {"event": "queue_created", "queue_id": "n1", "topic": "t1"},
-        {"event": "sentinel_weight", "sentinel_id": "s1", "weight": 0.75},
+        {
+            "event": "queue_created",
+            "queue_id": "n1",
+            "topic": "t1",
+            "version": 1,
+        },
+        {
+            "event": "sentinel_weight",
+            "sentinel_id": "s1",
+            "weight": 0.75,
+            "version": 1,
+        },
         {
             "event": "queue_update",
             "tags": ["t"],
             "interval": 60,
             "queues": [{"queue": "q1", "global": False}],
             "match_mode": "any",
+            "version": 1,
         },
     ]
 
@@ -46,7 +57,10 @@ async def test_ws_client_updates_state():
         await client.stop()
         assert client.queue_topics == {"n1": "t1"}
         assert client.sentinel_weights == {"s1": 0.75}
-        assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
+        assert any(
+            (d.get("event") or d.get("type")) == "queue_update" and d.get("version") == 1
+            for d in received
+        )
     finally:
         server.close()
         await server.wait_closed()
@@ -86,7 +100,7 @@ async def test_ws_client_reconnects(monkeypatch):
             return DummyWS([])
         if len(connects) == 2:
             return DummyWS([])
-        return DummyWS([json.dumps({"event": "queue_update"})])
+        return DummyWS([json.dumps({"event": "queue_update", "version": 1})])
 
     monkeypatch.setattr(websockets, "connect", fake_connect)
 
@@ -109,7 +123,10 @@ async def test_ws_client_reconnects(monkeypatch):
     await client.stop()
 
     assert len(connects) >= 3
-    assert any((d.get("event") or d.get("type")) == "queue_update" for d in received)
+    assert any(
+        (d.get("event") or d.get("type")) == "queue_update" and d.get("version") == 1
+        for d in received
+    )
 
 
 @pytest.mark.asyncio
@@ -137,7 +154,14 @@ async def test_ws_client_stop_closes_session():
 
 @pytest.mark.asyncio
 async def test_ws_client_logs_invalid_weight(caplog):
-    events = [{"event": "sentinel_weight", "sentinel_id": "s1", "weight": "bad"}]
+    events = [
+        {
+            "event": "sentinel_weight",
+            "sentinel_id": "s1",
+            "weight": "bad",
+            "version": 1,
+        }
+    ]
 
     async def handler(websocket):
         for e in events:

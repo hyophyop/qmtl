@@ -152,6 +152,9 @@ class TagQueryManager:
         """Apply WebSocket ``data`` to registered nodes."""
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        ver = payload.get("version")
+        if ver != 1:
+            return
         if event == "tagquery.upsert":
             tags = payload.get("tags") or []
             interval = payload.get("interval")

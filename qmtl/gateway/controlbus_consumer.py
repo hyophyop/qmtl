@@ -194,6 +194,11 @@ class ControlBusConsumer:
         if not self.ws_hub:
             return
 
+        version = msg.data.get("version")
+        if version != 1:
+            logger.warning("unsupported controlbus message version: %s", version)
+            return
+
         if msg.topic == "activation":
             await self.ws_hub.send_activation_updated(msg.data)
         elif msg.topic == "policy":

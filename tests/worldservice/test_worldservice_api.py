@@ -9,10 +9,10 @@ class DummyBus(ControlBusProducer):
     def __init__(self):
         self.events: list[tuple[str, str, int | None, object]] = []
 
-    async def publish_policy_update(self, world_id: str, strategies: list[str], *, version: int | None = None) -> None:  # type: ignore[override]
+    async def publish_policy_update(self, world_id: str, strategies: list[str], *, version: int = 1) -> None:  # type: ignore[override]
         self.events.append(("policy", world_id, version, list(strategies)))
 
-    async def publish_activation_update(self, world_id: str, payload: dict, *, version: int | None = None) -> None:  # type: ignore[override]
+    async def publish_activation_update(self, world_id: str, payload: dict, *, version: int = 1) -> None:  # type: ignore[override]
         self.events.append(("activation", world_id, version, payload))
 
 

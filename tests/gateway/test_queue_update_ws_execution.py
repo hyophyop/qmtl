@@ -25,6 +25,7 @@ class DummyHub(WebSocketHub):
                 "interval": interval,
                 "queues": queues,
                 "match_mode": match_mode.value,
+                "version": 1,
             },
         })
 

@@ -16,6 +16,7 @@ async def test_tagquery_upsert_initializes_node():
                 "tags": ["t"],
                 "interval": 60,
                 "queues": [{"queue": "q1", "global": False}],
+                "version": 1,
             },
         }
     )

@@ -63,8 +63,8 @@ class DummyBus(ControlBusProducer):
     def __init__(self) -> None:  # pragma: no cover - simple capture
         self.published: list[tuple] = []
 
-    async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any") -> None:  # type: ignore[override]
-        self.published.append((list(tags), interval, list(queues), match_mode))
+    async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any", *, version: int = 1) -> None:  # type: ignore[override]
+        self.published.append((list(tags), interval, list(queues), match_mode, version))
 
 
 @pytest.mark.asyncio
@@ -77,7 +77,8 @@ async def test_completion_emits_event():
     await monitor.check_once()
 
     assert bus.published
-    tags, interval, queues, mode = bus.published[0]
+    tags, interval, queues, mode, version = bus.published[0]
     assert queues == []
     assert tags == ["t1"]
     assert mode == "any"
+    assert version == 1

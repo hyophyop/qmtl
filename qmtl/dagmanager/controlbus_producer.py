@@ -30,7 +30,7 @@ class ControlBusProducer:
             await self._producer.stop()
         self._producer = None
 
-    async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any") -> None:
+    async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any", *, version: int = 1) -> None:
         if self._producer is None:
             return
         payload = {
@@ -38,6 +38,7 @@ class ControlBusProducer:
             "interval": interval,
             "queues": list(queues),
             "match_mode": match_mode,
+            "version": version,
         }
         data = json.dumps(payload).encode()
         key = ",".join(tags).encode()

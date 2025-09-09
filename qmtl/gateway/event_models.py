@@ -20,22 +20,25 @@ class QueueUpdateData(BaseModel):
     queues: List[QueueRef]
     match_mode: Literal["any", "all"] = "any"
     world_id: Optional[StrictStr] = None
+    version: StrictInt
 
 
 class TagQueryUpsertData(BaseModel):
     tags: List[StrictStr]
     interval: StrictInt
     queues: List[QueueRef]
+    version: StrictInt
 
 
 class SentinelWeightData(BaseModel):
     sentinel_id: StrictStr
     weight: StrictFloat
     world_id: Optional[StrictStr] = None
+    version: StrictInt
 
 
 class ActivationUpdatedData(BaseModel):
-    version: Optional[StrictInt] = None
+    version: StrictInt
     world_id: StrictStr
     strategy_id: Optional[StrictStr] = None
     side: Optional[Literal["long", "short"]] = None
@@ -51,7 +54,7 @@ class ActivationUpdatedData(BaseModel):
 
 
 class PolicyUpdatedData(BaseModel):
-    version: Optional[StrictInt] = None
+    version: StrictInt
     world_id: StrictStr
     policy_version: Optional[StrictInt] = None
     state_hash: Optional[StrictStr] = None
