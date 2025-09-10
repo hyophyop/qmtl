@@ -14,6 +14,10 @@ from pydantic import BaseModel
 from .policy_engine import Policy, evaluate_policy
 from .controlbus_producer import ControlBusProducer
 from .storage import Storage
+from qmtl.transforms import (
+    equity_linearity_metrics,
+    equity_linearity_metrics_v2,
+)
 
 
 class World(BaseModel):
@@ -50,6 +54,9 @@ class ApplyRequest(BaseModel):
     previous: List[str] | None = None
     correlations: Dict[tuple[str, str], float] | None = None
     policy: Policy | None = None
+    # Optional time series for server-side metric augmentation
+    # Each strategy may provide cumulative equity/pnl or returns (to be cumulated)
+    series: Dict[str, "StrategySeries"] | None = None
 
 
 class ApplyResponse(BaseModel):
@@ -217,7 +224,8 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         if policy is None:
             raise HTTPException(status_code=404, detail='policy not found')
         prev = payload.previous or await store.get_decisions(world_id)
-        active = evaluate_policy(payload.metrics, policy, prev, payload.correlations)
+        metrics = _augment_metrics_with_linearity(payload.metrics or {}, payload.series)
+        active = evaluate_policy(metrics, policy, prev, payload.correlations)
         return ApplyResponse(active=active)
 
     @app.post('/worlds/{world_id}/apply', response_model=ApplyResponse)
@@ -226,7 +234,8 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         if policy is None:
             raise HTTPException(status_code=404, detail='policy not found')
         prev = payload.previous or await store.get_decisions(world_id)
-        active = evaluate_policy(payload.metrics, policy, prev, payload.correlations)
+        metrics = _augment_metrics_with_linearity(payload.metrics or {}, payload.series)
+        active = evaluate_policy(metrics, policy, prev, payload.correlations)
         await store.set_decisions(world_id, active)
         version = await store.default_policy_version(world_id)
         if bus:
@@ -276,3 +285,85 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
 
 
 __all__ = ['World', 'PolicyRequest', 'ApplyRequest', 'ApplyResponse', 'create_app']
+
+# ---------------------------------------------------------------------------
+# Helper models and utilities (defined after create_app to avoid forward refs)
+
+class StrategySeries(BaseModel):
+    equity: List[float] | None = None
+    pnl: List[float] | None = None
+    returns: List[float] | None = None
+
+
+def _augment_metrics_with_linearity(
+    metrics: Dict[str, Dict[str, float]],
+    series: Dict[str, StrategySeries] | None,
+) -> Dict[str, Dict[str, float]]:
+    if not series:
+        return metrics
+    # Local copy to avoid mutating caller structures
+    out: Dict[str, Dict[str, float]] = {k: dict(v) for k, v in (metrics or {}).items()}
+
+    # Convert provided series to cumulative equity
+    equities: Dict[str, List[float]] = {}
+    for sid, s in series.items():
+        eq: List[float] | None
+        if s.equity:
+            eq = list(s.equity)
+        elif s.pnl:
+            eq = list(s.pnl)
+        elif s.returns:
+            c = 0.0
+            eq = []
+            for r in s.returns:
+                c += float(r)
+                eq.append(c)
+        else:
+            eq = None
+        if eq and len(eq) >= 2:
+            equities[sid] = eq
+            m1 = equity_linearity_metrics(eq)
+            m2 = equity_linearity_metrics_v2(eq)
+            slot = out.setdefault(sid, {})
+            slot.update(
+                {
+                    # v1
+                    "el_v1_score": m1["score"],
+                    "el_v1_r2_up": m1["r2_up"],
+                    "el_v1_straightness": m1["straightness_ratio"],
+                    "el_v1_monotonicity": m1["monotonicity"],
+                    "el_v1_new_high_frac": m1["new_high_frac"],
+                    "el_v1_net_gain": m1["net_gain"],
+                    # v2
+                    "el_v2_score": m2["score"],
+                    "el_v2_tvr": m2["tvr"],
+                    "el_v2_tuw": m2["tuw"],
+                    "el_v2_r2_up": m2["r2_up"],
+                    "el_v2_spearman_rho": m2["spearman_rho"],
+                    "el_v2_t_slope": m2["t_slope"],
+                    "el_v2_t_slope_sig": m2["t_slope_sig"],
+                    "el_v2_mdd_norm": m2["mdd_norm"],
+                    "el_v2_net_gain": m2["net_gain"],
+                }
+            )
+
+    # Aggregate portfolio-level metrics across provided series (equal-sum)
+    if equities:
+        minlen = min(len(v) for v in equities.values())
+        if minlen >= 2:
+            portfolio = [sum(v[i] for v in equities.values()) for i in range(minlen)]
+            p1 = equity_linearity_metrics(portfolio)
+            p2 = equity_linearity_metrics_v2(portfolio)
+            for sid in equities.keys():
+                slot = out.setdefault(sid, {})
+                slot.update(
+                    {
+                        "portfolio_el_v1_score": p1["score"],
+                        "portfolio_el_v2_score": p2["score"],
+                        "portfolio_el_v2_tvr": p2["tvr"],
+                        "portfolio_el_v2_tuw": p2["tuw"],
+                        "portfolio_el_v2_mdd_norm": p2["mdd_norm"],
+                    }
+                )
+
+    return out
