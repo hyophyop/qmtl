@@ -48,6 +48,12 @@ from .execution_velocity_hazard import (
     execution_velocity_hazard,
 )
 from .order_book_inertia import obii_from_survival, order_book_inertia
+from .equity_linearity import (
+    equity_linearity_metrics,
+    equity_linearity_from_history_node,
+    equity_linearity_metrics_v2,
+    equity_linearity_v2_from_history_node,
+)
 
 __all__ = [
     "rate_of_change",
@@ -102,4 +108,8 @@ __all__ = [
     "execution_velocity_hazard",
     "obii_from_survival",
     "order_book_inertia",
+    "equity_linearity_metrics",
+    "equity_linearity_from_history_node",
+    "equity_linearity_metrics_v2",
+    "equity_linearity_v2_from_history_node",
 ]
