@@ -6,8 +6,9 @@ This follows the spirit of the architecture spec by capturing deterministic
 fields and a sorted dependency list from a DAG node dictionary.
 """
 
-from typing import Any, Iterable
-from blake3 import blake3
+from typing import Any
+
+from .nodeid import hash_blake3
 
 
 def _sorted_deps(node: dict) -> list[str]:
@@ -45,7 +46,7 @@ def serialize_nodespec(node: dict[str, Any]) -> bytes:
 
 def canonical_node_id(node: dict[str, Any]) -> str:
     data = serialize_nodespec(node)
-    return f"blake3:{blake3(data).hexdigest()}"
+    return hash_blake3(data)
 
 
 __all__ = ["serialize_nodespec", "canonical_node_id"]
