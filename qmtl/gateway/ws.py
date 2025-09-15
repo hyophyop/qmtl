@@ -337,23 +337,20 @@ class WebSocketHub:
             self._known_topics.add(topic)
             await self._recalc_subscriber_metrics()
 
+    async def _send_event(self, event_type: str, payload: dict, *, topic: str | None = None) -> None:
+        """Format and broadcast an event for the given type and payload."""
+        event = format_event("qmtl.gateway", event_type, payload)
+        await self.broadcast(event, topic=topic)
+
     async def send_progress(self, strategy_id: str, status: str) -> None:
-        event = format_event(
-            "qmtl.gateway",
-            "progress",
-            {"strategy_id": strategy_id, "status": status, "version": 1},
-        )
-        await self.broadcast(event)
+        payload = {"strategy_id": strategy_id, "status": status, "version": 1}
+        await self._send_event("progress", payload)
 
     async def send_queue_map(
         self, strategy_id: str, queue_map: dict[str, list[str] | str]
     ) -> None:
-        event = format_event(
-            "qmtl.gateway",
-            "queue_map",
-            {"strategy_id": strategy_id, "queue_map": queue_map, "version": 1},
-        )
-        await self.broadcast(event)
+        payload = {"strategy_id": strategy_id, "queue_map": queue_map, "version": 1}
+        await self._send_event("queue_map", payload)
 
     async def send_queue_update(
         self,
@@ -365,58 +362,44 @@ class WebSocketHub:
         world_id: str | None = None,
         etag: str | None = None,
         ts: str | None = None,
-    ) -> None:
+        ) -> None:
         """Broadcast queue update events.
 
         ``match_mode`` must be ``MatchMode.ANY`` or ``MatchMode.ALL``.
         """
-        event = format_event(
-            "qmtl.gateway",
-            "queue_update",
-            {
-                "tags": tags,
-                "interval": interval,
-                "queues": queues,
-                "match_mode": match_mode.value,
-                **({"world_id": world_id} if world_id else {}),
-                **({"etag": etag} if etag is not None else {}),
-                **({"ts": ts} if ts is not None else {}),
-                "version": 1,
-            },
-        )
-        await self.broadcast(event, topic="queue")
+        payload = {
+            "tags": tags,
+            "interval": interval,
+            "queues": queues,
+            "match_mode": match_mode.value,
+            **({"world_id": world_id} if world_id else {}),
+            **({"etag": etag} if etag is not None else {}),
+            **({"ts": ts} if ts is not None else {}),
+            "version": 1,
+        }
+        await self._send_event("queue_update", payload, topic="queue")
 
     async def send_tagquery_upsert(
         self, tags: list[str], interval: int, queues: list[dict[str, object]]
     ) -> None:
         """Broadcast tag query upsert events."""
-        event = format_event(
-            "qmtl.gateway",
-            "tagquery.upsert",
-            {"tags": tags, "interval": interval, "queues": queues, "version": 1},
-        )
-        await self.broadcast(event, topic="queue")
+        payload = {"tags": tags, "interval": interval, "queues": queues, "version": 1}
+        await self._send_event("tagquery.upsert", payload, topic="queue")
 
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         """Broadcast sentinel weight updates."""
-        event = format_event(
-            "qmtl.gateway",
-            "sentinel_weight",
-            {"sentinel_id": sentinel_id, "weight": weight, "version": 1},
-        )
-        await self.broadcast(event, topic="activation")
+        payload = {"sentinel_id": sentinel_id, "weight": weight, "version": 1}
+        await self._send_event("sentinel_weight", payload, topic="activation")
 
     async def send_activation_updated(self, payload: dict) -> None:
         """Broadcast activation updates."""
         payload.setdefault("version", 1)
-        event = format_event("qmtl.gateway", "activation_updated", payload)
-        await self.broadcast(event, topic="activation")
+        await self._send_event("activation_updated", payload, topic="activation")
 
     async def send_policy_updated(self, payload: dict) -> None:
         """Broadcast policy updates."""
         payload.setdefault("version", 1)
-        event = format_event("qmtl.gateway", "policy_updated", payload)
-        await self.broadcast(event, topic="policy")
+        await self._send_event("policy_updated", payload, topic="policy")
 
 
 __all__ = ["WebSocketHub"]
