@@ -32,6 +32,14 @@ class ControlBusProducer:
             await self._producer.stop()
         self._producer = None
 
+    async def _publish(self, event_type: str, world_id: str, payload: Dict[str, Any]) -> None:
+        if self._producer is None:
+            return
+        event = format_event("qmtl.worldservice", event_type, payload)
+        data = json.dumps(event).encode()
+        key = world_id.encode()
+        await self._producer.send_and_wait(self.topic, data, key=key)
+
     async def publish_policy_update(
         self,
         world_id: str,
@@ -42,8 +50,6 @@ class ControlBusProducer:
         *,
         version: int = 1,
     ) -> None:
-        if self._producer is None:
-            return
         payload: Dict[str, Any] = {
             "world_id": world_id,
             "policy_version": policy_version,
@@ -52,10 +58,7 @@ class ControlBusProducer:
             "ts": ts,
             "version": version,
         }
-        event = format_event("qmtl.worldservice", "policy_updated", payload)
-        data = json.dumps(event).encode()
-        key = world_id.encode()
-        await self._producer.send_and_wait(self.topic, data, key=key)
+        await self._publish("policy_updated", world_id, payload)
 
     async def publish_activation_update(
         self,
@@ -68,8 +71,6 @@ class ControlBusProducer:
         payload: Dict[str, Any] | None = None,
         version: int = 1,
     ) -> None:
-        if self._producer is None:
-            return
         body: Dict[str, Any] = {
             "world_id": world_id,
             "etag": etag,
@@ -80,10 +81,7 @@ class ControlBusProducer:
         }
         if payload:
             body.update(payload)
-        event = format_event("qmtl.worldservice", "activation_updated", body)
-        data = json.dumps(event).encode()
-        key = world_id.encode()
-        await self._producer.send_and_wait(self.topic, data, key=key)
+        await self._publish("activation_updated", world_id, body)
 
 
 __all__ = ["ControlBusProducer"]
