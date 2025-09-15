@@ -1,19 +1,16 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException, Response
-import json
-from datetime import datetime, timezone
-try:
-    from blake3 import blake3 as _blake3
-except Exception:  # pragma: no cover - fallback
-    _blake3 = None
 from pydantic import BaseModel
 
 from .policy_engine import Policy, evaluate_policy
 from .controlbus_producer import ControlBusProducer
 from .storage import Storage
+from qmtl.common.hashutils import hash_bytes
 from qmtl.transforms import (
     equity_linearity_metrics,
     equity_linearity_metrics_v2,
@@ -201,11 +198,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
             # Compute state hash similar to the `/state_hash` endpoint for audit
             full_state = await store.get_activation(world_id)
             state_payload = json.dumps(full_state, sort_keys=True).encode()
-            if _blake3 is not None:
-                state_hash = 'blake3:' + _blake3(state_payload).hexdigest()
-            else:  # pragma: no cover - fallback
-                import hashlib as _hashlib
-                state_hash = 'sha256:' + _hashlib.sha256(state_payload).hexdigest()
+            state_hash = hash_bytes(state_payload)
             await bus.publish_activation_update(
                 world_id,
                 etag=data.get('etag', str(version)),
@@ -242,11 +235,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
             # Hash the active strategy list for a checksum
             sorted_active = sorted(active)
             digest_payload = json.dumps(sorted_active).encode()
-            if _blake3 is not None:
-                checksum = 'blake3:' + _blake3(digest_payload).hexdigest()
-            else:  # pragma: no cover - fallback
-                import hashlib as _hashlib
-                checksum = 'sha256:' + _hashlib.sha256(digest_payload).hexdigest()
+            checksum = hash_bytes(digest_payload)
             ts = datetime.now(timezone.utc).isoformat()
             await bus.publish_policy_update(
                 world_id,
@@ -270,11 +259,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         data = await store.get_activation(world_id)
         # Normalize deterministically
         payload = json.dumps(data, sort_keys=True).encode()
-        if _blake3 is not None:
-            digest = 'blake3:' + _blake3(payload).hexdigest()
-        else:  # pragma: no cover
-            import hashlib as _hashlib
-            digest = 'sha256:' + _hashlib.sha256(payload).hexdigest()
+        digest = hash_bytes(payload)
         return {"state_hash": digest}
 
     @app.get('/worlds/{world_id}/audit')
