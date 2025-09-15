@@ -5,7 +5,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from qmtl.gateway.event_handlers import create_event_router
+from qmtl.gateway.event_handlers import create_event_router, normalize_topics
 from qmtl.gateway.event_descriptor import EventDescriptorConfig
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway.api import create_app
@@ -18,6 +18,13 @@ class NoServerHub(WebSocketHub):
     async def stop(self) -> None:  # type: ignore[override]
         async with self._lock:
             self._clients.clear()
+
+
+def test_normalize_topics_aliases() -> None:
+    assert normalize_topics(["queues", "queue", "activation", "unknown"]) == {
+        "queue",
+        "activation",
+    }
 
 
 @pytest.mark.asyncio

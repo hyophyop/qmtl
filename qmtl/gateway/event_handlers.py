@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 import logging
 import contextlib
@@ -31,6 +31,24 @@ from .event_models import (
 from . import metrics as gw_metrics
 
 logger = logging.getLogger(__name__)
+
+
+_TOPIC_NORMALIZATION_MAP: dict[str, str] = {
+    "queues": "queue",
+    "queue": "queue",
+    "activation": "activation",
+    "policy": "policy",
+}
+
+
+def normalize_topics(raw_topics: Iterable[str]) -> set[str]:
+    """Return the normalized subscription topics."""
+
+    return {
+        _TOPIC_NORMALIZATION_MAP[topic]
+        for topic in raw_topics
+        if topic in _TOPIC_NORMALIZATION_MAP
+    }
 
 
 def create_event_router(
@@ -67,13 +85,7 @@ def create_event_router(
                 if token:
                     claims = validate_event_token(token, event_config)
                     raw_topics = claims.get("topics") or []
-                    normalize = {
-                        "queues": "queue",
-                        "queue": "queue",
-                        "activation": "activation",
-                        "policy": "policy",
-                    }
-                    topics_set = {normalize[t] for t in raw_topics if t in normalize}
+                    topics_set = normalize_topics(raw_topics)
                 else:
                     # Missing token
                     raise ValueError("missing token")
@@ -214,15 +226,7 @@ def create_event_router(
                             try:
                                 new_claims = validate_event_token(token, event_config)
                                 raw_topics = new_claims.get("topics") or []
-                                normalize = {
-                                    "queues": "queue",
-                                    "queue": "queue",
-                                    "activation": "activation",
-                                    "policy": "policy",
-                                }
-                                new_topics_set = {
-                                    normalize[t] for t in raw_topics if t in normalize
-                                }
+                                new_topics_set = normalize_topics(raw_topics)
                                 topics_set = new_topics_set
                                 claims = new_claims
                                 await ws_hub.set_topics(websocket, topics=new_topics_set)
