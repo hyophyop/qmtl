@@ -185,6 +185,31 @@ def test_compute_context_switch_clears_cache_and_records_metric():
     assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
 
 
+def test_compute_context_switch_resets_warmup_state():
+    calls = []
+
+    def fn(view):
+        calls.append(view)
+
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=fn, name="n", interval="60s", period=2)
+
+    Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "u1", 60, 120, {"v": 2})
+    assert not node.pre_warmup
+    assert len(calls) == 1
+    started_at = node._warmup_started_at
+
+    node.apply_compute_context(ComputeContext(world_id="w", execution_domain="live"))
+    assert node.pre_warmup
+    assert node._warmup_started_at > started_at
+
+    Runner.feed_queue_data(node, "u1", 60, 180, {"v": 3})
+    assert len(calls) == 1
+    Runner.feed_queue_data(node, "u1", 60, 240, {"v": 4})
+    assert len(calls) == 2
+
+
 def test_as_xarray_view_is_read_only_and_matches_get_slice():
     cache = NodeCache(period=2)
     cache.append("u1", 1, 1, {"v": 1})
