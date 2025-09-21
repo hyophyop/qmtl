@@ -29,7 +29,7 @@ class FakeRepo(NodeRepository):
         self.fetched = []
         self.sentinels = []
         self.records = {}
-        self.buffered: dict[str, int] = {}
+        self.buffered: dict[str, dict[str, int]] = {}
 
     def get_nodes(self, node_ids):
         self.fetched.append(list(node_ids))
@@ -41,14 +41,34 @@ class FakeRepo(NodeRepository):
     def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
 
-    def mark_buffering(self, node_id, *, timestamp_ms=None):
-        self.buffered[node_id] = timestamp_ms or 0
+    def mark_buffering(self, node_id, *, compute_key=None, timestamp_ms=None):
+        key = compute_key or "__global__"
+        self.buffered.setdefault(node_id, {})[key] = timestamp_ms or 0
 
-    def clear_buffering(self, node_id):
-        self.buffered.pop(node_id, None)
+    def clear_buffering(self, node_id, *, compute_key=None):
+        if compute_key:
+            ctx = self.buffered.get(node_id)
+            if isinstance(ctx, dict):
+                ctx.pop(compute_key, None)
+                if not ctx:
+                    self.buffered.pop(node_id, None)
+        else:
+            self.buffered.pop(node_id, None)
 
-    def get_buffering_nodes(self, older_than_ms):
-        return [n for n, t in self.buffered.items() if t < older_than_ms]
+    def get_buffering_nodes(self, older_than_ms, *, compute_key=None):
+        result = []
+        for node_id, ctx in self.buffered.items():
+            if isinstance(ctx, dict):
+                if compute_key:
+                    ts = ctx.get(compute_key)
+                    if ts is not None and ts < older_than_ms:
+                        result.append(node_id)
+                elif any(ts is not None and ts < older_than_ms for ts in ctx.values()):
+                    result.append(node_id)
+            else:
+                if ctx < older_than_ms:
+                    result.append(node_id)
+        return result
 
 
 class FakeQueue(QueueManager):
@@ -56,11 +76,23 @@ class FakeQueue(QueueManager):
         self.calls = []
 
     def upsert(
-        self, asset, node_type, code_hash, version, *, dry_run=False, namespace=None
+        self,
+        asset,
+        node_type,
+        code_hash,
+        version,
+        *,
+        dry_run=False,
+        namespace=None,
     ):
         self.calls.append((asset, node_type, code_hash, version, dry_run, namespace))
         return topic_name(
-            asset, node_type, code_hash, version, dry_run=dry_run, namespace=namespace
+            asset,
+            node_type,
+            code_hash,
+            version,
+            dry_run=dry_run,
+            namespace=namespace,
         )
 
 
@@ -106,20 +138,6 @@ def _make_dag(nodes):
     return json.dumps({"nodes": nodes})
 
 
-def _partition_with_context(
-    node_id: str,
-    interval: int | None = None,
-    bucket: int | None = None,
-    **ctx,
-) -> str:
-    return partition_key(
-        node_id,
-        interval,
-        bucket,
-        compute_key=compute_key(node_id, **ctx),
-    )
-
-
 def test_pre_scan_and_db_fetch_topo_order():
     repo = FakeRepo()
     queue = FakeQueue()
@@ -156,6 +174,20 @@ def test_pre_scan_and_db_fetch():
 
     service.diff(req)
     assert repo.fetched[0] == ["A", "B"]
+
+
+def _partition_with_context(
+    node_id: str,
+    interval: int | None = None,
+    bucket: int | None = None,
+    **ctx,
+) -> str:
+    return partition_key(
+        node_id,
+        interval,
+        bucket,
+        compute_key=compute_key(node_id, **ctx),
+    )
 
 
 def test_hash_compare_and_queue_upsert():
@@ -196,7 +228,8 @@ def test_hash_compare_and_queue_upsert():
     assert queue.calls == [("asset", "N", "c2", "v1", False, None)]
 
 
-def test_namespace_applied_to_queue_names(monkeypatch):
+def test_compute_key_isolation_and_metrics():
+    metrics.reset_metrics()
     repo = FakeRepo()
     repo.records["A"] = NodeRecord(
         "A",
@@ -215,7 +248,7 @@ def test_namespace_applied_to_queue_names(monkeypatch):
     stream = FakeStream()
     service = DiffService(repo, queue, stream)
 
-    dag = json.dumps(
+    dag_live = json.dumps(
         {
             "nodes": [
                 {
@@ -223,29 +256,32 @@ def test_namespace_applied_to_queue_names(monkeypatch):
                     "node_type": "N",
                     "code_hash": "c1",
                     "schema_hash": "s1",
-                },
-                {
-                    "node_id": "B",
-                    "node_type": "N",
-                    "code_hash": "c2",
-                    "schema_hash": "s2",
-                },
+                }
             ],
-            "meta": {
-                "topic_namespace": {"world": "World-1", "domain": "Live"},
-            },
+            "meta": {"compute_context": {"world_id": "w1", "execution_domain": "live"}},
+        }
+    )
+    dag_backtest = json.dumps(
+        {
+            "nodes": [
+                {
+                    "node_id": "A",
+                    "node_type": "N",
+                    "code_hash": "c1",
+                    "schema_hash": "s1",
+                }
+            ],
+            "meta": {"compute_context": {"world_id": "w2", "execution_domain": "backtest"}},
         }
     )
 
-    monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", "1")
+    service.diff(DiffRequest(strategy_id="s", dag_json=dag_live))
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag_backtest))
 
-    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
-
-    existing_topic = chunk.queue_map[_partition_with_context("A", None, None)]
-    new_topic = chunk.queue_map[_partition_with_context("B", None, None)]
-    assert existing_topic.startswith("world-1.live.")
-    assert new_topic.startswith("world-1.live.")
-    assert queue.calls[-1][5] == "world-1.live"
+    assert len(queue.calls) == 1
+    assert chunk.new_nodes and chunk.new_nodes[0].compute_key is not None
+    key = ("A", "w2", "backtest", "__unset__", "__unset__")
+    assert metrics.cross_context_cache_hit_total._vals.get(key) == 1  # type: ignore[attr-defined]
 
 
 def test_schema_change_buffering_flag():

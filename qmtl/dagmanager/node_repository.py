@@ -58,20 +58,20 @@ class MemoryNodeRepository(NodeRepository):
 
     # utility --------------------------------------------------------------
     def add_node(self, record: NodeRecord) -> None:
-                _GRAPH.add_node(
-                    record.node_id,
-                    type="compute",
-                    node_type=record.node_type,
-                    code_hash=record.code_hash,
-                    schema_hash=record.schema_hash,
-                    schema_id=record.schema_id,
-                    interval=record.interval,
-                    period=record.period,
-                    tags=list(record.tags),
-                    bucket=record.bucket,
-                    topic=record.topic,
-                    **{"global": record.is_global},
-                )
+        _GRAPH.add_node(
+            record.node_id,
+            type="compute",
+            node_type=record.node_type,
+            code_hash=record.code_hash,
+            schema_hash=record.schema_hash,
+            schema_id=record.schema_id,
+            interval=record.interval,
+            period=record.period,
+            tags=list(record.tags),
+            bucket=record.bucket,
+            topic=record.topic,
+            **{"global": record.is_global},
+        )
 
     # interface ------------------------------------------------------------
     def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -153,19 +153,67 @@ class MemoryNodeRepository(NodeRepository):
                 )
         return None
 
-    def mark_buffering(self, node_id: str, *, timestamp_ms: int | None = None) -> None:
+    def mark_buffering(
+        self,
+        node_id: str,
+        *,
+        compute_key: str | None = None,
+        timestamp_ms: int | None = None,
+    ) -> None:
         ts = timestamp_ms or int(time.time() * 1000)
         if _GRAPH.has_node(node_id):
-            _GRAPH.nodes[node_id]["buffering_since"] = ts
+            data = _GRAPH.nodes[node_id]
+            if compute_key:
+                ctx = data.setdefault("buffering_since_ctx", {})
+                if isinstance(ctx, dict):
+                    ctx[compute_key] = ts
+                else:
+                    data["buffering_since_ctx"] = {compute_key: ts}
+            else:
+                data["buffering_since"] = ts
 
-    def clear_buffering(self, node_id: str) -> None:
-        if _GRAPH.has_node(node_id):
-            _GRAPH.nodes[node_id].pop("buffering_since", None)
+    def clear_buffering(
+        self,
+        node_id: str,
+        *,
+        compute_key: str | None = None,
+    ) -> None:
+        if not _GRAPH.has_node(node_id):
+            return
+        data = _GRAPH.nodes[node_id]
+        if compute_key:
+            ctx = data.get("buffering_since_ctx")
+            if isinstance(ctx, dict):
+                ctx.pop(compute_key, None)
+                if not ctx:
+                    data.pop("buffering_since_ctx", None)
+        else:
+            data.pop("buffering_since", None)
+            ctx = data.get("buffering_since_ctx")
+            if isinstance(ctx, dict):
+                ctx.clear()
 
-    def get_buffering_nodes(self, older_than_ms: int) -> list[str]:
+    def get_buffering_nodes(
+        self,
+        older_than_ms: int,
+        *,
+        compute_key: str | None = None,
+    ) -> list[str]:
         result: list[str] = []
         for nid, data in _GRAPH.nodes(data=True):
             ts = data.get("buffering_since")
+            if compute_key:
+                ctx = data.get("buffering_since_ctx")
+                if isinstance(ctx, dict):
+                    ctx_ts = ctx.get(compute_key)
+                    if ctx_ts is not None and ctx_ts < older_than_ms:
+                        result.append(nid)
+                        continue
+            else:
+                if isinstance(data.get("buffering_since_ctx"), dict):
+                    if any(v is not None and v < older_than_ms for v in data["buffering_since_ctx"].values()):
+                        result.append(nid)
+                        continue
             if ts is not None and ts < older_than_ms:
                 result.append(nid)
         return result

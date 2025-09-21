@@ -64,13 +64,32 @@ def clear_nodecache_resident_bytes() -> None:
 def get_cross_context_cache_hit_counter():
     """Return the singleton counter tracking cross-context cache hits."""
 
+    expected_labels = [
+        "node_id",
+        "world_id",
+        "execution_domain",
+        "as_of",
+        "partition",
+    ]
     if "cross_context_cache_hit_total" in global_registry._names_to_collectors:  # type: ignore[attr-defined]
         counter = global_registry._names_to_collectors["cross_context_cache_hit_total"]  # type: ignore[index]
+        try:
+            labelnames = list(counter._labelnames)  # type: ignore[attr-defined]
+        except Exception:
+            labelnames = expected_labels
+        if labelnames != expected_labels:
+            global_registry.unregister(counter)
+            counter = Counter(
+                "cross_context_cache_hit_total",
+                "Number of cache hits observed with mismatched context",
+                expected_labels,
+                registry=global_registry,
+            )
     else:
         counter = Counter(
             "cross_context_cache_hit_total",
             "Number of cache hits observed with mismatched context",
-            ["node_id", "world_id", "execution_domain", "as_of", "partition"],
+            expected_labels,
             registry=global_registry,
         )
 
@@ -111,4 +130,3 @@ def clear_cross_context_cache_hits() -> None:
     counter = get_cross_context_cache_hit_counter()
     counter.clear()
     counter._vals = {}  # type: ignore[attr-defined]
-
