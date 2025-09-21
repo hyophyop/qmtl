@@ -100,10 +100,11 @@ def test_handle_trade_order_http_and_kafka(monkeypatch):
 
     import importlib
     import qmtl.sdk.runner as runner_module
+    from qmtl.sdk import trade_dispatcher as dispatcher_module
 
     runner_module = importlib.reload(runner_module)
-    monkeypatch.setattr(runner_module.HttpPoster, "post", fake_post)
-    assert runner_module.HttpPoster.post is fake_post
+    monkeypatch.setattr(dispatcher_module.HttpPoster, "post", fake_post)
+    assert dispatcher_module.HttpPoster.post is fake_post
 
     runner = runner_module.Runner
     producer = FakeKafkaProducer()
