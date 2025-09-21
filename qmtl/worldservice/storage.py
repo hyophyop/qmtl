@@ -188,6 +188,128 @@ class Storage:
         payload = "\x1f".join(str(part) for part in components).encode()
         return hash_bytes(payload)
 
+    def _coerce_validation_cache_entry(
+        self,
+        entry: ValidationCacheEntry | Dict[str, Any],
+        *,
+        world_id: str,
+        node_id: str,
+        execution_domain: str,
+    ) -> Optional[ValidationCacheEntry]:
+        if isinstance(entry, ValidationCacheEntry):
+            normalized_domain = self._normalize_execution_domain(entry.execution_domain)
+            if normalized_domain == entry.execution_domain:
+                return entry
+            return ValidationCacheEntry(
+                eval_key=entry.eval_key,
+                node_id=entry.node_id,
+                execution_domain=normalized_domain,
+                contract_id=entry.contract_id,
+                dataset_fingerprint=entry.dataset_fingerprint,
+                code_version=entry.code_version,
+                resource_policy=entry.resource_policy,
+                result=entry.result,
+                metrics=dict(entry.metrics),
+                timestamp=entry.timestamp,
+            )
+
+        if not isinstance(entry, dict):
+            raise TypeError(
+                f"unexpected validation cache payload for {world_id}/{node_id}: {entry!r}"
+            )
+
+        eval_key = entry.get("eval_key")
+        contract_id = entry.get("contract_id")
+        dataset_fingerprint = entry.get("dataset_fingerprint")
+        code_version = entry.get("code_version")
+        resource_policy = entry.get("resource_policy")
+        result = entry.get("result")
+        timestamp = entry.get("timestamp")
+
+        if not isinstance(eval_key, str):
+            return None
+        if not isinstance(contract_id, str):
+            return None
+        if not isinstance(dataset_fingerprint, str):
+            return None
+        if not isinstance(code_version, str):
+            return None
+        if not isinstance(resource_policy, str):
+            return None
+        if not isinstance(result, str):
+            return None
+        if not isinstance(timestamp, str):
+            return None
+
+        metrics = entry.get("metrics") or {}
+        if not isinstance(metrics, dict):
+            metrics = dict(metrics)
+
+        node_value = entry.get("node_id")
+        node_value = node_value if isinstance(node_value, str) else node_id
+
+        domain_value = entry.get("execution_domain", execution_domain)
+        try:
+            normalized_domain = self._normalize_execution_domain(domain_value)
+        except ValueError:
+            normalized_domain = DEFAULT_EXECUTION_DOMAIN
+
+        return ValidationCacheEntry(
+            eval_key=eval_key,
+            node_id=node_value,
+            execution_domain=normalized_domain,
+            contract_id=contract_id,
+            dataset_fingerprint=dataset_fingerprint,
+            code_version=code_version,
+            resource_policy=resource_policy,
+            result=result,
+            metrics=dict(metrics),
+            timestamp=timestamp,
+        )
+
+    def _ensure_validation_cache_bucket(
+        self, world_id: str, node_id: str
+    ) -> Dict[str, ValidationCacheEntry]:
+        world_cache = self.validation_cache.setdefault(world_id, {})
+        bucket = world_cache.get(node_id)
+        if bucket is None:
+            bucket = {}
+            world_cache[node_id] = bucket
+            return bucket
+        if not isinstance(bucket, dict):
+            raise TypeError(
+                f"unexpected validation cache container for {world_id}/{node_id}: {bucket!r}"
+            )
+
+        changed = False
+        normalized: Dict[str, ValidationCacheEntry] = {}
+        for domain_key, payload in list(bucket.items()):
+            try:
+                normalized_domain = self._normalize_execution_domain(domain_key)
+            except ValueError:
+                normalized_domain = DEFAULT_EXECUTION_DOMAIN
+                changed = True
+            converted = self._coerce_validation_cache_entry(
+                payload,
+                world_id=world_id,
+                node_id=node_id,
+                execution_domain=normalized_domain,
+            )
+            if converted is None:
+                changed = True
+                continue
+            if converted.execution_domain != normalized_domain:
+                normalized_domain = converted.execution_domain
+                changed = True
+            if not isinstance(payload, ValidationCacheEntry) or converted is not payload:
+                changed = True
+            normalized[normalized_domain] = converted
+
+        if changed:
+            world_cache[node_id] = normalized
+            return normalized
+        return bucket
+
     async def get_validation_cache(
         self,
         world_id: str,
@@ -202,16 +324,17 @@ class Storage:
         world_cache = self.validation_cache.get(world_id)
         if not world_cache:
             return None
-        node_cache = world_cache.get(node_id)
+        node_cache = self._ensure_validation_cache_bucket(world_id, node_id)
         if not node_cache:
             return None
-        entry = node_cache.get(execution_domain)
+        domain = self._normalize_execution_domain(execution_domain)
+        entry = node_cache.get(domain)
         if not entry:
             return None
         expected_key = self._compute_eval_key(
             node_id=node_id,
             world_id=world_id,
-            execution_domain=execution_domain,
+            execution_domain=domain,
             contract_id=contract_id,
             dataset_fingerprint=dataset_fingerprint,
             code_version=code_version,
@@ -276,7 +399,7 @@ class Storage:
             timestamp=ts,
         )
         world_cache = self.validation_cache.setdefault(world_id, {})
-        node_cache = world_cache.setdefault(node_id, {})
+        node_cache = self._ensure_validation_cache_bucket(world_id, node_id)
         node_cache[execution_domain] = entry
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
             {
@@ -302,14 +425,15 @@ class Storage:
             self.validation_cache.pop(world_id, None)
             scope = {"scope": "world"}
         else:
-            node_cache = cache.get(node_id)
+            node_cache = self._ensure_validation_cache_bucket(world_id, node_id)
             if not node_cache:
                 return
             if execution_domain is None:
                 cache.pop(node_id, None)
                 scope = {"scope": "node", "node_id": node_id}
             else:
-                node_cache.pop(execution_domain, None)
+                domain = self._normalize_execution_domain(execution_domain)
+                node_cache.pop(domain, None)
                 if not node_cache:
                     cache.pop(node_id, None)
                 scope = {
