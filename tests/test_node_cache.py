@@ -2,6 +2,8 @@ import pytest
 import pytest
 import xarray as xr
 from qmtl.sdk import ProcessingNode, StreamInput, Runner, NodeCache
+from qmtl.common.compute_key import ComputeContext
+from qmtl.sdk import metrics as sdk_metrics
 
 
 def test_input_window_hash_changes():
@@ -161,6 +163,26 @@ def test_get_slice_xarray():
     assert isinstance(da, xr.DataArray)
     assert da.shape == (2, 2)
     assert list(da[:, 0].astype(int)) == [2, 3]
+
+
+def test_compute_context_switch_clears_cache_and_records_metric():
+    sdk_metrics.reset_metrics()
+    src = StreamInput(interval="60s", period=2)
+    node = ProcessingNode(input=src, compute_fn=lambda _: None, name="n", interval="60s", period=2)
+
+    node.apply_compute_context(ComputeContext(world_id="w", execution_domain="backtest"))
+    Runner.feed_queue_data(node, "u1", 60, 60, {"v": 1})
+    Runner.feed_queue_data(node, "u1", 60, 120, {"v": 2})
+    assert node.cache.get_slice("u1", 60, count=2)[-1][0] == 120
+
+    node.apply_compute_context(ComputeContext(world_id="w", execution_domain="live"))
+    assert node.cache.get_slice("u1", 60, count=2) == []
+
+    Runner.feed_queue_data(node, "u1", 60, 180, {"v": 3})
+    assert node.cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
+
+    key = (node.node_id, "w", "live")
+    assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
 
 
 def test_as_xarray_view_is_read_only_and_matches_get_slice():
