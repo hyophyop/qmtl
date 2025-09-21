@@ -29,6 +29,8 @@ class ActivationState:
     version: int = 0
     long: SideState = field(default_factory=SideState)
     short: SideState = field(default_factory=SideState)
+    freeze: bool = False
+    drain: bool = False
     etag: Optional[str] = None
     run_id: Optional[str] = None
     ts: Optional[str] = None
@@ -56,6 +58,8 @@ class ActivationManager:
     def allow_side(self, side: str) -> bool:
         if self.state.stale:
             return False
+        if self.state.freeze or self.state.drain:
+            return False
         s = side.lower()
         st: SideState | None = None
         if s in {"buy", "long"}:
@@ -78,6 +82,8 @@ class ActivationManager:
         """
         if self.state.stale:
             return 0.0
+        if self.state.freeze or self.state.drain:
+            return 0.0
         s = side.lower()
         st: SideState | None = None
         if s in {"buy", "long"}:
@@ -98,6 +104,10 @@ class ActivationManager:
             return 1.0
         return w
 
+    def _recompute_global_modes(self) -> None:
+        self.state.freeze = bool(self.state.long.freeze or self.state.short.freeze)
+        self.state.drain = bool(self.state.long.drain or self.state.short.drain)
+
     async def _on_message(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
@@ -105,8 +115,10 @@ class ActivationManager:
             side = (payload.get("side") or "").lower()
             active = bool(payload.get("active", False))
             weight = payload.get("weight")
-            freeze = bool(payload.get("freeze", False))
-            drain = bool(payload.get("drain", False))
+            freeze_val = payload.get("freeze")
+            drain_val = payload.get("drain")
+            freeze = bool(freeze_val) if freeze_val is not None else None
+            drain = bool(drain_val) if drain_val is not None else None
             eff_mode = payload.get("effective_mode")
             self.state.etag = payload.get("etag") or self.state.etag
             self.state.run_id = payload.get("run_id") or self.state.run_id
@@ -128,8 +140,10 @@ class ActivationManager:
                 target = self.state.short
             if target is not None:
                 target.active = active
-                target.freeze = freeze
-                target.drain = drain
+                if freeze is not None:
+                    target.freeze = freeze
+                if drain is not None:
+                    target.drain = drain
                 if weight is not None:
                     try:
                         target.weight = float(weight)
@@ -138,6 +152,15 @@ class ActivationManager:
                 else:
                     # Default weight when absent per spec: 1.0 if active else 0.0
                     target.weight = 1.0 if active else 0.0
+            else:
+                # Global mode update (e.g., side="all")
+                if freeze is not None:
+                    self.state.long.freeze = freeze
+                    self.state.short.freeze = freeze
+                if drain is not None:
+                    self.state.long.drain = drain
+                    self.state.short.drain = drain
+            self._recompute_global_modes()
 
     async def start(self) -> None:
         if self._started:
