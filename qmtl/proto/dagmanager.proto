@@ -4,6 +4,11 @@ package qmtl.dagmanager;
 message DiffRequest {
   string strategy_id = 1;
   string dag_json = 2;
+  string world_id = 3;
+  string execution_domain = 4;
+  string as_of = 5;
+  string partition = 6;
+  string dataset_fingerprint = 7;
 }
 
 message BufferInstruction {

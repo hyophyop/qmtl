@@ -47,7 +47,7 @@ from .metrics import (
     diff_requests_total,
     diff_failures_total,
 )
-from .kafka_admin import KafkaAdmin, partition_key
+from .kafka_admin import KafkaAdmin, partition_key, compute_key
 from .topic import (
     TopicConfig,
     topic_name,
@@ -68,6 +68,11 @@ if TYPE_CHECKING:  # pragma: no cover - optional import for typing
 class DiffRequest:
     strategy_id: str
     dag_json: str
+    world_id: str | None = None
+    execution_domain: str | None = None
+    as_of: str | None = None
+    partition: str | None = None
+    dataset_fingerprint: str | None = None
 
 
 @dataclass
@@ -318,12 +323,21 @@ class DiffService:
         nodes: Iterable[NodeInfo],
         existing: Dict[str, NodeRecord],
         version: str,
+        context: dict[str, str | None] | None,
         *,
         namespace: object | None = None,
     ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
         buffering_nodes: List[NodeInfo] = []
+
+        world_id = context.get("world_id") if context else None
+        execution_domain = context.get("execution_domain") if context else None
+        as_of = context.get("as_of") if context else None
+        partition = context.get("partition") if context else None
+        dataset_fingerprint = (
+            context.get("dataset_fingerprint") if context else None
+        )
 
         def _asset_from_tags(tags: list[str]) -> str:
             # Prefer a short, stable asset name derived from tags
@@ -336,7 +350,17 @@ class DiffService:
             return 'asset'
         for n in nodes:
             rec = existing.get(n.node_id)
-            key = partition_key(n.node_id, n.interval, n.bucket)
+            ck = compute_key(
+                n.node_id,
+                world_id=world_id,
+                execution_domain=execution_domain,
+                as_of=as_of,
+                partition=partition,
+                dataset_fingerprint=dataset_fingerprint,
+            )
+            key = partition_key(
+                n.node_id, n.interval, n.bucket, compute_key=ck
+            )
             if rec and rec.code_hash == n.code_hash:
                 topic = rec.topic
                 if namespace:
@@ -463,10 +487,18 @@ class DiffService:
         try:
             nodes, version, namespace = self._pre_scan(request.dag_json)
             existing = self._db_fetch([n.node_id for n in nodes])
+            context = {
+                "world_id": request.world_id,
+                "execution_domain": request.execution_domain,
+                "as_of": request.as_of,
+                "partition": request.partition,
+                "dataset_fingerprint": request.dataset_fingerprint,
+            }
             queue_map, new_nodes, buffering = self._hash_compare(
                 nodes,
                 existing,
                 version,
+                context,
                 namespace=namespace,
             )
             instructions = self._buffer_instructions(buffering)

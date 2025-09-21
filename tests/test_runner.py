@@ -10,7 +10,7 @@ from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import StreamInput, ProcessingNode
 from qmtl.sdk import Strategy
 from tests.sample_strategy import SampleStrategy
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
 
 def test_run_logs(caplog, monkeypatch):
@@ -112,7 +112,9 @@ def test_gateway_queue_mapping(monkeypatch):
         assert "code_hash" in first_node and "schema_hash" in first_node
         first_id = first_node["node_id"]
         interval = first_node.get("interval")
-        key = partition_key(first_id, interval, 0)
+        key = partition_key(
+            first_id, interval, 0, compute_key=compute_key(first_id)
+        )
         return httpx.Response(
             202,
             json={"strategy_id": "s1", "queue_map": {key: "topic1"}},

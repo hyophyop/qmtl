@@ -11,7 +11,7 @@ pytestmark = [
 from qmtl.dagmanager.cli import main
 from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
 class DummyChannel:
     async def close(self):
@@ -81,7 +81,14 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
         async def RedoDiff(self, request):
             called["sentinel"] = request.sentinel_id
             return dagmanager_pb2.DiffResult(
-                queue_map={partition_key("q", None, None): "t"},
+                queue_map={
+                    partition_key(
+                        "q",
+                        None,
+                        None,
+                        compute_key=compute_key("q"),
+                    ): "t"
+                },
                 sentinel_id=request.sentinel_id,
                 version="v2025",
             )
@@ -93,7 +100,7 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
     main(["redo-diff", "--sentinel", "v1", "--file", str(path)])
     out = capsys.readouterr().out
     assert called["sentinel"] == "v1"
-    key = partition_key("q", None, None)
+    key = partition_key("q", None, None, compute_key=compute_key("q"))
     assert f'"{key}": "t"' in out
     assert '"version": "v2025"' in out
 
@@ -146,7 +153,7 @@ def test_cli_diff_grpc_error(monkeypatch, tmp_path, capsys):
         def __init__(self, target):
             pass
 
-        async def diff(self, strategy_id, dag_json):
+        async def diff(self, strategy_id, dag_json, **_kwargs):
             raise DummyRpcError("fail")
 
         async def close(self):

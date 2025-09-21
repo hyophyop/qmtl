@@ -19,7 +19,7 @@ from qmtl.dagmanager.diff_service import (
 )
 from qmtl.dagmanager.monitor import AckStatus
 from qmtl.dagmanager.node_repository import MemoryNodeRepository
-from qmtl.dagmanager.kafka_admin import KafkaAdmin, partition_key
+from qmtl.dagmanager.kafka_admin import KafkaAdmin, partition_key, compute_key
 from qmtl.dagmanager.topic import topic_name
 from qmtl.dagmanager import metrics
 
@@ -106,6 +106,20 @@ def _make_dag(nodes):
     return json.dumps({"nodes": nodes})
 
 
+def _partition_with_context(
+    node_id: str,
+    interval: int | None = None,
+    bucket: int | None = None,
+    **ctx,
+) -> str:
+    return partition_key(
+        node_id,
+        interval,
+        bucket,
+        compute_key=compute_key(node_id, **ctx),
+    )
+
+
 def test_pre_scan_and_db_fetch_topo_order():
     repo = FakeRepo()
     queue = FakeQueue()
@@ -173,8 +187,12 @@ def test_hash_compare_and_queue_upsert():
     chunk = service.diff(req)
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
-    assert chunk.queue_map[partition_key("A", None, None)] == expected_a
-    assert chunk.queue_map[partition_key("B", None, None)] == expected_b
+    assert (
+        chunk.queue_map[_partition_with_context("A", None, None)] == expected_a
+    )
+    assert (
+        chunk.queue_map[_partition_with_context("B", None, None)] == expected_b
+    )
     assert queue.calls == [("asset", "N", "c2", "v1", False, None)]
 
 
@@ -223,8 +241,8 @@ def test_namespace_applied_to_queue_names(monkeypatch):
 
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
-    existing_topic = chunk.queue_map[partition_key("A", None, None)]
-    new_topic = chunk.queue_map[partition_key("B", None, None)]
+    existing_topic = chunk.queue_map[_partition_with_context("A", None, None)]
+    new_topic = chunk.queue_map[_partition_with_context("B", None, None)]
     assert existing_topic.startswith("world-1.live.")
     assert new_topic.startswith("world-1.live.")
     assert queue.calls[-1][5] == "world-1.live"
@@ -255,7 +273,9 @@ def test_schema_change_buffering_flag():
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
 
     expected_a = topic_name("asset", "N", "c1", "v1")
-    assert chunk.queue_map[partition_key("A", None, None)] == expected_a
+    assert (
+        chunk.queue_map[_partition_with_context("A", None, None)] == expected_a
+    )
     assert queue.calls == []
     assert not chunk.new_nodes
     assert [n.node_id for n in chunk.buffering_nodes] == ["A"]
@@ -419,8 +439,8 @@ def test_integration_with_backends():
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
     assert chunk.queue_map == {
-        partition_key("A", None, None): expected_a,
-        partition_key("B", None, None): expected_b,
+        _partition_with_context("A", None, None): expected_a,
+        _partition_with_context("B", None, None): expected_b,
     }
     assert any("sid" in p for _, p in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == expected_b
@@ -459,8 +479,8 @@ def test_integration_with_memory_repo(tmp_path):
     expected_a = topic_name("asset", "N", "c1", "v1")
     expected_b = topic_name("asset", "N", "c2", "v1")
     assert chunk.queue_map == {
-        partition_key("A", None, None): expected_a,
-        partition_key("B", None, None): expected_b,
+        _partition_with_context("A", None, None): expected_a,
+        _partition_with_context("B", None, None): expected_b,
     }
     # ensure persistence
     repo2 = MemoryNodeRepository(str(path))

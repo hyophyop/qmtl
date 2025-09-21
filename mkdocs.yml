@@ -39,6 +39,7 @@ nav:
       - Docker & Compose: operations/docker.md
       - Backfill: operations/backfill.md
       - Canary Rollout: operations/canary_rollout.md
+      - DAG Manager Compute Context: operations/dagmanager_diff_context_rollout.md
       - E2E Testing: operations/e2e_testing.md
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md

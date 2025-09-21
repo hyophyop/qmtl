@@ -82,8 +82,41 @@ class StrategyWorker:
             if dag_json is None:
                 raise RuntimeError("dag not found")
 
+            raw_context = await self.redis.hmget(
+                f"strategy:{strategy_id}",
+                "compute_world_id",
+                "compute_execution_domain",
+                "compute_as_of",
+                "compute_partition",
+                "compute_dataset_fingerprint",
+            )
+
+            def _decode(value):
+                if isinstance(value, bytes):
+                    value = value.decode()
+                if value is None:
+                    return None
+                text = str(value).strip()
+                return text or None
+
+            world_id, execution_domain, as_of, partition, dataset_fingerprint = (
+                _decode(raw_context[0]),
+                _decode(raw_context[1]),
+                _decode(raw_context[2]),
+                _decode(raw_context[3]),
+                _decode(raw_context[4]),
+            )
+
             try:
-                diff_result = await self.dag_client.diff(strategy_id, dag_json)
+                diff_result = await self.dag_client.diff(
+                    strategy_id,
+                    dag_json,
+                    world_id=world_id,
+                    execution_domain=execution_domain,
+                    as_of=as_of,
+                    partition=partition,
+                    dataset_fingerprint=dataset_fingerprint,
+                )
                 self._grpc_fail_count = 0
             except Exception:
                 logging.exception("gRPC diff failed for strategy %s", strategy_id)

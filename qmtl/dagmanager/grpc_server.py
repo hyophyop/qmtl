@@ -95,7 +95,17 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         self._streams[sentinel_id] = stream
         svc = DiffService(self._service.node_repo, self._service.queue_manager, stream)
         fut = asyncio.create_task(
-            svc.diff_async(DiffRequest(strategy_id=request.strategy_id, dag_json=request.dag_json))
+            svc.diff_async(
+                DiffRequest(
+                    strategy_id=request.strategy_id,
+                    dag_json=request.dag_json,
+                    world_id=request.world_id or None,
+                    execution_domain=request.execution_domain or None,
+                    as_of=request.as_of or None,
+                    partition=request.partition or None,
+                    dataset_fingerprint=request.dataset_fingerprint or None,
+                )
+            )
         )
         fut.add_done_callback(lambda _fut: stream.queue.put_nowait(None))
         try:

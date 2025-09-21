@@ -31,13 +31,16 @@ class CommitLogWriter:
         self,
         bucket_ts: int,
         interval: int | None,
-        records: Iterable[tuple[str, str, Any]],
+        records: Iterable[tuple[str, str, Any] | tuple[str, str, Any, str | None]],
     ) -> None:
         """Publish ``records`` for ``interval``/``bucket_ts`` in a transaction.
 
-        Each record is a tuple ``(node_id, input_window_hash, payload)``.  The
-        value sent to Kafka contains ``(node_id, bucket_ts, input_window_hash,
-        payload)`` serialised as JSON.  The message key combines the
+        Each record is a tuple ``(node_id, input_window_hash, payload, compute_key)``.
+        The ``compute_key`` element is optional; when provided it is used to
+        derive the Kafka partition key so that commit-log entries remain
+        isolated per compute context. The value sent to Kafka contains
+        ``(node_id, bucket_ts, input_window_hash, payload)`` serialised as JSON.
+        The message key combines the
         :func:`~qmtl.dagmanager.kafka_admin.partition_key` for the ``node_id``,
         ``interval`` and ``bucket_ts`` with the ``input_window_hash`` to ensure
         the topic can be compacted.
@@ -45,11 +48,23 @@ class CommitLogWriter:
 
         await self._producer.begin_transaction()
         try:
-            for node_id, input_window_hash, payload in records:
+            for record in records:
+                parts = tuple(record)
+                if len(parts) == 4:
+                    node_id, input_window_hash, payload, compute_key_hint = parts  # type: ignore[misc]
+                elif len(parts) == 3:
+                    node_id, input_window_hash, payload = parts  # type: ignore[misc]
+                    compute_key_hint = None
+                else:  # pragma: no cover - defensive argument validation
+                    raise ValueError(
+                        "Commit-log records must contain 3 or 4 elements"
+                    )
                 value = json.dumps(
                     (node_id, bucket_ts, input_window_hash, payload)
                 ).encode()
-                pkey = partition_key(node_id, interval, bucket_ts)
+                pkey = partition_key(
+                    node_id, interval, bucket_ts, compute_key=compute_key_hint
+                )
                 key = f"{pkey}:{input_window_hash}".encode()
                 # Attach runtime fingerprint in Kafka headers when supported
                 headers = [("rfp", runtime_fingerprint().encode())]

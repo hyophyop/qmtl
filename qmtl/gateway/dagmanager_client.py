@@ -134,15 +134,38 @@ class DagManagerClient:
         return namespace, execution_domain
 
     async def diff(
-        self, strategy_id: str, dag_json: str, *, world_id: str | None = None
+        self,
+        strategy_id: str,
+        dag_json: str,
+        *,
+        world_id: str | None = None,
+        execution_domain: str | None = None,
+        as_of: str | None = None,
+        partition: str | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> dagmanager_pb2.DiffChunk | None:
-        """Call ``DiffService.Diff`` with retries and collect the stream."""
+        """Call ``DiffService.Diff`` with retries and collect the stream.
 
-        request = dagmanager_pb2.DiffRequest(strategy_id=strategy_id, dag_json=dag_json)
+        Returns ``None`` when the request ultimately fails or the circuit is
+        open."""
+
         namespace: str | None = None
-        domain: str | None = None
+        domain: str | None = execution_domain
         if topic_namespace_enabled():
-            namespace, domain = self._infer_namespace(dag_json, world_id)
+            inferred_ns, inferred_domain = self._infer_namespace(dag_json, world_id)
+            namespace = inferred_ns
+            if not domain and inferred_domain:
+                domain = inferred_domain
+
+        request = dagmanager_pb2.DiffRequest(
+            strategy_id=strategy_id,
+            dag_json=dag_json,
+            world_id=world_id or "",
+            execution_domain=(domain or ""),
+            as_of=as_of or "",
+            partition=partition or "",
+            dataset_fingerprint=dataset_fingerprint or "",
+        )
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:

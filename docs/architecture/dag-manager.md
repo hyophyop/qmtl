@@ -142,7 +142,7 @@ Note: This design preserves NodeID stability while providing strong execution is
 
 ### 2.1 입력·출력 정의
 
-* **Input:** `DiffReq{strategy_id, dag_json}` (\~10‑500 KiB)
+* **Input:** `DiffReq{strategy_id, dag_json, world_id?, execution_domain?, as_of?, partition?, dataset_fingerprint?}` (\~10‑500 KiB)
 * **Output:** stream `DiffChunk{queue_map[], sentinel_id, version}`
 
 ### 2.2 단계별 상세 로직

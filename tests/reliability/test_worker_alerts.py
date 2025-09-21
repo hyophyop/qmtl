@@ -37,7 +37,7 @@ class FakeDB(Database):
 
 
 class DummyDag:
-    async def diff(self, sid: str, dag: str):
+    async def diff(self, sid: str, dag: str, **_kwargs):
         raise RuntimeError("grpc fail")
 
 

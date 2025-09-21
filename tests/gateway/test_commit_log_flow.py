@@ -1,5 +1,6 @@
 import pytest
 
+from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.gateway.commit_log_consumer import CommitLogConsumer
@@ -63,7 +64,12 @@ async def test_commit_log_end_to_end() -> None:
     writer = CommitLogWriter(producer, "commit-log")
 
     # duplicate record within a batch
-    await writer.publish_bucket(100, 60, [("n1", "h1", {"a": 1}), ("n1", "h1", {"a": 2})])
+    ck = compute_key("n1")
+    await writer.publish_bucket(
+        100,
+        60,
+        [("n1", "h1", {"a": 1}, ck), ("n1", "h1", {"a": 2}, ck)],
+    )
 
     # consumer reads messages produced above
     batch = [_FakeMessage(value) for _, _, value in producer.messages]

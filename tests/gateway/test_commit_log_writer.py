@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.sdk.node import NodeCache
 
@@ -36,13 +36,13 @@ async def test_publish_bucket_commits() -> None:
     cache.append("u1", 60, 120, {"v": 2})
     h = cache.input_window_hash()
 
-    await writer.publish_bucket(120, 60, [("n1", h, {"a": 1})])
+    await writer.publish_bucket(120, 60, [("n1", h, {"a": 1}, compute_key("n1"))])
 
     assert producer.begin_called == 1
     assert producer.commit_called == 1
     assert producer.abort_called == 0
     assert producer.messages[0][0] == "commit-log"
-    expected_key = f"{partition_key('n1', 60, 120)}:{h}".encode()
+    expected_key = f"{partition_key('n1', 60, 120, compute_key=compute_key('n1'))}:{h}".encode()
     assert producer.messages[0][1] == expected_key
     assert json.loads(producer.messages[0][2].decode()) == ["n1", 120, h, {"a": 1}]
 
@@ -57,7 +57,7 @@ async def test_publish_bucket_aborts_on_error() -> None:
     writer = CommitLogWriter(producer, "commit-log")
 
     with pytest.raises(RuntimeError):
-        await writer.publish_bucket(200, 60, [("n1", "h1", "x")])
+        await writer.publish_bucket(200, 60, [("n1", "h1", "x", compute_key("n1"))])
 
     assert producer.begin_called == 1
     assert producer.commit_called == 0
