@@ -603,6 +603,8 @@ class Node:
         if context == self._compute_context:
             return
         self._compute_context = context
+        self.pre_warmup = True
+        self._warmup_started_at = time.perf_counter()
         self.cache.activate_compute_key(
             self.compute_key,
             node_id=self.node_id,
