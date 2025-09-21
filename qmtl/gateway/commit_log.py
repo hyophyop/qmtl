@@ -55,19 +55,28 @@ class CommitLogWriter:
         ).encode()
         key = f"ingest:{strategy_id}".encode()
         headers = [("rfp", runtime_fingerprint().encode())]
+        await self._producer.begin_transaction()
         try:
-            await self._producer.send_and_wait(
-                self._topic,
-                key=key,
-                value=value,
-                headers=headers,
-            )
-        except TypeError:  # pragma: no cover - producer without header support
-            await self._producer.send_and_wait(
-                self._topic,
-                key=key,
-                value=value,
-            )
+            try:
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                    headers=headers,
+                )
+            except TypeError:  # pragma: no cover - producer without header support
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                )
+            await self._producer.commit_transaction()
+        except Exception:
+            try:
+                await self._producer.abort_transaction()
+            except Exception:  # pragma: no cover - double failure
+                logger.exception("Commit-log abort failed")
+            raise
 
     async def publish_bucket(
         self,

@@ -38,6 +38,9 @@ class RecordingProducer:
     def __init__(self) -> None:
         self.records: list[tuple[str, bytes, bytes, Any]] = []
 
+    async def begin_transaction(self) -> None:
+        return None
+
     async def send_and_wait(
         self,
         topic: str,
@@ -47,6 +50,12 @@ class RecordingProducer:
         headers: Any | None = None,
     ) -> None:
         self.records.append((topic, key or b"", value or b"", headers))
+
+    async def commit_transaction(self) -> None:
+        return None
+
+    async def abort_transaction(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
@@ -118,8 +127,17 @@ async def test_strategy_manager_writes_commit_log() -> None:
 
 
 class ExplodingProducer:
+    async def begin_transaction(self) -> None:
+        return None
+
     async def send_and_wait(self, *args: Any, **kwargs: Any) -> None:
         raise RuntimeError("producer failure")
+
+    async def commit_transaction(self) -> None:
+        return None
+
+    async def abort_transaction(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
