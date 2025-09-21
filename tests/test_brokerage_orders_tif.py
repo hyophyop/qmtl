@@ -167,7 +167,12 @@ def test_market_on_open_and_close_fill_only_at_boundaries():
     brk = make_brokerage(hours=hours, fill=UnifiedFillModel())
     account = Account(cash=1_000_000)
 
-    open_ts = datetime.combine(datetime.now(timezone.utc).date(), hours.market_hours.regular_start)
+    today = datetime.now(timezone.utc).date()
+    trade_date = today
+    while trade_date.weekday() >= 5 or trade_date in hours.holidays:
+        trade_date += timedelta(days=1)
+
+    open_ts = datetime.combine(trade_date, hours.market_hours.regular_start)
     later_ts = open_ts + timedelta(minutes=5)
 
     order_moo = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOO)
@@ -177,7 +182,7 @@ def test_market_on_open_and_close_fill_only_at_boundaries():
     fill_open = brk.execute_order(account, order_moo2, market_price=100.0, ts=open_ts)
     assert fill_open.quantity == 100
 
-    close_time = hours.early_closes.get(open_ts.date(), hours.market_hours.regular_end)
+    close_time = hours.early_closes.get(trade_date, hours.market_hours.regular_end)
     close_ts = datetime.combine(open_ts.date(), close_time)
     before_close = close_ts - timedelta(minutes=1)
     order_moc = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOC)
