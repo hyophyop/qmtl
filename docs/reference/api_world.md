@@ -2,7 +2,7 @@
 title: "World API Reference — Proxied via Gateway"
 tags: [reference, api, world]
 author: "QMTL Team"
-last_modified: 2025-08-29
+last_modified: 2025-09-22
 ---
 
 {{ nav_links() }}
@@ -76,11 +76,18 @@ Response (ActivationEnvelope)
   "freeze": false,
   "drain": false,
   "effective_mode": "paper",
+  "execution_domain": "dryrun",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
+`effective_mode` carries the WorldService policy string and remains
+backwards-compatible (`validate|compute-only|paper|live`). Gateway and
+SDK clients MUST derive `execution_domain` from it using the normative
+mapping: `validate → backtest (orders gated OFF)`, `compute-only →
+backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved
+for operator-controlled dual runs.
 Schema: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash

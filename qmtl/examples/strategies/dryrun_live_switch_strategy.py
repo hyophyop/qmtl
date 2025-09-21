@@ -1,12 +1,19 @@
-"""Sample strategy runnable in paper or live mode via env/YAML.
+"""Sample strategy runnable in dryrun or live domains via env/YAML.
 
 Environment variables
 ---------------------
-- QMTL_TRADE_MODE: "paper" (default) or "live"
+- QMTL_EXECUTION_DOMAIN: "dryrun" (default) or "live"
+- QMTL_TRADE_MODE: legacy alias ("paper" → "dryrun")
 - QMTL_BROKER_URL: HTTP endpoint for live order submission
 - QMTL_TRADE_MAX_RETRIES: integer (optional)
 - QMTL_TRADE_BACKOFF: float seconds (optional)
 - QMTL_WS_URL: WebSocket endpoint for live data/control (optional)
+
+Execution domains mirror WorldService decisions. When the policy engine
+emits ``effective_mode="validate"`` the SDK maps it to the ``backtest``
+domain (orders gated OFF). ``effective_mode="paper"`` now maps to the
+``dryrun`` domain, which keeps broker hooks wired while still suppressing
+real order placement unless explicitly enabled.
 """
 
 from __future__ import annotations
@@ -22,6 +29,30 @@ from qmtl.transforms import (
     TradeOrderPublisherNode,
 )
 from qmtl.sdk.live_data_feed import WebSocketFeed
+
+
+DEFAULT_EXECUTION_DOMAIN = "dryrun"
+EXECUTION_DOMAIN_ENV = "QMTL_EXECUTION_DOMAIN"
+LEGACY_MODE_ENV = "QMTL_TRADE_MODE"
+
+
+def _resolve_execution_domain() -> str:
+    """Return the configured execution domain with legacy compatibility."""
+
+    raw = os.getenv(EXECUTION_DOMAIN_ENV)
+    if raw is None:
+        raw = os.getenv(LEGACY_MODE_ENV)
+    if raw is None:
+        raw = DEFAULT_EXECUTION_DOMAIN
+
+    domain = raw.strip().lower()
+    if domain == "paper":
+        domain = "dryrun"
+
+    if domain not in {"dryrun", "live"}:
+        raise ValueError("Execution domain must be 'dryrun' or 'live'")
+
+    return domain
 
 
 class SwitchableStrategy(Strategy):
@@ -64,7 +95,7 @@ async def _maybe_run_ws(url: str) -> None:
 def _configure_live() -> None:
     url = os.getenv("QMTL_BROKER_URL", "").strip()
     if not url:
-        raise RuntimeError("QMTL_BROKER_URL must be set for live mode")
+        raise RuntimeError("QMTL_BROKER_URL must be set for the live domain")
     max_retries = int(os.getenv("QMTL_TRADE_MAX_RETRIES", "3"))
     try:
         backoff = float(os.getenv("QMTL_TRADE_BACKOFF", "0.1"))
@@ -74,11 +105,9 @@ def _configure_live() -> None:
 
 
 def main() -> None:
-    mode = os.getenv("QMTL_TRADE_MODE", "paper").strip().lower()
-    if mode not in {"paper", "live"}:
-        raise ValueError("QMTL_TRADE_MODE must be 'paper' or 'live'")
+    domain = _resolve_execution_domain()
 
-    if mode == "live":
+    if domain == "live":
         _configure_live()
         ws_url = os.getenv("QMTL_WS_URL", "").strip()
         if ws_url:
@@ -89,7 +118,9 @@ def main() -> None:
                 pass
 
     # For simplicity, run an offline pass. In practice, you would call Runner.run
-    # with gateway/world settings and maintain a persistent process.
+    # with gateway/world settings and maintain a persistent process. World decisions
+    # that set ``effective_mode="validate"`` map to the ``backtest`` execution domain,
+    # keeping order gates OFF until promotion.
     Runner.offline(SwitchableStrategy)
 
 

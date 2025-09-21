@@ -2,7 +2,7 @@
 title: "SDK 사용 가이드"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-24
+last_modified: 2025-09-22
 ---
 
 {{ nav_links() }}
@@ -126,6 +126,14 @@ class WorldStrategy(Strategy):
 # world_id는 노드 등록과 메트릭 레이블에 자동으로 반영됩니다.
 Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
 ```
+
+### ExecutionDomain 매핑
+
+- WorldService는 정책 평가 결과를 `effective_mode` (`validate|compute-only|paper|live`)로 전달합니다.
+- Gateway와 SDK는 이 값을 ExecutionDomain으로 매핑해 `execution_domain` 필드를 채웁니다.
+- **매핑 규칙:** `validate → backtest (주문 게이트 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow`는 운영자 전용입니다.
+- 실행 예시: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})는 `QMTL_EXECUTION_DOMAIN` 환경 변수로 `dryrun`/`live`를 전환합니다. 레거시 `QMTL_TRADE_MODE` 값 `paper`는 자동으로 `dryrun`으로 변환됩니다.
+- 오프라인 실행(`Runner.offline`)은 기본적으로 `backtest` 도메인과 동일한 게이팅을 적용합니다. WorldService가 `effective_mode="validate"`를 전달하면 SDK는 자동으로 `backtest` ExecutionDomain을 사용해 주문을 차단합니다.
 
 ## CLI 도움말
 
