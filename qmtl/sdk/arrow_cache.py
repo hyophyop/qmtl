@@ -79,10 +79,17 @@ class _Slice:
 class ArrowCacheView:
     """Hierarchical read-only view backed by Arrow ``_Slice`` objects."""
 
-    def __init__(self, data: Dict[str, Dict[int, _Slice]], *, track_access: bool = False) -> None:
+    def __init__(
+        self,
+        data: Dict[str, Dict[int, _Slice]],
+        *,
+        track_access: bool = False,
+        artifact_plane: Any | None = None,
+    ) -> None:
         self._data = data
         self._track_access = track_access
         self._access_log: list[tuple[str, int]] = []
+        self._artifact_plane = artifact_plane
 
     def __getitem__(self, key: Any):
         from .node import Node  # local import to avoid cycle
@@ -99,6 +106,25 @@ class ArrowCacheView:
 
     def access_log(self) -> list[tuple[str, int]]:
         return list(self._access_log)
+
+    def feature_artifacts(
+        self,
+        factor: Any,
+        *,
+        instrument: str | None = None,
+        dataset_fingerprint: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> list[tuple[int, Any]]:
+        if self._artifact_plane is None:
+            return []
+        return self._artifact_plane.load_series(
+            factor,
+            instrument=instrument,
+            dataset_fingerprint=dataset_fingerprint,
+            start=start,
+            end=end,
+        )
 
 
 class _SecondLevelView:
@@ -162,6 +188,8 @@ class NodeCacheArrow:
         self._active_compute_key: str | None = None
         self._active_world_id: str = ""
         self._active_execution_domain: str = DEFAULT_EXECUTION_DOMAIN
+        self._active_as_of: Any | None = None
+        self._active_partition: Any | None = None
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
         self._stop_event = threading.Event()
@@ -221,28 +249,44 @@ class NodeCacheArrow:
         node_id: str,
         world_id: str | None = None,
         execution_domain: str | None = None,
+        as_of: Any | None = None,
+        partition: Any | None = None,
     ) -> None:
         """Activate ``compute_key`` and clear cache when context changes."""
 
         key = compute_key or "__default__"
         world = str(world_id or "")
         domain = str(execution_domain or DEFAULT_EXECUTION_DOMAIN)
+        as_of_val = as_of
+        partition_val = partition
         if self._active_compute_key is None:
             self._active_compute_key = key
             self._active_world_id = world
             self._active_execution_domain = domain
+            self._active_as_of = as_of_val
+            self._active_partition = partition_val
             return
         if self._active_compute_key == key:
             self._active_world_id = world
             self._active_execution_domain = domain
+            self._active_as_of = as_of_val
+            self._active_partition = partition_val
             return
         had_data = bool(self._slices)
         self._clear_all()
         self._active_compute_key = key
         self._active_world_id = world
         self._active_execution_domain = domain
+        self._active_as_of = as_of_val
+        self._active_partition = partition_val
         if had_data:
-            sdk_metrics.observe_cross_context_cache_hit(node_id, world, domain)
+            sdk_metrics.observe_cross_context_cache_hit(
+                node_id,
+                world,
+                domain,
+                as_of=str(as_of_val) if as_of_val is not None else None,
+                partition=str(partition_val) if partition_val is not None else None,
+            )
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         sl = self._ensure(u, interval)
@@ -291,13 +335,22 @@ class NodeCacheArrow:
         self._filled.pop(key, None)
         self._last_seen.pop(key, None)
 
-    def view(self, *, track_access: bool = False) -> ArrowCacheView:
+    def view(
+        self,
+        *,
+        track_access: bool = False,
+        artifact_plane: Any | None = None,
+    ) -> ArrowCacheView:
         """Return an Arrow-native :class:`CacheView` implementation."""
 
         data: Dict[str, Dict[int, _Slice]] = {}
         for (u, i), sl in self._slices.items():
             data.setdefault(u, {})[i] = sl
-        return ArrowCacheView(data, track_access=track_access)
+        return ArrowCacheView(
+            data,
+            track_access=track_access,
+            artifact_plane=artifact_plane,
+        )
 
     def missing_flags(self) -> Dict[str, Dict[int, bool]]:
         result: Dict[str, Dict[int, bool]] = {}

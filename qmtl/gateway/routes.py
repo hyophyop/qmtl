@@ -338,6 +338,7 @@ def create_api_router(
             worlds = [payload.world_id]
 
         compute_ctx = _extract_compute_context(payload)
+        exec_domain = compute_ctx.get("execution_domain")
 
         # Preferred path: use diff to compute sentinel and queue mapping
         sentinel_id = ""

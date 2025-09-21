@@ -99,6 +99,8 @@ class NodeCache:
         self._active_compute_key: str | None = None
         self._active_world_id: str = ""
         self._active_execution_domain: str = DEFAULT_EXECUTION_DOMAIN
+        self._active_as_of: Any | None = None
+        self._active_partition: Any | None = None
 
     def _ordered_array(self, u: str, interval: int) -> np.ndarray:
         """Return internal array for ``(u, interval)`` ordered oldest->latest."""
@@ -135,28 +137,44 @@ class NodeCache:
         node_id: str,
         world_id: str | None = None,
         execution_domain: str | None = None,
+        as_of: Any | None = None,
+        partition: Any | None = None,
     ) -> None:
         """Activate ``compute_key`` and clear data when the context changes."""
 
         key = compute_key or "__default__"
         world = str(world_id or "")
         domain = str(execution_domain or DEFAULT_EXECUTION_DOMAIN)
+        as_of_val = as_of
+        partition_val = partition
         if self._active_compute_key is None:
             self._active_compute_key = key
             self._active_world_id = world
             self._active_execution_domain = domain
+            self._active_as_of = as_of_val
+            self._active_partition = partition_val
             return
         if self._active_compute_key == key:
             self._active_world_id = world
             self._active_execution_domain = domain
+            self._active_as_of = as_of_val
+            self._active_partition = partition_val
             return
         had_data = bool(self._buffers)
         self._clear_all()
         self._active_compute_key = key
         self._active_world_id = world
         self._active_execution_domain = domain
+        self._active_as_of = as_of_val
+        self._active_partition = partition_val
         if had_data:
-            sdk_metrics.observe_cross_context_cache_hit(node_id, world, domain)
+            sdk_metrics.observe_cross_context_cache_hit(
+                node_id,
+                world,
+                domain,
+                as_of=str(as_of_val) if as_of_val is not None else None,
+                partition=str(partition_val) if partition_val is not None else None,
+            )
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
@@ -208,7 +226,12 @@ class NodeCache:
             ]
         return result
 
-    def view(self, *, track_access: bool = False) -> CacheView:
+    def view(
+        self,
+        *,
+        track_access: bool = False,
+        artifact_plane: Any | None = None,
+    ) -> CacheView:
         """Return a :class:`CacheView` over the current cache contents.
 
         The returned view is read-only and mirrors the structure of
@@ -222,7 +245,7 @@ class NodeCache:
             data.setdefault(u, {})[i] = [
                 (int(t), v) for t, v in self._ordered_array(u, i) if t is not None
             ]
-        return CacheView(data, track_access=track_access)
+        return CacheView(data, track_access=track_access, artifact_plane=artifact_plane)
 
     def missing_flags(self) -> dict[str, dict[int, bool]]:
         """Return gap flags for all ``(u, interval)`` pairs."""
@@ -522,6 +545,7 @@ class Node:
         self.expected_schema = expected_schema or {}
         self.execute = True
         self.kafka_topic: str | None = None
+        self.enable_feature_artifacts = bool(self.config.get("enable_feature_artifacts", False))
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:
@@ -538,11 +562,14 @@ class Node:
         self.runtime_compat: str = runtime_compat  # "strict" | "loose"
         # Compute context (world/domain isolation)
         self._compute_context = ComputeContext()
+        self._dataset_fingerprint: str | None = None
         self.cache.activate_compute_key(
             self.compute_key,
             node_id=self.node_id,
             world_id=self._compute_context.world_id,
             execution_domain=self._compute_context.execution_domain,
+            as_of=self._compute_context.as_of,
+            partition=self._compute_context.partition,
         )
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
@@ -610,6 +637,8 @@ class Node:
             node_id=self.node_id,
             world_id=context.world_id,
             execution_domain=context.execution_domain,
+            as_of=context.as_of,
+            partition=context.partition,
         )
 
     @property
@@ -640,6 +669,14 @@ class Node:
             partition=self._compute_context.partition,
         )
         self.apply_compute_context(context)
+
+    @property
+    def dataset_fingerprint(self) -> str | None:
+        return self._dataset_fingerprint
+
+    @dataset_fingerprint.setter
+    def dataset_fingerprint(self, value: str | None) -> None:
+        self._dataset_fingerprint = value or None
 
     @property
     def as_of(self) -> Any | None:
@@ -715,6 +752,8 @@ class Node:
                 node_id=self.node_id,
                 world_id=self._compute_context.world_id,
                 execution_domain=self._compute_context.execution_domain,
+                as_of=self._compute_context.as_of,
+                partition=self._compute_context.partition,
             )
             self.cache.append(upstream_id, interval, timestamp, payload)
             sdk_metrics.observe_nodecache_resident_bytes(

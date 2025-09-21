@@ -181,7 +181,7 @@ def test_compute_context_switch_clears_cache_and_records_metric():
     Runner.feed_queue_data(node, "u1", 60, 180, {"v": 3})
     assert node.cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
 
-    key = (node.node_id, "w", "live")
+    key = (node.node_id, "w", "live", "__unset__", "__unset__")
     assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
 
 
