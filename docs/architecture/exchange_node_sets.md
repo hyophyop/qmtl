@@ -278,6 +278,10 @@ Freeze/Drain Semantics
 - ``world``: snapshots and fills are keyed by ``(world_id, symbol)`` so all
   strategies in the same world draw from a shared portfolio.
 
+Built-in Node Set builders obtain these scopes through a shared helper that
+returns both the activation weight function (soft gating) and the correctly
+scoped :class:`~qmtl.sdk.portfolio.Portfolio` instance keyed by ``world_id``.
+
 When ``portfolio_scope="world"``, ``RiskControlNode`` evaluates leverage and
 concentration across the combined positions of every participating strategy.
 This enables cross‑strategy limits such as capping aggregate symbol exposure

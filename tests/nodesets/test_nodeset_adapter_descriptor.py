@@ -1,8 +1,11 @@
 from qmtl.sdk import Node, StreamInput
 from qmtl.nodesets.adapters import CcxtSpotAdapter
+from qmtl.nodesets.options import NodeSetOptions
+from qmtl.nodesets.resources import clear_shared_portfolios
 
 
 def test_ccxt_adapter_populates_ports_and_capabilities_in_describe():
+    clear_shared_portfolios()
     price = StreamInput(interval="60s", period=1)
     signal = Node(input=price, compute_fn=lambda v: {"action": "HOLD"})
 
@@ -23,3 +26,14 @@ def test_ccxt_adapter_populates_ports_and_capabilities_in_describe():
     assert "modes" in caps and "simulate" in caps["modes"]
     assert caps.get("portfolio_scope") == "strategy"
     assert info.get("name") == "ccxt_spot"
+
+
+def test_ccxt_adapter_respects_options():
+    clear_shared_portfolios()
+    price = StreamInput(interval="60s", period=1)
+    signal = Node(input=price, compute_fn=lambda v: {"action": "HOLD"})
+    adapter = CcxtSpotAdapter(exchange_id="binance")
+    options = NodeSetOptions(portfolio_scope="world")
+    ns = adapter.build({"signal": signal}, world_id="w1", options=options)
+    caps = ns.capabilities()
+    assert caps.get("portfolio_scope") == "world"

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from qmtl.sdk.node import Node
 
 from .options import NodeSetOptions, PortfolioScope
+from .resources import get_execution_resources
 from .stubs import (
     StubPreTradeGateNode,
     StubSizingNode,
@@ -109,7 +110,7 @@ class NodeSetBuilder:
         signal: Node,
         *,
         world_id: str,
-        scope: Literal["strategy", "world"] = "strategy",
+        scope: Literal["strategy", "world"] | None = None,
         pretrade: Node | None = None,
         sizing: Node | None = None,
         execution: Node | None = None,
@@ -126,20 +127,49 @@ class NodeSetBuilder:
         wired to consume the appropriate upstream (e.g., ``sizing`` should
         consume ``pretrade``).
         """
+        effective_scope: PortfolioScope = scope or self.options.portfolio_scope
+        resources = get_execution_resources(
+            world_id,
+            portfolio_scope=effective_scope,
+            activation_weighting=self.options.activation_weighting,
+        )
+
+        def _mark(node: Node) -> Node:
+            setattr(node, "world_id", world_id)
+            return node
+
         # Defaults to pass-through stubs to preserve chain contracts
-        pre = pretrade or StubPreTradeGateNode(signal)
-        siz = sizing or StubSizingNode(pre)
-        exe = execution or StubExecutionNode(siz)
-        pub = order_publish or StubOrderPublishNode(exe)
-        fil = fills or StubFillIngestNode(pub)
-        pf = portfolio or StubPortfolioNode(fil)
-        rk = risk or StubRiskControlNode(pf)
-        tm = timing or StubTimingGateNode(rk)
+        pre = _mark(pretrade or StubPreTradeGateNode(signal))
+
+        if sizing is None:
+            siz_node = StubSizingNode(pre, portfolio=resources.portfolio, weight_fn=resources.weight_fn)
+        else:
+            siz_node = sizing
+            if getattr(siz_node, "portfolio", None) is None:
+                setattr(siz_node, "portfolio", resources.portfolio)
+            if resources.weight_fn is not None and getattr(siz_node, "weight_fn", None) is None:
+                setattr(siz_node, "weight_fn", resources.weight_fn)
+        siz = _mark(siz_node)
+
+        exe = _mark(execution or StubExecutionNode(siz))
+        pub = _mark(order_publish or StubOrderPublishNode(exe))
+        fil = _mark(fills or StubFillIngestNode(pub))
+
+        if portfolio is None:
+            pf_node = StubPortfolioNode(fil, portfolio=resources.portfolio)
+        else:
+            pf_node = portfolio
+            if getattr(pf_node, "portfolio", None) is None:
+                setattr(pf_node, "portfolio", resources.portfolio)
+        pf = _mark(pf_node)
+
+        rk = _mark(risk or StubRiskControlNode(pf))
+        tm = _mark(timing or StubTimingGateNode(rk))
         return NodeSet(
             _nodes=(pre, siz, exe, pub, fil, pf, rk, tm),
             name="nodeset",
             modes=("simulate",),
-            portfolio_scope=scope,
+            portfolio_scope=effective_scope,
         )
 
 

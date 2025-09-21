@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from qmtl.sdk.node import ProcessingNode, Node, CacheView
+from qmtl.sdk.portfolio import Portfolio
 
 
 class StubPreTradeGateNode(ProcessingNode):
@@ -32,10 +35,20 @@ class StubSizingNode(ProcessingNode):
     """Pass-through sizing stub.
 
     A real implementation would convert value/percent to absolute quantity.
+    The stub still records shared resources for compatibility with recipes.
     """
 
-    def __init__(self, order: Node, *, name: str | None = None) -> None:
+    def __init__(
+        self,
+        order: Node,
+        *,
+        portfolio: Portfolio | None = None,
+        weight_fn: Callable[[dict], float] | None = None,
+        name: str | None = None,
+    ) -> None:
         self.order = order
+        self.portfolio = portfolio
+        self.weight_fn = weight_fn
         super().__init__(
             order,
             compute_fn=self._compute,
@@ -118,8 +131,15 @@ class StubFillIngestNode(ProcessingNode):
 class StubPortfolioNode(ProcessingNode):
     """Pass-through portfolio stub."""
 
-    def __init__(self, fills: Node, *, name: str | None = None) -> None:
+    def __init__(
+        self,
+        fills: Node,
+        *,
+        portfolio: Portfolio | None = None,
+        name: str | None = None,
+    ) -> None:
         self.fills = fills
+        self.portfolio = portfolio
         super().__init__(
             fills,
             compute_fn=self._compute,

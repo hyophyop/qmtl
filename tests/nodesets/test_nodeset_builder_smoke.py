@@ -3,6 +3,8 @@ from __future__ import annotations
 from qmtl.sdk.node import Node
 from qmtl.sdk.runner import Runner
 from qmtl.nodesets.base import NodeSetBuilder
+from qmtl.nodesets.options import NodeSetOptions
+from qmtl.nodesets.resources import clear_shared_portfolios
 
 
 def test_nodeset_attach_passes_through():
@@ -38,3 +40,22 @@ def test_nodeset_attach_passes_through():
     # timing
     out = Runner.feed_queue_data(nodes[7], nodes[6].node_id, 1, 0, out)
     assert out == order
+
+
+def test_nodeset_builder_world_scope_shares_portfolio():
+    clear_shared_portfolios()
+    signal1 = Node(name="sig1", interval=1, period=1)
+    signal2 = Node(name="sig2", interval=1, period=1)
+    builder = NodeSetBuilder(options=NodeSetOptions(portfolio_scope="world"))
+    ns1 = builder.attach(signal1, world_id="world", scope="world")
+    ns2 = builder.attach(signal2, world_id="world", scope="world")
+
+    sizing1 = list(ns1)[1]
+    sizing2 = list(ns2)[1]
+    portfolio1 = getattr(sizing1, "portfolio", None)
+    portfolio2 = getattr(sizing2, "portfolio", None)
+
+    assert portfolio1 is not None
+    assert portfolio1 is portfolio2
+    assert getattr(list(ns1)[5], "portfolio", None) is portfolio1
+    assert getattr(sizing1, "weight_fn", None) is not None

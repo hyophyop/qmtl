@@ -5,6 +5,7 @@ from __future__ import annotations
 from qmtl.sdk import Node
 from qmtl.nodesets.base import NodeSet
 from qmtl.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
+from qmtl.nodesets.options import NodeSetOptions
 from qmtl.nodesets.recipes import make_ccxt_spot_nodeset
 
 
@@ -34,7 +35,13 @@ class CcxtSpotAdapter(NodeSetAdapter):
         self.time_in_force = time_in_force
         self.reduce_only = reduce_only
 
-    def build(self, inputs: dict[str, Node], *, world_id: str, options=None) -> NodeSet:
+    def build(
+        self,
+        inputs: dict[str, Node],
+        *,
+        world_id: str,
+        options: NodeSetOptions | None = None,
+    ) -> NodeSet:
         self.validate_inputs(inputs)
         signal = inputs["signal"]
         return make_ccxt_spot_nodeset(
@@ -46,6 +53,7 @@ class CcxtSpotAdapter(NodeSetAdapter):
             secret=self.secret,
             time_in_force=self.time_in_force,
             reduce_only=self.reduce_only,
+            options=options,
             descriptor=self.descriptor,
         )
 

@@ -43,4 +43,4 @@ Notes
 - strategy (default) scopes portfolio snapshots and fills by `(world_id, strategy_id, symbol)`.
 - world scopes by `(world_id, symbol)` so multiple strategies share cash/limits.
 - Prefer using the Node Set as a black box (attach then add); internal nodes are implementation details and may change.
-- In the current scaffold, this option establishes the contract; concrete exchange Node Sets enforce the behavior as they are implemented.
+- Built-in Node Set recipes and the default builder share a per-world `Portfolio` when `portfolio_scope="world"`, so strategies in the same world operate on a common cash/positions view automatically.
