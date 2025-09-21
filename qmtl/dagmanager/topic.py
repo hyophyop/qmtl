@@ -9,7 +9,7 @@ import os
 
 _NAMESPACE_FLAG_ENV = "QMTL_ENABLE_TOPIC_NAMESPACE"
 _TRUE_VALUES = {"1", "true", "yes", "on"}
-_FALSE_VALUES = {"0", "false", "no", "off", ""}
+_FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def topic_namespace_enabled() -> bool:
@@ -19,6 +19,8 @@ def topic_namespace_enabled() -> bool:
     if raw is None:
         return True
     value = raw.strip().lower()
+    if not value:
+        return True
     if value in _FALSE_VALUES:
         return False
     if value in _TRUE_VALUES:
