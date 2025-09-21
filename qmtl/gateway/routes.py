@@ -147,7 +147,7 @@ def create_api_router(
     # ControlBus-driven updates; see qmtl.gateway.ws and event handlers.
     @router.get("/queues/by_tag", response_model=QueuesByTagResponse)
     async def queues_by_tag(
-        tags: str, interval: int, match_mode: str, world_id: str = ""
+        tags: str, interval: int, match_mode: str | None = None, world_id: str = ""
     ) -> QueuesByTagResponse:
         from qmtl.common.tagquery import split_tags, normalize_match_mode
 
