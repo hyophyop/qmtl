@@ -172,6 +172,36 @@ async def test_validation_cache_endpoints_domain_and_context_handling():
 
 
 @pytest.mark.asyncio
+async def test_validation_cache_normalises_execution_domain_on_set():
+    store = Storage()
+    world_id = "world-normalised"
+    context = {
+        "node_id": "blake3:node-norm",
+        "execution_domain": "backtest",
+        "contract_id": "contract-norm",
+        "dataset_fingerprint": "lake:blake3:norm",
+        "code_version": "rev1",
+        "resource_policy": "standard",
+    }
+
+    await store.set_validation_cache(
+        world_id,
+        **{**context, "execution_domain": "BackTest"},
+        result="valid",
+        metrics={"score": 0.7},
+        timestamp="2025-02-02T00:00:00Z",
+    )
+
+    cached = await store.get_validation_cache(world_id, **context)
+    assert cached is not None
+    assert cached.execution_domain == "backtest"
+
+    node_cache = store.validation_cache[world_id][context["node_id"]]
+    assert "backtest" in node_cache
+    assert "BackTest" not in node_cache
+
+
+@pytest.mark.asyncio
 async def test_validation_cache_legacy_payloads_are_normalised_and_invalidated():
     store = Storage()
     world_id = "world-legacy"
