@@ -5,15 +5,18 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 import redis.asyncio as redis
+from fastapi import HTTPException
 from opentelemetry import trace
 
-from .database import Database
-from .fsm import StrategyFSM
-from .degradation import DegradationManager, DegradationLevel
 from . import metrics as gw_metrics
+from .commit_log import CommitLogWriter
+from .database import Database
+from .degradation import DegradationManager, DegradationLevel
+from .fsm import StrategyFSM
 from .models import StrategySubmit
 
 tracer = trace.get_tracer(__name__)
@@ -26,6 +29,7 @@ class StrategyManager:
     fsm: StrategyFSM
     degrade: Optional[DegradationManager] = None
     insert_sentinel: bool = True
+    commit_log_writer: CommitLogWriter | None = None
 
     async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
         with tracer.start_as_current_span("gateway.submit"):
@@ -56,6 +60,8 @@ class StrategyManager:
                     sentinel["version"] = version_meta
                 dag_for_storage.setdefault("nodes", []).append(sentinel)
             encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
+
+            compute_ctx, context_mapping, world_list = self._build_compute_context(payload)
 
             # Atomically perform dedupe (SETNX) and initial storage to avoid race duplicates
             lua = """
@@ -93,50 +99,45 @@ class StrategyManager:
                     if isinstance(existing_id, bytes):
                         existing_id = existing_id.decode()
                     return str(existing_id), True
+                try:
+                    if self.commit_log_writer is not None:
+                        record = self._build_commit_log_payload(
+                            strategy_id,
+                            dag_for_storage,
+                            encoded_dag,
+                            dag_hash,
+                            payload,
+                            compute_ctx,
+                            world_list,
+                        )
+                        await self.commit_log_writer.publish_submission(
+                            strategy_id,
+                            record,
+                        )
+                except Exception as exc:
+                    gw_metrics.lost_requests_total.inc()
+                    gw_metrics.lost_requests_total._val = (
+                        gw_metrics.lost_requests_total._value.get()
+                    )  # type: ignore[attr-defined]
+                    await self._rollback_submission(strategy_id, dag_hash)
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "code": "E_COMMITLOG",
+                            "message": "commit log unavailable",
+                        },
+                    ) from exc
                 # Enqueue after storage; degradation may redirect the enqueue only
                 if self.degrade and self.degrade.level == DegradationLevel.PARTIAL and not self.degrade.dag_ok:
                     self.degrade.local_queue.append(strategy_id)
                 else:
                     await self.redis.rpush("strategy_queue", strategy_id)
+            except HTTPException:
+                raise
             except Exception:
                 gw_metrics.lost_requests_total.inc()
                 gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
                 raise
-
-            def _ctx_value(value):
-                if isinstance(value, bytes):
-                    value = value.decode()
-                if value is None:
-                    return None
-                if isinstance(value, (str, int, float)):
-                    text = str(value).strip()
-                    return text or None
-                return None
-
-            context_mapping: dict[str, str] = {}
-            world_candidates: list[str] = []
-            if payload.world_id:
-                world_candidates.append(payload.world_id)
-            wid_list = getattr(payload, "world_ids", None)
-            if wid_list:
-                world_candidates.extend([w for w in wid_list if w])
-            if world_candidates:
-                world_val = _ctx_value(world_candidates[0])
-                if world_val:
-                    context_mapping["compute_world_id"] = world_val
-
-            meta = payload.meta if isinstance(payload.meta, dict) else {}
-            for key in (
-                "execution_domain",
-                "as_of",
-                "partition",
-                "dataset_fingerprint",
-            ):
-                if not meta:
-                    break
-                val = _ctx_value(meta.get(key))
-                if val:
-                    context_mapping[f"compute_{key}"] = val
 
             if context_mapping:
                 await self.redis.hset(
@@ -147,3 +148,101 @@ class StrategyManager:
 
     async def status(self, strategy_id: str) -> Optional[str]:
         return await self.fsm.get(strategy_id)
+
+    async def _rollback_submission(self, strategy_id: str, dag_hash: str) -> None:
+        try:
+            if hasattr(self.redis, "delete"):
+                await self.redis.delete(f"dag_hash:{dag_hash}")
+                await self.redis.delete(f"strategy:{strategy_id}")
+        except Exception:
+            pass
+
+    def _build_commit_log_payload(
+        self,
+        strategy_id: str,
+        dag: dict[str, Any],
+        encoded_dag: str,
+        dag_hash: str,
+        payload: StrategySubmit,
+        compute_ctx: dict[str, str | None],
+        world_ids: list[str],
+    ) -> dict[str, Any]:
+        submitted_at = datetime.now(timezone.utc).isoformat()
+        log_payload: dict[str, Any] = {
+            "event": "gateway.ingest",
+            "version": 1,
+            "strategy_id": strategy_id,
+            "dag_hash": dag_hash,
+            "dag": dag,
+            "dag_base64": encoded_dag,
+            "node_ids_crc32": payload.node_ids_crc32,
+            "insert_sentinel": bool(self.insert_sentinel),
+            "compute_context": compute_ctx,
+            "world_ids": world_ids,
+            "submitted_at": submitted_at,
+        }
+        if payload.world_id:
+            log_payload["world_id"] = self._ctx_value(payload.world_id)
+        meta = payload.meta if isinstance(payload.meta, dict) else None
+        if meta:
+            log_payload["meta"] = self._json_safe(meta)
+        return log_payload
+
+    def _json_safe(self, value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, dict):
+            return {str(k): self._json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [self._json_safe(v) for v in value]
+        return str(value)
+
+    def _ctx_value(self, value: Any | None) -> str | None:
+        if isinstance(value, bytes):
+            value = value.decode()
+        if value is None:
+            return None
+        if isinstance(value, (str, int, float)):
+            text = str(value).strip()
+            return text or None
+        return None
+
+    def _build_compute_context(
+        self, payload: StrategySubmit
+    ) -> tuple[dict[str, str | None], dict[str, str], list[str]]:
+        world_candidates: list[str] = []
+        if payload.world_id:
+            world_candidates.append(payload.world_id)
+        wid_list = getattr(payload, "world_ids", None)
+        if wid_list:
+            for wid in wid_list:
+                if wid:
+                    world_candidates.append(wid)
+        unique_worlds: list[str] = []
+        seen: set[str] = set()
+        for wid in world_candidates:
+            normalised = self._ctx_value(wid)
+            if not normalised:
+                continue
+            if normalised not in seen:
+                seen.add(normalised)
+                unique_worlds.append(normalised)
+        compute_ctx: dict[str, str | None] = {
+            "world_id": unique_worlds[0] if unique_worlds else None,
+        }
+        meta = payload.meta if isinstance(payload.meta, dict) else {}
+        for key in (
+            "execution_domain",
+            "as_of",
+            "partition",
+            "dataset_fingerprint",
+        ):
+            val = self._ctx_value(meta.get(key)) if meta else None
+            if val:
+                compute_ctx[key] = val
+        context_mapping: dict[str, str] = {
+            f"compute_{k}": v
+            for k, v in compute_ctx.items()
+            if isinstance(v, str) and v
+        }
+        return compute_ctx, context_mapping, unique_worlds

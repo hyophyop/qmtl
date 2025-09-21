@@ -24,6 +24,18 @@ class InMemoryRedis:
             self._values[key] = value
         return True
 
+    async def delete(self, *keys: str) -> int:
+        async with self._lock:
+            removed = 0
+            for key in keys:
+                if key in self._values:
+                    del self._values[key]
+                    removed += 1
+                if key in self._lists:
+                    del self._lists[key]
+                    removed += 1
+            return removed
+
     async def hset(
         self,
         name: str,
