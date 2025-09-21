@@ -24,6 +24,50 @@ class FakeDB(Database):
 
 
 @pytest.mark.asyncio
+async def test_world_routes_require_world_client(fake_redis):
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=None,
+        enable_background=False,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            resp = await api_client.get("/worlds")
+
+    assert resp.status_code == 503
+    assert resp.json() == {"detail": "world service disabled"}
+
+
+@pytest.mark.asyncio
+async def test_world_proxy_sets_correlation_header(fake_redis):
+    captured: dict[str, str | None] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["cid"] = request.headers.get("X-Correlation-ID")
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            resp = await api_client.get("/worlds/abc")
+
+    await client._client.aclose()
+    assert resp.status_code == 200
+    assert resp.headers["X-Correlation-ID"]
+    assert resp.headers["X-Correlation-ID"] == captured.get("cid")
+
+
+@pytest.mark.asyncio
 async def test_decide_ttl_cache(fake_redis):
     metrics.reset_metrics()
     call_count = {"n": 0}
