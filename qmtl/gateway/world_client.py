@@ -233,8 +233,9 @@ class WorldServiceClient:
         tval = data.get("ttl") if isinstance(data, dict) else None
         if tval is None:
             # Spec default when envelope omits ttl
-            self._decision_cache[world_id] = TTLCacheEntry(data, 300)
-            return data, False
+            augmented = _augment_decision_payload(world_id, data)
+            self._decision_cache[world_id] = TTLCacheEntry(augmented, 300)
+            return augmented, False
 
         # Envelope provided ttl; honor zero as "do not cache"
         env_ttl: int | None = None
