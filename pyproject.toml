@@ -15,7 +15,7 @@ dependencies = [
     "asyncpg",
     "aiosqlite",
     "websockets",
-    "grpcio>=1.74.0",
+    "grpcio>=1.75.0",
     "grpcio",
     "PyYAML",
     "psutil",

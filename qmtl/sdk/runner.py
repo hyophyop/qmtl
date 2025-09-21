@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Mapping, Optional
 import logging
 
 from opentelemetry import trace
@@ -74,6 +74,10 @@ class Runner:
         kafka_producer=_kafka_producer,
         trade_order_kafka_topic=_trade_order_kafka_topic,
     )
+    _default_context: dict[str, str] | None = None
+
+    _VALID_MODES = {"backtest", "dryrun", "live"}
+    _CLOCKS = {"virtual", "wall"}
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -95,6 +99,163 @@ class Runner:
         """Inject or clear the activation manager (for tests or custom wiring)."""
         cls._activation_manager = am
         cls._trade_dispatcher.set_activation_manager(am)
+
+    @classmethod
+    def set_default_context(cls, context: Mapping[str, str] | None) -> None:
+        """Register default compute context values for subsequent runs."""
+
+        if context is None:
+            cls._default_context = None
+            return
+        normalized: dict[str, str] = {}
+        for key, value in context.items():
+            if value is None:
+                continue
+            normalized[str(key)] = str(value)
+        cls._default_context = normalized or None
+
+    @classmethod
+    def _mode_from_domain(cls, domain: str | None) -> str | None:
+        if not domain:
+            return None
+        key = str(domain).strip().lower()
+        if key == DEFAULT_EXECUTION_DOMAIN:
+            return None
+        if key in cls._VALID_MODES:
+            return key
+        return None
+
+    @classmethod
+    def _normalize_mode(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("execution_mode must be provided")
+        mode = str(value).strip().lower()
+        if mode not in cls._VALID_MODES:
+            raise ValueError(
+                "execution_mode must be one of 'backtest', 'dryrun', or 'live'"
+            )
+        return mode
+
+    @classmethod
+    def _merge_context(
+        cls,
+        base: dict[str, str],
+        source: Mapping[str, str] | None,
+    ) -> None:
+        if not source:
+            return
+        for key, value in source.items():
+            skey = str(key)
+            if value is None:
+                base.pop(skey, None)
+                continue
+            base[skey] = str(value)
+
+    @classmethod
+    def _resolve_context(
+        cls,
+        *,
+        context: Mapping[str, str] | None,
+        execution_mode: str | None,
+        execution_domain: str | None,
+        clock: str | None,
+        as_of: object | None,
+        dataset_fingerprint: str | None,
+        offline_requested: bool,
+        gateway_url: str | None,
+    ) -> tuple[dict[str, str], bool]:
+        merged: dict[str, str] = {}
+        if cls._default_context:
+            merged.update(cls._default_context)
+        cls._merge_context(merged, context)
+
+        mode: str | None = None
+        if execution_mode is not None:
+            mode = cls._normalize_mode(execution_mode)
+        else:
+            derived = cls._mode_from_domain(execution_domain)
+            if derived is not None:
+                mode = derived
+        if mode is None:
+            domain_hint = merged.get("execution_domain")
+            if domain_hint:
+                derived = cls._mode_from_domain(domain_hint)
+                if derived is not None:
+                    mode = derived
+        if mode is None:
+            existing = merged.get("execution_mode")
+            if existing:
+                mode = cls._normalize_mode(existing)
+        if mode is None:
+            if cls._trade_mode == "live" and not offline_requested:
+                mode = "live"
+            elif gateway_url and not offline_requested:
+                mode = "live"
+            else:
+                mode = "backtest"
+        merged["execution_mode"] = mode
+        merged["execution_domain"] = mode
+
+        if clock is not None:
+            merged["clock"] = str(clock)
+        clock_val = merged.get("clock")
+        expected_clock = "wall" if mode == "live" else "virtual"
+        if clock_val is None:
+            merged["clock"] = expected_clock
+        else:
+            cval = str(clock_val).strip().lower()
+            if cval not in cls._CLOCKS:
+                raise ValueError("clock must be one of 'virtual' or 'wall'")
+            if cval != expected_clock:
+                raise ValueError(
+                    f"{mode} runs require '{expected_clock}' clock but received '{clock_val}'"
+                )
+            merged["clock"] = cval
+
+        if as_of is not None:
+            text = str(as_of).strip()
+            if text:
+                merged["as_of"] = text
+            else:
+                merged.pop("as_of", None)
+        elif "as_of" in merged:
+            text = str(merged["as_of"]).strip()
+            if text:
+                merged["as_of"] = text
+            else:
+                merged.pop("as_of", None)
+
+        if dataset_fingerprint is not None:
+            text = str(dataset_fingerprint).strip()
+            if text:
+                merged["dataset_fingerprint"] = text
+            else:
+                merged.pop("dataset_fingerprint", None)
+        elif "dataset_fingerprint" in merged:
+            text = str(merged["dataset_fingerprint"]).strip()
+            if text:
+                merged["dataset_fingerprint"] = text
+            else:
+                merged.pop("dataset_fingerprint", None)
+
+        force_offline = False
+        if mode != "live":
+            has_as_of = bool(merged.get("as_of"))
+            has_dataset = bool(merged.get("dataset_fingerprint"))
+            if not (has_as_of and has_dataset):
+                if gateway_url and not offline_requested:
+                    force_offline = True
+                    logger.warning(
+                        "Missing dataset metadata for %s run; forcing compute-only mode",
+                        mode,
+                    )
+                merged.pop("as_of", None)
+                merged.pop("dataset_fingerprint", None)
+        else:
+            merged.pop("as_of", None)
+            merged.pop("dataset_fingerprint", None)
+
+        return merged, force_offline
 
     # ------------------------------------------------------------------
 
@@ -350,6 +511,9 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        context: Mapping[str, str] | None = None,
+        execution_mode: str | None = None,
+        clock: str | None = None,
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
@@ -357,40 +521,74 @@ class Runner:
         execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
         as_of: object | None = None,
         partition: object | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> Strategy:
         """Run a strategy under a given world, following WS decisions/activation.
 
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
-        context = ComputeContext(
-            world_id=world_id,
+        resolved_context, force_offline = Runner._resolve_context(
+            context=context,
+            execution_mode=execution_mode,
             execution_domain=execution_domain,
+            clock=clock,
             as_of=as_of,
+            dataset_fingerprint=dataset_fingerprint,
+            offline_requested=offline,
+            gateway_url=gateway_url,
+        )
+
+        domain = resolved_context.get("execution_domain", DEFAULT_EXECUTION_DOMAIN)
+        as_of_value = resolved_context.get("as_of")
+        compute_context = ComputeContext(
+            world_id=world_id,
+            execution_domain=domain,
+            as_of=as_of_value,
             partition=partition,
         )
-        dataset_fingerprint: str | None = None
+
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
             try:
-                n.apply_compute_context(context)
+                n.apply_compute_context(compute_context)
             except AttributeError:
                 pass
+        setattr(strategy, "compute_context", dict(resolved_context))
+
+        gateway_context = {
+            key: value
+            for key, value in resolved_context.items()
+            if key in {"execution_mode", "clock", "as_of", "dataset_fingerprint"}
+        }
+
+        meta_payload: dict | None = None
+        if meta is not None:
+            meta_payload = dict(meta)
+        dataset_fp = resolved_context.get("dataset_fingerprint")
+        if dataset_fp:
+            if meta_payload is None:
+                meta_payload = {}
+            meta_payload.setdefault("dataset_fingerprint", dataset_fp)
+
+        effective_offline = offline or force_offline
         try:
             strategy.on_start()
 
             bootstrapper = StrategyBootstrapper(Runner._gateway_client)
             bootstrap_result = await bootstrapper.bootstrap(
                 strategy,
-                context=context,
+                context=compute_context,
                 world_id=world_id,
                 gateway_url=gateway_url,
-                meta=meta,
-                offline=offline,
+                meta=meta_payload,
+                offline=effective_offline,
                 kafka_available=Runner._kafka_available,
                 trade_mode=Runner._trade_mode,
                 schema_enforcement=schema_enforcement,
                 feature_plane=Runner._feature_artifact_plane,
+                gateway_context=gateway_context or None,
+                skip_gateway_submission=force_offline,
             )
             manager = bootstrap_result.manager
             offline_mode = bootstrap_result.offline_mode
@@ -442,6 +640,9 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        context: Mapping[str, str] | None = None,
+        execution_mode: str | None = None,
+        clock: str | None = None,
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
@@ -449,6 +650,7 @@ class Runner:
         execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
         as_of: object | None = None,
         partition: object | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.run_async(
@@ -456,6 +658,9 @@ class Runner:
                 world_id=world_id,
                 gateway_url=gateway_url,
                 meta=meta,
+                context=context,
+                execution_mode=execution_mode,
+                clock=clock,
                 offline=offline,
                 history_start=history_start,
                 history_end=history_end,
@@ -463,6 +668,7 @@ class Runner:
                 execution_domain=execution_domain,
                 as_of=as_of,
                 partition=partition,
+                dataset_fingerprint=dataset_fingerprint,
             )
         )
 
@@ -495,6 +701,18 @@ class Runner:
         except TypeError:
             manager = tag_service.init(strategy)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
+        resolved_context, _ = Runner._resolve_context(
+            context=None,
+            execution_mode="backtest",
+            execution_domain=None,
+            clock=None,
+            as_of=None,
+            dataset_fingerprint=None,
+            offline_requested=True,
+            gateway_url=None,
+        )
+        resolved_context["execution_domain"] = "offline"
+        setattr(strategy, "compute_context", dict(resolved_context))
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         # Hydrate from snapshots first, then fill any gaps from history

@@ -45,6 +45,8 @@ class StrategyBootstrapper:
         trade_mode: str,
         schema_enforcement: str,
         feature_plane: FeatureArtifactPlane | None,
+        gateway_context: Mapping[str, str] | None = None,
+        skip_gateway_submission: bool = False,
     ) -> BootstrapResult:
         # Apply context and schema enforcement on all nodes
         for node in strategy.nodes:
@@ -105,11 +107,12 @@ class StrategyBootstrapper:
 
         queue_map: dict[str, Any] | Any
         queue_map = {}
-        if gateway_url:
+        if gateway_url and not skip_gateway_submission:
             queue_map = await self._gateway_client.post_strategy(
                 gateway_url=gateway_url,
                 dag=dag,
                 meta=meta_for_gateway,
+                context=dict(gateway_context) if gateway_context else None,
                 world_id=world_id,
             )
             if isinstance(queue_map, dict) and "error" in queue_map:
