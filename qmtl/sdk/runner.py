@@ -28,6 +28,7 @@ from . import runtime, metrics as sdk_metrics
 from .http import HttpPoster
 from . import snapshot as snap
 from qmtl.dagmanager.topic import build_namespace, topic_namespace_enabled
+from .feature_store import FeatureArtifactPlane
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -60,6 +61,7 @@ class Runner:
     _enable_trade_submission: bool = True
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
+    _feature_artifact_plane: FeatureArtifactPlane | None = FeatureArtifactPlane.from_env()
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -92,6 +94,20 @@ class Runner:
             ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]
         else:
             fn(cache_view)
+
+    @classmethod
+    def set_feature_artifact_plane(
+        cls, plane: FeatureArtifactPlane | None
+    ) -> None:
+        """Override the global feature artifact plane."""
+
+        cls._feature_artifact_plane = plane
+
+    @classmethod
+    def feature_artifact_plane(cls) -> FeatureArtifactPlane | None:
+        """Return the configured feature artifact plane if enabled."""
+
+        return cls._feature_artifact_plane
 
     @staticmethod
     def _prepare(strategy_cls: type[Strategy]) -> Strategy:
@@ -311,16 +327,18 @@ class Runner:
         )
 
         result = None
+        plane = Runner.feature_artifact_plane()
         if ready and node.execute and node.compute_fn:
             start = time.perf_counter()
             try:
                 with tracer.start_as_current_span(
                     "node.process", attributes={"node.id": node.node_id}
                 ):
+                    view = node.cache.view(artifact_plane=plane)
                     if Runner._ray_available and not runtime.NO_RAY and ray is not None:
-                        Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+                        Runner._execute_compute_fn(node.compute_fn, view)
                     else:
-                        result = node.compute_fn(node.cache.view())
+                        result = node.compute_fn(view)
                         # Postprocess the result
                         Runner._postprocess_result(node, result)
             except Exception:
@@ -329,6 +347,8 @@ class Runner:
             finally:
                 duration_ms = (time.perf_counter() - start) * 1000
                 sdk_metrics.observe_node_process(node.node_id, duration_ms)
+            if plane is not None and result is not None:
+                plane.record(node, timestamp, result)
         return result
 
     # ------------------------------------------------------------------
@@ -594,6 +614,7 @@ class Runner:
             as_of=as_of,
             partition=partition,
         )
+        dataset_fingerprint: str | None = None
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
             try:
@@ -621,6 +642,11 @@ class Runner:
                 raw_domain = meta_payload.get("execution_domain")
                 if isinstance(raw_domain, str) and raw_domain.strip():
                     execution_domain = raw_domain.strip()
+                raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
+                    "datasetFingerprint"
+                )
+                if isinstance(raw_fp, str) and raw_fp.strip():
+                    dataset_fingerprint = raw_fp.strip()
 
             if topic_namespace_enabled():
                 if execution_domain is None:
@@ -660,6 +686,22 @@ class Runner:
 
             offline_mode = offline or not Runner._kafka_available or not gateway_url
             await manager.resolve_tags(offline=offline_mode)
+
+            if dataset_fingerprint:
+                if isinstance(dag_meta, dict):
+                    dag_meta.setdefault("dataset_fingerprint", dataset_fingerprint)
+                for n in strategy.nodes:
+                    try:
+                        n.dataset_fingerprint = dataset_fingerprint
+                    except AttributeError:
+                        pass
+
+            plane = Runner.feature_artifact_plane()
+            if plane is not None:
+                plane.configure(
+                    dataset_fingerprint=dataset_fingerprint,
+                    execution_domain=context.execution_domain,
+                )
 
             # Start activation manager to gate orders by world activation
             if gateway_url and not offline_mode:

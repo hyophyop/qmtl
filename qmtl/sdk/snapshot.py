@@ -151,6 +151,9 @@ def write_snapshot(node) -> Path | None:
         "created_at": int(time.time()),
         "format": os.getenv("QMTL_SNAPSHOT_FORMAT", "json").lower(),
     }
+    dataset_fp = getattr(node, "dataset_fingerprint", None)
+    if dataset_fp:
+        meta["dataset_fingerprint"] = str(dataset_fp)
     key = _node_key(node)
     fmt = meta["format"]
     # Prefer remote base when configured
@@ -289,6 +292,11 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
                 continue
             if meta.get("schema_hash") != node.schema_hash:
                 continue
+            expected_df = getattr(node, "dataset_fingerprint", None)
+            if expected_df:
+                snap_df = meta.get("dataset_fingerprint")
+                if snap_df != expected_df:
+                    continue
             # Merge into cache preserving most recent
             for u, mp in data.items():
                 for interval_s, items in mp.items():

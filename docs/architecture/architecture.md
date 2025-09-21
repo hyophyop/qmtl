@@ -137,6 +137,9 @@ sequenceDiagram
 - 공유 원칙: 도메인 간 공유는 Feature Artifact 파일만 읽기 전용으로 허용한다(SHALL). 런타임 캐시(ComputeKey 기반)나 상태는 도메인 간 공유가 금지된다.
 - Retention/Backfill: 아티팩트는 버전 관리되며, 백테스트/리플레이 요구에 맞춰 보존 정책과 백필 경로를 문서화한다(SHOULD). 삭제 전에는 소비자 영향도를 평가한다.
 - ComputeKey 연계: 런타임에서 캐시 히트가 발생하면 `ComputeKey`는 현 도메인의 값만 참조해야 하며, Feature Artifact는 입력 창구로만 사용한다.
+- 구현 상태: SDK Runner는 `qmtl.sdk.feature_store` 계층(FileSystem 기본 어댑터, `QMTL_FEATURE_ARTIFACT_DIR` · `QMTL_FEATURE_ARTIFACT_VERSIONS` 환경변수 지원)을 통해 백테스트/드라이런 도메인에서 자동으로 아티팩트를 기록하고, `CacheView.feature_artifacts()`로 라이브/섀도우 도메인에서 읽기 전용 소비를 보장한다.
+- Dataset Fingerprint: 모든 아티팩트·스냅샷은 `dataset_fingerprint`에 고정된다. Fingerprint가 일치하지 않으면 하이드레이션/조회가 차단되어 프로모션 경로에서 데이터 혼합을 방지한다.
+- CLI/Backfill 워크플로: 로컬 백필 시 `QMTL_FEATURE_ARTIFACT_DIR=/mnt/artifacts`처럼 경로를 고정하고, 필요 시 `QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS`로 쓰기 허용 도메인을 제한하여 리플레이와 검증 파이프라인을 분리한다.
 
 ### 1.5 Clock & Input Guards
 

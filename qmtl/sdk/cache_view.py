@@ -21,6 +21,7 @@ class CacheView:
         data: Any,
         *,
         track_access: bool = False,
+        artifact_plane: Any | None = None,
         access_log: list[tuple[str, int]] | None = None,
         path: tuple[Any, ...] = (),
     ) -> None:
@@ -28,6 +29,7 @@ class CacheView:
         self._track_access = track_access
         self._access_log = access_log if access_log is not None else []
         self._path = path
+        self._artifact_plane = artifact_plane
 
     def __getitem__(self, key: Any) -> Any:
         # Use direct attribute access to avoid any accidental recursion
@@ -54,6 +56,7 @@ class CacheView:
                 return CacheView(
                     value,
                     track_access=self._track_access,
+                    artifact_plane=self._artifact_plane,
                     access_log=self._access_log,
                     path=new_path,
                 )
@@ -62,6 +65,7 @@ class CacheView:
                 return CacheView(
                     value,
                     track_access=self._track_access,
+                    artifact_plane=self._artifact_plane,
                     access_log=self._access_log,
                     path=new_path,
                 )
@@ -109,3 +113,25 @@ class CacheView:
     def access_log(self) -> list[tuple[str, int]]:
         """Return list of accessed ``(upstream_id, interval)`` pairs."""
         return list(self._access_log)
+
+    # ------------------------------------------------------------------
+    def feature_artifacts(
+        self,
+        factor: Any,
+        *,
+        instrument: str | None = None,
+        dataset_fingerprint: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> list[tuple[int, Any]]:
+        """Return immutable feature artifacts for ``factor`` when available."""
+
+        if self._artifact_plane is None:
+            return []
+        return self._artifact_plane.load_series(
+            factor,
+            instrument=instrument,
+            dataset_fingerprint=dataset_fingerprint,
+            start=start,
+            end=end,
+        )

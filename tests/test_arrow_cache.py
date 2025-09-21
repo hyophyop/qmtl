@@ -116,5 +116,5 @@ def test_arrow_cache_compute_context_switch_records_metric():
     cache.append("u1", 60, 180, {"v": 3})
     assert cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
 
-    key = ("node", "w", "live")
+    key = ("node", "w", "live", "__unset__", "__unset__")
     assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
