@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Iterable
 
 from qmtl.dagmanager.kafka_admin import partition_key
@@ -26,6 +27,56 @@ class CommitLogWriter:
     def __init__(self, producer: AIOKafkaProducer, topic: str) -> None:  # type: ignore[misc]
         self._producer = producer
         self._topic = topic
+
+    async def publish_submission(
+        self,
+        strategy_id: str,
+        payload: dict[str, Any],
+        *,
+        timestamp_ms: int | None = None,
+    ) -> None:
+        """Publish a gateway ingestion record to the commit log.
+
+        The record value follows the same four-element tuple structure used by
+        :class:`CommitLogConsumer` so existing consumers can decode mixed
+        streams.  The tuple shape is ``("gateway.ingest", ts, strategy_id,
+        payload)`` where ``payload`` contains the submission envelope. When
+        ``timestamp_ms`` is ``None`` the current epoch milliseconds are used.
+        """
+
+        ts_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000)
+        value = json.dumps(
+            [
+                "gateway.ingest",
+                ts_ms,
+                strategy_id,
+                payload,
+            ]
+        ).encode()
+        key = f"ingest:{strategy_id}".encode()
+        headers = [("rfp", runtime_fingerprint().encode())]
+        await self._producer.begin_transaction()
+        try:
+            try:
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                    headers=headers,
+                )
+            except TypeError:  # pragma: no cover - producer without header support
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                )
+            await self._producer.commit_transaction()
+        except Exception:
+            try:
+                await self._producer.abort_transaction()
+            except Exception:  # pragma: no cover - double failure
+                logger.exception("Commit-log abort failed")
+            raise
 
     async def publish_bucket(
         self,

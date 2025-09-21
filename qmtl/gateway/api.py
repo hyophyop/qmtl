@@ -77,17 +77,18 @@ def create_app(
     fsm = StrategyFSM(redis=redis_conn, database=database_obj)
     dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
     degradation = DegradationManager(redis_conn, database_obj, dagmanager, world_client)
+    commit_log_writer_local = commit_log_writer
     manager = StrategyManager(
         redis=redis_conn,
         database=database_obj,
         fsm=fsm,
         degrade=degradation,
         insert_sentinel=insert_sentinel,
+        commit_log_writer=commit_log_writer_local,
     )
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
     commit_log_consumer_local = commit_log_consumer
-    commit_log_writer_local = commit_log_writer
     commit_log_handler_local = commit_log_handler
     world_client_local = world_client
     if world_client_local is None and enable_worldservice_proxy and worldservice_url is not None:

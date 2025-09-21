@@ -62,3 +62,25 @@ async def test_publish_bucket_aborts_on_error() -> None:
     assert producer.begin_called == 1
     assert producer.commit_called == 0
     assert producer.abort_called == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_submission_formats_payload() -> None:
+    producer = FakeProducer()
+    writer = CommitLogWriter(producer, "commit-log")
+
+    await writer.publish_submission(
+        "strategy-1",
+        {"dag_hash": "h", "node_ids_crc32": 123},
+        timestamp_ms=1690000000000,
+    )
+
+    assert producer.messages, "submission should emit a commit-log record"
+    topic, key, value = producer.messages[0]
+    assert topic == "commit-log"
+    assert key == b"ingest:strategy-1"
+    record = json.loads(value.decode())
+    assert record[0] == "gateway.ingest"
+    assert record[1] == 1690000000000
+    assert record[2] == "strategy-1"
+    assert record[3] == {"dag_hash": "h", "node_ids_crc32": 123}

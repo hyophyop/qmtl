@@ -69,6 +69,12 @@ async def _main(argv: list[str] | None = None) -> None:
             group=config.controlbus_group,
         )
 
+    if not config.commitlog_bootstrap or not config.commitlog_topic:
+        logging.warning(
+            "Commit-log writer is disabled; production deployments must set "
+            "commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+        )
+
     commit_consumer = None
     commit_writer = None
     if config.commitlog_bootstrap and config.commitlog_topic:
