@@ -1,8 +1,9 @@
 import httpx
 import pytest
 
+from qmtl.common.hashutils import hash_bytes
 from qmtl.worldservice.api import create_app
-from qmtl.worldservice.storage import Storage
+from qmtl.worldservice.storage import Storage, ValidationCacheEntry
 
 
 @pytest.mark.asyncio
@@ -134,3 +135,70 @@ async def test_validation_cache_endpoints_domain_and_context_handling():
                 "/worlds/world-api/validations/cache/lookup", json=context
             )
             assert final_lookup.json()["cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_legacy_payloads_are_normalised_and_invalidated():
+    store = Storage()
+    world_id = "world-legacy"
+    node_id = "blake3:legacy-node"
+    context = {
+        "node_id": node_id,
+        "execution_domain": "backtest",
+        "contract_id": "contract-legacy",
+        "dataset_fingerprint": "lake:blake3:legacy",
+        "code_version": "rev0",
+        "resource_policy": "standard",
+    }
+
+    legacy_components = [
+        node_id,
+        world_id,
+        context["contract_id"],
+        context["dataset_fingerprint"],
+        context["code_version"],
+        context["resource_policy"],
+    ]
+    legacy_payload = "\x1f".join(str(part) for part in legacy_components).encode()
+    legacy_eval_key = hash_bytes(legacy_payload)
+
+    store.validation_cache.setdefault(world_id, {})[node_id] = {
+        "backtest": {
+            "eval_key": legacy_eval_key,
+            "node_id": node_id,
+            "contract_id": context["contract_id"],
+            "dataset_fingerprint": context["dataset_fingerprint"],
+            "code_version": context["code_version"],
+            "resource_policy": context["resource_policy"],
+            "result": "valid",
+            "metrics": {"score": 0.1},
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+    }
+
+    cached = await store.get_validation_cache(world_id, **context)
+    assert cached is None
+    assert world_id not in store.validation_cache
+
+    # Seed a dict payload that already follows the new EvalKey scheme to ensure
+    # lazy normalisation converts it into a ValidationCacheEntry instance.
+    eval_key = store._compute_eval_key(**context, world_id=world_id)  # type: ignore[arg-type]
+    store.validation_cache.setdefault(world_id, {})[node_id] = {
+        "backtest": {
+            "eval_key": eval_key,
+            "node_id": node_id,
+            "execution_domain": "backtest",
+            "contract_id": context["contract_id"],
+            "dataset_fingerprint": context["dataset_fingerprint"],
+            "code_version": context["code_version"],
+            "resource_policy": context["resource_policy"],
+            "result": "valid",
+            "metrics": {"score": 1.0},
+            "timestamp": "2025-01-01T00:00:00Z",
+        }
+    }
+
+    cached_updated = await store.get_validation_cache(world_id, **context)
+    assert cached_updated is not None
+    assert isinstance(cached_updated, ValidationCacheEntry)
+    assert isinstance(store.validation_cache[world_id][node_id]["backtest"], ValidationCacheEntry)
