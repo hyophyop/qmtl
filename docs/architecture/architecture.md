@@ -92,14 +92,6 @@ flowchart LR
 - 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
 - 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md), [Order & Fill Event Schemas](../reference/api/order_events.md)
 
-### 1.3 Execution Domains & Isolation (new)
-
-- Domains: `backtest | dryrun | live | shadow`. WorldService treats ExecutionDomain as a 1급 개념 and drives gating and promotions via 2‑Phase Apply (Freeze/Drain → Switch → Unfreeze).
-- NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다.
-- WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. `WvgEdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다.
-- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑한다(`validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`; `shadow`는 운영자 전용).
-- Queue 네임스페이스: 운영적 격리를 위해 `{world_id}.{execution_domain}.<topic>` 프리픽스를 사용할 수 있다(선택). NodeID/토픽 규범은 그대로 유지한다.
-
 ### 1.2 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
 
 SDK/Runner가 전략을 제출하고, Gateway가 DAG Manager/WorldService를 중개하며, ControlBus 이벤트를 통해 활성/큐 변경이 실시간 반영되는 전체 플로우를 도식화한다.
@@ -126,6 +118,31 @@ sequenceDiagram
 ```
 
 관련 구현·사양은 아래 문서를 참고한다: [Gateway 사양](gateway.md), [DAG Manager 사양](dag-manager.md), [WorldService](worldservice.md). 운영·사용 관점의 예시는 [operations/](../operations/README.md) 및 [reference/](../reference/README.md) 하위 문서에 정리되어 있다.
+
+### 1.3 Execution Domains & Isolation (new)
+
+- Domains: `backtest | dryrun | live | shadow`. WorldService treats ExecutionDomain as a 1급 개념 and drives gating and promotions via 2‑Phase Apply (Freeze/Drain → Switch → Unfreeze).
+- NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다.
+- WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. `WvgEdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다.
+- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑한다(`validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`; `shadow`는 운영자 전용).
+- Queue 네임스페이스: 프로덕션 배포에서는 `{world_id}.{execution_domain}.<topic>` 프리픽스로 토픽을 분리해야 한다(SHALL). 교차 도메인 구독·발행은 ACL로 금지하며, 운영 환경에서만 예외를 명시적으로 허용한다.
+- WorldNodeRef 독립성: 서로 다른 `execution_domain` 조합은 상태·큐·검증 결과를 공유할 수 없다(SHALL). 공유가 필요한 경우 Feature Artifact Plane(§1.4)처럼 불변 아티팩트만 사용한다.
+- Promotion guard: WVG의 `WvgEdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
+
+### 1.4 Feature Artifact Plane (Dual-Plane)
+
+- 목표: Feature Plane(불변)과 Strategy/Execution Plane(도메인 스코프)을 분리하여 안전하게 재사용하면서 격리를 유지한다.
+- Feature Artifact Key (SHALL): `(factor, interval, params, instrument, t, dataset_fingerprint)`.
+- 저장소: 파일 시스템, 객체 스토리지, RocksDB 등 불변 백엔드 중 하나를 사용하고, 라이브에서는 읽기 전용으로 마운트한다(SHOULD).
+- 공유 원칙: 도메인 간 공유는 Feature Artifact 파일만 읽기 전용으로 허용한다(SHALL). 런타임 캐시(ComputeKey 기반)나 상태는 도메인 간 공유가 금지된다.
+- Retention/Backfill: 아티팩트는 버전 관리되며, 백테스트/리플레이 요구에 맞춰 보존 정책과 백필 경로를 문서화한다(SHOULD). 삭제 전에는 소비자 영향도를 평가한다.
+- ComputeKey 연계: 런타임에서 캐시 히트가 발생하면 `ComputeKey`는 현 도메인의 값만 참조해야 하며, Feature Artifact는 입력 창구로만 사용한다.
+
+### 1.5 Clock & Input Guards
+
+- 백테스트/드라이런은 VirtualClock을 사용하고(as_of 필수) 라이브는 WallClock을 사용한다(SHALL). 혼용 호출은 빌드/정적 검증 단계에서 실패해야 한다.
+- 모든 백테스트 입력 노드는 `as_of`(dataset commit)를 명시해야 하며(SHALL), Gateway는 누락 시 거부하거나 안전 모드로 강등한다.
+- SDK는 노드/런너 레벨에서 클록 타입을 선언적으로 지정하고, WorldService와 Gateway는 정책/결정 시 이를 검증한다.
 
 ### 전역-로컬 분리와 불변식 (GSG/WVG)
 

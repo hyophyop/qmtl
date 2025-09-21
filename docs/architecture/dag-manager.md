@@ -131,6 +131,8 @@ qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --passwor
   - NodeCache and any compute de‑duplication MUST key on `ComputeKey` (not solely on `node_id`).
   - Cross‑context cache hits (same `node_id`, different `(world_id|execution_domain|as_of|partition)`) MUST be treated as violations and reported via a metric `cross_context_cache_hit_total` and blocked by policy (SLO: 0).
   - Queue topics and NodeID remain unchanged; ComputeKey does not alter topic naming. Operators MAY additionally deploy namespace prefixes `{world_id}.{execution_domain}.<topic>` at the broker level for operational isolation (see WorldService doc).
+  - Instrumentation: DAG Manager and SDK MUST emit `cross_context_cache_hit_total` and alert when >0 (critical). Promotion workflows must halt until cleared.
+  - Completeness: `as_of` MUST be non-empty for backtests/dryruns; Gateway supplies the value. When absent, ComputeKey falls back to sentinel `live` context and no reuse is permitted.
 
 Note: This design preserves NodeID stability while providing strong execution isolation across worlds and domains.
 

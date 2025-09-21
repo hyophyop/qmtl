@@ -32,6 +32,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **GCSchedulerStall** – warns if `gc_last_run_timestamp` lags by more than ten minutes.
 - **NodeSlowProcessing** – triggers when `node_process_duration_ms` p95 exceeds 500 ms for a node.
 - **NodeFailures** – fires when `node_process_failure_total` increases.
+- **CrossContextCacheHit** – CRIT when `cross_context_cache_hit_total` > 0; indicates domain mixing and automatically freezes promotions until cleared.
 
 ## Grafana Dashboards
 
@@ -64,6 +65,7 @@ For DAG diff processing, the following counters standardize naming and enable SL
 
 - `diff_requests_total` — total diff requests processed (throughput baseline).
 - `diff_failures_total` — total failed diff requests (for failure rate calculation).
+- `cross_context_cache_hit_total` — MUST remain 0; any increment blocks promotions until the offending component is reset.
 
 Suggested Prometheus rules combine these into three core alert groups: latency (`diff_duration_ms_p95`), failure-rate (`rate(diff_failures_total)/rate(diff_requests_total)`), and throughput (`rate(diff_requests_total)`). See `alert_rules.yml` for working examples.
 
@@ -94,6 +96,7 @@ expose these by calling `metrics.start_metrics_server()`.
 | `node_processed_total` | Counter | Total number of node compute executions | `node_id` |
 | `node_process_duration_ms` | Histogram | Duration of node compute execution in milliseconds | `node_id` |
 | `node_process_failure_total` | Counter | Total number of node compute failures | `node_id` |
+| `cross_context_cache_hit_total` | Counter | Number of cache hits where context (world/domain/as_of/partition) mismatched | `node_id`, `world_id`, `execution_domain` |
 
 Start the server as part of your application:
 

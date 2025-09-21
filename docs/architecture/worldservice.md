@@ -137,7 +137,15 @@ TTL & Staleness
   - Cross‑domain edges MUST be disabled by default via `WvgEdgeOverride` until a policy explicitly enables them post‑promotion.
   - Orders are always gated OFF while `freeze=true` during 2‑Phase apply.
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain → Switch(domain) → Unfreeze`.
-- Queue namespace guidance: operationally, topics MAY be organized under `{world_id}.{execution_domain}.<topic>` namespaces with ACLs to prevent accidental cross‑domain consumption. This does not change NodeID semantics and remains a deployment choice.
+- 2‑Phase Apply protocol (SHALL):
+  1. **Freeze/Drain** — Activation entries set `active=false, freeze=true`; Gateway/SDK gate all order publications; EdgeOverride keeps live queues disconnected.
+  2. **Switch** — ExecutionDomain updated (예: backtest→live), queue/topic bindings refreshed, Feature Artifact snapshot pinned via `dataset_fingerprint`.
+  3. **Unfreeze** — Activation resumes (`freeze=false`) only after the new domain’s ActivationUpdated event is acknowledged by Gateway/SDK.
+  - Single-flight guard: world 당 동시에 하나의 apply만 실행할 수 있다(SHALL). 중복 요청은 409를 반환하거나 큐에 보류한다.
+  - Failure policy: Switch 단계에서 오류가 발생하면 즉시 직전 Activation snapshot으로 롤백하고 freeze 상태를 유지한다(SHALL).
+  - Audit: WorldAuditLog에 `requested → freeze → switch → unfreeze → completed/rolled_back` 타임라인을 기록한다(SHOULD).
+- Queue namespace guidance: 프로덕션에서는 `{world_id}.{execution_domain}.<topic>` 네임스페이스와 ACL을 사용해 교차 도메인 접근을 막는다(SHALL). NodeID/토픽 규범은 변하지 않는다.
+- Dataset Fingerprint: Promotion은 특정 데이터 스냅샷(`dataset_fingerprint`)에 고정되어야 하며(SHALL), EvalKey에 포함돼 cross-domain 재검증을 분리한다.
 
 ---
 
@@ -161,23 +169,51 @@ The evaluation returns DecisionEnvelope and an optional plan for apply.
 - EvalKey = `blake3(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`
 - Any change in the components invalidates cache and triggers re‑validation.
 
+### 4‑C. Gating Policy Specification (normative)
+
+Reference YAML structure enforced by policy tooling:
+
+```yaml
+gating_policy:
+  promotion_point: "2025-10-01T00:00:00Z"
+  apply: { mode: two_phase, freeze_timeout_ms: 30000 }
+  domains: { from: backtest, to: live }
+  clocks:
+    backtest: { type: virtual, epoch0: "2020-01-01T00:00:00Z" }
+    live:     { type: wall }
+  dataset_fingerprint: "ohlcv:ASOF=2025-09-30T23:59:59Z"
+  share_policy: "feature-artifacts-only"   # runtime cache sharing forbidden
+  snapshot:
+    strategy_plane: "cow"
+    feature_plane: "readonly"
+  risk_limits:
+    max_pos_usd_long:  500000
+    max_pos_usd_short: 500000
+  divergence_guards:
+    feature_drift_bp_long: 5
+    feature_drift_bp_short: 5
+    slippage_bp_long: 10
+    slippage_bp_short: 12
+  execution_model:
+    fill: "bar-mid+slippage"
+    fee_bp: 2
+  can_short: true
+  edges:
+    pre_promotion:  { disable_edges_to: "live" }
+    post_promotion: { enable_edges_to:  "live" }
+  observability:
+    slo: { cross_context_cache_hit: 0 }
+    audit_topic: "gating.alerts"
+```
+
+- Policies MUST specify `dataset_fingerprint`, explicit `share_policy`, and edge overrides for pre/post promotion. 누락 시 Apply는 compute-only로 강등되거나 거부된다.
+- `observability.slo.cross_context_cache_hit`는 0이어야 하며(SHALL), 위반 시 실행이 차단된다. Gateway/SDK는 ControlBus 이벤트와 메트릭으로 이를 감시한다.
+- `snapshot`/`share_policy` 조합은 Feature Artifact Plane(§1.4) 규칙과 일치해야 한다. Strategy Plane은 Copy-on-Write, Feature Plane은 읽기 전용 복제로만 공유한다.
+- `risk_limits`, `divergence_guards`, `execution_model`은 프로모션 전 검증에서 평가되며, 실패 시 Apply가 거부되고 freeze 상태가 유지된다.
+
 ---
 
-## 5. 2‑Phase Apply
-
-1) Freeze/Drain (orders gated OFF)
-2) Switch (activation set swap, weights applied)
-3) Unfreeze (orders gated ON)
-
-Each apply carries a run_id and is idempotent. On failure, revert to previous activation snapshot.
-
-Concurrency & Single‑Flight
-- At most one apply per `world_id` in flight; subsequent applies return 409 or are queued.
-- Updates use optimistic concurrency via `resource_version`/`etag` on activation sets.
-
----
-
-## 6. Security & RBAC
+## 5. Security & RBAC
 
 - Auth: service‑to‑service tokens (mTLS/JWT); user tokens at Gateway → propagated to WS
 - World‑scope RBAC enforced at WS; Gateway only proxies
@@ -188,22 +224,24 @@ Clock Discipline
 
 ---
 
-## 7. Observability & SLOs
+## 6. Observability & SLOs
 
 Metrics example
 - world_decide_latency_ms_p95, world_apply_duration_ms_p95
 - activation_skew_seconds, promotion_fail_total, demotion_fail_total
 - registry_write_fail_total, audit_backlog_depth
+- cross_context_cache_hit_total (target=0; violation blocks promotions)
 
 Skew Metrics
 - `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
 
 Alerts
 - Decision failures, explicit status polling failures, stale activation cache at Gateway
+- cross_context_cache_hit_total > 0 (CRIT): investigate domain mixing before re-enabling apply
 
 ---
 
-## 8. Failure Modes & Recovery
+## 7. Failure Modes & Recovery
 
 - WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute‑only/inactive). Activation defaults to inactive.
 - Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
@@ -211,7 +249,7 @@ Alerts
 
 ---
 
-## 9. Integration & Events
+## 8. Integration & Events
 
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
@@ -224,7 +262,7 @@ Runner & SDK Integration (clarification)
 
 ---
 
-## 10. Testing & Validation
+## 9. Testing & Validation
 
 - Contract tests for envelopes (Decision/Activation) using the JSON Schemas (reference/schemas.md).
 - Idempotency tests: duplicate/out‑of‑order event handling based on `etag`/`run_id`.
