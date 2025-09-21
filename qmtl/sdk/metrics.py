@@ -187,9 +187,48 @@ else:
         registry=global_registry,
     )
 
+if "feature_artifact_write_total" in global_registry._names_to_collectors:
+    feature_artifact_write_total = global_registry._names_to_collectors[
+        "feature_artifact_write_total"
+    ]
+else:
+    feature_artifact_write_total = Counter(
+        "feature_artifact_write_total",
+        "Number of feature artifacts written",
+        ["factor", "execution_domain"],
+        registry=global_registry,
+    )
+
+if "feature_artifact_hit_total" in global_registry._names_to_collectors:
+    feature_artifact_hit_total = global_registry._names_to_collectors[
+        "feature_artifact_hit_total"
+    ]
+else:
+    feature_artifact_hit_total = Counter(
+        "feature_artifact_hit_total",
+        "Feature artifact cache hits",
+        ["factor", "execution_domain"],
+        registry=global_registry,
+    )
+
+if "feature_artifact_miss_total" in global_registry._names_to_collectors:
+    feature_artifact_miss_total = global_registry._names_to_collectors[
+        "feature_artifact_miss_total"
+    ]
+else:
+    feature_artifact_miss_total = Counter(
+        "feature_artifact_miss_total",
+        "Feature artifact cache misses",
+        ["factor", "execution_domain"],
+        registry=global_registry,
+    )
+
 orders_published_total._vals = {}  # type: ignore[attr-defined]
 fills_ingested_total._vals = {}  # type: ignore[attr-defined]
 orders_rejected_total._vals = {}  # type: ignore[attr-defined]
+feature_artifact_write_total._vals = {}  # type: ignore[attr-defined]
+feature_artifact_hit_total._vals = {}  # type: ignore[attr-defined]
+feature_artifact_miss_total._vals = {}  # type: ignore[attr-defined]
 
 def record_order_published() -> None:
     w = _WORLD_ID
@@ -206,6 +245,27 @@ def record_order_rejected(reason: str) -> None:
     orders_rejected_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
     orders_rejected_total._vals[key] = orders_rejected_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+
+
+def observe_feature_artifact_write(factor: str, execution_domain: str) -> None:
+    f = str(factor)
+    d = str(execution_domain)
+    feature_artifact_write_total.labels(factor=f, execution_domain=d).inc()
+    feature_artifact_write_total._vals[(f, d)] = feature_artifact_write_total._vals.get((f, d), 0) + 1  # type: ignore[attr-defined]
+
+
+def observe_feature_artifact_hit(factor: str, execution_domain: str) -> None:
+    f = str(factor)
+    d = str(execution_domain)
+    feature_artifact_hit_total.labels(factor=f, execution_domain=d).inc()
+    feature_artifact_hit_total._vals[(f, d)] = feature_artifact_hit_total._vals.get((f, d), 0) + 1  # type: ignore[attr-defined]
+
+
+def observe_feature_artifact_miss(factor: str, execution_domain: str) -> None:
+    f = str(factor)
+    d = str(execution_domain)
+    feature_artifact_miss_total.labels(factor=f, execution_domain=d).inc()
+    feature_artifact_miss_total._vals[(f, d)] = feature_artifact_miss_total._vals.get((f, d), 0) + 1  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Alpha performance metrics
@@ -398,6 +458,18 @@ def reset_metrics() -> None:
     pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
     pretrade_rejection_ratio.clear()
     pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
+    orders_published_total.clear()
+    orders_published_total._vals = {}  # type: ignore[attr-defined]
+    fills_ingested_total.clear()
+    fills_ingested_total._vals = {}  # type: ignore[attr-defined]
+    orders_rejected_total.clear()
+    orders_rejected_total._vals = {}  # type: ignore[attr-defined]
+    feature_artifact_write_total.clear()
+    feature_artifact_write_total._vals = {}  # type: ignore[attr-defined]
+    feature_artifact_hit_total.clear()
+    feature_artifact_hit_total._vals = {}  # type: ignore[attr-defined]
+    feature_artifact_miss_total.clear()
+    feature_artifact_miss_total._vals = {}  # type: ignore[attr-defined]
     # Snapshot metrics reset
     try:
         snapshot_write_duration_ms.clear()  # type: ignore[attr-defined]

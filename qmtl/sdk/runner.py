@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import Optional, Iterable
 import logging
 
@@ -26,6 +26,7 @@ from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 from .http import HttpPoster
 from . import snapshot as snap
+from .feature_store import FeatureArtifactStore, FeatureStoreConfig, FeatureStoreContext
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -58,6 +59,9 @@ class Runner:
     _enable_trade_submission: bool = True
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
+    _feature_store: FeatureArtifactStore | None = None
+    _feature_store_config: FeatureStoreConfig | None = None
+    _feature_context_stack: list[FeatureStoreContext] = []
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -80,6 +84,171 @@ class Runner:
         cls._activation_manager = am
 
     # ------------------------------------------------------------------
+
+    @classmethod
+    def configure_feature_store(
+        cls,
+        config: FeatureStoreConfig | None = None,
+        *,
+        store: FeatureArtifactStore | None = None,
+    ) -> FeatureArtifactStore:
+        """Configure the Feature Artifact Plane for subsequent runs."""
+
+        if store is not None:
+            cls._feature_store = store
+            cls._feature_store_config = None
+            return store
+        cfg = config or FeatureStoreConfig.from_env()
+        cls._feature_store_config = cfg
+        cls._feature_store = FeatureArtifactStore.from_config(cfg)
+        return cls._feature_store
+
+    @classmethod
+    def reset_feature_store(cls) -> None:
+        """Clear feature store configuration and context (primarily for tests)."""
+
+        cls._feature_store = None
+        cls._feature_store_config = None
+        cls._feature_context_stack.clear()
+
+    @classmethod
+    def _ensure_feature_store(cls) -> FeatureArtifactStore | None:
+        if cls._feature_store is not None:
+            return cls._feature_store
+        cfg = cls._feature_store_config or FeatureStoreConfig.from_env()
+        cls._feature_store_config = cfg
+        try:
+            cls._feature_store = FeatureArtifactStore.from_config(cfg)
+        except Exception:
+            logger.debug("feature artifact store unavailable", exc_info=True)
+            cls._feature_store = None
+        return cls._feature_store
+
+    @classmethod
+    def get_feature_store(cls) -> FeatureArtifactStore | None:
+        """Return the configured feature store if available."""
+
+        return cls._ensure_feature_store()
+
+    @classmethod
+    def _push_feature_context(cls, context: FeatureStoreContext) -> None:
+        cls._feature_context_stack.append(context)
+
+    @classmethod
+    def _pop_feature_context(cls) -> None:
+        if cls._feature_context_stack:
+            cls._feature_context_stack.pop()
+
+    @classmethod
+    def _current_feature_context(cls) -> FeatureStoreContext | None:
+        if cls._feature_context_stack:
+            return cls._feature_context_stack[-1]
+        return None
+
+    @classmethod
+    @contextmanager
+    def feature_context(
+        cls,
+        *,
+        execution_domain: str,
+        dataset_fingerprint: str | None = None,
+        world_id: str | None = None,
+    ):
+        """Context manager for temporarily overriding feature store context."""
+
+        ctx = FeatureStoreContext(
+            execution_domain=execution_domain,
+            dataset_fingerprint=dataset_fingerprint,
+            world_id=world_id,
+        )
+        cls._push_feature_context(ctx)
+        try:
+            yield ctx
+        finally:
+            cls._pop_feature_context()
+
+    @staticmethod
+    def _resolve_execution_domain(meta: dict | None, offline_mode: bool) -> str:
+        if meta:
+            candidate = meta.get("execution_domain")
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return "backtest" if offline_mode else "live"
+
+    @classmethod
+    def _maybe_consume_feature_artifact(
+        cls,
+        node,
+        interval: int | None,
+        timestamp: int,
+    ):
+        ctx = cls._current_feature_context()
+        if ctx is None or ctx.is_writer():
+            return None
+        descriptor = getattr(node, "feature_plane", None)
+        if descriptor is None:
+            return None
+        dataset_fp = descriptor.dataset_fingerprint or ctx.dataset_fingerprint
+        if not dataset_fp:
+            return None
+        store = cls._ensure_feature_store()
+        if store is None:
+            return None
+        try:
+            key = descriptor.materialise_key(
+                interval=interval or getattr(node, "interval", None),
+                timestamp=timestamp,
+                dataset_fingerprint=dataset_fp,
+            )
+            artifact = store.read_latest(key, context=ctx)
+        except Exception:
+            logger.debug("feature artifact lookup failed", exc_info=True)
+            return None
+        if artifact is None:
+            return None
+        return artifact.payload
+
+    @classmethod
+    def _maybe_store_feature_artifact(
+        cls,
+        node,
+        interval: int | None,
+        timestamp: int,
+        payload,
+    ) -> None:
+        if payload is None:
+            return
+        descriptor = getattr(node, "feature_plane", None)
+        if descriptor is None:
+            return
+        ctx = cls._current_feature_context()
+        if ctx is None or not ctx.is_writer():
+            return
+        dataset_fp = descriptor.dataset_fingerprint or ctx.dataset_fingerprint
+        if not dataset_fp:
+            logger.debug(
+                "skipping feature artifact write for %s: missing dataset_fingerprint",
+                getattr(node, "node_id", "<unknown>"),
+            )
+            return
+        store = cls._ensure_feature_store()
+        if store is None:
+            return
+        try:
+            store.write(
+                descriptor,
+                interval=interval or getattr(node, "interval", None),
+                timestamp=timestamp,
+                dataset_fingerprint=dataset_fp,
+                payload=payload,
+                context=ctx,
+            )
+        except Exception:
+            logger.warning(
+                "failed to persist feature artifact for %s",
+                getattr(node, "node_id", "<unknown>"),
+                exc_info=True,
+            )
 
     @staticmethod
     def _execute_compute_fn(fn, cache_view) -> None:
@@ -309,24 +478,33 @@ class Runner:
         )
 
         result = None
+        executed = False
         if ready and node.execute and node.compute_fn:
-            start = time.perf_counter()
-            try:
-                with tracer.start_as_current_span(
-                    "node.process", attributes={"node.id": node.node_id}
-                ):
-                    if Runner._ray_available and not runtime.NO_RAY and ray is not None:
-                        Runner._execute_compute_fn(node.compute_fn, node.cache.view())
-                    else:
-                        result = node.compute_fn(node.cache.view())
-                        # Postprocess the result
-                        Runner._postprocess_result(node, result)
-            except Exception:
-                sdk_metrics.observe_node_process_failure(node.node_id)
-                raise
-            finally:
-                duration_ms = (time.perf_counter() - start) * 1000
-                sdk_metrics.observe_node_process(node.node_id, duration_ms)
+            reused = Runner._maybe_consume_feature_artifact(node, interval, timestamp)
+            if reused is not None:
+                result = reused
+            else:
+                start = time.perf_counter()
+                try:
+                    with tracer.start_as_current_span(
+                        "node.process", attributes={"node.id": node.node_id}
+                    ):
+                        if Runner._ray_available and not runtime.NO_RAY and ray is not None:
+                            Runner._execute_compute_fn(node.compute_fn, node.cache.view())
+                        else:
+                            executed = True
+                            result = node.compute_fn(node.cache.view())
+                except Exception:
+                    sdk_metrics.observe_node_process_failure(node.node_id)
+                    raise
+                finally:
+                    if executed:
+                        duration_ms = (time.perf_counter() - start) * 1000
+                        sdk_metrics.observe_node_process(node.node_id, duration_ms)
+                if executed and result is not None:
+                    Runner._maybe_store_feature_artifact(node, interval, timestamp, result)
+        if result is not None:
+            Runner._postprocess_result(node, result)
         return result
 
     # ------------------------------------------------------------------
@@ -583,6 +761,15 @@ class Runner:
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
+        meta = dict(meta or {})
+        preliminary_offline = offline or not Runner._kafka_available or not gateway_url
+        exec_domain = Runner._resolve_execution_domain(meta, preliminary_offline)
+        context = FeatureStoreContext(
+            execution_domain=exec_domain,
+            dataset_fingerprint=meta.get("dataset_fingerprint"),
+            world_id=world_id,
+        )
+        Runner._push_feature_context(context)
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
         try:
@@ -616,7 +803,7 @@ class Runner:
                 strategy.on_finish()
                 return strategy
 
-            offline_mode = offline or not Runner._kafka_available or not gateway_url
+            offline_mode = preliminary_offline
             await manager.resolve_tags(offline=offline_mode)
 
             # Start activation manager to gate orders by world activation
@@ -751,6 +938,8 @@ class Runner:
         except Exception as e:
             strategy.on_error(e)
             raise
+        finally:
+            Runner._pop_feature_context()
 
     @staticmethod
     def run(
@@ -793,6 +982,10 @@ class Runner:
         strategy = Runner._prepare(strategy_cls)
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
+        push_context = False
+        if Runner._current_feature_context() is None:
+            Runner._push_feature_context(FeatureStoreContext(execution_domain="backtest"))
+            push_context = True
         tag_service = TagManagerService(None)
         # Use a stable default world id for offline execution so that
         # node IDs match typical offline test runs.
@@ -809,6 +1002,8 @@ class Runner:
         # After replay, write a fresh snapshot for faster next start
         Runner._write_snapshots(strategy)
         await Runner._replay_history(strategy, None, None)
+        if push_context:
+            Runner._pop_feature_context()
         return strategy
 
     # ------------------------------------------------------------------

@@ -4,7 +4,7 @@ import inspect
 import json
 import os
 from collections.abc import Iterable
-from typing import Any, TYPE_CHECKING
+from typing import Any, Mapping, TYPE_CHECKING
 import logging
 from enum import Enum
 
@@ -24,6 +24,7 @@ from .cache_view import CacheView
 from .backfill_state import BackfillState
 from .exceptions import NodeValidationError, InvalidParameterError
 from . import arrow_cache
+from .feature_store.types import FeatureDescriptor
 from . import metrics as sdk_metrics
 from . import node_validation as default_validator
 from . import hash_utils as default_hash_utils
@@ -437,6 +438,7 @@ class Node:
         validator=default_validator,
         hash_utils=default_hash_utils,
         event_service: EventRecorderService | None = None,
+        feature_plane: FeatureDescriptor | Mapping[str, Any] | None = None,
     ) -> None:
         self.validator = validator
         self.hash_utils = hash_utils
@@ -476,6 +478,10 @@ class Node:
         self.expected_schema = expected_schema or {}
         self.execute = True
         self.kafka_topic: str | None = None
+        descriptor = FeatureDescriptor.coerce(feature_plane)
+        if descriptor is not None:
+            descriptor = descriptor.with_interval(interval_val)
+        self.feature_plane = descriptor
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:

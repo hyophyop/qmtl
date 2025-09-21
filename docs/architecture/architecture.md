@@ -137,6 +137,11 @@ sequenceDiagram
 - 공유 원칙: 도메인 간 공유는 Feature Artifact 파일만 읽기 전용으로 허용한다(SHALL). 런타임 캐시(ComputeKey 기반)나 상태는 도메인 간 공유가 금지된다.
 - Retention/Backfill: 아티팩트는 버전 관리되며, 백테스트/리플레이 요구에 맞춰 보존 정책과 백필 경로를 문서화한다(SHOULD). 삭제 전에는 소비자 영향도를 평가한다.
 - ComputeKey 연계: 런타임에서 캐시 히트가 발생하면 `ComputeKey`는 현 도메인의 값만 참조해야 하며, Feature Artifact는 입력 창구로만 사용한다.
+- SDK Feature Store: `qmtl.sdk.feature_store.FeatureArtifactStore`는 기본적으로 로컬 디렉터리(`QMTL_FEATURE_STORE_DIR`, 기본값 `.qmtl_feature_store`)에 JSON 스냅샷을 작성한다. `QMTL_FEATURE_STORE_BACKEND={local|object|rocksdb}`로 백엔드를 교체할 수 있으며, `QMTL_FEATURE_STORE_MAX_VERSIONS`, `QMTL_FEATURE_STORE_TTL_SECONDS` 환경변수로 버전/TTL 보존 정책을 조정한다. 백테스트·드라이런 실행 시 Runner가 자동으로 기록하고, 라이브/섀도 도메인에서는 읽기 전용으로 소비한다.
+- Versioning & Retention Hooks: 각 아티팩트는 버전이 증가하며, 노드 단위로 `feature_plane.max_versions`/`retention_seconds`를 지정해 더 짧은 보존 규칙을 적용할 수 있다. Runner는 기록 직후 retention 훅을 실행하고, 초과 버전/만료 항목을 정리한다.
+- Promotion Pinning: 게이팅/프로모션 경로는 `dataset_fingerprint`를 고정해야 하며(SHALL), 동일한 fingerprint가 아닌 경우 Feature Artifact Plane 재사용을 금지한다. Runner는 메타데이터(`meta.dataset_fingerprint`)를 바탕으로 아티팩트를 저장하고, WorldService 프로모션 문맥도 동일한 fingerprint에 고정돼야 한다.
+- CLI/Backfill Workflow: 백필·리플레이 스크립트는 `Runner.feature_context(execution_domain="backtest", dataset_fingerprint=...)` 컨텍스트 매니저를 사용하여 명시적으로 fingerprint를 지정하고, 실행 전 `Runner.configure_feature_store(...)`로 운영 환경과 동일한 백엔드를 선택한다. 이렇게 작성된 아티팩트는 `Runner.feature_context(execution_domain="live", ...)` 컨텍스트에서 재사용되며 런타임 캐시는 계속 도메인 스코프를 유지한다.
+- Snapshot Alignment: 스냅샷(`qmtl/sdk/snapshot.py`)은 Strategy Plane(COW)과 Feature Plane(읽기 전용) 모두에 대해 `dataset_fingerprint`가 일치해야 승격이 허용된다. Feature Plane은 읽기 전용 마운트에서만 접근 가능하며, Snapshot/Artifact 동기화를 위해 프로모션 단계에서 fingerprint와 버전이 로그에 기록된다.
 
 ### 1.5 Clock & Input Guards
 
