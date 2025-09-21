@@ -103,6 +103,7 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
   - Inputs: Activation (from WS via Gateway), Symbol/Hours/Shortable providers, Account/BuyingPower
   - Output: Either a pass‑through order intent or a structured rejection with `RejectionReason`
   - Backed by: `qmtl/sdk/pretrade.py`, `qmtl/common/pretrade.py`, `qmtl/brokerage/*`
+  - Watermark Gating: configure via `qmtl.sdk.watermark.WatermarkGate` (enable/disable, `topic`, `lag`). Use `WatermarkGate.for_mode("simulate"|"paper"|"live")` for defaults—simulate/backtest disable gating; paper/live enable it.
 
 - [SizingNode]({{ code_url('qmtl/transforms/execution_nodes.py#L80') }})
   - Inputs: Order intent, Portfolio snapshot (t−1)
@@ -133,6 +134,7 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
   - Inputs: Fills stream
   - Outputs: Portfolio/positions snapshot stream (compacted), risk features
   - Backed by: `qmtl/sdk/portfolio.py`
+  - Watermark Topic: emits readiness markers to `watermark_topic` (default `trade.portfolio`). Align overrides with the gate topic.
 
 - RiskControlNode
   - Inputs: Portfolio snapshots, per‑symbol metrics

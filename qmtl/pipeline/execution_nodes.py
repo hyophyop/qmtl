@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Mapping, Callable
+from typing import Mapping, Callable, Any
 
 from qmtl.sdk.node import Node, ProcessingNode, StreamInput, CacheView
 from qmtl.sdk.pretrade import check_pretrade
 from qmtl.sdk.order_gate import Activation
+from qmtl.sdk.watermark import WatermarkGate, is_ready
 from qmtl.brokerage import BrokerageModel, Account, OrderType, TimeInForce
 from qmtl.sdk.portfolio import (
     Portfolio,
@@ -50,7 +51,8 @@ class PreTradeGateNode(ProcessingNode):
         brokerage: BrokerageModel,
         account: Account,
         backpressure_guard: Callable[[], bool] | None = None,
-        require_portfolio_watermark: bool = False,
+        require_portfolio_watermark: bool | WatermarkGate | Mapping[str, Any] | None = False,
+        watermark_gate: WatermarkGate | Mapping[str, Any] | bool | None = None,
         name: str | None = None,
     ) -> None:
         self.order = order
@@ -58,7 +60,10 @@ class PreTradeGateNode(ProcessingNode):
         self.brokerage = brokerage
         self.account = account
         self.backpressure_guard = backpressure_guard
-        self.require_portfolio_watermark = require_portfolio_watermark
+        self.watermark_gate = self._normalise_watermark_gate(
+            watermark_gate if watermark_gate is not None else require_portfolio_watermark
+        )
+        self.require_portfolio_watermark = self.watermark_gate.enabled
         super().__init__(
             order,
             compute_fn=self._compute,
@@ -66,6 +71,18 @@ class PreTradeGateNode(ProcessingNode):
             interval=order.interval,
             period=1,
         )
+
+    @staticmethod
+    def _normalise_watermark_gate(
+        gate: WatermarkGate | Mapping[str, Any] | bool | None
+    ) -> WatermarkGate:
+        if isinstance(gate, WatermarkGate):
+            return gate
+        if isinstance(gate, bool) or gate is None:
+            return WatermarkGate(enabled=bool(gate)) if gate else WatermarkGate(enabled=False)
+        if isinstance(gate, Mapping):
+            return WatermarkGate(**gate)
+        raise TypeError("Unsupported watermark gate configuration")
 
     def _compute(self, view: CacheView) -> dict | None:
         data = view[self.order][self.order.interval]
@@ -80,15 +97,13 @@ class PreTradeGateNode(ProcessingNode):
             except Exception:
                 pass
         # Optional watermark gating: require portfolio snapshot up to t-1
-        if self.require_portfolio_watermark:
+        if self.watermark_gate.enabled:
             try:
                 interval = self.order.interval or 0
                 if interval:
-                    from qmtl.sdk.watermark import is_ready
-
                     world = getattr(self.order, "world_id", None) or "default"
-                    required = int(ts) - int(interval)
-                    if not is_ready("trade.portfolio", world, required):
+                    required = self.watermark_gate.required_timestamp(ts, interval)
+                    if not is_ready(self.watermark_gate.topic, world, required):
                         return {"rejected": True, "reason": "watermark"}
             except Exception:
                 pass
@@ -313,9 +328,17 @@ class FillIngestNode(StreamInput):
 class PortfolioNode(ProcessingNode):
     """Apply fills to a :class:`~qmtl.sdk.portfolio.Portfolio`."""
 
-    def __init__(self, fills: Node, *, portfolio: Portfolio, name: str | None = None) -> None:
+    def __init__(
+        self,
+        fills: Node,
+        *,
+        portfolio: Portfolio,
+        name: str | None = None,
+        watermark_topic: str | None = "trade.portfolio",
+    ) -> None:
         self.fills = fills
         self.portfolio = portfolio
+        self._watermark_topic = watermark_topic
         super().__init__(
             fills,
             compute_fn=self._compute,
@@ -339,14 +362,17 @@ class PortfolioNode(ProcessingNode):
         commission = float(fill.get("commission", 0.0))
         self.portfolio.apply_fill(symbol, qty, price, commission)
         # Update watermark for portfolio snapshots
-        try:
-            from qmtl.sdk.watermark import set_watermark
+        if self._watermark_topic:
+            try:
+                from qmtl.sdk.watermark import set_watermark
 
-            world = getattr(self.fills, "world_id", None) or "default"
-            fill_ts = int(fill.get("timestamp", ts)) if isinstance(fill, dict) else int(ts)
-            set_watermark("trade.portfolio", world, fill_ts)
-        except Exception:
-            pass
+                world = getattr(self.fills, "world_id", None) or "default"
+                fill_ts = (
+                    int(fill.get("timestamp", ts)) if isinstance(fill, dict) else int(ts)
+                )
+                set_watermark(self._watermark_topic, world, fill_ts)
+            except Exception:
+                pass
         snapshot = {
             "cash": self.portfolio.cash,
             "positions": {
