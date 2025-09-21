@@ -52,6 +52,9 @@ class Database:
     async def append_event(self, strategy_id: str, event: str) -> None:
         raise NotImplementedError
 
+    async def upsert_wsb(self, world_id: str, strategy_id: str) -> None:
+        raise NotImplementedError
+
     async def healthy(self) -> bool:
         raise NotImplementedError
 
@@ -99,6 +102,15 @@ class PostgresDatabase(Database):
             )
             """
         )
+        await self._pool.execute(
+            """
+            CREATE TABLE IF NOT EXISTS world_strategy_bindings (
+                world_id TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                PRIMARY KEY (world_id, strategy_id)
+            )
+            """
+        )
 
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
         assert self._pool
@@ -133,6 +145,18 @@ class PostgresDatabase(Database):
                     strategy_id,
                     event,
                 )
+
+    async def upsert_wsb(self, world_id: str, strategy_id: str) -> None:
+        assert self._pool
+        await self._pool.execute(
+            """
+            INSERT INTO world_strategy_bindings(world_id, strategy_id)
+            VALUES($1, $2)
+            ON CONFLICT (world_id, strategy_id) DO NOTHING
+            """,
+            world_id,
+            strategy_id,
+        )
 
     async def get_status(self, strategy_id: str) -> Optional[str]:
         assert self._pool
@@ -201,6 +225,15 @@ class SQLiteDatabase(Database):
             )
             """
         )
+        await self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS world_strategy_bindings (
+                world_id TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                PRIMARY KEY (world_id, strategy_id)
+            )
+            """
+        )
         await self._conn.commit()
 
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
@@ -229,6 +262,14 @@ class SQLiteDatabase(Database):
         await self._conn.execute(
             "INSERT INTO event_log(strategy_id, event) VALUES(?, ?)",
             (strategy_id, event),
+        )
+        await self._conn.commit()
+
+    async def upsert_wsb(self, world_id: str, strategy_id: str) -> None:
+        assert self._conn
+        await self._conn.execute(
+            "INSERT OR IGNORE INTO world_strategy_bindings(world_id, strategy_id) VALUES(?, ?)",
+            (world_id, strategy_id),
         )
         await self._conn.commit()
 
@@ -261,6 +302,7 @@ class MemoryDatabase(Database):
     def __init__(self) -> None:
         self.strategies: dict[str, dict] = {}
         self.events: list[tuple[str, str]] = []
+        self.world_strategy_bindings: set[tuple[str, str]] = set()
 
     async def insert_strategy(self, strategy_id: str, meta: Optional[dict]) -> None:
         self.strategies[strategy_id] = {"meta": meta, "status": _INITIAL_STATUS}
@@ -276,6 +318,9 @@ class MemoryDatabase(Database):
 
     async def append_event(self, strategy_id: str, event: str) -> None:
         self.events.append((strategy_id, event))
+
+    async def upsert_wsb(self, world_id: str, strategy_id: str) -> None:
+        self.world_strategy_bindings.add((world_id, strategy_id))
 
     async def healthy(self) -> bool:
         return True

@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from qmtl.common import compute_node_id, crc32_of_list
+from qmtl.gateway.database import MemoryDatabase, PostgresDatabase, SQLiteDatabase
 from qmtl.gateway.models import StrategySubmit
 from qmtl.gateway.strategy_submission import (
     StrategySubmissionConfig,
@@ -62,6 +63,67 @@ class DummyDatabase:
 
     async def upsert_wsb(self, world_id: str, strategy_id: str) -> None:
         self.bindings.append((world_id, strategy_id))
+
+
+async def _build_memory_db(_monkeypatch):
+    db = MemoryDatabase()
+
+    async def fetch_bindings() -> set[tuple[str, str]]:
+        return set(db.world_strategy_bindings)
+
+    async def cleanup() -> None:
+        return None
+
+    return db, fetch_bindings, cleanup
+
+
+async def _build_sqlite_db(_monkeypatch):
+    db = SQLiteDatabase("sqlite:///:memory:")
+    await db.connect()
+
+    async def fetch_bindings() -> set[tuple[str, str]]:
+        assert db._conn
+        async with db._conn.execute(
+            "SELECT world_id, strategy_id FROM world_strategy_bindings"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return {(world_id, strategy_id) for world_id, strategy_id in rows}
+
+    async def cleanup() -> None:
+        await db.close()
+
+    return db, fetch_bindings, cleanup
+
+
+async def _build_postgres_db(monkeypatch):
+    class FakePool:
+        def __init__(self) -> None:
+            self.bindings: set[tuple[str, str]] = set()
+
+        async def execute(self, query: str, *params) -> None:
+            if params and "world_strategy_bindings" in query:
+                self.bindings.add((params[0], params[1]))
+
+        async def close(self) -> None:
+            return None
+
+    pool = FakePool()
+
+    async def fake_create_pool(_dsn: str, *args, **kwargs):
+        return pool
+
+    monkeypatch.setattr("qmtl.gateway.database.asyncpg.create_pool", fake_create_pool)
+
+    db = PostgresDatabase("postgres://user:pass@localhost/db")
+    await db.connect()
+
+    async def fetch_bindings() -> set[tuple[str, str]]:
+        return set(pool.bindings)
+
+    async def cleanup() -> None:
+        await db.close()
+
+    return db, fetch_bindings, cleanup
 
 
 def _build_payload(mismatch: bool = False) -> tuple[StrategySubmit, dict, str]:
@@ -198,3 +260,24 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
     assert result.queue_map[expected_node_id][0]["queue"] == "world-1:alpha"
     expected_crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
     assert result.sentinel_id == f"dryrun:{expected_crc:08x}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "db_builder",
+    [_build_memory_db, _build_sqlite_db, _build_postgres_db],
+    ids=["memory", "sqlite", "postgres"],
+)
+async def test_world_bindings_persist_for_all_databases(db_builder, monkeypatch) -> None:
+    db, fetch_bindings, cleanup = await db_builder(monkeypatch)
+    helper = StrategySubmissionHelper(DummyManager(), DummyDagManager(), db)
+    payload, _, _ = _build_payload()
+    config = StrategySubmissionConfig(submit=True, diff_timeout=0.1)
+
+    try:
+        await helper.process(payload, config)
+        await helper.process(payload, config)
+        bindings = await fetch_bindings()
+        assert bindings == {("world-1", "strategy-abc")}
+    finally:
+        await cleanup()
