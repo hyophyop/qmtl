@@ -9,7 +9,7 @@ import pickle
 import re
 import time
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
 try:  # optional dependency
@@ -159,6 +159,25 @@ class ObjectStoreArtifactBackend(LocalFileArtifactBackend):
     def _path(self, key: FeatureArtifactKey, version: int) -> Path:
         # Use local cache directory for atomic writes, then copy to remote
         return super()._path(key, version)
+
+    def list_versions(self, key: FeatureArtifactKey) -> list[int]:
+        versions = set(super().list_versions(key))
+        folder = super()._dir(key)
+        remote_dir = f"{self._base_url}/{folder.relative_to(self._base)}"
+        try:
+            entries = self._fs.ls(remote_dir, detail=False)  # type: ignore[attr-defined]
+        except FileNotFoundError:
+            return sorted(versions)
+
+        for entry in entries:
+            name = PurePosixPath(str(entry)).name
+            if not name.startswith("v") or not name.endswith(".json"):
+                continue
+            try:
+                versions.add(int(name[1:-5]))
+            except ValueError:
+                continue
+        return sorted(versions)
 
     def write(self, artifact: FeatureArtifact) -> FeatureArtifact:
         local = super().write(artifact)
