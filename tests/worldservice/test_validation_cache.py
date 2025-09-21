@@ -70,6 +70,40 @@ async def test_validation_cache_invalidation_on_context_change():
 
 
 @pytest.mark.asyncio
+async def test_validation_cache_invalidation_handles_domain_normalisation():
+    store = Storage()
+    context = {
+        "node_id": "blake3:node-2a",
+        "execution_domain": "backtest",
+        "contract_id": "contract-a",
+        "dataset_fingerprint": "lake:blake3:data-a",
+        "code_version": "rev1",
+        "resource_policy": "standard",
+    }
+
+    await store.set_validation_cache(
+        "world-2a",
+        **context,
+        result="valid",
+        metrics={"score": 0.9},
+        timestamp="2025-01-01T00:00:00Z",
+    )
+
+    changed = await store.get_validation_cache(
+        "world-2a",
+        **{
+            **context,
+            "execution_domain": "BACKTEST",
+            "dataset_fingerprint": "lake:blake3:data-b",
+        },
+    )
+    assert changed is None
+
+    cached = await store.get_validation_cache("world-2a", **context)
+    assert cached is None
+
+
+@pytest.mark.asyncio
 async def test_validation_cache_endpoints_domain_and_context_handling():
     app = create_app()
     async with httpx.ASGITransport(app=app) as transport:

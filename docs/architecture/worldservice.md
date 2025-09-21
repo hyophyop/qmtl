@@ -173,7 +173,8 @@ The evaluation returns DecisionEnvelope and an optional plan for apply.
 ### 4‑B. EvalKey and Validation Caching
 
 - EvalKey = `blake3(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`
-- Any change in the components invalidates cache and triggers re‑validation.
+- ExecutionDomain is normalised (case-insensitive) before hashing and storage so cache keys remain domain-scoped and comparable.
+- Any change in the components invalidates cache and triggers re‑validation. Invalidation removes the scoped domain entry (and empties the node/world bucket when last entry is purged) to prevent stale re-use.
 
 ### 4‑C. Gating Policy Specification (normative)
 
