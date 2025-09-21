@@ -548,12 +548,6 @@ class Runner:
             partition=partition,
         )
 
-        for n in strategy.nodes:
-            setattr(n, "_schema_enforcement", schema_enforcement)
-            try:
-                n.apply_compute_context(compute_context)
-            except AttributeError:
-                pass
         setattr(strategy, "compute_context", dict(resolved_context))
 
         gateway_context = {
