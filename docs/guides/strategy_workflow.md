@@ -2,7 +2,7 @@
 title: "Strategy Development and Testing Workflow"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-09-22
 ---
 
 {{ nav_links() }}
@@ -123,6 +123,13 @@ Use `Runner.offline()` for local testing without dependencies. For integrated ru
 switch to `Runner.run(strategy_cls, world_id=..., gateway_url=...)`. Activation and queue
 updates are delivered via the Gateway's opaque control stream on the `/events/subscribe`
 WebSocket; WS remains the authority for policy and activation.
+
+Execution domains are now surfaced explicitly on envelopes:
+
+- WorldService decisions emit `effective_mode` (`validate|compute-only|paper|live`).
+- Gateway/SDKs derive `execution_domain` (`backtest|dryrun|live|shadow`) using the normative mapping `validate → backtest (orders gated OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`.
+- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }}) toggles between `dryrun` and `live` by reading `QMTL_EXECUTION_DOMAIN`. Legacy `QMTL_TRADE_MODE=paper` is accepted but coerced to `dryrun` for compatibility.
+- Offline runs mirror the `backtest` domain, so a `validate` decision never publishes orders until promotion completes.
 
 ```bash
 # start with built-in defaults
