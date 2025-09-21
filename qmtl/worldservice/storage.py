@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from datetime import datetime, timezone
 
 from .policy_engine import Policy
@@ -22,6 +22,11 @@ WORLD_NODE_STATUSES: set[str] = {
 EXECUTION_DOMAINS: set[str] = {"backtest", "dryrun", "live", "shadow"}
 DEFAULT_EXECUTION_DOMAIN = "live"
 DEFAULT_WORLD_NODE_STATUS = "unknown"
+
+_REASON_UNSET = object()
+DEFAULT_EDGE_OVERRIDES: Tuple[tuple[str, str, str]] = (
+    ("domain:backtest", "domain:live", "auto:cross-domain-block"),
+)
 
 
 @dataclass
@@ -79,10 +84,12 @@ class Storage:
         self.world_nodes: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
         self.apply_runs: Dict[str, Dict] = {}
         self.validation_cache: Dict[str, Dict[str, Dict[str, ValidationCacheEntry]]] = {}
+        self.edge_overrides: Dict[str, Dict[tuple[str, str], Dict[str, Any]]] = {}
 
     async def create_world(self, world: Dict) -> None:
         self.worlds[world["id"]] = world
         self.audit.setdefault(world["id"], WorldAuditLog()).entries.append({"event": "world_created", "world": world})
+        await self._ensure_default_edge_overrides(world["id"])
 
     async def list_worlds(self) -> List[Dict]:
         return list(self.worlds.values())
@@ -106,6 +113,7 @@ class Storage:
         self.decisions.pop(world_id, None)
         self.world_nodes.pop(world_id, None)
         self.validation_cache.pop(world_id, None)
+        self.edge_overrides.pop(world_id, None)
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "world_deleted"})
 
     async def add_policy(self, world_id: str, policy: Policy) -> int:
@@ -700,8 +708,124 @@ class Storage:
     async def get_audit(self, world_id: str) -> List[Dict]:
         return list(self.audit.get(world_id, WorldAuditLog()).entries)
 
+    async def upsert_edge_override(
+        self,
+        world_id: str,
+        src_node_id: str,
+        dst_node_id: str,
+        *,
+        active: bool,
+        reason: str | None | object = _REASON_UNSET,
+    ) -> Dict[str, Any]:
+        bucket = self.edge_overrides.setdefault(world_id, {})
+        key = (src_node_id, dst_node_id)
+        previous = bucket.get(key)
+        if reason is _REASON_UNSET:
+            resolved_reason = previous.get("reason") if previous else None
+        else:
+            resolved_reason = None if reason is None else str(reason)
+            if resolved_reason is not None:
+                resolved_reason = resolved_reason.strip()
+                if not resolved_reason:
+                    resolved_reason = None
+
+        ts = (
+            datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        payload: Dict[str, Any] = {
+            "src_node_id": src_node_id,
+            "dst_node_id": dst_node_id,
+            "active": bool(active),
+            "updated_at": ts,
+        }
+        if resolved_reason is not None:
+            payload["reason"] = resolved_reason
+
+        bucket[key] = payload
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {
+                "event": "edge_override_upserted",
+                "src_node_id": src_node_id,
+                "dst_node_id": dst_node_id,
+                "active": bool(active),
+                "reason": resolved_reason,
+                "updated_at": ts,
+            }
+        )
+        return self._clone_edge_override(world_id, payload)
+
+    async def get_edge_override(
+        self, world_id: str, src_node_id: str, dst_node_id: str
+    ) -> Optional[Dict[str, Any]]:
+        bucket = self.edge_overrides.get(world_id)
+        if not bucket:
+            return None
+        entry = bucket.get((src_node_id, dst_node_id))
+        if not entry:
+            return None
+        return self._clone_edge_override(world_id, entry)
+
+    async def list_edge_overrides(self, world_id: str) -> List[Dict[str, Any]]:
+        bucket = self.edge_overrides.get(world_id)
+        if not bucket:
+            return []
+        results: List[Dict[str, Any]] = []
+        for src_node_id, dst_node_id in sorted(bucket.keys()):
+            payload = bucket[(src_node_id, dst_node_id)]
+            results.append(self._clone_edge_override(world_id, payload))
+        return results
+
+    async def delete_edge_override(
+        self, world_id: str, src_node_id: str, dst_node_id: str
+    ) -> None:
+        bucket = self.edge_overrides.get(world_id)
+        if not bucket:
+            return
+        entry = bucket.pop((src_node_id, dst_node_id), None)
+        if entry is None:
+            return
+        if not bucket:
+            self.edge_overrides.pop(world_id, None)
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {
+                "event": "edge_override_deleted",
+                "src_node_id": src_node_id,
+                "dst_node_id": dst_node_id,
+                "active": entry.get("active"),
+            }
+        )
+
+    async def _ensure_default_edge_overrides(self, world_id: str) -> None:
+        for src_node_id, dst_node_id, reason in DEFAULT_EDGE_OVERRIDES:
+            existing = await self.get_edge_override(world_id, src_node_id, dst_node_id)
+            if existing is None:
+                await self.upsert_edge_override(
+                    world_id,
+                    src_node_id,
+                    dst_node_id,
+                    active=False,
+                    reason=reason,
+                )
+
+    def _clone_edge_override(self, world_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        data = {
+            "world_id": world_id,
+            "src_node_id": payload["src_node_id"],
+            "dst_node_id": payload["dst_node_id"],
+            "active": bool(payload.get("active", False)),
+        }
+        if "reason" in payload:
+            data["reason"] = payload["reason"]
+        if "updated_at" in payload:
+            data["updated_at"] = payload["updated_at"]
+        return data
+
 
 __all__ = [
+    'DEFAULT_EDGE_OVERRIDES',
     'DEFAULT_EXECUTION_DOMAIN',
     'DEFAULT_WORLD_NODE_STATUS',
     'EXECUTION_DOMAINS',

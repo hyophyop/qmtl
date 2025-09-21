@@ -117,6 +117,20 @@ class WorldNodeUpsertRequest(BaseModel):
     annotations: Dict[str, Any] | None = None
 
 
+class EdgeOverrideResponse(BaseModel):
+    world_id: str
+    src_node_id: str
+    dst_node_id: str
+    active: bool
+    reason: str | None = None
+    updated_at: str | None = None
+
+
+class EdgeOverrideUpsertRequest(BaseModel):
+    active: bool
+    reason: str | None = None
+
+
 class DecisionEnvelope(BaseModel):
     world_id: str
     policy_version: int
@@ -180,6 +194,24 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
             lock = asyncio.Lock()
             app.state.apply_locks[world_id] = lock
         return lock
+
+    def _normalize_edge_domain(candidate: str) -> str:
+        domain = str(candidate).strip().lower()
+        if not domain:
+            raise ValueError("edge override domain cannot be empty")
+        if domain not in EXECUTION_DOMAINS:
+            raise ValueError(f"unknown execution domain for edge override: {candidate}")
+        return domain
+
+    def _coerce_edge_targets(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            candidates = [value]
+        else:
+            candidates = list(value)
+        normalized = {_normalize_edge_domain(item) for item in candidates}
+        return sorted(normalized)
 
     def _next_sequence(state: Dict[str, Any]) -> int:
         state["sequence"] = int(state.get("sequence", 0)) + 1
@@ -395,6 +427,32 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return Response(status_code=204)
 
+    @app.get('/worlds/{world_id}/edges/overrides', response_model=List[EdgeOverrideResponse])
+    async def get_edge_overrides(world_id: str) -> List[EdgeOverrideResponse]:
+        overrides = await store.list_edge_overrides(world_id)
+        return [EdgeOverrideResponse(**item) for item in overrides]
+
+    @app.put(
+        '/worlds/{world_id}/edges/{src_node_id}/{dst_node_id}',
+        response_model=EdgeOverrideResponse,
+    )
+    async def put_edge_override(
+        world_id: str,
+        src_node_id: str,
+        dst_node_id: str,
+        payload: EdgeOverrideUpsertRequest,
+    ) -> EdgeOverrideResponse:
+        kwargs: Dict[str, Any] = {"active": payload.active}
+        if "reason" in payload.model_fields_set:
+            kwargs["reason"] = payload.reason
+        override = await store.upsert_edge_override(
+            world_id,
+            src_node_id,
+            dst_node_id,
+            **kwargs,
+        )
+        return EdgeOverrideResponse(**override)
+
     @app.post('/worlds/{world_id}/policies', response_model=PolicyVersionResponse)
     async def post_policy(world_id: str, payload: PolicyRequest) -> PolicyVersionResponse:
         version = await store.add_policy(world_id, payload.policy)
@@ -497,6 +555,15 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        pre_disable: List[str] = []
+        post_enable: List[str] = []
+        if isinstance(gating, GatingPolicy):
+            try:
+                pre_disable = _coerce_edge_targets(gating.edges.pre_promotion.disable_edges_to)
+                post_enable = _coerce_edge_targets(gating.edges.post_promotion.enable_edges_to)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
         lock = _lock_for(world_id)
         async with lock:
             state = app.state.apply_runs.get(world_id)
@@ -542,7 +609,46 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                 gating_policy=gating.model_dump() if isinstance(gating, GatingPolicy) else None,
             )
 
+            edge_restore: Dict[tuple[str, str], Dict[str, Any] | None] = {}
+
+            async def _set_edge_override(domain: str, *, active: bool, reason: str | None) -> None:
+                src_node_id = "domain:backtest"
+                dst_node_id = f"domain:{domain}"
+                key = (src_node_id, dst_node_id)
+                if key not in edge_restore:
+                    edge_restore[key] = await store.get_edge_override(world_id, src_node_id, dst_node_id)
+                await store.upsert_edge_override(
+                    world_id,
+                    src_node_id,
+                    dst_node_id,
+                    active=active,
+                    reason=reason,
+                )
+
+            async def _restore_edge_overrides() -> None:
+                if not edge_restore:
+                    return
+                for (src_node_id, dst_node_id), previous in edge_restore.items():
+                    if previous is None:
+                        await store.delete_edge_override(world_id, src_node_id, dst_node_id)
+                    else:
+                        await store.upsert_edge_override(
+                            world_id,
+                            src_node_id,
+                            dst_node_id,
+                            active=bool(previous.get("active", False)),
+                            reason=previous.get("reason"),
+                        )
+
             try:
+                if isinstance(gating, GatingPolicy):
+                    for domain in pre_disable:
+                        await _set_edge_override(
+                            domain,
+                            active=False,
+                            reason=f"pre_promotion_disable:{payload.run_id}",
+                        )
+
                 await _freeze_world(world_id, payload.run_id, snapshot_view, run_state)
                 run_state["stage"] = "freeze"
                 await store.record_apply_stage(world_id, payload.run_id, "freeze")
@@ -570,11 +676,20 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                 run_state["stage"] = "unfreeze"
                 await store.record_apply_stage(world_id, payload.run_id, "unfreeze")
 
+                if isinstance(gating, GatingPolicy):
+                    for domain in post_enable:
+                        await _set_edge_override(
+                            domain,
+                            active=True,
+                            reason=f"post_promotion_enable:{payload.run_id}",
+                        )
+
                 run_state["completed"] = True
                 run_state["stage"] = "completed"
                 await store.record_apply_stage(world_id, payload.run_id, "completed")
                 return ApplyAck(run_id=payload.run_id, active=list(target_active), phase="completed")
             except HTTPException:
+                await _restore_edge_overrides()
                 raise
             except Exception as exc:  # pragma: no cover - defensive fallback
                 await store.restore_activation(world_id, snapshot_full)
@@ -601,6 +716,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                 run_state["active"] = list(previous_decisions)
                 run_state["stage"] = "rolled_back"
                 run_state["completed"] = False
+                await _restore_edge_overrides()
                 raise HTTPException(status_code=500, detail="apply failed") from exc
 
     @app.get('/worlds/{world_id}/{topic}/state_hash')

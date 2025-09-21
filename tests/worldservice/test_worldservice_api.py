@@ -87,6 +87,18 @@ async def test_world_crud_policy_apply_and_events():
             r = await client.get("/worlds")
             assert r.json() == [{"id": "w1", "name": "World"}]
 
+            overrides_resp = await client.get("/worlds/w1/edges/overrides")
+            assert overrides_resp.status_code == 200
+            overrides = overrides_resp.json()
+            assert overrides
+            default_edge = next(
+                o
+                for o in overrides
+                if o["src_node_id"] == "domain:backtest" and o["dst_node_id"] == "domain:live"
+            )
+            assert default_edge["active"] is False
+            assert default_edge["reason"] == "auto:cross-domain-block"
+
             # Add policy and set default
             await client.post("/worlds/w1/policies", json={"policy": {"top_k": {"metric": "m", "k": 1}}})
             await client.post("/worlds/w1/set-default", json={"version": 1})
@@ -107,6 +119,16 @@ async def test_world_crud_policy_apply_and_events():
             r = await client.post("/worlds/w1/apply", json=payload)
             body = r.json()
             assert body == {"ok": True, "run_id": run_id, "active": ["s1"], "phase": "completed"}
+
+            overrides_after = await client.get("/worlds/w1/edges/overrides")
+            assert overrides_after.status_code == 200
+            edge_after = next(
+                o
+                for o in overrides_after.json()
+                if o["src_node_id"] == "domain:backtest" and o["dst_node_id"] == "domain:live"
+            )
+            assert edge_after["active"] is True
+            assert edge_after["reason"] == f"post_promotion_enable:{run_id}"
 
             # Idempotent acknowledgement for same run
             r = await client.post("/worlds/w1/apply", json=payload)
@@ -172,6 +194,55 @@ async def test_apply_rejects_invalid_gating_policy():
 
             r = await client.post("/worlds/w2/apply", json=payload)
             assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_edge_overrides_upsert_and_reason_preservation():
+    app = create_app()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "edge-world", "name": "Edges"})
+
+            resp = await client.get("/worlds/edge-world/edges/overrides")
+            assert resp.status_code == 200
+            overrides = resp.json()
+            assert overrides
+            base = next(
+                o
+                for o in overrides
+                if o["src_node_id"] == "domain:backtest" and o["dst_node_id"] == "domain:live"
+            )
+            assert base["active"] is False
+            assert base["reason"] == "auto:cross-domain-block"
+            assert base["updated_at"]
+
+            put_resp = await client.put(
+                "/worlds/edge-world/edges/domain:backtest/domain:live",
+                json={"active": True, "reason": "manual enable"},
+            )
+            assert put_resp.status_code == 200
+            override = put_resp.json()
+            assert override["active"] is True
+            assert override["reason"] == "manual enable"
+
+            put_again = await client.put(
+                "/worlds/edge-world/edges/domain:backtest/domain:live",
+                json={"active": False},
+            )
+            assert put_again.status_code == 200
+            updated = put_again.json()
+            assert updated["active"] is False
+            assert updated["reason"] == "manual enable"
+
+            latest = await client.get("/worlds/edge-world/edges/overrides")
+            assert latest.status_code == 200
+            latest_edge = next(
+                o
+                for o in latest.json()
+                if o["src_node_id"] == "domain:backtest" and o["dst_node_id"] == "domain:live"
+            )
+            assert latest_edge["active"] is False
+            assert latest_edge["reason"] == "manual enable"
 
 
 @pytest.mark.asyncio
