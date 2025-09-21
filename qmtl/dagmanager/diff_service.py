@@ -340,7 +340,22 @@ class DiffService:
             if rec and rec.code_hash == n.code_hash:
                 topic = rec.topic
                 if namespace:
-                    topic = ensure_namespace(topic, namespace)
+                    namespaced = ensure_namespace(topic, namespace)
+                    if namespaced != topic:
+                        try:
+                            topic = self.queue_manager.upsert(
+                                _asset_from_tags(n.tags),
+                                n.node_type,
+                                n.code_hash,
+                                version,
+                                namespace=namespace,
+                            )
+                        except Exception:
+                            queue_create_error_total.inc()
+                            queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
+                            raise
+                    else:
+                        topic = namespaced
                 queue_map[key] = topic
                 if rec.schema_hash != n.schema_hash:
                     buffering_nodes.append(n)
