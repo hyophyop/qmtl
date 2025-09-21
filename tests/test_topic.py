@@ -1,4 +1,9 @@
-from qmtl.dagmanager.topic import topic_name, get_config, TopicConfig
+from qmtl.dagmanager.topic import (
+    topic_name,
+    get_config,
+    TopicConfig,
+    topic_namespace_enabled,
+)
 from qmtl.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
 
 
@@ -70,3 +75,13 @@ def test_idempotent_topic_creation():
     assert parts == 1
     assert repl == 1
     assert conf["retention.ms"] == "1000"
+
+
+def test_topic_namespace_enabled_defaults_true(monkeypatch):
+    monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
+    assert topic_namespace_enabled() is True
+
+
+def test_topic_namespace_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", "0")
+    assert topic_namespace_enabled() is False

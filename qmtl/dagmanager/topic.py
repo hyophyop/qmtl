@@ -8,16 +8,22 @@ import os
 
 
 _NAMESPACE_FLAG_ENV = "QMTL_ENABLE_TOPIC_NAMESPACE"
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off", ""}
 
 
 def topic_namespace_enabled() -> bool:
     """Return ``True`` when topic namespace prefixing is enabled."""
 
-    return os.getenv(_NAMESPACE_FLAG_ENV, "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    raw = os.getenv(_NAMESPACE_FLAG_ENV)
+    if raw is None:
+        return True
+    value = raw.strip().lower()
+    if value in _FALSE_VALUES:
+        return False
+    if value in _TRUE_VALUES:
+        return True
+    return True
 
 
 def _sanitize_namespace_segment(value: object) -> str:

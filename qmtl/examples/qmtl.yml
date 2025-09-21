@@ -24,6 +24,8 @@ gateway:
 
 dagmanager:
   memory_repo_path: memrepo.gpickle
+  # Topic namespaces default to enabled; set the QMTL_ENABLE_TOPIC_NAMESPACE
+  # environment variable to 0 to drop the world/domain prefix in local runs.
   # Example cluster configuration using Neo4j and Kafka
   # neo4j_dsn: bolt://localhost:7687
   # neo4j_user: neo4j

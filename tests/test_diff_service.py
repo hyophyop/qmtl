@@ -228,6 +228,43 @@ def test_hash_compare_and_queue_upsert():
     assert queue.calls == [("asset", "N", "c2", "v1", False, None)]
 
 
+def test_diff_service_namespaces_by_default(monkeypatch):
+    monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = json.dumps(
+        {
+            "meta": {
+                "strategy_version": "v1",
+                "compute_context": {
+                    "world_id": "World-1",
+                    "execution_domain": "Paper",
+                },
+            },
+            "nodes": [
+                {
+                    "node_id": "A",
+                    "node_type": "N",
+                    "code_hash": "c1",
+                    "schema_hash": "s1",
+                    "tags": ["btc"],
+                }
+            ],
+        }
+    )
+
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    assert queue.calls
+    assert queue.calls[0][-1] == "world-1.paper"
+    assert all(
+        value.startswith("world-1.paper.") for value in chunk.queue_map.values()
+    )
+
+
 def test_compute_key_isolation_and_metrics():
     metrics.reset_metrics()
     repo = FakeRepo()
@@ -278,7 +315,12 @@ def test_compute_key_isolation_and_metrics():
     service.diff(DiffRequest(strategy_id="s", dag_json=dag_live))
     chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag_backtest))
 
-    assert len(queue.calls) == 1
+    assert len(queue.calls) == 2
+    assert queue.calls[0][-1] == "w1.live"
+    assert queue.calls[1][-1] == "w2.backtest"
+    assert all(
+        value.startswith("w2.backtest.") for value in chunk.queue_map.values()
+    )
     assert chunk.new_nodes and chunk.new_nodes[0].compute_key is not None
     key = ("A", "w2", "backtest", "__unset__", "__unset__")
     assert metrics.cross_context_cache_hit_total._vals.get(key) == 1  # type: ignore[attr-defined]
