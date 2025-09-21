@@ -10,7 +10,7 @@ import hashlib
 import os
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Coroutine, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -32,6 +32,10 @@ from .models import (
     ExecutionFillEvent,
 )
 from .strategy_manager import StrategyManager
+from .strategy_submission import (
+    StrategySubmissionConfig,
+    StrategySubmissionHelper,
+)
 from .ws import WebSocketHub
 from .world_client import WorldServiceClient
 
@@ -54,35 +58,7 @@ def create_api_router(
 
     router = APIRouter()
 
-    def _normalize_context_value(value: object | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, (str, int, float)):
-            text = str(value).strip()
-            return text or None
-        return None
-
-    def _extract_compute_context(payload: StrategySubmit) -> dict[str, str | None]:
-        meta = payload.meta if isinstance(payload.meta, dict) else {}
-        return {
-            "execution_domain": _normalize_context_value(
-                meta.get("execution_domain") if meta else None
-            ),
-            "as_of": _normalize_context_value(meta.get("as_of") if meta else None),
-            "partition": _normalize_context_value(
-                meta.get("partition") if meta else None
-            ),
-            "dataset_fingerprint": _normalize_context_value(
-                meta.get("dataset_fingerprint") if meta else None
-            ),
-        }
-
-    def _node_id_from_partition_key(identifier: str) -> str:
-        base, _, _ = identifier.partition("#")
-        token = base or identifier
-        if ":" in token:
-            return token.rsplit(":", 2)[0]
-        return token
+    submission_helper = StrategySubmissionHelper(manager, dagmanager, database_obj)
 
     @router.get("/status")
     async def status_endpoint() -> dict[str, Any]:
@@ -111,192 +87,18 @@ def create_api_router(
     )
     async def post_strategies(payload: StrategySubmit) -> StrategyAck:
         start = time.perf_counter()
-        try:
-            dag_bytes = base64.b64decode(payload.dag_json)
-            dag = json.loads(dag_bytes.decode())
-        except Exception:
-            dag = json.loads(payload.dag_json)
-
-        # Schema validation (non-breaking): accept legacy DAGs without a version
-        # but standardize error reporting when an explicit unsupported version is given.
-        from qmtl.dagmanager.schema_validator import validate_dag
-        ok, _version, verrors = validate_dag(dag)
-        if not ok:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
-            )
-
-        from qmtl.common import (
-            crc32_of_list,
-            compute_node_id,
+        result = await submission_helper.process(
+            payload,
+            StrategySubmissionConfig(
+                submit=True,
+                diff_timeout=0.1,
+            ),
         )
-
-        nodes = dag.get("nodes", [])
-        node_ids_for_crc: list[str] = []
-        missing_fields: list[dict[str, object]] = []
-        mismatches: list[dict[str, str | int]] = []
-
-        for idx, node in enumerate(nodes):
-            nid = node.get("node_id")
-            if not isinstance(nid, str) or not nid:
-                node_ids_for_crc.append(str(nid or ""))
-                missing_fields.append({"index": idx, "missing": ["node_id"]})
-                continue
-
-            node_ids_for_crc.append(nid)
-            required = {
-                "node_type": node.get("node_type"),
-                "code_hash": node.get("code_hash"),
-                "config_hash": node.get("config_hash"),
-                "schema_hash": node.get("schema_hash"),
-            }
-            missing = [field for field, value in required.items() if not value]
-            if missing:
-                missing_fields.append({
-                    "index": idx,
-                    "node_id": nid,
-                    "missing": missing,
-                })
-                continue
-
-            expected = compute_node_id(
-                str(required["node_type"]),
-                str(required["code_hash"]),
-                str(required["config_hash"]),
-                str(required["schema_hash"]),
-            )
-            if nid != expected:
-                mismatches.append({"index": idx, "node_id": nid, "expected": expected})
-
-        crc = crc32_of_list(node_ids_for_crc)
-        if missing_fields:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "E_NODE_ID_FIELDS",
-                    "message": "node_id validation requires node_type, code_hash, config_hash and schema_hash",
-                    "missing_fields": missing_fields,
-                    "hint": "Regenerate the DAG with an updated SDK so each node includes the hashes required by compute_node_id().",
-                },
-            )
-
-        if crc != payload.node_ids_crc32:
-            # Standardize error payload while keeping message readable
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "E_CHECKSUM_MISMATCH", "message": "node id checksum mismatch"},
-            )
-
-        if mismatches:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "E_NODE_ID_MISMATCH",
-                    "message": "node_id does not match canonical compute_node_id output",
-                    "node_id_mismatch": mismatches,
-                    "hint": "Ensure legacy world-coupled or pre-BLAKE3 node_ids are regenerated using compute_node_id().",
-                },
-            )
-
-        strategy_id, existed = await manager.submit(payload)
-        if existed:
-            raise HTTPException(
-                status_code=409, detail={"code": "E_DUPLICATE", "strategy_id": strategy_id}
-            )
-
-        # Persist world↔strategy bindings (WSB) for all requested worlds
-        worlds: list[str] = []
-        wid_list = getattr(payload, "world_ids", None)
-        if wid_list:
-            worlds = list(dict.fromkeys([w for w in (wid_list or []) if w]))
-        elif payload.world_id:
-            worlds = [payload.world_id]
-        for w in worlds:
-            try:
-                await database_obj.upsert_wsb(w, strategy_id)
-            except Exception:
-                # Best-effort: do not fail ingestion on binding errors
-                pass
-
-        compute_ctx = _extract_compute_context(payload)
-
-        queue_map: dict[str, list[dict[str, object]]] = {}
-        node_ids: list[str] = []
-        queries: list[Coroutine[Any, Any, list[str]]] = []
-        query_targets: list[tuple[str, str | None]] = []  # (node_id, world_id)
-        exec_domain: str | None = None
-        if isinstance(payload.meta, dict):
-            raw_domain = payload.meta.get("execution_domain")
-            if isinstance(raw_domain, str) and raw_domain.strip():
-                exec_domain = raw_domain.strip()
-
-        for node in dag.get("nodes", []):
-            if node.get("node_type") != "TagQueryNode":
-                continue
-            tags = node.get("tags", [])
-            interval = int(node.get("interval", 0))
-            match_mode = node.get("match_mode", "any")
-            nid = node["node_id"]
-            node_ids.append(nid)
-            if worlds:
-                for w in worlds:
-                    queries.append(
-                        dagmanager.get_queues_by_tag(
-                            tags, interval, match_mode, w, exec_domain
-                        )
-                    )
-                    query_targets.append((nid, w))
-            else:
-                queries.append(
-                    dagmanager.get_queues_by_tag(
-                        tags, interval, match_mode, payload.world_id, exec_domain
-                    )
-                )
-                query_targets.append((nid, payload.world_id))
-
-        results = []
-        if queries:
-            results = await asyncio.gather(*queries, return_exceptions=True)
-
-        if queries:
-            # Merge per-world results into node-scoped queue lists with de-duplication
-            merged: dict[str, list[dict[str, object]]] = {}
-            seen: dict[str, set[str]] = {}
-            for (nid, _w), result in zip(query_targets, results):
-                if isinstance(result, Exception):
-                    merged.setdefault(nid, [])
-                    continue
-                merged.setdefault(nid, [])
-                seen.setdefault(nid, set())
-                for q in result:
-                    qname = q.get("queue") if isinstance(q, dict) else str(q)
-                    if qname not in seen[nid]:
-                        merged[nid].append(q)
-                        seen[nid].add(qname)
-            queue_map.update(merged)
-
-        # Try to fetch sentinel id quickly via Diff; fall back to deterministic value
-        sentinel_id = f"{strategy_id}-sentinel"
-        try:
-            # Use first world for diff context if provided; sentinel is world-agnostic
-            diff_world = worlds[0] if worlds else (payload.world_id or None)
-            diff_task = dagmanager.diff(
-                strategy_id,
-                json.dumps(dag),
-                world_id=diff_world,
-                execution_domain=compute_ctx.get("execution_domain"),
-                as_of=compute_ctx.get("as_of"),
-                partition=compute_ctx.get("partition"),
-                dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
-            )
-            chunk = await asyncio.wait_for(diff_task, timeout=0.1)
-            if chunk and getattr(chunk, "sentinel_id", ""):
-                sentinel_id = chunk.sentinel_id
-        except Exception:
-            pass
-
-        resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map, sentinel_id=sentinel_id)
+        resp = StrategyAck(
+            strategy_id=result.strategy_id,
+            queue_map=result.queue_map,
+            sentinel_id=result.sentinel_id,
+        )
         duration_ms = (time.perf_counter() - start) * 1000
         gw_metrics.observe_gateway_latency(duration_ms)
         return resp
@@ -314,134 +116,23 @@ def create_api_router(
         maps them to the HTTP queue_map shape; falls back to per-node tag
         queries when diff is unavailable.
         """
-        try:
-            dag_bytes = base64.b64decode(payload.dag_json)
-            dag = json.loads(dag_bytes.decode())
-        except Exception:
-            dag = json.loads(payload.dag_json)
-
-        # Schema validation parity with /strategies
-        from qmtl.dagmanager.schema_validator import validate_dag
-        ok, _version, verrors = validate_dag(dag)
-        if not ok:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
-            )
-
-        # Worlds scope
-        worlds: list[str] = []
-        wid_list = getattr(payload, "world_ids", None)
-        if wid_list:
-            worlds = list(dict.fromkeys([w for w in (wid_list or []) if w]))
-        elif payload.world_id:
-            worlds = [payload.world_id]
-
-        compute_ctx = _extract_compute_context(payload)
-        exec_domain = compute_ctx.get("execution_domain")
-
-        # Preferred path: use diff to compute sentinel and queue mapping
-        sentinel_id = ""
-        queue_map_http: dict[str, list[dict[str, object]]] = {}
-        try:
-            if len(worlds) <= 1:
-                chunk = await asyncio.wait_for(
-                    dagmanager.diff(
-                        "dryrun",
-                        json.dumps(dag),
-                        world_id=(worlds[0] if worlds else None),
-                        execution_domain=compute_ctx.get("execution_domain"),
-                        as_of=compute_ctx.get("as_of"),
-                        partition=compute_ctx.get("partition"),
-                        dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
-                    ),
-                    timeout=0.5,
-                )
-                if chunk is not None:
-                    sentinel_id = getattr(chunk, "sentinel_id", "") or ""
-                    # Transform partition-key map to HTTP queue_map shape
-                    for key, topic in dict(chunk.queue_map).items():
-                        identifier = str(key)
-                        node_id = _node_id_from_partition_key(identifier)
-                        queue_map_http.setdefault(node_id, []).append(
-                            {"queue": topic, "global": False}
-                        )
-            else:
-                # Merge per-world diffs
-                tasks = [
-                    dagmanager.diff(
-                        "dryrun",
-                        json.dumps(dag),
-                        world_id=w,
-                        execution_domain=compute_ctx.get("execution_domain"),
-                        as_of=compute_ctx.get("as_of"),
-                        partition=compute_ctx.get("partition"),
-                        dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
-                    )
-                    for w in worlds
-                ]
-                chunks = await asyncio.gather(*tasks, return_exceptions=True)
-                for ch in chunks:
-                    if isinstance(ch, Exception) or ch is None:
-                        continue
-                    if not sentinel_id:
-                        sentinel_id = getattr(ch, "sentinel_id", "") or ""
-                    for key, topic in dict(ch.queue_map).items():
-                        identifier = str(key)
-                        node_id = _node_id_from_partition_key(identifier)
-                        lst = queue_map_http.setdefault(node_id, [])
-                        if topic not in [d.get("queue") for d in lst]:
-                            lst.append({"queue": topic, "global": False})
-        except Exception:
-            # Fallback: reuse TagQueryNode queries to provide parity with /strategies
-            queue_map_http = {}
-            node_ids: list[str] = []
-            queries: list[Coroutine[Any, Any, list[str]]] = []
-            query_targets: list[tuple[str, str | None]] = []
-            for node in dag.get("nodes", []):
-                if node.get("node_type") == "TagQueryNode":
-                    tags = node.get("tags", [])
-                    interval = int(node.get("interval", 0))
-                    match_mode = node.get("match_mode", "any")
-                    nid = node.get("node_id")
-                    node_ids.append(nid)
-                    if worlds:
-                        for w in worlds:
-                            queries.append(
-                                dagmanager.get_queues_by_tag(
-                                    tags, interval, match_mode, w, exec_domain
-                                )
-                            )
-                            query_targets.append((nid, w))
-                    else:
-                        queries.append(
-                            dagmanager.get_queues_by_tag(
-                                tags, interval, match_mode, payload.world_id, exec_domain
-                            )
-                        )
-                        query_targets.append((nid, payload.world_id))
-            results = []
-            if queries:
-                results = await asyncio.gather(*queries, return_exceptions=True)
-            for (nid, _w), result in zip(query_targets, results):
-                if isinstance(result, Exception):
-                    queue_map_http.setdefault(nid, [])
-                    continue
-                lst = queue_map_http.setdefault(nid, [])
-                seen = {d.get("queue") for d in lst}
-                for q in result:
-                    qname = q.get("queue") if isinstance(q, dict) else str(q)
-                    if qname not in seen:
-                        lst.append(q)
-                        seen.add(qname)
-            # Ensure non-empty sentinel when diff is unavailable: derive a deterministic id
-            if not sentinel_id:
-                from qmtl.common import crc32_of_list
-
-                crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
-                sentinel_id = f"dryrun:{crc:08x}"
-
-        return StrategyAck(strategy_id="dryrun", queue_map=queue_map_http, sentinel_id=sentinel_id)
+        result = await submission_helper.process(
+            payload,
+            StrategySubmissionConfig(
+                submit=False,
+                strategy_id="dryrun",
+                diff_timeout=0.5,
+                prefer_diff_queue_map=True,
+                sentinel_default="",
+                diff_strategy_id="dryrun",
+                use_crc_sentinel_fallback=True,
+            ),
+        )
+        return StrategyAck(
+            strategy_id=result.strategy_id,
+            queue_map=result.queue_map,
+            sentinel_id=result.sentinel_id,
+        )
 
     @router.get(
         "/strategies/{strategy_id}/status", response_model=StatusResponse
