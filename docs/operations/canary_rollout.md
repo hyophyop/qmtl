@@ -19,7 +19,8 @@ Traffic splits between strategy versions are adjusted by publishing `sentinel_we
 
 ## Monitoring Metrics
 
-* **Gateway metrics:** check `gateway_sentinel_traffic_ratio{version="v1.2.1"}` in Prometheus to confirm the live split. The metric is exposed via the Gateway's `/metrics` endpoint.
+* **Gateway metrics:** check `gateway_sentinel_traffic_ratio{version="v1.2.1"}` in Prometheus to confirm the live split. The metric is exposed via the Gateway's `/metrics` endpoint and is updated immediately whenever a `sentinel_weight` ControlBus event is processed.
+* **Skew guardrail:** monitor `sentinel_skew_seconds{sentinel_id="v1.2.1"}` to ensure Gateway is receiving ControlBus updates quickly relative to the emitter.
 * **DAG Manager metrics:** monitor `dagmanager_active_version_weight` for each version to ensure the new weight is applied. This gauge is available from the DAG Manager's `/metrics` endpoint.
 * **Alerts:** alert rules under `alert_rules.yml` trigger if traffic weight deviates from the configured value for more than 5 minutes.
 

@@ -33,6 +33,16 @@ class FakeHub:
         if self._done and len(self.events) == 4:
             self._done.set()
 
+    async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
+        self.events.append(
+            (
+                "sentinel_weight",
+                {"sentinel_id": sentinel_id, "weight": weight, "version": 1},
+            )
+        )
+        if self._done and len(self.events) == 4:
+            self._done.set()
+
     async def send_queue_update(
         self,
         tags,
@@ -165,6 +175,37 @@ async def test_consumer_relays_and_deduplicates():
     assert metrics.event_relay_events_total.labels(topic="policy")._value.get() == 1
     assert metrics.event_relay_events_total.labels(topic="queue")._value.get() == 1
     assert metrics.event_relay_dropped_total.labels(topic="activation")._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_sentinel_weight_updates_metrics_and_ws():
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["sentinel_weight"], group="g", ws_hub=hub
+    )
+    await consumer.start()
+    msg = ControlBusMessage(
+        topic="sentinel_weight",
+        key="sentinel:v1",
+        etag="",
+        run_id="",
+        data={"sentinel_id": "v1", "weight": 0.75, "version": 1},
+        timestamp_ms=time.time() * 1000,
+    )
+    await consumer.publish(msg)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == [
+        ("sentinel_weight", {"sentinel_id": "v1", "weight": 0.75, "version": 1})
+    ]
+    assert metrics.gateway_sentinel_traffic_ratio._vals["v1"] == pytest.approx(0.75)
+    assert "v1" in metrics._sentinel_weight_updates
+    assert (
+        metrics.event_relay_events_total.labels(topic="sentinel_weight")._value.get()
+        == 1
+    )
 
 
 class StartStopConsumer(ControlBusConsumer):
