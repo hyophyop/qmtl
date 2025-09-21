@@ -7,6 +7,7 @@ import importlib
 
 import qmtl.sdk.runner as runner_module
 from qmtl.sdk import TradeExecutionService
+from qmtl.sdk import trade_dispatcher as dispatcher_module
 
 
 class DummyResponse:
@@ -24,7 +25,7 @@ def test_service_retries_on_failure(monkeypatch):
         if calls["count"] == 1:
             raise httpx.HTTPError("boom")
         return DummyResponse()
-    monkeypatch.setattr(runner_module.HttpPoster, "post", fake_post)
+    monkeypatch.setattr(dispatcher_module.HttpPoster, "post", fake_post)
     monkeypatch.setattr(TradeExecutionService, "poll_order_status", lambda self, order: None)
     service = TradeExecutionService("http://broker", max_retries=2)
     service.post_order({"id": 1})
@@ -53,7 +54,7 @@ def test_runner_delegates_to_service(monkeypatch):
         def post_order(self, order):
             self.orders.append(order)
 
-    monkeypatch.setattr(runner_module.HttpPoster, "post", boom)
+    monkeypatch.setattr(dispatcher_module.HttpPoster, "post", boom)
     service = DummyService()
     importlib.reload(runner_module)
     runner_module.Runner.set_trade_execution_service(service)

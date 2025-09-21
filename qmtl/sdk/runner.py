@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
-from typing import Optional, Iterable
+from typing import Optional
 import logging
 
 from opentelemetry import trace
@@ -23,11 +23,10 @@ from .strategy import Strategy
 from .gateway_client import GatewayClient
 from .tag_manager_service import TagManagerService
 from .activation_manager import ActivationManager
-from .history_loader import HistoryLoader
+from .history_warmup_service import HistoryWarmupService
+from .strategy_bootstrapper import StrategyBootstrapper
+from .trade_dispatcher import TradeOrderDispatcher
 from . import runtime, metrics as sdk_metrics
-from .http import HttpPoster
-from . import snapshot as snap
-from qmtl.dagmanager.topic import build_namespace, topic_namespace_enabled
 from .feature_store import FeatureArtifactPlane
 
 try:  # Optional aiokafka dependency
@@ -62,6 +61,19 @@ class Runner:
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
     _feature_artifact_plane: FeatureArtifactPlane | None = FeatureArtifactPlane.from_env()
+    _history_service: HistoryWarmupService = HistoryWarmupService()
+    _trade_dispatcher: TradeOrderDispatcher = TradeOrderDispatcher(
+        dedup_cache=_order_dedup,
+        activation_manager=_activation_manager,
+        trade_execution_service=(
+            None
+            if _trade_execution_service is _trade_execution_service_sentinel
+            else _trade_execution_service
+        ),
+        trade_order_http_url=_trade_order_http_url,
+        kafka_producer=_kafka_producer,
+        trade_order_kafka_topic=_trade_order_kafka_topic,
+    )
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -82,6 +94,7 @@ class Runner:
     def set_activation_manager(cls, am: ActivationManager | None) -> None:
         """Inject or clear the activation manager (for tests or custom wiring)."""
         cls._activation_manager = am
+        cls._trade_dispatcher.set_activation_manager(am)
 
     # ------------------------------------------------------------------
 
@@ -118,108 +131,11 @@ class Runner:
     # ------------------------------------------------------------------
     @staticmethod
     def _missing_ranges(
-        coverage: Iterable[tuple[int, int]], start: int, end: int, interval: int
+        coverage, start: int, end: int, interval: int
     ) -> list[tuple[int, int]]:
-        """Return timestamp gaps in ``[start, end]``."""
-        ranges = sorted([tuple(r) for r in coverage])
-        merged: list[tuple[int, int]] = []
-        for s, e in ranges:
-            if not merged:
-                merged.append((s, e))
-                continue
-            ls, le = merged[-1]
-            if s <= le + interval:
-                merged[-1] = (ls, max(le, e))
-            else:
-                merged.append((s, e))
+        """Proxy to :class:`HistoryWarmupService` for compatibility."""
 
-        gaps: list[tuple[int, int]] = []
-        cur = start
-        for s, e in merged:
-            if e < start:
-                continue
-            if s > end:
-                break
-            if s > cur:
-                gaps.append((cur, min(s - interval, end)))
-            cur = max(cur, e + interval)
-            if cur > end:
-                break
-        if cur <= end:
-            gaps.append((cur, end))
-        return [g for g in gaps if g[0] <= g[1]]
-
-    @staticmethod
-    async def _ensure_node_history(
-        node,
-        start: int,
-        end: int,
-        *,
-        stop_on_ready: bool = False,
-        strict: bool = False,
-    ) -> None:
-        """Ensure history coverage for a single ``StreamInput`` node."""
-        if node.interval is None or start is None or end is None:
-            return
-        provider = getattr(node, "history_provider", None)
-        if provider is None:
-            await node.load_history(start, end)
-            return
-        # If no explicit range provided and provider has known coverage,
-        # hydrate directly over its coverage window to avoid wall-clock skew.
-        if start is None and end is None:
-            cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            if cov:
-                s = min(c[0] for c in cov)
-                e = max(c[1] for c in cov)
-                await node.load_history(s, e)
-                return
-        # Guard against infinite warm-up if provider never clears pre_warmup
-        deadline = time.monotonic() + 60.0
-        while node.pre_warmup:
-            cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            missing = Runner._missing_ranges(cov, start, end, node.interval)
-            if not missing:
-                await node.load_history(start, end)
-                return
-            for s, e in missing:
-                await provider.fill_missing(
-                    s, e, node_id=node.node_id, interval=node.interval
-                )
-                if stop_on_ready and not node.pre_warmup:
-                    return
-            if time.monotonic() > deadline:
-                logger.warning(
-                    "history warm-up timed out for %s; proceeding with available data",
-                    getattr(node, "node_id", "<unknown>"),
-                )
-                break
-            if stop_on_ready:
-                # Avoid infinite loops when history providers fail to warm up
-                break
-        if node.pre_warmup:
-            try:
-                cov = await provider.coverage(
-                    node_id=node.node_id, interval=node.interval
-                )
-            except Exception:
-                cov = []
-            if cov:
-                s = min(c[0] for c in cov)
-                e = max(c[1] for c in cov)
-                await node.load_history(s, e)
-            else:
-                await node.load_history(start, end)
-        if strict:
-            try:
-                cov = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            except Exception:
-                cov = []
-            missing = Runner._missing_ranges(cov, start, end, node.interval)
-            if missing or getattr(node, "pre_warmup", False):
-                raise RuntimeError(
-                    f"history gap for {getattr(node, 'node_id', '<unknown>')} in strict mode"
-                )
+        return Runner._history_service.missing_ranges(coverage, start, end, interval)
 
     @staticmethod
     async def _ensure_history(
@@ -230,78 +146,29 @@ class Runner:
         stop_on_ready: bool = False,
         strict: bool = False,
     ) -> None:
-        """Ensure history coverage for all ``StreamInput`` nodes."""
-        from .node import StreamInput
+        """Proxy to history service for backward compatibility."""
 
-        tasks = []
-        now = runtime.FIXED_NOW if runtime.FIXED_NOW is not None else int(time.time())
-        for n in strategy.nodes:
-            if not isinstance(n, StreamInput):
-                continue
-            if start is None or end is None:
-                if n.interval is None or n.period is None:
-                    continue
-                rng_end = now - (now % n.interval)
-                rng_start = rng_end - n.interval * n.period + n.interval
-            else:
-                rng_start = start
-                rng_end = end
-            task = asyncio.create_task(
-                Runner._ensure_node_history(
-                    n,
-                    rng_start,
-                    rng_end,
-                    stop_on_ready=stop_on_ready,
-                    strict=strict,
-                )
-            )
-            tasks.append(task)
-        if tasks:
-            await asyncio.gather(*tasks)
+        await Runner._history_service.ensure_history(
+            strategy,
+            start,
+            end,
+            stop_on_ready=stop_on_ready,
+            strict=strict,
+        )
 
     @staticmethod
     def _hydrate_snapshots(strategy: Strategy) -> int:
-        """Attempt to hydrate all StreamInput nodes from snapshots.
+        """Proxy to history service for backwards compatibility."""
 
-        Returns number of nodes hydrated.
-        """
-        from .node import StreamInput
-
-        count = 0
-        for n in strategy.nodes:
-            if isinstance(n, StreamInput) and n.interval is not None and n.period:
-                try:
-                    strict = False
-                    try:
-                        strict = getattr(n, "runtime_compat", "loose") == "strict"
-                    except Exception:
-                        strict = False
-                    if snap.hydrate(n, strict_runtime=strict):
-                        count += 1
-                except Exception:
-                    logger.exception("snapshot hydration failed for %s", n.node_id)
-        if count:
-            logger.info("hydrated %d nodes from snapshots", count)
-        return count
+        return Runner._history_service.hydrate_snapshots(strategy)
 
     @staticmethod
     def _write_snapshots(strategy: Strategy) -> int:
-        """Write snapshots for all StreamInput nodes that have data."""
-        from .node import StreamInput
+        """Proxy to history service for backwards compatibility."""
 
-        count = 0
-        for n in strategy.nodes:
-            if isinstance(n, StreamInput) and n.interval is not None and n.period:
-                try:
-                    p = snap.write_snapshot(n)
-                    if p:
-                        count += 1
-                except Exception:
-                    logger.exception("snapshot write failed for %s", n.node_id)
-        if count:
-            logger.info("wrote %d node snapshots", count)
-        return count
+        return Runner._history_service.write_snapshots(strategy)
 
+    # ------------------------------------------------------------------
     # ------------------------------------------------------------------
     @staticmethod
     def feed_queue_data(
@@ -420,23 +287,11 @@ class Runner:
     def _collect_history_events(
         strategy: Strategy, start: int | None, end: int | None
     ) -> list[tuple[int, any, any]]:
-        """Gather cached history items for all ``StreamInput`` nodes."""
-        from .node import StreamInput
+        """Proxy to history service for backwards compatibility."""
 
-        events: list[tuple[int, any, any]] = []
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
-                continue
-            snapshot = node.cache._snapshot().get(node.node_id, {})
-            items = snapshot.get(node.interval, []) if node.interval is not None else []
-            for ts, payload in items:
-                if start is not None and ts < start:
-                    continue
-                if end is not None and ts > end:
-                    continue
-                events.append((ts, node, payload))
-        events.sort(key=lambda e: e[0])
-        return events
+        return Runner._history_service.collect_history_events(
+            strategy, start, end
+        )
 
     @staticmethod
     def run_pipeline(strategy: Strategy) -> None:
@@ -450,77 +305,9 @@ class Runner:
 
     @staticmethod
     def _replay_events_simple(strategy: Strategy) -> None:
-        """Replay events deterministically without relying on prepopulated caches.
+        """Proxy to history service for deterministic replay."""
 
-        This builds per-event ephemeral views and computes nodes in the order
-        they are registered, ensuring dependent nodes use values from the
-        current event only. Intended for simple offline/no-provider scenarios
-        and tests that assert per-tick ordering.
-        """
-        from .node import StreamInput
-        from .cache_view import CacheView
-
-        events = Runner._collect_history_events(strategy, None, None)
-        # Group events by timestamp to support multi-source sync if present
-        by_ts: dict[int, list[tuple[StreamInput, any]]] = {}
-        for ts, node, payload in events:
-            by_ts.setdefault(ts, []).append((node, payload))
-
-        for ts in sorted(by_ts):
-            seeds = by_ts[ts]
-            # Event-local values: node_id -> {interval: [(ts, payload|result)]}
-            event_values: dict[str, dict[int, list[tuple[int, any]]]] = {}
-            for src, payload in seeds:
-                event_values.setdefault(src.node_id, {}).setdefault(
-                    src.interval, []
-                ).append((ts, payload))
-
-            progressed = True
-            # Guard: ensure each node executes at most once per event timestamp
-            done: set[str] = set()
-            while progressed:
-                progressed = False
-                for node in strategy.nodes:
-                    if not getattr(node, "compute_fn", None):
-                        continue
-                    if not getattr(node, "execute", True):
-                        continue
-                    # Require all inputs to be available in this event
-                    inputs = getattr(node, "inputs", [])
-                    if not inputs:
-                        continue
-                    uid = getattr(node, "node_id", None)
-                    if uid is None:
-                        continue
-                    # Skip nodes already computed for this event
-                    if uid in done:
-                        continue
-                    ready = True
-                    for upstream in inputs if isinstance(inputs, list) else [inputs]:
-                        if upstream is None:
-                            continue
-                        uid = getattr(upstream, "node_id", None)
-                        ival = getattr(upstream, "interval", None)
-                        if uid is None or ival is None:
-                            continue
-                        if uid not in event_values or ival not in event_values[uid]:
-                            ready = False
-                            break
-                    if not ready:
-                        continue
-                    # Compute with ephemeral view
-                    view = CacheView(event_values)
-                    result = node.compute_fn(view)
-                    Runner._postprocess_result(node, result)
-                    n_uid = getattr(node, "node_id", None)
-                    ival = getattr(node, "interval", None)
-                    if n_uid is not None and ival is not None:
-                        event_values.setdefault(n_uid, {}).setdefault(ival, []).append(
-                            (ts, result)
-                        )
-                        # Mark node as executed for this event to prevent re-run
-                        done.add(n_uid)
-                        progressed = True
+        Runner._history_service.replay_events_simple(strategy)
 
     @staticmethod
     def _maybe_int(value) -> int | None:
@@ -537,36 +324,11 @@ class Runner:
         *,
         on_missing: str = "skip",
     ) -> None:
-        """Replay cached history through a :class:`Pipeline`."""
-        from .node import StreamInput
-        from qmtl import Pipeline
+        """Proxy to history service for backward compatibility."""
 
-        pipeline = Pipeline(strategy.nodes)
-
-        async def collect(node: StreamInput) -> list[tuple[int, StreamInput, any]]:
-            items = node.cache.get_slice(node.node_id, node.interval, count=node.period)
-            return [
-                (ts, node, payload)
-                for ts, payload in items
-                if (start is None or ts >= start) and (end is None or ts <= end)
-            ]
-
-        tasks = [
-            asyncio.create_task(collect(n))
-            for n in strategy.nodes
-            if isinstance(n, StreamInput) and n.interval is not None
-        ]
-
-        events: list[tuple[int, StreamInput, any]] = []
-        if tasks:
-            results = await asyncio.gather(*tasks)
-            for res in results:
-                events.extend(res)
-
-        events.sort(key=lambda e: e[0])
-
-        for ts, node, payload in events:
-            pipeline.feed(node, ts, payload, on_missing=on_missing)
+        await Runner._history_service.replay_history(
+            strategy, start, end, on_missing=on_missing
+        )
 
     @staticmethod
     def _replay_history_events(
@@ -575,18 +337,11 @@ class Runner:
         *,
         on_missing: str = "skip",
     ) -> None:
-        """Feed cached history to dependent nodes in timestamp order."""
-        for ts, src, payload in events:
-            for node in strategy.nodes:
-                if src in node.inputs:
-                    Runner.feed_queue_data(
-                        node,
-                        src.node_id,
-                        src.interval,
-                        ts,
-                        payload,
-                        on_missing=on_missing,
-                    )
+        """Proxy to history service for backward compatibility."""
+
+        Runner._history_service.replay_history_events(
+            strategy, events, on_missing=on_missing
+        )
 
     @staticmethod
     async def run_async(
@@ -624,214 +379,58 @@ class Runner:
         try:
             strategy.on_start()
 
-            tag_service = TagManagerService(gateway_url)
-            try:
-                manager = tag_service.init(strategy, world_id=world_id)
-            except TypeError:
-                # Backward-compat for tests that monkeypatch TagManagerService.init
-                manager = tag_service.init(strategy)
-            sdk_metrics.set_world_id(world_id)
-            logger.info(f"[RUN] {strategy_cls.__name__} world={world_id}")
-            dag = strategy.serialize()
-            logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
-
-            dag_meta = dag.setdefault("meta", {}) if isinstance(dag, dict) else {}
-            meta_payload = dict(meta) if isinstance(meta, dict) else None
-            execution_domain: str | None = None
-            if isinstance(meta_payload, dict):
-                raw_domain = meta_payload.get("execution_domain")
-                if isinstance(raw_domain, str) and raw_domain.strip():
-                    execution_domain = raw_domain.strip()
-                raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
-                    "datasetFingerprint"
-                )
-                if isinstance(raw_fp, str) and raw_fp.strip():
-                    dataset_fingerprint = raw_fp.strip()
-
-            if topic_namespace_enabled():
-                if execution_domain is None:
-                    if offline:
-                        execution_domain = "backtest"
-                    else:
-                        execution_domain = "live" if Runner._trade_mode == "live" else "dryrun"
-                namespace = build_namespace(world_id, execution_domain)
-                if namespace:
-                    if isinstance(dag_meta, dict):
-                        dag_meta["topic_namespace"] = {
-                            "world": world_id,
-                            "domain": execution_domain,
-                        }
-                    if meta_payload is None:
-                        meta_payload = {}
-                    meta_payload.setdefault("execution_domain", execution_domain)
-
-            meta_for_gateway = meta_payload if meta_payload is not None else meta
-
-            queue_map = {}
-            if gateway_url:
-                queue_map = await Runner._gateway_client.post_strategy(
-                    gateway_url=gateway_url,
-                    dag=dag,
-                    meta=meta_for_gateway,
-                    world_id=world_id,
-                )
-                if isinstance(queue_map, dict) and "error" in queue_map:
-                    raise RuntimeError(queue_map["error"])
-
-            tag_service.apply_queue_map(strategy, queue_map or {})
-            if not any(n.execute for n in strategy.nodes):
-                logger.info("No executable nodes; exiting strategy")
-                strategy.on_finish()
+            bootstrapper = StrategyBootstrapper(Runner._gateway_client)
+            bootstrap_result = await bootstrapper.bootstrap(
+                strategy,
+                context=context,
+                world_id=world_id,
+                gateway_url=gateway_url,
+                meta=meta,
+                offline=offline,
+                kafka_available=Runner._kafka_available,
+                trade_mode=Runner._trade_mode,
+                schema_enforcement=schema_enforcement,
+                feature_plane=Runner._feature_artifact_plane,
+            )
+            manager = bootstrap_result.manager
+            offline_mode = bootstrap_result.offline_mode
+            if bootstrap_result.completed:
                 return strategy
 
-            offline_mode = offline or not Runner._kafka_available or not gateway_url
-            await manager.resolve_tags(offline=offline_mode)
-
-            if dataset_fingerprint:
-                if isinstance(dag_meta, dict):
-                    dag_meta.setdefault("dataset_fingerprint", dataset_fingerprint)
-                for n in strategy.nodes:
-                    try:
-                        n.dataset_fingerprint = dataset_fingerprint
-                    except AttributeError:
-                        pass
-
-            plane = Runner.feature_artifact_plane()
-            if plane is not None:
-                plane.configure(
-                    dataset_fingerprint=dataset_fingerprint,
-                    execution_domain=context.execution_domain,
-                )
-
-            # Start activation manager to gate orders by world activation
             if gateway_url and not offline_mode:
                 try:
                     if Runner._activation_manager is None:
                         Runner._activation_manager = ActivationManager(
                             gateway_url, world_id=world_id, strategy_id=None
                         )
+                    Runner._trade_dispatcher.set_activation_manager(
+                        Runner._activation_manager
+                    )
                     await Runner._activation_manager.start()
                 except Exception:
                     logger.warning(
                         "Activation manager failed to start; proceeding with gates OFF by default"
                     )
-
-            # Hydrate and warm up from history to satisfy periods
-            Runner._hydrate_snapshots(strategy)
-            # Determine strict mode: only enforce when offline and history providers are present
-            from .node import StreamInput
-
-            has_provider = any(
-                isinstance(n, StreamInput)
-                and getattr(n, "history_provider", None) is not None
-                for n in strategy.nodes
-            )
-            # Strict gap handling is opt-in via env/flag only
-            from . import runtime as _rt
-
-            strict_mode = bool(_rt.FAIL_ON_HISTORY_GAP)
-
-            # Apply explicit history ranges if provided; otherwise use defaults
-            h_start = history_start
-            h_end = history_end
-            if offline_mode and h_start is None and h_end is None and not has_provider:
-                # Deterministic test defaults for offline mode without providers
-                h_start, h_end = 1, 2
-
-            # Decide whether to ensure history:
-            ensure_history = has_provider or (h_start is not None and h_end is not None)
-            if not ensure_history and offline_mode:
-                # If no providers and offline, skip ensure_history when we already
-                # have data in cache (e.g., tests pre-fill snapshots). Otherwise, call
-                # ensure_history with deterministic defaults to satisfy tests that
-                # assert load_history invocations.
-                from .node import StreamInput
-
-                has_cached = False
-                for n in strategy.nodes:
-                    if isinstance(n, StreamInput):
-                        try:
-                            snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
-                            if snap:
-                                has_cached = True
-                                break
-                        except KeyError:
-                            continue
-                if not has_cached:
-                    h_start, h_end = 1, 2
-                    ensure_history = True
-
-            if ensure_history:
-                if h_start is not None and h_end is not None:
-                    await Runner._ensure_history(
-                        strategy, h_start, h_end, stop_on_ready=True, strict=strict_mode
-                    )
-                else:
-                    await Runner._ensure_history(
-                        strategy, None, None, stop_on_ready=True, strict=strict_mode
-                    )
-            if offline_mode:
-                if has_provider:
-                    # When history providers are available, replay ensured history now
-                    await Runner._replay_history(strategy, None, None)
-                else:
-                    # Without providers, do not auto-replay here. Tests and callers
-                    # often backfill explicitly and then invoke run_pipeline().
-                    # Leaving caches intact avoids double-processing of hydrated
-                    # snapshots or test-seeded data.
-                    pass
-                # After replay, enforce strict gap handling if requested
-                if strict_mode:
-                    from .node import StreamInput
-
-                    for n in strategy.nodes:
-                        if isinstance(n, StreamInput) and getattr(n, "pre_warmup", False):
-                            raise RuntimeError(
-                                "history pre-warmup unresolved in strict mode"
-                            )
-                    # Additionally, detect non-contiguous gaps when a provider is present
-                    for n in strategy.nodes:
-                        if not isinstance(n, StreamInput):
-                            continue
-                        if getattr(n, "history_provider", None) is None:
-                            continue
-                        try:
-                            snap = n.cache._snapshot()[n.node_id].get(n.interval, [])
-                            ts_sorted = sorted(ts for ts, _ in snap)
-                            # Compare against provider coverage density
-                            cov = await n.history_provider.coverage(
-                                node_id=n.node_id, interval=n.interval
-                            )  # type: ignore[attr-defined]
-                            if cov:
-                                s = min(c[0] for c in cov)
-                                e = max(c[1] for c in cov)
-                                if n.interval:
-                                    expected = int((e - s) // n.interval) + 1
-                                    actual = len([t for t in ts_sorted if s <= t <= e])
-                                    if actual < expected:
-                                        raise RuntimeError(
-                                            "history gap detected in strict mode"
-                                        )
-                            else:
-                                # No coverage reported but we have data; fall back to contiguous check
-                                for a, b in zip(ts_sorted, ts_sorted[1:]):
-                                    if n.interval and (b - a) != n.interval:
-                                        raise RuntimeError(
-                                            "history gap detected in strict mode"
-                                        )
-                            # If coverage present, also ensure we have at least 'period' samples
-                            if cov:
-                                needed = getattr(n, "period", 1) or 1
-                                if len(ts_sorted) < needed:
-                                    raise RuntimeError("history missing in strict mode")
-                        except KeyError:
-                            # No data present; treat as unresolved
-                            raise RuntimeError("history missing in strict mode")
             else:
+                Runner._trade_dispatcher.set_activation_manager(
+                    Runner._activation_manager
+                )
+
+            history_service = Runner._history_service
+            await history_service.warmup_strategy(
+                strategy,
+                offline_mode=offline_mode,
+                history_start=history_start,
+                history_end=history_end,
+            )
+
+            if not offline_mode:
                 await manager.start()
-            Runner._write_snapshots(strategy)
+
+            history_service.write_snapshots(strategy)
             strategy.on_finish()
             return strategy
+
         except Exception as e:
             strategy.on_error(e)
             raise
@@ -899,11 +498,12 @@ class Runner:
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         # Hydrate from snapshots first, then fill any gaps from history
-        Runner._hydrate_snapshots(strategy)
-        await HistoryLoader.load(strategy, None, None)
+        history_service = Runner._history_service
+        history_service.hydrate_snapshots(strategy)
+        await history_service.load_history(strategy, None, None)
         # After replay, write a fresh snapshot for faster next start
-        Runner._write_snapshots(strategy)
-        await Runner._replay_history(strategy, None, None)
+        history_service.write_snapshots(strategy)
+        await history_service.replay_history(strategy, None, None)
         return strategy
 
     # ------------------------------------------------------------------
@@ -971,21 +571,25 @@ class Runner:
         global _trade_execution_service
         _trade_execution_service = service
         cls._trade_execution_service = service
+        cls._trade_dispatcher.set_trade_execution_service(service)
 
     @classmethod
     def set_kafka_producer(cls, producer) -> None:
         """Set the Kafka producer for trade orders."""
         cls._kafka_producer = producer
+        cls._trade_dispatcher.set_kafka_producer(producer)
 
     @classmethod
     def set_trade_order_http_url(cls, url: str | None) -> None:
         """Set HTTP URL for trade order submission."""
         cls._trade_order_http_url = url
+        cls._trade_dispatcher.set_http_url(url)
 
     @classmethod
     def set_trade_order_kafka_topic(cls, topic: str | None) -> None:
         """Set Kafka topic for trade order submission."""
         cls._trade_order_kafka_topic = topic
+        cls._trade_dispatcher.set_trade_order_kafka_topic(topic)
 
     @classmethod
     def set_enable_trade_submission(cls, enabled: bool) -> None:
@@ -1011,57 +615,9 @@ class Runner:
 
     @classmethod
     def _handle_trade_order(cls, order: dict) -> None:
-        """Handle trade order submission via HTTP and/or Kafka."""
-        # Gating: check world activation before submitting
-        am = cls._activation_manager
-        side = (order.get("side") or "").lower() if isinstance(order, dict) else ""
-        if am is not None and side:
-            allowed = am.allow_side(side)
-            if not allowed:
-                logger.info("Order gated off by activation: side=%s", side)
-                return
+        """Handle trade order submission via the configured dispatcher."""
 
-        # Submit via trade execution service if available
-        service = cls._trade_execution_service
-        if service is not _trade_execution_service_sentinel and service is not None:
-            service.post_order(order)
-            return
-
-        # Validate basic shape for built-in HTTP/Kafka adapters
-        if not isinstance(order, dict) or not order.get("side"):
-            logger.debug("ignoring non-order payload: %s", order)
-            return
-
-        # Idempotency: suppress duplicate orders derived from the same signal
-        # Key composed from side/quantity/timestamp and optional symbol to avoid replay dupes
-        try:
-            qty = order.get("quantity")
-            ts = order.get("timestamp")
-            sym = order.get("symbol") or ""
-            key = f"{order.get('side')}|{qty}|{ts}|{sym}"
-        except Exception:
-            key = None  # fall back to no dedup on malformed data
-        cache = cls._order_dedup
-        if key and cache is not None:
-            if cache.get(key):
-                logger.info("duplicate order suppressed (idempotent): %s", key)
-                return
-            cache[key] = True
-
-        # Submit via HTTP if URL is configured
-        if cls._trade_order_http_url is not None:
-            # Light retry for transient failures; idempotency relies on upstream consumer
-            for attempt in range(2):
-                try:
-                    HttpPoster.post(cls._trade_order_http_url, json=order)
-                    break
-                except Exception:
-                    if attempt == 1:
-                        logger.warning("trade order HTTP submit failed; dropping order")
-
-        # Submit via Kafka if producer and topic are configured
-        if cls._kafka_producer is not None and cls._trade_order_kafka_topic is not None:
-            cls._kafka_producer.send(cls._trade_order_kafka_topic, order)
+        cls._trade_dispatcher.dispatch(order)
 
     @staticmethod
     def _postprocess_result(node, result) -> None:
@@ -1089,6 +645,7 @@ class Runner:
         cache = cls._order_dedup
         if cache is not None:
             cache.clear()
+        cls._trade_dispatcher.reset_dedup()
 
     @classmethod
     def set_trade_mode(cls, mode: str) -> None:
