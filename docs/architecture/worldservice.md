@@ -15,6 +15,7 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - World/Policy registry: CRUD, versioning, defaults, rollback
 - Decision engine: data-currency, sample sufficiency, gates/score/constraints, hysteresis → effective_mode
 - Activation control: per-world activation set for strategies/sides with weights
+- ExecutionDomain as a first-class concept: `backtest | dryrun | live | shadow` per world
 - 2‑Phase apply: Freeze/Drain → Switch → Unfreeze, idempotent with run_id
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
 - Events: emits activation/policy updates to the internal ControlBus
@@ -46,7 +47,7 @@ WorldAuditLog (DB)
 
 WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes (Global Strategy Graph=GSG):
 
-- WorldNodeRef (DB): `(world_id, node_id)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
+- WorldNodeRef (DB): `(world_id, node_id, execution_domain)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
 - Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' prefix required**), `result`, `metrics{}`, `timestamp`
 - DecisionEvent (DB/Event): `event_id`, `world_id`, `node_id`, `decision` (`stop|pause|resume|quarantine`), `reason_code`, `scope` (default `world-local`), `propagation_rule`, `ttl`, `timestamp`
 - **WvgEdgeOverride (DB):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다.
@@ -119,13 +120,24 @@ Field semantics and precedence
 - `drain=true` blocks new orders but allows existing opens to complete naturally.
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
-- `effective_mode` communicates compute mode to SDK/UI (`compute-only|paper|live`).
+- `effective_mode` communicates compute mode to SDK/UI (`compute-only|paper|live`). Gateway/SDK map this to an ExecutionDomain for compute and routing: `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` is reserved for parallel validation against live feeds without publishing orders.
 
 Idempotency: consumers must treat older etag/run_id as no‑ops. Unknown or expired decisions/activations should default to “inactive/safe”.
 
 TTL & Staleness
 - DecisionEnvelope includes a TTL (default 300s if unspecified). After TTL, Gateway must treat the decision as stale and enforce a safe default: compute‑only (orders gated OFF) until a fresh decision is obtained.
 - Activation has no TTL but carries `etag` (and optional `state_hash`). Unknown/expired activation → orders gated OFF.
+
+---
+
+### 4. Execution Domains & Apply (normative)
+
+- Domains: `backtest | dryrun | live | shadow`.
+- Isolation invariants:
+  - Cross‑domain edges MUST be disabled by default via `WvgEdgeOverride` until a policy explicitly enables them post‑promotion.
+  - Orders are always gated OFF while `freeze=true` during 2‑Phase apply.
+  - Domain switch is atomic from the perspective of order gating: `Freeze/Drain → Switch(domain) → Unfreeze`.
+- Queue namespace guidance: operationally, topics MAY be organized under `{world_id}.{execution_domain}.<topic>` namespaces with ACLs to prevent accidental cross‑domain consumption. This does not change NodeID semantics and remains a deployment choice.
 
 ---
 
@@ -146,7 +158,7 @@ The evaluation returns DecisionEnvelope and an optional plan for apply.
 
 ### 4‑B. EvalKey and Validation Caching
 
-- EvalKey = `blake3(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)`
+- EvalKey = `blake3(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`
 - Any change in the components invalidates cache and triggers re‑validation.
 
 ---

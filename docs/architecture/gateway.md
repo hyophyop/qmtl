@@ -29,7 +29,7 @@ spec_version: v1.2
 
 ---
 
-## S0 · System Context & Goals
+## S0 · System Context & Goals
 
 Gateway sits at the **operational boundary** between *ephemeral* strategy submissions and the *persistent* graph state curated by DAG Manager. Its design objectives are:
 
@@ -42,6 +42,7 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 
 **Ax‑1** SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
 **Ax‑2** Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.
+**Ax‑3** Gateway forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies.
 
 ### Non‑Goals
 - Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
@@ -49,7 +50,7 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 
 ---
 
-## S1 · Functional Decomposition
+## S1 · Functional Decomposition
 
 ```mermaid
 graph LR
@@ -267,6 +268,8 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 
 - Strategy submission and worlds:
   - Clients may include `world_id` (single) **or** `world_ids[]` (multiple). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
+  - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context: `validate → backtest (orders gated OFF)` unless `shadow` is explicitly requested; `compute-only → backtest`; `paper → dryrun`; `live → live`. `shadow` is reserved and must be explicitly requested by operators.
+  - Gateway forwards the compute context `{ world_id, execution_domain, as_of (if backtest), partition }` with diff/ingest requests so DAG Manager derives a Domain‑Scoped ComputeKey and isolates caches per domain.
 
 ### Event Stream Descriptor
 
@@ -302,6 +305,7 @@ Token refresh
 - Live guard: Gateway rejects live trading unless consent is given.
   - When enabled, callers must include header ``X-Allow-Live: true``.
   - Starting Gateway with ``--allow-live`` disables the guard for testing.
+- 2‑Phase apply handshake: during `Freeze/Drain`, Gateway MUST gate all order publications (OrderPublishNode outputs are suppressed). Gateway unblocks only after an `ActivationUpdated` event reflecting `freeze=false` post‑switch.
 - Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.
 
 See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).

@@ -116,6 +116,24 @@ qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --passwor
 - Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
 - **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
 
+### 1.4 Domain‑Scoped ComputeKey (new)
+
+- Rationale: NodeID is global and world‑agnostic by design. To prevent accidental cross‑world/domain reuse in caches and runtime de‑duplication, a separate ComputeKey is used for execution/caching.
+- Definition:
+
+  `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`
+
+  - `NodeHash` is the canonical hash used by NodeID (§1.3).
+  - `world_id` scopes execution to a world; `execution_domain ∈ {backtest,dryrun,live,shadow}` ensures backtest/live separation.
+  - `as_of` binds backtests to a dataset snapshot/commit; required for deterministic replay.
+  - `partition` optionally scopes multi‑tenant or strategy/portfolio partitions.
+- Usage:
+  - NodeCache and any compute de‑duplication MUST key on `ComputeKey` (not solely on `node_id`).
+  - Cross‑context cache hits (same `node_id`, different `(world_id|execution_domain|as_of|partition)`) MUST be treated as violations and reported via a metric `cross_context_cache_hit_total` and blocked by policy (SLO: 0).
+  - Queue topics and NodeID remain unchanged; ComputeKey does not alter topic naming. Operators MAY additionally deploy namespace prefixes `{world_id}.{execution_domain}.<topic>` at the broker level for operational isolation (see WorldService doc).
+
+Note: This design preserves NodeID stability while providing strong execution isolation across worlds and domains.
+
 ---
 
 ## 2. Diff 알고리즘 (v2)

@@ -54,9 +54,9 @@ graph LR
   DM --> GDB
   DM --> KQ
   WS -- publish --> CB
-  DM -- publish --> CB
-  GW -- subscribe --> CB
-  GW -- WS (opaque) --> SDK
+    DM -- publish --> CB
+    GW -- subscribe --> CB
+    GW -- WS (opaque) --> SDK
 ```
 
 1. **SDK**는 전략을 DAG로 직렬화하고 Gateway에 제출/질의한다. 실행 중에는 Gateway의 WS로부터 불투명(ControlBus 기반) 이벤트 스트림을 전달받아 활성/큐 변경을 반영한다.
@@ -91,6 +91,14 @@ flowchart LR
 참고 문서
 - 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
 - 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md), [Order & Fill Event Schemas](../reference/api/order_events.md)
+
+### 1.3 Execution Domains & Isolation (new)
+
+- Domains: `backtest | dryrun | live | shadow`. WorldService treats ExecutionDomain as a 1급 개념 and drives gating and promotions via 2‑Phase Apply (Freeze/Drain → Switch → Unfreeze).
+- NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다.
+- WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. `WvgEdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다.
+- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑한다(`validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`; `shadow`는 운영자 전용).
+- Queue 네임스페이스: 운영적 격리를 위해 `{world_id}.{execution_domain}.<topic>` 프리픽스를 사용할 수 있다(선택). NodeID/토픽 규범은 그대로 유지한다.
 
 ### 1.2 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
 
