@@ -16,22 +16,18 @@ from qmtl.sdk.brokerage_client import (
     FakeBrokerageClient,
 )
 from qmtl.nodesets.base import NodeSet
+from qmtl.nodesets.options import NodeSetOptions
+from qmtl.nodesets.resources import get_execution_resources
 from qmtl.pipeline.execution_nodes import SizingNode as RealSizingNode, PortfolioNode as RealPortfolioNode
-from qmtl.sdk.portfolio import Portfolio
 from qmtl.nodesets.steps import (
     pretrade,
-    sizing,
     execution,
     order_publish,
     fills,
-    portfolio,
     risk,
     timing,
     compose,
 )
-
-
-_WORLD_PORTFOLIOS: dict[str, Portfolio] = {}
 
 
 def make_ccxt_spot_nodeset(
@@ -44,6 +40,7 @@ def make_ccxt_spot_nodeset(
     secret: str | None = None,
     time_in_force: str = "GTC",
     reduce_only: bool = False,
+    options: NodeSetOptions | None = None,
     descriptor: Any | None = None,
 ) -> NodeSet:
     """Compose a minimal CCXT spot execution Node Set behind ``signal_node``.
@@ -86,36 +83,24 @@ def make_ccxt_spot_nodeset(
         client.post_order(order)
         return order
 
-    # Build the full chain via compose with our parameterized execution step.
-    # Select portfolio instance; world-shared to honor portfolio_scope when used in future extensions
-    portfolio_obj = _WORLD_PORTFOLIOS.setdefault(world_id, Portfolio())
+    opts = options or NodeSetOptions()
+    resources = get_execution_resources(
+        world_id,
+        portfolio_scope=opts.portfolio_scope,
+        activation_weighting=opts.activation_weighting,
+    )
+    portfolio_obj = resources.portfolio
+    weight_fn = resources.weight_fn
 
     def _sizing_step(upstream: Node) -> Node:
-        # Activation-weight soft gating: consult Runner's ActivationManager when available.
-        def _weight(order: dict) -> float:
-            try:
-                from qmtl.sdk.runner import Runner  # late import to avoid cycles
-
-                am = Runner._activation_manager
-                if am is None:
-                    return 1.0
-                qty = float(order.get("quantity", 0.0))
-                side = "buy" if qty >= 0 else "sell"
-                w = float(am.weight_for_side(side))
-                if w < 0.0:
-                    return 0.0
-                if w > 1.0:
-                    return 1.0
-                return w
-            except Exception:
-                return 1.0
-
-        # Use a lightweight local portfolio for sizing helpers; portfolio state may be
-        # updated by a downstream PortfolioNode in richer recipes.
-        return RealSizingNode(upstream, portfolio=portfolio_obj, weight_fn=_weight)
+        node = RealSizingNode(upstream, portfolio=portfolio_obj, weight_fn=weight_fn)
+        setattr(node, "world_id", world_id)
+        return node
 
     def _portfolio_step(upstream: Node) -> Node:
-        return RealPortfolioNode(upstream, portfolio=portfolio_obj)
+        node = RealPortfolioNode(upstream, portfolio=portfolio_obj)
+        setattr(node, "world_id", world_id)
+        return node
 
     return compose(
         signal_node,
@@ -131,7 +116,7 @@ def make_ccxt_spot_nodeset(
         ],
         name="ccxt_spot",
         modes=("simulate", "paper", "live"),
-        portfolio_scope="strategy",
+        portfolio_scope=opts.portfolio_scope,
         descriptor=descriptor,
     )
 

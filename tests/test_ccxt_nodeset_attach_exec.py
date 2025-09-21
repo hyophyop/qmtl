@@ -1,8 +1,10 @@
 from qmtl.sdk import Node, StreamInput
 from qmtl.nodesets.recipes import make_ccxt_spot_nodeset
+from qmtl.nodesets.resources import clear_shared_portfolios
 
 
 def test_ccxt_nodeset_exec_carries_symbol_and_defaults():
+    clear_shared_portfolios()
     price = StreamInput(interval="60s", period=1)
 
     def make_signal(view):
