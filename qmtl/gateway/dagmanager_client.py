@@ -199,7 +199,7 @@ class DagManagerClient:
                         if not applied_namespace and world_id:
                             applied_namespace = build_namespace(
                                 world_id,
-                                domain or "dryrun",
+                                domain or "live",
                             )
                         if applied_namespace:
                             result_chunk.queue_map.update(
@@ -255,7 +255,7 @@ class DagManagerClient:
 
         namespace: str | None = None
         if topic_namespace_enabled() and world_id:
-            namespace = build_namespace(world_id, execution_domain or "dryrun")
+            namespace = build_namespace(world_id, execution_domain or "live")
 
         @self._breaker
         async def _call() -> list[dict[str, object]]:
