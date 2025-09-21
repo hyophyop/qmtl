@@ -14,8 +14,6 @@ from qmtl.common.metrics_shared import (
     observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
     get_cross_context_cache_hit_counter,
-    observe_cross_context_cache_hit as _observe_cross_context_cache_hit,
-    clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
 )
 
 # Metrics defined in documentation
@@ -72,6 +70,8 @@ diff_failures_total = Counter(
     registry=global_registry,
 )
 
+cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
+
 sentinel_gap_count = Gauge(
     "sentinel_gap_count",
     "Number of missing sentinel events detected",
@@ -80,8 +80,6 @@ sentinel_gap_count = Gauge(
 sentinel_gap_count._val = 0  # type: ignore[attr-defined]
 
 nodecache_resident_bytes = get_nodecache_resident_bytes()
-
-cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
 orphan_queue_total = Gauge(
     "orphan_queue_total",
@@ -170,25 +168,6 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     _observe_nodecache_resident_bytes(node_id, resident)
 
 
-def observe_cross_context_cache_hit(
-    node_id: str,
-    world_id: str,
-    execution_domain: str,
-    *,
-    as_of: str | None = None,
-    partition: str | None = None,
-) -> None:
-    """Record a cache hit with mismatched execution context."""
-
-    _observe_cross_context_cache_hit(
-        node_id,
-        world_id,
-        execution_domain,
-        as_of=as_of,
-        partition=partition,
-    )
-
-
 def observe_queue_lag(topic: str, lag_seconds: float, threshold_seconds: float) -> None:
     """Record current lag and configured threshold for ``topic``."""
     queue_lag_seconds.labels(topic=topic).set(lag_seconds)
@@ -260,7 +239,8 @@ def reset_metrics() -> None:
     queue_lag_seconds._vals = {}  # type: ignore[attr-defined]
     queue_lag_threshold_seconds.clear()
     queue_lag_threshold_seconds._vals = {}  # type: ignore[attr-defined]
-    _clear_cross_context_cache_hits()
+    if hasattr(cross_context_cache_hit_total, "clear"):
+        cross_context_cache_hit_total.clear()
     if hasattr(dagmanager_active_version_weight, "clear"):
         dagmanager_active_version_weight.clear()
     dagmanager_active_version_weight._vals = {}  # type: ignore[attr-defined]

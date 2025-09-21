@@ -11,7 +11,7 @@ from qmtl.dagmanager.topic import topic_name
 class FakeRepo(NodeRepository):
     def __init__(self, done: asyncio.Event | None = None):
         self.records: dict[str, NodeRecord] = {}
-        self.buffered: dict[str, int] = {}
+        self.buffered: dict[str, dict[str, int]] = {}
         self.cleared: list[str] = []
         self.done = done or asyncio.Event()
 
@@ -27,16 +27,32 @@ class FakeRepo(NodeRepository):
     def get_node_by_queue(self, queue):
         return None
 
-    def mark_buffering(self, node_id, *, timestamp_ms=None):
-        self.buffered[node_id] = timestamp_ms or 0
+    def mark_buffering(self, node_id, *, compute_key=None, timestamp_ms=None):
+        key = compute_key or "__global__"
+        self.buffered.setdefault(node_id, {})[key] = timestamp_ms or 0
 
-    def clear_buffering(self, node_id):
+    def clear_buffering(self, node_id, *, compute_key=None):
         self.cleared.append(node_id)
-        self.buffered.pop(node_id, None)
+        if compute_key:
+            ctx = self.buffered.get(node_id)
+            if isinstance(ctx, dict):
+                ctx.pop(compute_key, None)
+                if not ctx:
+                    self.buffered.pop(node_id, None)
+        else:
+            self.buffered.pop(node_id, None)
         self.done.set()
 
-    def get_buffering_nodes(self, older_than_ms):
-        return [n for n, t in self.buffered.items() if t < older_than_ms]
+    def get_buffering_nodes(self, older_than_ms, *, compute_key=None):
+        result = []
+        for node_id, ctx in self.buffered.items():
+            if compute_key:
+                ts = ctx.get(compute_key)
+                if ts is not None and ts < older_than_ms:
+                    result.append(node_id)
+            elif any(ts is not None and ts < older_than_ms for ts in ctx.values()):
+                result.append(node_id)
+        return result
 
 
 class FakeDiff(DiffService):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterable, List, Dict, TYPE_CHECKING
 
 try:  # optional high performance json
@@ -40,6 +40,20 @@ def _normalize_version(raw: object, default: str = "v1") -> str:
     result = "".join(cleaned).strip("-_.")
     return result or default
 
+
+def _stringify(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return str(value)
+    return str(value).strip()
+
+
+def _normalize_execution_domain(raw: object) -> str:
+    value = _stringify(raw)
+    return value.lower() or "live"
+
+
 from .metrics import (
     observe_diff_duration,
     queue_create_error_total,
@@ -58,6 +72,7 @@ from .topic import (
     ensure_namespace,
 )
 from qmtl.common import AsyncCircuitBreaker
+from qmtl.common.metrics_shared import observe_cross_context_cache_hit
 from .monitor import AckStatus
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
@@ -73,6 +88,28 @@ class DiffRequest:
     as_of: str | None = None
     partition: str | None = None
     dataset_fingerprint: str | None = None
+
+
+@dataclass(frozen=True)
+class ComputeContext:
+    world_id: str = ""
+    execution_domain: str = "live"
+    as_of: str = ""
+    partition: str = ""
+    dataset_fingerprint: str = ""
+
+    def label_values(self) -> tuple[str, str]:
+        return (
+            self.world_id or "",
+            self.execution_domain or "",
+        )
+
+
+@dataclass
+class _CachedBinding:
+    topic: str
+    code_hash: str
+    schema_hash: str
 
 
 @dataclass
@@ -96,6 +133,7 @@ class NodeInfo:
     tags: list[str]
     bucket: int | None = None
     is_global: bool = False
+    compute_key: str | None = field(default=None, init=False)
 
 
 @dataclass
@@ -159,6 +197,7 @@ class NodeRepository:
         self,
         node_id: str,
         *,
+        compute_key: str | None = None,
         timestamp_ms: int | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
@@ -169,6 +208,7 @@ class NodeRepository:
         self,
         node_id: str,
         *,
+        compute_key: str | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
         """Remove buffering state from the given node."""
@@ -178,6 +218,7 @@ class NodeRepository:
         self,
         older_than_ms: int,
         *,
+        compute_key: str | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> list[str]:
         """Return node IDs buffering since before ``older_than_ms``."""
@@ -227,12 +268,13 @@ class DiffService:
         self.node_repo = node_repo
         self.queue_manager = queue_manager
         self.stream_sender = stream_sender
+        self._bindings: Dict[str, Dict[str, _CachedBinding]] = {}
 
     # Step 1 ---------------------------------------------------------------
     def _pre_scan(
         self, dag_json: str
-    ) -> tuple[List[NodeInfo], str, str | None]:
-        """Parse DAG JSON and return nodes, version, and namespace."""
+    ) -> tuple[List[NodeInfo], str, ComputeContext, str | None]:
+        """Parse DAG JSON and return nodes, version, compute context, namespace."""
         data = _json_loads(dag_json)
 
         raw_nodes = data.get("nodes", []) or []
@@ -240,6 +282,22 @@ class DiffService:
         meta = meta_obj if isinstance(meta_obj, dict) else {}
         sentinel_version: str | None = None
         filtered_nodes: list[dict] = []
+        context = self._extract_compute_context(data)
+        namespace: str | None = None
+        if topic_namespace_enabled():
+            raw_namespace = meta.get("topic_namespace")
+            normalized = normalize_namespace(raw_namespace)
+            if normalized:
+                namespace = normalized
+            else:
+                world_for_ns = context.world_id or _stringify(
+                    meta.get("world") or meta.get("world_id")
+                )
+                domain_for_ns = context.execution_domain or _normalize_execution_domain(
+                    meta.get("execution_domain") or meta.get("domain")
+                )
+                if world_for_ns:
+                    namespace = build_namespace(world_for_ns, domain_for_ns)
         for entry in raw_nodes:
             if not isinstance(entry, dict):
                 continue
@@ -289,18 +347,15 @@ class DiffService:
             )
             for n in ordered
         ]
-        namespace: str | None = None
-        if topic_namespace_enabled():
-            raw_namespace = meta.get("topic_namespace")
-            normalized = normalize_namespace(raw_namespace)
-            if normalized:
-                namespace = normalized
-            else:
-                namespace = build_namespace(
-                    meta.get("world") or meta.get("world_id"),
-                    meta.get("execution_domain") or meta.get("domain"),
-                )
-
+        for node in nodes:
+            node.compute_key = compute_key(
+                node.node_id,
+                world_id=context.world_id or None,
+                execution_domain=context.execution_domain or None,
+                as_of=context.as_of or None,
+                partition=context.partition or None,
+                dataset_fingerprint=context.dataset_fingerprint or None,
+            )
         if sentinel_version:
             version = sentinel_version
         else:
@@ -311,11 +366,39 @@ class DiffService:
                 or meta.get("strategy_version")
                 or meta.get("build_version")
             )
-        return nodes, version, namespace
+        return nodes, version, context, namespace
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
         return self.node_repo.get_nodes(node_ids)
+
+    def _extract_compute_context(self, payload: dict) -> ComputeContext:
+        meta = payload.get("meta") or {}
+        ctx = payload.get("compute_context")
+        if not isinstance(ctx, dict):
+            ctx = meta.get("compute_context")
+        if not isinstance(ctx, dict):
+            ctx = {}
+        return ComputeContext(
+            world_id=_stringify(ctx.get("world_id")),
+            execution_domain=_normalize_execution_domain(ctx.get("execution_domain")),
+            as_of=_stringify(ctx.get("as_of")),
+            partition=_stringify(ctx.get("partition")),
+            dataset_fingerprint=_stringify(
+                ctx.get("dataset_fingerprint") or meta.get("dataset_fingerprint")
+            ),
+        )
+
+    def _record_cross_context_hit(
+        self, node: NodeInfo, context: ComputeContext
+    ) -> None:
+        observe_cross_context_cache_hit(
+            node.node_id,
+            context.world_id or "",
+            context.execution_domain or "",
+            as_of=context.as_of or None,
+            partition=context.partition or None,
+        )
 
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
@@ -323,21 +406,13 @@ class DiffService:
         nodes: Iterable[NodeInfo],
         existing: Dict[str, NodeRecord],
         version: str,
-        context: dict[str, str | None] | None,
+        compute_context: ComputeContext,
         *,
         namespace: object | None = None,
     ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
         buffering_nodes: List[NodeInfo] = []
-
-        world_id = context.get("world_id") if context else None
-        execution_domain = context.get("execution_domain") if context else None
-        as_of = context.get("as_of") if context else None
-        partition = context.get("partition") if context else None
-        dataset_fingerprint = (
-            context.get("dataset_fingerprint") if context else None
-        )
 
         def _asset_from_tags(tags: list[str]) -> str:
             # Prefer a short, stable asset name derived from tags
@@ -348,42 +423,66 @@ class DiffService:
                 if s:
                     return s
             return 'asset'
+
+        def _ensure_topic_namespace(topic: str, node: NodeInfo) -> str:
+            if not namespace:
+                return topic
+            namespaced = ensure_namespace(topic, namespace)
+            if namespaced != topic:
+                try:
+                    return self.queue_manager.upsert(
+                        _asset_from_tags(node.tags),
+                        node.node_type,
+                        node.code_hash,
+                        version,
+                        namespace=namespace,
+                    )
+                except Exception:
+                    queue_create_error_total.inc()
+                    queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
+                    raise
+            return namespaced
         for n in nodes:
             rec = existing.get(n.node_id)
-            ck = compute_key(
+            node_compute_key = n.compute_key or compute_key(
                 n.node_id,
-                world_id=world_id,
-                execution_domain=execution_domain,
-                as_of=as_of,
-                partition=partition,
-                dataset_fingerprint=dataset_fingerprint,
+                world_id=compute_context.world_id or None,
+                execution_domain=compute_context.execution_domain or None,
+                as_of=compute_context.as_of or None,
+                partition=compute_context.partition or None,
+                dataset_fingerprint=compute_context.dataset_fingerprint or None,
             )
+            n.compute_key = node_compute_key
             key = partition_key(
-                n.node_id, n.interval, n.bucket, compute_key=ck
+                n.node_id,
+                n.interval,
+                n.bucket,
+                compute_key=node_compute_key,
             )
-            if rec and rec.code_hash == n.code_hash:
-                topic = rec.topic
-                if namespace:
-                    namespaced = ensure_namespace(topic, namespace)
-                    if namespaced != topic:
-                        try:
-                            topic = self.queue_manager.upsert(
-                                _asset_from_tags(n.tags),
-                                n.node_type,
-                                n.code_hash,
-                                version,
-                                namespace=namespace,
-                            )
-                        except Exception:
-                            queue_create_error_total.inc()
-                            queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
-                            raise
-                    else:
-                        topic = namespaced
+            bindings = self._bindings.setdefault(n.node_id, {})
+            cached = bindings.get(node_compute_key)
+            if cached and cached.code_hash == n.code_hash:
+                topic = _ensure_topic_namespace(cached.topic, n)
+                cached.topic = topic
                 queue_map[key] = topic
+                if cached.schema_hash != n.schema_hash:
+                    buffering_nodes.append(n)
+                continue
+            if rec and rec.code_hash == n.code_hash and not bindings:
+                topic = _ensure_topic_namespace(rec.topic, n)
+                queue_map[key] = topic
+                bindings[node_compute_key] = _CachedBinding(
+                    topic=topic,
+                    code_hash=rec.code_hash,
+                    schema_hash=rec.schema_hash,
+                )
                 if rec.schema_hash != n.schema_hash:
                     buffering_nodes.append(n)
                 continue
+            if rec and rec.code_hash == n.code_hash and node_compute_key not in bindings:
+                self._record_cross_context_hit(n, compute_context)
+                if rec.schema_hash != n.schema_hash:
+                    buffering_nodes.append(n)
             try:
                 topic = self.queue_manager.upsert(
                     _asset_from_tags(n.tags),
@@ -396,8 +495,14 @@ class DiffService:
                 queue_create_error_total.inc()
                 queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
                 raise
+            topic = _ensure_topic_namespace(topic, n)
             queue_map[key] = topic
             new_nodes.append(n)
+            bindings[node_compute_key] = _CachedBinding(
+                topic=topic,
+                code_hash=n.code_hash,
+                schema_hash=n.schema_hash,
+            )
         return queue_map, new_nodes, buffering_nodes
 
     def _buffer_instructions(self, nodes: Iterable[NodeInfo]) -> List[BufferInstruction]:
@@ -405,20 +510,20 @@ class DiffService:
         result: List[BufferInstruction] = []
         for n in nodes:
             lag = n.period or 0
-            self.node_repo.mark_buffering(n.node_id)
-            result.append(
-                BufferInstruction(
-                    node_id=n.node_id,
-                    node_type=n.node_type,
-                    code_hash=n.code_hash,
-                    schema_hash=n.schema_hash,
-                    schema_id=n.schema_id,
-                    interval=n.interval,
-                    period=n.period,
-                    tags=list(n.tags),
-                    lag=lag,
-                )
+            self.node_repo.mark_buffering(n.node_id, compute_key=n.compute_key)
+            instruction = BufferInstruction(
+                node_id=n.node_id,
+                node_type=n.node_type,
+                code_hash=n.code_hash,
+                schema_hash=n.schema_hash,
+                schema_id=n.schema_id,
+                interval=n.interval,
+                period=n.period,
+                tags=list(n.tags),
+                lag=lag,
             )
+            instruction.compute_key = n.compute_key
+            result.append(instruction)
         return result
 
     # Step 4 ---------------------------------------------------------------
@@ -485,20 +590,27 @@ class DiffService:
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
-            nodes, version, namespace = self._pre_scan(request.dag_json)
+            nodes, version, inferred_context, namespace = self._pre_scan(
+                request.dag_json
+            )
+            merged_context = replace(
+                inferred_context,
+                world_id=_stringify(request.world_id) or inferred_context.world_id,
+                execution_domain=_normalize_execution_domain(
+                    request.execution_domain or inferred_context.execution_domain
+                ),
+                as_of=_stringify(request.as_of) or inferred_context.as_of,
+                partition=_stringify(request.partition) or inferred_context.partition,
+                dataset_fingerprint=
+                _stringify(request.dataset_fingerprint)
+                or inferred_context.dataset_fingerprint,
+            )
             existing = self._db_fetch([n.node_id for n in nodes])
-            context = {
-                "world_id": request.world_id,
-                "execution_domain": request.execution_domain,
-                "as_of": request.as_of,
-                "partition": request.partition,
-                "dataset_fingerprint": request.dataset_fingerprint,
-            }
             queue_map, new_nodes, buffering = self._hash_compare(
                 nodes,
                 existing,
                 version,
-                context,
+                merged_context,
                 namespace=namespace,
             )
             instructions = self._buffer_instructions(buffering)
@@ -664,6 +776,7 @@ class Neo4jNodeRepository(NodeRepository):
         self,
         node_id: str,
         *,
+        compute_key: str | None = None,
         timestamp_ms: int | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
@@ -679,6 +792,7 @@ class Neo4jNodeRepository(NodeRepository):
         self,
         node_id: str,
         *,
+        compute_key: str | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
         query = (
@@ -692,6 +806,7 @@ class Neo4jNodeRepository(NodeRepository):
         self,
         older_than_ms: int,
         *,
+        compute_key: str | None = None,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> list[str]:
         query = (

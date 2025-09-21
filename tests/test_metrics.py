@@ -27,28 +27,47 @@ class FakeRepo(NodeRepository):
     def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
 
-    def mark_buffering(self, node_id, *, timestamp_ms=None):
+    def mark_buffering(self, node_id, *, compute_key=None, timestamp_ms=None):
         pass
 
-    def clear_buffering(self, node_id):
+    def clear_buffering(self, node_id, *, compute_key=None):
         pass
 
-    def get_buffering_nodes(self, older_than_ms):
+    def get_buffering_nodes(self, older_than_ms, *, compute_key=None):
         return []
 
 
 class FakeQueue(QueueManager):
     def upsert(
-        self, asset, node_type, code_hash, version, *, dry_run=False, namespace=None
+        self,
+        asset,
+        node_type,
+        code_hash,
+        version,
+        *,
+        dry_run=False,
+        namespace=None,
     ):
         return topic_name(
-            asset, node_type, code_hash, version, dry_run=dry_run, namespace=namespace
+            asset,
+            node_type,
+            code_hash,
+            version,
+            dry_run=dry_run,
+            namespace=namespace,
         )
 
 
 class FailingQueue(QueueManager):
     def upsert(
-        self, asset, node_type, code_hash, version, *, dry_run=False, namespace=None
+        self,
+        asset,
+        node_type,
+        code_hash,
+        version,
+        *,
+        dry_run=False,
+        namespace=None,
     ):
         raise RuntimeError("fail")
 
