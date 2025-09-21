@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .policy_engine import Policy, evaluate_policy
 from .controlbus_producer import ControlBusProducer
 from .storage import EXECUTION_DOMAINS, WORLD_NODE_STATUSES, Storage
+from .policy import GatingPolicy, parse_gating_policy
 from qmtl.common.hashutils import hash_bytes
 from qmtl.transforms import (
     equity_linearity_metrics,
@@ -59,8 +61,13 @@ class ActivationRequest(BaseModel):
     ts: str | None = None
 
 
-class ApplyRequest(BaseModel):
-    metrics: Dict[str, Dict[str, float]]
+class ApplyPlan(BaseModel):
+    activate: List[str] = Field(default_factory=list)
+    deactivate: List[str] = Field(default_factory=list)
+
+
+class EvaluateRequest(BaseModel):
+    metrics: Dict[str, Dict[str, float]] = Field(default_factory=dict)
     previous: List[str] | None = None
     correlations: Dict[tuple[str, str], float] | None = None
     policy: Policy | None = None
@@ -69,8 +76,21 @@ class ApplyRequest(BaseModel):
     series: Dict[str, "StrategySeries"] | None = None
 
 
+class ApplyRequest(EvaluateRequest):
+    run_id: str
+    plan: ApplyPlan | None = None
+    gating_policy: Any | None = None
+
+
 class ApplyResponse(BaseModel):
     active: List[str]
+
+
+class ApplyAck(BaseModel):
+    ok: bool = True
+    run_id: str
+    active: List[str]
+    phase: str | None = None
 
 
 class DecisionsRequest(BaseModel):
@@ -124,6 +144,151 @@ class ActivationEnvelope(BaseModel):
 def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None = None) -> FastAPI:
     app = FastAPI()
     store = storage or Storage()
+    app.state.apply_locks: Dict[str, asyncio.Lock] = {}
+    app.state.apply_runs: Dict[str, Dict[str, Any]] = {}
+
+    def _lock_for(world_id: str) -> asyncio.Lock:
+        lock = app.state.apply_locks.get(world_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            app.state.apply_locks[world_id] = lock
+        return lock
+
+    def _next_sequence(state: Dict[str, Any]) -> int:
+        state["sequence"] = int(state.get("sequence", 0)) + 1
+        return state["sequence"]
+
+    async def _update_activation_state(
+        world_id: str,
+        payload: Dict[str, Any],
+        *,
+        phase: str | None = None,
+        requires_ack: bool = False,
+        sequence: int | None = None,
+    ) -> Dict[str, Any]:
+        version, data = await store.update_activation(world_id, payload)
+        if bus:
+            full_state = await store.get_activation(world_id)
+            state_payload = json.dumps(full_state, sort_keys=True).encode()
+            state_hash = hash_bytes(state_payload)
+            event_payload = {
+                key: val
+                for key, val in {
+                    **data,
+                    "strategy_id": payload["strategy_id"],
+                    "side": payload["side"],
+                    "phase": phase,
+                }.items()
+                if key not in {"etag", "run_id", "ts"} and val is not None
+            }
+            await bus.publish_activation_update(
+                world_id,
+                etag=data.get("etag", str(version)),
+                run_id=str(data.get("run_id") or ""),
+                ts=str(data.get("ts")),
+                state_hash=state_hash,
+                payload=event_payload,
+                version=version,
+                requires_ack=requires_ack,
+                sequence=sequence,
+            )
+        return data
+
+    async def _freeze_world(
+        world_id: str,
+        run_id: str,
+        snapshot: Dict[str, Any],
+        run_state: Dict[str, Any],
+    ) -> None:
+        state = snapshot.get("state", {})
+        if not state:
+            return
+        for strategy_id, sides in state.items():
+            for side, entry in sides.items():
+                payload = {
+                    "strategy_id": strategy_id,
+                    "side": side,
+                    "active": False,
+                    "weight": entry.get("weight", 0.0),
+                    "freeze": True,
+                    "drain": True,
+                    "effective_mode": entry.get("effective_mode"),
+                    "run_id": run_id,
+                }
+                sequence = _next_sequence(run_state)
+                await _update_activation_state(
+                    world_id,
+                    payload,
+                    phase="freeze",
+                    requires_ack=True,
+                    sequence=sequence,
+                )
+
+    async def _unfreeze_world(
+        world_id: str,
+        run_id: str,
+        snapshot: Dict[str, Any],
+        run_state: Dict[str, Any],
+        target_active: Sequence[str],
+    ) -> None:
+        state = snapshot.get("state", {})
+        active_set = set(target_active)
+        seen: set[tuple[str, str]] = set()
+        for strategy_id, sides in state.items():
+            for side, entry in sides.items():
+                seen.add((strategy_id, side))
+                active_flag = strategy_id in active_set
+                payload = {
+                    "strategy_id": strategy_id,
+                    "side": side,
+                    "active": active_flag,
+                    "weight": entry.get("weight", 1.0 if active_flag else 0.0),
+                    "freeze": False,
+                    "drain": False,
+                    "effective_mode": entry.get("effective_mode"),
+                    "run_id": run_id,
+                }
+                sequence = _next_sequence(run_state)
+                await _update_activation_state(
+                    world_id,
+                    payload,
+                    phase="unfreeze",
+                    requires_ack=True,
+                    sequence=sequence,
+                )
+
+        for strategy_id in active_set:
+            if all(strategy_id != sid for sid, _ in seen):
+                sequence = _next_sequence(run_state)
+                await _update_activation_state(
+                    world_id,
+                    {
+                        "strategy_id": strategy_id,
+                        "side": "long",
+                        "active": True,
+                        "weight": 1.0,
+                        "freeze": False,
+                        "drain": False,
+                        "run_id": run_id,
+                    },
+                    phase="unfreeze",
+                    requires_ack=True,
+                    sequence=sequence,
+                )
+
+    async def _determine_active(world_id: str, payload: ApplyRequest | EvaluateRequest) -> List[str]:
+        if isinstance(payload, ApplyRequest) and payload.plan:
+            prev = payload.previous or await store.get_decisions(world_id)
+            activate = set(payload.plan.activate)
+            deactivate = set(payload.plan.deactivate)
+            return sorted((set(prev) - deactivate) | activate)
+
+        policy = payload.policy or await store.get_default_policy(world_id)
+        if policy is None:
+            raise HTTPException(status_code=404, detail="policy not found")
+        prev = payload.previous or await store.get_decisions(world_id)
+        metrics = _augment_metrics_with_linearity(payload.metrics or {}, getattr(payload, "series", None))
+        return evaluate_policy(metrics, policy, prev, payload.correlations)
 
     @app.post('/worlds', status_code=201)
     async def post_world(payload: World) -> World:
@@ -290,40 +455,126 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         return ActivationEnvelope(world_id=world_id, strategy_id=payload.strategy_id, side=payload.side, **data)
 
     @app.post('/worlds/{world_id}/evaluate', response_model=ApplyResponse)
-    async def post_evaluate(world_id: str, payload: ApplyRequest) -> ApplyResponse:
-        policy = payload.policy or await store.get_default_policy(world_id)
-        if policy is None:
-            raise HTTPException(status_code=404, detail='policy not found')
-        prev = payload.previous or await store.get_decisions(world_id)
-        metrics = _augment_metrics_with_linearity(payload.metrics or {}, payload.series)
-        active = evaluate_policy(metrics, policy, prev, payload.correlations)
+    async def post_evaluate(world_id: str, payload: EvaluateRequest) -> ApplyResponse:
+        active = await _determine_active(world_id, payload)
         return ApplyResponse(active=active)
 
-    @app.post('/worlds/{world_id}/apply', response_model=ApplyResponse)
-    async def post_apply(world_id: str, payload: ApplyRequest) -> ApplyResponse:
-        policy = payload.policy or await store.get_default_policy(world_id)
-        if policy is None:
-            raise HTTPException(status_code=404, detail='policy not found')
-        prev = payload.previous or await store.get_decisions(world_id)
-        metrics = _augment_metrics_with_linearity(payload.metrics or {}, payload.series)
-        active = evaluate_policy(metrics, policy, prev, payload.correlations)
-        await store.set_decisions(world_id, active)
-        version = await store.default_policy_version(world_id)
-        if bus:
-            # Hash the active strategy list for a checksum
-            sorted_active = sorted(active)
-            digest_payload = json.dumps(sorted_active).encode()
-            checksum = hash_bytes(digest_payload)
-            ts = datetime.now(timezone.utc).isoformat()
-            await bus.publish_policy_update(
-                world_id,
-                policy_version=version,
-                checksum=checksum,
-                status="ACTIVE",
-                ts=ts,
-                version=version,
+    @app.post('/worlds/{world_id}/apply', response_model=ApplyAck)
+    async def post_apply(world_id: str, payload: ApplyRequest) -> ApplyAck:
+        try:
+            gating = (
+                parse_gating_policy(payload.gating_policy)
+                if payload.gating_policy is not None
+                else None
             )
-        return ApplyResponse(active=active)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        lock = _lock_for(world_id)
+        async with lock:
+            state = app.state.apply_runs.get(world_id)
+            if state:
+                if not state.get("completed", False):
+                    stage = state.get("stage")
+                    if state.get("run_id") == payload.run_id:
+                        if stage == "rolled_back":
+                            return ApplyAck(ok=False, run_id=payload.run_id, active=list(state.get("active", [])), phase=stage)
+                        return ApplyAck(run_id=payload.run_id, active=list(state.get("active", [])), phase=stage)
+                    if stage == "rolled_back":
+                        app.state.apply_runs.pop(world_id, None)
+                        state = None
+                    else:
+                        raise HTTPException(status_code=409, detail="apply in progress")
+                elif state.get("run_id") == payload.run_id:
+                    return ApplyAck(run_id=payload.run_id, active=list(state.get("active", [])), phase="completed")
+
+            target_active = await _determine_active(world_id, payload)
+            previous_decisions = list(await store.get_decisions(world_id))
+            snapshot_full = await store.snapshot_activation(world_id)
+            snapshot_view = {
+                "state": {
+                    sid: {side: dict(entry) for side, entry in sides.items()}
+                    for sid, sides in snapshot_full.state.items()
+                }
+            }
+            run_state: Dict[str, Any] = {
+                "run_id": payload.run_id,
+                "stage": "requested",
+                "completed": False,
+                "sequence": 0,
+                "active": list(target_active),
+            }
+            app.state.apply_runs[world_id] = run_state
+
+            await store.record_apply_stage(
+                world_id,
+                payload.run_id,
+                "requested",
+                plan=payload.plan.model_dump() if payload.plan else None,
+                active=list(target_active),
+                gating_policy=gating.model_dump() if isinstance(gating, GatingPolicy) else None,
+            )
+
+            try:
+                await _freeze_world(world_id, payload.run_id, snapshot_view, run_state)
+                run_state["stage"] = "freeze"
+                await store.record_apply_stage(world_id, payload.run_id, "freeze")
+
+                await store.set_decisions(world_id, list(target_active))
+                run_state["stage"] = "switch"
+                await store.record_apply_stage(world_id, payload.run_id, "switch", active=list(target_active))
+
+                version = await store.default_policy_version(world_id)
+                if bus:
+                    sorted_active = sorted(target_active)
+                    digest_payload = json.dumps(sorted_active).encode()
+                    checksum = hash_bytes(digest_payload)
+                    ts = datetime.now(timezone.utc).isoformat()
+                    await bus.publish_policy_update(
+                        world_id,
+                        policy_version=version,
+                        checksum=checksum,
+                        status="ACTIVE",
+                        ts=ts,
+                        version=version,
+                    )
+
+                await _unfreeze_world(world_id, payload.run_id, snapshot_view, run_state, target_active)
+                run_state["stage"] = "unfreeze"
+                await store.record_apply_stage(world_id, payload.run_id, "unfreeze")
+
+                run_state["completed"] = True
+                run_state["stage"] = "completed"
+                await store.record_apply_stage(world_id, payload.run_id, "completed")
+                return ApplyAck(run_id=payload.run_id, active=list(target_active), phase="completed")
+            except HTTPException:
+                raise
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                await store.restore_activation(world_id, snapshot_full)
+                await store.set_decisions(world_id, list(previous_decisions))
+                await store.record_apply_stage(
+                    world_id,
+                    payload.run_id,
+                    "rolled_back",
+                    error=str(exc),
+                    active=list(previous_decisions),
+                )
+                restored = await store.snapshot_activation(world_id)
+                await _freeze_world(
+                    world_id,
+                    payload.run_id,
+                    {
+                        "state": {
+                            sid: {side: dict(entry) for side, entry in sides.items()}
+                            for sid, sides in restored.state.items()
+                        }
+                    },
+                    run_state,
+                )
+                run_state["active"] = list(previous_decisions)
+                run_state["stage"] = "rolled_back"
+                run_state["completed"] = False
+                raise HTTPException(status_code=500, detail="apply failed") from exc
 
     @app.get('/worlds/{world_id}/{topic}/state_hash')
     async def get_state_hash(world_id: str, topic: str) -> Dict:
@@ -347,7 +598,16 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
     return app
 
 
-__all__ = ['World', 'PolicyRequest', 'ApplyRequest', 'ApplyResponse', 'create_app']
+__all__ = [
+    'World',
+    'PolicyRequest',
+    'ApplyPlan',
+    'EvaluateRequest',
+    'ApplyRequest',
+    'ApplyResponse',
+    'ApplyAck',
+    'create_app',
+]
 
 # ---------------------------------------------------------------------------
 # Helper models and utilities (defined after create_app to avoid forward refs)

@@ -36,6 +36,17 @@ def test_topic_name_generation():
     )
     assert sim.endswith("_sim")
 
+
+def test_topic_name_with_namespace():
+    name = topic_name(
+        "btc",
+        "Indicator",
+        "abcdef123456",
+        "v1",
+        namespace={"world": "W1", "domain": "Live"},
+    )
+    assert name.startswith("w1.live.")
+
 def test_topic_config_values():
     config = get_config("raw")
     assert config == TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000)

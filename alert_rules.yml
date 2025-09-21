@@ -69,3 +69,11 @@ prometheus:
             severity: warning
           annotations:
             summary: Sentinel traffic skew persists beyond 5s
+        - alert: CrossContextCacheHit
+          expr: cross_context_cache_hit_total > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: Cross-context cache hit detected (SLO=0)
+            runbook: docs/operations/monitoring.html#runbook-cross-context-cache-hits-slo-0

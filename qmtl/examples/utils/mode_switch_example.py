@@ -7,7 +7,7 @@ from qmtl.sdk import Strategy, Node, StreamInput, Runner
 
 
 class ModeSwitchStrategy(Strategy):
-    """Run the same strategy in multiple modes."""
+    """Run the same strategy across multiple execution domains."""
 
     def setup(self) -> None:
         price = StreamInput(interval="60s", period=30)

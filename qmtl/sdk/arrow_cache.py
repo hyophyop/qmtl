@@ -18,6 +18,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 from . import metrics as sdk_metrics, runtime
 from .backfill_state import BackfillState
+from qmtl.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 ARROW_AVAILABLE = pa is not None
 RAY_AVAILABLE = ray is not None
@@ -158,6 +159,9 @@ class NodeCacheArrow:
         self._filled: Dict[tuple[str, int], int] = {}
         self._last_seen: Dict[tuple[str, int], int] = {}
         self.backfill_state = BackfillState()
+        self._active_compute_key: str | None = None
+        self._active_world_id: str = ""
+        self._active_execution_domain: str = DEFAULT_EXECUTION_DOMAIN
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
         self._stop_event = threading.Event()
@@ -201,6 +205,44 @@ class NodeCacheArrow:
             self._filled[key] = 0
             self._last_seen[key] = 0
         return self._slices[key]
+
+    def _clear_all(self) -> None:
+        self._slices.clear()
+        self._last_ts.clear()
+        self._missing.clear()
+        self._filled.clear()
+        self._last_seen.clear()
+        self.backfill_state = BackfillState()
+
+    def activate_compute_key(
+        self,
+        compute_key: str | None,
+        *,
+        node_id: str,
+        world_id: str | None = None,
+        execution_domain: str | None = None,
+    ) -> None:
+        """Activate ``compute_key`` and clear cache when context changes."""
+
+        key = compute_key or "__default__"
+        world = str(world_id or "")
+        domain = str(execution_domain or DEFAULT_EXECUTION_DOMAIN)
+        if self._active_compute_key is None:
+            self._active_compute_key = key
+            self._active_world_id = world
+            self._active_execution_domain = domain
+            return
+        if self._active_compute_key == key:
+            self._active_world_id = world
+            self._active_execution_domain = domain
+            return
+        had_data = bool(self._slices)
+        self._clear_all()
+        self._active_compute_key = key
+        self._active_world_id = world
+        self._active_execution_domain = domain
+        if had_data:
+            sdk_metrics.observe_cross_context_cache_hit(node_id, world, domain)
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         sl = self._ensure(u, interval)
