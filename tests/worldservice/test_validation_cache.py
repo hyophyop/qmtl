@@ -1,0 +1,136 @@
+import httpx
+import pytest
+
+from qmtl.worldservice.api import create_app
+from qmtl.worldservice.storage import Storage
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_scoped_by_execution_domain_storage():
+    store = Storage()
+    context = {
+        "node_id": "blake3:node-1",
+        "execution_domain": "backtest",
+        "contract_id": "contract-a",
+        "dataset_fingerprint": "lake:blake3:data-a",
+        "code_version": "rev1",
+        "resource_policy": "standard",
+    }
+    await store.set_validation_cache(
+        "world-1",
+        **context,
+        result="valid",
+        metrics={"score": 0.9},
+        timestamp="2025-01-01T00:00:00Z",
+    )
+
+    cached = await store.get_validation_cache("world-1", **context)
+    assert cached is not None
+    assert cached.eval_key.startswith("blake3:")
+
+    other_domain = await store.get_validation_cache(
+        "world-1",
+        **{**context, "execution_domain": "live"},
+    )
+    assert other_domain is None
+
+    cached_again = await store.get_validation_cache("world-1", **context)
+    assert cached_again is not None
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_invalidation_on_context_change():
+    store = Storage()
+    context = {
+        "node_id": "blake3:node-2",
+        "execution_domain": "backtest",
+        "contract_id": "contract-a",
+        "dataset_fingerprint": "lake:blake3:data-a",
+        "code_version": "rev1",
+        "resource_policy": "standard",
+    }
+    await store.set_validation_cache(
+        "world-2",
+        **context,
+        result="valid",
+        metrics={"score": 0.9},
+        timestamp="2025-01-01T00:00:00Z",
+    )
+
+    changed = await store.get_validation_cache(
+        "world-2",
+        **{**context, "dataset_fingerprint": "lake:blake3:data-b"},
+    )
+    assert changed is None
+
+    # Cache was invalidated because context changed
+    cached = await store.get_validation_cache("world-2", **context)
+    assert cached is None
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_endpoints_domain_and_context_handling():
+    app = create_app()
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "world-api"})
+
+            context = {
+                "node_id": "blake3:node-3",
+                "execution_domain": "backtest",
+                "contract_id": "contract-a",
+                "dataset_fingerprint": "lake:blake3:data-a",
+                "code_version": "rev1",
+                "resource_policy": "standard",
+            }
+            payload = {**context, "result": "valid", "metrics": {"score": 1.0}, "timestamp": "2025-01-01T00:00:00Z"}
+
+            store_resp = await client.post("/worlds/world-api/validations/cache", json=payload)
+            assert store_resp.status_code == 200
+            body = store_resp.json()
+            assert body["cached"] is True
+            assert isinstance(body["eval_key"], str)
+            assert body["eval_key"].startswith("blake3:")
+
+            lookup_resp = await client.post("/worlds/world-api/validations/cache/lookup", json=context)
+            lookup_body = lookup_resp.json()
+            assert lookup_body["cached"] is True
+            assert lookup_body["eval_key"] == body["eval_key"]
+
+            other_domain_resp = await client.post(
+                "/worlds/world-api/validations/cache/lookup",
+                json={**context, "execution_domain": "live"},
+            )
+            other_domain_body = other_domain_resp.json()
+            assert other_domain_body["cached"] is False
+
+            # Domain-specific miss should not evict the original cache
+            repeat_lookup = await client.post(
+                "/worlds/world-api/validations/cache/lookup", json=context
+            )
+            assert repeat_lookup.json()["cached"] is True
+
+            # Context change invalidates the cache entry
+            mismatch_lookup = await client.post(
+                "/worlds/world-api/validations/cache/lookup",
+                json={**context, "dataset_fingerprint": "lake:blake3:data-b"},
+            )
+            assert mismatch_lookup.json()["cached"] is False
+
+            # Original context should now miss because of invalidation
+            after_invalidation = await client.post(
+                "/worlds/world-api/validations/cache/lookup", json=context
+            )
+            assert after_invalidation.json()["cached"] is False
+
+            # Re-store and then delete explicitly via API
+            await client.post("/worlds/world-api/validations/cache", json=payload)
+            delete_resp = await client.delete(
+                "/worlds/world-api/validations/blake3:node-3",
+                params={"execution_domain": "backtest"},
+            )
+            assert delete_resp.status_code == 204
+            final_lookup = await client.post(
+                "/worlds/world-api/validations/cache/lookup", json=context
+            )
+            assert final_lookup.json()["cached"] is False
