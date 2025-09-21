@@ -58,7 +58,6 @@ def create_app(
     worldservice_retries: int = 2,
     enable_worldservice_proxy: bool = True,
     enforce_live_guard: bool = True,
-    accept_legacy_nodeids: bool = True,
     enable_otel: bool | None = None,
     enable_background: bool = True,
 ) -> FastAPI:
@@ -230,7 +229,6 @@ def create_app(
         world_client_local,
         enforce_live_guard,
         fill_producer,
-        accept_legacy_nodeids=accept_legacy_nodeids,
     )
     app.include_router(api_router)
     # Expose event endpoints (subscribe/JWKS and WS bridge). Pass world and

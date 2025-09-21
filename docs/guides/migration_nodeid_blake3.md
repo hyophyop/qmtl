@@ -21,5 +21,6 @@ The NodeID algorithm uses BLAKE3 with a mandatory `blake3:` prefix and must not 
 - Ensure all code paths use `compute_node_id` exclusively.
 - Migrate any stored NodeIDs to the canonical `blake3:` form.
 - Remove any references to `compute_legacy_node_id` in your codebase.
+- Update DAG serialization to include `config_hash` alongside `code_hash` and `schema_hash` so Gateway validation can recompute canonical IDs.
 
 {{ nav_links() }}

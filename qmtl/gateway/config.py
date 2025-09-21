@@ -26,4 +26,3 @@ class GatewayConfig:
     worldservice_retries: int = 2
     enable_worldservice_proxy: bool = True
     enforce_live_guard: bool = True
-    accept_legacy_nodeids: bool = True

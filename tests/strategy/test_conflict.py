@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.common import crc32_of_list
+from qmtl.common import crc32_of_list, compute_node_id
 
 
 class FakeDB(Database):
@@ -40,7 +40,16 @@ def make_payload(dag: dict) -> StrategySubmit:
 
 
 def test_duplicate_strategy_returns_409(client):
-    dag = {"nodes": [{"node_id": "A"}]}
+    node = {
+        "node_type": "IndicatorNode",
+        "code_hash": "ch",
+        "config_hash": "cfg",
+        "schema_hash": "sh",
+    }
+    node_id = compute_node_id(
+        node["node_type"], node["code_hash"], node["config_hash"], node["schema_hash"]
+    )
+    dag = {"nodes": [{**node, "node_id": node_id}]}
     payload = make_payload(dag)
     first = client.post("/strategies", json=payload.model_dump())
     assert first.status_code == 202

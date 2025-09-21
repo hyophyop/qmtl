@@ -4,23 +4,15 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.common import (
-    compute_node_id,
-    crc32_of_list,
-)
-from qmtl.gateway import metrics as gw_metrics
+from qmtl.common import compute_node_id, crc32_of_list
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.routes import (
-    LEGACY_NODEID_SUNSET,
-    LEGACY_NODEID_WARNING_HEADER,
-)
 
 
 class FakeDB(Database):
     def __init__(self) -> None:
-        self.records = {}
-        self.events = []
+        self.records: dict[str, dict[str, object]] = {}
+        self.events: list[tuple[str, str]] = []
 
     async def insert_strategy(self, strategy_id: str, meta=None) -> None:  # pragma: no cover - not used
         self.records[strategy_id] = {"status": "queued", "meta": meta}
@@ -44,6 +36,15 @@ def client_and_redis(fake_redis):
         yield c, fake_redis
 
 
+def _payload_for(node: dict) -> StrategySubmit:
+    dag = {"nodes": [node]}
+    return StrategySubmit(
+        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+        meta=None,
+        node_ids_crc32=crc32_of_list([node.get("node_id", "")]),
+    )
+
+
 def test_compute_node_id_collision():
     data = ("A", "B", "C", "D")
     first = compute_node_id(*data)
@@ -62,22 +63,38 @@ async def test_node_id_mismatch(client_and_redis):
         "schema_hash": "s",
         "node_id": "wrong",
     }
-    dag = {"nodes": [node]}
-    payload = StrategySubmit(
-        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
-        meta=None,
-        node_ids_crc32=crc32_of_list(["wrong"]),
-    )
+    payload = _payload_for(node)
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 400
     detail = resp.json()["detail"]
-    assert "node_id_mismatch" in detail
+    assert detail["code"] == "E_NODE_ID_MISMATCH"
+    assert detail["node_id_mismatch"][0]["expected"].startswith("blake3:")
+    assert "hint" in detail
+
+
+@pytest.mark.asyncio
+async def test_missing_node_fields_rejected(client_and_redis):
+    client, _ = client_and_redis
+    node = {
+        "node_type": "N",
+        "code_hash": "c",
+        # config_hash intentionally omitted
+        "schema_hash": "s",
+        "node_id": "blake3:deadbeef",
+    }
+    payload = _payload_for(node)
+    resp = client.post("/strategies", json=payload.model_dump())
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "E_NODE_ID_FIELDS"
+    missing = detail["missing_fields"][0]
+    assert "config_hash" in missing["missing"]
+    assert "hint" in detail
 
 
 @pytest.mark.asyncio
 async def test_legacy_node_id_rejected(client_and_redis):
     client, _ = client_and_redis
-    # Manually craft a world-coupled legacy-like id (not using helper)
     legacy_like = "legacy:world"
     node = {
         "node_type": "N",
@@ -86,41 +103,33 @@ async def test_legacy_node_id_rejected(client_and_redis):
         "schema_hash": "s",
         "node_id": legacy_like,
     }
-    dag = {"nodes": [node]}
     payload = StrategySubmit(
-        dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
+        dag_json=base64.b64encode(json.dumps({"nodes": [node]}).encode()).decode(),
         meta=None,
         world_id="w1",
         node_ids_crc32=crc32_of_list([legacy_like]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "E_NODE_ID_MISMATCH"
 
 
-def _legacy_node_submission(include_world: bool = False) -> tuple[StrategySubmit, str]:
+@pytest.mark.asyncio
+async def test_tag_query_node_id_mismatch(client_and_redis):
+    client, _ = client_and_redis
     node = {
-        "node_type": "N",
+        "node_type": "TagQueryNode",
         "code_hash": "c",
         "config_hash": "cfg",
         "schema_hash": "s",
-        "schema_id": "schema:v1",
+        "tags": ["t1"],
         "interval": 60,
-        "period": 5,
-        "params": {"window": 10},
+        "node_id": "incorrect",
     }
-    legacy_id = compute_node_id(
-        node["node_type"], node["code_hash"], node["config_hash"], node["schema_hash"]
-    )
-    node["node_id"] = legacy_id
-    dag = {"nodes": [node]}
-    payload_kwargs = {
-        "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
-        "meta": None,
-        "node_ids_crc32": crc32_of_list([legacy_id]),
-    }
-    if include_world:
-        payload_kwargs["world_id"] = "w1"
-    return StrategySubmit(**payload_kwargs), legacy_id
+    payload = _payload_for(node)
+    resp = client.post("/strategies", json=payload.model_dump())
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "E_NODE_ID_MISMATCH"
 
 
 @pytest.mark.asyncio
@@ -154,60 +163,11 @@ async def test_sentinel_skip(fake_redis):
             meta=None,
             node_ids_crc32=crc32_of_list([]),
         )
-
-
-@pytest.mark.asyncio
-async def test_legacy_node_id_sets_deprecation_headers(client_and_redis):
-    gw_metrics.reset_metrics()
-    client, _ = client_and_redis
-    payload, legacy_id = _legacy_node_submission()
-    resp = client.post("/strategies", json=payload.model_dump())
-    assert resp.status_code == 202
-    warning = resp.headers.get("Warning")
-    assert warning is not None
-    assert LEGACY_NODEID_WARNING_HEADER in warning
-    assert resp.headers.get("Deprecation") == "true"
-    assert resp.headers.get("Sunset") == LEGACY_NODEID_SUNSET
-    assert gw_metrics.legacy_nodeid_strategy_total._value.get() >= 1
-    snapshot = gw_metrics.get_last_legacy_nodeid_strategy()
-    assert snapshot.get("strategy_id") == resp.json()["strategy_id"]
-    assert legacy_id in (snapshot.get("node_ids") or [])
-
-
-class StubHub:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    async def send_deprecation_notice(self, payload: dict) -> None:
-        self.calls.append(payload)
-
-    async def start(self, *, start_server: bool = False) -> int:  # pragma: no cover - unused
-        return 0
-
-    async def stop(self) -> None:  # pragma: no cover - unused
-        return None
-
-
-@pytest.mark.asyncio
-async def test_legacy_node_id_emits_ws_notice(fake_redis):
-    gw_metrics.reset_metrics()
-    db = FakeDB()
-    hub = StubHub()
-    app = create_app(
-        redis_client=fake_redis,
-        database=db,
-        ws_hub=hub,
-        enable_background=False,
-    )
-    with TestClient(app) as client:
-        payload, legacy_id = _legacy_node_submission()
         resp = client.post("/strategies", json=payload.model_dump())
         assert resp.status_code == 202
-        resp_json = resp.json()
-    assert hub.calls, "expected deprecation notice to be emitted"
-    notice = hub.calls[0]
-    assert notice.get("strategy_id") == resp_json["strategy_id"]
-    assert legacy_id in (notice.get("node_ids") or [])
-    assert notice.get("sunset") == LEGACY_NODEID_SUNSET
-    assert notice.get("message")
-    assert notice.get("nodes")
+        sid = resp.json()["strategy_id"]
+        encoded = await redis.hget(f"strategy:{sid}", "dag")
+        dag_saved = json.loads(base64.b64decode(encoded).decode())
+        assert not any(
+            n["node_type"] == "VersionSentinel" for n in dag_saved["nodes"]
+        )
