@@ -6,21 +6,58 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Protocol, Mapping, Dict, Iterable
 
-from qmtl.common import AsyncCircuitBreaker
+from qmtl.common import AsyncCircuitBreaker, hash_bytes
 from . import metrics
 
 from .topic import TopicConfig
 
 
-def partition_key(node_id: str, interval: int | None, bucket: int | None) -> str:
+def compute_key(
+    node_id: str,
+    *,
+    world_id: str | None = None,
+    execution_domain: str | None = None,
+    as_of: str | None = None,
+    partition: str | None = None,
+    dataset_fingerprint: str | None = None,
+) -> str:
+    """Return the domain-scoped compute key for ``node_id``.
+
+    The key is derived from the canonical ``node_id`` and compute context
+    components to enforce isolation across worlds, execution domains and data
+    snapshots. Optional context values default to empty strings (or ``"live"``
+    for the execution domain) to maintain backward compatibility.
+    """
+
+    components = [
+        node_id or "",
+        (world_id or "").strip(),
+        (execution_domain or "live").strip() or "live",
+        (as_of or "").strip(),
+        (partition or "").strip(),
+        (dataset_fingerprint or "").strip(),
+    ]
+    payload = "|".join(components)
+    return hash_bytes(payload.encode())
+
+
+def partition_key(
+    node_id: str,
+    interval: int | None,
+    bucket: int | None,
+    *,
+    compute_key: str | None = None,
+) -> str:
     """Return a stable partition key for Kafka operations.
 
     ``interval`` and ``bucket`` may be ``None`` which is normal for nodes that
     do not operate on a fixed schedule. ``None`` values are normalised to ``0``
     so that the resulting key is always a simple ``":"`` separated string.
     """
-
-    return f"{node_id}:{interval or 0}:{bucket or 0}"
+    base = f"{node_id}:{interval or 0}:{bucket or 0}"
+    if compute_key:
+        return f"{base}#ck={compute_key}"
+    return base
 
 
 class TopicExistsError(Exception):
@@ -159,5 +196,6 @@ __all__ = [
     "AdminClient",
     "TopicExistsError",
     "InMemoryAdminClient",
+    "compute_key",
     "partition_key",
 ]

@@ -107,13 +107,29 @@ class DagManagerClient:
             return False
 
     async def diff(
-        self, strategy_id: str, dag_json: str, *, world_id: str | None = None
+        self,
+        strategy_id: str,
+        dag_json: str,
+        *,
+        world_id: str | None = None,
+        execution_domain: str | None = None,
+        as_of: str | None = None,
+        partition: str | None = None,
+        dataset_fingerprint: str | None = None,
     ) -> dagmanager_pb2.DiffChunk | None:
         """Call ``DiffService.Diff`` with retries and collect the stream.
 
         Returns ``None`` when the request ultimately fails or the circuit is
         open."""
-        request = dagmanager_pb2.DiffRequest(strategy_id=strategy_id, dag_json=dag_json)
+        request = dagmanager_pb2.DiffRequest(
+            strategy_id=strategy_id,
+            dag_json=dag_json,
+            world_id=world_id or "",
+            execution_domain=execution_domain or "",
+            as_of=as_of or "",
+            partition=partition or "",
+            dataset_fingerprint=dataset_fingerprint or "",
+        )
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:

@@ -102,6 +102,46 @@ class StrategyManager:
                 gw_metrics.lost_requests_total.inc()
                 gw_metrics.lost_requests_total._val = gw_metrics.lost_requests_total._value.get()  # type: ignore[attr-defined]
                 raise
+
+            def _ctx_value(value):
+                if isinstance(value, bytes):
+                    value = value.decode()
+                if value is None:
+                    return None
+                if isinstance(value, (str, int, float)):
+                    text = str(value).strip()
+                    return text or None
+                return None
+
+            context_mapping: dict[str, str] = {}
+            world_candidates: list[str] = []
+            if payload.world_id:
+                world_candidates.append(payload.world_id)
+            wid_list = getattr(payload, "world_ids", None)
+            if wid_list:
+                world_candidates.extend([w for w in wid_list if w])
+            if world_candidates:
+                world_val = _ctx_value(world_candidates[0])
+                if world_val:
+                    context_mapping["compute_world_id"] = world_val
+
+            meta = payload.meta if isinstance(payload.meta, dict) else {}
+            for key in (
+                "execution_domain",
+                "as_of",
+                "partition",
+                "dataset_fingerprint",
+            ):
+                if not meta:
+                    break
+                val = _ctx_value(meta.get(key))
+                if val:
+                    context_mapping[f"compute_{key}"] = val
+
+            if context_mapping:
+                await self.redis.hset(
+                    f"strategy:{strategy_id}", mapping=context_mapping
+                )
             await self.fsm.create(strategy_id, payload.meta)
             return strategy_id, False
 

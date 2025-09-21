@@ -3,7 +3,7 @@ import pytest
 
 from qmtl.common import AsyncCircuitBreaker
 from qmtl.sdk.gateway_client import GatewayClient
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class FailingClient:
@@ -37,7 +37,17 @@ class FlakyClient:
         if type(self).calls == 1:
             raise httpx.RequestError("fail", request=httpx.Request("POST", url))
         return httpx.Response(
-            202, json={"queue_map": {partition_key("n", None, None): "t"}}
+            202,
+            json={
+                "queue_map": {
+                    partition_key(
+                        "n",
+                        None,
+                        None,
+                        compute_key=compute_key("n"),
+                    ): "t"
+                }
+            },
         )
 
 
@@ -113,7 +123,9 @@ async def test_breaker_resets_on_success(monkeypatch):
         dag={},
         meta=None,
     )
-    assert second == {partition_key("n", None, None): "t"}
+    assert second == {
+        partition_key("n", None, None, compute_key=compute_key("n")): "t"
+    }
     assert cb.reset_calls == 1
     assert cb.failures == 0
     assert not cb.is_open

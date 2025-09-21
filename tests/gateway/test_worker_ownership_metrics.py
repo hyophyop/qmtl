@@ -177,7 +177,7 @@ async def test_worker_takeover_increments_reassign_metric_once(fake_redis) -> No
     db = FakeDB()
     fsm = StrategyFSM(redis, db)
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         return SimpleNamespace(queue_map={}, sentinel_id="s")
 
     dag_client = SimpleNamespace(diff=diff)

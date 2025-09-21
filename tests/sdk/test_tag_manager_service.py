@@ -3,7 +3,7 @@ import pytest
 
 from qmtl.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
 from qmtl.sdk.tag_manager_service import TagManagerService
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class _Strat(Strategy):
@@ -29,8 +29,18 @@ def test_apply_queue_map_updates_nodes(caplog):
     strat.setup()
     service = TagManagerService(None)
     mapping = {
-        partition_key(strat.proc.node_id, strat.proc.interval, 0): "topic1",
-        partition_key(strat.tq.node_id, strat.tq.interval, 0): ["q1"],
+        partition_key(
+            strat.proc.node_id,
+            strat.proc.interval,
+            0,
+            compute_key=compute_key(strat.proc.node_id),
+        ): "topic1",
+        partition_key(
+            strat.tq.node_id,
+            strat.tq.interval,
+            0,
+            compute_key=compute_key(strat.tq.node_id),
+        ): ["q1"],
     }
     caplog.set_level(logging.DEBUG, logger="qmtl.sdk.tag_manager_service")
     service.apply_queue_map(strat, mapping)
@@ -50,7 +60,12 @@ def test_apply_queue_map_filters_global():
     strat.setup()
     service = TagManagerService(None)
     mapping = {
-        partition_key(strat.tq.node_id, strat.tq.interval, 0): [
+        partition_key(
+            strat.tq.node_id,
+            strat.tq.interval,
+            0,
+            compute_key=compute_key(strat.tq.node_id),
+        ): [
             {"queue": "q1", "global": True},
             {"queue": "q2", "global": False},
         ]

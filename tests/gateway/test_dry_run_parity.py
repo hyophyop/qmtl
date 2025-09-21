@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
 from qmtl.common import crc32_of_list, compute_node_id
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.proto import dagmanager_pb2
 
 
@@ -43,8 +44,18 @@ class DummyDagClient:
         # Return a single-chunk result mapping to topics used above
         return dagmanager_pb2.DiffChunk(
             queue_map={
-                f"{_TAGQUERY_NODE_ID}:0:0": "q1",
-                f"{_TAGQUERY_NODE_ID}:0:1": "q2",
+                partition_key(
+                    _TAGQUERY_NODE_ID,
+                    0,
+                    0,
+                    compute_key=compute_key(_TAGQUERY_NODE_ID),
+                ): "q1",
+                partition_key(
+                    _TAGQUERY_NODE_ID,
+                    0,
+                    1,
+                    compute_key=compute_key(_TAGQUERY_NODE_ID),
+                ): "q2",
             },
             sentinel_id="s-123",
         )

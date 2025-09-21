@@ -54,6 +54,36 @@ def create_api_router(
 
     router = APIRouter()
 
+    def _normalize_context_value(value: object | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, (str, int, float)):
+            text = str(value).strip()
+            return text or None
+        return None
+
+    def _extract_compute_context(payload: StrategySubmit) -> dict[str, str | None]:
+        meta = payload.meta if isinstance(payload.meta, dict) else {}
+        return {
+            "execution_domain": _normalize_context_value(
+                meta.get("execution_domain") if meta else None
+            ),
+            "as_of": _normalize_context_value(meta.get("as_of") if meta else None),
+            "partition": _normalize_context_value(
+                meta.get("partition") if meta else None
+            ),
+            "dataset_fingerprint": _normalize_context_value(
+                meta.get("dataset_fingerprint") if meta else None
+            ),
+        }
+
+    def _node_id_from_partition_key(identifier: str) -> str:
+        base, _, _ = identifier.partition("#")
+        token = base or identifier
+        if ":" in token:
+            return token.rsplit(":", 2)[0]
+        return token
+
     @router.get("/status")
     async def status_endpoint() -> dict[str, Any]:
         health_data = await gateway_health(
@@ -189,6 +219,8 @@ def create_api_router(
                 # Best-effort: do not fail ingestion on binding errors
                 pass
 
+        compute_ctx = _extract_compute_context(payload)
+
         queue_map: dict[str, list[dict[str, object]]] = {}
         node_ids: list[str] = []
         queries: list[Coroutine[Any, Any, list[str]]] = []
@@ -242,7 +274,15 @@ def create_api_router(
         try:
             # Use first world for diff context if provided; sentinel is world-agnostic
             diff_world = worlds[0] if worlds else (payload.world_id or None)
-            diff_task = dagmanager.diff(strategy_id, json.dumps(dag), world_id=diff_world)
+            diff_task = dagmanager.diff(
+                strategy_id,
+                json.dumps(dag),
+                world_id=diff_world,
+                execution_domain=compute_ctx.get("execution_domain"),
+                as_of=compute_ctx.get("as_of"),
+                partition=compute_ctx.get("partition"),
+                dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
+            )
             chunk = await asyncio.wait_for(diff_task, timeout=0.1)
             if chunk and getattr(chunk, "sentinel_id", ""):
                 sentinel_id = chunk.sentinel_id
@@ -290,6 +330,8 @@ def create_api_router(
         elif payload.world_id:
             worlds = [payload.world_id]
 
+        compute_ctx = _extract_compute_context(payload)
+
         # Preferred path: use diff to compute sentinel and queue mapping
         sentinel_id = ""
         queue_map_http: dict[str, list[dict[str, object]]] = {}
@@ -297,7 +339,13 @@ def create_api_router(
             if len(worlds) <= 1:
                 chunk = await asyncio.wait_for(
                     dagmanager.diff(
-                        "dryrun", json.dumps(dag), world_id=(worlds[0] if worlds else None)
+                        "dryrun",
+                        json.dumps(dag),
+                        world_id=(worlds[0] if worlds else None),
+                        execution_domain=compute_ctx.get("execution_domain"),
+                        as_of=compute_ctx.get("as_of"),
+                        partition=compute_ctx.get("partition"),
+                        dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
                     ),
                     timeout=0.5,
                 )
@@ -306,14 +354,23 @@ def create_api_router(
                     # Transform partition-key map to HTTP queue_map shape
                     for key, topic in dict(chunk.queue_map).items():
                         identifier = str(key)
-                        node_id = identifier.rsplit(":", 2)[0] if ":" in identifier else identifier
+                        node_id = _node_id_from_partition_key(identifier)
                         queue_map_http.setdefault(node_id, []).append(
                             {"queue": topic, "global": False}
                         )
             else:
                 # Merge per-world diffs
                 tasks = [
-                    dagmanager.diff("dryrun", json.dumps(dag), world_id=w) for w in worlds
+                    dagmanager.diff(
+                        "dryrun",
+                        json.dumps(dag),
+                        world_id=w,
+                        execution_domain=compute_ctx.get("execution_domain"),
+                        as_of=compute_ctx.get("as_of"),
+                        partition=compute_ctx.get("partition"),
+                        dataset_fingerprint=compute_ctx.get("dataset_fingerprint"),
+                    )
+                    for w in worlds
                 ]
                 chunks = await asyncio.gather(*tasks, return_exceptions=True)
                 for ch in chunks:
@@ -323,7 +380,7 @@ def create_api_router(
                         sentinel_id = getattr(ch, "sentinel_id", "") or ""
                     for key, topic in dict(ch.queue_map).items():
                         identifier = str(key)
-                        node_id = identifier.rsplit(":", 2)[0] if ":" in identifier else identifier
+                        node_id = _node_id_from_partition_key(identifier)
                         lst = queue_map_http.setdefault(node_id, [])
                         if topic not in [d.get("queue") for d in lst]:
                             lst.append({"queue": topic, "global": False})

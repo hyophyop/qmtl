@@ -10,7 +10,7 @@ from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.database import Database
 from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.ws import WebSocketHub
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 import zlib
 
 
@@ -66,7 +66,7 @@ async def test_worker_locking_single_processing(fake_redis):
 
     await queue.push("sid")
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         return SimpleNamespace(queue_map={}, sentinel_id="s")
 
     dag_client = SimpleNamespace(diff=diff)
@@ -110,10 +110,18 @@ async def test_worker_diff_success_broadcasts(fake_redis):
 
     called = []
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         called.append((sid, dag))
         return SimpleNamespace(
-            queue_map={partition_key("n", None, None): "t"}, sentinel_id="s"
+            queue_map={
+                partition_key(
+                    "n",
+                    None,
+                    None,
+                    compute_key=compute_key("n"),
+                ): "t"
+            },
+            sentinel_id="s",
         )
 
     dag_client = SimpleNamespace(diff=diff)
@@ -122,7 +130,9 @@ async def test_worker_diff_success_broadcasts(fake_redis):
     await worker.run_once()
 
     assert called == [("sid", "{}")]
-    assert hub.maps == [("sid", {partition_key("n", None, None): "t"})]
+    assert hub.maps == [
+        ("sid", {partition_key("n", None, None, compute_key=compute_key("n")): "t"})
+    ]
     assert hub.progress[0] == ("sid", "processing")
     assert hub.progress[-1] == ("sid", "completed")
     assert db.records["sid"] == "completed"
@@ -141,7 +151,7 @@ async def test_worker_diff_failure_sets_failed_and_broadcasts(fake_redis):
 
     called = []
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         called.append((sid, dag))
         raise RuntimeError("fail")
 
@@ -167,7 +177,7 @@ async def test_process_logs_diff_error(fake_redis, caplog):
     await fsm.create("sid", None)
     await redis.hset("strategy:sid", mapping={"dag": "{}"})
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         raise RuntimeError("fail")
 
     dag_client = SimpleNamespace(diff=diff)
@@ -191,7 +201,7 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
     await fsm.create("sid", None)
     await redis.hset("strategy:sid", mapping={"dag": "{}"})
 
-    async def diff(sid: str, dag: str):
+    async def diff(sid: str, dag: str, **_kwargs):
         return SimpleNamespace(queue_map={}, sentinel_id="s")
 
     async def handler(sid: str):

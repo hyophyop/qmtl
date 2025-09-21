@@ -12,7 +12,7 @@ pytestmark = [
 import json
 
 from qmtl.dagmanager.diff_service import StreamSender
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.api import create_app
 from qmtl.dagmanager import metrics
@@ -152,7 +152,21 @@ async def test_grpc_redo_diff(monkeypatch):
         def diff(self, request: DiffRequest):
             called["sid"] = request.strategy_id
             return DiffChunk(
-                queue_map={partition_key("x", None, None): "t"},
+                queue_map={
+                    partition_key(
+                        "x",
+                        None,
+                        None,
+                        compute_key=compute_key(
+                            "x",
+                            world_id=request.world_id,
+                            execution_domain=request.execution_domain,
+                            as_of=request.as_of,
+                            partition=request.partition,
+                            dataset_fingerprint=request.dataset_fingerprint,
+                        ),
+                    ): "t"
+                },
                 sentinel_id=request.strategy_id + "-sentinel",
                 version="v1",
             )
@@ -174,7 +188,13 @@ async def test_grpc_redo_diff(monkeypatch):
     await server.stop(None)
 
     assert called["sid"] == "v2"
-    assert dict(resp.queue_map)[partition_key("x", None, None)] == "t"
+    key = partition_key(
+        "x",
+        None,
+        None,
+        compute_key=compute_key("x"),
+    )
+    assert dict(resp.queue_map)[key] == "t"
     assert resp.sentinel_id == "v2-sentinel"
 
 
