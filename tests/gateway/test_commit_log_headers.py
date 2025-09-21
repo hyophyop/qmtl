@@ -1,6 +1,7 @@
 import json
 import pytest
 
+from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway.commit_log import CommitLogWriter
 
 
@@ -24,7 +25,7 @@ class ProducerWithHeaders:
 async def test_commit_log_writer_attaches_runtime_fingerprint_header():
     p = ProducerWithHeaders()
     w = CommitLogWriter(p, "t")
-    await w.publish_bucket(100, 60, [("n1", "h1", {"x": 1})])
+    await w.publish_bucket(100, 60, [("n1", "h1", {"x": 1}, compute_key("n1"))])
     assert p.committed == 1
     assert p.records and isinstance(p.records[-1][3], list)
     headers = dict((k, v) for k, v in p.records[-1][3] or [])

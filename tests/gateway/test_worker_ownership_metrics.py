@@ -14,7 +14,7 @@ from qmtl.gateway.ownership import OwnershipManager
 from qmtl.gateway.redis_queue import RedisTaskQueue
 from qmtl.gateway.worker import StrategyWorker
 from qmtl.gateway.fsm import StrategyFSM
-from qmtl.dagmanager.kafka_admin import partition_key
+from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class FakeConn:
@@ -136,7 +136,11 @@ async def test_two_workers_single_commit_no_duplicates() -> None:
         try:
             start.set()
             await finish.wait()
-            await writer.publish_bucket(100, 60, [("n1", "h1", {"a": 1})])
+            await writer.publish_bucket(
+                100,
+                60,
+                [("n1", "h1", {"a": 1}, compute_key("n1"))],
+            )
             return True
         finally:
             await manager.release(key)

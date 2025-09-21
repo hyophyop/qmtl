@@ -36,6 +36,7 @@ from qmtl.sdk.execution_modeling import (
 from qmtl.sdk.risk_management import RiskManager, PositionInfo
 from qmtl.sdk.timing_controls import TimingController
 from qmtl.sdk import metrics as sdk_metrics
+from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway.commit_log import CommitLogWriter
 import asyncio
 
@@ -254,10 +255,25 @@ class OrderPublishNode(ProcessingNode):
         if self.commit_log_writer is None:
             return
         try:
+            def _ctx(name: str) -> str | None:
+                for source in (self, self.order):
+                    value = getattr(source, name, None)
+                    if value is not None:
+                        return str(value)
+                return None
+
+            key_hint = compute_key(
+                self.node_id,
+                world_id=_ctx("world_id"),
+                execution_domain=_ctx("execution_domain"),
+                as_of=_ctx("as_of"),
+                partition=_ctx("partition"),
+                dataset_fingerprint=_ctx("dataset_fingerprint"),
+            )
             coro = self.commit_log_writer.publish_bucket(
                 ts,
                 self.order.interval,
-                [(self.node_id, "", order)],
+                [(self.node_id, "", order, key_hint)],
             )
             try:
                 asyncio.get_running_loop().create_task(coro)
