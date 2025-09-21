@@ -41,10 +41,19 @@ class StrategyManager:
             strategy_id = str(uuid.uuid4())
             dag_for_storage = dag_dict.copy()
             if self.insert_sentinel:
+                version_meta = None
+                if isinstance(payload.meta, dict):
+                    for key in ("version", "strategy_version", "build_version"):
+                        val = payload.meta.get(key)
+                        if isinstance(val, str) and val.strip():
+                            version_meta = val.strip()
+                            break
                 sentinel = {
                     "node_type": "VersionSentinel",
                     "node_id": f"{strategy_id}-sentinel",
                 }
+                if version_meta:
+                    sentinel["version"] = version_meta
                 dag_for_storage.setdefault("nodes", []).append(sentinel)
             encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
 

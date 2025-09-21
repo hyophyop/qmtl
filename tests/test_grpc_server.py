@@ -154,6 +154,7 @@ async def test_grpc_redo_diff(monkeypatch):
             return DiffChunk(
                 queue_map={partition_key("x", None, None): "t"},
                 sentinel_id=request.strategy_id + "-sentinel",
+                version="v1",
             )
 
         async def diff_async(self, request: DiffRequest):

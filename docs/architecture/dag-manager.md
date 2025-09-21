@@ -123,7 +123,7 @@ qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --passwor
 ### 2.1 입력·출력 정의
 
 * **Input:** `DiffReq{strategy_id, dag_json}` (\~10‑500 KiB)
-* **Output:** stream `DiffChunk{queue_map[], sentinel_id}`
+* **Output:** stream `DiffChunk{queue_map[], sentinel_id, version}`
 
 ### 2.2 단계별 상세 로직
 
@@ -184,6 +184,7 @@ Sentinel weight updates are published as `sentinel_weight` events on the Control
 
 * `short_hash = first 8 of node_id digest` → 충돌 시 길이+2.
 * 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
+* `{version}` 값은 `VersionSentinel.version` 혹은 전략 메타데이터(`meta.version`, `meta.strategy_version`)에서 파생되며, 제공되지 않으면 `v1`로 디폴트된다.
 
 ### 3.2 QoS & 레플리카 설정
 

@@ -96,8 +96,16 @@ class MemoryNodeRepository(NodeRepository):
                 )
         return records
 
-    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
-        _GRAPH.add_node(sentinel_id, type="sentinel")
+    def insert_sentinel(
+        self, sentinel_id: str, node_ids: Iterable[str], version: str
+    ) -> None:
+        _GRAPH.add_node(
+            sentinel_id,
+            type="sentinel",
+            sentinel_id=sentinel_id,
+            version=version,
+            created_at=int(time.time() * 1000),
+        )
         for nid in node_ids:
             _GRAPH.add_edge(sentinel_id, nid)
 

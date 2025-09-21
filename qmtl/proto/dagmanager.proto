@@ -22,6 +22,7 @@ message DiffChunk {
   map<string,string> queue_map = 1;
   string sentinel_id = 2;
   repeated BufferInstruction buffer_nodes = 3;
+  string version = 4;
 }
 
 message ChunkAck {
@@ -81,6 +82,7 @@ message RedoDiffRequest {
 message DiffResult {
   map<string,string> queue_map = 1;
   string sentinel_id = 2;
+  string version = 3;
 }
 
 message StatusRequest {}

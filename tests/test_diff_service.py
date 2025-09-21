@@ -35,8 +35,8 @@ class FakeRepo(NodeRepository):
         self.fetched.append(list(node_ids))
         return {nid: self.records[nid] for nid in node_ids if nid in self.records}
 
-    def insert_sentinel(self, sentinel_id, node_ids):
-        self.sentinels.append((sentinel_id, list(node_ids)))
+    def insert_sentinel(self, sentinel_id, node_ids, version):
+        self.sentinels.append((sentinel_id, list(node_ids), version))
 
     def get_queues_by_tag(self, tags, interval, match_mode="any"):
         return []
@@ -219,9 +219,46 @@ def test_sentinel_insert_and_stream():
 
     chunk = service.diff(req)
 
-    assert repo.sentinels == [("strategy-sentinel", ["A"])]
+    assert repo.sentinels == [("strategy-sentinel", ["A"], "v1")]
     assert stream.chunks[0] == chunk
     assert chunk.sentinel_id == "strategy-sentinel"
+
+
+def test_version_extracted_from_sentinel_node():
+    repo = FakeRepo()
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = json.dumps(
+        {
+            "nodes": [
+                {
+                    "node_id": "A",
+                    "node_type": "N",
+                    "code_hash": "c1",
+                    "schema_hash": "s1",
+                    "tags": ["btc"],
+                },
+                {
+                    "node_id": "sentinel-node",
+                    "node_type": "VersionSentinel",
+                    "version": "release-2025.09",
+                },
+            ]
+        }
+    )
+
+    chunk = service.diff(DiffRequest(strategy_id="sid", dag_json=dag))
+
+    # normalized version should flow into topics, chunk and sentinel storage
+    assert queue.calls[-1][3] == "release-2025.09"
+    assert chunk.version == "release-2025.09"
+    assert repo.sentinels[-1] == (
+        "sid-sentinel",
+        ["A"],
+        "release-2025.09",
+    )
 
 
 def test_stream_resumes_after_timeout():
