@@ -244,6 +244,22 @@ async def test_validation_cache_legacy_payloads_are_normalised_and_invalidated()
     assert cached is None
     assert world_id not in store.validation_cache
 
+    audit_log = store.audit.get(world_id)
+    assert audit_log is not None
+    normalized_events = [
+        event
+        for event in audit_log.entries
+        if event["event"] == "validation_cache_bucket_normalized"
+    ]
+    assert normalized_events
+    assert any("backtest" in event.get("domains", []) for event in normalized_events)
+
+    invalidated_events = [
+        event for event in audit_log.entries if event["event"] == "validation_cache_invalidated"
+    ]
+    assert invalidated_events
+    assert invalidated_events[-1]["reason"] == "context_mismatch"
+
     # Seed a dict payload that already follows the new EvalKey scheme to ensure
     # lazy normalisation converts it into a ValidationCacheEntry instance.
     eval_key = store._compute_eval_key(**context, world_id=world_id)  # type: ignore[arg-type]

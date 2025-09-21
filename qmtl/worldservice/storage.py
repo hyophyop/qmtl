@@ -292,12 +292,15 @@ class Storage:
 
         changed = False
         normalized: Dict[str, ValidationCacheEntry] = {}
+        updated_domains: Set[str] = set()
+        dropped_domains: Set[str] = set()
         for domain_key, payload in list(bucket.items()):
             try:
                 normalized_domain = self._normalize_execution_domain(domain_key)
             except ValueError:
                 normalized_domain = DEFAULT_EXECUTION_DOMAIN
                 changed = True
+                updated_domains.add(normalized_domain)
             converted = self._coerce_validation_cache_entry(
                 payload,
                 world_id=world_id,
@@ -306,16 +309,32 @@ class Storage:
             )
             if converted is None:
                 changed = True
+                dropped_domains.add(str(domain_key))
                 continue
             if converted.execution_domain != normalized_domain:
                 normalized_domain = converted.execution_domain
                 changed = True
+                updated_domains.add(normalized_domain)
             if not isinstance(payload, ValidationCacheEntry) or converted is not payload:
                 changed = True
+                updated_domains.add(normalized_domain)
+            if normalized_domain in normalized:
+                changed = True
+                dropped_domains.add(str(domain_key))
             normalized[normalized_domain] = converted
 
         if changed:
             world_cache[node_id] = normalized
+            audit_payload: Dict[str, Any] = {
+                "event": "validation_cache_bucket_normalized",
+                "node_id": node_id,
+                "domains": sorted(normalized.keys()),
+            }
+            if updated_domains:
+                audit_payload["updated_domains"] = sorted(updated_domains)
+            if dropped_domains:
+                audit_payload["dropped_domains"] = sorted(dropped_domains)
+            self.audit.setdefault(world_id, WorldAuditLog()).entries.append(audit_payload)
             return normalized
         return bucket
 
@@ -515,9 +534,19 @@ class Storage:
             )
             converted: Dict[str, Dict[str, Any]] = {normalized["execution_domain"]: normalized}
             bucket[node_id] = converted
+            audit_payload = {
+                "event": "world_node_bucket_normalized",
+                "node_id": node_id,
+                "domains": [normalized["execution_domain"]],
+                "source": "legacy-single",
+            }
+            self.audit.setdefault(world_id, WorldAuditLog()).entries.append(audit_payload)
             return converted
         if isinstance(entry, dict):
-            converted = {}
+            converted: Dict[str, Dict[str, Any]] = {}
+            changed = False
+            updated_domains: Set[str] = set()
+            dropped_domains: Set[str] = set()
             for domain_key, node_data in list(entry.items()):
                 if not isinstance(node_data, dict):
                     raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {node_data!r}")
@@ -529,9 +558,29 @@ class Storage:
                     node_data.get("last_eval_key"),
                     node_data.get("annotations"),
                 )
-                converted[normalized["execution_domain"]] = normalized
-            bucket[node_id] = converted
-            return converted
+                domain = normalized["execution_domain"]
+                if domain_key != domain or node_data != normalized:
+                    changed = True
+                    updated_domains.add(domain)
+                if domain in converted:
+                    changed = True
+                    dropped_domains.add(str(domain_key))
+                converted[domain] = normalized
+            if changed:
+                bucket[node_id] = converted
+                audit_payload = {
+                    "event": "world_node_bucket_normalized",
+                    "node_id": node_id,
+                    "domains": sorted(converted.keys()),
+                    "source": "bucket",
+                }
+                if updated_domains:
+                    audit_payload["updated_domains"] = sorted(updated_domains)
+                if dropped_domains:
+                    audit_payload["dropped_domains"] = sorted(dropped_domains)
+                self.audit.setdefault(world_id, WorldAuditLog()).entries.append(audit_payload)
+                return converted
+            return entry
         raise TypeError(f"unexpected world node container for {world_id}/{node_id}: {entry!r}")
 
     def _clone_world_node_ref(self, node: Dict[str, Any]) -> Dict[str, Any]:
