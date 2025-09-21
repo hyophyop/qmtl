@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 from datetime import datetime, timezone
 
 from .policy_engine import Policy
+from qmtl.common.hashutils import hash_bytes
 
 
 @dataclass
@@ -30,6 +31,22 @@ class WorldAuditLog:
     entries: List[Dict] = field(default_factory=list)
 
 
+@dataclass
+class ValidationCacheEntry:
+    """Cached validation result scoped by ExecutionDomain."""
+
+    eval_key: str
+    node_id: str
+    execution_domain: str
+    contract_id: str
+    dataset_fingerprint: str
+    code_version: str
+    resource_policy: str
+    result: str
+    metrics: Dict[str, Any]
+    timestamp: str
+
+
 class Storage:
     """In-memory storage backing WorldService endpoints.
 
@@ -43,6 +60,7 @@ class Storage:
         self.bindings: Dict[str, Set[str]] = {}
         self.decisions: Dict[str, List[str]] = {}
         self.audit: Dict[str, WorldAuditLog] = {}
+        self.validation_cache: Dict[str, Dict[str, Dict[str, ValidationCacheEntry]]] = {}
 
     async def create_world(self, world: Dict) -> None:
         self.worlds[world["id"]] = world
@@ -59,6 +77,8 @@ class Storage:
             raise KeyError(world_id)
         self.worlds[world_id].update(data)
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "world_updated", "world": self.worlds[world_id]})
+        if {"contract_id", "dataset_fingerprint", "resource_policy", "code_version"} & data.keys():
+            await self.invalidate_validation_cache(world_id)
 
     async def delete_world(self, world_id: str) -> None:
         self.worlds.pop(world_id, None)
@@ -66,6 +86,7 @@ class Storage:
         self.policies.pop(world_id, None)
         self.bindings.pop(world_id, None)
         self.decisions.pop(world_id, None)
+        self.validation_cache.pop(world_id, None)
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "world_deleted"})
 
     async def add_policy(self, world_id: str, policy: Policy) -> int:
@@ -75,6 +96,7 @@ class Storage:
         if wp.default is None:
             wp.default = version
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "policy_added", "version": version})
+        await self.invalidate_validation_cache(world_id)
         return version
 
     async def list_policies(self, world_id: str) -> List[Dict]:
@@ -95,6 +117,7 @@ class Storage:
             raise KeyError(version)
         wp.default = version
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "policy_default_set", "version": version})
+        await self.invalidate_validation_cache(world_id)
 
     async def get_default_policy(self, world_id: str) -> Optional[Policy]:
         wp = self.policies.get(world_id)
@@ -122,6 +145,164 @@ class Storage:
 
     async def get_decisions(self, world_id: str) -> List[str]:
         return list(self.decisions.get(world_id, []))
+
+    def _compute_eval_key(
+        self,
+        *,
+        node_id: str,
+        world_id: str,
+        execution_domain: str,
+        contract_id: str,
+        dataset_fingerprint: str,
+        code_version: str,
+        resource_policy: str,
+    ) -> str:
+        components = [
+            node_id,
+            world_id,
+            execution_domain,
+            contract_id,
+            dataset_fingerprint,
+            code_version,
+            resource_policy,
+        ]
+        payload = "\x1f".join(str(part) for part in components).encode()
+        return hash_bytes(payload)
+
+    async def get_validation_cache(
+        self,
+        world_id: str,
+        *,
+        node_id: str,
+        execution_domain: str,
+        contract_id: str,
+        dataset_fingerprint: str,
+        code_version: str,
+        resource_policy: str,
+    ) -> Optional[ValidationCacheEntry]:
+        world_cache = self.validation_cache.get(world_id)
+        if not world_cache:
+            return None
+        node_cache = world_cache.get(node_id)
+        if not node_cache:
+            return None
+        entry = node_cache.get(execution_domain)
+        if not entry:
+            return None
+        expected_key = self._compute_eval_key(
+            node_id=node_id,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            contract_id=contract_id,
+            dataset_fingerprint=dataset_fingerprint,
+            code_version=code_version,
+            resource_policy=resource_policy,
+        )
+        if entry.eval_key != expected_key:
+            node_cache.pop(execution_domain, None)
+            if not node_cache:
+                world_cache.pop(node_id, None)
+            if not world_cache:
+                self.validation_cache.pop(world_id, None)
+            self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+                {
+                    "event": "validation_cache_invalidated",
+                    "reason": "context_mismatch",
+                    "node_id": node_id,
+                    "execution_domain": execution_domain,
+                    "stored_eval_key": entry.eval_key,
+                    "expected_eval_key": expected_key,
+                }
+            )
+            return None
+        return entry
+
+    async def set_validation_cache(
+        self,
+        world_id: str,
+        *,
+        node_id: str,
+        execution_domain: str,
+        contract_id: str,
+        dataset_fingerprint: str,
+        code_version: str,
+        resource_policy: str,
+        result: str,
+        metrics: Dict[str, Any],
+        timestamp: str | None = None,
+    ) -> ValidationCacheEntry:
+        eval_key = self._compute_eval_key(
+            node_id=node_id,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            contract_id=contract_id,
+            dataset_fingerprint=dataset_fingerprint,
+            code_version=code_version,
+            resource_policy=resource_policy,
+        )
+        ts = (
+            timestamp
+            or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
+        entry = ValidationCacheEntry(
+            eval_key=eval_key,
+            node_id=node_id,
+            execution_domain=execution_domain,
+            contract_id=contract_id,
+            dataset_fingerprint=dataset_fingerprint,
+            code_version=code_version,
+            resource_policy=resource_policy,
+            result=result,
+            metrics=dict(metrics),
+            timestamp=ts,
+        )
+        world_cache = self.validation_cache.setdefault(world_id, {})
+        node_cache = world_cache.setdefault(node_id, {})
+        node_cache[execution_domain] = entry
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {
+                "event": "validation_cached",
+                "node_id": node_id,
+                "execution_domain": execution_domain,
+                "eval_key": eval_key,
+            }
+        )
+        return entry
+
+    async def invalidate_validation_cache(
+        self,
+        world_id: str,
+        *,
+        node_id: str | None = None,
+        execution_domain: str | None = None,
+    ) -> None:
+        cache = self.validation_cache.get(world_id)
+        if not cache:
+            return
+        if node_id is None:
+            self.validation_cache.pop(world_id, None)
+            scope = {"scope": "world"}
+        else:
+            node_cache = cache.get(node_id)
+            if not node_cache:
+                return
+            if execution_domain is None:
+                cache.pop(node_id, None)
+                scope = {"scope": "node", "node_id": node_id}
+            else:
+                node_cache.pop(execution_domain, None)
+                if not node_cache:
+                    cache.pop(node_id, None)
+                scope = {
+                    "scope": "domain",
+                    "node_id": node_id,
+                    "execution_domain": execution_domain,
+                }
+            if not cache:
+                self.validation_cache.pop(world_id, None)
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {"event": "validation_cache_cleared", **scope}
+        )
 
     async def get_activation(self, world_id: str, strategy_id: str | None = None, side: str | None = None) -> Dict:
         act = self.activations.get(world_id)
@@ -163,5 +344,6 @@ __all__ = [
     'WorldActivation',
     'WorldPolicies',
     'WorldAuditLog',
+    'ValidationCacheEntry',
     'Storage',
 ]

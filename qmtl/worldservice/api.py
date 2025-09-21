@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Any, Dict, List, Literal
 
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
@@ -90,6 +90,33 @@ class ActivationEnvelope(BaseModel):
     etag: str
     run_id: str | None = None
     ts: str
+
+
+class ValidationCacheContext(BaseModel):
+    node_id: str
+    execution_domain: str
+    contract_id: str
+    dataset_fingerprint: str
+    code_version: str
+    resource_policy: str
+
+
+class ValidationCacheLookupRequest(ValidationCacheContext):
+    pass
+
+
+class ValidationCacheStoreRequest(ValidationCacheContext):
+    result: Literal['valid', 'invalid', 'warning']
+    metrics: Dict[str, Any]
+    timestamp: str | None = None
+
+
+class ValidationCacheResponse(BaseModel):
+    cached: bool
+    eval_key: str | None = None
+    result: str | None = None
+    metrics: Dict[str, Any] | None = None
+    timestamp: str | None = None
 
 
 def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None = None) -> FastAPI:
@@ -265,6 +292,35 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
     @app.get('/worlds/{world_id}/audit')
     async def get_audit(world_id: str) -> List[Dict]:
         return await store.get_audit(world_id)
+
+    @app.post('/worlds/{world_id}/validations/cache/lookup', response_model=ValidationCacheResponse)
+    async def post_validation_cache_lookup(world_id: str, payload: ValidationCacheLookupRequest) -> ValidationCacheResponse:
+        entry = await store.get_validation_cache(world_id, **payload.model_dump())
+        if not entry:
+            return ValidationCacheResponse(cached=False)
+        return ValidationCacheResponse(
+            cached=True,
+            eval_key=entry.eval_key,
+            result=entry.result,
+            metrics=entry.metrics,
+            timestamp=entry.timestamp,
+        )
+
+    @app.post('/worlds/{world_id}/validations/cache', response_model=ValidationCacheResponse)
+    async def post_validation_cache(world_id: str, payload: ValidationCacheStoreRequest) -> ValidationCacheResponse:
+        entry = await store.set_validation_cache(world_id, **payload.model_dump())
+        return ValidationCacheResponse(
+            cached=True,
+            eval_key=entry.eval_key,
+            result=entry.result,
+            metrics=entry.metrics,
+            timestamp=entry.timestamp,
+        )
+
+    @app.delete('/worlds/{world_id}/validations/{node_id}', status_code=204)
+    async def delete_validation_cache(world_id: str, node_id: str, execution_domain: str | None = None) -> Response:
+        await store.invalidate_validation_cache(world_id, node_id=node_id, execution_domain=execution_domain)
+        return Response(status_code=204)
 
     return app
 
