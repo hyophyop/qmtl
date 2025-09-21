@@ -99,6 +99,29 @@ Runner.offline(MyStrategy)
 `Runner`는 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여 해당 태그에
 매칭되는 큐를 조회하고 이벤트 디스크립터/토큰을 받아 WebSocket 구독을 시작합니다. 모든 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
 
+### Clock · Dataset Context 요구사항
+
+`Runner`는 실행 모드에 따라 **Clock**과 데이터 스냅샷 메타데이터를 엄격히 검증합니다.
+
+- `execution_mode`가 `backtest` 또는 `dryrun`일 때는 항상 `clock="virtual"`이어야 하며, `as_of`와 `dataset_fingerprint`를 명시해야 합니다. 누락될 경우 Runner는 Gateway 호출을 건너뛰고 compute-only 모드로 강등하여 실시간 큐를 오염시키지 않습니다.
+- `execution_mode`가 `live`일 때는 `clock="wall"`만 허용됩니다. 잘못된 Clock을 지정하면 구성 오류가 발생합니다.
+
+Python 코드에서 직접 실행할 때는 `context` 인수로 값을 전달할 수 있습니다.
+
+```python
+Runner.run(
+    MyStrategy,
+    world_id="demo_world",
+    gateway_url="http://gw",
+    context={
+        "execution_mode": "backtest",
+        "clock": "virtual",
+        "as_of": "2025-09-30T23:59:59Z",
+        "dataset_fingerprint": "lake:blake3:ohlcv:20250930",
+    },
+)
+```
+
 ### world_id 전달 흐름
 
 `world_id`는 실행 시점에서 `Runner`가 받아 `TagQueryManager`와 `ActivationManager`에 전파됩니다. 두 관리자는 각 노드와 메트릭에 동일한 `world_id`를 주입해 큐·활성 상태와 지표가 월드별로 분리되도록 보장합니다.
@@ -161,6 +184,20 @@ qmtl sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWA
 ```bash
 python -m qmtl.sdk --help
 ```
+
+`qmtl sdk run` 명령은 Clock/데이터 메타데이터를 직접 설정할 수 있는 옵션을 제공합니다.
+
+```bash
+qmtl sdk run strategies.my:MyStrategy \
+  --world-id demo_world \
+  --gateway-url http://gw \
+  --mode backtest \
+  --clock virtual \
+  --as-of 2025-09-30T23:59:59Z \
+  --dataset-fingerprint lake:blake3:ohlcv:20250930
+```
+
+`--mode live`를 사용할 경우 `--clock wall`만 허용되며, 잘못된 조합은 즉시 실패합니다. 백테스트/드라이런에서 `--as-of` 또는 `--dataset-fingerprint`를 생략하면 Runner가 Gateway 호출을 차단하고 compute-only 모드로 전환합니다. 이 동작은 혼합 데이터셋이 라이브 큐에 섞이는 것을 방지하기 위한 방어선입니다.
 
 ## 캐시 조회
 

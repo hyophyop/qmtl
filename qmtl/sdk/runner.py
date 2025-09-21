@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Mapping
 import logging
 
 from opentelemetry import trace
@@ -58,6 +58,7 @@ class Runner:
     _enable_trade_submission: bool = True
     _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
+    _default_context: dict[str, str] | None = None
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -78,6 +79,85 @@ class Runner:
     def set_activation_manager(cls, am: ActivationManager | None) -> None:
         """Inject or clear the activation manager (for tests or custom wiring)."""
         cls._activation_manager = am
+
+    @classmethod
+    def set_default_context(cls, context: Mapping[str, str] | None) -> None:
+        """Configure default compute context values used when none are supplied."""
+
+        cls._default_context = dict(context) if context else None
+
+    @classmethod
+    def _merge_context(
+        cls,
+        *,
+        context: Mapping[str, str] | None,
+        execution_mode: str | None,
+    ) -> dict[str, str]:
+        merged: dict[str, str] = {}
+        if cls._default_context:
+            merged.update(cls._default_context)
+        if context:
+            for key, value in context.items():
+                if value is None:
+                    merged.pop(key, None)
+                    continue
+                merged[key] = str(value)
+        if execution_mode is not None:
+            merged["execution_mode"] = str(execution_mode)
+        return merged
+
+    @classmethod
+    def _resolve_context(
+        cls,
+        *,
+        context: Mapping[str, str] | None,
+        execution_mode: str | None,
+        offline_requested: bool,
+        gateway_url: str | None,
+    ) -> tuple[dict[str, str], bool]:
+        """Return normalized compute context and whether to force compute-only."""
+
+        resolved = cls._merge_context(context=context, execution_mode=execution_mode)
+        mode = resolved.get("execution_mode")
+        if mode is None:
+            mode = "live" if cls._trade_mode == "live" and not offline_requested else "backtest"
+        mode = str(mode).lower()
+        if mode not in {"backtest", "dryrun", "live"}:
+            raise ValueError("execution_mode must be one of 'backtest', 'dryrun', or 'live'")
+        resolved["execution_mode"] = mode
+
+        expected_clock = "wall" if mode == "live" else "virtual"
+        clock_val = resolved.get("clock")
+        if clock_val is None:
+            resolved["clock"] = expected_clock
+            clock_val = expected_clock
+        clock_norm = str(clock_val).lower()
+        if clock_norm != expected_clock:
+            raise ValueError(
+                f"{mode} runs require '{expected_clock}' clock but received '{clock_val}'"
+            )
+
+        force_offline = False
+        if mode != "live":
+            as_of = resolved.get("as_of")
+            dataset_fp = resolved.get("dataset_fingerprint")
+            if not as_of or not dataset_fp:
+                if gateway_url:
+                    force_offline = True
+                    logger.warning(
+                        "Missing dataset metadata for %s run; forcing compute-only mode",
+                        mode,
+                    )
+                resolved.pop("as_of", None)
+                resolved.pop("dataset_fingerprint", None)
+            else:
+                resolved["as_of"] = str(as_of)
+                resolved["dataset_fingerprint"] = str(dataset_fp)
+        else:
+            resolved.pop("as_of", None)
+            resolved.pop("dataset_fingerprint", None)
+
+        return resolved, force_offline
 
     # ------------------------------------------------------------------
 
@@ -573,6 +653,8 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        context: Mapping[str, str] | None = None,
+        execution_mode: str | None = None,
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
@@ -599,12 +681,21 @@ class Runner:
             dag = strategy.serialize()
             logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
+            resolved_context, force_offline = Runner._resolve_context(
+                context=context,
+                execution_mode=execution_mode,
+                offline_requested=offline,
+                gateway_url=gateway_url,
+            )
+            setattr(strategy, "compute_context", resolved_context)
+
             queue_map = {}
-            if gateway_url:
+            if gateway_url and not force_offline:
                 queue_map = await Runner._gateway_client.post_strategy(
                     gateway_url=gateway_url,
                     dag=dag,
                     meta=meta,
+                    context=resolved_context or None,
                     world_id=world_id,
                 )
                 if isinstance(queue_map, dict) and "error" in queue_map:
@@ -616,7 +707,12 @@ class Runner:
                 strategy.on_finish()
                 return strategy
 
-            offline_mode = offline or not Runner._kafka_available or not gateway_url
+            offline_mode = (
+                offline
+                or force_offline
+                or not Runner._kafka_available
+                or not gateway_url
+            )
             await manager.resolve_tags(offline=offline_mode)
 
             # Start activation manager to gate orders by world activation
@@ -759,6 +855,8 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
+        context: Mapping[str, str] | None = None,
+        execution_mode: str | None = None,
         offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
@@ -770,6 +868,8 @@ class Runner:
                 world_id=world_id,
                 gateway_url=gateway_url,
                 meta=meta,
+                context=context,
+                execution_mode=execution_mode,
                 offline=offline,
                 history_start=history_start,
                 history_end=history_end,
@@ -801,6 +901,13 @@ class Runner:
         except TypeError:
             manager = tag_service.init(strategy)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
+        resolved_context, _ = Runner._resolve_context(
+            context=None,
+            execution_mode=None,
+            offline_requested=True,
+            gateway_url=None,
+        )
+        setattr(strategy, "compute_context", resolved_context)
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         # Hydrate from snapshots first, then fill any gaps from history

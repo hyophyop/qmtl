@@ -697,3 +697,60 @@ def test_cli_disable_ray(monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
     cli_mod.main()
     assert runtime.NO_RAY
+
+
+def test_runner_missing_dataset_forces_compute_only(monkeypatch, caplog):
+    Runner.set_default_context(None)
+
+    async def _fail_post_strategy(*_args, **_kwargs):
+        raise AssertionError("Gateway should not be invoked without dataset metadata")
+
+    monkeypatch.setattr(
+        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        _fail_post_strategy,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        strategy = Runner.run(
+            SampleStrategy,
+            world_id="w",
+            gateway_url="http://gw",
+            context={"execution_mode": "backtest", "clock": "virtual"},
+        )
+
+    assert any("Missing dataset metadata" in rec.getMessage() for rec in caplog.records)
+    assert isinstance(strategy, SampleStrategy)
+
+
+def test_runner_backtest_enforces_virtual_clock():
+    Runner.set_default_context(None)
+
+    with pytest.raises(ValueError) as exc:
+        Runner.run(
+            SampleStrategy,
+            world_id="w",
+            gateway_url=None,
+            offline=True,
+            context={
+                "execution_mode": "backtest",
+                "clock": "wall",
+                "as_of": "2025-01-01T00:00:00Z",
+                "dataset_fingerprint": "lake:blake3:test",
+            },
+        )
+
+    assert "virtual" in str(exc.value)
+
+
+def test_runner_live_enforces_wall_clock():
+    Runner.set_default_context(None)
+
+    with pytest.raises(ValueError) as exc:
+        Runner.run(
+            SampleStrategy,
+            world_id="w",
+            gateway_url="http://gw",
+            context={"execution_mode": "live", "clock": "virtual"},
+        )
+
+    assert "wall" in str(exc.value)

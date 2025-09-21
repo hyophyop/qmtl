@@ -22,6 +22,21 @@ async def _main(argv: List[str] | None = None) -> int:
     run_p.add_argument("--world-id", required=True)
     run_p.add_argument("--gateway-url", required=True, help="Gateway base URL")
     run_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
+    run_p.add_argument(
+        "--mode",
+        choices=["backtest", "dryrun", "live"],
+        help="Execution mode (backtest/dryrun/live)",
+    )
+    run_p.add_argument(
+        "--clock",
+        choices=["virtual", "wall"],
+        help="Clock discipline to request from Gateway",
+    )
+    run_p.add_argument("--as-of", help="Dataset snapshot timestamp/identifier")
+    run_p.add_argument(
+        "--dataset-fingerprint",
+        help="Immutable dataset fingerprint for non-live runs",
+    )
 
     off_p = sub.add_parser("offline", help="Run locally without Gateway/WS")
     off_p.add_argument("strategy", help="Import path as module:Class")
@@ -49,12 +64,24 @@ async def _main(argv: List[str] | None = None) -> int:
         h_end = os.getenv("QMTL_HISTORY_END")
         if runtime.TEST_MODE and h_start is None and h_end is None:
             h_start, h_end = "1", "2"
+        run_context = {}
+        if args.mode:
+            run_context["execution_mode"] = args.mode
+        if args.clock:
+            run_context["clock"] = args.clock
+        if args.as_of:
+            run_context["as_of"] = args.as_of
+        if args.dataset_fingerprint:
+            run_context["dataset_fingerprint"] = args.dataset_fingerprint
+        context = run_context or None
         await Runner.run_async(
             strategy_cls,
             world_id=args.world_id,
             gateway_url=args.gateway_url,
             history_start=h_start,
             history_end=h_end,
+            context=context,
+            execution_mode=args.mode,
         )
     else:
         await Runner.offline_async(strategy_cls)
