@@ -176,10 +176,11 @@ class Storage:
         code_version: str,
         resource_policy: str,
     ) -> str:
+        normalized_domain = self._normalize_execution_domain(execution_domain)
         components = [
             node_id,
             world_id,
-            execution_domain,
+            normalized_domain,
             contract_id,
             dataset_fingerprint,
             code_version,
@@ -341,7 +342,7 @@ class Storage:
             resource_policy=resource_policy,
         )
         if entry.eval_key != expected_key:
-            node_cache.pop(execution_domain, None)
+            node_cache.pop(domain, None)
             if not node_cache:
                 world_cache.pop(node_id, None)
             if not world_cache:
@@ -373,10 +374,11 @@ class Storage:
         metrics: Dict[str, Any],
         timestamp: str | None = None,
     ) -> ValidationCacheEntry:
+        domain = self._normalize_execution_domain(execution_domain)
         eval_key = self._compute_eval_key(
             node_id=node_id,
             world_id=world_id,
-            execution_domain=execution_domain,
+            execution_domain=domain,
             contract_id=contract_id,
             dataset_fingerprint=dataset_fingerprint,
             code_version=code_version,
@@ -389,7 +391,7 @@ class Storage:
         entry = ValidationCacheEntry(
             eval_key=eval_key,
             node_id=node_id,
-            execution_domain=execution_domain,
+            execution_domain=domain,
             contract_id=contract_id,
             dataset_fingerprint=dataset_fingerprint,
             code_version=code_version,
@@ -400,12 +402,12 @@ class Storage:
         )
         world_cache = self.validation_cache.setdefault(world_id, {})
         node_cache = self._ensure_validation_cache_bucket(world_id, node_id)
-        node_cache[execution_domain] = entry
+        node_cache[domain] = entry
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
             {
                 "event": "validation_cached",
                 "node_id": node_id,
-                "execution_domain": execution_domain,
+                "execution_domain": domain,
                 "eval_key": eval_key,
             }
         )
