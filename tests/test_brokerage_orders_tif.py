@@ -19,6 +19,15 @@ from qmtl.brokerage import (
 )
 
 
+def _next_regular_session_date(hours: ExchangeHoursProvider) -> datetime.date:
+    day = datetime.now(timezone.utc).date()
+    while True:
+        start = datetime.combine(day, hours.market_hours.regular_start)
+        if hours.is_open(start):
+            return day
+        day += timedelta(days=1)
+
+
 def make_brokerage(symbols=None, hours=None, fill=None):
     return BrokerageModel(
         CashBuyingPowerModel(),
@@ -167,12 +176,8 @@ def test_market_on_open_and_close_fill_only_at_boundaries():
     brk = make_brokerage(hours=hours, fill=UnifiedFillModel())
     account = Account(cash=1_000_000)
 
-    today = datetime.now(timezone.utc).date()
-    trade_date = today
-    while trade_date.weekday() >= 5 or trade_date in hours.holidays:
-        trade_date += timedelta(days=1)
-
-    open_ts = datetime.combine(trade_date, hours.market_hours.regular_start)
+    session_day = _next_regular_session_date(hours)
+    open_ts = datetime.combine(session_day, hours.market_hours.regular_start)
     later_ts = open_ts + timedelta(minutes=5)
 
     order_moo = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOO)
@@ -182,8 +187,8 @@ def test_market_on_open_and_close_fill_only_at_boundaries():
     fill_open = brk.execute_order(account, order_moo2, market_price=100.0, ts=open_ts)
     assert fill_open.quantity == 100
 
-    close_time = hours.early_closes.get(trade_date, hours.market_hours.regular_end)
-    close_ts = datetime.combine(open_ts.date(), close_time)
+    close_time = hours.early_closes.get(session_day, hours.market_hours.regular_end)
+    close_ts = datetime.combine(session_day, close_time)
     before_close = close_ts - timedelta(minutes=1)
     order_moc = Order(symbol="AAPL", quantity=100, price=100.0, type=OrderType.MOC)
     fill_before_close = brk.execute_order(account, order_moc, market_price=100.0, ts=before_close)

@@ -14,7 +14,12 @@ from qmtl.pipeline.execution_nodes import (
     TimingGateNode,
 )
 from qmtl.sdk.order_gate import Activation
-from qmtl.sdk.watermark import set_watermark
+from qmtl.sdk.watermark import (
+    WatermarkGate,
+    clear_watermarks,
+    get_watermark,
+    set_watermark,
+)
 from qmtl.brokerage.order import Account
 from qmtl.sdk.portfolio import Portfolio
 from qmtl.sdk.execution_modeling import ExecutionFill
@@ -43,18 +48,108 @@ class DummyExecModel:
         )
 
 
-def test_pretrade_gate_allows():
-    src = Node(name="src", interval=1, period=1)
-    set_watermark("trade.portfolio", "default", 10**9)
+def test_pretrade_gate_allows_when_gating_disabled():
+    clear_watermarks()
+    src = Node(name="src", interval=60, period=1)
+    src.world_id = "sim-world"
     node = PreTradeGateNode(
         src,
         activation_map={"AAPL": Activation(True)},
         brokerage=DummyBrokerage(),
         account=Account(),
+        watermark_gate=WatermarkGate.for_mode("simulate"),
     )
     order = {"symbol": "AAPL", "quantity": 1, "price": 10.0}
-    out = Runner.feed_queue_data(node, src.node_id, 1, 0, order)
+    out = Runner.feed_queue_data(node, src.node_id, 60, 120, order)
     assert out == order
+
+
+def test_pretrade_gate_blocks_until_watermark_ready():
+    clear_watermarks()
+    src = Node(name="src", interval=60, period=1)
+    src.world_id = "live-world"
+    node = PreTradeGateNode(
+        src,
+        activation_map={"AAPL": Activation(True)},
+        brokerage=DummyBrokerage(),
+        account=Account(),
+        watermark_gate=WatermarkGate.for_mode("live"),
+    )
+    order = {"symbol": "AAPL", "quantity": 1, "price": 10.0}
+    rejected = Runner.feed_queue_data(node, src.node_id, 60, 180, order.copy())
+    assert rejected == {"rejected": True, "reason": "watermark"}
+
+    set_watermark("trade.portfolio", "live-world", 179)
+    rejected_again = Runner.feed_queue_data(
+        node, src.node_id, 60, 240, {"symbol": "AAPL", "quantity": 1, "price": 10.5}
+    )
+    assert rejected_again == {"rejected": True, "reason": "watermark"}
+
+    set_watermark("trade.portfolio", "live-world", 240)
+    allowed = Runner.feed_queue_data(
+        node, src.node_id, 60, 300, {"symbol": "AAPL", "quantity": 1, "price": 10.5}
+    )
+    assert allowed["symbol"] == "AAPL"
+
+
+def test_pretrade_gate_respects_configured_lag():
+    clear_watermarks()
+    src = Node(name="src", interval=60, period=1)
+    src.world_id = "lag-world"
+    node = PreTradeGateNode(
+        src,
+        activation_map={"AAPL": Activation(True)},
+        brokerage=DummyBrokerage(),
+        account=Account(),
+        watermark_gate=WatermarkGate(enabled=True, lag=2),
+    )
+    rejected = Runner.feed_queue_data(node, src.node_id, 60, 180, {"symbol": "AAPL", "quantity": 1, "price": 11.0})
+    assert rejected == {"rejected": True, "reason": "watermark"}
+
+    set_watermark("trade.portfolio", "lag-world", 119)
+    still_blocked = Runner.feed_queue_data(
+        node, src.node_id, 60, 240, {"symbol": "AAPL", "quantity": 1, "price": 11.5}
+    )
+    assert still_blocked == {"rejected": True, "reason": "watermark"}
+
+    set_watermark("trade.portfolio", "lag-world", 180)
+    allowed = Runner.feed_queue_data(
+        node, src.node_id, 60, 300, {"symbol": "AAPL", "quantity": 1, "price": 11.5}
+    )
+    assert allowed["price"] == 11.5
+
+
+def test_pretrade_gate_isolated_per_world():
+    clear_watermarks()
+    src_a = Node(name="src_a", interval=60, period=1)
+    src_a.world_id = "world-a"
+    src_b = Node(name="src_b", interval=60, period=1)
+    src_b.world_id = "world-b"
+    gate_a = PreTradeGateNode(
+        src_a,
+        activation_map={"AAPL": Activation(True)},
+        brokerage=DummyBrokerage(),
+        account=Account(),
+        watermark_gate=WatermarkGate(enabled=True),
+    )
+    gate_b = PreTradeGateNode(
+        src_b,
+        activation_map={"AAPL": Activation(True)},
+        brokerage=DummyBrokerage(),
+        account=Account(),
+        watermark_gate=WatermarkGate(enabled=True),
+    )
+
+    set_watermark("trade.portfolio", "world-a", 10**9)
+    allowed = Runner.feed_queue_data(
+        gate_a, src_a.node_id, 60, 180, {"symbol": "AAPL", "quantity": 1, "price": 12.0}
+    )
+    assert allowed["price"] == 12.0
+
+    rejected = Runner.feed_queue_data(
+        gate_b, src_b.node_id, 60, 180, {"symbol": "AAPL", "quantity": 1, "price": 12.0}
+    )
+    assert rejected == {"rejected": True, "reason": "watermark"}
 
 
 def test_sizing_node_value_to_quantity():
@@ -83,6 +178,30 @@ def test_portfolio_node_applies_fill():
     out = Runner.feed_queue_data(node, src.node_id, 1, 0, fill)
     assert portfolio.cash == 50.0
     assert out["positions"]["AAPL"]["qty"] == 5.0
+
+
+def test_portfolio_node_updates_custom_watermark_topic():
+    clear_watermarks()
+    src = Node(name="fill", interval=1, period=1)
+    src.world_id = "topic-world"
+    portfolio = Portfolio(cash=100.0)
+    node = PortfolioNode(src, portfolio=portfolio, watermark_topic="custom.topic")
+    fill = {"symbol": "AAPL", "quantity": 1.0, "fill_price": 10.0, "timestamp": 200}
+    Runner.feed_queue_data(node, src.node_id, 1, 0, fill)
+    assert get_watermark("custom.topic", "topic-world") == 200
+
+
+def test_portfolio_node_watermark_ignores_out_of_order_fill():
+    clear_watermarks()
+    src = Node(name="fill", interval=1, period=1)
+    src.world_id = "wm-world"
+    portfolio = Portfolio(cash=100.0)
+    node = PortfolioNode(src, portfolio=portfolio)
+    newest = {"symbol": "AAPL", "quantity": 1.0, "fill_price": 10.0, "timestamp": 220}
+    Runner.feed_queue_data(node, src.node_id, 1, 0, newest)
+    older = {"symbol": "AAPL", "quantity": 1.0, "fill_price": 10.0, "timestamp": 200}
+    Runner.feed_queue_data(node, src.node_id, 1, 0, older)
+    assert get_watermark("trade.portfolio", "wm-world") == 220
 
 
 def test_risk_control_node_rejects_large_position():
