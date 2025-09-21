@@ -45,9 +45,23 @@ else:
         registry=global_registry,
     )
 
+# Cross-context cache guard (SLO: 0)
+if "cross_context_cache_hit_total" in global_registry._names_to_collectors:
+    cross_context_cache_hit_total = global_registry._names_to_collectors[
+        "cross_context_cache_hit_total"
+    ]
+else:
+    cross_context_cache_hit_total = Counter(
+        "cross_context_cache_hit_total",
+        "Number of cache hits where compute context mismatched",
+        ["node_id", "world_id", "execution_domain"],
+        registry=global_registry,
+    )
+
 # Expose recorded values for tests
 cache_read_total._vals = {}  # type: ignore[attr-defined]
 cache_last_read_timestamp._vals = {}  # type: ignore[attr-defined]
+cross_context_cache_hit_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Backfill metrics
@@ -305,6 +319,23 @@ def observe_cache_read(upstream_id: str, interval: int) -> None:
     cache_last_read_timestamp._vals[(u, i)] = ts  # type: ignore[attr-defined]
 
 
+def observe_cross_context_cache_hit(
+    node_id: str, world_id: str, execution_domain: str
+) -> None:
+    """Record a cross-context cache guard event (policy violation)."""
+
+    n = str(node_id)
+    w = str(world_id or "")
+    d = str(execution_domain or "")
+    cross_context_cache_hit_total.labels(
+        node_id=n, world_id=w, execution_domain=d
+    ).inc()
+    key = (n, w, d)
+    cross_context_cache_hit_total._vals[key] = (  # type: ignore[attr-defined]
+        cross_context_cache_hit_total._vals.get(key, 0) + 1
+    )
+
+
 def observe_backfill_start(node_id: str, interval: int) -> None:
     n = str(node_id)
     i = str(interval)
@@ -373,6 +404,8 @@ def reset_metrics() -> None:
     cache_read_total._vals = {}  # type: ignore[attr-defined]
     cache_last_read_timestamp.clear()
     cache_last_read_timestamp._vals = {}  # type: ignore[attr-defined]
+    cross_context_cache_hit_total.clear()
+    cross_context_cache_hit_total._vals = {}  # type: ignore[attr-defined]
     backfill_last_timestamp.clear()
     backfill_last_timestamp._vals = {}  # type: ignore[attr-defined]
     backfill_jobs_in_progress.set(0)

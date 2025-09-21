@@ -10,6 +10,7 @@ import logging
 from opentelemetry import trace
 
 from qmtl.common.tracing import setup_tracing
+from qmtl.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
 from cachetools import TTLCache
 from qmtl.common import AsyncCircuitBreaker
 
@@ -577,14 +578,27 @@ class Runner:
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
+        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
+        as_of: object | None = None,
+        partition: object | None = None,
     ) -> Strategy:
         """Run a strategy under a given world, following WS decisions/activation.
 
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
+        context = ComputeContext(
+            world_id=world_id,
+            execution_domain=execution_domain,
+            as_of=as_of,
+            partition=partition,
+        )
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
+            try:
+                n.apply_compute_context(context)
+            except AttributeError:
+                pass
         try:
             strategy.on_start()
 
@@ -763,6 +777,9 @@ class Runner:
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
+        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
+        as_of: object | None = None,
+        partition: object | None = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.run_async(
@@ -774,6 +791,9 @@ class Runner:
                 history_start=history_start,
                 history_end=history_end,
                 schema_enforcement=schema_enforcement,
+                execution_domain=execution_domain,
+                as_of=as_of,
+                partition=partition,
             )
         )
 
@@ -791,8 +811,13 @@ class Runner:
         strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
     ) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
+        context = ComputeContext(world_id="w", execution_domain="offline")
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
+            try:
+                n.apply_compute_context(context)
+            except AttributeError:
+                pass
         tag_service = TagManagerService(None)
         # Use a stable default world id for offline execution so that
         # node IDs match typical offline test runs.

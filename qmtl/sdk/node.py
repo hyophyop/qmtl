@@ -34,6 +34,11 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
 
 from qmtl.common import compute_node_id
+from qmtl.common.compute_key import (
+    ComputeContext,
+    compute_compute_key,
+    DEFAULT_EXECUTION_DOMAIN,
+)
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -91,6 +96,9 @@ class NodeCache:
         self._filled: dict[tuple[str, int], int] = {}
         self._offset: dict[tuple[str, int], int] = {}
         self.backfill_state = BackfillState()
+        self._active_compute_key: str | None = None
+        self._active_world_id: str = ""
+        self._active_execution_domain: str = DEFAULT_EXECUTION_DOMAIN
 
     def _ordered_array(self, u: str, interval: int) -> np.ndarray:
         """Return internal array for ``(u, interval)`` ordered oldest->latest."""
@@ -111,6 +119,44 @@ class NodeCache:
             self._filled[key] = 0
             self._offset[key] = 0
         return self._buffers[key]
+
+    def _clear_all(self) -> None:
+        self._buffers.clear()
+        self._last_ts.clear()
+        self._missing.clear()
+        self._filled.clear()
+        self._offset.clear()
+        self.backfill_state = BackfillState()
+
+    def activate_compute_key(
+        self,
+        compute_key: str | None,
+        *,
+        node_id: str,
+        world_id: str | None = None,
+        execution_domain: str | None = None,
+    ) -> None:
+        """Activate ``compute_key`` and clear data when the context changes."""
+
+        key = compute_key or "__default__"
+        world = str(world_id or "")
+        domain = str(execution_domain or DEFAULT_EXECUTION_DOMAIN)
+        if self._active_compute_key is None:
+            self._active_compute_key = key
+            self._active_world_id = world
+            self._active_execution_domain = domain
+            return
+        if self._active_compute_key == key:
+            self._active_world_id = world
+            self._active_execution_domain = domain
+            return
+        had_data = bool(self._buffers)
+        self._clear_all()
+        self._active_compute_key = key
+        self._active_world_id = world
+        self._active_execution_domain = domain
+        if had_data:
+            sdk_metrics.observe_cross_context_cache_hit(node_id, world, domain)
 
     def append(self, u: str, interval: int, timestamp: int, payload: Any) -> None:
         """Insert ``payload`` with ``timestamp`` for ``(u, interval)``."""
@@ -490,8 +536,14 @@ class Node:
         self._late_events: list[tuple[str, int, Any]] = []
         # Runtime reuse policy surface
         self.runtime_compat: str = runtime_compat  # "strict" | "loose"
-        # World identifier assigned by Runner/TagManagerService
-        self.world_id: str | None = None
+        # Compute context (world/domain isolation)
+        self._compute_context = ComputeContext()
+        self.cache.activate_compute_key(
+            self.compute_key,
+            node_id=self.node_id,
+            world_id=self._compute_context.world_id,
+            execution_domain=self._compute_context.execution_domain,
+        )
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -530,6 +582,90 @@ class Node:
             self.config_hash,
             self.schema_hash,
         )
+
+    @property
+    def node_hash(self) -> str:
+        """Return canonical hash used for compute key derivation."""
+
+        return self.node_id
+
+    @property
+    def compute_context(self) -> ComputeContext:
+        return self._compute_context
+
+    @property
+    def compute_key(self) -> str:
+        return compute_compute_key(self.node_hash, self._compute_context)
+
+    def apply_compute_context(self, context: ComputeContext) -> None:
+        """Apply ``context`` and enforce cache isolation."""
+
+        if context == self._compute_context:
+            return
+        self._compute_context = context
+        self.cache.activate_compute_key(
+            self.compute_key,
+            node_id=self.node_id,
+            world_id=context.world_id,
+            execution_domain=context.execution_domain,
+        )
+
+    @property
+    def world_id(self) -> str | None:
+        val = self._compute_context.world_id
+        return val or None
+
+    @world_id.setter
+    def world_id(self, value: str | None) -> None:
+        context = ComputeContext(
+            world_id=str(value or ""),
+            execution_domain=self._compute_context.execution_domain,
+            as_of=self._compute_context.as_of,
+            partition=self._compute_context.partition,
+        )
+        self.apply_compute_context(context)
+
+    @property
+    def execution_domain(self) -> str:
+        return self._compute_context.execution_domain
+
+    @execution_domain.setter
+    def execution_domain(self, value: str) -> None:
+        context = ComputeContext(
+            world_id=self._compute_context.world_id,
+            execution_domain=str(value or DEFAULT_EXECUTION_DOMAIN),
+            as_of=self._compute_context.as_of,
+            partition=self._compute_context.partition,
+        )
+        self.apply_compute_context(context)
+
+    @property
+    def as_of(self) -> Any | None:
+        return self._compute_context.as_of
+
+    @as_of.setter
+    def as_of(self, value: Any | None) -> None:
+        context = ComputeContext(
+            world_id=self._compute_context.world_id,
+            execution_domain=self._compute_context.execution_domain,
+            as_of=value,
+            partition=self._compute_context.partition,
+        )
+        self.apply_compute_context(context)
+
+    @property
+    def partition(self) -> Any | None:
+        return self._compute_context.partition
+
+    @partition.setter
+    def partition(self, value: Any | None) -> None:
+        context = ComputeContext(
+            world_id=self._compute_context.world_id,
+            execution_domain=self._compute_context.execution_domain,
+            as_of=self._compute_context.as_of,
+            partition=value,
+        )
+        self.apply_compute_context(context)
 
     # --- runtime cache handling -----------------------------------------
     def feed(
@@ -572,6 +708,12 @@ class Node:
         with tracer.start_as_current_span(
             "node.feed", attributes={"node.id": self.node_id}
         ):
+            self.cache.activate_compute_key(
+                self.compute_key,
+                node_id=self.node_id,
+                world_id=self._compute_context.world_id,
+                execution_domain=self._compute_context.execution_domain,
+            )
             self.cache.append(upstream_id, interval, timestamp, payload)
             sdk_metrics.observe_nodecache_resident_bytes(
                 self.node_id, self.cache.resident_bytes
