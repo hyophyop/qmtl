@@ -411,6 +411,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                     return ApplyAck(run_id=payload.run_id, active=list(state.get("active", [])), phase="completed")
 
             target_active = await _determine_active(world_id, payload)
+            previous_decisions = list(await store.get_decisions(world_id))
             snapshot_full = await store.snapshot_activation(world_id)
             snapshot_view = {
                 "state": {
@@ -472,7 +473,14 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                 raise
             except Exception as exc:  # pragma: no cover - defensive fallback
                 await store.restore_activation(world_id, snapshot_full)
-                await store.record_apply_stage(world_id, payload.run_id, "rolled_back", error=str(exc))
+                await store.set_decisions(world_id, list(previous_decisions))
+                await store.record_apply_stage(
+                    world_id,
+                    payload.run_id,
+                    "rolled_back",
+                    error=str(exc),
+                    active=list(previous_decisions),
+                )
                 restored = await store.snapshot_activation(world_id)
                 await _freeze_world(
                     world_id,
@@ -485,6 +493,7 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
                     },
                     run_state,
                 )
+                run_state["active"] = list(previous_decisions)
                 run_state["stage"] = "rolled_back"
                 run_state["completed"] = False
                 raise HTTPException(status_code=500, detail="apply failed") from exc
