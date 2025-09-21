@@ -237,10 +237,12 @@ class Storage:
         if not legacy_bucket:
             return None
         for legacy in list(legacy_bucket):
-            resolved_domain = self._resolve_domain(legacy, explicit=execution_domain)
+            resolved_domain = self._resolve_domain(legacy)
             if resolved_domain != execution_domain:
                 continue
-            upgraded = self._upgrade_legacy_world_node_ref(legacy, mode="lazy", explicit_domain=execution_domain)
+            upgraded = self._upgrade_legacy_world_node_ref(
+                legacy, mode="lazy", explicit_domain=resolved_domain
+            )
             if upgraded:
                 legacy_bucket.remove(legacy)
                 if not legacy_bucket:
