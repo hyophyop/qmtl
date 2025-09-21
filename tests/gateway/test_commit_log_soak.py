@@ -1,6 +1,7 @@
 import json
 import pytest
 
+from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.gateway.commit_log_consumer import CommitLogConsumer
@@ -52,7 +53,12 @@ async def test_commit_log_exactly_once_soak():
     w = CommitLogWriter(p, "t")
     n = 100
     # produce duplicates for the same (node, bucket, input_hash)
-    await w.publish_bucket(100, 60, [("n1", "ih", {"v": i % 3}) for i in range(n)])
+    ck = compute_key("n1")
+    await w.publish_bucket(
+        100,
+        60,
+        [("n1", "ih", {"v": i % 3}, ck) for i in range(n)],
+    )
 
     batch = [_M(v) for (_, _, v, _) in p.buf]
     # consumer
