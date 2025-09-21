@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Dict, List
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .policy_engine import Policy, evaluate_policy
 from .controlbus_producer import ControlBusProducer
-from .storage import Storage
+from .storage import Storage, DomainTransition
 from qmtl.common.hashutils import hash_bytes
 from qmtl.transforms import (
     equity_linearity_metrics,
@@ -46,18 +47,45 @@ class ActivationRequest(BaseModel):
     ts: str | None = None
 
 
+class DomainTransitionRequest(BaseModel):
+    run_id: str = Field(..., min_length=1)
+    phase: Literal["freeze", "switch", "unfreeze", "rollback"]
+    target: str | None = None
+
+
+class DomainStateResponse(BaseModel):
+    current: str
+    previous: str | None = None
+    pending: str | None = None
+    run_id: str | None = None
+    phase: str
+    freeze: bool
+    drain: bool
+    last_transition_at: str | None = None
+
+
 class ApplyRequest(BaseModel):
-    metrics: Dict[str, Dict[str, float]]
+    metrics: Dict[str, Dict[str, float]] = Field(default_factory=dict)
     previous: List[str] | None = None
     correlations: Dict[tuple[str, str], float] | None = None
     policy: Policy | None = None
     # Optional time series for server-side metric augmentation
     # Each strategy may provide cumulative equity/pnl or returns (to be cumulated)
     series: Dict[str, "StrategySeries"] | None = None
+    transition: DomainTransitionRequest | None = None
 
 
 class ApplyResponse(BaseModel):
     active: List[str]
+    domain: DomainStateResponse | None = None
+
+    def model_dump(self, *args, **kwargs):  # type: ignore[override]
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump(*args, **kwargs)
+
+    def model_dump_json(self, *args, **kwargs):  # type: ignore[override]
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump_json(*args, **kwargs)
 
 
 class DecisionsRequest(BaseModel):
@@ -221,8 +249,44 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
         active = evaluate_policy(metrics, policy, prev, payload.correlations)
         return ApplyResponse(active=active)
 
-    @app.post('/worlds/{world_id}/apply', response_model=ApplyResponse)
+    @app.post('/worlds/{world_id}/apply', response_model=ApplyResponse, response_model_exclude_none=True)
     async def post_apply(world_id: str, payload: ApplyRequest) -> ApplyResponse:
+        if payload.transition is not None:
+            try:
+                state, updates = await store.apply_transition(
+                    world_id,
+                    DomainTransition(
+                        run_id=payload.transition.run_id,
+                        phase=payload.transition.phase,
+                        target=payload.transition.target,
+                    ),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+            if bus and updates:
+                full_state = await store.get_activation(world_id)
+                digest_payload = json.dumps(full_state, sort_keys=True).encode()
+                state_hash = hash_bytes(digest_payload)
+                for entry in updates:
+                    await bus.publish_activation_update(
+                        world_id,
+                        etag=entry.get('etag', ''),
+                        run_id=str(entry.get('run_id') or ''),
+                        ts=str(entry.get('ts')),
+                        state_hash=state_hash,
+                        payload={
+                            key: val
+                            for key, val in entry.items()
+                            if key not in {'etag', 'ts', 'run_id', 'version'}
+                        },
+                        version=int(entry.get('version', 1)),
+                    )
+            active = await store.get_decisions(world_id)
+            return ApplyResponse(active=active, domain=DomainStateResponse(**state.snapshot()))
+
         policy = payload.policy or await store.get_default_policy(world_id)
         if policy is None:
             raise HTTPException(status_code=404, detail='policy not found')
