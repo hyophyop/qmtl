@@ -9,7 +9,7 @@ from qmtl.dagmanager.monitor import AckStatus
 @pytest.mark.asyncio
 async def test_resume_requeues_unacked_chunks():
     stream = _GrpcStream(asyncio.get_running_loop())
-    chunk = DiffChunk(queue_map={}, sentinel_id="s")
+    chunk = DiffChunk(queue_map={}, sentinel_id="s", version="v1")
 
     stream.send(chunk)
     # Simulate client consuming the chunk
@@ -25,8 +25,8 @@ async def test_resume_requeues_unacked_chunks():
 @pytest.mark.asyncio
 async def test_resume_skips_acknowledged_chunks():
     stream = _GrpcStream(asyncio.get_running_loop())
-    first = DiffChunk(queue_map={}, sentinel_id="s")
-    second = DiffChunk(queue_map={}, sentinel_id="s")
+    first = DiffChunk(queue_map={}, sentinel_id="s", version="v1")
+    second = DiffChunk(queue_map={}, sentinel_id="s", version="v1")
 
     stream.send(first)
     await stream.queue.get()
@@ -49,7 +49,7 @@ async def test_resume_skips_acknowledged_chunks():
 @pytest.mark.asyncio
 async def test_wait_for_ack_timeout():
     stream = _GrpcStream(asyncio.get_running_loop())
-    chunk = DiffChunk(queue_map={}, sentinel_id="s")
+    chunk = DiffChunk(queue_map={}, sentinel_id="s", version="v1")
 
     stream.send(chunk)
     await stream.queue.get()
