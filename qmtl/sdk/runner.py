@@ -27,6 +27,7 @@ from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 from .http import HttpPoster
 from . import snapshot as snap
+from qmtl.dagmanager.topic import build_namespace, topic_namespace_enabled
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -613,12 +614,39 @@ class Runner:
             dag = strategy.serialize()
             logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
+            dag_meta = dag.setdefault("meta", {}) if isinstance(dag, dict) else {}
+            meta_payload = dict(meta) if isinstance(meta, dict) else None
+            execution_domain: str | None = None
+            if isinstance(meta_payload, dict):
+                raw_domain = meta_payload.get("execution_domain")
+                if isinstance(raw_domain, str) and raw_domain.strip():
+                    execution_domain = raw_domain.strip()
+
+            if topic_namespace_enabled():
+                if execution_domain is None:
+                    if offline:
+                        execution_domain = "backtest"
+                    else:
+                        execution_domain = "live" if Runner._trade_mode == "live" else "dryrun"
+                namespace = build_namespace(world_id, execution_domain)
+                if namespace:
+                    if isinstance(dag_meta, dict):
+                        dag_meta["topic_namespace"] = {
+                            "world": world_id,
+                            "domain": execution_domain,
+                        }
+                    if meta_payload is None:
+                        meta_payload = {}
+                    meta_payload.setdefault("execution_domain", execution_domain)
+
+            meta_for_gateway = meta_payload if meta_payload is not None else meta
+
             queue_map = {}
             if gateway_url:
                 queue_map = await Runner._gateway_client.post_strategy(
                     gateway_url=gateway_url,
                     dag=dag,
-                    meta=meta,
+                    meta=meta_for_gateway,
                     world_id=world_id,
                 )
                 if isinstance(queue_map, dict) and "error" in queue_map:
