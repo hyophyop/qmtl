@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from qmtl.common import compute_node_id, crc32_of_list
+from qmtl.gateway import metrics
 from qmtl.gateway.database import MemoryDatabase, PostgresDatabase, SQLiteDatabase
 from qmtl.gateway.models import StrategySubmit
 from qmtl.gateway.strategy_submission import (
@@ -126,7 +127,13 @@ async def _build_postgres_db(monkeypatch):
     return db, fetch_bindings, cleanup
 
 
-def _build_payload(mismatch: bool = False) -> tuple[StrategySubmit, dict, str]:
+def _build_payload(
+    mismatch: bool = False,
+    *,
+    execution_domain: str | None = " sim ",
+    include_as_of: bool = True,
+    as_of_value: str = "2025-01-01T00:00:00Z",
+) -> tuple[StrategySubmit, dict, str]:
     node_type = "TagQueryNode"
     code_hash = "code"
     config_hash = "config"
@@ -149,9 +156,14 @@ def _build_payload(mismatch: bool = False) -> tuple[StrategySubmit, dict, str]:
     }
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     crc = crc32_of_list([node_id])
+    meta: dict[str, object] = {}
+    if execution_domain is not None:
+        meta["execution_domain"] = execution_domain
+    if include_as_of:
+        meta["as_of"] = as_of_value
     payload = StrategySubmit(
         dag_json=dag_json,
-        meta={"execution_domain": " sim "},
+        meta=meta or None,
         world_id="world-1",
         node_ids_crc32=crc,
     )
@@ -181,6 +193,13 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
     assert queues and queues[0]["queue"] == "world-1:alpha"
     assert database.bindings == [("world-1", "strategy-abc")]
     assert dagmanager.diff_calls, "diff should be invoked for sentinel lookup"
+    strategy_id, world_id, domain, as_of, partition, dataset_fingerprint = dagmanager.diff_calls[0]
+    assert strategy_id == "strategy-abc"
+    assert domain == "backtest"
+    assert as_of == "2025-01-01T00:00:00Z"
+    assert partition is None
+    assert dataset_fingerprint is None
+    assert dagmanager.tag_queries[0][-1] == "backtest"
 
 
 @pytest.mark.asyncio
@@ -206,6 +225,64 @@ async def test_process_dry_run_prefers_diff_queue_map():
     assert result.queue_map == {"node123": [{"queue": "topic-A", "global": False}]}
     assert not dagmanager.tag_queries, "diff path should avoid tag query lookups"
     assert result.sentinel_id == "diff-sentinel"
+
+
+@pytest.mark.asyncio
+async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
+    metrics.reset_metrics()
+    dagmanager = DummyDagManager()
+    helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
+    payload, _, expected_node_id = _build_payload(
+        execution_domain="dryrun",
+        include_as_of=False,
+    )
+
+    result = await helper.process(
+        payload,
+        StrategySubmissionConfig(
+            submit=False,
+            strategy_id="dryrun",
+            diff_timeout=0.3,
+        ),
+    )
+
+    assert result.queue_map.keys() == {expected_node_id}
+    assert dagmanager.diff_calls
+    _, _, domain, as_of, _, _ = dagmanager.diff_calls[0]
+    assert domain == "backtest"
+    assert as_of is None
+    assert dagmanager.tag_queries[0][-1] == "backtest"
+    metric_value = (
+        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+    )
+    assert metric_value == 1
+
+
+@pytest.mark.asyncio
+async def test_process_dryrun_synonym_with_as_of_keeps_domain():
+    metrics.reset_metrics()
+    dagmanager = DummyDagManager()
+    helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
+    payload, _, _ = _build_payload(execution_domain="paper")
+
+    await helper.process(
+        payload,
+        StrategySubmissionConfig(
+            submit=False,
+            strategy_id="dryrun",
+            diff_timeout=0.3,
+        ),
+    )
+
+    assert dagmanager.diff_calls
+    _, _, domain, as_of, _, _ = dagmanager.diff_calls[0]
+    assert domain == "dryrun"
+    assert as_of == "2025-01-01T00:00:00Z"
+    assert dagmanager.tag_queries[0][-1] == "dryrun"
+    metric_value = (
+        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+    )
+    assert metric_value == 0
 
 
 @pytest.mark.asyncio

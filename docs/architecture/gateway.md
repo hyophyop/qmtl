@@ -142,10 +142,22 @@ Content‑Encoding: gzip
 Content‑Type: application/json
 {
   "dag_json": "<base64>",
-  "meta": { "user": "quant.alice", "desc": "BTC scalper" },
+  "meta": {
+    "user": "quant.alice",
+    "desc": "BTC scalper",
+    "execution_domain": "backtest",
+    "as_of": "2025-01-01T00:00:00Z",
+    "partition": "tenant-a"
+  },
   "world_ids": ["crypto_mom_1h", "crypto_alt_1h"]  // or legacy single field: "world_id"
 }
 ```
+
+> **Backtests & dry-runs:** When `meta.execution_domain` resolves to `backtest` or
+> `dryrun` (including aliases such as `compute-only`, `paper`, or `sim`), callers
+> MUST include `meta.as_of`. Gateway downgrades missing values to compute-only
+> backtests and records the event via `strategy_compute_context_downgrade_total{
+> reason="missing_as_of"}` to prevent dataset cross-contamination.
 
 **Example Queue Lookup**
 

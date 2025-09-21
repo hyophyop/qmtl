@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from fastapi import HTTPException
 
+from . import metrics as gw_metrics
 from .models import StrategySubmit
 
 
@@ -35,6 +37,31 @@ class StrategySubmissionResult:
 
 class StrategySubmissionHelper:
     """Normalize DAG processing for ingestion and dry-run endpoints."""
+
+    _BACKTEST_TOKENS = {
+        "backtest",
+        "backtesting",
+        "compute",
+        "computeonly",
+        "offline",
+        "sandbox",
+        "sim",
+        "simulation",
+        "simulated",
+        "validate",
+        "validation",
+    }
+    _DRYRUN_TOKENS = {
+        "dryrun",
+        "dryrunmode",
+        "papermode",
+        "paper",
+        "papertrade",
+        "papertrading",
+        "papertrader",
+    }
+    _LIVE_TOKENS = {"live", "prod", "production"}
+    _SHADOW_TOKENS = {"shadow"}
 
     def __init__(self, manager, dagmanager, database) -> None:
         self._manager = manager
@@ -157,17 +184,28 @@ class StrategySubmissionHelper:
         self, payload: StrategySubmit
     ) -> dict[str, str | None]:
         meta = payload.meta if isinstance(payload.meta, dict) else {}
+        raw_domain = self._normalize_context_value(
+            meta.get("execution_domain") if meta else None
+        )
+        execution_domain = self._resolve_execution_domain(raw_domain)
+        as_of = self._normalize_context_value(meta.get("as_of") if meta else None)
+        partition = self._normalize_context_value(meta.get("partition") if meta else None)
+        dataset_fingerprint = self._normalize_context_value(
+            meta.get("dataset_fingerprint") if meta else None
+        )
+
+        if execution_domain in {"backtest", "dryrun"} and not as_of:
+            gw_metrics.strategy_compute_context_downgrade_total.labels(
+                reason="missing_as_of"
+            ).inc()
+            if execution_domain == "dryrun":
+                execution_domain = "backtest"
+
         return {
-            "execution_domain": self._normalize_context_value(
-                meta.get("execution_domain") if meta else None
-            ),
-            "as_of": self._normalize_context_value(meta.get("as_of") if meta else None),
-            "partition": self._normalize_context_value(
-                meta.get("partition") if meta else None
-            ),
-            "dataset_fingerprint": self._normalize_context_value(
-                meta.get("dataset_fingerprint") if meta else None
-            ),
+            "execution_domain": execution_domain,
+            "as_of": as_of,
+            "partition": partition,
+            "dataset_fingerprint": dataset_fingerprint,
         }
 
     def _normalize_context_value(self, value: object | None) -> str | None:
@@ -177,6 +215,23 @@ class StrategySubmissionHelper:
             text = str(value).strip()
             return text or None
         return None
+
+    def _resolve_execution_domain(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        lowered = value.lower()
+        segments = re.split(r"[/:]", lowered)
+        for segment in segments:
+            token = re.sub(r"[\s_-]+", "", segment)
+            if token in self._BACKTEST_TOKENS:
+                return "backtest"
+            if token in self._DRYRUN_TOKENS:
+                return "dryrun"
+            if token in self._LIVE_TOKENS:
+                return "live"
+            if token in self._SHADOW_TOKENS:
+                return "shadow"
+        return lowered
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
         from qmtl.common import crc32_of_list, compute_node_id

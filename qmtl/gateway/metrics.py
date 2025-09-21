@@ -113,6 +113,13 @@ worlds_compute_context_downgrade_total = Counter(
     registry=global_registry,
 )
 
+strategy_compute_context_downgrade_total = Counter(
+    "strategy_compute_context_downgrade_total",
+    "Total number of strategy submissions downgraded due to missing fields",
+    ["reason"],
+    registry=global_registry,
+)
+
 # Circuit breaker metrics for WorldService
 worlds_breaker_state = Gauge(
     "worlds_breaker_state",
@@ -474,6 +481,7 @@ def reset_metrics() -> None:
     worlds_stale_responses_total._value.set(0)  # type: ignore[attr-defined]
     worlds_stale_responses_total._val = 0  # type: ignore[attr-defined]
     worlds_compute_context_downgrade_total.clear()
+    strategy_compute_context_downgrade_total.clear()
     _worlds_samples.clear()
     worlds_breaker_state.set(0)
     worlds_breaker_state._val = 0  # type: ignore[attr-defined]
