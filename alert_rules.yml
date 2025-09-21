@@ -70,7 +70,7 @@ prometheus:
           annotations:
             summary: Sentinel traffic skew persists beyond 5s
         - alert: CrossContextCacheHit
-          expr: increase(cross_context_cache_hit_total[1m]) > 0
+          expr: cross_context_cache_hit_total > 0
           for: 0m
           labels:
             severity: critical
