@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Dict
 
 
 from ..proto import dagmanager_pb2, dagmanager_pb2_grpc
 from ..common import AsyncCircuitBreaker
+from qmtl.dagmanager.topic import (
+    build_namespace,
+    ensure_namespace,
+    normalize_namespace,
+    topic_namespace_enabled,
+)
 from . import metrics as gw_metrics
 
 
@@ -106,6 +113,26 @@ class DagManagerClient:
         except Exception:
             return False
 
+    def _infer_namespace(
+        self, dag_json: str, world_id: str | None
+    ) -> tuple[str | None, str | None]:
+        namespace: str | None = None
+        execution_domain: str | None = None
+        try:
+            data = json.loads(dag_json)
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            meta = data.get("meta")
+            if isinstance(meta, dict):
+                namespace = normalize_namespace(meta.get("topic_namespace"))
+                raw_domain = meta.get("execution_domain")
+                if isinstance(raw_domain, str) and raw_domain.strip():
+                    execution_domain = raw_domain.strip()
+        if not namespace and world_id:
+            namespace = build_namespace(world_id, execution_domain)
+        return namespace, execution_domain
+
     async def diff(
         self,
         strategy_id: str,
@@ -121,11 +148,20 @@ class DagManagerClient:
 
         Returns ``None`` when the request ultimately fails or the circuit is
         open."""
+
+        namespace: str | None = None
+        domain: str | None = execution_domain
+        if topic_namespace_enabled():
+            inferred_ns, inferred_domain = self._infer_namespace(dag_json, world_id)
+            namespace = inferred_ns
+            if not domain and inferred_domain:
+                domain = inferred_domain
+
         request = dagmanager_pb2.DiffRequest(
             strategy_id=strategy_id,
             dag_json=dag_json,
             world_id=world_id or "",
-            execution_domain=execution_domain or "",
+            execution_domain=(domain or ""),
             as_of=as_of or "",
             partition=partition or "",
             dataset_fingerprint=dataset_fingerprint or "",
@@ -152,12 +188,27 @@ class DagManagerClient:
                                 sentinel_id=chunk.sentinel_id, chunk_id=0
                             )
                         )
-                    return dagmanager_pb2.DiffChunk(
+                    result_chunk = dagmanager_pb2.DiffChunk(
                         queue_map=queue_map,
                         sentinel_id=sentinel_id,
                         buffer_nodes=buffer_nodes,
                         version=version,
                     )
+                    if topic_namespace_enabled():
+                        applied_namespace = namespace
+                        if not applied_namespace and world_id:
+                            applied_namespace = build_namespace(
+                                world_id,
+                                domain or "dryrun",
+                            )
+                        if applied_namespace:
+                            result_chunk.queue_map.update(
+                                {
+                                    k: ensure_namespace(v, applied_namespace)
+                                    for k, v in result_chunk.queue_map.items()
+                                }
+                            )
+                    return result_chunk
                 except Exception:
                     if attempt == retries - 1:
                         raise
@@ -172,10 +223,6 @@ class DagManagerClient:
         else:
             self._breaker.reset()
             gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
-            if result and world_id:
-                result.queue_map.update(
-                    {k: f"w/{world_id}/{v}" for k, v in result.queue_map.items()}
-                )
             return result
 
     async def get_queues_by_tag(
@@ -184,6 +231,7 @@ class DagManagerClient:
         interval: int,
         match_mode: str = "any",
         world_id: str | None = None,
+        execution_domain: str | None = None,
     ) -> list[dict[str, object]]:
         """Return queue descriptors matching ``tags`` and ``interval``.
 
@@ -205,6 +253,10 @@ class DagManagerClient:
             tags=tags, interval=interval, match_mode=match_mode
         )
 
+        namespace: str | None = None
+        if topic_namespace_enabled() and world_id:
+            namespace = build_namespace(world_id, execution_domain or "dryrun")
+
         @self._breaker
         async def _call() -> list[dict[str, object]]:
             self._ensure_channel()
@@ -214,7 +266,7 @@ class DagManagerClient:
                     response = await self._tag_stub.GetQueues(request)
                     return [
                         {
-                            "queue": f"w/{world_id}/{q.queue}" if world_id else q.queue,
+                            "queue": ensure_namespace(q.queue, namespace),
                             "global": getattr(q, "global"),
                         }
                         for q in response.queues

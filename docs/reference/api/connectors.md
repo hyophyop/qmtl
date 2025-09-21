@@ -2,7 +2,7 @@
 title: "Live & Brokerage Connectors"
 tags: [api]
 author: "QMTL Team"
-last_modified: 2025-09-09
+last_modified: 2025-09-22
 ---
 
 {{ nav_links() }}
@@ -145,14 +145,16 @@ await fake.stop()
 Minimal env configuration for a live run:
 
 ```bash
-export QMTL_TRADE_MODE=live
+export QMTL_EXECUTION_DOMAIN=live
 export QMTL_BROKER_URL=https://broker/api/orders
 export QMTL_TRADE_MAX_RETRIES=3
 export QMTL_TRADE_BACKOFF=0.1
 export QMTL_WS_URL=wss://gateway/ws
+# Optional legacy compatibility (maps "paper" → "dryrun")
+export QMTL_TRADE_MODE=live
 ```
 
-Example strategy: `qmtl/examples/strategies/paper_live_switch_strategy.py` reads these variables to switch between paper and live.
+Example strategy: `qmtl/examples/strategies/dryrun_live_switch_strategy.py` reads these variables to switch between dryrun and live domains.
 
 YAML integration: you can mirror these settings in your project config and load them before constructing clients. The SDK does not enforce a specific YAML schema.
 

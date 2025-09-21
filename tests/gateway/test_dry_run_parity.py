@@ -36,7 +36,9 @@ class DummyDagClient:
             ]
         }
 
-    async def get_queues_by_tag(self, tags, interval, match_mode="any", world_id=None):
+    async def get_queues_by_tag(
+        self, tags, interval, match_mode="any", world_id=None, execution_domain=None
+    ):
         # Mirror the diff-produced topics
         return list(self._queues.get(_TAGQUERY_NODE_ID, []))
 

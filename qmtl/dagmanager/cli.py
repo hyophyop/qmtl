@@ -63,11 +63,19 @@ class _MemQueue(QueueManager):
         version: str,
         *,
         dry_run: bool = False,
+        namespace: object | None = None,
     ) -> str:
-        key = (asset, node_type, code_hash, version, dry_run)
+        key = (asset, node_type, code_hash, version, dry_run, namespace)
         topic = self.topics.get(key)
         if not topic:
-            topic = topic_name(asset, node_type, code_hash, version, dry_run=dry_run)
+            topic = topic_name(
+                asset,
+                node_type,
+                code_hash,
+                version,
+                dry_run=dry_run,
+                namespace=namespace,
+            )
             self.topics[key] = topic
         return topic
 

@@ -39,6 +39,7 @@ from qmtl.sdk import metrics as sdk_metrics
 from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway.commit_log import CommitLogWriter
 import asyncio
+from qmtl.transforms.execution_nodes import activation_blocks_order
 
 
 class PreTradeGateNode(ProcessingNode):
@@ -295,6 +296,8 @@ class OrderPublishNode(ProcessingNode):
         if not data:
             return None
         ts, order = data[-1]
+        if activation_blocks_order(order):
+            return order
         self._publish_commit_log(ts, order)
         self._publish_gateway(order)
         try:

@@ -225,28 +225,35 @@ def create_api_router(
         node_ids: list[str] = []
         queries: list[Coroutine[Any, Any, list[str]]] = []
         query_targets: list[tuple[str, str | None]] = []  # (node_id, world_id)
+        exec_domain: str | None = None
+        if isinstance(payload.meta, dict):
+            raw_domain = payload.meta.get("execution_domain")
+            if isinstance(raw_domain, str) and raw_domain.strip():
+                exec_domain = raw_domain.strip()
+
         for node in dag.get("nodes", []):
-            if node.get("node_type") == "TagQueryNode":
-                tags = node.get("tags", [])
-                interval = int(node.get("interval", 0))
-                match_mode = node.get("match_mode", "any")
-                nid = node["node_id"]
-                node_ids.append(nid)
-                if worlds:
-                    for w in worlds:
-                        queries.append(
-                            dagmanager.get_queues_by_tag(
-                                tags, interval, match_mode, w
-                            )
-                        )
-                        query_targets.append((nid, w))
-                else:
+            if node.get("node_type") != "TagQueryNode":
+                continue
+            tags = node.get("tags", [])
+            interval = int(node.get("interval", 0))
+            match_mode = node.get("match_mode", "any")
+            nid = node["node_id"]
+            node_ids.append(nid)
+            if worlds:
+                for w in worlds:
                     queries.append(
                         dagmanager.get_queues_by_tag(
-                            tags, interval, match_mode, payload.world_id
+                            tags, interval, match_mode, w, exec_domain
                         )
                     )
-                    query_targets.append((nid, payload.world_id))
+                    query_targets.append((nid, w))
+            else:
+                queries.append(
+                    dagmanager.get_queues_by_tag(
+                        tags, interval, match_mode, payload.world_id, exec_domain
+                    )
+                )
+                query_targets.append((nid, payload.world_id))
 
         results = []
         if queries:
@@ -401,14 +408,14 @@ def create_api_router(
                         for w in worlds:
                             queries.append(
                                 dagmanager.get_queues_by_tag(
-                                    tags, interval, match_mode, w
+                                    tags, interval, match_mode, w, exec_domain
                                 )
                             )
                             query_targets.append((nid, w))
                     else:
                         queries.append(
                             dagmanager.get_queues_by_tag(
-                                tags, interval, match_mode, payload.world_id
+                                tags, interval, match_mode, payload.world_id, exec_domain
                             )
                         )
                         query_targets.append((nid, payload.world_id))

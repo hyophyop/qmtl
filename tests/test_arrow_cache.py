@@ -5,6 +5,7 @@ from qmtl.sdk import arrow_cache
 from qmtl.sdk.cache_view import CacheView
 
 from qmtl.sdk import ProcessingNode, StreamInput
+from qmtl.sdk import metrics as sdk_metrics
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),
@@ -98,3 +99,22 @@ def test_arrow_cache_view_iteration_benchmark():
     assert total == total2
     # Allow slight variance in timing to avoid flakiness
     assert arrow_duration <= list_duration * 1.5
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_arrow_cache_compute_context_switch_records_metric():
+    sdk_metrics.reset_metrics()
+    cache = arrow_cache.NodeCacheArrow(period=2)
+    cache.activate_compute_key("old", node_id="node", world_id="w", execution_domain="backtest")
+    cache.append("u1", 60, 60, {"v": 1})
+    cache.append("u1", 60, 120, {"v": 2})
+    assert cache.get_slice("u1", 60, count=2)[-1][0] == 120
+
+    cache.activate_compute_key("new", node_id="node", world_id="w", execution_domain="live")
+    assert cache.get_slice("u1", 60, count=2) == []
+
+    cache.append("u1", 60, 180, {"v": 3})
+    assert cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
+
+    key = ("node", "w", "live")
+    assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1

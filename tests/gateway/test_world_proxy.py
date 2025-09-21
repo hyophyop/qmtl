@@ -54,6 +54,105 @@ async def test_decide_ttl_cache(fake_redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode, expected",
+    [
+        ("validate", "backtest"),
+        ("compute-only", "backtest"),
+        ("paper", "dryrun"),
+        ("live", "live"),
+        ("shadow", "shadow"),
+        ("ACTIVE", "live"),
+        ("unknown", "backtest"),
+    ],
+)
+async def test_decide_compute_context_mapping(fake_redis, mode, expected):
+    metrics.reset_metrics()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            body = {
+                "world_id": "world-alpha",
+                "policy_version": 3,
+                "effective_mode": mode,
+                "as_of": "2025-01-01T00:00:00Z",
+                "ttl": "300s",
+                "etag": "w:world-alpha:v3",
+                "partition": "tenant-a",
+                "dataset_fingerprint": "lake:blake3:abc",
+            }
+            return httpx.Response(200, json=body)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            resp = await api_client.get("/worlds/world-alpha/decide")
+
+    await client._client.aclose()
+    data = resp.json()
+    assert data["execution_domain"] == expected
+    context = data["compute_context"]
+    assert context["world_id"] == "world-alpha"
+    assert context["execution_domain"] == expected
+    assert context["as_of"] == "2025-01-01T00:00:00Z"
+    assert context["partition"] == "tenant-a"
+    assert context["dataset_fingerprint"] == "lake:blake3:abc"
+    assert "downgraded" not in context
+
+
+@pytest.mark.asyncio
+async def test_decide_compute_context_downgrade_missing_as_of(fake_redis):
+    metrics.reset_metrics()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            body = {
+                "world_id": "world-beta",
+                "policy_version": 1,
+                "effective_mode": "paper",
+                "ttl": "300s",
+                "etag": "w:world-beta:v1",
+            }
+            return httpx.Response(200, json=body)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient("http://world", client=httpx.AsyncClient(transport=transport))
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        world_client=client,
+        enable_background=False,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as api_client:
+            resp = await api_client.get("/worlds/world-beta/decide")
+
+    await client._client.aclose()
+    data = resp.json()
+    assert data["execution_domain"] == "backtest"
+    context = data["compute_context"]
+    assert context["execution_domain"] == "backtest"
+    assert context["as_of"] is None
+    assert context["downgraded"] is True
+    assert context["downgrade_reason"] == "missing_as_of"
+    metric_value = (
+        metrics.worlds_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+    )
+    assert metric_value == 1
+
+
+@pytest.mark.asyncio
 async def test_activation_etag_cache(fake_redis):
     call_count = {"n": 0}
 

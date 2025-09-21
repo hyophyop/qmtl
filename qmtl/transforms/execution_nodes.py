@@ -12,7 +12,7 @@ Currently includes:
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, Any
 
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
@@ -131,4 +131,54 @@ class SizingNode(Node):
         return order
 
 
-__all__ = ["PreTradeGateNode", "SizingNode"]
+def _infer_activation_side(order: Mapping[str, Any]) -> str | None:
+    """Infer order side for activation gating."""
+
+    side = order.get("side")
+    if side is not None:
+        s = str(side).lower()
+        if s in {"buy", "long"}:
+            return "buy"
+        if s in {"sell", "short"}:
+            return "sell"
+
+    qty = order.get("quantity")
+    if qty is not None:
+        try:
+            return "buy" if float(qty) >= 0 else "sell"
+        except (TypeError, ValueError):
+            pass
+
+    for key in ("value", "percent", "target_percent"):
+        val = order.get(key)
+        if val is not None:
+            try:
+                return "buy" if float(val) >= 0 else "sell"
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def activation_blocks_order(order: Mapping[str, Any]) -> bool:
+    """Return ``True`` when the global ActivationManager gates the order."""
+
+    try:
+        from qmtl.sdk.runner import Runner  # Late import to avoid cycle
+    except Exception:
+        return False
+
+    am = Runner._activation_manager
+    if am is None:
+        return False
+
+    side = _infer_activation_side(order)
+    if side is None:
+        return False
+
+    try:
+        return not am.allow_side(side)
+    except Exception:
+        return False
+
+
+__all__ = ["PreTradeGateNode", "SizingNode", "activation_blocks_order"]
