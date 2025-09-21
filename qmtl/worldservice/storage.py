@@ -307,6 +307,7 @@ class Storage:
                 raise RuntimeError("transition run_id mismatch")
             state.freeze = False
             state.drain = False
+            state.pending = None
             state.phase = "steady"
             state.last_transition_at = now
             updates = self._touch_activation_entries(
