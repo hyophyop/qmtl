@@ -7,11 +7,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from pydantic import ValidationError
 from qmtl.sdk.node import MatchMode
 
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
+from .event_models import SentinelWeightData
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ class ControlBusConsumer:
         self._task: asyncio.Task | None = None
         self._broker_task: asyncio.Task | None = None
         self._consumer: Any | None = None
-        self._last_seen: dict[tuple[str, str], tuple[str, str]] = {}
+        self._last_seen: dict[tuple[str, str], tuple[Any, ...]] = {}
         # Track discovered tag+interval combinations to emit upsert events
         self._known_tag_intervals: set[tuple[tuple[str, ...], int]] = set()
 
@@ -199,6 +201,12 @@ class ControlBusConsumer:
         key = (msg.topic, msg.key)
         if msg.topic == "policy":
             marker = (msg.data.get("checksum"), msg.data.get("policy_version"))
+        elif msg.topic == "sentinel_weight":
+            marker = (
+                msg.data.get("sentinel_id"),
+                msg.data.get("weight"),
+                msg.data.get("version"),
+            )
         else:
             marker = (msg.etag, msg.run_id)
         if self._last_seen.get(key) == marker:
@@ -207,6 +215,23 @@ class ControlBusConsumer:
         self._last_seen[key] = marker
 
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
+
+        if msg.topic == "sentinel_weight":
+            try:
+                payload = SentinelWeightData.model_validate(msg.data)
+            except ValidationError as exc:
+                logger.warning("invalid sentinel_weight payload: %s", exc)
+                return
+            sentinel_id = payload.sentinel_id
+            weight = float(payload.weight)
+            try:
+                gw_metrics.record_sentinel_weight_update(sentinel_id)
+                gw_metrics.set_sentinel_traffic_ratio(sentinel_id, weight)
+            except Exception:
+                logger.exception("failed to update sentinel weight metrics", exc_info=True)
+            if self.ws_hub:
+                await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
+            return
 
         if not self.ws_hub:
             return
