@@ -17,7 +17,6 @@ from prometheus_client import (
 _e2e_samples: Deque[float] = deque(maxlen=100)
 _worlds_samples: Deque[float] = deque(maxlen=100)
 _sentinel_weight_updates: dict[str, float] = {}
-_legacy_nodeid_snapshot: dict[str, object] = {}
 
 _WORLD_ID = "default"
 
@@ -55,19 +54,6 @@ commit_invalid_total = Counter(
 owner_reassign_total = Counter(
     "owner_reassign_total",
     "Total number of lease owner changes mid-bucket",
-    registry=global_registry,
-)
-
-# Canonical NodeID mismatch (scaffold metric during migration)
-nodeid_canon_mismatch_total = Counter(
-    "nodeid_canon_mismatch_total",
-    "Number of nodes where canonical NodeID (spec) differs from 4-field ID",
-    registry=global_registry,
-)
-
-legacy_nodeid_strategy_total = Counter(
-    "legacy_nodeid_strategy_total",
-    "Number of strategies accepted with legacy NodeIDs during migration",
     registry=global_registry,
 )
 
@@ -422,23 +408,6 @@ def record_event_fanout(topic: str, recipients: int) -> None:
     event_fanout_total.labels(topic=topic).inc(recipients)
 
 
-def record_legacy_nodeid_strategy(strategy_id: str, node_ids: list[str]) -> None:
-    """Record acceptance of a strategy containing legacy NodeIDs."""
-
-    legacy_nodeid_strategy_total.inc()
-    legacy_nodeid_strategy_total._val = legacy_nodeid_strategy_total._value.get()  # type: ignore[attr-defined]
-    _legacy_nodeid_snapshot.clear()
-    _legacy_nodeid_snapshot.update(
-        {"strategy_id": strategy_id, "node_ids": list(node_ids)}
-    )
-
-
-def get_last_legacy_nodeid_strategy() -> dict[str, object]:
-    """Return snapshot of the most recent legacy NodeID submission."""
-
-    return dict(_legacy_nodeid_snapshot)
-
-
 def update_ws_subscribers(counts: dict[str, int]) -> None:
     """Update active WebSocket subscriber counts per topic."""
     ws_subscribers.clear()
@@ -518,9 +487,6 @@ def reset_metrics() -> None:
     ws_disconnects_total._value.set(0)  # type: ignore[attr-defined]
     ws_auth_failures_total._value.set(0)  # type: ignore[attr-defined]
     ws_heartbeats_total._value.set(0)  # type: ignore[attr-defined]
-    legacy_nodeid_strategy_total._value.set(0)  # type: ignore[attr-defined]
-    legacy_nodeid_strategy_total._val = 0  # type: ignore[attr-defined]
-    _legacy_nodeid_snapshot.clear()
     ws_acks_total._value.set(0)  # type: ignore[attr-defined]
     ws_refreshes_total._value.set(0)  # type: ignore[attr-defined]
     ws_refresh_failures_total._value.set(0)  # type: ignore[attr-defined]

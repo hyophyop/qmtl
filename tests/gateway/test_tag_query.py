@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import asyncio
 
 from qmtl.gateway.api import create_app, Database
-from qmtl.common import crc32_of_list
+from qmtl.common import crc32_of_list, compute_node_id
 from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.dagmanager.grpc_server import serve
 from qmtl.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
@@ -126,12 +126,13 @@ def test_submit_tag_query_node(client):
     dag_json = {
         "nodes": [
             {
-                "node_id": "N1",
+                "node_id": _TAGQUERY_ID,
                 "node_type": "TagQueryNode",
                 "interval": 60,
                 "period": 2,
                 "tags": ["t1"],
                 "code_hash": "ch",
+                "config_hash": "cfg",
                 "schema_hash": "sh",
                 "inputs": [],
             }
@@ -140,12 +141,12 @@ def test_submit_tag_query_node(client):
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
-        "node_ids_crc32": crc32_of_list(["N1"]),
+        "node_ids_crc32": crc32_of_list([_TAGQUERY_ID]),
     }
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202
     assert resp.json()["queue_map"] == {
-        "N1": [
+        _TAGQUERY_ID: [
             {"queue": "q1", "global": False},
             {"queue": "q2", "global": False},
         ]
@@ -173,22 +174,24 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         dag_json = {
             "nodes": [
                 {
-                    "node_id": "N1",
+                    "node_id": _TAGQUERY_ID,
                     "node_type": "TagQueryNode",
                     "interval": 60,
                     "period": 2,
                     "tags": ["good"],
                     "code_hash": "ch",
+                    "config_hash": "cfg",
                     "schema_hash": "sh",
                     "inputs": [],
                 },
                 {
-                    "node_id": "N2",
+                    "node_id": _TAGQUERY_ALT_ID,
                     "node_type": "TagQueryNode",
                     "interval": 30,
                     "period": 2,
                     "tags": ["bad"],
                     "code_hash": "ch",
+                    "config_hash": "cfg2",
                     "schema_hash": "sh",
                     "inputs": [],
                 },
@@ -197,13 +200,13 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
         payload = {
             "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
             "meta": None,
-            "node_ids_crc32": crc32_of_list(["N1", "N2"]),
+            "node_ids_crc32": crc32_of_list([_TAGQUERY_ID, _TAGQUERY_ALT_ID]),
         }
         resp = c.post("/strategies", json=payload)
         assert resp.status_code == 202
         assert resp.json()["queue_map"] == {
-            "N1": [{"queue": "good_q", "global": False}],
-            "N2": [],
+            _TAGQUERY_ID: [{"queue": "good_q", "global": False}],
+            _TAGQUERY_ALT_ID: [],
         }
         assert len(dag.calls) == 2
     asyncio.run(dag.close())
@@ -260,3 +263,5 @@ def test_repository_match_modes():
     assert "any(" in driver.last_query.lower()
     repo.get_queues_by_tag(["a"], 60, "all")
     assert "all(" in driver.last_query.lower()
+_TAGQUERY_ID = compute_node_id("TagQueryNode", "ch", "cfg", "sh")
+_TAGQUERY_ALT_ID = compute_node_id("TagQueryNode", "ch", "cfg2", "sh")

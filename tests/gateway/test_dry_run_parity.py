@@ -5,8 +5,11 @@ from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.common import crc32_of_list
+from qmtl.common import crc32_of_list, compute_node_id
 from qmtl.proto import dagmanager_pb2
+
+
+_TAGQUERY_NODE_ID = compute_node_id("TagQueryNode", "c", "cfg", "s")
 
 
 class FakeDB(Database):
@@ -26,7 +29,7 @@ class FakeDB(Database):
 class DummyDagClient:
     def __init__(self):
         self._queues = {
-            "N1": [
+            _TAGQUERY_NODE_ID: [
                 {"queue": "q1", "global": False},
                 {"queue": "q2", "global": False},
             ]
@@ -34,12 +37,15 @@ class DummyDagClient:
 
     async def get_queues_by_tag(self, tags, interval, match_mode="any", world_id=None):
         # Mirror the diff-produced topics
-        return list(self._queues.get("N1", []))
+        return list(self._queues.get(_TAGQUERY_NODE_ID, []))
 
     async def diff(self, strategy_id: str, dag_json: str, *, world_id: str | None = None):
         # Return a single-chunk result mapping to topics used above
         return dagmanager_pb2.DiffChunk(
-            queue_map={"N1:0:0": "q1", "N1:0:1": "q2"},
+            queue_map={
+                f"{_TAGQUERY_NODE_ID}:0:0": "q1",
+                f"{_TAGQUERY_NODE_ID}:0:1": "q2",
+            },
             sentinel_id="s-123",
         )
 
@@ -62,11 +68,12 @@ def test_dry_run_matches_submit_queue_map_and_sentinel(fake_redis):
         dag = {
             "nodes": [
                 {
-                    "node_id": "N1",
+                    "node_id": _TAGQUERY_NODE_ID,
                     "node_type": "TagQueryNode",
                     "interval": 60,
                     "tags": ["t1"],
                     "code_hash": "c",
+                    "config_hash": "cfg",
                     "schema_hash": "s",
                     "inputs": [],
                 }

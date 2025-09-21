@@ -638,6 +638,7 @@ class Node:
             "tags": list(self.tags),
             "inputs": [n.node_id for n in self.inputs],
             "code_hash": self.code_hash,
+            "config_hash": self.config_hash,
             "schema_hash": self.schema_hash,
             "pre_warmup": self.pre_warmup,
             "expected_schema": self.expected_schema,
