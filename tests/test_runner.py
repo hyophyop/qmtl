@@ -699,6 +699,22 @@ def test_cli_disable_ray(monkeypatch):
     assert runtime.NO_RAY
 
 
+def test_runner_defaults_to_live_when_gateway(monkeypatch):
+    Runner.set_default_context(None)
+    monkeypatch.setattr(Runner, "_trade_mode", "simulate", raising=False)
+
+    resolved, force_offline = Runner._resolve_context(
+        context=None,
+        execution_mode=None,
+        offline_requested=False,
+        gateway_url="http://gw",
+    )
+
+    assert resolved["execution_mode"] == "live"
+    assert resolved["clock"] == "wall"
+    assert not force_offline
+
+
 def test_runner_missing_dataset_forces_compute_only(monkeypatch, caplog):
     Runner.set_default_context(None)
 

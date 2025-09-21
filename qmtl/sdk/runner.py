@@ -120,7 +120,12 @@ class Runner:
         resolved = cls._merge_context(context=context, execution_mode=execution_mode)
         mode = resolved.get("execution_mode")
         if mode is None:
-            mode = "live" if cls._trade_mode == "live" and not offline_requested else "backtest"
+            if cls._trade_mode == "live" and not offline_requested:
+                mode = "live"
+            elif gateway_url and not offline_requested:
+                mode = "live"
+            else:
+                mode = "backtest"
         mode = str(mode).lower()
         if mode not in {"backtest", "dryrun", "live"}:
             raise ValueError("execution_mode must be one of 'backtest', 'dryrun', or 'live'")
