@@ -107,6 +107,7 @@ async def _main(argv: list[str] | None = None) -> None:
         worldservice_retries=config.worldservice_retries,
         enable_worldservice_proxy=config.enable_worldservice_proxy,
         enforce_live_guard=enforce_live_guard,
+        accept_legacy_nodeids=config.accept_legacy_nodeids,
     )
     db = app.state.database
     if hasattr(db, "connect"):

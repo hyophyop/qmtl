@@ -39,6 +39,16 @@ from .world_client import WorldServiceClient
 logger = logging.getLogger(__name__)
 
 
+LEGACY_NODEID_SUNSET = "Mon, 01 Dec 2025 00:00:00 GMT"
+LEGACY_NODEID_NOTICE_MESSAGE = (
+    "Legacy NodeIDs accepted; canonical IDs required by 2025-12-01."
+)
+LEGACY_NODEID_WARNING_HEADER = (
+    '299 qmtl.gateway "Legacy NodeIDs accepted; canonical IDs required by 2025-12-01. '
+    'See docs/architecture/gateway.md#nodeid-deprecation-window."'
+)
+
+
 def create_api_router(
     manager: StrategyManager,
     redis_conn,
@@ -49,7 +59,8 @@ def create_api_router(
     world_client: Optional[WorldServiceClient],
     enforce_live_guard: bool,
     fill_producer: Any | None = None,
-
+    *,
+    accept_legacy_nodeids: bool = True,
 ) -> APIRouter:
 
     router = APIRouter()
@@ -79,7 +90,9 @@ def create_api_router(
         status_code=status.HTTP_202_ACCEPTED,
         response_model=StrategyAck,
     )
-    async def post_strategies(payload: StrategySubmit) -> StrategyAck:
+    async def post_strategies(
+        payload: StrategySubmit, response: Response
+    ) -> StrategyAck:
         start = time.perf_counter()
         try:
             dag_bytes = base64.b64decode(payload.dag_json)
@@ -111,6 +124,16 @@ def create_api_router(
             )
 
         mismatches: list[dict[str, str | int]] = []
+        legacy_nodes: list[dict[str, str | int]] = []
+        legacy_node_ids: list[str] = []
+        legacy_node_id_set: set[str] = set()
+        canonical_fn: Any | None = None
+        try:
+            from qmtl.common.nodespec import canonical_node_id as _canonical_node_id
+
+            canonical_fn = _canonical_node_id
+        except Exception:
+            canonical_fn = None
         for idx, node in enumerate(dag.get("nodes", [])):
             if node.get("node_type") == "TagQueryNode":
                 continue
@@ -124,15 +147,31 @@ def create_api_router(
                 continue
             expected = compute_node_id(*required)
             nid = node.get("node_id")
-            # Compute canonical NodeID from NodeSpec for comparison (non-enforcing)
-            try:
-                from qmtl.common.nodespec import canonical_node_id as _canon_id
-
-                canon = _canon_id(node)
-                if isinstance(nid, str) and nid == expected and nid != canon:
-                    gw_metrics.nodeid_canon_mismatch_total.inc()
-            except Exception:
-                pass
+            canon: str | None = None
+            if callable(canonical_fn):
+                try:
+                    canon = str(canonical_fn(node))
+                except Exception:
+                    canon = None
+            if (
+                isinstance(nid, str)
+                and canon is not None
+                and nid == expected
+                and nid != canon
+            ):
+                gw_metrics.nodeid_canon_mismatch_total.inc()
+                if accept_legacy_nodeids:
+                    if nid not in legacy_node_id_set:
+                        legacy_node_id_set.add(nid)
+                        legacy_node_ids.append(nid)
+                    legacy_nodes.append(
+                        {"index": idx, "node_id": nid, "canonical": canon}
+                    )
+                else:
+                    mismatches.append(
+                        {"index": idx, "node_id": nid, "expected": canon}
+                    )
+                    continue
             if nid != expected:
                 mismatches.append(
                     {"index": idx, "node_id": node.get("node_id", ""), "expected": expected}
@@ -224,6 +263,43 @@ def create_api_router(
             pass
 
         resp = StrategyAck(strategy_id=strategy_id, queue_map=queue_map, sentinel_id=sentinel_id)
+        if legacy_nodes and accept_legacy_nodeids:
+            existing_warning = response.headers.get("Warning")
+            if existing_warning:
+                response.headers["Warning"] = f"{existing_warning}, {LEGACY_NODEID_WARNING_HEADER}"
+            else:
+                response.headers["Warning"] = LEGACY_NODEID_WARNING_HEADER
+            response.headers["Deprecation"] = "true"
+            response.headers.setdefault("Sunset", LEGACY_NODEID_SUNSET)
+            gw_metrics.record_legacy_nodeid_strategy(strategy_id, legacy_node_ids)
+            logger.warning(
+                "legacy_nodeid_accepted",
+                extra={
+                    "event": "legacy_nodeid_accepted",
+                    "strategy_id": strategy_id,
+                    "node_ids": legacy_node_ids,
+                },
+            )
+            if ws_hub is not None:
+                notice_payload = {
+                    "strategy_id": strategy_id,
+                    "node_ids": legacy_node_ids,
+                    "sunset": LEGACY_NODEID_SUNSET,
+                    "message": LEGACY_NODEID_NOTICE_MESSAGE,
+                    "version": 1,
+                    "nodes": [
+                        {
+                            "index": entry.get("index"),
+                            "node_id": entry.get("node_id"),
+                            "canonical": entry.get("canonical"),
+                        }
+                        for entry in legacy_nodes
+                    ],
+                }
+                try:
+                    await ws_hub.send_deprecation_notice(notice_payload)
+                except Exception:
+                    logger.exception("Failed to broadcast legacy NodeID deprecation notice")
         duration_ms = (time.perf_counter() - start) * 1000
         gw_metrics.observe_gateway_latency(duration_ms)
         return resp

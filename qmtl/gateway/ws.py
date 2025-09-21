@@ -401,5 +401,11 @@ class WebSocketHub:
         payload.setdefault("version", 1)
         await self._send_event("policy_updated", payload, topic="policy")
 
+    async def send_deprecation_notice(self, payload: dict) -> None:
+        """Broadcast gateway deprecation notices."""
+
+        payload.setdefault("version", 1)
+        await self._send_event("deprecation.notice", payload, topic="deprecation")
+
 
 __all__ = ["WebSocketHub"]

@@ -38,6 +38,7 @@ _TOPIC_NORMALIZATION_MAP: dict[str, str] = {
     "queue": "queue",
     "activation": "activation",
     "policy": "policy",
+    "deprecation": "deprecation",
 }
 
 

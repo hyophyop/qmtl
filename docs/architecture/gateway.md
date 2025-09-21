@@ -198,6 +198,33 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
+### NodeID Deprecation Window (Legacy Acceptance)
+
+Gateway exposes an explicit deprecation bridge while it still honours the
+legacy four-field NodeIDs used prior to the canonical NodeSpec hashing roll-out.
+This bridge is controlled by the configuration flag
+``gateway.accept_legacy_nodeids`` (and corresponding CLI/SDK wiring) which
+defaults to ``true`` during the migration window. When the flag is enabled the
+service surfaces multiple signals so client teams can track their migration
+status:
+
+- **HTTP headers** on `/strategies` responses include
+  ``Warning: 299 qmtl.gateway "Legacy NodeIDs accepted; canonical IDs required by 2025-12-01. See docs/architecture/gateway.md#nodeid-deprecation-window."``,
+  alongside ``Deprecation: true`` and ``Sunset: Mon, 01 Dec 2025 00:00:00 GMT``.
+- **WebSocket event** `deprecation.notice` is published on the `deprecation`
+  topic via the Gateway hub. The payload captures the `strategy_id`, affected
+  `node_ids`, canonical replacements and the sunset timestamp so UI clients can
+  raise real-time alerts.
+- **Metrics**: `nodeid_canon_mismatch_total` continues to count per-node
+  mismatches, and the new `legacy_nodeid_strategy_total` counter increments per
+  strategy submission that relied on legacy IDs. The latest submission snapshot
+  is exposed via the metrics helper to simplify CI assertions.
+
+Operators can disable legacy acceptance by setting
+``accept_legacy_nodeids = false`` once all DAGs have been migrated. At that
+point Gateway enforces canonical NodeSpec-derived IDs and the transitional
+headers/events cease.
+
 Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 ### S5 · Reliability Checklist
