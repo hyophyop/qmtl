@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict, Literal
 import uuid
 
 import httpx
@@ -31,6 +31,88 @@ class TTLCacheEntry:
 
     def valid(self) -> bool:
         return time.time() < self.expires_at
+
+
+ExecutionDomain = Literal["backtest", "dryrun", "live", "shadow"]
+
+
+class ComputeContext(TypedDict, total=False):
+    world_id: str
+    execution_domain: ExecutionDomain
+    as_of: str | None
+    partition: str | None
+    dataset_fingerprint: str | None
+    downgraded: bool
+    downgrade_reason: str
+
+
+def _normalize_optional_str(value: Any) -> str | None:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned:
+            return cleaned
+    return None
+
+
+_MODE_TO_DOMAIN: dict[str, ExecutionDomain] = {
+    "validate": "backtest",
+    "compute-only": "backtest",
+    "compute_only": "backtest",
+    "paper": "dryrun",
+    "live": "live",
+    "active": "live",
+    "shadow": "shadow",
+}
+
+
+def _map_execution_domain(mode: Any) -> ExecutionDomain:
+    if not isinstance(mode, str):
+        return "backtest"
+    key = mode.strip().lower()
+    return _MODE_TO_DOMAIN.get(key, "backtest")
+
+
+def _assemble_compute_context(world_id: str, payload: dict[str, Any]) -> ComputeContext:
+    domain = _map_execution_domain(payload.get("effective_mode"))
+    as_of = _normalize_optional_str(payload.get("as_of"))
+    partition = _normalize_optional_str(payload.get("partition"))
+    dataset_fingerprint = _normalize_optional_str(payload.get("dataset_fingerprint"))
+    if dataset_fingerprint is None:
+        dataset_fingerprint = _normalize_optional_str(payload.get("datasetFingerprint"))
+
+    downgraded = False
+    downgrade_reason = ""
+    if domain in {"backtest", "dryrun"} and not as_of:
+        downgraded = True
+        downgrade_reason = "missing_as_of"
+        if domain == "dryrun":
+            domain = "backtest"
+        gw_metrics.worlds_compute_context_downgrade_total.labels(reason=downgrade_reason).inc()
+
+    context: ComputeContext = {
+        "world_id": world_id,
+        "execution_domain": domain,
+        "as_of": as_of,
+    }
+    if partition is not None:
+        context["partition"] = partition
+    if dataset_fingerprint is not None:
+        context["dataset_fingerprint"] = dataset_fingerprint
+    if downgraded:
+        context["downgraded"] = True
+        context["downgrade_reason"] = downgrade_reason
+    return context
+
+
+def _augment_decision_payload(world_id: str, payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    if "effective_mode" not in payload:
+        return payload
+    context = _assemble_compute_context(world_id, payload)
+    payload["execution_domain"] = context["execution_domain"]
+    payload["compute_context"] = context
+    return payload
 
 
 class WorldServiceClient:
@@ -143,8 +225,9 @@ class WorldServiceClient:
 
         # Header max-age takes precedence if positive
         if ttl > 0:
-            self._decision_cache[world_id] = TTLCacheEntry(data, ttl)
-            return data, False
+            augmented = _augment_decision_payload(world_id, data)
+            self._decision_cache[world_id] = TTLCacheEntry(augmented, ttl)
+            return augmented, False
 
         # Fallback to envelope ttl semantics when header is missing or <= 0
         tval = data.get("ttl") if isinstance(data, dict) else None
@@ -169,13 +252,14 @@ class WorldServiceClient:
 
         if env_ttl is None:
             # Invalid ttl provided → be conservative and do not cache
-            return data, False
+            return _augment_decision_payload(world_id, data), False
         if env_ttl <= 0:
             # Explicit no-cache
-            return data, False
+            return _augment_decision_payload(world_id, data), False
 
-        self._decision_cache[world_id] = TTLCacheEntry(data, env_ttl)
-        return data, False
+        augmented = _augment_decision_payload(world_id, data)
+        self._decision_cache[world_id] = TTLCacheEntry(augmented, env_ttl)
+        return augmented, False
 
     async def get_activation(
         self,
@@ -315,4 +399,4 @@ class WorldServiceClient:
         return resp.json()
 
 
-__all__ = ["Budget", "WorldServiceClient"]
+__all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]
