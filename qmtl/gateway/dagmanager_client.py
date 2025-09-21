@@ -123,10 +123,13 @@ class DagManagerClient:
                 try:
                     queue_map: Dict[str, str] = {}
                     sentinel_id = ""
+                    version = ""
                     buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
                     async for chunk in self._diff_stub.Diff(request):
                         queue_map.update(dict(chunk.queue_map))
                         sentinel_id = chunk.sentinel_id
+                        if getattr(chunk, "version", ""):
+                            version = chunk.version
                         buffer_nodes.extend(chunk.buffer_nodes)
                         await self._diff_stub.AckChunk(
                             dagmanager_pb2.ChunkAck(
@@ -137,6 +140,7 @@ class DagManagerClient:
                         queue_map=queue_map,
                         sentinel_id=sentinel_id,
                         buffer_nodes=buffer_nodes,
+                        version=version,
                     )
                 except Exception:
                     if attempt == retries - 1:

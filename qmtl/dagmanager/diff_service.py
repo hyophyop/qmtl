@@ -12,6 +12,34 @@ _json_loads = _json.loads
 import time
 import asyncio
 
+
+def _normalize_version(raw: object, default: str = "v1") -> str:
+    """Normalize version strings for topic naming.
+
+    Falls back to ``default`` when ``raw`` is falsy or not a primitive.
+    Invalid characters are replaced with ``-`` and leading/trailing
+    punctuation is stripped to keep Kafka topic suffixes tidy.
+    """
+
+    if isinstance(raw, (int, float)):
+        value = str(raw)
+    elif isinstance(raw, str):
+        value = raw.strip()
+    else:
+        value = ""
+    if not value:
+        return default
+    cleaned = []
+    for ch in value:
+        if ch.isalnum() or ch in {"-", "_", "."}:
+            cleaned.append(ch)
+        elif ch.isspace():
+            cleaned.append("-")
+        else:
+            cleaned.append("-")
+    result = "".join(cleaned).strip("-_.")
+    return result or default
+
 from .metrics import (
     observe_diff_duration,
     queue_create_error_total,
@@ -38,6 +66,7 @@ class DiffRequest:
 class DiffChunk:
     queue_map: Dict[str, str]
     sentinel_id: str
+    version: str
     buffering_nodes: List["BufferInstruction"] = field(default_factory=list)
     new_nodes: List["NodeInfo"] = field(default_factory=list)
 
@@ -81,6 +110,7 @@ class NodeRepository:
         self,
         sentinel_id: str,
         node_ids: Iterable[str],
+        version: str,
         *,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
@@ -185,11 +215,30 @@ class DiffService:
         self.stream_sender = stream_sender
 
     # Step 1 ---------------------------------------------------------------
-    def _pre_scan(self, dag_json: str) -> List[NodeInfo]:
-        """Parse DAG JSON and return nodes in topological order."""
+    def _pre_scan(self, dag_json: str) -> tuple[List[NodeInfo], str]:
+        """Parse DAG JSON and return nodes in topological order and version."""
         data = _json_loads(dag_json)
 
-        node_map = {n["node_id"]: n for n in data.get("nodes", [])}
+        raw_nodes = data.get("nodes", []) or []
+        sentinel_version: str | None = None
+        filtered_nodes: list[dict] = []
+        for entry in raw_nodes:
+            if not isinstance(entry, dict):
+                continue
+            node_type = str(entry.get("node_type", ""))
+            if node_type == "VersionSentinel":
+                if sentinel_version is None:
+                    for key in ("version", "strategy_version", "build_version"):
+                        if key in entry:
+                            sentinel_version = _normalize_version(entry.get(key))
+                            if sentinel_version:
+                                break
+                    if not sentinel_version:
+                        sentinel_version = _normalize_version(entry.get("node_id"))
+                continue
+            filtered_nodes.append(entry)
+
+        node_map = {n["node_id"]: n for n in filtered_nodes if "node_id" in n}
         deps: Dict[str, set[str]] = {
             nid: set(node_map[nid].get("inputs", [])) for nid in node_map
         }
@@ -208,7 +257,7 @@ class DiffService:
         if len(ordered) != len(node_map):  # cycle fallback to given order
             ordered = list(node_map.keys())
 
-        return [
+        nodes = [
             NodeInfo(
                 node_id=node_map[n]["node_id"],
                 node_type=node_map[n].get("node_type", ""),
@@ -222,6 +271,18 @@ class DiffService:
             )
             for n in ordered
         ]
+        if sentinel_version:
+            version = sentinel_version
+        else:
+            meta = data.get("meta") or {}
+            version = _normalize_version(
+                data.get("strategy_version")
+                or data.get("version")
+                or meta.get("version")
+                or meta.get("strategy_version")
+                or meta.get("build_version")
+            )
+        return nodes, version
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -229,7 +290,10 @@ class DiffService:
 
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
-        self, nodes: Iterable[NodeInfo], existing: Dict[str, NodeRecord]
+        self,
+        nodes: Iterable[NodeInfo],
+        existing: Dict[str, NodeRecord],
+        version: str,
     ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
@@ -257,7 +321,7 @@ class DiffService:
                     _asset_from_tags(n.tags),
                     n.node_type,
                     n.code_hash,
-                    "v1",
+                    version,
                 )
             except Exception:
                 queue_create_error_total.inc()
@@ -289,8 +353,12 @@ class DiffService:
         return result
 
     # Step 4 ---------------------------------------------------------------
-    def _insert_sentinel(self, sentinel_id: str, nodes: Iterable[NodeInfo]) -> None:
-        self.node_repo.insert_sentinel(sentinel_id, [n.node_id for n in nodes])
+    def _insert_sentinel(
+        self, sentinel_id: str, nodes: Iterable[NodeInfo], version: str
+    ) -> None:
+        self.node_repo.insert_sentinel(
+            sentinel_id, [n.node_id for n in nodes], version
+        )
 
     # Step 5 is handled inside _hash_compare via queue upsert --------------
 
@@ -299,6 +367,7 @@ class DiffService:
         self,
         queue_map: Dict[str, str],
         sentinel_id: str,
+        version: str,
         new_nodes: List[NodeInfo],
         buffering_nodes: List[BufferInstruction],
     ) -> None:
@@ -322,6 +391,7 @@ class DiffService:
                 DiffChunk(
                     queue_map=queue_map,
                     sentinel_id=sentinel_id,
+                    version=version,
                     new_nodes=[],
                     buffering_nodes=[],
                 )
@@ -336,6 +406,7 @@ class DiffService:
                 DiffChunk(
                     queue_map=queue_map,
                     sentinel_id=sentinel_id,
+                    version=version,
                     new_nodes=chunk_new,
                     buffering_nodes=chunk_buf,
                 )
@@ -345,21 +416,22 @@ class DiffService:
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
-            nodes = self._pre_scan(request.dag_json)
+            nodes, version = self._pre_scan(request.dag_json)
             existing = self._db_fetch([n.node_id for n in nodes])
-            queue_map, new_nodes, buffering = self._hash_compare(nodes, existing)
+            queue_map, new_nodes, buffering = self._hash_compare(nodes, existing, version)
             instructions = self._buffer_instructions(buffering)
             sentinel_id = f"{request.strategy_id}-sentinel"
-            self._insert_sentinel(sentinel_id, new_nodes)
+            self._insert_sentinel(sentinel_id, new_nodes, version)
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id, new_nodes, instructions)
+            self._stream_send(queue_map, sentinel_id, version, new_nodes, instructions)
             # success path accounted as processed request
             diff_requests_total.inc()
             return DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,
+                version=version,
                 new_nodes=new_nodes,
                 buffering_nodes=instructions,
             )
@@ -426,18 +498,25 @@ class Neo4jNodeRepository(NodeRepository):
         self,
         sentinel_id: str,
         node_ids: Iterable[str],
+        version: str,
         *,
         breaker: AsyncCircuitBreaker | None = None,
     ) -> None:
         if not node_ids:
             return
         query = (
-            "CREATE (s:VersionSentinel {version: $sid, created_at: timestamp()}) "
+            "CREATE (s:VersionSentinel {sentinel_id: $sid, version: $version, "
+            "created_at: timestamp()}) "
             "WITH s UNWIND $ids AS nid MATCH (c:ComputeNode {node_id: nid}) "
             "MERGE (s)-[:HAS]->(c)"
         )
         with self._open_session(breaker) as session:
-            session.run(query, sid=sentinel_id, ids=list(node_ids))
+            session.run(
+                query,
+                sid=sentinel_id,
+                version=version,
+                ids=list(node_ids),
+            )
 
     def get_queues_by_tag(
         self,

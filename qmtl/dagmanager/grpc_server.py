@@ -106,6 +106,7 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                 pb = dagmanager_pb2.DiffChunk(
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
+                    version=chunk.version,
                     buffer_nodes=[
                             dagmanager_pb2.BufferInstruction(
                                 node_id=n.node_id,
@@ -238,7 +239,9 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
             DiffRequest(strategy_id=request.sentinel_id, dag_json=request.dag_json)
         )
         return dagmanager_pb2.DiffResult(
-            queue_map=chunk.queue_map, sentinel_id=chunk.sentinel_id
+            queue_map=chunk.queue_map,
+            sentinel_id=chunk.sentinel_id,
+            version=chunk.version,
         )
 
 

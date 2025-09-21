@@ -34,8 +34,10 @@ class _MemRepo(NodeRepository):
     def get_nodes(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
         return {nid: self.records[nid] for nid in node_ids if nid in self.records}
 
-    def insert_sentinel(self, sentinel_id: str, node_ids: Iterable[str]) -> None:
-        self.sentinels.append((sentinel_id, list(node_ids)))
+    def insert_sentinel(
+        self, sentinel_id: str, node_ids: Iterable[str], version: str
+    ) -> None:
+        self.sentinels.append((sentinel_id, list(node_ids), version))
 
     def get_queues_by_tag(
         self, tags: Iterable[str], interval: int, match_mode: str = "any"
@@ -72,7 +74,15 @@ class _MemQueue(QueueManager):
 
 class _PrintStream(StreamSender):
     def send(self, chunk) -> None:
-        print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
+        print(
+            json.dumps(
+                {
+                    "queue_map": chunk.queue_map,
+                    "sentinel_id": chunk.sentinel_id,
+                    "version": getattr(chunk, "version", ""),
+                }
+            )
+        )
 
     def wait_for_ack(self) -> AckStatus:
         return AckStatus.OK
@@ -102,12 +112,28 @@ async def _cmd_diff(args: argparse.Namespace) -> None:
     if args.dry_run:
         service = DiffService(_MemRepo(), _MemQueue(), _PrintStream())
         chunk = service.diff(DiffRequest(strategy_id="cli", dag_json=data))
-        print(json.dumps({"queue_map": chunk.queue_map, "sentinel_id": chunk.sentinel_id}))
+        print(
+            json.dumps(
+                {
+                    "queue_map": chunk.queue_map,
+                    "sentinel_id": chunk.sentinel_id,
+                    "version": chunk.version,
+                }
+            )
+        )
     else:
         client = DagManagerClient(args.target)
         try:
             chunk = await _grpc_call(client.diff("cli", data))
-            print(json.dumps({"queue_map": dict(chunk.queue_map), "sentinel_id": chunk.sentinel_id}))
+            print(
+                json.dumps(
+                    {
+                        "queue_map": dict(chunk.queue_map),
+                        "sentinel_id": chunk.sentinel_id,
+                        "version": chunk.version,
+                    }
+                )
+            )
         finally:
             await client.close()
 
@@ -140,7 +166,15 @@ async def _cmd_redo_diff(args: argparse.Namespace) -> None:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
         req = dagmanager_pb2.RedoDiffRequest(sentinel_id=args.sentinel, dag_json=data)
         resp = await _grpc_call(stub.RedoDiff(req))
-        print(json.dumps({"queue_map": dict(resp.queue_map), "sentinel_id": resp.sentinel_id}))
+        print(
+            json.dumps(
+                {
+                    "queue_map": dict(resp.queue_map),
+                    "sentinel_id": resp.sentinel_id,
+                    "version": getattr(resp, "version", ""),
+                }
+            )
+        )
     finally:
         await channel.close()
 

@@ -83,6 +83,7 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
             return dagmanager_pb2.DiffResult(
                 queue_map={partition_key("q", None, None): "t"},
                 sentinel_id=request.sentinel_id,
+                version="v2025",
             )
 
     monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
@@ -94,6 +95,7 @@ def test_cli_redo_diff(monkeypatch, tmp_path, capsys):
     assert called["sentinel"] == "v1"
     key = partition_key("q", None, None)
     assert f'"{key}": "t"' in out
+    assert '"version": "v2025"' in out
 
 
 def test_cli_export_schema(monkeypatch, tmp_path):
