@@ -48,7 +48,15 @@ from .metrics import (
     diff_failures_total,
 )
 from .kafka_admin import KafkaAdmin, partition_key
-from .topic import TopicConfig, topic_name, get_config
+from .topic import (
+    TopicConfig,
+    topic_name,
+    get_config,
+    topic_namespace_enabled,
+    normalize_namespace,
+    build_namespace,
+    ensure_namespace,
+)
 from qmtl.common import AsyncCircuitBreaker
 from .monitor import AckStatus
 
@@ -182,6 +190,7 @@ class QueueManager:
         version: str,
         *,
         dry_run: bool = False,
+        namespace: object | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -215,11 +224,15 @@ class DiffService:
         self.stream_sender = stream_sender
 
     # Step 1 ---------------------------------------------------------------
-    def _pre_scan(self, dag_json: str) -> tuple[List[NodeInfo], str]:
-        """Parse DAG JSON and return nodes in topological order and version."""
+    def _pre_scan(
+        self, dag_json: str
+    ) -> tuple[List[NodeInfo], str, str | None]:
+        """Parse DAG JSON and return nodes, version, and namespace."""
         data = _json_loads(dag_json)
 
         raw_nodes = data.get("nodes", []) or []
+        meta_obj = data.get("meta")
+        meta = meta_obj if isinstance(meta_obj, dict) else {}
         sentinel_version: str | None = None
         filtered_nodes: list[dict] = []
         for entry in raw_nodes:
@@ -271,10 +284,21 @@ class DiffService:
             )
             for n in ordered
         ]
+        namespace: str | None = None
+        if topic_namespace_enabled():
+            raw_namespace = meta.get("topic_namespace")
+            normalized = normalize_namespace(raw_namespace)
+            if normalized:
+                namespace = normalized
+            else:
+                namespace = build_namespace(
+                    meta.get("world") or meta.get("world_id"),
+                    meta.get("execution_domain") or meta.get("domain"),
+                )
+
         if sentinel_version:
             version = sentinel_version
         else:
-            meta = data.get("meta") or {}
             version = _normalize_version(
                 data.get("strategy_version")
                 or data.get("version")
@@ -282,7 +306,7 @@ class DiffService:
                 or meta.get("strategy_version")
                 or meta.get("build_version")
             )
-        return nodes, version
+        return nodes, version, namespace
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -294,6 +318,8 @@ class DiffService:
         nodes: Iterable[NodeInfo],
         existing: Dict[str, NodeRecord],
         version: str,
+        *,
+        namespace: object | None = None,
     ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
         queue_map: Dict[str, str] = {}
         new_nodes: List[NodeInfo] = []
@@ -312,7 +338,10 @@ class DiffService:
             rec = existing.get(n.node_id)
             key = partition_key(n.node_id, n.interval, n.bucket)
             if rec and rec.code_hash == n.code_hash:
-                queue_map[key] = rec.topic
+                topic = rec.topic
+                if namespace:
+                    topic = ensure_namespace(topic, namespace)
+                queue_map[key] = topic
                 if rec.schema_hash != n.schema_hash:
                     buffering_nodes.append(n)
                 continue
@@ -322,6 +351,7 @@ class DiffService:
                     n.node_type,
                     n.code_hash,
                     version,
+                    namespace=namespace,
                 )
             except Exception:
                 queue_create_error_total.inc()
@@ -416,9 +446,14 @@ class DiffService:
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
-            nodes, version = self._pre_scan(request.dag_json)
+            nodes, version, namespace = self._pre_scan(request.dag_json)
             existing = self._db_fetch([n.node_id for n in nodes])
-            queue_map, new_nodes, buffering = self._hash_compare(nodes, existing, version)
+            queue_map, new_nodes, buffering = self._hash_compare(
+                nodes,
+                existing,
+                version,
+                namespace=namespace,
+            )
             instructions = self._buffer_instructions(buffering)
             sentinel_id = f"{request.strategy_id}-sentinel"
             self._insert_sentinel(sentinel_id, new_nodes, version)
@@ -636,6 +671,7 @@ class KafkaQueueManager(QueueManager):
         version: str,
         *,
         dry_run: bool = False,
+        namespace: object | None = None,
     ) -> str:
         existing = self.admin.client.list_topics().keys()
         # Choose TopicConfig by topic type per spec. Default to 'indicator'.
@@ -656,6 +692,7 @@ class KafkaQueueManager(QueueManager):
             version,
             dry_run=dry_run,
             existing=existing,
+            namespace=namespace,
         )
         self.admin.create_topic_if_needed(topic, applied_cfg or self.config)
         return topic
