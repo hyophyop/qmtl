@@ -7,6 +7,10 @@
   "properties": {
     "world_id": { "type": "string" },
     "node_id": { "type": "string", "pattern": "^blake3:.*$" },
+    "execution_domain": {
+      "type": "string",
+      "enum": ["backtest", "dryrun", "live", "shadow"]
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -16,5 +20,5 @@
     "last_eval_key": { "type": ["string","null"], "pattern": "^blake3:.*$" },
     "annotations": { "type": ["object","null"] }
   },
-  "required": ["world_id", "node_id", "status"]
+  "required": ["world_id", "node_id", "execution_domain", "status"]
 }

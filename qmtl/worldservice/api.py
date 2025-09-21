@@ -2,18 +2,31 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Dict, List
+from enum import Enum
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 from .policy_engine import Policy, evaluate_policy
 from .controlbus_producer import ControlBusProducer
-from .storage import Storage
+from .storage import EXECUTION_DOMAINS, WORLD_NODE_STATUSES, Storage
 from qmtl.common.hashutils import hash_bytes
 from qmtl.transforms import (
     equity_linearity_metrics,
     equity_linearity_metrics_v2,
+)
+
+
+ExecutionDomainEnum = Enum(
+    "ExecutionDomainEnum",
+    {value.upper(): value for value in sorted(EXECUTION_DOMAINS)},
+    type=str,
+)
+WorldNodeStatusEnum = Enum(
+    "WorldNodeStatusEnum",
+    {value.upper(): value for value in sorted(WORLD_NODE_STATUSES)},
+    type=str,
 )
 
 
@@ -66,6 +79,22 @@ class DecisionsRequest(BaseModel):
 
 class BindingsResponse(BaseModel):
     strategies: List[str]
+
+
+class WorldNodeRef(BaseModel):
+    world_id: str
+    node_id: str
+    execution_domain: ExecutionDomainEnum
+    status: WorldNodeStatusEnum
+    last_eval_key: str | None = None
+    annotations: Dict[str, Any] | None = None
+
+
+class WorldNodeUpsertRequest(BaseModel):
+    status: WorldNodeStatusEnum
+    execution_domain: ExecutionDomainEnum | None = None
+    last_eval_key: str | None = None
+    annotations: Dict[str, Any] | None = None
 
 
 class DecisionEnvelope(BaseModel):
@@ -123,6 +152,55 @@ def create_app(*, bus: ControlBusProducer | None = None, storage: Storage | None
     @app.delete('/worlds/{world_id}', status_code=204)
     async def delete_world(world_id: str) -> Response:
         await store.delete_world(world_id)
+        return Response(status_code=204)
+
+    @app.get('/worlds/{world_id}/nodes', response_model=List[WorldNodeRef])
+    async def get_world_nodes(world_id: str, execution_domain: str | None = None) -> List[WorldNodeRef]:
+        try:
+            nodes = await store.list_world_nodes(world_id, execution_domain=execution_domain)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return [WorldNodeRef(**node) for node in nodes]
+
+    @app.get('/worlds/{world_id}/nodes/{node_id}', response_model=WorldNodeRef)
+    async def get_world_node(
+        world_id: str,
+        node_id: str,
+        execution_domain: str | None = None,
+    ) -> WorldNodeRef:
+        try:
+            node = await store.get_world_node(world_id, node_id, execution_domain=execution_domain)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not node:
+            raise HTTPException(status_code=404, detail='world node not found')
+        return WorldNodeRef(**node)
+
+    @app.put('/worlds/{world_id}/nodes/{node_id}', response_model=WorldNodeRef)
+    async def put_world_node(world_id: str, node_id: str, payload: WorldNodeUpsertRequest) -> WorldNodeRef:
+        try:
+            node = await store.upsert_world_node(
+                world_id,
+                node_id,
+                execution_domain=payload.execution_domain.value if payload.execution_domain else None,
+                status=payload.status.value,
+                last_eval_key=payload.last_eval_key,
+                annotations=payload.annotations,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return WorldNodeRef(**node)
+
+    @app.delete('/worlds/{world_id}/nodes/{node_id}', status_code=204)
+    async def delete_world_node(
+        world_id: str,
+        node_id: str,
+        execution_domain: str | None = None,
+    ) -> Response:
+        try:
+            await store.delete_world_node(world_id, node_id, execution_domain=execution_domain)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return Response(status_code=204)
 
     @app.post('/worlds/{world_id}/policies', response_model=PolicyVersionResponse)
