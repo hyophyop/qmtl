@@ -2,7 +2,7 @@
 title: "Monitoring and Alerting"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-08-25
 ---
 
 {{ nav_links() }}
@@ -32,7 +32,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **GCSchedulerStall** – warns if `gc_last_run_timestamp` lags by more than ten minutes.
 - **NodeSlowProcessing** – triggers when `node_process_duration_ms` p95 exceeds 500 ms for a node.
 - **NodeFailures** – fires when `node_process_failure_total` increases.
-- **CrossContextCacheHit** – CRIT when `cross_context_cache_hit_total` > 0; indicates domain mixing and automatically freezes promotions until cleared.
+- **CrossContextCacheHit** – CRIT when `cross_context_cache_hit_total` > 0; the metric has an SLO of 0 and signals domain mixing. Follow the runbook below before resuming promotions.
 
 ## Grafana Dashboards
 
@@ -65,7 +65,18 @@ For DAG diff processing, the following counters standardize naming and enable SL
 
 - `diff_requests_total` — total diff requests processed (throughput baseline).
 - `diff_failures_total` — total failed diff requests (for failure rate calculation).
-- `cross_context_cache_hit_total` — MUST remain 0; any increment blocks promotions until the offending component is reset.
+- `cross_context_cache_hit_total` — MUST remain 0; any increment blocks promotions until the offending component is reset. Labels include `node_id`, `world_id`, `execution_domain`, `as_of`, and `partition`. Empty or unknown contexts are normalized to `__unset__` to ease alert routing.
+
+### Runbook: Cross-context cache hits (SLO = 0)
+
+1. **Acknowledge the alert.** Verify that `cross_context_cache_hit_total` has increased above zero. Record the label set attached to the increment for debugging.
+2. **Freeze promotions.** Halt release workflows that touch the affected DAG version. Automated tooling should already block promotions while the counter is non-zero.
+3. **Trace the offending context.** Compare the label set `(node_id, world_id, execution_domain, as_of, partition)` against recent deploys. Look for:
+   - Backtests or dry-runs that reused live cache entries.
+   - Missing `as_of` values (`__unset__` label) that caused compute-key fallback.
+   - Partitioning changes (e.g., moved tenants) without cache invalidation.
+4. **Purge the polluted cache.** Flush SDK node caches for the offending node or trigger a DAG Manager recompute with the correct context. Ensure ComputeKey isolation is re-established.
+5. **Reset the counter.** After remediation, restart the component or invoke the cache reset tooling to clear the metric. Confirm the counter returns to zero for at least 10 minutes before resuming promotions.
 
 Suggested Prometheus rules combine these into three core alert groups: latency (`diff_duration_ms_p95`), failure-rate (`rate(diff_failures_total)/rate(diff_requests_total)`), and throughput (`rate(diff_requests_total)`). See `alert_rules.yml` for working examples.
 
@@ -96,7 +107,7 @@ expose these by calling `metrics.start_metrics_server()`.
 | `node_processed_total` | Counter | Total number of node compute executions | `node_id` |
 | `node_process_duration_ms` | Histogram | Duration of node compute execution in milliseconds | `node_id` |
 | `node_process_failure_total` | Counter | Total number of node compute failures | `node_id` |
-| `cross_context_cache_hit_total` | Counter | Number of cache hits where context (world/domain/as_of/partition) mismatched | `node_id`, `world_id`, `execution_domain` |
+| `cross_context_cache_hit_total` | Counter | Number of cache hits where context (world/domain/as_of/partition) mismatched | `node_id`, `world_id`, `execution_domain`, `as_of`, `partition` (missing values emitted as `__unset__`) |
 
 Start the server as part of your application:
 

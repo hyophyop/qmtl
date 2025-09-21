@@ -15,6 +15,9 @@ from qmtl.common.metrics_shared import (
     get_nodecache_resident_bytes,
     observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
+    get_cross_context_cache_hit_counter,
+    observe_cross_context_cache_hit as _observe_cross_context_cache_hit,
+    clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
 )
 
 _WORLD_ID = "default"
@@ -107,6 +110,9 @@ backfill_retry_total._vals = {}  # type: ignore[attr-defined]
 # Shared metric instance (avoids duplicate registration when importing
 # qmtl.dagmanager.metrics in the same process)
 nodecache_resident_bytes = get_nodecache_resident_bytes()
+
+# ---------------------------------------------------------------------------
+cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
 # ---------------------------------------------------------------------------
 if "node_processed_total" in global_registry._names_to_collectors:
@@ -341,6 +347,25 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     _observe_nodecache_resident_bytes(node_id, resident)
 
 
+def observe_cross_context_cache_hit(
+    node_id: str,
+    world_id: str,
+    execution_domain: str,
+    *,
+    as_of: str | None = None,
+    partition: str | None = None,
+) -> None:
+    """Record a cache hit where the execution context mismatched."""
+
+    _observe_cross_context_cache_hit(
+        node_id,
+        world_id,
+        execution_domain,
+        as_of=as_of,
+        partition=partition,
+    )
+
+
 def observe_node_process(node_id: str, duration_ms: float) -> None:
     """Record execution duration and increment counter for ``node_id``."""
     n = str(node_id)
@@ -382,6 +407,7 @@ def reset_metrics() -> None:
     backfill_retry_total.clear()
     backfill_retry_total._vals = {}  # type: ignore[attr-defined]
     _clear_nodecache_resident_bytes()
+    _clear_cross_context_cache_hits()
     node_processed_total.clear()
     node_processed_total._vals = {}  # type: ignore[attr-defined]
     node_process_duration_ms.clear()
