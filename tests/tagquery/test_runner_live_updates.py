@@ -17,7 +17,9 @@ async def wait_for(condition, timeout: float = 1.0) -> None:
 
 
 class DummyDag:
-    async def get_queues_by_tag(self, tags, interval, match_mode="any", world_id=None):
+    async def get_queues_by_tag(
+        self, tags, interval, match_mode="any", world_id=None, execution_domain=None
+    ):
         return []
 
 

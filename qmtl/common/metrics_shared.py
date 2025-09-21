@@ -6,13 +6,18 @@ This module centralizes creation and observation of common metrics to avoid
 duplicate registration when both subsystems are imported in the same process.
 """
 
-from prometheus_client import Gauge, REGISTRY as global_registry
+from prometheus_client import Counter, Gauge, REGISTRY as global_registry
 
 __all__ = [
     "get_nodecache_resident_bytes",
     "observe_nodecache_resident_bytes",
     "clear_nodecache_resident_bytes",
+    "get_cross_context_cache_hit_counter",
+    "observe_cross_context_cache_hit",
+    "clear_cross_context_cache_hits",
 ]
+
+_UNSET_LABEL = "__unset__"
 
 
 def get_nodecache_resident_bytes():
@@ -54,4 +59,56 @@ def clear_nodecache_resident_bytes() -> None:
     g = get_nodecache_resident_bytes()
     g.clear()
     g._vals = {}  # type: ignore[attr-defined]
+
+
+def get_cross_context_cache_hit_counter():
+    """Return the singleton counter tracking cross-context cache hits."""
+
+    if "cross_context_cache_hit_total" in global_registry._names_to_collectors:  # type: ignore[attr-defined]
+        counter = global_registry._names_to_collectors["cross_context_cache_hit_total"]  # type: ignore[index]
+    else:
+        counter = Counter(
+            "cross_context_cache_hit_total",
+            "Number of cache hits observed with mismatched context",
+            ["node_id", "world_id", "execution_domain", "as_of", "partition"],
+            registry=global_registry,
+        )
+
+    if not hasattr(counter, "_vals"):
+        counter._vals = {}  # type: ignore[attr-defined]
+    return counter
+
+
+def _normalise(value: str | None) -> str:
+    value = _UNSET_LABEL if value in (None, "") else value
+    return str(value)
+
+
+def observe_cross_context_cache_hit(
+    node_id: str,
+    world_id: str,
+    execution_domain: str,
+    *,
+    as_of: str | None = None,
+    partition: str | None = None,
+) -> None:
+    """Increment the cross-context cache hit counter with normalized labels."""
+
+    counter = get_cross_context_cache_hit_counter()
+    labels = dict(
+        node_id=str(node_id),
+        world_id=str(world_id),
+        execution_domain=str(execution_domain),
+        as_of=_normalise(as_of),
+        partition=_normalise(partition),
+    )
+    counter.labels(**labels).inc()
+    key = tuple(labels.values())
+    counter._vals[key] = counter._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+
+
+def clear_cross_context_cache_hits() -> None:
+    counter = get_cross_context_cache_hit_counter()
+    counter.clear()
+    counter._vals = {}  # type: ignore[attr-defined]
 

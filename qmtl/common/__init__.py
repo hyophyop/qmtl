@@ -15,6 +15,7 @@ from .circuit_breaker import AsyncCircuitBreaker
 from .four_dim_cache import FourDimCache
 from .hashutils import hash_bytes
 from .nodeid import compute_node_id
+from .compute_key import ComputeContext, compute_compute_key, DEFAULT_EXECUTION_DOMAIN
 
 __all__ = [
     "crc32_of_list",
@@ -24,4 +25,7 @@ __all__ = [
     "FourDimCache",
     "hash_bytes",
     "compute_node_id",
+    "ComputeContext",
+    "compute_compute_key",
+    "DEFAULT_EXECUTION_DOMAIN",
 ]

@@ -10,6 +10,7 @@ import logging
 from opentelemetry import trace
 
 from qmtl.common.tracing import setup_tracing
+from qmtl.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
 from cachetools import TTLCache
 from qmtl.common import AsyncCircuitBreaker
 
@@ -26,6 +27,7 @@ from .history_loader import HistoryLoader
 from . import runtime, metrics as sdk_metrics
 from .http import HttpPoster
 from . import snapshot as snap
+from qmtl.dagmanager.topic import build_namespace, topic_namespace_enabled
 
 try:  # Optional aiokafka dependency
     from aiokafka import AIOKafkaConsumer  # type: ignore
@@ -577,14 +579,27 @@ class Runner:
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
+        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
+        as_of: object | None = None,
+        partition: object | None = None,
     ) -> Strategy:
         """Run a strategy under a given world, following WS decisions/activation.
 
         In offline mode or when Kafka is unavailable, executes compute‑only locally.
         """
         strategy = Runner._prepare(strategy_cls)
+        context = ComputeContext(
+            world_id=world_id,
+            execution_domain=execution_domain,
+            as_of=as_of,
+            partition=partition,
+        )
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
+            try:
+                n.apply_compute_context(context)
+            except AttributeError:
+                pass
         try:
             strategy.on_start()
 
@@ -599,12 +614,39 @@ class Runner:
             dag = strategy.serialize()
             logger.info("Sending DAG to service: %s", [n["node_id"] for n in dag["nodes"]])
 
+            dag_meta = dag.setdefault("meta", {}) if isinstance(dag, dict) else {}
+            meta_payload = dict(meta) if isinstance(meta, dict) else None
+            execution_domain: str | None = None
+            if isinstance(meta_payload, dict):
+                raw_domain = meta_payload.get("execution_domain")
+                if isinstance(raw_domain, str) and raw_domain.strip():
+                    execution_domain = raw_domain.strip()
+
+            if topic_namespace_enabled():
+                if execution_domain is None:
+                    if offline:
+                        execution_domain = "backtest"
+                    else:
+                        execution_domain = "live" if Runner._trade_mode == "live" else "dryrun"
+                namespace = build_namespace(world_id, execution_domain)
+                if namespace:
+                    if isinstance(dag_meta, dict):
+                        dag_meta["topic_namespace"] = {
+                            "world": world_id,
+                            "domain": execution_domain,
+                        }
+                    if meta_payload is None:
+                        meta_payload = {}
+                    meta_payload.setdefault("execution_domain", execution_domain)
+
+            meta_for_gateway = meta_payload if meta_payload is not None else meta
+
             queue_map = {}
             if gateway_url:
                 queue_map = await Runner._gateway_client.post_strategy(
                     gateway_url=gateway_url,
                     dag=dag,
-                    meta=meta,
+                    meta=meta_for_gateway,
                     world_id=world_id,
                 )
                 if isinstance(queue_map, dict) and "error" in queue_map:
@@ -763,6 +805,9 @@ class Runner:
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
+        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
+        as_of: object | None = None,
+        partition: object | None = None,
     ) -> Strategy:
         return asyncio.run(
             Runner.run_async(
@@ -774,6 +819,9 @@ class Runner:
                 history_start=history_start,
                 history_end=history_end,
                 schema_enforcement=schema_enforcement,
+                execution_domain=execution_domain,
+                as_of=as_of,
+                partition=partition,
             )
         )
 
@@ -791,8 +839,13 @@ class Runner:
         strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
     ) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
+        context = ComputeContext(world_id="w", execution_domain="offline")
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
+            try:
+                n.apply_compute_context(context)
+            except AttributeError:
+                pass
         tag_service = TagManagerService(None)
         # Use a stable default world id for offline execution so that
         # node IDs match typical offline test runs.

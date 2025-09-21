@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Set
 from datetime import datetime, timezone
 
 from .policy_engine import Policy
 from qmtl.common.hashutils import hash_bytes
+
+
+WORLD_NODE_STATUSES: set[str] = {
+    "unknown",
+    "validating",
+    "valid",
+    "invalid",
+    "running",
+    "paused",
+    "stopped",
+    "archived",
+}
+EXECUTION_DOMAINS: set[str] = {"backtest", "dryrun", "live", "shadow"}
+DEFAULT_EXECUTION_DOMAIN = "live"
+DEFAULT_WORLD_NODE_STATUS = "unknown"
 
 
 @dataclass
@@ -60,6 +76,8 @@ class Storage:
         self.bindings: Dict[str, Set[str]] = {}
         self.decisions: Dict[str, List[str]] = {}
         self.audit: Dict[str, WorldAuditLog] = {}
+        self.world_nodes: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
+        self.apply_runs: Dict[str, Dict] = {}
         self.validation_cache: Dict[str, Dict[str, Dict[str, ValidationCacheEntry]]] = {}
 
     async def create_world(self, world: Dict) -> None:
@@ -86,6 +104,7 @@ class Storage:
         self.policies.pop(world_id, None)
         self.bindings.pop(world_id, None)
         self.decisions.pop(world_id, None)
+        self.world_nodes.pop(world_id, None)
         self.validation_cache.pop(world_id, None)
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append({"event": "world_deleted"})
 
@@ -303,6 +322,195 @@ class Storage:
         self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
             {"event": "validation_cache_cleared", **scope}
         )
+        
+    def _normalize_execution_domain(self, execution_domain: str | None) -> str:
+        if execution_domain is None:
+            return DEFAULT_EXECUTION_DOMAIN
+        candidate = str(execution_domain).strip().lower()
+        if not candidate:
+            return DEFAULT_EXECUTION_DOMAIN
+        if candidate not in EXECUTION_DOMAINS:
+            raise ValueError(f"unknown execution_domain: {execution_domain}")
+        return candidate
+
+    def _normalize_world_node_status(self, status: str | None) -> str:
+        if status is None:
+            return DEFAULT_WORLD_NODE_STATUS
+        candidate = str(status).strip().lower()
+        if not candidate:
+            return DEFAULT_WORLD_NODE_STATUS
+        if candidate not in WORLD_NODE_STATUSES:
+            raise ValueError(f"unknown world node status: {status}")
+        return candidate
+
+    def _make_world_node_ref(
+        self,
+        world_id: str,
+        node_id: str,
+        execution_domain: str | None,
+        status: str | None,
+        last_eval_key: str | None,
+        annotations: Any | None,
+    ) -> Dict[str, Any]:
+        normalized_domain = self._normalize_execution_domain(execution_domain)
+        normalized_status = self._normalize_world_node_status(status)
+        return {
+            "world_id": world_id,
+            "node_id": node_id,
+            "execution_domain": normalized_domain,
+            "status": normalized_status,
+            "last_eval_key": last_eval_key,
+            "annotations": deepcopy(annotations) if annotations is not None else None,
+        }
+
+    def _ensure_world_node_bucket(self, world_id: str, node_id: str) -> Dict[str, Dict[str, Any]]:
+        bucket = self.world_nodes.setdefault(world_id, {})
+        entry = bucket.get(node_id)
+        if entry is None:
+            entry = {}
+            bucket[node_id] = entry
+            return entry
+        if isinstance(entry, dict) and "status" in entry:
+            normalized = self._make_world_node_ref(
+                world_id,
+                node_id,
+                entry.get("execution_domain"),
+                entry.get("status"),
+                entry.get("last_eval_key"),
+                entry.get("annotations"),
+            )
+            converted: Dict[str, Dict[str, Any]] = {normalized["execution_domain"]: normalized}
+            bucket[node_id] = converted
+            return converted
+        if isinstance(entry, dict):
+            converted = {}
+            for domain_key, node_data in list(entry.items()):
+                if not isinstance(node_data, dict):
+                    raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {node_data!r}")
+                normalized = self._make_world_node_ref(
+                    world_id,
+                    node_id,
+                    node_data.get("execution_domain", domain_key),
+                    node_data.get("status"),
+                    node_data.get("last_eval_key"),
+                    node_data.get("annotations"),
+                )
+                converted[normalized["execution_domain"]] = normalized
+            bucket[node_id] = converted
+            return converted
+        raise TypeError(f"unexpected world node container for {world_id}/{node_id}: {entry!r}")
+
+    def _clone_world_node_ref(self, node: Dict[str, Any]) -> Dict[str, Any]:
+        annotations = node.get("annotations")
+        return {
+            "world_id": node["world_id"],
+            "node_id": node["node_id"],
+            "execution_domain": node["execution_domain"],
+            "status": node["status"],
+            "last_eval_key": node.get("last_eval_key"),
+            "annotations": deepcopy(annotations) if annotations is not None else None,
+        }
+
+    async def upsert_world_node(
+        self,
+        world_id: str,
+        node_id: str,
+        *,
+        execution_domain: str | None = None,
+        status: str | None = None,
+        last_eval_key: str | None = None,
+        annotations: Any | None = None,
+    ) -> Dict[str, Any]:
+        bucket = self._ensure_world_node_bucket(world_id, node_id)
+        ref = self._make_world_node_ref(world_id, node_id, execution_domain, status, last_eval_key, annotations)
+        bucket[ref["execution_domain"]] = ref
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+            {
+                "event": "world_node_upserted",
+                "node_id": node_id,
+                "execution_domain": ref["execution_domain"],
+                "status": ref["status"],
+            }
+        )
+        return self._clone_world_node_ref(ref)
+
+    async def get_world_node(
+        self,
+        world_id: str,
+        node_id: str,
+        *,
+        execution_domain: str | None = None,
+    ) -> Optional[Dict[str, Any]]:
+        nodes = self.world_nodes.get(world_id)
+        if not nodes or node_id not in nodes:
+            return None
+        bucket = self._ensure_world_node_bucket(world_id, node_id)
+        domain = self._normalize_execution_domain(execution_domain)
+        ref = bucket.get(domain)
+        if not ref:
+            return None
+        return self._clone_world_node_ref(ref)
+
+    async def list_world_nodes(
+        self,
+        world_id: str,
+        *,
+        execution_domain: str | None = None,
+    ) -> List[Dict[str, Any]]:
+        nodes = self.world_nodes.get(world_id)
+        if not nodes:
+            return []
+        include_all = False
+        domain_filter: Optional[str]
+        if execution_domain is None:
+            domain_filter = self._normalize_execution_domain(None)
+        else:
+            candidate = str(execution_domain).strip().lower()
+            if not candidate:
+                domain_filter = self._normalize_execution_domain(None)
+            elif candidate in {"*", "all"}:
+                include_all = True
+                domain_filter = None
+            else:
+                domain_filter = self._normalize_execution_domain(candidate)
+        results: List[Dict[str, Any]] = []
+        for node_id in sorted(nodes.keys()):
+            bucket = self._ensure_world_node_bucket(world_id, node_id)
+            if include_all:
+                for domain in sorted(bucket.keys()):
+                    results.append(self._clone_world_node_ref(bucket[domain]))
+            else:
+                if domain_filter is None:
+                    continue
+                ref = bucket.get(domain_filter)
+                if ref:
+                    results.append(self._clone_world_node_ref(ref))
+        return results
+
+    async def delete_world_node(
+        self,
+        world_id: str,
+        node_id: str,
+        *,
+        execution_domain: str | None = None,
+    ) -> None:
+        nodes = self.world_nodes.get(world_id)
+        if not nodes or node_id not in nodes:
+            return
+        bucket = self._ensure_world_node_bucket(world_id, node_id)
+        domain = self._normalize_execution_domain(execution_domain)
+        ref = bucket.pop(domain, None)
+        if ref:
+            if not bucket:
+                nodes.pop(node_id, None)
+            self.audit.setdefault(world_id, WorldAuditLog()).entries.append(
+                {
+                    "event": "world_node_deleted",
+                    "node_id": node_id,
+                    "execution_domain": domain,
+                    "status": ref.get("status"),
+                }
+            )
 
     async def get_activation(self, world_id: str, strategy_id: str | None = None, side: str | None = None) -> Dict:
         act = self.activations.get(world_id)
@@ -312,6 +520,21 @@ class Storage:
             data = act.state.get(strategy_id, {}).get(side, {})
             return {"version": act.version, **data}
         return {"version": act.version, "state": act.state}
+
+    async def snapshot_activation(self, world_id: str) -> WorldActivation:
+        act = self.activations.get(world_id)
+        if not act:
+            return WorldActivation()
+        return WorldActivation(
+            version=act.version,
+            state={sid: {side: dict(val) for side, val in sides.items()} for sid, sides in act.state.items()},
+        )
+
+    async def restore_activation(self, world_id: str, snapshot: WorldActivation) -> None:
+        self.activations[world_id] = WorldActivation(
+            version=snapshot.version,
+            state={sid: {side: dict(val) for side, val in sides.items()} for sid, sides in snapshot.state.items()},
+        )
 
     async def update_activation(self, world_id: str, payload: Dict) -> tuple[int, Dict]:
         act = self.activations.setdefault(world_id, WorldActivation())
@@ -336,11 +559,27 @@ class Storage:
         )
         return act.version, entry
 
+    async def record_apply_stage(self, world_id: str, run_id: str, stage: str, **details: object) -> None:
+        entry = {
+            "event": "apply_stage",
+            "run_id": run_id,
+            "stage": stage,
+            "ts": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+        for key, val in details.items():
+            if val is not None:
+                entry[key] = val
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(entry)
+
     async def get_audit(self, world_id: str) -> List[Dict]:
         return list(self.audit.get(world_id, WorldAuditLog()).entries)
 
 
 __all__ = [
+    'DEFAULT_EXECUTION_DOMAIN',
+    'DEFAULT_WORLD_NODE_STATUS',
+    'EXECUTION_DOMAINS',
+    'WORLD_NODE_STATUSES',
     'WorldActivation',
     'WorldPolicies',
     'WorldAuditLog',

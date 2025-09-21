@@ -2,7 +2,7 @@
 title: "QMTL Gateway — Comprehensive Technical Specification"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-09-22
 spec_version: v1.2
 ---
 
@@ -268,7 +268,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 
 - Strategy submission and worlds:
   - Clients may include `world_id` (single) **or** `world_ids[]` (multiple). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
-  - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context: `validate → backtest (orders gated OFF)` unless `shadow` is explicitly requested; `compute-only → backtest`; `paper → dryrun`; `live → live`. `shadow` is reserved and must be explicitly requested by operators.
+  - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context and writes it to envelopes it relays: `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` is reserved and must be explicitly requested by operators.
   - Gateway forwards the compute context `{ world_id, execution_domain, as_of (if backtest), partition }` with diff/ingest requests so DAG Manager derives a Domain‑Scoped ComputeKey and isolates caches per domain.
   - Backtest/dryrun submissions MUST include `as_of` (dataset commit) and MAY include `dataset_fingerprint`; when absent Gateway rejects or falls back to compute-only mode to avoid mixing datasets.
 

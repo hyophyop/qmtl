@@ -55,9 +55,13 @@ class FakeQueue(QueueManager):
     def __init__(self):
         self.calls = []
 
-    def upsert(self, asset, node_type, code_hash, version, *, dry_run=False):
-        self.calls.append((asset, node_type, code_hash, version, dry_run))
-        return topic_name(asset, node_type, code_hash, version, dry_run=dry_run)
+    def upsert(
+        self, asset, node_type, code_hash, version, *, dry_run=False, namespace=None
+    ):
+        self.calls.append((asset, node_type, code_hash, version, dry_run, namespace))
+        return topic_name(
+            asset, node_type, code_hash, version, dry_run=dry_run, namespace=namespace
+        )
 
 
 class FakeStream(StreamSender):
@@ -171,7 +175,59 @@ def test_hash_compare_and_queue_upsert():
     expected_b = topic_name("asset", "N", "c2", "v1")
     assert chunk.queue_map[partition_key("A", None, None)] == expected_a
     assert chunk.queue_map[partition_key("B", None, None)] == expected_b
-    assert queue.calls == [("asset", "N", "c2", "v1", False)]
+    assert queue.calls == [("asset", "N", "c2", "v1", False, None)]
+
+
+def test_namespace_applied_to_queue_names(monkeypatch):
+    repo = FakeRepo()
+    repo.records["A"] = NodeRecord(
+        "A",
+        "N",
+        "c1",
+        "s1",
+        "id1",
+        None,
+        None,
+        [],
+        None,
+        False,
+        topic_name("asset", "N", "c1", "v1"),
+    )
+    queue = FakeQueue()
+    stream = FakeStream()
+    service = DiffService(repo, queue, stream)
+
+    dag = json.dumps(
+        {
+            "nodes": [
+                {
+                    "node_id": "A",
+                    "node_type": "N",
+                    "code_hash": "c1",
+                    "schema_hash": "s1",
+                },
+                {
+                    "node_id": "B",
+                    "node_type": "N",
+                    "code_hash": "c2",
+                    "schema_hash": "s2",
+                },
+            ],
+            "meta": {
+                "topic_namespace": {"world": "World-1", "domain": "Live"},
+            },
+        }
+    )
+
+    monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", "1")
+
+    chunk = service.diff(DiffRequest(strategy_id="s", dag_json=dag))
+
+    existing_topic = chunk.queue_map[partition_key("A", None, None)]
+    new_topic = chunk.queue_map[partition_key("B", None, None)]
+    assert existing_topic.startswith("world-1.live.")
+    assert new_topic.startswith("world-1.live.")
+    assert queue.calls[-1][5] == "world-1.live"
 
 
 def test_schema_change_buffering_flag():
