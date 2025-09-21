@@ -199,29 +199,20 @@ class ControlBusConsumer:
 
     async def _handle_message(self, msg: ControlBusMessage) -> None:
         key = (msg.topic, msg.key)
-        if msg.topic == "policy":
-            marker = (msg.data.get("checksum"), msg.data.get("policy_version"))
-        elif msg.topic == "sentinel_weight":
-            marker = (
-                msg.data.get("sentinel_id"),
-                msg.data.get("weight"),
-                msg.data.get("version"),
-            )
-        else:
-            marker = (msg.etag, msg.run_id)
-        if self._last_seen.get(key) == marker:
-            gw_metrics.record_event_dropped(msg.topic)
-            return
-        self._last_seen[key] = marker
-
-        gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
-
         if msg.topic == "sentinel_weight":
             try:
                 payload = SentinelWeightData.model_validate(msg.data)
             except ValidationError as exc:
                 logger.warning("invalid sentinel_weight payload: %s", exc)
                 return
+            marker = (payload.sentinel_id, payload.weight, payload.version)
+            if self._last_seen.get(key) == marker:
+                gw_metrics.record_event_dropped(msg.topic)
+                return
+            self._last_seen[key] = marker
+
+            gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
+
             sentinel_id = payload.sentinel_id
             weight = float(payload.weight)
             try:
@@ -232,6 +223,18 @@ class ControlBusConsumer:
             if self.ws_hub:
                 await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
             return
+
+        if msg.topic == "policy":
+            marker = (msg.data.get("checksum"), msg.data.get("policy_version"))
+        else:
+            marker = (msg.etag, msg.run_id)
+
+        if self._last_seen.get(key) == marker:
+            gw_metrics.record_event_dropped(msg.topic)
+            return
+        self._last_seen[key] = marker
+
+        gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
         if not self.ws_hub:
             return
