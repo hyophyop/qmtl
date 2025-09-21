@@ -70,6 +70,8 @@ class ControlBusProducer:
         state_hash: str,
         payload: Dict[str, Any] | None = None,
         version: int = 1,
+        requires_ack: bool = False,
+        sequence: int | None = None,
     ) -> None:
         body: Dict[str, Any] = {
             "world_id": world_id,
@@ -81,6 +83,10 @@ class ControlBusProducer:
         }
         if payload:
             body.update(payload)
+        if requires_ack:
+            body["requires_ack"] = True
+        if sequence is not None:
+            body["sequence"] = sequence
         await self._publish("activation_updated", world_id, body)
 
 

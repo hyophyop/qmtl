@@ -43,6 +43,7 @@ class Storage:
         self.bindings: Dict[str, Set[str]] = {}
         self.decisions: Dict[str, List[str]] = {}
         self.audit: Dict[str, WorldAuditLog] = {}
+        self.apply_runs: Dict[str, Dict] = {}
 
     async def create_world(self, world: Dict) -> None:
         self.worlds[world["id"]] = world
@@ -132,6 +133,21 @@ class Storage:
             return {"version": act.version, **data}
         return {"version": act.version, "state": act.state}
 
+    async def snapshot_activation(self, world_id: str) -> WorldActivation:
+        act = self.activations.get(world_id)
+        if not act:
+            return WorldActivation()
+        return WorldActivation(
+            version=act.version,
+            state={sid: {side: dict(val) for side, val in sides.items()} for sid, sides in act.state.items()},
+        )
+
+    async def restore_activation(self, world_id: str, snapshot: WorldActivation) -> None:
+        self.activations[world_id] = WorldActivation(
+            version=snapshot.version,
+            state={sid: {side: dict(val) for side, val in sides.items()} for sid, sides in snapshot.state.items()},
+        )
+
     async def update_activation(self, world_id: str, payload: Dict) -> tuple[int, Dict]:
         act = self.activations.setdefault(world_id, WorldActivation())
         act.version += 1
@@ -154,6 +170,18 @@ class Storage:
             {"event": "activation_updated", "version": act.version, "strategy_id": strategy_id, "side": side, **entry}
         )
         return act.version, entry
+
+    async def record_apply_stage(self, world_id: str, run_id: str, stage: str, **details: object) -> None:
+        entry = {
+            "event": "apply_stage",
+            "run_id": run_id,
+            "stage": stage,
+            "ts": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+        for key, val in details.items():
+            if val is not None:
+                entry[key] = val
+        self.audit.setdefault(world_id, WorldAuditLog()).entries.append(entry)
 
     async def get_audit(self, world_id: str) -> List[Dict]:
         return list(self.audit.get(world_id, WorldAuditLog()).entries)
