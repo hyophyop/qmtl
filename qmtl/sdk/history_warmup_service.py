@@ -3,13 +3,58 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Iterable
+from dataclasses import dataclass
+from typing import Any
 
-from . import snapshot as snap
+from .history_coverage import (
+    WarmupWindow,
+    compute_missing_ranges,
+    coverage_bounds,
+    ensure_strict_history,
+)
 from .history_loader import HistoryLoader
+from .history_snapshot import hydrate_strategy_snapshots, write_strategy_snapshots
+from .history_warmup_polling import HistoryWarmupPoller, WarmupRequest
 from .strategy import Strategy
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class NodeWarmupPlan:
+    node_id: str
+    interval: int
+    window: WarmupWindow
+    provider: Any | None
+    stop_on_ready: bool
+    strict: bool
+    timeout: float = 60.0
+
+    @classmethod
+    def build(
+        cls,
+        node: Any,
+        start: int | None,
+        end: int | None,
+        *,
+        stop_on_ready: bool,
+        strict: bool,
+        timeout: float = 60.0,
+    ) -> NodeWarmupPlan | None:
+        interval = getattr(node, "interval", None)
+        if interval is None or start is None or end is None:
+            return None
+        node_id = getattr(node, "node_id", "<unknown>")
+        provider = getattr(node, "history_provider", None)
+        return cls(
+            node_id=node_id,
+            interval=interval,
+            window=WarmupWindow(start=start, end=end, interval=interval),
+            provider=provider,
+            stop_on_ready=stop_on_ready,
+            strict=strict,
+            timeout=timeout,
+        )
 
 
 class HistoryWarmupService:
@@ -23,41 +68,11 @@ class HistoryWarmupService:
     # ------------------------------------------------------------------
     @staticmethod
     def hydrate_snapshots(strategy: Strategy) -> int:
-        from .node import StreamInput
-
-        count = 0
-        for node in strategy.nodes:
-            if isinstance(node, StreamInput) and node.interval is not None and node.period:
-                try:
-                    strict = False
-                    try:
-                        strict = getattr(node, "runtime_compat", "loose") == "strict"
-                    except Exception:
-                        strict = False
-                    if snap.hydrate(node, strict_runtime=strict):
-                        count += 1
-                except Exception:
-                    logger.exception("snapshot hydration failed for %s", node.node_id)
-        if count:
-            logger.info("hydrated %d nodes from snapshots", count)
-        return count
+        return hydrate_strategy_snapshots(strategy)
 
     @staticmethod
     def write_snapshots(strategy: Strategy) -> int:
-        from .node import StreamInput
-
-        count = 0
-        for node in strategy.nodes:
-            if isinstance(node, StreamInput) and node.interval is not None and node.period:
-                try:
-                    path = snap.write_snapshot(node)
-                    if path:
-                        count += 1
-                except Exception:
-                    logger.exception("snapshot write failed for %s", node.node_id)
-        if count:
-            logger.info("wrote %d node snapshots", count)
-        return count
+        return write_strategy_snapshots(strategy)
 
     # ------------------------------------------------------------------
     async def load_history(
@@ -68,38 +83,71 @@ class HistoryWarmupService:
     # ------------------------------------------------------------------
     @staticmethod
     def missing_ranges(
-        coverage: Iterable[tuple[int, int]],
+        coverage: Any,
         start: int,
         end: int,
         interval: int,
     ) -> list[tuple[int, int]]:
-        ranges = sorted([tuple(r) for r in coverage])
-        merged: list[tuple[int, int]] = []
-        for s, e in ranges:
-            if not merged:
-                merged.append((s, e))
-                continue
-            ls, le = merged[-1]
-            if s <= le + interval:
-                merged[-1] = (ls, max(le, e))
-            else:
-                merged.append((s, e))
+        window = WarmupWindow(start=start, end=end, interval=interval)
+        gaps = compute_missing_ranges(coverage, window)
+        return [(gap.start, gap.end) for gap in gaps]
 
-        gaps: list[tuple[int, int]] = []
-        cur = start
-        for s, e in merged:
-            if e < start:
-                continue
-            if s > end:
-                break
-            if s > cur:
-                gaps.append((cur, min(s - interval, end)))
-            cur = max(cur, e + interval)
-            if cur > end:
-                break
-        if cur <= end:
-            gaps.append((cur, end))
-        return [g for g in gaps if g[0] <= g[1]]
+    async def _ensure_node_with_plan(self, node: Any, plan: NodeWarmupPlan) -> None:
+        if plan.provider is None:
+            await node.load_history(plan.window.start, plan.window.end)
+            return
+
+        poller = HistoryWarmupPoller(plan.provider)
+        result = await poller.poll(
+            WarmupRequest(
+                node_id=plan.node_id,
+                interval=plan.interval,
+                window=plan.window,
+                stop_on_ready=plan.stop_on_ready,
+                timeout=plan.timeout,
+            ),
+            is_ready=lambda: not getattr(node, "pre_warmup", False),
+        )
+
+        if result.timed_out:
+            logger.warning(
+                "history warm-up timed out for %s; proceeding with available data",
+                plan.node_id,
+            )
+
+        coverage = result.coverage
+        if getattr(node, "pre_warmup", False):
+            if not coverage:
+                coverage = list(
+                    await plan.provider.coverage(
+                        node_id=plan.node_id, interval=plan.interval
+                    )
+                )
+            bounds = coverage_bounds(coverage)
+            if bounds:
+                await node.load_history(bounds.start, bounds.end)
+            else:
+                await node.load_history(plan.window.start, plan.window.end)
+        else:
+            await node.load_history(plan.window.start, plan.window.end)
+            if not coverage:
+                coverage = list(
+                    await plan.provider.coverage(
+                        node_id=plan.node_id, interval=plan.interval
+                    )
+                )
+
+        if plan.strict:
+            coverage = list(
+                await plan.provider.coverage(
+                    node_id=plan.node_id, interval=plan.interval
+                )
+            )
+            gaps = compute_missing_ranges(coverage, plan.window)
+            if gaps or getattr(node, "pre_warmup", False):
+                raise RuntimeError(
+                    f"history gap for {plan.node_id} in strict mode"
+                )
 
     async def ensure_node_history(
         self,
@@ -110,61 +158,16 @@ class HistoryWarmupService:
         stop_on_ready: bool = False,
         strict: bool = False,
     ) -> None:
-        if node.interval is None or start is None or end is None:
+        plan = NodeWarmupPlan.build(
+            node,
+            start,
+            end,
+            stop_on_ready=stop_on_ready,
+            strict=strict,
+        )
+        if plan is None:
             return
-        provider = getattr(node, "history_provider", None)
-        if provider is None:
-            await node.load_history(start, end)
-            return
-        if start is None and end is None:
-            coverage = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            if coverage:
-                s = min(c[0] for c in coverage)
-                e = max(c[1] for c in coverage)
-                await node.load_history(s, e)
-                return
-        deadline = time.monotonic() + 60.0
-        while node.pre_warmup:
-            coverage = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            missing = self.missing_ranges(coverage, start, end, node.interval)
-            if not missing:
-                await node.load_history(start, end)
-                return
-            for s, e in missing:
-                await provider.fill_missing(
-                    s, e, node_id=node.node_id, interval=node.interval
-                )
-                if stop_on_ready and not node.pre_warmup:
-                    return
-            if time.monotonic() > deadline:
-                logger.warning(
-                    "history warm-up timed out for %s; proceeding with available data",
-                    getattr(node, "node_id", "<unknown>"),
-                )
-                break
-            if stop_on_ready:
-                break
-        if node.pre_warmup:
-            try:
-                coverage = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            except Exception:
-                coverage = []
-            if coverage:
-                s = min(c[0] for c in coverage)
-                e = max(c[1] for c in coverage)
-                await node.load_history(s, e)
-            else:
-                await node.load_history(start, end)
-        if strict:
-            try:
-                coverage = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            except Exception:
-                coverage = []
-            missing = self.missing_ranges(coverage, start, end, node.interval)
-            if missing or getattr(node, "pre_warmup", False):
-                raise RuntimeError(
-                    f"history gap for {getattr(node, 'node_id', '<unknown>')} in strict mode"
-                )
+        await self._ensure_node_with_plan(node, plan)
 
     async def ensure_history(
         self,
@@ -195,16 +198,17 @@ class HistoryWarmupService:
             else:
                 rng_start = start
                 rng_end = end
+            plan = NodeWarmupPlan.build(
+                node,
+                rng_start,
+                rng_end,
+                stop_on_ready=stop_on_ready,
+                strict=strict,
+            )
+            if plan is None:
+                continue
             tasks.append(
-                asyncio.create_task(
-                    self.ensure_node_history(
-                        node,
-                        rng_start,
-                        rng_end,
-                        stop_on_ready=stop_on_ready,
-                        strict=strict,
-                    )
-                )
+                asyncio.create_task(self._ensure_node_with_plan(node, plan))
             )
         if tasks:
             await asyncio.gather(*tasks)
@@ -422,25 +426,15 @@ class HistoryWarmupService:
             try:
                 snapshot = node.cache._snapshot()[node.node_id].get(node.interval, [])
                 ts_sorted = sorted(ts for ts, _ in snapshot)
-            except KeyError:
-                raise RuntimeError("history missing in strict mode")
+            except KeyError as exc:
+                raise RuntimeError("history missing in strict mode") from exc
             coverage = await provider.coverage(node_id=node.node_id, interval=node.interval)
-            if coverage:
-                s = min(c[0] for c in coverage)
-                e = max(c[1] for c in coverage)
-                if node.interval:
-                    expected = int((e - s) // node.interval) + 1
-                    actual = len([ts for ts in ts_sorted if s <= ts <= e])
-                    if actual < expected:
-                        raise RuntimeError("history gap detected in strict mode")
-            else:
-                for a, b in zip(ts_sorted, ts_sorted[1:]):
-                    if node.interval and (b - a) != node.interval:
-                        raise RuntimeError("history gap detected in strict mode")
-            if coverage:
-                needed = getattr(node, "period", 1) or 1
-                if len(ts_sorted) < needed:
-                    raise RuntimeError("history missing in strict mode")
+            ensure_strict_history(
+                ts_sorted,
+                getattr(node, "interval", None),
+                getattr(node, "period", 1) or 1,
+                coverage,
+            )
 
 
 __all__ = ["HistoryWarmupService"]
