@@ -16,15 +16,11 @@ from datetime import datetime, timezone
 from typing import Mapping, Callable, Any
 
 from qmtl.sdk.node import Node, ProcessingNode, StreamInput, CacheView
-from qmtl.sdk.pretrade import check_pretrade
 from qmtl.sdk.order_gate import Activation
 from qmtl.sdk.watermark import WatermarkGate, is_ready
-from qmtl.brokerage import BrokerageModel, Account, OrderType, TimeInForce
+from qmtl.brokerage import BrokerageModel, Account
 from qmtl.sdk.portfolio import (
     Portfolio,
-    order_percent,
-    order_target_percent,
-    order_value,
 )
 from qmtl.sdk.execution_modeling import (
     ExecutionModel,
@@ -40,6 +36,7 @@ from qmtl.dagmanager.kafka_admin import compute_key
 from qmtl.gateway.commit_log import CommitLogWriter
 import asyncio
 from qmtl.transforms.execution_nodes import activation_blocks_order
+from qmtl.transforms.execution_shared import run_pretrade_checks, apply_sizing
 
 
 class PreTradeGateNode(ProcessingNode):
@@ -110,21 +107,13 @@ class PreTradeGateNode(ProcessingNode):
             except Exception:
                 pass
 
-        result = check_pretrade(
+        _allowed, payload = run_pretrade_checks(
+            order,
             activation_map=self.activation_map,
             brokerage=self.brokerage,
             account=self.account,
-            symbol=order["symbol"],
-            quantity=int(order["quantity"]),
-            price=float(order["price"]),
-            order_type=order.get("order_type", OrderType.MARKET),
-            tif=order.get("tif", TimeInForce.DAY),
-            limit_price=order.get("limit_price"),
-            stop_price=order.get("stop_price"),
         )
-        if result.allowed:
-            return order
-        return {"rejected": True, "reason": result.reason.value}
+        return payload
 
 
 class SizingNode(ProcessingNode):
@@ -154,35 +143,7 @@ class SizingNode(ProcessingNode):
         if not data:
             return None
         _, order = data[-1]
-        if "quantity" in order:
-            return order
-        price = float(order["price"])
-        symbol = order["symbol"]
-        if "value" in order:
-            qty = order_value(symbol, float(order["value"]), price)
-        elif "percent" in order:
-            qty = order_percent(self.portfolio, symbol, float(order["percent"]), price)
-        elif "target_percent" in order:
-            qty = order_target_percent(
-                self.portfolio, symbol, float(order["target_percent"]), price
-            )
-        else:
-            return order
-        order = dict(order)
-        # Apply soft gating weight if provided
-        if self.weight_fn is not None:
-            try:
-                factor = float(self.weight_fn(order))
-                if factor < 0.0:
-                    factor = 0.0
-                if factor > 1.0:
-                    factor = 1.0
-                qty *= factor
-            except Exception:
-                # Ignore weighting errors
-                pass
-        order["quantity"] = qty
-        return order
+        return apply_sizing(order, self.portfolio, weight_fn=self.weight_fn)
 
 class ExecutionNode(ProcessingNode):
     """Simulate execution using :class:`~qmtl.sdk.execution_modeling.ExecutionModel`."""
