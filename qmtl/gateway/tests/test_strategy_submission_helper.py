@@ -278,7 +278,7 @@ async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
     assert result.downgrade_reason == DowngradeReason.MISSING_AS_OF
     metric_value = (
         metrics.strategy_compute_context_downgrade_total.labels(
-            reason=DowngradeReason.MISSING_AS_OF
+            reason=DowngradeReason.MISSING_AS_OF.value
         )._value.get()
     )
     assert metric_value == 1
@@ -314,7 +314,7 @@ async def test_process_backtest_missing_as_of_enters_safe_mode():
     assert manager.skip_flags == [True]
     metric_value = (
         metrics.strategy_compute_context_downgrade_total.labels(
-            reason=DowngradeReason.MISSING_AS_OF
+            reason=DowngradeReason.MISSING_AS_OF.value
         )._value.get()
     )
     assert metric_value == 1
@@ -343,7 +343,7 @@ async def test_process_dryrun_synonym_with_as_of_keeps_domain():
     assert dagmanager.tag_queries[0][-1] == "dryrun"
     metric_value = (
         metrics.strategy_compute_context_downgrade_total.labels(
-            reason=DowngradeReason.MISSING_AS_OF
+            reason=DowngradeReason.MISSING_AS_OF.value
         )._value.get()
     )
     assert metric_value == 0

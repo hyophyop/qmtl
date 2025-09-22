@@ -74,8 +74,13 @@ class StrategyManager:
                 and compute_ctx.downgrade_reason
                 and not skip_downgrade_metric
             ):
+                reason = getattr(
+                    compute_ctx.downgrade_reason,
+                    "value",
+                    compute_ctx.downgrade_reason,
+                )
                 gw_metrics.strategy_compute_context_downgrade_total.labels(
-                    reason=compute_ctx.downgrade_reason
+                    reason=reason
                 ).inc()
 
             try:

@@ -64,8 +64,9 @@ class StrategySubmissionHelper:
 
         # Emit a downgrade metric whenever we enter safe mode due to missing context.
         if downgraded and downgrade_reason:
+            reason = getattr(downgrade_reason, "value", downgrade_reason)
             gw_metrics.strategy_compute_context_downgrade_total.labels(
-                reason=downgrade_reason
+                reason=reason
             ).inc()
 
         strategy_id, existed = await self._maybe_submit(

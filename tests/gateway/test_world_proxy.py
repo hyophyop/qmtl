@@ -193,7 +193,7 @@ async def test_decide_compute_context_downgrade_missing_as_of(fake_redis):
     assert context["downgrade_reason"] == DowngradeReason.MISSING_AS_OF
     metric_value = (
         metrics.worlds_compute_context_downgrade_total.labels(
-            reason=DowngradeReason.MISSING_AS_OF
+            reason=DowngradeReason.MISSING_AS_OF.value
         )._value.get()
     )
     assert metric_value == 1

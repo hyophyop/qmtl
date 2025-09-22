@@ -284,7 +284,7 @@ async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
 
     metric_value = (
         metrics.strategy_compute_context_downgrade_total.labels(
-            reason=DowngradeReason.MISSING_AS_OF
+            reason=DowngradeReason.MISSING_AS_OF.value
         )._value.get()
     )
     assert metric_value == 1
