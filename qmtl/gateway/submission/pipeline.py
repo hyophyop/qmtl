@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List
 
-from qmtl.common.compute_context import ComputeContext
-
-from .context_service import ComputeContextService
+from .context_service import ComputeContextService, StrategyComputeContext
 from .dag_loader import DagLoader
 from .diff_executor import DiffExecutor
 from .node_identity import NodeIdentityValidator
@@ -20,10 +18,23 @@ if TYPE_CHECKING:  # pragma: no cover - typing hints only
 @dataclass
 class PreparedSubmission:
     dag: dict[str, Any]
-    compute_context: ComputeContext
-    context_payload: dict[str, Any]
-    context_mapping: dict[str, str]
-    worlds: List[str]
+    strategy_context: StrategyComputeContext
+
+    @property
+    def compute_context(self) -> StrategyComputeContext:
+        return self.strategy_context
+
+    @property
+    def context_payload(self) -> dict[str, Any]:
+        return self.strategy_context.commit_log_payload()
+
+    @property
+    def context_mapping(self) -> dict[str, str]:
+        return self.strategy_context.redis_mapping()
+
+    @property
+    def worlds(self) -> List[str]:
+        return self.strategy_context.worlds_list()
 
 
 class SubmissionPipeline:
@@ -49,13 +60,10 @@ class SubmissionPipeline:
         loaded = self._dag_loader.load(payload.dag_json)
         dag = loaded.dag
         self._node_validator.validate(dag, payload.node_ids_crc32)
-        context, context_payload, mapping, worlds = self._context_service.build(payload)
+        strategy_context = self._context_service.build(payload)
         return PreparedSubmission(
             dag=dag,
-            compute_context=context,
-            context_payload=context_payload,
-            context_mapping=mapping,
-            worlds=worlds,
+            strategy_context=strategy_context,
         )
 
     async def run_diff(
@@ -65,7 +73,7 @@ class SubmissionPipeline:
         dag_json: str,
         worlds: list[str],
         fallback_world_id: str | None,
-        compute_ctx: ComputeContext,
+        compute_ctx: StrategyComputeContext,
         timeout: float,
         prefer_queue_map: bool,
     ) -> tuple[str | None, dict[str, list[dict[str, Any]]] | None]:

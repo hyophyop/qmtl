@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from qmtl.common import compute_node_id, crc32_of_list
+from qmtl.common.compute_context import DowngradeReason
 from qmtl.gateway import metrics
 from qmtl.gateway.database import MemoryDatabase, PostgresDatabase, SQLiteDatabase
 from qmtl.gateway.models import StrategySubmit
@@ -274,9 +275,11 @@ async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
     assert dagmanager.tag_queries[0][-1] == "backtest"
     assert result.downgraded is True
     assert result.safe_mode is True
-    assert result.downgrade_reason == "missing_as_of"
+    assert result.downgrade_reason == DowngradeReason.MISSING_AS_OF
     metric_value = (
-        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+        metrics.strategy_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.MISSING_AS_OF.value
+        )._value.get()
     )
     assert metric_value == 1
 
@@ -303,14 +306,16 @@ async def test_process_backtest_missing_as_of_enters_safe_mode():
     assert result.queue_map.keys() == {expected_node_id}
     assert result.downgraded is True
     assert result.safe_mode is True
-    assert result.downgrade_reason == "missing_as_of"
+    assert result.downgrade_reason == DowngradeReason.MISSING_AS_OF
     assert dagmanager.diff_calls
     _, _, domain, as_of, _, _ = dagmanager.diff_calls[0]
     assert domain == "backtest"
     assert as_of is None
     assert manager.skip_flags == [True]
     metric_value = (
-        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+        metrics.strategy_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.MISSING_AS_OF.value
+        )._value.get()
     )
     assert metric_value == 1
 
@@ -337,7 +342,9 @@ async def test_process_dryrun_synonym_with_as_of_keeps_domain():
     assert as_of == "2025-01-01T00:00:00Z"
     assert dagmanager.tag_queries[0][-1] == "dryrun"
     metric_value = (
-        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+        metrics.strategy_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.MISSING_AS_OF.value
+        )._value.get()
     )
     assert metric_value == 0
 

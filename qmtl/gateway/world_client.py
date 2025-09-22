@@ -43,9 +43,8 @@ ExecutionDomain = Literal["backtest", "dryrun", "live", "shadow"]
 def _assemble_compute_context(world_id: str, payload: dict[str, Any]) -> ComputeContext:
     context = build_worldservice_compute_context(world_id, payload)
     if context.downgraded and context.downgrade_reason:
-        gw_metrics.worlds_compute_context_downgrade_total.labels(
-            reason=context.downgrade_reason
-        ).inc()
+        reason = getattr(context.downgrade_reason, "value", context.downgrade_reason)
+        gw_metrics.worlds_compute_context_downgrade_total.labels(reason=reason).inc()
     return context
 
 

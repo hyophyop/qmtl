@@ -46,7 +46,7 @@ The payload object contains all data required to replay an ingestion event:
 | ``dag_base64`` | Base64 representation of ``dag`` for quick transport. |
 | ``node_ids_crc32`` | CRC32 checksum supplied by the client. |
 | ``insert_sentinel`` | Boolean flag indicating whether Gateway appended a sentinel node. |
-| ``compute_context`` | Normalised compute context with ``world_id``, ``execution_domain``, ``as_of``, ``partition`` and ``dataset_fingerprint`` when supplied. |
+| ``compute_context`` | Normalised compute context with ``world_id``, ``execution_domain``, ``as_of``, ``partition`` and ``dataset_fingerprint`` when supplied. When Gateway downgrades into safe mode the payload also includes ``downgraded``, ``downgrade_reason`` (a value from the shared ``DowngradeReason`` enum) and ``safe_mode``. |
 | ``world_ids`` | Ordered list of unique world identifiers associated with the submission. |
 | ``world_id`` | Primary world identifier when provided. |
 | ``meta`` | Original submission metadata (JSON coerced). |

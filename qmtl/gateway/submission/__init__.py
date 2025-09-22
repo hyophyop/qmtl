@@ -1,6 +1,6 @@
 """Submission pipeline services for Gateway strategy ingestion."""
 
-from .context_service import ComputeContextService
+from .context_service import ComputeContextService, StrategyComputeContext
 from .dag_loader import DagLoader, LoadedDag
 from .diff_executor import DiffExecutor
 from .node_identity import NodeIdentityValidator
@@ -16,4 +16,5 @@ __all__ = [
     "PreparedSubmission",
     "SubmissionPipeline",
     "QueueMapResolver",
+    "StrategyComputeContext",
 ]

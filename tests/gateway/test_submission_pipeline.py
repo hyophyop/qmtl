@@ -5,7 +5,11 @@ import asyncio
 import pytest
 
 from qmtl.common.compute_context import ComputeContext
-from qmtl.gateway.submission import PreparedSubmission, SubmissionPipeline
+from qmtl.gateway.submission import (
+    PreparedSubmission,
+    StrategyComputeContext,
+    SubmissionPipeline,
+)
 
 
 class _Loader:
@@ -30,7 +34,7 @@ class _Validator:
 class _ContextService:
     def build(self, payload):
         context = ComputeContext(world_id="w1", execution_domain="live")
-        return context, {"execution_domain": "live"}, {"compute_execution_domain": "live"}, ["w1"]
+        return StrategyComputeContext(context=context, worlds=("w1",))
 
 
 class _DiffExecutor:

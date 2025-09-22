@@ -14,14 +14,13 @@ from fastapi import HTTPException
 from opentelemetry import trace
 
 from . import metrics as gw_metrics
-from .compute_context import ComputeContext
 from .commit_log import CommitLogWriter
 from .database import Database
 from .degradation import DegradationManager, DegradationLevel
 from .fsm import StrategyFSM
 from .models import StrategySubmit
 from .strategy_persistence import StrategyQueue, StrategyStorage
-from .submission import ComputeContextService
+from .submission import ComputeContextService, StrategyComputeContext
 
 tracer = trace.get_tracer(__name__)
 
@@ -64,20 +63,24 @@ class StrategyManager:
         with tracer.start_as_current_span("gateway.submit"):
             decoded = self._decode_dag(payload)
 
-            (
-                compute_ctx,
-                compute_ctx_payload,
-                context_mapping,
-                world_list,
-            ) = self._build_compute_context(payload)
+            strategy_ctx = self._build_compute_context(payload)
+            compute_ctx = strategy_ctx.context
+            compute_ctx_payload = strategy_ctx.commit_log_payload()
+            context_mapping = strategy_ctx.redis_mapping()
+            world_list = strategy_ctx.worlds_list()
 
             if (
                 compute_ctx.downgraded
                 and compute_ctx.downgrade_reason
                 and not skip_downgrade_metric
             ):
+                reason = getattr(
+                    compute_ctx.downgrade_reason,
+                    "value",
+                    compute_ctx.downgrade_reason,
+                )
                 gw_metrics.strategy_compute_context_downgrade_total.labels(
-                    reason=compute_ctx.downgrade_reason
+                    reason=reason
                 ).inc()
 
             try:
@@ -268,12 +271,7 @@ class StrategyManager:
 
     def _build_compute_context(
         self, payload: StrategySubmit
-    ) -> tuple[
-        ComputeContext,
-        dict[str, str | bool | None],
-        dict[str, str],
-        list[str],
-    ]:
+    ) -> StrategyComputeContext:
         if self.context_service is None:
             self.context_service = ComputeContextService()
         return self.context_service.build(payload)

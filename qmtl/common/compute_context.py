@@ -3,12 +3,14 @@ from __future__ import annotations
 """Canonical compute context model shared across QMTL services."""
 
 from dataclasses import dataclass, replace
+from enum import Enum
 import re
 from typing import Any, Mapping
 
 __all__ = [
     "DEFAULT_EXECUTION_DOMAIN",
     "ComputeContext",
+    "DowngradeReason",
     "normalize_context_value",
     "resolve_execution_domain",
     "evaluate_safe_mode",
@@ -58,6 +60,12 @@ _WORLD_MODE_TOKENS = {
 }
 
 
+class DowngradeReason(str, Enum):
+    """Enumerate downgrade reasons shared across services."""
+
+    MISSING_AS_OF = "missing_as_of"
+
+
 def normalize_context_value(value: Any | None) -> str | None:
     """Normalize raw values into stripped strings."""
 
@@ -96,16 +104,16 @@ def resolve_execution_domain(value: str | None) -> str | None:
 
 def evaluate_safe_mode(
     execution_domain: str | None, as_of: str | None
-) -> tuple[str | None, bool, str | None, bool]:
+) -> tuple[str | None, bool, DowngradeReason | None, bool]:
     """Determine downgrades and safe-mode requirements."""
 
     downgraded = False
-    downgrade_reason: str | None = None
+    downgrade_reason: DowngradeReason | None = None
     safe_mode = False
 
     if execution_domain in {"backtest", "dryrun"} and not as_of:
         downgraded = True
-        downgrade_reason = "missing_as_of"
+        downgrade_reason = DowngradeReason.MISSING_AS_OF
         safe_mode = True
         execution_domain = "backtest"
 
@@ -122,7 +130,7 @@ class ComputeContext:
     partition: str | None = None
     dataset_fingerprint: str | None = None
     downgraded: bool = False
-    downgrade_reason: str | None = None
+    downgrade_reason: DowngradeReason | None = None
     safe_mode: bool = False
 
     def with_world(self, world_id: str | None) -> "ComputeContext":
@@ -175,7 +183,7 @@ class ComputeContext:
         if include_flags and self.downgraded:
             payload["downgraded"] = True
             if self.downgrade_reason:
-                payload["downgrade_reason"] = self.downgrade_reason
+                payload["downgrade_reason"] = self.downgrade_reason.value
             if self.safe_mode:
                 payload["safe_mode"] = True
         elif include_flags and self.safe_mode:

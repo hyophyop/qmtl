@@ -42,7 +42,7 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 
 **Ax‑1** SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
 **Ax‑2** Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.
-**Ax‑3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/common/compute_context.py` and is consumed by Gateway, DAG Manager, and the SDK.
+**Ax‑3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/common/compute_context.py` and is wrapped by `StrategyComputeContext` (`qmtl/gateway/submission/context_service.py`) which owns commit-log serialization, downgrade tracking, and Redis mapping for ingestion flows.
 
 ### Non‑Goals
 - Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
@@ -156,8 +156,11 @@ Content‑Type: application/json
 > **Backtests & dry-runs:** When `meta.execution_domain` resolves to `backtest` or
 > `dryrun` (including aliases such as `compute-only`, `paper`, or `sim`), callers
 > MUST include `meta.as_of`. Gateway downgrades missing values to compute-only
-> backtests and records the event via `strategy_compute_context_downgrade_total{
-> reason="missing_as_of"}` to prevent dataset cross-contamination.
+> backtests, enters safe mode, and records the event via
+> `strategy_compute_context_downgrade_total{reason="missing_as_of"}`. The
+> downgrade reasons are defined by the shared `DowngradeReason` enum in
+> `qmtl/common/compute_context.py` to keep replay and commit-log behavior in
+> sync.
 
 **Example Queue Lookup**
 

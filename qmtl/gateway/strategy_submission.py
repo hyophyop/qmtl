@@ -31,7 +31,7 @@ class StrategySubmissionResult:
     queue_map: dict[str, list[dict[str, Any] | Any]]
     sentinel_id: str
     downgraded: bool = False
-    downgrade_reason: str | None = None
+    downgrade_reason: "DowngradeReason | str | None" = None
     safe_mode: bool = False
 
 
@@ -56,16 +56,17 @@ class StrategySubmissionHelper:
     ) -> StrategySubmissionResult:
         prepared = self._pipeline.prepare(payload)
         dag = prepared.dag
-        compute_ctx = prepared.compute_context
+        strategy_ctx = prepared.compute_context
         worlds = prepared.worlds
-        downgraded = compute_ctx.downgraded
-        downgrade_reason = compute_ctx.downgrade_reason
-        safe_mode = compute_ctx.safe_mode
+        downgraded = strategy_ctx.downgraded
+        downgrade_reason = strategy_ctx.downgrade_reason
+        safe_mode = strategy_ctx.safe_mode
 
         # Emit a downgrade metric whenever we enter safe mode due to missing context.
         if downgraded and downgrade_reason:
+            reason = getattr(downgrade_reason, "value", downgrade_reason)
             gw_metrics.strategy_compute_context_downgrade_total.labels(
-                reason=downgrade_reason
+                reason=reason
             ).inc()
 
         strategy_id, existed = await self._maybe_submit(
@@ -81,7 +82,7 @@ class StrategySubmissionHelper:
             await self._persist_world_bindings(worlds, payload.world_id, strategy_id)
 
         queue_map = {}
-        exec_domain = compute_ctx.execution_domain or None
+        exec_domain = strategy_ctx.execution_domain or None
 
         prefer_diff = config.prefer_diff_queue_map
         diff_strategy_id = config.diff_strategy_id or strategy_id
@@ -102,7 +103,7 @@ class StrategySubmissionHelper:
                 dag_json=dag_json,
                 worlds=worlds,
                 fallback_world_id=payload.world_id,
-                compute_ctx=compute_ctx,
+                compute_ctx=strategy_ctx,
                 timeout=config.diff_timeout,
                 prefer_queue_map=prefer_diff,
             )
