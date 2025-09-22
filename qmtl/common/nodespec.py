@@ -42,7 +42,13 @@ def _canonicalize_params(value: Any) -> Any:
             canonical[key] = _canonicalize_params(value[key])
         return canonical
     if isinstance(value, set):
-        return sorted(_canonicalize_params(item) for item in value)
+        items = [_canonicalize_params(item) for item in value]
+        def _sort_key(x: Any) -> str:
+            try:
+                return json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+            except Exception:
+                return str(x)
+        return sorted(items, key=_sort_key)
     if isinstance(value, Sequence) and not isinstance(
         value, (str, bytes, bytearray)
     ):
@@ -85,4 +91,3 @@ def serialize_nodespec(node: Mapping[str, Any]) -> bytes:
 
 
 __all__ = ["serialize_nodespec"]
-

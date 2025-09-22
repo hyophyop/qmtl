@@ -58,9 +58,8 @@ class StrategySubmissionHelper:
         downgrade_reason = compute_ctx.get("downgrade_reason")
         safe_mode = bool(compute_ctx.get("safe_mode"))
 
-        # Only emit metrics during dry runs (not real submissions).
-        # This avoids recording metrics during actual submissions.
-        if not config.submit and downgraded and downgrade_reason:
+        # Emit a downgrade metric whenever we enter safe mode due to missing context.
+        if downgraded and downgrade_reason:
             gw_metrics.strategy_compute_context_downgrade_total.labels(
                 reason=downgrade_reason
             ).inc()

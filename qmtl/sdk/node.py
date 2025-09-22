@@ -44,6 +44,30 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 
+def _extract_schema_compat_id(schema: Any, expected_schema: Any) -> str | None:
+    """Extract a schema compatibility identifier from provided schemas.
+
+    Checks multiple common key variants in ``schema`` first, then in
+    ``expected_schema``. Returns ``None`` if not found.
+    """
+    compat_id: Any = None
+    if isinstance(schema, dict):
+        compat_id = (
+            schema.get("schema_compat_id")
+            or schema.get("compat_id")
+            or schema.get("compatId")
+        )
+    if compat_id is None and isinstance(expected_schema, dict):
+        compat_id = (
+            expected_schema.get("schema_compat_id")
+            or expected_schema.get("compat_id")
+            or expected_schema.get("compatId")
+        )
+    if compat_id is None:
+        return None
+    return str(compat_id)
+
+
 class MatchMode(str, Enum):
     """Tag matching behaviour for :class:`TagQueryNode`.
 
@@ -546,20 +570,9 @@ class Node:
         self.execute = True
         self.kafka_topic: str | None = None
         self.enable_feature_artifacts = bool(self.config.get("enable_feature_artifacts", False))
-        compat_id: str | None = None
-        if isinstance(self.schema, dict):
-            compat_id = (
-                self.schema.get("schema_compat_id")
-                or self.schema.get("compat_id")
-                or self.schema.get("compatId")
-            )
-        if compat_id is None and isinstance(self.expected_schema, dict):
-            compat_id = (
-                self.expected_schema.get("schema_compat_id")
-                or self.expected_schema.get("compat_id")
-                or self.expected_schema.get("compatId")
-            )
-        self.schema_compat_id: str = str(compat_id) if compat_id is not None else self.schema_hash
+        self.schema_compat_id: str = (
+            _extract_schema_compat_id(self.schema, self.expected_schema) or self.schema_hash
+        )
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:
