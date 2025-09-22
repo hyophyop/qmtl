@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from qmtl.dagmanager.diff_service import CrossContextTopicReuseError
+
 from qmtl.dagmanager.diff_service import DiffRequest, DiffService, NodeRecord
 from qmtl.dagmanager.topic import topic_name
 
@@ -83,12 +85,17 @@ def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, 
     )
 
     diff_service.diff(DiffRequest(strategy_id="s", dag_json=dag_live))
-    chunk = diff_service.diff(DiffRequest(strategy_id="s", dag_json=dag_backtest))
+    with pytest.raises(CrossContextTopicReuseError) as exc:
+        diff_service.diff(DiffRequest(strategy_id="s", dag_json=dag_backtest))
 
+    assert "A" in str(exc.value)
     assert len(fake_queue.calls) == 1
-    assert chunk.new_nodes and chunk.new_nodes[0].compute_key is not None
     key = ("A", "w2", "backtest", "__unset__", "__unset__")
     assert diff_metrics.cross_context_cache_hit_total._vals.get(key) == 1  # type: ignore[attr-defined]
+    violation_key = ("A", "w2", "backtest")
+    assert (
+        diff_metrics.cross_context_cache_violation_total._vals.get(violation_key) == 1
+    )  # type: ignore[attr-defined]
 
 
 def test_sentinel_insert_and_stream(diff_service, fake_repo, fake_stream):
