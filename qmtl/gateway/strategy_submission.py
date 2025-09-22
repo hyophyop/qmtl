@@ -54,7 +54,7 @@ class StrategySubmissionHelper:
     async def process(
         self, payload: StrategySubmit, config: StrategySubmissionConfig
     ) -> StrategySubmissionResult:
-        prepared = self._pipeline.prepare(payload)
+        prepared = await self._pipeline.prepare(payload)
         dag = prepared.dag
         strategy_ctx = prepared.compute_context
         worlds = prepared.worlds

@@ -1,14 +1,29 @@
-from __future__ import annotations
-
 """Shared compute context helpers for strategy submissions."""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, List
 
-from qmtl.common.compute_context import ComputeContext, build_strategy_compute_context
+from qmtl.common.compute_context import (
+    ComputeContext,
+    DowngradeReason,
+    build_strategy_compute_context,
+    build_worldservice_compute_context,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing aid
     from qmtl.gateway.models import StrategySubmit
+    from qmtl.gateway.world_client import WorldServiceClient
+
+
+class _WorldDecisionUnavailable(RuntimeError):
+    """Sentinel exception representing a failed WorldService lookup."""
+
+    def __init__(self, world_id: str, *, stale: bool = False) -> None:
+        super().__init__(f"world decision unavailable for {world_id}")
+        self.world_id = world_id
+        self.stale = stale
 
 
 @dataclass(frozen=True)
@@ -45,14 +60,74 @@ class StrategyComputeContext:
 class ComputeContextService:
     """Normalize compute context metadata and world identifiers."""
 
-    def build(
+    def __init__(self, world_client: "WorldServiceClient | None" = None) -> None:
+        self._world_client = world_client
+
+    async def build(
         self, payload: "StrategySubmit"
     ) -> StrategyComputeContext:
         worlds = tuple(self._unique_worlds(payload))
         meta = payload.meta if isinstance(payload.meta, dict) else None
         base_ctx = build_strategy_compute_context(meta)
-        context = base_ctx.with_world(worlds[0]) if worlds else base_ctx
+
+        context = base_ctx
+        if worlds:
+            context = context.with_world(worlds[0])
+
+        decision_ctx: ComputeContext | None = None
+        stale_decision = False
+        if worlds and self._world_client is not None:
+            world_id = worlds[0]
+            try:
+                decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
+            except _WorldDecisionUnavailable as exc:
+                stale_decision = stale_decision or exc.stale
+                decision_ctx = None
+
+        if decision_ctx is not None:
+            context = self._merge_contexts(decision_ctx, base_ctx)
+            if stale_decision:
+                context = self._downgrade_stale(context)
+
         return StrategyComputeContext(context=context, worlds=worlds)
+
+    async def _fetch_decision_context(
+        self, world_id: str
+    ) -> tuple[ComputeContext | None, bool]:
+        if self._world_client is None:
+            raise _WorldDecisionUnavailable(world_id)
+        try:
+            payload, stale = await self._world_client.get_decide(world_id)
+        except Exception as exc:  # pragma: no cover - defensive network guard
+            raise _WorldDecisionUnavailable(world_id) from exc
+        if payload is None:
+            raise _WorldDecisionUnavailable(world_id, stale=stale)
+        try:
+            context = build_worldservice_compute_context(world_id, payload)
+        except Exception as exc:  # pragma: no cover - protect against schema drift
+            raise _WorldDecisionUnavailable(world_id, stale=stale) from exc
+        return context, stale
+
+    def _merge_contexts(
+        self, decision_ctx: ComputeContext, base_ctx: ComputeContext
+    ) -> ComputeContext:
+        overrides: dict[str, Any] = {}
+        if base_ctx.partition:
+            overrides["partition"] = base_ctx.partition
+        if base_ctx.as_of and not decision_ctx.as_of:
+            overrides["as_of"] = base_ctx.as_of
+        if overrides:
+            decision_ctx = decision_ctx.with_overrides(**overrides)
+        return decision_ctx
+
+    def _downgrade_stale(self, context: ComputeContext) -> ComputeContext:
+        downgraded = context.with_overrides(execution_domain="backtest", as_of=None)
+        return replace(
+            downgraded,
+            downgraded=True,
+            downgrade_reason=DowngradeReason.STALE_DECISION,
+            safe_mode=True,
+        )
 
     def _unique_worlds(self, payload: "StrategySubmit") -> List[str]:
         candidates: list[str] = []
@@ -80,3 +155,6 @@ class ComputeContextService:
             text = str(value).strip()
             return text or None
         return None
+
+
+__all__ = ["ComputeContextService", "StrategyComputeContext"]

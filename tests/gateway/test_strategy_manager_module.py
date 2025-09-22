@@ -269,7 +269,7 @@ async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
         node_ids_crc32=0,
     )
 
-    strategy_ctx = manager._build_compute_context(payload)
+    strategy_ctx = await manager._build_compute_context(payload)
     context = strategy_ctx.context
     context_payload = strategy_ctx.commit_log_payload()
     assert context.downgraded is True

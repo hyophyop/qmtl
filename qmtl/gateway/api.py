@@ -30,7 +30,7 @@ from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
 from .commit_log_consumer import CommitLogConsumer
 from .commit_log import CommitLogWriter
-from .submission import SubmissionPipeline
+from .submission import ComputeContextService, SubmissionPipeline
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -221,7 +221,10 @@ def create_app(
             return Response(status_code=503)
         return await call_next(request)
 
-    submission_pipeline = SubmissionPipeline(dagmanager)
+    submission_pipeline = SubmissionPipeline(
+        dagmanager,
+        context_service=ComputeContextService(world_client=world_client_local),
+    )
 
     api_router = create_api_router(
         manager,
