@@ -78,17 +78,14 @@ class ComputeContextService:
         decision_ctx: ComputeContext | None = None
         stale_decision = False
         decision_unavailable = False
-        if worlds:
-            if self._world_client is None:
+        if worlds and self._world_client is not None:
+            world_id = worlds[0]
+            try:
+                decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
+            except _WorldDecisionUnavailable as exc:
+                stale_decision = stale_decision or exc.stale
+                decision_ctx = None
                 decision_unavailable = True
-            else:
-                world_id = worlds[0]
-                try:
-                    decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
-                except _WorldDecisionUnavailable as exc:
-                    stale_decision = stale_decision or exc.stale
-                    decision_ctx = None
-                    decision_unavailable = True
 
         if decision_ctx is not None:
             context = self._merge_contexts(decision_ctx, base_ctx)
