@@ -1,4 +1,4 @@
-from qmtl.transforms import equity_linearity_metrics_v2
+from qmtl.transforms.linearity_metrics import equity_linearity_metrics_v2
 
 
 def test_v2_linear_up_is_high():
