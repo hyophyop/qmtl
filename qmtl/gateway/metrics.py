@@ -3,15 +3,19 @@ from __future__ import annotations
 """Prometheus metrics for Gateway."""
 
 from collections import deque
+from collections.abc import Sequence
 from typing import Deque
 import time
 
 from prometheus_client import (
-    Gauge,
-    Counter,
     generate_latest,
     start_http_server,
     REGISTRY as global_registry,
+)
+from qmtl.common.metrics_factory import (
+    get_or_create_counter,
+    get_or_create_gauge,
+    reset_metrics as reset_registered_metrics,
 )
 
 _e2e_samples: Deque[float] = deque(maxlen=100)
@@ -19,6 +23,29 @@ _worlds_samples: Deque[float] = deque(maxlen=100)
 _sentinel_weight_updates: dict[str, float] = {}
 
 _WORLD_ID = "default"
+_REGISTERED_METRICS: set[str] = set()
+
+
+def _counter(
+    name: str,
+    documentation: str,
+    labelnames: Sequence[str] | None = None,
+    **kwargs,
+):
+    metric = get_or_create_counter(name, documentation, labelnames, **kwargs)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
+
+
+def _gauge(
+    name: str,
+    documentation: str,
+    labelnames: Sequence[str] | None = None,
+    **kwargs,
+):
+    metric = get_or_create_gauge(name, documentation, labelnames, **kwargs)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
 
 
 def set_world_id(world_id: str) -> None:
@@ -26,294 +53,293 @@ def set_world_id(world_id: str) -> None:
     _WORLD_ID = str(world_id)
 
 
-gateway_e2e_latency_p95 = Gauge(
+# ---------------------------------------------------------------------------
+# Core Gateway health metrics
+# ---------------------------------------------------------------------------
+gateway_e2e_latency_p95 = _gauge(
     "gateway_e2e_latency_p95",
     "95th percentile end-to-end latency in milliseconds",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0.0,
+    reset=lambda g: g.set(0.0),
 )
 
-lost_requests_total = Counter(
+lost_requests_total = _counter(
     "lost_requests_total",
     "Total number of diff submissions lost due to queue errors",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-commit_duplicate_total = Counter(
+commit_duplicate_total = _counter(
     "commit_duplicate_total",
     "Total number of duplicate commit-log records detected",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-commit_invalid_total = Counter(
+commit_invalid_total = _counter(
     "commit_invalid_total",
     "Total number of invalid commit-log records detected",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-
-owner_reassign_total = Counter(
+owner_reassign_total = _counter(
     "owner_reassign_total",
     "Total number of lease owner changes mid-bucket",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-dagclient_breaker_state = Gauge(
+# DAG Manager breaker metrics
+dagclient_breaker_state = _gauge(
     "dagclient_breaker_state",
     "DAG Manager circuit breaker state (1=open, 0=closed)",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-dagclient_breaker_failures = Gauge(
+dagclient_breaker_failures = _gauge(
     "dagclient_breaker_failures",
     "Consecutive failures recorded by the DAG Manager circuit breaker",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-dagclient_breaker_open_total = Gauge(
+dagclient_breaker_open_total = _gauge(
     "dagclient_breaker_open_total",
     "Number of times the DAG Manager client breaker opened",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-# Metrics for WorldService proxy
-worlds_proxy_latency_p95 = Gauge(
+# WorldService proxy metrics
+worlds_proxy_latency_p95 = _gauge(
     "worlds_proxy_latency_p95",
     "95th percentile latency of requests proxied to WorldService in milliseconds",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0.0,
+    reset=lambda g: g.set(0.0),
 )
 
-worlds_proxy_requests_total = Counter(
+worlds_proxy_requests_total = _counter(
     "worlds_proxy_requests_total",
     "Total number of requests proxied to WorldService",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-worlds_cache_hits_total = Counter(
+worlds_cache_hits_total = _counter(
     "worlds_cache_hits_total",
     "Total number of cache hits when proxying WorldService requests",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-worlds_cache_hit_ratio = Gauge(
+worlds_cache_hit_ratio = _gauge(
     "worlds_cache_hit_ratio",
     "Cache hit ratio for WorldService proxy requests",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0.0,
+    reset=lambda g: g.set(0),
 )
 
-worlds_stale_responses_total = Counter(
+worlds_stale_responses_total = _counter(
     "worlds_stale_responses_total",
     "Total number of stale cache responses served for WorldService requests",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
 )
 
-worlds_compute_context_downgrade_total = Counter(
+worlds_compute_context_downgrade_total = _counter(
     "worlds_compute_context_downgrade_total",
     "Total number of decision compute contexts downgraded due to missing fields",
     ["reason"],
-    registry=global_registry,
 )
 
-strategy_compute_context_downgrade_total = Counter(
+strategy_compute_context_downgrade_total = _counter(
     "strategy_compute_context_downgrade_total",
     "Total number of strategy submissions downgraded due to missing fields",
     ["reason"],
-    registry=global_registry,
 )
 
-# Circuit breaker metrics for WorldService
-worlds_breaker_state = Gauge(
+worlds_breaker_state = _gauge(
     "worlds_breaker_state",
     "WorldService circuit breaker state (1=open, 0=closed)",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-worlds_breaker_failures = Gauge(
+worlds_breaker_failures = _gauge(
     "worlds_breaker_failures",
     "Consecutive failures recorded by the WorldService circuit breaker",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-worlds_breaker_open_total = Gauge(
+worlds_breaker_open_total = _gauge(
     "worlds_breaker_open_total",
     "Number of times the WorldService client breaker opened",
-    registry=global_registry,
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
 )
 
-
-# Track the percentage of traffic routed to each sentinel version
-if "gateway_sentinel_traffic_ratio" in global_registry._names_to_collectors:
-    gateway_sentinel_traffic_ratio = global_registry._names_to_collectors["gateway_sentinel_traffic_ratio"]
-else:
-    gateway_sentinel_traffic_ratio = Gauge(
-        "gateway_sentinel_traffic_ratio",
-        "Traffic ratio reported by each sentinel instance (0~1)",
-        ["sentinel_id"],
-        registry=global_registry,
-    )
-gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
-
-# Degradation level of the Gateway service
-degrade_level = Gauge(
-    "degrade_level",
-    "Current degradation level",
-    ["service"],
-    registry=global_registry,
+# ---------------------------------------------------------------------------
+# Sentinel routing metrics
+# ---------------------------------------------------------------------------
+gateway_sentinel_traffic_ratio = _gauge(
+    "gateway_sentinel_traffic_ratio",
+    "Traffic ratio reported by each sentinel instance (0~1)",
+    ["sentinel_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
 )
 
-# Event relay and ControlBus metrics
-controlbus_lag_ms = Gauge(
-    "controlbus_lag_ms",
-    "Delay between event creation and processing in milliseconds",
-    ["topic"],
-    registry=global_registry,
-)
-
-event_relay_events_total = Counter(
-    "event_relay_events_total",
-    "Total number of ControlBus events relayed to clients",
-    ["topic"],
-    registry=global_registry,
-)
-
-event_relay_dropped_total = Counter(
-    "event_relay_dropped_total",
-    "Total number of ControlBus events dropped",
-    ["topic"],
-    registry=global_registry,
-)
-
-event_relay_skew_ms = Gauge(
-    "event_relay_skew_ms",
-    "Clock skew between event timestamp and relay time in milliseconds",
-    ["topic"],
-    registry=global_registry,
-)
-
-event_fanout_total = Counter(
-    "event_fanout_total",
-    "Total number of recipients for relayed ControlBus events",
-    ["topic"],
-    registry=global_registry,
-)
-
-ws_subscribers = Gauge(
-    "ws_subscribers",
-    "Active WebSocket subscribers",
-    ["topic"],
-    registry=global_registry,
-)
-ws_subscribers._vals = {}  # type: ignore[attr-defined]
-
-ws_dropped_subscribers_total = Counter(
-    "ws_dropped_subscribers_total",
-    "Total number of WebSocket subscribers dropped",
-    registry=global_registry,
-)
-
-# WebSocket control-plane metrics
-ws_connections_total = Counter(
-    "ws_connections_total",
-    "Total number of WebSocket connections accepted",
-    registry=global_registry,
-)
-
-ws_disconnects_total = Counter(
-    "ws_disconnects_total",
-    "Total number of WebSocket connections closed by server",
-    registry=global_registry,
-)
-
-ws_auth_failures_total = Counter(
-    "ws_auth_failures_total",
-    "Total number of WebSocket authentication failures",
-    registry=global_registry,
-)
-
-ws_heartbeats_total = Counter(
-    "ws_heartbeats_total",
-    "Total number of heartbeats received from clients",
-    registry=global_registry,
-)
-
-ws_acks_total = Counter(
-    "ws_acks_total",
-    "Total number of acknowledgements received from clients",
-    registry=global_registry,
-)
-
-ws_refreshes_total = Counter(
-    "ws_refreshes_total",
-    "Total number of WebSocket token refresh requests",
-    registry=global_registry,
-)
-
-ws_refresh_failures_total = Counter(
-    "ws_refresh_failures_total",
-    "Total number of failed WebSocket token refresh attempts",
-    registry=global_registry,
-)
-
-# ------------------------------------------------------------
-# Fills webhook metrics
-# ------------------------------------------------------------
-
-fills_accepted_total = Counter(
-    "fills_accepted_total",
-    "Total number of accepted execution fill events",
-    ["world_id", "strategy_id"],
-    registry=global_registry,
-)
-
-fills_rejected_total = Counter(
-    "fills_rejected_total",
-    "Total number of rejected execution fill events",
-    ["world_id", "strategy_id", "reason"],
-    registry=global_registry,
-)
-
-sentinel_skew_seconds = Gauge(
+sentinel_skew_seconds = _gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
     ["sentinel_id"],
-    registry=global_registry,
+    test_value_attr="_vals",
+    test_value_factory=dict,
 )
-sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
-# Pre-trade rejection metrics (Gateway-side)
-if "gw_pretrade_attempts_total" in global_registry._names_to_collectors:
-    pretrade_attempts_total = global_registry._names_to_collectors["gw_pretrade_attempts_total"]
-else:
-    pretrade_attempts_total = Counter(
-        "gw_pretrade_attempts_total",
-        "Total number of pre-trade validation attempts observed by Gateway",
-        ["world_id"],
-        registry=global_registry,
-    )
+# Fills webhook metrics
+# ---------------------------------------------------------------------------
+fills_accepted_total = _counter(
+    "fills_accepted_total",
+    "Total number of accepted execution fill events",
+    ["world_id", "strategy_id"],
+)
 
-if "gw_pretrade_rejections_total" in global_registry._names_to_collectors:
-    pretrade_rejections_total = global_registry._names_to_collectors["gw_pretrade_rejections_total"]
-else:
-    pretrade_rejections_total = Counter(
-        "gw_pretrade_rejections_total",
-        "Total pre-trade rejections grouped by reason at Gateway",
-        ["world_id", "reason"],
-        registry=global_registry,
-    )
+fills_rejected_total = _counter(
+    "fills_rejected_total",
+    "Total number of rejected execution fill events",
+    ["world_id", "strategy_id", "reason"],
+)
 
-if "gw_pretrade_rejection_ratio" in global_registry._names_to_collectors:
-    pretrade_rejection_ratio = global_registry._names_to_collectors["gw_pretrade_rejection_ratio"]
-else:
-    pretrade_rejection_ratio = Gauge(
-        "gw_pretrade_rejection_ratio",
-        "Ratio of rejected to attempted pre-trade validations seen by Gateway",
-        ["world_id"],
-        registry=global_registry,
-    )
+# ---------------------------------------------------------------------------
+# Degradation and ControlBus metrics
+# ---------------------------------------------------------------------------
+degrade_level = _gauge(
+    "degrade_level",
+    "Current degradation level",
+    ["service"],
+)
 
-pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
+controlbus_lag_ms = _gauge(
+    "controlbus_lag_ms",
+    "Delay between event creation and processing in milliseconds",
+    ["topic"],
+)
+
+event_relay_events_total = _counter(
+    "event_relay_events_total",
+    "Total number of ControlBus events relayed to clients",
+    ["topic"],
+)
+
+event_relay_dropped_total = _counter(
+    "event_relay_dropped_total",
+    "Total number of ControlBus events dropped",
+    ["topic"],
+)
+
+event_relay_skew_ms = _gauge(
+    "event_relay_skew_ms",
+    "Clock skew between event timestamp and relay time in milliseconds",
+    ["topic"],
+)
+
+event_fanout_total = _counter(
+    "event_fanout_total",
+    "Total number of recipients for relayed ControlBus events",
+    ["topic"],
+)
+
+ws_subscribers = _gauge(
+    "ws_subscribers",
+    "Active WebSocket subscribers per topic",
+    ["topic"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+ws_dropped_subscribers_total = _counter(
+    "ws_dropped_subscribers_total",
+    "Total number of WebSocket subscribers dropped",
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+)
+
+ws_connections_total = _counter(
+    "ws_connections_total",
+    "Total number of WebSocket connections accepted",
+)
+
+ws_disconnects_total = _counter(
+    "ws_disconnects_total",
+    "Total number of WebSocket connections closed by server",
+)
+
+ws_auth_failures_total = _counter(
+    "ws_auth_failures_total",
+    "Total number of WebSocket authentication failures",
+)
+
+ws_heartbeats_total = _counter(
+    "ws_heartbeats_total",
+    "Total number of heartbeats received from clients",
+)
+
+ws_acks_total = _counter(
+    "ws_acks_total",
+    "Total number of acknowledgements received from clients",
+)
+
+ws_refreshes_total = _counter(
+    "ws_refreshes_total",
+    "Total number of WebSocket token refresh requests",
+)
+
+ws_refresh_failures_total = _counter(
+    "ws_refresh_failures_total",
+    "Total number of failed WebSocket token refresh attempts",
+)
+
+# ---------------------------------------------------------------------------
+# Gateway pre-trade metrics
+# ---------------------------------------------------------------------------
+pretrade_attempts_total = _counter(
+    "gw_pretrade_attempts_total",
+    "Total number of pre-trade validation attempts observed by Gateway",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+pretrade_rejections_total = _counter(
+    "gw_pretrade_rejections_total",
+    "Total pre-trade rejections grouped by reason at Gateway",
+    ["world_id", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+pretrade_rejection_ratio = _gauge(
+    "gw_pretrade_rejection_ratio",
+    "Ratio of rejected to attempted pre-trade validations seen by Gateway",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
 
 def record_pretrade_attempt() -> None:
@@ -340,6 +366,27 @@ def _update_pretrade_ratio() -> None:
     ratio = (rejected / total) if total else 0.0
     pretrade_rejection_ratio.labels(world_id=w).set(ratio)
     pretrade_rejection_ratio._vals[w] = ratio  # type: ignore[attr-defined]
+
+
+def get_pretrade_stats() -> dict[str, object]:
+    """Return a snapshot of pre-trade rejection counts and ratio for status."""
+
+    w = _WORLD_ID
+    return {
+        "attempts": int(pretrade_attempts_total._vals.get(w, 0)),  # type: ignore[attr-defined]
+        "rejections": {
+            reason: count
+            for (wid, reason), count in pretrade_rejections_total._vals.items()  # type: ignore[attr-defined]
+            if wid == w
+        },
+        "ratio": float(pretrade_rejection_ratio._vals.get(w, 0.0)),  # type: ignore[attr-defined]
+    }
+
+
+def record_sentinel_weight_update(sentinel_id: str) -> None:
+    """Record the time when a sentinel weight update was received."""
+
+    _sentinel_weight_updates[sentinel_id] = time.time()
 
 
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
@@ -398,13 +445,9 @@ def _update_worlds_cache_ratio() -> None:
     worlds_cache_hit_ratio._val = worlds_cache_hit_ratio._value.get()  # type: ignore[attr-defined]
 
 
-def record_sentinel_weight_update(sentinel_id: str) -> None:
-    """Record the time when a sentinel weight update was received."""
-    _sentinel_weight_updates[sentinel_id] = time.time()
-
-
 def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:
     """Record metrics for a ControlBus message being relayed."""
+
     event_relay_events_total.labels(topic=topic).inc()
     if timestamp_ms is not None:
         now_ms = time.time() * 1000
@@ -448,83 +491,7 @@ def collect_metrics() -> str:
 
 def reset_metrics() -> None:
     """Reset all metric values for tests."""
+    reset_registered_metrics(_REGISTERED_METRICS)
     _e2e_samples.clear()
-    gateway_e2e_latency_p95.set(0)
-    gateway_e2e_latency_p95._val = 0  # type: ignore[attr-defined]
-    lost_requests_total._value.set(0)  # type: ignore[attr-defined]
-    lost_requests_total._val = 0  # type: ignore[attr-defined]
-    commit_duplicate_total._value.set(0)  # type: ignore[attr-defined]
-    commit_duplicate_total._val = 0  # type: ignore[attr-defined]
-    commit_invalid_total._value.set(0)  # type: ignore[attr-defined]
-    commit_invalid_total._val = 0  # type: ignore[attr-defined]
-    owner_reassign_total._value.set(0)  # type: ignore[attr-defined]
-    owner_reassign_total._val = 0  # type: ignore[attr-defined]
-    gateway_sentinel_traffic_ratio.clear()
-    gateway_sentinel_traffic_ratio._vals = {}  # type: ignore[attr-defined]
-    if hasattr(gateway_sentinel_traffic_ratio, "_metrics"):
-        gateway_sentinel_traffic_ratio._metrics.clear()
-    dagclient_breaker_state.set(0)
-    dagclient_breaker_state._val = 0  # type: ignore[attr-defined]
-    dagclient_breaker_failures.set(0)
-    dagclient_breaker_failures._val = 0  # type: ignore[attr-defined]
-    degrade_level.clear()
-    dagclient_breaker_open_total.set(0)
-    dagclient_breaker_open_total._val = 0  # type: ignore[attr-defined]
-    worlds_proxy_latency_p95.set(0)
-    worlds_proxy_latency_p95._val = 0  # type: ignore[attr-defined]
-    worlds_proxy_requests_total._value.set(0)  # type: ignore[attr-defined]
-    worlds_proxy_requests_total._val = 0  # type: ignore[attr-defined]
-    worlds_cache_hits_total._value.set(0)  # type: ignore[attr-defined]
-    worlds_cache_hits_total._val = 0  # type: ignore[attr-defined]
-    worlds_cache_hit_ratio.set(0)
-    worlds_cache_hit_ratio._val = 0  # type: ignore[attr-defined]
-    worlds_stale_responses_total._value.set(0)  # type: ignore[attr-defined]
-    worlds_stale_responses_total._val = 0  # type: ignore[attr-defined]
-    worlds_compute_context_downgrade_total.clear()
-    strategy_compute_context_downgrade_total.clear()
     _worlds_samples.clear()
-    worlds_breaker_state.set(0)
-    worlds_breaker_state._val = 0  # type: ignore[attr-defined]
-    worlds_breaker_failures.set(0)
-    worlds_breaker_failures._val = 0  # type: ignore[attr-defined]
-    worlds_breaker_open_total.set(0)
-    worlds_breaker_open_total._val = 0  # type: ignore[attr-defined]
     _sentinel_weight_updates.clear()
-    controlbus_lag_ms.clear()
-    event_relay_events_total.clear()
-    event_relay_dropped_total.clear()
-    event_relay_skew_ms.clear()
-    event_fanout_total.clear()
-    ws_subscribers.clear()
-    ws_subscribers._vals = {}  # type: ignore[attr-defined]
-    ws_dropped_subscribers_total._value.set(0)  # type: ignore[attr-defined]
-    ws_dropped_subscribers_total._val = 0  # type: ignore[attr-defined]
-    ws_connections_total._value.set(0)  # type: ignore[attr-defined]
-    ws_disconnects_total._value.set(0)  # type: ignore[attr-defined]
-    ws_auth_failures_total._value.set(0)  # type: ignore[attr-defined]
-    ws_heartbeats_total._value.set(0)  # type: ignore[attr-defined]
-    ws_acks_total._value.set(0)  # type: ignore[attr-defined]
-    ws_refreshes_total._value.set(0)  # type: ignore[attr-defined]
-    ws_refresh_failures_total._value.set(0)  # type: ignore[attr-defined]
-    sentinel_skew_seconds.clear()
-    sentinel_skew_seconds._vals = {}  # type: ignore[attr-defined]
-    pretrade_attempts_total.clear()
-    pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
-    pretrade_rejections_total.clear()
-    pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-    pretrade_rejection_ratio.clear()
-    pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
-
-
-def get_pretrade_stats() -> dict:
-    """Return a snapshot of pre-trade rejection counts and ratio for status."""
-    w = _WORLD_ID
-    return {
-        "attempts": int(pretrade_attempts_total._vals.get(w, 0)),  # type: ignore[attr-defined]
-        "rejections": {
-            reason: count
-            for (wid, reason), count in pretrade_rejections_total._vals.items()  # type: ignore[attr-defined]
-            if wid == w
-        },
-        "ratio": float(pretrade_rejection_ratio._vals.get(w, 0.0)),  # type: ignore[attr-defined]
-    }

@@ -33,6 +33,7 @@ nav:
       - Migration (NodeID BLAKE3): guides/migration_nodeid_blake3.md
       - Python Environment: guides/python_environment.md
       - Testing & Pytest: guides/testing.md
+      - Prometheus Metric Helper: guides/prometheus_metrics_helper.md
       - HTTPX Usage: guides/httpx_usage.md
   - Operations:
       - Overview: operations/README.md
