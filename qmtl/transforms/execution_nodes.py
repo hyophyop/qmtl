@@ -16,15 +16,10 @@ from typing import Mapping, Any
 
 from qmtl.sdk.cache_view import CacheView
 from qmtl.sdk.node import Node
-from qmtl.sdk.pretrade import check_pretrade, Activation
-from qmtl.common.pretrade import RejectionReason
-from qmtl.brokerage import BrokerageModel, Account, OrderType, TimeInForce
-from qmtl.sdk.portfolio import (
-    Portfolio,
-    order_value,
-    order_percent,
-    order_target_percent,
-)
+from qmtl.sdk.pretrade import Activation
+from qmtl.brokerage import BrokerageModel, Account
+from qmtl.sdk.portfolio import Portfolio
+from qmtl.transforms.execution_shared import run_pretrade_checks, apply_sizing
 
 
 class PreTradeGateNode(Node):
@@ -61,22 +56,13 @@ class PreTradeGateNode(Node):
         if not data:
             return None
         order = data[-1][1]
-        result = check_pretrade(
+        _, payload = run_pretrade_checks(
+            order,
             activation_map=self.activation_map,
             brokerage=self.brokerage,
             account=self.account,
-            symbol=order["symbol"],
-            quantity=order["quantity"],
-            price=order.get("price", 0.0),
-            order_type=order.get("order_type", OrderType.MARKET),
-            tif=order.get("tif", TimeInForce.DAY),
-            limit_price=order.get("limit_price"),
-            stop_price=order.get("stop_price"),
         )
-        if result.allowed:
-            return order
-        reason = result.reason.value if result.reason else RejectionReason.UNKNOWN.value
-        return {"rejected": True, "reason": reason}
+        return payload
 
 
 class SizingNode(Node):
@@ -112,23 +98,9 @@ class SizingNode(Node):
         portfolio_data = view[self.portfolio][self.portfolio.interval]
         if not intent_data or not portfolio_data:
             return None
-        order = dict(intent_data[-1][1])
+        order = intent_data[-1][1]
         _, portfolio = portfolio_data[-1]
-        if "quantity" in order:
-            return order
-        price = order.get("price")
-        if price is None:
-            return None
-        if "value" in order:
-            qty = order_value(order["symbol"], order["value"], price)
-        elif "percent" in order:
-            qty = order_percent(portfolio, order["symbol"], order["percent"], price)
-        elif "target_percent" in order:
-            qty = order_target_percent(portfolio, order["symbol"], order["target_percent"], price)
-        else:
-            return order
-        order["quantity"] = qty
-        return order
+        return apply_sizing(order, portfolio)
 
 
 def _infer_activation_side(order: Mapping[str, Any]) -> str | None:
