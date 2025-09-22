@@ -8,7 +8,8 @@ from typing import Iterable, Dict
 
 import networkx as nx
 
-from .diff_service import NodeRepository, NodeRecord
+from .models import NodeRecord
+from .repository import NodeRepository
 
 _GRAPH = nx.DiGraph()
 _GRAPH_PATH: Path | None = None

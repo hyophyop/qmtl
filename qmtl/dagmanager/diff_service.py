@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from typing import Iterable, List, Dict, TYPE_CHECKING
+from dataclasses import dataclass, replace
+from typing import Dict, Iterable, List, TYPE_CHECKING
 
 try:  # optional high performance json
     import orjson as _json
@@ -13,53 +13,24 @@ import time
 import asyncio
 
 
-def _normalize_version(raw: object, default: str = "v1") -> str:
-    """Normalize version strings for topic naming.
-
-    Falls back to ``default`` when ``raw`` is falsy or not a primitive.
-    Invalid characters are replaced with ``-`` and leading/trailing
-    punctuation is stripped to keep Kafka topic suffixes tidy.
-    """
-
-    if isinstance(raw, (int, float)):
-        value = str(raw)
-    elif isinstance(raw, str):
-        value = raw.strip()
-    else:
-        value = ""
-    if not value:
-        return default
-    cleaned = []
-    for ch in value:
-        if ch.isalnum() or ch in {"-", "_", "."}:
-            cleaned.append(ch)
-        elif ch.isspace():
-            cleaned.append("-")
-        else:
-            cleaned.append("-")
-    result = "".join(cleaned).strip("-_.")
-    return result or default
-
-
-def _stringify(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, (int, float)):
-        return str(value)
-    return str(value).strip()
-
-
-def _normalize_execution_domain(raw: object) -> str:
-    value = _stringify(raw)
-    return value.lower() or "live"
-
-
 from .metrics import (
     observe_diff_duration,
     queue_create_error_total,
     sentinel_gap_count,
     diff_requests_total,
     diff_failures_total,
+)
+from .models import (
+    BufferInstruction,
+    DiffChunk,
+    DiffRequest,
+    NodeInfo,
+    NodeRecord,
+)
+from .normalize import (
+    normalize_execution_domain,
+    normalize_version,
+    stringify,
 )
 from .kafka_admin import KafkaAdmin, partition_key, compute_key
 from .topic import (
@@ -75,21 +46,10 @@ from qmtl.common import AsyncCircuitBreaker
 from qmtl.common.compute_context import ComputeContext, coerce_compute_context
 from qmtl.common.metrics_shared import observe_cross_context_cache_hit
 from .monitor import AckStatus
+from .repository import NodeRepository
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
-
-
-@dataclass
-class DiffRequest:
-    strategy_id: str
-    dag_json: str
-    world_id: str | None = None
-    execution_domain: str | None = None
-    as_of: str | None = None
-    partition: str | None = None
-    dataset_fingerprint: str | None = None
-
 @dataclass
 class _CachedBinding:
     topic: str
@@ -97,117 +57,6 @@ class _CachedBinding:
     schema_hash: str
 
 
-@dataclass
-class DiffChunk:
-    queue_map: Dict[str, str]
-    sentinel_id: str
-    version: str
-    buffering_nodes: List["BufferInstruction"] = field(default_factory=list)
-    new_nodes: List["NodeInfo"] = field(default_factory=list)
-
-
-@dataclass
-class NodeInfo:
-    node_id: str
-    node_type: str
-    code_hash: str
-    schema_hash: str
-    schema_id: str
-    interval: int | None
-    period: int | None
-    tags: list[str]
-    bucket: int | None = None
-    is_global: bool = False
-    compute_key: str | None = field(default=None, init=False)
-
-
-@dataclass
-class NodeRecord(NodeInfo):
-    topic: str = ""
-
-
-@dataclass
-class BufferInstruction(NodeInfo):
-    lag: int = 0
-
-
-class NodeRepository:
-    """Interface to fetch nodes and insert sentinels."""
-
-    def get_nodes(
-        self,
-        node_ids: Iterable[str],
-        *,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> Dict[str, NodeRecord]:
-        raise NotImplementedError
-
-    def insert_sentinel(
-        self,
-        sentinel_id: str,
-        node_ids: Iterable[str],
-        version: str,
-        *,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> None:
-        raise NotImplementedError
-
-    def get_queues_by_tag(
-        self,
-        tags: Iterable[str],
-        interval: int,
-        match_mode: str = "any",
-        *,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> list[dict[str, object]]:
-        """Return queue descriptors matching ``tags`` and ``interval``.
-
-        ``match_mode`` determines whether all tags must match ("all") or any
-        tag may match ("any").
-        """
-        raise NotImplementedError
-
-    def get_node_by_queue(
-        self,
-        queue: str,
-        *,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> NodeRecord | None:
-        """Return ``NodeRecord`` for the given queue topic, if any."""
-        raise NotImplementedError
-
-    # buffering -------------------------------------------------------------
-
-    def mark_buffering(
-        self,
-        node_id: str,
-        *,
-        compute_key: str | None = None,
-        timestamp_ms: int | None = None,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> None:
-        """Record when ``node_id`` entered buffering mode."""
-        raise NotImplementedError
-
-    def clear_buffering(
-        self,
-        node_id: str,
-        *,
-        compute_key: str | None = None,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> None:
-        """Remove buffering state from the given node."""
-        raise NotImplementedError
-
-    def get_buffering_nodes(
-        self,
-        older_than_ms: int,
-        *,
-        compute_key: str | None = None,
-        breaker: AsyncCircuitBreaker | None = None,
-    ) -> list[str]:
-        """Return node IDs buffering since before ``older_than_ms``."""
-        raise NotImplementedError
 
 
 class QueueManager:
@@ -275,10 +124,10 @@ class DiffService:
             if normalized:
                 namespace = normalized
             else:
-                world_for_ns = context.world_id or _stringify(
+                world_for_ns = context.world_id or stringify(
                     meta.get("world") or meta.get("world_id")
                 )
-                domain_for_ns = context.execution_domain or _normalize_execution_domain(
+                domain_for_ns = context.execution_domain or normalize_execution_domain(
                     meta.get("execution_domain") or meta.get("domain")
                 )
                 if world_for_ns:
@@ -291,11 +140,11 @@ class DiffService:
                 if sentinel_version is None:
                     for key in ("version", "strategy_version", "build_version"):
                         if key in entry:
-                            sentinel_version = _normalize_version(entry.get(key))
+                            sentinel_version = normalize_version(entry.get(key))
                             if sentinel_version:
                                 break
                     if not sentinel_version:
-                        sentinel_version = _normalize_version(entry.get("node_id"))
+                        sentinel_version = normalize_version(entry.get("node_id"))
                 continue
             filtered_nodes.append(entry)
 
@@ -344,7 +193,7 @@ class DiffService:
         if sentinel_version:
             version = sentinel_version
         else:
-            version = _normalize_version(
+            version = normalize_version(
                 data.get("strategy_version")
                 or data.get("version")
                 or meta.get("version")
@@ -592,14 +441,14 @@ class DiffService:
             )
             merged_context = replace(
                 inferred_context,
-                world_id=_stringify(request.world_id) or inferred_context.world_id,
-                execution_domain=_normalize_execution_domain(
+                world_id=stringify(request.world_id) or inferred_context.world_id,
+                execution_domain=normalize_execution_domain(
                     request.execution_domain or inferred_context.execution_domain
                 ),
-                as_of=_stringify(request.as_of) or inferred_context.as_of,
-                partition=_stringify(request.partition) or inferred_context.partition,
+                as_of=stringify(request.as_of) or inferred_context.as_of,
+                partition=stringify(request.partition) or inferred_context.partition,
                 dataset_fingerprint=
-                _stringify(request.dataset_fingerprint)
+                stringify(request.dataset_fingerprint)
                 or inferred_context.dataset_fingerprint,
             )
             existing = self._db_fetch([n.node_id for n in nodes])
