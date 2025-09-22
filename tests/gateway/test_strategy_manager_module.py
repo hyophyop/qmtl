@@ -34,6 +34,29 @@ async def test_strategy_manager_submit_and_status():
     assert await manager.status(sid) == "queued"
 
 
+@pytest.mark.asyncio
+async def test_strategy_manager_submit_deduplicates() -> None:
+    redis = InMemoryRedis()
+    db = MemoryDatabase()
+    fsm = StrategyFSM(redis=redis, database=db)
+    manager = StrategyManager(redis=redis, database=db, fsm=fsm, insert_sentinel=False)
+
+    dag = {"nodes": []}
+    dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
+    payload = StrategySubmit(
+        dag_json=dag_json,
+        meta=None,
+        node_ids_crc32=0,
+    )
+
+    sid1, existed1 = await manager.submit(payload)
+    sid2, existed2 = await manager.submit(payload)
+
+    assert existed1 is False
+    assert existed2 is True
+    assert sid1 == sid2
+
+
 class RecordingProducer:
     def __init__(self) -> None:
         self.records: list[tuple[str, bytes, bytes, Any]] = []
