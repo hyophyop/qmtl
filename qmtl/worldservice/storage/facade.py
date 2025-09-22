@@ -17,6 +17,7 @@ from .repositories import (
     WorldNodeRepository,
     WorldRepository,
     _REASON_UNSET,
+    _normalize_execution_domain,
 )
 from qmtl.worldservice.policy_engine import Policy
 
@@ -282,10 +283,11 @@ class Storage:
     ) -> str:
         """Backwards-compatible helper for tests touching the legacy API."""
 
+        normalized_domain = _normalize_execution_domain(execution_domain)
         return self._validation_cache._compute_eval_key(  # type: ignore[attr-defined]
             node_id=node_id,
             world_id=world_id,
-            execution_domain=execution_domain,
+            execution_domain=normalized_domain,
             contract_id=contract_id,
             dataset_fingerprint=dataset_fingerprint,
             code_version=code_version,
