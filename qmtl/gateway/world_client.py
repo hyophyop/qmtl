@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, TypedDict, Literal
+from typing import Any, Dict, Optional, Literal
 import uuid
 
 import httpx
 
 from qmtl.common import AsyncCircuitBreaker
+from qmtl.common.compute_context import (
+    ComputeContext,
+    build_worldservice_compute_context,
+)
 from . import metrics as gw_metrics
 
 
@@ -36,71 +40,12 @@ class TTLCacheEntry:
 ExecutionDomain = Literal["backtest", "dryrun", "live", "shadow"]
 
 
-class ComputeContext(TypedDict, total=False):
-    world_id: str
-    execution_domain: ExecutionDomain
-    as_of: str | None
-    partition: str | None
-    dataset_fingerprint: str | None
-    downgraded: bool
-    downgrade_reason: str
-
-
-def _normalize_optional_str(value: Any) -> str | None:
-    if isinstance(value, str):
-        cleaned = value.strip()
-        if cleaned:
-            return cleaned
-    return None
-
-
-_MODE_TO_DOMAIN: dict[str, ExecutionDomain] = {
-    "validate": "backtest",
-    "compute-only": "backtest",
-    "compute_only": "backtest",
-    "paper": "dryrun",
-    "live": "live",
-    "active": "live",
-    "shadow": "shadow",
-}
-
-
-def _map_execution_domain(mode: Any) -> ExecutionDomain:
-    if not isinstance(mode, str):
-        return "backtest"
-    key = mode.strip().lower()
-    return _MODE_TO_DOMAIN.get(key, "backtest")
-
-
 def _assemble_compute_context(world_id: str, payload: dict[str, Any]) -> ComputeContext:
-    domain = _map_execution_domain(payload.get("effective_mode"))
-    as_of = _normalize_optional_str(payload.get("as_of"))
-    partition = _normalize_optional_str(payload.get("partition"))
-    dataset_fingerprint = _normalize_optional_str(payload.get("dataset_fingerprint"))
-    if dataset_fingerprint is None:
-        dataset_fingerprint = _normalize_optional_str(payload.get("datasetFingerprint"))
-
-    downgraded = False
-    downgrade_reason = ""
-    if domain in {"backtest", "dryrun"} and not as_of:
-        downgraded = True
-        downgrade_reason = "missing_as_of"
-        if domain == "dryrun":
-            domain = "backtest"
-        gw_metrics.worlds_compute_context_downgrade_total.labels(reason=downgrade_reason).inc()
-
-    context: ComputeContext = {
-        "world_id": world_id,
-        "execution_domain": domain,
-        "as_of": as_of,
-    }
-    if partition is not None:
-        context["partition"] = partition
-    if dataset_fingerprint is not None:
-        context["dataset_fingerprint"] = dataset_fingerprint
-    if downgraded:
-        context["downgraded"] = True
-        context["downgrade_reason"] = downgrade_reason
+    context = build_worldservice_compute_context(world_id, payload)
+    if context.downgraded and context.downgrade_reason:
+        gw_metrics.worlds_compute_context_downgrade_total.labels(
+            reason=context.downgrade_reason
+        ).inc()
     return context
 
 
@@ -110,8 +55,8 @@ def _augment_decision_payload(world_id: str, payload: Any) -> Any:
     if "effective_mode" not in payload:
         return payload
     context = _assemble_compute_context(world_id, payload)
-    payload["execution_domain"] = context["execution_domain"]
-    payload["compute_context"] = context
+    payload["execution_domain"] = context.execution_domain or None
+    payload["compute_context"] = context.to_dict(include_flags=True)
     return payload
 
 

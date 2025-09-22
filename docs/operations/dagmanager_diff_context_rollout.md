@@ -10,6 +10,7 @@ deploy sequence.
 - `DiffService.DiffRequest` now accepts optional fields:
   `world_id`, `execution_domain`, `as_of`, `partition`, and
   `dataset_fingerprint`.
+- Gateway, DAG Manager, and the SDK share the canonical compute context model implemented in `qmtl/common/compute_context.py`; ensure all services upgrade in lockstep to retain compatibility.
 - `DiffService` derives a domain-scoped compute key and appends it to each
   `queue_map` partition key as `...#ck=<hash>`. Downstream consumers must strip
   the `#ck=` suffix (if present) before extracting the `node_id` portion.

@@ -86,7 +86,7 @@ async def test_publish_submission_noop_without_writer(
 ) -> None:
     payload = _make_payload()
     decoded = strategy_manager._decode_dag(payload)
-    compute_ctx, _, worlds, _, _ = strategy_manager._build_compute_context(payload)
+    _, compute_ctx_payload, _, worlds = strategy_manager._build_compute_context(payload)
 
     await strategy_manager._publish_submission(
         decoded.strategy_id,
@@ -94,7 +94,7 @@ async def test_publish_submission_noop_without_writer(
         decoded.encoded_dag,
         decoded.dag_hash,
         payload,
-        compute_ctx,
+        compute_ctx_payload,
         worlds,
     )
 
@@ -116,7 +116,7 @@ async def test_publish_submission_failure_rolls_back(
     )
 
     strategy_manager.commit_log_writer = _ExplodingWriter()
-    compute_ctx, _, worlds, _, _ = strategy_manager._build_compute_context(payload)
+    _, compute_ctx_payload, _, worlds = strategy_manager._build_compute_context(payload)
 
     with pytest.raises(HTTPException):
         await strategy_manager._publish_submission(
@@ -125,7 +125,7 @@ async def test_publish_submission_failure_rolls_back(
             decoded.encoded_dag,
             decoded.dag_hash,
             payload,
-            compute_ctx,
+            compute_ctx_payload,
             worlds,
         )
 

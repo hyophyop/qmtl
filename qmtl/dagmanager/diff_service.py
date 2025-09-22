@@ -72,6 +72,7 @@ from .topic import (
     ensure_namespace,
 )
 from qmtl.common import AsyncCircuitBreaker
+from qmtl.common.compute_context import ComputeContext, coerce_compute_context
 from qmtl.common.metrics_shared import observe_cross_context_cache_hit
 from .monitor import AckStatus
 
@@ -88,22 +89,6 @@ class DiffRequest:
     as_of: str | None = None
     partition: str | None = None
     dataset_fingerprint: str | None = None
-
-
-@dataclass(frozen=True)
-class ComputeContext:
-    world_id: str = ""
-    execution_domain: str = "live"
-    as_of: str = ""
-    partition: str = ""
-    dataset_fingerprint: str = ""
-
-    def label_values(self) -> tuple[str, str]:
-        return (
-            self.world_id or "",
-            self.execution_domain or "",
-        )
-
 
 @dataclass
 class _CachedBinding:
@@ -376,18 +361,13 @@ class DiffService:
         meta = payload.get("meta") or {}
         ctx = payload.get("compute_context")
         if not isinstance(ctx, dict):
-            ctx = meta.get("compute_context")
-        if not isinstance(ctx, dict):
-            ctx = {}
-        return ComputeContext(
-            world_id=_stringify(ctx.get("world_id")),
-            execution_domain=_normalize_execution_domain(ctx.get("execution_domain")),
-            as_of=_stringify(ctx.get("as_of")),
-            partition=_stringify(ctx.get("partition")),
-            dataset_fingerprint=_stringify(
-                ctx.get("dataset_fingerprint") or meta.get("dataset_fingerprint")
-            ),
-        )
+            ctx = meta.get("compute_context") if isinstance(meta, dict) else None
+        base = coerce_compute_context(ctx if isinstance(ctx, dict) else None)
+        if isinstance(meta, dict):
+            dataset = meta.get("dataset_fingerprint")
+            if dataset and not base.dataset_fingerprint:
+                base = base.with_overrides(dataset_fingerprint=dataset)
+        return base
 
     def _record_cross_context_hit(
         self, node: NodeInfo, context: ComputeContext

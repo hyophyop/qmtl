@@ -14,13 +14,14 @@ from fastapi import HTTPException
 from opentelemetry import trace
 
 from . import metrics as gw_metrics
-from .compute_context import build_strategy_compute_context
+from .compute_context import ComputeContext
 from .commit_log import CommitLogWriter
 from .database import Database
 from .degradation import DegradationManager, DegradationLevel
 from .fsm import StrategyFSM
 from .models import StrategySubmit
 from .strategy_persistence import StrategyQueue, StrategyStorage
+from .submission import ComputeContextService
 
 tracer = trace.get_tracer(__name__)
 
@@ -44,12 +45,15 @@ class StrategyManager:
     commit_log_writer: CommitLogWriter | None = None
     storage: StrategyStorage | None = None
     queue: StrategyQueue | None = None
+    context_service: ComputeContextService | None = None
 
     def __post_init__(self) -> None:
         if self.storage is None:
             self.storage = StrategyStorage(self.redis)
         if self.queue is None:
             self.queue = StrategyQueue(self.redis)
+        if self.context_service is None:
+            self.context_service = ComputeContextService()
 
     async def submit(
         self,
@@ -62,19 +66,18 @@ class StrategyManager:
 
             (
                 compute_ctx,
+                compute_ctx_payload,
                 context_mapping,
                 world_list,
-                downgraded,
-                downgrade_reason,
             ) = self._build_compute_context(payload)
 
             if (
-                downgraded
-                and downgrade_reason
+                compute_ctx.downgraded
+                and compute_ctx.downgrade_reason
                 and not skip_downgrade_metric
             ):
                 gw_metrics.strategy_compute_context_downgrade_total.labels(
-                    reason=downgrade_reason
+                    reason=compute_ctx.downgrade_reason
                 ).inc()
 
             try:
@@ -96,7 +99,7 @@ class StrategyManager:
                 decoded.encoded_dag,
                 decoded.dag_hash,
                 payload,
-                compute_ctx,
+                compute_ctx_payload,
                 world_list,
             )
 
@@ -176,7 +179,7 @@ class StrategyManager:
         encoded_dag: str,
         dag_hash: str,
         payload: StrategySubmit,
-        compute_ctx: dict[str, str | bool | None],
+        compute_ctx: dict[str, Any],
         world_list: list[str],
     ) -> None:
         if self.commit_log_writer is None:
@@ -188,7 +191,7 @@ class StrategyManager:
                 encoded_dag,
                 dag_hash,
                 payload,
-                compute_ctx,
+        compute_ctx,
                 world_list,
             )
             await self.commit_log_writer.publish_submission(strategy_id, record)
@@ -220,7 +223,7 @@ class StrategyManager:
         encoded_dag: str,
         dag_hash: str,
         payload: StrategySubmit,
-        compute_ctx: dict[str, str | None],
+        compute_ctx: dict[str, Any],
         world_ids: list[str],
     ) -> dict[str, Any]:
         submitted_at = datetime.now(timezone.utc).isoformat()
@@ -266,42 +269,11 @@ class StrategyManager:
     def _build_compute_context(
         self, payload: StrategySubmit
     ) -> tuple[
+        ComputeContext,
         dict[str, str | bool | None],
         dict[str, str],
         list[str],
-        bool,
-        str | None,
     ]:
-        world_candidates: list[str] = []
-        if payload.world_id:
-            world_candidates.append(payload.world_id)
-        wid_list = getattr(payload, "world_ids", None)
-        if wid_list:
-            for wid in wid_list:
-                if wid:
-                    world_candidates.append(wid)
-        unique_worlds: list[str] = []
-        seen: set[str] = set()
-        for wid in world_candidates:
-            normalised = self._ctx_value(wid)
-            if not normalised:
-                continue
-            if normalised not in seen:
-                seen.add(normalised)
-                unique_worlds.append(normalised)
-        meta = payload.meta if isinstance(payload.meta, dict) else None
-        base_ctx, downgraded, downgrade_reason, safe_mode = build_strategy_compute_context(meta)
-        compute_ctx: dict[str, str | bool | None] = dict(base_ctx)
-        compute_ctx["world_id"] = unique_worlds[0] if unique_worlds else None
-        if downgraded:
-            compute_ctx["downgraded"] = True
-            if downgrade_reason:
-                compute_ctx["downgrade_reason"] = downgrade_reason
-            if safe_mode:
-                compute_ctx["safe_mode"] = True
-        context_mapping: dict[str, str] = {
-            f"compute_{k}": v
-            for k, v in compute_ctx.items()
-            if isinstance(v, str) and v
-        }
-        return compute_ctx, context_mapping, unique_worlds, downgraded, downgrade_reason
+        if self.context_service is None:
+            self.context_service = ComputeContextService()
+        return self.context_service.build(payload)
