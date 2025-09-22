@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.common import crc32_of_list, compute_node_id
+from tests.factories import indicator_node_payload, node_ids_crc32
 
 
 class FakeDB(Database):
@@ -32,37 +32,23 @@ def client(fake_redis):
 
 
 def test_checksum_rejects_tampered_ids(client):
-    node_a = {
-        "node_type": "IndicatorNode",
-        "code_hash": "ch_a",
-        "config_hash": "cfg_a",
-        "schema_hash": "sch_a",
-        "schema_compat_id": "sch_a_major",
-        "interval": 60,
-        "period": 5,
-        "params": {"window": 5},
-        "dependencies": [],
-    }
-    node_b = {
-        "node_type": "IndicatorNode",
-        "code_hash": "ch_b",
-        "config_hash": "cfg_b",
-        "schema_hash": "sch_b",
-        "schema_compat_id": "sch_b_major",
-        "interval": 60,
-        "period": 5,
-        "params": {"window": 10},
-        "dependencies": ["dep-a"],
-    }
-    node_a_id = compute_node_id(node_a)
-    node_b_id = compute_node_id(node_b)
-    dag = {
-        "nodes": [
-            {**node_a, "node_id": node_a_id},
-            {**node_b, "node_id": node_b_id},
-        ]
-    }
-    checksum = crc32_of_list([node_a_id, node_b_id])
+    node_a = indicator_node_payload(
+        code_hash="ch_a",
+        config_hash="cfg_a",
+        schema_hash="sch_a",
+        schema_compat_id="sch_a_major",
+        params={"window": 5},
+    )
+    node_b = indicator_node_payload(
+        code_hash="ch_b",
+        config_hash="cfg_b",
+        schema_hash="sch_b",
+        schema_compat_id="sch_b_major",
+        params={"window": 10},
+        dependencies=["dep-a"],
+    )
+    dag = {"nodes": [node_a, node_b]}
+    checksum = node_ids_crc32(dag["nodes"])
     good = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
@@ -74,7 +60,7 @@ def test_checksum_rejects_tampered_ids(client):
     tampered = {
         "nodes": [
             {**node_a, "node_id": "blake3:tampered"},
-            {**node_b, "node_id": node_b_id},
+            node_b,
         ]
     }
     bad = StrategySubmit(

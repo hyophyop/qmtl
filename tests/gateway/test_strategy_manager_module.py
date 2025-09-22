@@ -15,6 +15,7 @@ from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.models import StrategySubmit
 from qmtl.gateway.redis_client import InMemoryRedis
 from qmtl.gateway.strategy_manager import StrategyManager
+from tests.factories import canonical_node_payload
 
 
 @pytest.mark.asyncio
@@ -98,20 +99,18 @@ async def test_strategy_manager_writes_commit_log() -> None:
         commit_log_writer=writer,
     )
 
-    dag = {
-        "nodes": [
-            {
-                "node_id": "n1",
-                "node_type": "TypeA",
-                "config_hash": "c",
-                "code_hash": "d",
-                "schema_hash": "s",
-                "schema_compat_id": "s-major",
-                "params": {},
-                "dependencies": [],
-            }
-        ]
-    }
+    node = canonical_node_payload(
+        node_type="TypeA",
+        config_hash="c",
+        code_hash="d",
+        schema_hash="s",
+        schema_compat_id="s-major",
+        params={},
+        dependencies=[],
+        include_node_id=False,
+    )
+    node["node_id"] = "n1"
+    dag = {"nodes": [node]}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
