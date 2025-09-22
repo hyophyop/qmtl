@@ -1,7 +1,7 @@
 # Prometheus metric helper
 
 The Gateway and SDK subsystems now share a small utility module,
-[`qmtl.common.metrics_factory`](../../qmtl/common/metrics_factory.py), which wraps
+[`qmtl.common.metrics_factory`]({{ code_url('qmtl/common/metrics_factory.py') }}), which wraps
 Prometheus registration and reset boilerplate.
 
 ## Creating metrics
