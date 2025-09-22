@@ -1,15 +1,4 @@
-import zlib
-from typing import Iterable
-
-
-def crc32_of_list(items: Iterable[str]) -> int:
-    """Return CRC32 for an iterable of strings in order."""
-    crc = 0
-    for item in items:
-        crc = zlib.crc32(item.encode(), crc)
-    return crc & 0xFFFFFFFF
-
-
+from .crc import crc32_of_list
 from .reconnect import ReconnectingRedis, ReconnectingNeo4j
 from .circuit_breaker import AsyncCircuitBreaker
 from .four_dim_cache import FourDimCache
@@ -17,6 +6,15 @@ from .hashutils import hash_bytes
 from .nodeid import compute_node_id
 from .compute_key import compute_compute_key
 from .compute_context import ComputeContext, DEFAULT_EXECUTION_DOMAIN, DowngradeReason
+from .node_validation import (
+    MissingNodeField,
+    NodeIdentityMismatch,
+    NodeValidationError,
+    NodeValidationReport,
+    REQUIRED_NODE_FIELDS,
+    enforce_node_identity,
+    validate_node_identity,
+)
 
 __all__ = [
     "crc32_of_list",
@@ -30,4 +28,11 @@ __all__ = [
     "DowngradeReason",
     "compute_compute_key",
     "DEFAULT_EXECUTION_DOMAIN",
+    "MissingNodeField",
+    "NodeIdentityMismatch",
+    "NodeValidationError",
+    "NodeValidationReport",
+    "REQUIRED_NODE_FIELDS",
+    "enforce_node_identity",
+    "validate_node_identity",
 ]
