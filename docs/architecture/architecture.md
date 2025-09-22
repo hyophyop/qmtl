@@ -223,6 +223,7 @@ Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
      `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
    - **규칙:** 비결정적 필드(타임스탬프/난수 시드/환경변수 등)는 **입력에서 제외**. 모든 분리 가능한 파라미터는 `params`에서 **개별 필드**로 분리하고 키 정렬·정밀도 고정(JSON canonical form).
    - **네임스페이스:** 해시 문자열은 반드시 `blake3:` **접두사**를 갖는다. 충돌 방지·강화를 위해 필요 시 **BLAKE3 XOF**로 길이 확장하고, 도메인 분리를 유지한다.
+   - **구현:** SDK와 Gateway는 `CanonicalNodeSpec` 빌더를 사용해 노드 페이로드를 구성한다. 빌더는 필드 순서를 고정하고 `schema_compat_id` 기본값과 월드/도메인 파라미터 배제를 보장하며, `.from_payload()` / `.to_payload()` 브리지로 기존 DAG JSON과 상호 변환된다.
    - **스키마 호환성:** NodeID 입력에는 `schema_compat_id`(Schema Registry의 major‑compat 식별자)를 사용한다. Minor/Patch 수준 변경에서는 동일 `schema_compat_id`를 유지하므로 Back‑compat 스키마 변경 시에도 `node_id`는 보존된다.
 2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
    자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](../operations/canary_rollout.md)에서 설명한다.

@@ -15,6 +15,7 @@ from .circuit_breaker import AsyncCircuitBreaker
 from .four_dim_cache import FourDimCache
 from .hashutils import hash_bytes
 from .nodeid import compute_node_id
+from .nodespec import CanonicalNodeSpec
 from .compute_key import compute_compute_key
 from .compute_context import ComputeContext, DEFAULT_EXECUTION_DOMAIN, DowngradeReason
 
@@ -26,6 +27,7 @@ __all__ = [
     "FourDimCache",
     "hash_bytes",
     "compute_node_id",
+    "CanonicalNodeSpec",
     "ComputeContext",
     "DowngradeReason",
     "compute_compute_key",

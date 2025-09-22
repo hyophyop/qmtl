@@ -156,7 +156,7 @@ class StrategySubmissionHelper:
         return strategy_id, False
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
-        from qmtl.common import crc32_of_list, compute_node_id
+        from qmtl.common import CanonicalNodeSpec, crc32_of_list, compute_node_id
 
         nodes = dag.get("nodes", [])
         node_ids_for_crc: list[str] = []
@@ -185,7 +185,8 @@ class StrategySubmissionHelper:
                 )
                 continue
 
-            expected = compute_node_id(node)
+            spec = CanonicalNodeSpec.from_payload(node)
+            expected = compute_node_id(spec)
             if nid != expected:
                 mismatches.append({"index": idx, "node_id": nid, "expected": expected})
 

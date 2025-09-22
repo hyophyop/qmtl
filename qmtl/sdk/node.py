@@ -33,7 +33,7 @@ from .util import parse_interval
 if TYPE_CHECKING:  # pragma: no cover - type checking import
     from qmtl.io import HistoryProvider, EventRecorder
 
-from qmtl.common import compute_node_id
+from qmtl.common import CanonicalNodeSpec, compute_node_id
 from qmtl.common.compute_key import (
     ComputeContext,
     compute_compute_key,
@@ -612,6 +612,30 @@ class Node:
         return self
 
     # --- hashing helpers -------------------------------------------------
+    def _canonical_spec(self) -> CanonicalNodeSpec:
+        deps = [n.node_id for n in self.inputs]
+        return (
+            CanonicalNodeSpec()
+            .with_node_type(self.node_type)
+            .with_interval(self.interval)
+            .with_period(self.period)
+            .with_params(self.config)
+            .with_dependencies(deps)
+            .with_schema_compat_id(self.schema_compat_id)
+            .with_code_hash(self.code_hash)
+            .update_extras(
+                {
+                    "name": self.name,
+                    "tags": list(self.tags),
+                    "inputs": list(deps),
+                    "config_hash": self.config_hash,
+                    "schema_hash": self.schema_hash,
+                    "pre_warmup": self.pre_warmup,
+                    "expected_schema": self.expected_schema,
+                }
+            )
+        )
+
     @property
     def node_type(self) -> str:
         return self.__class__.__name__
@@ -630,16 +654,7 @@ class Node:
 
     @property
     def node_id(self) -> str:
-        spec = {
-            "node_type": self.node_type,
-            "interval": int(self.interval or 0),
-            "period": int(self.period or 0),
-            "params": self.config,
-            "dependencies": [n.node_id for n in self.inputs],
-            "schema_compat_id": self.schema_compat_id,
-            "code_hash": self.code_hash,
-        }
-        return compute_node_id(spec)
+        return compute_node_id(self._canonical_spec())
 
     @property
     def node_hash(self) -> str:
@@ -843,22 +858,10 @@ class Node:
         return self._last_watermark
 
     def to_dict(self) -> dict:
-        return {
-            "node_id": self.node_id,
-            "node_type": self.node_type,
-            "name": self.name,
-            "interval": self.interval,
-            "period": self.period,
-            "tags": list(self.tags),
-            "inputs": [n.node_id for n in self.inputs],
-            "code_hash": self.code_hash,
-            "config_hash": self.config_hash,
-            "schema_hash": self.schema_hash,
-            "schema_compat_id": self.schema_compat_id,
-            "params": self.config,
-            "pre_warmup": self.pre_warmup,
-            "expected_schema": self.expected_schema,
-        }
+        spec = self._canonical_spec()
+        payload = spec.to_payload()
+        payload["node_id"] = compute_node_id(spec)
+        return payload
 
 
 class SourceNode(Node):

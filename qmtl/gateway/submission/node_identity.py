@@ -6,7 +6,7 @@ from typing import Any, Iterable
 
 from fastapi import HTTPException
 
-from qmtl.common import crc32_of_list, compute_node_id
+from qmtl.common import CanonicalNodeSpec, crc32_of_list, compute_node_id
 
 
 class NodeIdentityValidator:
@@ -42,7 +42,8 @@ class NodeIdentityValidator:
                 )
                 continue
 
-            expected = compute_node_id(node)
+            spec = CanonicalNodeSpec.from_payload(node)
+            expected = compute_node_id(spec)
             if nid != expected:
                 mismatches.append({"index": idx, "node_id": nid, "expected": expected})
 
