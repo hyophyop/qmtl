@@ -99,39 +99,19 @@ Runner.offline(MyStrategy)
 `Runner`는 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여 해당 태그에
 매칭되는 큐를 조회하고 이벤트 디스크립터/토큰을 받아 WebSocket 구독을 시작합니다. 모든 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
 
-### Clock · Dataset Context 요구사항
+### Backtest/Dry‑Run 요구사항
 
-`Runner`는 실행 모드에 따라 **Clock**과 데이터 스냅샷 메타데이터를 엄격히 검증합니다.
+Backtest/Dry‑Run에 필요한 Clock/스냅샷 메타데이터(as_of, dataset_fingerprint)는
+서버 측(WorldService/Gateway)에서 강제·검증됩니다. SDK `Runner`는 실행 도메인이나
+클록을 설정하지 않으며, WS 결정과 활성 상태를 그대로 따릅니다.
 
-- `execution_mode`가 `backtest` 또는 `dryrun`일 때는 항상 `clock="virtual"`이어야 하며, `as_of`와 `dataset_fingerprint`를 명시해야 합니다. 누락될 경우 Runner는 Gateway 호출을 건너뛰고 compute-only 모드로 강등하여 실시간 큐를 오염시키지 않습니다.
-- `execution_mode`가 `live`일 때는 `clock="wall"`만 허용됩니다. 잘못된 Clock을 지정하면 구성 오류가 발생합니다.
+- Gateway/WS는 backtest/dry‑run에 스냅샷 메타데이터가 누락되면 요청을 거부하거나
+  안전 모드(compute‑only, 주문 게이트 OFF)로 강등합니다.
+- 결정이 부재/만료 상태이거나 활성 정보가 없으면 SDK는 기본적으로
+  compute‑only로 유지합니다.
 
-Python 코드에서 직접 실행할 때는 `context` 인수나 개별 인수를 통해 값을 전달할 수 있습니다.
-
-```python
-Runner.run(
-    MyStrategy,
-    world_id="demo_world",
-    gateway_url="http://gw",
-    context={
-        "execution_mode": "backtest",
-        "clock": "virtual",
-        "as_of": "2025-09-30T23:59:59Z",
-        "dataset_fingerprint": "lake:blake3:ohlcv:20250930",
-    },
-)
-
-# 또는 개별 인수 활용
-Runner.run(
-    MyStrategy,
-    world_id="demo_world",
-    gateway_url="http://gw",
-    execution_mode="backtest",
-    clock="virtual",
-    as_of="2025-09-30T23:59:59Z",
-    dataset_fingerprint="lake:blake3:ohlcv:20250930",
-)
-```
+로컬 재현/테스트에는 `Runner.offline(MyStrategy)`를 사용하세요. 태그 기반 노드는
+빈 큐 목록으로 초기화되며, 필요 시 스냅샷/피처 아티팩트를 직접 주입해 재현성을 확보합니다.
 
 ### world_id 전달 흐름
 

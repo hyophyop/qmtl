@@ -121,11 +121,11 @@ sequenceDiagram
 
 ### 1.3 Execution Domains & Isolation (new)
 
-- Domains: `backtest | dryrun | live | shadow`. WorldService treats ExecutionDomain as a 1급 개념 and drives gating and promotions via 2‑Phase Apply (Freeze/Drain → Switch → Unfreeze).
-- NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다.
+- Domains: `backtest | dryrun | live | shadow`. ExecutionDomain은 WorldService가 소유·결정하는 1급 개념이며, 게이팅과 프로모션은 2‑Phase Apply(Freeze/Drain → Switch → Unfreeze)로 백엔드에서 구동한다. SDK/Runner는 도메인을 “선택”하지 않으며, 오직 월드 결정의 결과를 반영한다.
+- NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다. SDK는 ComputeKey를 “제안”하거나 “주입”하지 않는다 — 런타임/서비스가 WS 결정과 제출 메타를 근거로 도출·검증한다.
 - WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. `WvgEdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다.
-- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑하고 `execution_domain` 필드로 중계한다(`validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`; `shadow`는 운영자 전용).
-- Queue 네임스페이스: 프로덕션 배포에서는 `{world_id}.{execution_domain}.<topic>` 프리픽스로 토픽을 분리해야 한다(SHALL). 교차 도메인 구독·발행은 ACL로 금지하며, 운영 환경에서만 예외를 명시적으로 허용한다.
+- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 “표시만” 하여 `execution_domain` 필드로 중계한다. SDK/Runner는 이를 입력으로만 취급하며 도메인을 자의적으로 변경하지 않는다. 매핑은 `validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`이며, `shadow`는 운영자 전용이다.
+- Queue 네임스페이스: 프로덕션 배포에서는 `{world_id}.{execution_domain}.<topic>` 프리픽스로 토픽을 분리해야 한다(SHALL). 교차 도메인 구독·발행은 ACL로 금지하며, 운영 환경에서만 예외를 명시적으로 허용한다. 기본 도메인 표기는 운영적 네임스페이스 목적의 “live”를 따른다. 단, 실행 모드 기본값은 WS 결정 부재·만료 시 “compute‑only(backtest, 주문 게이트 OFF)”이다.
 - WorldNodeRef 독립성: 서로 다른 `execution_domain` 조합은 상태·큐·검증 결과를 공유할 수 없다(SHALL). 공유가 필요한 경우 Feature Artifact Plane(§1.4)처럼 불변 아티팩트만 사용한다.
 - Promotion guard: WVG의 `WvgEdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
 
@@ -145,7 +145,7 @@ sequenceDiagram
 
 - 백테스트/드라이런은 VirtualClock을 사용하고(as_of 필수) 라이브는 WallClock을 사용한다(SHALL). 혼용 호출은 빌드/정적 검증 단계에서 실패해야 한다.
 - 모든 백테스트 입력 노드는 `as_of`(dataset commit)를 명시해야 하며(SHALL), Gateway는 누락 시 거부하거나 안전 모드로 강등한다.
-- SDK는 노드/런너 레벨에서 클록 타입을 선언적으로 지정하고, WorldService와 Gateway는 정책/결정 시 이를 검증한다.
+- SDK는 노드/런너 레벨에서 클록 타입을 “주석 수준으로 선언”할 수 있으나, 최종 권한은 백엔드(WS/GW)에 있다. 정책과 결정과 상충할 경우 WS/GW는 요청을 거부하거나 안전 모드(backtest, 주문 게이트 OFF)로 강등한다.
 
 ### 전역-로컬 분리와 불변식 (GSG/WVG)
 

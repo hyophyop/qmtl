@@ -22,21 +22,11 @@ async def _main(argv: List[str] | None = None) -> int:
     run_p.add_argument("--world-id", required=True)
     run_p.add_argument("--gateway-url", required=True, help="Gateway base URL")
     run_p.add_argument("--no-ray", action="store_true", help="Disable Ray-based features")
-    run_p.add_argument(
-        "--mode",
-        choices=["backtest", "dryrun", "live"],
-        help="Execution mode (backtest/dryrun/live)",
-    )
-    run_p.add_argument(
-        "--clock",
-        choices=["virtual", "wall"],
-        help="Clock discipline to request from Gateway",
-    )
-    run_p.add_argument("--as-of", help="Dataset snapshot timestamp/identifier")
-    run_p.add_argument(
-        "--dataset-fingerprint",
-        help="Immutable dataset fingerprint for non-live runs",
-    )
+    # Deprecated advanced options kept for CLI compatibility; ignored.
+    run_p.add_argument("--mode", choices=["backtest", "dryrun", "live"], help=argparse.SUPPRESS)
+    run_p.add_argument("--clock", choices=["virtual", "wall"], help=argparse.SUPPRESS)
+    run_p.add_argument("--as-of", help=argparse.SUPPRESS)
+    run_p.add_argument("--dataset-fingerprint", help=argparse.SUPPRESS)
 
     off_p = sub.add_parser("offline", help="Run locally without Gateway/WS")
     off_p.add_argument("strategy", help="Import path as module:Class")
@@ -68,10 +58,6 @@ async def _main(argv: List[str] | None = None) -> int:
             strategy_cls,
             world_id=args.world_id,
             gateway_url=args.gateway_url,
-            execution_mode=args.mode,
-            clock=args.clock,
-            as_of=args.as_of,
-            dataset_fingerprint=args.dataset_fingerprint,
             history_start=h_start,
             history_end=h_end,
         )

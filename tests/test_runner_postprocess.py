@@ -70,9 +70,7 @@ def test_run_hooks_offline(monkeypatch):
         "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
     )
 
-    strategy = Runner.run(
-        DummyStrategy, world_id="w", gateway_url="http://gw", offline=True
-    )
+    strategy = Runner.offline(DummyStrategy)
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)
@@ -159,9 +157,7 @@ def test_run_hooks_live_like(monkeypatch):
         "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
     )
 
-    strategy = Runner.run(
-        DummyStrategy, world_id="w", gateway_url="http://gw", offline=True
-    )
+    strategy = Runner.offline(DummyStrategy)
     _trigger(strategy)
 
     Runner.set_trade_order_http_url(None)

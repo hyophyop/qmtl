@@ -182,14 +182,14 @@ wait
 When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), prefer the session context manager to ensure everything is cleaned up:
 
 ```python
-async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw", offline=True) as strategy:
+async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw") as strategy:
     ...  # assertions
 ```
 
 If you cannot use ``async with`` (e.g., in synchronous tests), fall back to the explicit helpers:
 
 ```python
-strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw", offline=True)
+strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw")
 try:
     ...  # assertions
 finally:
