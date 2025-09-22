@@ -1,181 +1,31 @@
+"""Arrow-backed cache backend implementation."""
 from __future__ import annotations
 
 import os
 import time
-import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from typing import Any, Dict
 
-try:
-    import pyarrow as pa
-except Exception:  # pragma: no cover - optional dependency
-    pa = None  # type: ignore
-
-try:
-    import ray
-except Exception:  # pragma: no cover - optional dependency
-    ray = None  # type: ignore
-
-from . import metrics as sdk_metrics, runtime
-from .backfill_state import BackfillState
 from qmtl.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
-ARROW_AVAILABLE = pa is not None
-RAY_AVAILABLE = ray is not None
-
-# Feature gate controlled via environment variable
-ARROW_CACHE_ENABLED = ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1"
-
-
-class _Slice:
-    def __init__(self, period: int) -> None:
-        self.period = period
-        if not ARROW_AVAILABLE:
-            raise RuntimeError("pyarrow is required for Arrow cache")
-        import pickle
-
-        self._pickle = pickle
-        self.ts = pa.array([], pa.int64())
-        self.vals = pa.array([], pa.binary())
-
-    def append(self, timestamp: int, payload: Any) -> None:
-        self.ts = pa.concat_arrays([self.ts, pa.array([timestamp], pa.int64())])
-        buf = self._pickle.dumps(payload)
-        self.vals = pa.concat_arrays([self.vals, pa.array([buf], pa.binary())])
-        if len(self.ts) > self.period:
-            start = len(self.ts) - self.period
-            self.ts = self.ts.slice(start)
-            self.vals = self.vals.slice(start)
-
-    def latest(self) -> tuple[int, Any] | None:
-        if len(self.ts) == 0:
-            return None
-        idx = len(self.ts) - 1
-        ts = self.ts[idx].as_py()
-        val = self._pickle.loads(self.vals[idx].as_py())
-        return int(ts), val
-
-    def get_list(self) -> list[tuple[int, Any]]:
-        ts = self.ts.to_pylist()
-        vals = [self._pickle.loads(x) for x in self.vals.to_pylist()]
-        return [(int(t), v) for t, v in zip(ts, vals)]
-
-    @property
-    def table(self) -> pa.Table:
-        return pa.table({"t": self.ts, "v": self.vals})
-
-    def slice_table(self, start: int, end: int) -> pa.Table:
-        start = max(0, start)
-        end = min(len(self.ts), end)
-        length = max(0, end - start)
-        return pa.table({"t": self.ts.slice(start, length), "v": self.vals.slice(start, length)})
-
-    @property
-    def resident_bytes(self) -> int:
-        # Approximate memory usage backed by Arrow buffers
-        return int(self.ts.nbytes) + int(self.vals.nbytes)
-
-
-class ArrowCacheView:
-    """Hierarchical read-only view backed by Arrow ``_Slice`` objects."""
-
-    def __init__(
-        self,
-        data: Dict[str, Dict[int, _Slice]],
-        *,
-        track_access: bool = False,
-        artifact_plane: Any | None = None,
-    ) -> None:
-        self._data = data
-        self._track_access = track_access
-        self._access_log: list[tuple[str, int]] = []
-        self._artifact_plane = artifact_plane
-
-    def __getitem__(self, key: Any):
-        from .node import Node  # local import to avoid cycle
-
-        if isinstance(key, Node):
-            key = key.node_id
-        mp = self._data[key]
-        return _SecondLevelView(mp, key, self._track_access, self._access_log)
-
-    def __getattr__(self, name: str):  # pragma: no cover - convenience
-        if name in self._data:
-            return self.__getitem__(name)
-        raise AttributeError(name)
-
-    def access_log(self) -> list[tuple[str, int]]:
-        return list(self._access_log)
-
-    def feature_artifacts(
-        self,
-        factor: Any,
-        *,
-        instrument: str | None = None,
-        dataset_fingerprint: str | None = None,
-        start: int | None = None,
-        end: int | None = None,
-    ) -> list[tuple[int, Any]]:
-        if self._artifact_plane is None:
-            return []
-        return self._artifact_plane.load_series(
-            factor,
-            instrument=instrument,
-            dataset_fingerprint=dataset_fingerprint,
-            start=start,
-            end=end,
-        )
-
-
-class _SecondLevelView:
-    def __init__(self, data: Dict[int, _Slice], upstream: str, track_access: bool, log: list[tuple[str, int]]) -> None:
-        self._data = data
-        self._upstream = upstream
-        self._track_access = track_access
-        self._log = log
-
-    def __getitem__(self, key: int):
-        if self._track_access:
-            self._log.append((self._upstream, key))
-            sdk_metrics.observe_cache_read(self._upstream, key)
-        return _SliceView(self._data[key])
-
-
-class _SliceView(Sequence):
-    def __init__(self, sl: _Slice, start: int = 0, end: int | None = None) -> None:
-        self._slice = sl
-        self._start = start
-        self._end = len(sl.ts) if end is None else end
-
-    def __len__(self) -> int:
-        return self._end - self._start
-
-    def __getitem__(self, idx: int | slice):
-        if isinstance(idx, slice):
-            start, stop, step = idx.indices(len(self))
-            if step != 1:
-                return [self[i] for i in range(start, stop, step)]
-            return _SliceView(self._slice, self._start + start, self._start + stop)
-        if idx < 0:
-            idx += len(self)
-        if idx < 0 or idx >= len(self):
-            raise IndexError("index out of range")
-        real = self._start + idx
-        ts = self._slice.ts[real].as_py()
-        val = self._slice._pickle.loads(self._slice.vals[real].as_py())
-        return int(ts), val
-
-    def latest(self) -> tuple[int, Any] | None:
-        return self[-1] if len(self) else None
-
-    def table(self) -> pa.Table:
-        return self._slice.slice_table(self._start, self._end)
+from ..backfill_state import BackfillState
+from .dependencies import ARROW_AVAILABLE, ARROW_CACHE_ENABLED, pa
+from .eviction import EvictionStrategy, create_default_eviction_strategy
+from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION, default_instrumentation
+from .slices import _Slice
+from .view import ArrowCacheView
 
 
 class NodeCacheArrow:
     """Arrow based cache backend."""
 
-    def __init__(self, period: int) -> None:
+    def __init__(
+        self,
+        period: int,
+        *,
+        metrics: CacheInstrumentation | None = None,
+        eviction_strategy: EvictionStrategy | None = None,
+    ) -> None:
         if not ARROW_AVAILABLE:
             raise RuntimeError("pyarrow not installed")
         self.period = period
@@ -190,38 +40,26 @@ class NodeCacheArrow:
         self._active_execution_domain: str = DEFAULT_EXECUTION_DOMAIN
         self._active_as_of: Any | None = None
         self._active_partition: Any | None = None
+        self._active_node_id: str | None = None
+
+        self._metrics = metrics or default_instrumentation()
+        if self._metrics is None:  # pragma: no cover - defensive
+            self._metrics = NOOP_INSTRUMENTATION
 
         self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
-        self._stop_event = threading.Event()
-        self._evict_thread: threading.Thread | None = None
-        self._evictor = None
-        if RAY_AVAILABLE and not runtime.NO_RAY:
-            self._evictor = _Evictor.options(name=f"evictor_{id(self)}").remote(self._evict_interval)
-            self_ref = self
-            self._evictor.start.remote(self_ref)
-        else:
-            self._start_thread_evictor()
+        self._eviction = eviction_strategy or create_default_eviction_strategy(self._evict_interval)
+        self._eviction.start(self)
 
-    def _start_thread_evictor(self) -> None:
-        def loop() -> None:
-            while not self._stop_event.is_set():
-                self._stop_event.wait(self._evict_interval)
-                self.evict_expired()
-
-        t = threading.Thread(target=loop, daemon=True)
-        t.start()
-        self._evict_thread = t
-
+    # --------------------------------------------------------------
     def close(self) -> None:
         """Stop background eviction workers."""
-        self._stop_event.set()
-        if self._evict_thread is not None:
-            self._evict_thread.join(timeout=0)
-        if RAY_AVAILABLE and not runtime.NO_RAY and self._evictor is not None:
-            ray.get(self._evictor.stop.remote())
+        self._eviction.stop()
 
     def __del__(self) -> None:  # pragma: no cover - cleanup
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # --------------------------------------------------------------
     def _ensure(self, u: str, interval: int) -> _Slice:
@@ -259,6 +97,7 @@ class NodeCacheArrow:
         domain = str(execution_domain or DEFAULT_EXECUTION_DOMAIN)
         as_of_val = as_of
         partition_val = partition
+        self._active_node_id = node_id
         if self._active_compute_key is None:
             self._active_compute_key = key
             self._active_world_id = world
@@ -280,7 +119,7 @@ class NodeCacheArrow:
         self._active_as_of = as_of_val
         self._active_partition = partition_val
         if had_data:
-            sdk_metrics.observe_cross_context_cache_hit(
+            self._metrics.observe_cross_context_cache_hit(
                 node_id,
                 world,
                 domain,
@@ -297,7 +136,6 @@ class NodeCacheArrow:
             self._last_ts[(u, interval)] = bucket
         else:
             if bucket < prev:
-                # Late arrival: do not regress last_ts nor set missing
                 self._missing[(u, interval)] = False
             else:
                 self._missing[(u, interval)] = prev + interval != bucket
@@ -312,7 +150,7 @@ class NodeCacheArrow:
     def ready(self) -> bool:
         if not self._slices:
             return False
-        for key, count in self._filled.items():
+        for count in self._filled.values():
             if count < self.period:
                 return False
         return True
@@ -328,12 +166,7 @@ class NodeCacheArrow:
 
     def drop_upstream(self, upstream_id: str, interval: int) -> None:
         """Alias for :meth:`drop` removing cache for ``upstream_id``."""
-        key = (upstream_id, interval)
-        self._slices.pop(key, None)
-        self._last_ts.pop(key, None)
-        self._missing.pop(key, None)
-        self._filled.pop(key, None)
-        self._last_seen.pop(key, None)
+        self.drop(upstream_id, interval)
 
     def view(
         self,
@@ -350,6 +183,7 @@ class NodeCacheArrow:
             data,
             track_access=track_access,
             artifact_plane=artifact_plane,
+            metrics=self._metrics,
         )
 
     def missing_flags(self) -> Dict[str, Dict[int, bool]]:
@@ -365,11 +199,6 @@ class NodeCacheArrow:
         return result
 
     def watermark(self, *, allowed_lateness: int = 0) -> int | None:
-        """Return event-time watermark based on last timestamps.
-
-        Watermark is ``min(last_ts) - allowed_lateness`` across all observed
-        ``(upstream_id, interval)`` pairs. Returns ``None`` when empty.
-        """
         last = [ts for ts in self._last_ts.values() if ts is not None]
         if not last:
             return None
@@ -409,7 +238,6 @@ class NodeCacheArrow:
                 return []
             return items[-min(count, len(items)) :]
 
-        # Build DataArray like NodeCache.get_slice for consistency
         import numpy as np  # type: ignore
         import xarray as xr  # type: ignore
 
@@ -440,7 +268,13 @@ class NodeCacheArrow:
             total += sl.resident_bytes
         return total
 
-    # Compatibility helpers to mirror NodeCache API used in tests/backfill
+    def record_resident_bytes(self, node_id: str) -> int:
+        """Record resident bytes using the configured instrumentation."""
+
+        total = self.resident_bytes
+        self._metrics.observe_resident_bytes(node_id, total)
+        return total
+
     def backfill_bulk(
         self,
         u: str,
@@ -448,16 +282,13 @@ class NodeCacheArrow:
         items: Iterable[tuple[int, Any]],
     ) -> None:
         sl = self._ensure(u, interval)
-        # Build merged mapping with live data taking precedence
         existing: dict[int, Any] = {ts: v for ts, v in sl.get_list()}
         backfill_items: list[tuple[int, Any]] = []
         for ts, payload in items:
             bucket = ts - (ts % interval)
             backfill_items.append((bucket, payload))
 
-        # Record contiguous ranges for observability/merging behaviour
         if backfill_items:
-            # De-duplicate by timestamp only; payload equality does not matter for ranges
             ts_sorted = sorted({ts for ts, _ in backfill_items})
             ranges: list[tuple[int, int]] = []
             start_range = ts_sorted[0]
@@ -477,9 +308,7 @@ class NodeCacheArrow:
             merged_map.setdefault(ts, payload)
         merged = sorted(merged_map.items())[-self.period :]
 
-        # Rewrite slice arrays
         if ARROW_AVAILABLE:
-            import pyarrow as pa  # type: ignore
             import pickle
 
             ts_list = [int(t) for t, _ in merged]
@@ -490,7 +319,6 @@ class NodeCacheArrow:
             for ts, v in merged:
                 sl.append(int(ts), v)
 
-        # Update bookkeeping similar to append()
         self._filled[(u, interval)] = min(len(merged), self.period)
         last_ts = merged[-1][0] if merged else None
         prev_last = self._last_ts.get((u, interval))
@@ -520,24 +348,14 @@ class NodeCacheArrow:
                 self._filled.pop(key, None)
                 self._last_seen.pop(key, None)
 
+    def eviction_tick(self) -> None:
+        """Manually trigger the eviction strategy loop."""
 
-if RAY_AVAILABLE:
+        self._eviction.tick()
 
-    @ray.remote
-    class _Evictor:
-        def __init__(self, interval: int) -> None:
-            self._interval = interval
-            self._stop_event = threading.Event()
 
-        def start(self, cache: NodeCacheArrow) -> None:
-            while not self._stop_event.is_set():
-                self._stop_event.wait(self._interval)
-                cache.evict_expired()
-
-        def stop(self) -> None:
-            self._stop_event.set()
-
-else:
-
-    class _Evictor:  # pragma: no cover - dummy placeholder
-        pass
+__all__ = [
+    "NodeCacheArrow",
+    "ARROW_AVAILABLE",
+    "ARROW_CACHE_ENABLED",
+]
