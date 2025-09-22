@@ -7,7 +7,7 @@ subcommand to dedicated modules. Each subcommand implementation lives in
 
 Design note: We avoid ``argparse`` subparsers here so that ``qmtl <cmd> --help``
 is forwarded to the actual subcommand parser (e.g., ``qmtl dagmanager --help``
-prints Dag Manager help, not a placeholder).
+prints DAG Manager help, not a placeholder).
 """
 
 from __future__ import annotations
