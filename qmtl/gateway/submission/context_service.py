@@ -91,7 +91,7 @@ class ComputeContextService:
             context = self._merge_contexts(decision_ctx, base_ctx)
             if stale_decision:
                 context = self._downgrade_stale(context)
-        elif downgrade_missing_decision:
+        elif downgrade_missing_decision and worlds:
             gw_metrics.record_worlds_stale_response()
             if not context.safe_mode:
                 context = self._downgrade_unavailable(context)
