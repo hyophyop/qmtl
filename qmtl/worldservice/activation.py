@@ -29,17 +29,23 @@ class ActivationEventPublisher:
             full_state = await self.store.get_activation(world_id)
             state_payload = json.dumps(full_state, sort_keys=True).encode()
             state_hash = hash_bytes(state_payload)
+            event_payload = {
+                key: val
+                for key, val in {
+                    **data,
+                    "strategy_id": payload.get("strategy_id")
+                    or data.get("strategy_id"),
+                    "side": payload.get("side") or data.get("side"),
+                }.items()
+                if key not in {"etag", "run_id", "ts"} and val is not None
+            }
             await self.bus.publish_activation_update(
                 world_id,
                 etag=data.get("etag", str(version)),
                 run_id=str(data.get("run_id") or ""),
                 ts=str(data.get("ts")),
                 state_hash=state_hash,
-                payload={
-                    key: val
-                    for key, val in payload.items()
-                    if key not in {"etag", "run_id", "ts"} and val is not None
-                },
+                payload=event_payload,
                 version=version,
             )
         return data
