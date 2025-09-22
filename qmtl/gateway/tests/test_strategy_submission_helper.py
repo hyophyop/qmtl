@@ -20,9 +20,13 @@ from qmtl.gateway.strategy_submission import (
 class DummyManager:
     def __init__(self) -> None:
         self.calls: list[StrategySubmit] = []
+        self.skip_flags: list[bool] = []
 
-    async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
+    async def submit(
+        self, payload: StrategySubmit, *, skip_downgrade_metric: bool = False
+    ) -> tuple[str, bool]:
         self.calls.append(payload)
+        self.skip_flags.append(skip_downgrade_metric)
         return "strategy-abc", False
 
 
@@ -252,6 +256,43 @@ async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
     assert domain == "backtest"
     assert as_of is None
     assert dagmanager.tag_queries[0][-1] == "backtest"
+    assert result.downgraded is True
+    assert result.safe_mode is True
+    assert result.downgrade_reason == "missing_as_of"
+    metric_value = (
+        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+    )
+    assert metric_value == 1
+
+
+@pytest.mark.asyncio
+async def test_process_backtest_missing_as_of_enters_safe_mode():
+    metrics.reset_metrics()
+    manager = DummyManager()
+    dagmanager = DummyDagManager()
+    helper = StrategySubmissionHelper(manager, dagmanager, DummyDatabase())
+    payload, _, expected_node_id = _build_payload(
+        execution_domain="backtest",
+        include_as_of=False,
+    )
+
+    result = await helper.process(
+        payload,
+        StrategySubmissionConfig(
+            submit=True,
+            diff_timeout=0.2,
+        ),
+    )
+
+    assert result.queue_map.keys() == {expected_node_id}
+    assert result.downgraded is True
+    assert result.safe_mode is True
+    assert result.downgrade_reason == "missing_as_of"
+    assert dagmanager.diff_calls
+    _, _, domain, as_of, _, _ = dagmanager.diff_calls[0]
+    assert domain == "backtest"
+    assert as_of is None
+    assert manager.skip_flags == [True]
     metric_value = (
         metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
     )

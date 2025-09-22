@@ -3,13 +3,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from fastapi import HTTPException
 
 from . import metrics as gw_metrics
+from .compute_context import (
+    evaluate_safe_mode,
+    normalize_context_value,
+    resolve_execution_domain,
+)
 from .models import StrategySubmit
 
 
@@ -33,35 +37,13 @@ class StrategySubmissionResult:
     strategy_id: str
     queue_map: dict[str, list[dict[str, Any] | Any]]
     sentinel_id: str
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
 
 
 class StrategySubmissionHelper:
     """Normalize DAG processing for ingestion and dry-run endpoints."""
-
-    _BACKTEST_TOKENS = {
-        "backtest",
-        "backtesting",
-        "compute",
-        "computeonly",
-        "offline",
-        "sandbox",
-        "sim",
-        "simulation",
-        "simulated",
-        "validate",
-        "validation",
-    }
-    _DRYRUN_TOKENS = {
-        "dryrun",
-        "dryrunmode",
-        "papermode",
-        "paper",
-        "papertrade",
-        "papertrading",
-        "papertrader",
-    }
-    _LIVE_TOKENS = {"live", "prod", "production"}
-    _SHADOW_TOKENS = {"shadow"}
 
     def __init__(self, manager, dagmanager, database) -> None:
         self._manager = manager
@@ -77,8 +59,18 @@ class StrategySubmissionHelper:
 
         worlds = self._extract_worlds(payload)
         compute_ctx = self._extract_compute_context(payload)
+        downgraded = bool(compute_ctx.get("downgraded"))
+        downgrade_reason = compute_ctx.get("downgrade_reason")
+        safe_mode = bool(compute_ctx.get("safe_mode"))
 
-        strategy_id, existed = await self._maybe_submit(payload, config)
+        if downgraded and downgrade_reason:
+            gw_metrics.strategy_compute_context_downgrade_total.labels(
+                reason=downgrade_reason
+            ).inc()
+
+        strategy_id, existed = await self._maybe_submit(
+            payload, config, downgraded
+        )
         if existed:
             raise HTTPException(
                 status_code=409,
@@ -142,15 +134,23 @@ class StrategySubmissionHelper:
             strategy_id=strategy_id,
             queue_map=queue_map,
             sentinel_id=sentinel_id,
+            downgraded=downgraded,
+            downgrade_reason=downgrade_reason,
+            safe_mode=safe_mode,
         )
 
     async def _maybe_submit(
-        self, payload: StrategySubmit, config: StrategySubmissionConfig
+        self,
+        payload: StrategySubmit,
+        config: StrategySubmissionConfig,
+        downgraded: bool,
     ) -> tuple[str, bool]:
         if config.submit:
             if self._manager is None:
                 raise RuntimeError("StrategyManager is required for submission")
-            return await self._manager.submit(payload)
+            return await self._manager.submit(
+                payload, skip_downgrade_metric=downgraded
+            )
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
 
@@ -184,54 +184,31 @@ class StrategySubmissionHelper:
         self, payload: StrategySubmit
     ) -> dict[str, str | None]:
         meta = payload.meta if isinstance(payload.meta, dict) else {}
-        raw_domain = self._normalize_context_value(
-            meta.get("execution_domain") if meta else None
-        )
-        execution_domain = self._resolve_execution_domain(raw_domain)
-        as_of = self._normalize_context_value(meta.get("as_of") if meta else None)
-        partition = self._normalize_context_value(meta.get("partition") if meta else None)
-        dataset_fingerprint = self._normalize_context_value(
-            meta.get("dataset_fingerprint") if meta else None
+        raw_domain = normalize_context_value(meta.get("execution_domain"))
+        execution_domain = resolve_execution_domain(raw_domain)
+        as_of = normalize_context_value(meta.get("as_of"))
+        partition = normalize_context_value(meta.get("partition"))
+        dataset_fingerprint = normalize_context_value(meta.get("dataset_fingerprint"))
+
+        execution_domain, downgraded, downgrade_reason, safe_mode = evaluate_safe_mode(
+            execution_domain, as_of
         )
 
-        if execution_domain in {"backtest", "dryrun"} and not as_of:
-            gw_metrics.strategy_compute_context_downgrade_total.labels(
-                reason="missing_as_of"
-            ).inc()
-            if execution_domain == "dryrun":
-                execution_domain = "backtest"
-
-        return {
+        context: dict[str, str | None] = {
             "execution_domain": execution_domain,
             "as_of": as_of,
             "partition": partition,
             "dataset_fingerprint": dataset_fingerprint,
         }
 
-    def _normalize_context_value(self, value: object | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, (str, int, float)):
-            text = str(value).strip()
-            return text or None
-        return None
+        if downgraded:
+            context["downgraded"] = True
+            if downgrade_reason:
+                context["downgrade_reason"] = downgrade_reason
+            if safe_mode:
+                context["safe_mode"] = True
 
-    def _resolve_execution_domain(self, value: str | None) -> str | None:
-        if value is None:
-            return None
-        lowered = value.lower()
-        segments = re.split(r"[/:]", lowered)
-        for segment in segments:
-            token = re.sub(r"[\s_-]+", "", segment)
-            if token in self._BACKTEST_TOKENS:
-                return "backtest"
-            if token in self._DRYRUN_TOKENS:
-                return "dryrun"
-            if token in self._LIVE_TOKENS:
-                return "live"
-            if token in self._SHADOW_TOKENS:
-                return "shadow"
-        return lowered
+        return context
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
         from qmtl.common import crc32_of_list, compute_node_id
