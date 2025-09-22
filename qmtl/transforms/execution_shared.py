@@ -22,12 +22,6 @@ def _coerce_float(value: Any) -> float | None:
     return float(value)
 
 
-def _coerce_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    return int(value)
-
-
 def run_pretrade_checks(
     order: Mapping[str, Any],
     *,
@@ -45,7 +39,7 @@ def run_pretrade_checks(
     """
 
     symbol = order["symbol"]
-    quantity = _coerce_int(order["quantity"])
+    quantity = _coerce_float(order["quantity"])
     price = _coerce_float(order.get("price"))
     order_type = order.get("order_type", default_order_type)
     tif = order.get("tif", default_tif)
@@ -57,7 +51,7 @@ def run_pretrade_checks(
         brokerage=brokerage,
         account=account,
         symbol=str(symbol),
-        quantity=quantity if quantity is not None else 0,
+        quantity=quantity if quantity is not None else 0.0,
         price=price if price is not None else 0.0,
         order_type=order_type,
         tif=tif,
