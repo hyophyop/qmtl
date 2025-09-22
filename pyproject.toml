@@ -26,6 +26,7 @@ dependencies = [
     "opentelemetry-instrumentation-grpc",
     "cachetools",
     "blake3",
+    "pytest-asyncio>=0.23",
 ]
 
 [project.optional-dependencies]
