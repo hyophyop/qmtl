@@ -345,9 +345,12 @@ class Node:
                 partition=self._compute_context.partition,
             )
             self.cache.append(upstream_id, interval, timestamp, payload)
-            sdk_metrics.observe_nodecache_resident_bytes(
-                self.node_id, self.cache.resident_bytes
-            )
+            if hasattr(self.cache, "record_resident_bytes"):
+                self.cache.record_resident_bytes(self.node_id)
+            else:
+                sdk_metrics.observe_nodecache_resident_bytes(
+                    self.node_id, self.cache.resident_bytes
+                )
 
         if self.event_service is not None:
             self.event_service.record(self.node_id, interval, timestamp, payload)

@@ -6,6 +6,7 @@ from qmtl.sdk.cache_view import CacheView
 
 from qmtl.sdk import ProcessingNode, StreamInput
 from qmtl.sdk import metrics as sdk_metrics
+import qmtl.sdk.arrow_cache.eviction as eviction
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),
@@ -51,18 +52,15 @@ def test_drop_upstream_removes_data_and_is_idempotent():
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
 def test_no_ray_forces_thread(monkeypatch):
-    monkeypatch.setattr(arrow_cache, "RAY_AVAILABLE", True)
-    called = {"flag": False}
-
-    def fake_start(self):
-        called["flag"] = True
-
-    monkeypatch.setattr(arrow_cache.NodeCacheArrow, "_start_thread_evictor", fake_start)
+    monkeypatch.setattr(eviction, "RAY_AVAILABLE", True)
     import qmtl.sdk.runtime as runtime
     monkeypatch.setattr(runtime, "NO_RAY", True)
 
     cache = arrow_cache.NodeCacheArrow(period=2)
-    assert called["flag"]
+    try:
+        assert isinstance(cache._eviction, eviction.ThreadedEvictionStrategy)
+    finally:
+        cache.close()
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
@@ -118,3 +116,21 @@ def test_arrow_cache_compute_context_switch_records_metric():
 
     key = ("node", "w", "live", "__unset__", "__unset__")
     assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_arrow_cache_resident_bytes_instrumentation():
+    recorded: list[tuple[str, int]] = []
+
+    inst = arrow_cache.CacheInstrumentation(
+        observe_cache_read=lambda *_args, **_kwargs: None,
+        observe_cross_context_cache_hit=lambda *_args, **_kwargs: None,
+        observe_resident_bytes=lambda node_id, resident: recorded.append((node_id, resident)),
+    )
+
+    cache = arrow_cache.NodeCacheArrow(period=2, metrics=inst)
+    cache.activate_compute_key(None, node_id="node", world_id="w")
+    cache.append("u", 60, 60, {"v": 1})
+    total = cache.record_resident_bytes("node")
+
+    assert recorded == [("node", total)]
