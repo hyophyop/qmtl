@@ -155,6 +155,12 @@ class StrategySubmissionHelper:
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
 
+    def _crc_sentinel(self, dag: dict[str, Any]) -> str:
+        from qmtl.common import crc32_of_list
+
+        crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
+        return f"dryrun:{crc:08x}"
+
     async def _persist_world_bindings(
         self, worlds: list[str], default_world: str | None, strategy_id: str
     ) -> None:
@@ -169,8 +175,13 @@ class StrategySubmissionHelper:
             except Exception:
                 pass
 
-    def _crc_sentinel(self, dag: dict[str, Any]) -> str:
-        from qmtl.common import crc32_of_list
-
-        crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
-        return f"dryrun:{crc:08x}"
+    async def _build_queue_map_from_queries(
+        self,
+        dag: dict[str, Any],
+        worlds: list[str],
+        default_world: str | None,
+        execution_domain: str | None,
+    ) -> dict[str, list[dict[str, Any] | Any]]:
+        return await self._pipeline.build_queue_map(
+            dag, worlds, default_world, execution_domain
+        )

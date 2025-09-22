@@ -7,7 +7,7 @@ from typing import Any
 
 from blake3 import blake3
 
-from .nodespec import serialize_nodespec
+from .nodespec import CanonicalNodeSpec, serialize_nodespec
 
 
 def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
@@ -44,7 +44,7 @@ def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
 
 
 def compute_node_id(
-    node: Mapping[str, Any],
+    node: Mapping[str, Any] | CanonicalNodeSpec,
     *,
     existing_ids: Iterable[str] | None = None,
 ) -> str:
