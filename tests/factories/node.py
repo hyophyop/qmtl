@@ -98,6 +98,8 @@ def canonical_node_payload(
         or payload.get("schema_id", ""),
         "code_hash": payload.get("code_hash", ""),
     }
+    if "inputs" in payload:
+        spec["inputs"] = payload.get("inputs", [])
     if include_node_id:
         payload.setdefault("node_id", compute_node_id(spec))
     return payload
