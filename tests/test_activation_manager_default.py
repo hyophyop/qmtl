@@ -31,3 +31,6 @@ def test_runner_blocks_without_activation():
     Runner._handle_trade_order({"side": "SELL", "quantity": 1, "timestamp": 0})
 
     assert producer.messages == []
+    Runner.set_activation_manager(None)
+    Runner.set_trade_order_kafka_topic(None)
+    Runner.set_kafka_producer(None)

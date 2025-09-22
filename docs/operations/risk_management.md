@@ -13,7 +13,8 @@ This guide explains how to configure and use the `RiskManager` to enforce portfo
 
 ## Configuration
 
-`RiskManager` supports several parameters to control portfolio risk:
+`RiskManager` accepts a :class:`RiskConfig` dataclass describing portfolio
+constraints. The configuration captures the most common thresholds:
 
 - `max_position_size`: absolute maximum position value.
 - `max_leverage`: maximum allowed leverage ratio.
@@ -23,12 +24,14 @@ This guide explains how to configure and use the `RiskManager` to enforce portfo
 - `position_size_limit_pct`: maximum percentage of portfolio per position.
 - `enable_dynamic_sizing`: whether to automatically scale positions to meet limits.
 
-Initialize the manager with the limits appropriate for your strategy:
+You can pass an instance of :class:`RiskConfig` directly or override specific
+fields inline:
 
 ```python
-from qmtl.sdk.risk_management import RiskManager
+from qmtl.sdk.risk_management import RiskConfig, RiskManager
 
-risk_mgr = RiskManager(position_size_limit_pct=0.10)
+config = RiskConfig(position_size_limit_pct=0.10)
+risk_mgr = RiskManager(config=config, max_leverage=2.0)
 ```
 
 ## Enforcing Position Limits

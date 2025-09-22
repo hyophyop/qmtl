@@ -1,281 +1,206 @@
-"""Risk management controls for enhanced backtest accuracy."""
+"""Risk management orchestration built on composable controls."""
 
 from __future__ import annotations
 
-import logging
-import math
-from typing import Dict, List, Optional, Tuple, Sequence
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import replace
+from typing import Dict, List, Optional, Sequence, Tuple
 
-logger = logging.getLogger(__name__)
-
-
-class PortfolioScope(str, Enum):
-    """Scope for portfolio risk calculations."""
-
-    STRATEGY = "strategy"
-    WORLD = "world"
-
-
-class RiskViolationType(str, Enum):
-    """Types of risk violations."""
-    POSITION_SIZE_LIMIT = "position_size_limit"
-    LEVERAGE_LIMIT = "leverage_limit"
-    DRAWDOWN_LIMIT = "drawdown_limit"
-    CONCENTRATION_LIMIT = "concentration_limit"
-    VOLATILITY_LIMIT = "volatility_limit"
-
-
-@dataclass
-class RiskViolation:
-    """Represents a risk management violation."""
-    
-    violation_type: RiskViolationType
-    current_value: float
-    limit_value: float
-    description: str
-    timestamp: int
-    symbol: Optional[str] = None
-    
-    @property
-    def severity(self) -> str:
-        """Calculate severity based on how much the limit is exceeded."""
-        ratio = abs(self.current_value) / abs(self.limit_value) if self.limit_value != 0 else float('inf')
-        
-        if ratio >= 2.0:
-            return "critical"
-        elif ratio >= 1.5:
-            return "high"
-        elif ratio >= 1.2:
-            return "medium"
-        else:
-            return "low"
-
-
-@dataclass
-class PositionInfo:
-    """Information about a position."""
-    
-    symbol: str
-    quantity: float
-    market_value: float
-    unrealized_pnl: float
-    entry_price: float
-    current_price: float
-    
-    @property
-    def exposure(self) -> float:
-        """Absolute market value exposure."""
-        return abs(self.market_value)
-
-
-def aggregate_portfolios(portfolios: Sequence[Tuple[float, Dict[str, PositionInfo]]]) -> Tuple[float, Dict[str, PositionInfo]]:
-    """Aggregate positions across multiple strategies.
-
-    Parameters
-    ----------
-    portfolios:
-        Iterable of ``(portfolio_value, positions)`` tuples for each strategy.
-
-    Returns
-    -------
-    Tuple[float, Dict[str, PositionInfo]]
-        Combined portfolio value and merged positions keyed by symbol.
-    """
-
-    total_value = 0.0
-    aggregated: Dict[str, PositionInfo] = {}
-
-    for value, positions in portfolios:
-        total_value += value
-        for symbol, pos in positions.items():
-            existing = aggregated.get(symbol)
-            if existing:
-                existing.quantity += pos.quantity
-                existing.market_value += pos.market_value
-                existing.unrealized_pnl += pos.unrealized_pnl
-            else:
-                aggregated[symbol] = PositionInfo(
-                    symbol=symbol,
-                    quantity=pos.quantity,
-                    market_value=pos.market_value,
-                    unrealized_pnl=pos.unrealized_pnl,
-                    entry_price=pos.entry_price,
-                    current_price=pos.current_price,
-                )
-
-    return total_value, aggregated
+from .risk import (
+    DrawdownControl,
+    PortfolioScope,
+    PositionInfo,
+    RiskConfig,
+    RiskViolation,
+    RiskViolationType,
+    VolatilityControl,
+    aggregate_portfolios,
+    evaluate_concentration,
+    evaluate_leverage,
+    evaluate_position_size,
+)
 
 
 class RiskManager:
     """Risk management system for backtesting."""
-    
+
     def __init__(
         self,
-        *,
-        max_position_size: Optional[float] = None,
-        max_leverage: float = 3.0,
-        max_drawdown_pct: float = 0.15,  # 15% max drawdown
-        max_concentration_pct: float = 0.20,  # 20% max single position
-        max_portfolio_volatility: float = 0.25,  # 25% annualized volatility
-        position_size_limit_pct: float = 0.10,  # 10% of portfolio per position
-        enable_dynamic_sizing: bool = True,
-    ):
-        """Initialize risk management system.
-        
+        config: Optional[RiskConfig] = None,
+        **config_overrides: object,
+    ) -> None:
+        """Create a :class:`RiskManager` using ``RiskConfig`` thresholds.
+
         Parameters
         ----------
-        max_position_size : float, optional
-            Maximum absolute position size. If None, uses percentage-based sizing.
-        max_leverage : float
-            Maximum portfolio leverage ratio.
-        max_drawdown_pct : float
-            Maximum allowed drawdown as fraction (0.15 = 15%).
-        max_concentration_pct : float
-            Maximum concentration in single position as fraction.
-        max_portfolio_volatility : float
-            Maximum allowed portfolio volatility (annualized).
-        position_size_limit_pct : float
-            Maximum position size as percentage of portfolio.
-        enable_dynamic_sizing : bool
-            Whether to dynamically adjust position sizes based on risk.
+        config:
+            Optional base configuration. If omitted, :class:`RiskConfig` defaults
+            are used.
+        **config_overrides:
+            Keyword arguments matching :class:`RiskConfig` fields to override
+            either the provided ``config`` or the defaults.
         """
-        self.max_position_size = max_position_size
-        self.max_leverage = max_leverage
-        self.max_drawdown_pct = max_drawdown_pct
-        self.max_concentration_pct = max_concentration_pct
-        self.max_portfolio_volatility = max_portfolio_volatility
-        self.position_size_limit_pct = position_size_limit_pct
-        self.enable_dynamic_sizing = enable_dynamic_sizing
-        
-        # Tracking
+
+        base_config = config or RiskConfig()
+
+        if config_overrides:
+            unknown = set(config_overrides) - set(RiskConfig.__annotations__)
+            if unknown:
+                unknown_str = ", ".join(sorted(unknown))
+                raise TypeError(f"Unknown risk config overrides: {unknown_str}")
+            base_config = replace(base_config, **config_overrides)
+
+        self.config = base_config
         self.violations: List[RiskViolation] = []
-        self.portfolio_value_history: List[Tuple[int, float]] = []
-        self.peak_portfolio_value = 0.0
-    
+        self._drawdown_control = DrawdownControl(self.config.max_drawdown_pct)
+        self._volatility_control = VolatilityControl(
+            self.config.max_portfolio_volatility,
+            lookback=self.config.volatility_lookback,
+            min_samples=self.config.volatility_min_samples,
+        )
+
+    @property
+    def portfolio_value_history(self) -> List[Tuple[int, float]]:
+        """History of portfolio values observed by the manager."""
+
+        return self._volatility_control.history
+
+    @portfolio_value_history.setter
+    def portfolio_value_history(self, values: Sequence[Tuple[int, float]]) -> None:
+        """Replace the tracked portfolio history, primarily for test scenarios."""
+
+        history_list = list(values)
+        self._volatility_control.history = history_list
+
+        if not history_list:
+            self._drawdown_control.current_drawdown = 0.0
+            return
+
+        # Default peak to provided setter value or infer from history if unset.
+        peak_value = self._drawdown_control.peak_portfolio_value
+        if peak_value <= 0:
+            peak_value = max(value for _, value in history_list)
+            self._drawdown_control.peak_portfolio_value = peak_value
+
+        current_value = history_list[-1][1]
+        if peak_value > 0:
+            self._drawdown_control.current_drawdown = (
+                peak_value - current_value
+            ) / peak_value
+        else:
+            self._drawdown_control.current_drawdown = 0.0
+
+    @property
+    def peak_portfolio_value(self) -> float:
+        """Highest portfolio value observed so far."""
+
+        return self._drawdown_control.peak_portfolio_value
+
+    @peak_portfolio_value.setter
+    def peak_portfolio_value(self, value: float) -> None:
+        """Allow tests and callers to seed the peak tracking value."""
+
+        self._drawdown_control.peak_portfolio_value = value
+        history = self._volatility_control.history
+        if history and value > 0:
+            current_value = history[-1][1]
+            self._drawdown_control.current_drawdown = (
+                value - current_value
+            ) / value
+        elif value <= 0:
+            self._drawdown_control.current_drawdown = 0.0
+
+    @property
+    def max_position_size(self) -> Optional[float]:
+        return self.config.max_position_size
+
+    @property
+    def max_leverage(self) -> float:
+        return self.config.max_leverage
+
+    @property
+    def max_drawdown_pct(self) -> float:
+        return self.config.max_drawdown_pct
+
+    @property
+    def max_concentration_pct(self) -> float:
+        return self.config.max_concentration_pct
+
+    @property
+    def max_portfolio_volatility(self) -> float:
+        return self.config.max_portfolio_volatility
+
+    @property
+    def position_size_limit_pct(self) -> float:
+        return self.config.position_size_limit_pct
+
+    @property
+    def enable_dynamic_sizing(self) -> bool:
+        return self.config.enable_dynamic_sizing
+
     def validate_position_size(
-        self, 
+        self,
         symbol: str,
         proposed_quantity: float,
         current_price: float,
         portfolio_value: float,
-        current_positions: Dict[str, PositionInfo]
+        current_positions: Dict[str, PositionInfo],
     ) -> Tuple[bool, Optional[RiskViolation], float]:
-        """Validate proposed position size against risk limits.
-        
-        Returns
-        -------
-        Tuple[bool, Optional[RiskViolation], float]
-            (is_valid, violation_if_any, adjusted_quantity)
-        """
-        proposed_value = abs(proposed_quantity * current_price)
-        
-        # Check absolute position size limit
-        if self.max_position_size and proposed_value > self.max_position_size:
-            violation = RiskViolation(
-                violation_type=RiskViolationType.POSITION_SIZE_LIMIT,
-                current_value=proposed_value,
-                limit_value=self.max_position_size,
-                description=f"Position size {proposed_value:.2f} exceeds absolute limit {self.max_position_size:.2f}",
-                timestamp=0,  # Will be set by caller
-                symbol=symbol
-            )
-            
-            if self.enable_dynamic_sizing:
-                # Adjust to maximum allowed
-                adjusted_quantity = (self.max_position_size / current_price) * (1 if proposed_quantity > 0 else -1)
-                return False, violation, adjusted_quantity
-            else:
-                return False, violation, 0.0
-        
-        # Check percentage-based position size limit
-        if portfolio_value > 0:
-            position_pct = proposed_value / portfolio_value
-            
-            if position_pct > self.position_size_limit_pct:
-                violation = RiskViolation(
-                    violation_type=RiskViolationType.POSITION_SIZE_LIMIT,
-                    current_value=position_pct,
-                    limit_value=self.position_size_limit_pct,
-                    description=f"Position size {position_pct:.1%} exceeds limit {self.position_size_limit_pct:.1%}",
-                    timestamp=0,
-                    symbol=symbol
-                )
-                
-                if self.enable_dynamic_sizing:
-                    # Adjust to maximum allowed percentage
-                    max_value = portfolio_value * self.position_size_limit_pct
-                    adjusted_quantity = (max_value / current_price) * (1 if proposed_quantity > 0 else -1)
-                    return False, violation, adjusted_quantity
-                else:
-                    return False, violation, 0.0
-        
-        return True, None, proposed_quantity
+        """Validate proposed position size against risk limits."""
+
+        return evaluate_position_size(
+            symbol,
+            proposed_quantity,
+            current_price,
+            portfolio_value,
+            current_positions,
+            max_position_size=self.config.max_position_size,
+            position_size_limit_pct=self.config.position_size_limit_pct,
+            enable_dynamic_sizing=self.config.enable_dynamic_sizing,
+        )
 
     def validate_portfolio_risk(
         self,
         positions: Dict[str, PositionInfo],
         portfolio_value: float,
-        timestamp: int
+        timestamp: int,
     ) -> List[RiskViolation]:
         """Validate overall portfolio risk metrics."""
-        violations = []
-        
+
+        volatility_violations = self._volatility_control.update(
+            timestamp, portfolio_value
+        )
+        violations: List[RiskViolation] = []
+
         if portfolio_value <= 0:
-            return violations
-        
-        # Calculate total exposure and leverage
+            self.violations.extend(volatility_violations)
+            return volatility_violations
+
         total_exposure = sum(pos.exposure for pos in positions.values())
-        leverage = total_exposure / portfolio_value if portfolio_value > 0 else 0
-        
-        # Check leverage limit
-        if leverage > self.max_leverage:
-            violations.append(RiskViolation(
-                violation_type=RiskViolationType.LEVERAGE_LIMIT,
-                current_value=leverage,
-                limit_value=self.max_leverage,
-                description=f"Portfolio leverage {leverage:.2f}x exceeds limit {self.max_leverage:.2f}x",
-                timestamp=timestamp
-            ))
-        
-        # Check concentration limits
-        for symbol, position in positions.items():
-            concentration = position.exposure / portfolio_value
-            if concentration > self.max_concentration_pct:
-                violations.append(RiskViolation(
-                    violation_type=RiskViolationType.CONCENTRATION_LIMIT,
-                    current_value=concentration,
-                    limit_value=self.max_concentration_pct,
-                    description=f"Position concentration in {symbol} is {concentration:.1%}, exceeds limit {self.max_concentration_pct:.1%}",
-                    timestamp=timestamp,
-                    symbol=symbol
-                ))
-        
-        # Check drawdown limit
-        self.peak_portfolio_value = max(self.peak_portfolio_value, portfolio_value)
-        if self.peak_portfolio_value > 0:
-            current_drawdown = (self.peak_portfolio_value - portfolio_value) / self.peak_portfolio_value
-            
-            if current_drawdown > self.max_drawdown_pct:
-                violations.append(RiskViolation(
-                    violation_type=RiskViolationType.DRAWDOWN_LIMIT,
-                    current_value=current_drawdown,
-                    limit_value=self.max_drawdown_pct,
-                    description=f"Portfolio drawdown {current_drawdown:.1%} exceeds limit {self.max_drawdown_pct:.1%}",
-                    timestamp=timestamp
-                ))
-        
-        # Track portfolio value for volatility calculation
-        self.portfolio_value_history.append((timestamp, portfolio_value))
-        
-        # Check volatility limit (if we have enough history)
-        if len(self.portfolio_value_history) >= 30:  # At least 30 observations
-            violations.extend(self._check_volatility_limit(timestamp))
-        
-        # Store violations
+        leverage_violation = evaluate_leverage(
+            total_exposure,
+            portfolio_value,
+            max_leverage=self.config.max_leverage,
+            timestamp=timestamp,
+        )
+        if leverage_violation:
+            violations.append(leverage_violation)
+
+        violations.extend(
+            evaluate_concentration(
+                positions,
+                portfolio_value,
+                max_concentration_pct=self.config.max_concentration_pct,
+                timestamp=timestamp,
+            )
+        )
+
+        violations.extend(
+            self._drawdown_control.update(portfolio_value, timestamp)
+        )
+
+        violations.extend(volatility_violations)
+
         self.violations.extend(violations)
-        
         return violations
 
     def validate_world_risk(
@@ -283,127 +208,81 @@ class RiskManager:
         strategies: Sequence[Tuple[float, Dict[str, PositionInfo]]],
         timestamp: int,
     ) -> List[RiskViolation]:
-        """Validate risk metrics across multiple strategies.
-
-        Parameters
-        ----------
-        strategies:
-            Iterable of ``(portfolio_value, positions)`` for each strategy in the world.
-        timestamp:
-            Timestamp for the risk evaluation.
-        """
+        """Validate risk metrics across multiple strategies."""
 
         total_value, aggregated = aggregate_portfolios(strategies)
         return self.validate_portfolio_risk(aggregated, total_value, timestamp)
-    
+
     def _check_volatility_limit(self, timestamp: int) -> List[RiskViolation]:
-        """Check portfolio volatility against limits."""
-        violations = []
-        
-        if len(self.portfolio_value_history) < 2:
-            return violations
-        
-        # Calculate returns from recent history (last 30 periods)
-        recent_history = self.portfolio_value_history[-30:]
-        returns = []
-        
-        for i in range(1, len(recent_history)):
-            prev_value = recent_history[i-1][1]
-            curr_value = recent_history[i][1]
-            if prev_value > 0:
-                ret = (curr_value - prev_value) / prev_value
-                returns.append(ret)
-        
-        if len(returns) >= 10:  # Need at least 10 return observations
-            # Calculate annualized volatility (assuming daily returns)
-            mean_return = sum(returns) / len(returns)
-            variance = sum((r - mean_return) ** 2 for r in returns) / len(returns)
-            volatility = math.sqrt(variance) * math.sqrt(252)  # Annualize assuming 252 trading days
-            
-            if volatility > self.max_portfolio_volatility:
-                violations.append(RiskViolation(
-                    violation_type=RiskViolationType.VOLATILITY_LIMIT,
-                    current_value=volatility,
-                    limit_value=self.max_portfolio_volatility,
-                    description=f"Portfolio volatility {volatility:.1%} exceeds limit {self.max_portfolio_volatility:.1%}",
-                    timestamp=timestamp
-                ))
-        
-        return violations
-    
+        """Backwards-compatible volatility check using the configured control."""
+
+        history = self.portfolio_value_history
+        if len(history) < 2:
+            return []
+
+        # Reuse volatility control logic without mutating the primary history list.
+        control = VolatilityControl(
+            self.config.max_portfolio_volatility,
+            lookback=self.config.volatility_lookback,
+            min_samples=self.config.volatility_min_samples,
+            history=list(history),
+        )
+
+        last_value = history[-1][1]
+        return control.update(timestamp, last_value)
+
     def calculate_position_size(
         self,
         symbol: str,
         target_allocation_pct: float,
         current_price: float,
         portfolio_value: float,
-        current_volatility: Optional[float] = None
+        current_volatility: Optional[float] = None,
     ) -> float:
-        """Calculate appropriate position size considering risk constraints.
-        
-        Parameters
-        ----------
-        symbol : str
-            Symbol to size position for.
-        target_allocation_pct : float
-            Target allocation as percentage (0.1 = 10%).
-        current_price : float
-            Current price of the asset.
-        portfolio_value : float
-            Current portfolio value.
-        current_volatility : float, optional
-            Current asset volatility for risk adjustment.
-            
-        Returns
-        -------
-        float
-            Recommended position size (number of shares/units).
-        """
+        """Calculate appropriate position size considering risk constraints."""
+
         if portfolio_value <= 0 or current_price <= 0:
             return 0.0
-        
-        # Base allocation
-        base_allocation = min(target_allocation_pct, self.position_size_limit_pct)
-        
-        # Adjust for volatility if provided
+
+        base_allocation = min(
+            target_allocation_pct, self.config.position_size_limit_pct
+        )
+
         if current_volatility and current_volatility > 0:
-            # Scale down position size for higher volatility assets
-            volatility_adjustment = min(1.0, 0.20 / current_volatility)  # Target 20% volatility
+            volatility_adjustment = min(1.0, 0.20 / current_volatility)
             adjusted_allocation = base_allocation * volatility_adjustment
         else:
             adjusted_allocation = base_allocation
-        
-        # Calculate position size
+
         target_value = portfolio_value * adjusted_allocation
-        position_size = target_value / current_price
-        
-        return position_size
-    
-    def get_risk_summary(self) -> Dict[str, any]:
+        return target_value / current_price
+
+    def get_risk_summary(self) -> Dict[str, object]:
         """Get summary of risk metrics and violations."""
+
         return {
             "total_violations": len(self.violations),
-            "violation_types": {vtype.value: len([v for v in self.violations if v.violation_type == vtype]) 
-                             for vtype in RiskViolationType},
-            "critical_violations": len([v for v in self.violations if v.severity == "critical"]),
-            "high_violations": len([v for v in self.violations if v.severity == "high"]),
+            "violation_types": {
+                vtype.value: len(
+                    [v for v in self.violations if v.violation_type == vtype]
+                )
+                for vtype in RiskViolationType
+            },
+            "critical_violations": len(
+                [v for v in self.violations if v.severity == "critical"]
+            ),
+            "high_violations": len(
+                [v for v in self.violations if v.severity == "high"]
+            ),
             "peak_portfolio_value": self.peak_portfolio_value,
-            "current_drawdown": self._calculate_current_drawdown(),
+            "current_drawdown": self._drawdown_control.current_drawdown,
             "risk_config": {
-                "max_leverage": self.max_leverage,
-                "max_drawdown_pct": self.max_drawdown_pct,
-                "max_concentration_pct": self.max_concentration_pct,
-                "position_size_limit_pct": self.position_size_limit_pct,
-            }
+                "max_leverage": self.config.max_leverage,
+                "max_drawdown_pct": self.config.max_drawdown_pct,
+                "max_concentration_pct": self.config.max_concentration_pct,
+                "position_size_limit_pct": self.config.position_size_limit_pct,
+            },
         }
-    
-    def _calculate_current_drawdown(self) -> float:
-        """Calculate current portfolio drawdown."""
-        if not self.portfolio_value_history or self.peak_portfolio_value <= 0:
-            return 0.0
-
-        current_value = self.portfolio_value_history[-1][1]
-        return (self.peak_portfolio_value - current_value) / self.peak_portfolio_value
 
 
 __all__ = [
@@ -411,6 +290,7 @@ __all__ = [
     "RiskViolationType",
     "RiskViolation",
     "PositionInfo",
+    "RiskConfig",
     "aggregate_portfolios",
     "RiskManager",
 ]

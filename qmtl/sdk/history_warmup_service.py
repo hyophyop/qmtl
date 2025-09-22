@@ -117,7 +117,7 @@ class HistoryWarmupService:
 
         coverage = result.coverage
         if getattr(node, "pre_warmup", False):
-            if not coverage:
+            if not coverage and not plan.stop_on_ready:
                 coverage = list(
                     await plan.provider.coverage(
                         node_id=plan.node_id, interval=plan.interval
@@ -130,7 +130,7 @@ class HistoryWarmupService:
                 await node.load_history(plan.window.start, plan.window.end)
         else:
             await node.load_history(plan.window.start, plan.window.end)
-            if not coverage:
+            if not coverage and not plan.stop_on_ready:
                 coverage = list(
                     await plan.provider.coverage(
                         node_id=plan.node_id, interval=plan.interval
