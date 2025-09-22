@@ -37,7 +37,7 @@ async def test_world_routes_require_world_client(fake_redis):
             resp = await api_client.get("/worlds")
 
     assert resp.status_code == 503
-    assert resp.json() == {"detail": "world service disabled"}
+    assert resp.json() == {"detail": "WorldService disabled"}
 
 
 @pytest.mark.asyncio

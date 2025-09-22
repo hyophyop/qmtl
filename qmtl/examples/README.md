@@ -12,7 +12,7 @@ uv pip install -e qmtl[dev]
 
 ## Running
 
-Run strategies against a Gateway-connected world service:
+Run strategies against a Gateway-connected WorldService:
 
 ```bash
 python strategies/my_strategy.py --world-id demo --gateway-url http://localhost:8000

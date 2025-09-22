@@ -150,7 +150,7 @@ class WorldServiceClient:
         gw_metrics.worlds_breaker_failures.set(0)
 
     async def _wait_for_service(self, timeout: float = 5.0) -> None:
-        """Poll the world service health endpoint until it is ready."""
+        """Poll the WorldService health endpoint until it is ready."""
         deadline = asyncio.get_running_loop().time() + timeout
         health_url = f"{self._base}/health"
         while True:
@@ -163,7 +163,7 @@ class WorldServiceClient:
             except Exception:
                 pass
             if asyncio.get_running_loop().time() > deadline:
-                raise RuntimeError("World service unavailable")
+                raise RuntimeError("WorldService unavailable")
             await asyncio.sleep(0.5)
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
