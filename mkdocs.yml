@@ -8,7 +8,7 @@ nav:
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md
-      - World Service: architecture/worldservice.md
+      - WorldService: architecture/worldservice.md
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Exchange Node Sets: architecture/exchange_node_sets.md

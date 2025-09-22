@@ -198,7 +198,7 @@ def create_api_router(
     ) -> Response:
         client: WorldServiceClient | None = world_client
         if client is None:
-            raise HTTPException(status_code=503, detail="world service disabled")
+            raise HTTPException(status_code=503, detail="WorldService disabled")
 
         headers, cid = _build_world_headers(request)
         data = await func(client, headers)

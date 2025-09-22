@@ -27,7 +27,7 @@ hysteresis:
 
 ## Applying a Policy
 
-Use the World Service API to apply a policy and evaluate strategies:
+Use the WorldService API to apply a policy and evaluate strategies:
 
 ```bash
 curl -X POST /worlds/alpha/apply \
