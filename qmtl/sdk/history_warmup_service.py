@@ -138,6 +138,11 @@ class HistoryWarmupService:
                 )
 
         if plan.strict:
+            coverage = list(
+                await plan.provider.coverage(
+                    node_id=plan.node_id, interval=plan.interval
+                )
+            )
             gaps = compute_missing_ranges(coverage, plan.window)
             if gaps or getattr(node, "pre_warmup", False):
                 raise RuntimeError(
