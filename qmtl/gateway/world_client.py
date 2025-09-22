@@ -152,7 +152,7 @@ class WorldServiceClient:
     async def _wait_for_service(self, timeout: float = 5.0) -> None:
         """Poll the WorldService health endpoint until it is ready."""
         deadline = asyncio.get_running_loop().time() + timeout
-        health_url = f"{self._base}/health"
+        health_url = self._build_url("/health")
         while True:
             try:
                 resp = await self._client.get(
@@ -165,6 +165,13 @@ class WorldServiceClient:
             if asyncio.get_running_loop().time() > deadline:
                 raise RuntimeError("WorldService unavailable")
             await asyncio.sleep(0.5)
+
+    def _build_url(self, path: str) -> str:
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{self._base}{path}"
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         @self._breaker
@@ -190,6 +197,44 @@ class WorldServiceClient:
         gw_metrics.worlds_breaker_failures.set(self._breaker.failures)
         return resp
 
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        json: Any = None,
+    ) -> Any:
+        resp = await self._request(
+            method,
+            self._build_url(path),
+            headers=headers,
+            params=params,
+            json=json,
+        )
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return None
+        return resp.json()
+
+    async def _request_no_content(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        resp = await self._request(
+            method,
+            self._build_url(path),
+            headers=headers,
+            params=params,
+        )
+        resp.raise_for_status()
+        return None
+
     @property
     def breaker(self) -> AsyncCircuitBreaker:
         return self._breaker
@@ -203,7 +248,9 @@ class WorldServiceClient:
             return entry.value, False
         try:
             resp = await self._request(
-                "GET", f"{self._base}/worlds/{world_id}/decide", headers=headers
+                "GET",
+                self._build_url(f"/worlds/{world_id}/decide"),
+                headers=headers,
             )
         except Exception:
             if entry is not None:
@@ -277,7 +324,7 @@ class WorldServiceClient:
         try:
             resp = await self._request(
                 "GET",
-                f"{self._base}/worlds/{world_id}/activation",
+                self._build_url(f"/worlds/{world_id}/activation"),
                 headers=req_headers,
                 params={"strategy_id": strategy_id, "side": side},
             )
@@ -301,68 +348,85 @@ class WorldServiceClient:
 
 
     async def list_worlds(self, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("GET", f"{self._base}/worlds", headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json("GET", "/worlds", headers=headers)
 
     async def create_world(self, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("POST", f"{self._base}/worlds", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "POST", "/worlds", headers=headers, json=payload
+        )
 
     async def get_world(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("GET", f"{self._base}/worlds/{world_id}", headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "GET", f"/worlds/{world_id}", headers=headers
+        )
 
     async def put_world(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("PUT", f"{self._base}/worlds/{world_id}", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "PUT",
+            f"/worlds/{world_id}",
+            headers=headers,
+            json=payload,
+        )
 
     async def delete_world(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> None:
-        resp = await self._request("DELETE", f"{self._base}/worlds/{world_id}", headers=headers)
-        resp.raise_for_status()
+        await self._request_no_content(
+            "DELETE", f"/worlds/{world_id}", headers=headers
+        )
 
     async def post_policy(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("POST", f"{self._base}/worlds/{world_id}/policies", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/policies",
+            headers=headers,
+            json=payload,
+        )
 
     async def get_policies(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("GET", f"{self._base}/worlds/{world_id}/policies", headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "GET", f"/worlds/{world_id}/policies", headers=headers
+        )
 
     async def set_default_policy(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("POST", f"{self._base}/worlds/{world_id}/set-default", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/set-default",
+            headers=headers,
+            json=payload,
+        )
 
     async def post_bindings(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("POST", f"{self._base}/worlds/{world_id}/bindings", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/bindings",
+            headers=headers,
+            json=payload,
+        )
 
     async def get_bindings(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("GET", f"{self._base}/worlds/{world_id}/bindings", headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "GET", f"/worlds/{world_id}/bindings", headers=headers
+        )
 
     async def post_decisions(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("POST", f"{self._base}/worlds/{world_id}/decisions", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/decisions",
+            headers=headers,
+            json=payload,
+        )
 
     async def put_activation(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("PUT", f"{self._base}/worlds/{world_id}/activation", headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "PUT",
+            f"/worlds/{world_id}/activation",
+            headers=headers,
+            json=payload,
+        )
 
     async def get_audit(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request("GET", f"{self._base}/worlds/{world_id}/audit", headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request_json(
+            "GET", f"/worlds/{world_id}/audit", headers=headers
+        )
     async def get_state_hash(
         self,
         world_id: str,
@@ -371,33 +435,27 @@ class WorldServiceClient:
     ) -> Any:
         """Fetch state hash for a topic without retrieving full snapshot."""
 
-        resp = await self._request(
+        return await self._request_json(
             "GET",
-            f"{self._base}/worlds/{world_id}/{topic}/state_hash",
+            f"/worlds/{world_id}/{topic}/state_hash",
             headers=headers,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     async def post_evaluate(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request(
+        return await self._request_json(
             "POST",
-            f"{self._base}/worlds/{world_id}/evaluate",
+            f"/worlds/{world_id}/evaluate",
             headers=headers,
             json=payload,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     async def post_apply(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        resp = await self._request(
+        return await self._request_json(
             "POST",
-            f"{self._base}/worlds/{world_id}/apply",
+            f"/worlds/{world_id}/apply",
             headers=headers,
             json=payload,
         )
-        resp.raise_for_status()
-        return resp.json()
 
 
 __all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]
