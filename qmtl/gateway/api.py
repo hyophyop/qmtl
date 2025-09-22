@@ -79,6 +79,9 @@ def create_app(
     dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
     degradation = DegradationManager(redis_conn, database_obj, dagmanager, world_client)
     commit_log_writer_local = commit_log_writer
+    world_client_local = world_client
+    shared_context_service = ComputeContextService(world_client=world_client_local)
+
     manager = StrategyManager(
         redis=redis_conn,
         database=database_obj,
@@ -86,12 +89,12 @@ def create_app(
         degrade=degradation,
         insert_sentinel=insert_sentinel,
         commit_log_writer=commit_log_writer_local,
+        context_service=shared_context_service,
     )
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer
     commit_log_consumer_local = commit_log_consumer
     commit_log_handler_local = commit_log_handler
-    world_client_local = world_client
     if world_client_local is None and enable_worldservice_proxy and worldservice_url is not None:
         budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
         breaker = AsyncCircuitBreaker(
@@ -223,7 +226,7 @@ def create_app(
 
     submission_pipeline = SubmissionPipeline(
         dagmanager,
-        context_service=ComputeContextService(world_client=world_client_local),
+        context_service=shared_context_service,
     )
 
     api_router = create_api_router(

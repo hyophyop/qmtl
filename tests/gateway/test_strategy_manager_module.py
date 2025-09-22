@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
-from qmtl.common.compute_context import DowngradeReason
+from qmtl.common.compute_context import ComputeContext, DowngradeReason
 from qmtl.gateway import metrics
 from qmtl.gateway.commit_log import CommitLogWriter
 from qmtl.gateway.database import MemoryDatabase
@@ -15,6 +15,7 @@ from qmtl.gateway.fsm import StrategyFSM
 from qmtl.gateway.models import StrategySubmit
 from qmtl.gateway.redis_client import InMemoryRedis
 from qmtl.gateway.strategy_manager import StrategyManager
+from qmtl.gateway.submission.context_service import StrategyComputeContext
 from tests.factories import canonical_node_payload
 
 
@@ -203,6 +204,45 @@ async def test_strategy_manager_commit_log_includes_downgrade_metadata() -> None
 
     stored_reason = await redis.hget(f"strategy:{sid}", "compute_downgrade_reason")
     assert stored_reason == DowngradeReason.MISSING_AS_OF
+
+
+class _FailingContextService:
+    async def build(self, payload):  # pragma: no cover - guard against misuse
+        raise AssertionError("precomputed context should be used")
+
+
+@pytest.mark.asyncio
+async def test_strategy_manager_submit_uses_supplied_context() -> None:
+    redis = InMemoryRedis()
+    db = MemoryDatabase()
+    fsm = StrategyFSM(redis=redis, database=db)
+    manager = StrategyManager(
+        redis=redis,
+        database=db,
+        fsm=fsm,
+        insert_sentinel=False,
+        context_service=_FailingContextService(),
+    )
+
+    dag = {"nodes": []}
+    dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
+    payload = StrategySubmit(
+        dag_json=dag_json,
+        meta=None,
+        node_ids_crc32=0,
+    )
+    supplied_context = StrategyComputeContext(
+        context=ComputeContext(world_id="world-a", execution_domain="live"),
+        worlds=("world-a",),
+    )
+
+    sid, existed = await manager.submit(
+        payload,
+        strategy_context=supplied_context,
+    )
+
+    assert sid
+    assert existed is False
 
 
 class ExplodingProducer:

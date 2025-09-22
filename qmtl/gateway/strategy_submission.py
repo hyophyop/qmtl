@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 from . import metrics as gw_metrics
 from .models import StrategySubmit
-from .submission import SubmissionPipeline
+from .submission import SubmissionPipeline, StrategyComputeContext
 
 
 @dataclass
@@ -70,7 +70,7 @@ class StrategySubmissionHelper:
             ).inc()
 
         strategy_id, existed = await self._maybe_submit(
-            payload, config, downgraded
+            payload, config, downgraded, strategy_ctx
         )
         if existed:
             raise HTTPException(
@@ -145,12 +145,15 @@ class StrategySubmissionHelper:
         payload: StrategySubmit,
         config: StrategySubmissionConfig,
         downgraded: bool,
+        strategy_ctx: StrategyComputeContext,
     ) -> tuple[str, bool]:
         if config.submit:
             if self._manager is None:
                 raise RuntimeError("StrategyManager is required for submission")
             return await self._manager.submit(
-                payload, skip_downgrade_metric=downgraded
+                payload,
+                skip_downgrade_metric=downgraded,
+                strategy_context=strategy_ctx,
             )
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
