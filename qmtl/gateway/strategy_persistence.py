@@ -55,9 +55,14 @@ class StrategyStorage:
             if isinstance(existing, bytes):
                 existing = existing.decode()
             return [existing or "", 1]
-        await self._redis.set(
+        inserted = await self._redis.set(
             f"dag_hash:{dag_hash}", strategy_id, nx=True
         )
+        if not inserted:
+            existing = await self._redis.get(f"dag_hash:{dag_hash}")
+            if isinstance(existing, bytes):
+                existing = existing.decode()
+            return [existing or "", 1]
         await self._redis.hset(
             f"strategy:{strategy_id}", mapping={"dag": encoded_dag, "hash": dag_hash}
         )
