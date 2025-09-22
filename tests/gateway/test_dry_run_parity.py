@@ -5,22 +5,21 @@ from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.common import crc32_of_list, compute_node_id
 from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.proto import dagmanager_pb2
+from tests.factories import node_ids_crc32, tag_query_node_payload
 
 
-_TAGQUERY_NODE_ID = compute_node_id(
-    {
-        "node_type": "TagQueryNode",
-        "interval": 60,
-        "period": 0,
-        "params": {"tags": ["t1"], "match_mode": "any"},
-        "dependencies": [],
-        "schema_compat_id": "s-major",
-        "code_hash": "c",
-    }
+_TAGQUERY_NODE = tag_query_node_payload(
+    tags=["t1"],
+    interval=60,
+    period=0,
+    code_hash="c",
+    config_hash="cfg",
+    schema_hash="s",
+    schema_compat_id="s-major",
 )
+_TAGQUERY_NODE_ID = _TAGQUERY_NODE["node_id"]
 
 
 class FakeDB(Database):
@@ -80,7 +79,7 @@ def _payload_for(dag: dict) -> StrategySubmit:
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        node_ids_crc32=crc32_of_list(n.get("node_id") for n in dag.get("nodes", [])),
+        node_ids_crc32=node_ids_crc32(dag.get("nodes", [])),
     )
 
 
@@ -88,23 +87,16 @@ def test_dry_run_matches_submit_queue_map_and_sentinel(fake_redis):
     dag_client = DummyDagClient()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag_client, enable_background=False)
     with TestClient(app) as c:
-        dag = {
-            "nodes": [
-                {
-                    "node_id": _TAGQUERY_NODE_ID,
-                    "node_type": "TagQueryNode",
-                    "interval": 60,
-                    "tags": ["t1"],
-                    "code_hash": "c",
-                    "config_hash": "cfg",
-                    "schema_hash": "s",
-                    "schema_compat_id": "s-major",
-                    "params": {"tags": ["t1"], "match_mode": "any"},
-                    "dependencies": [],
-                    "inputs": [],
-                }
-            ]
-        }
+        dag = {"nodes": [tag_query_node_payload(
+            tags=["t1"],
+            interval=60,
+            period=0,
+            code_hash="c",
+            config_hash="cfg",
+            schema_hash="s",
+            schema_compat_id="s-major",
+            inputs=[],
+        )]}
         payload = _payload_for(dag)
 
         dry = c.post("/strategies/dry-run", json=payload.model_dump())

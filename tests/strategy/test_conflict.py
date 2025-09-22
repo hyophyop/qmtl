@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.models import StrategySubmit
-from qmtl.common import crc32_of_list, compute_node_id
+from tests.factories import indicator_node_payload, node_ids_crc32
 
 
 class FakeDB(Database):
@@ -35,24 +35,19 @@ def make_payload(dag: dict) -> StrategySubmit:
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
-        node_ids_crc32=crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
+        node_ids_crc32=node_ids_crc32(dag.get("nodes", [])),
     )
 
 
 def test_duplicate_strategy_returns_409(client):
-    node = {
-        "node_type": "IndicatorNode",
-        "code_hash": "ch",
-        "config_hash": "cfg",
-        "schema_hash": "sh",
-        "schema_compat_id": "sh-major",
-        "interval": 60,
-        "period": 5,
-        "params": {"window": 5},
-        "dependencies": [],
-    }
-    node_id = compute_node_id(node)
-    dag = {"nodes": [{**node, "node_id": node_id}]}
+    node = indicator_node_payload(
+        code_hash="ch",
+        config_hash="cfg",
+        schema_hash="sh",
+        schema_compat_id="sh-major",
+        params={"window": 5},
+    )
+    dag = {"nodes": [node]}
     payload = make_payload(dag)
     first = client.post("/strategies", json=payload.model_dump())
     assert first.status_code == 202
