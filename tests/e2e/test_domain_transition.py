@@ -106,7 +106,9 @@ async def test_domain_promotion_flow_respects_freeze_and_isolation(monkeypatch):
         assert am.state.effective_mode == "validate"
 
         sdk_metrics.reset_metrics()
-        monkeypatch.setattr(Runner, "_ray_available", False)
+        monkeypatch.setattr(
+            Runner.services().ray_executor, "execute", lambda fn, view: fn(view)
+        )
         stream = StreamInput(interval="60s", period=1)
         node = ProcessingNode(
             input=stream,

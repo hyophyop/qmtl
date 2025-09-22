@@ -139,7 +139,7 @@ def activation_blocks_order(order: Mapping[str, Any]) -> bool:
     except Exception:
         return False
 
-    am = Runner._activation_manager
+    am = Runner.services().activation_manager
     if am is None:
         return False
 

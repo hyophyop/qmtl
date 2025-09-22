@@ -55,7 +55,8 @@ def test_run_hooks_offline(monkeypatch):
             pass
 
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        Runner.services().gateway_client,
+        "post_strategy",
         fake_gateway,
     )
     monkeypatch.setattr(
@@ -139,7 +140,8 @@ def test_run_hooks_live_like(monkeypatch):
             pass
 
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        Runner.services().gateway_client,
+        "post_strategy",
         fake_gateway,
     )
     monkeypatch.setattr(

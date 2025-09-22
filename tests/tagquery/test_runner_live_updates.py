@@ -125,7 +125,25 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
 
     monkeypatch.setattr("qmtl.sdk.gateway_client.httpx.AsyncClient", DummyClient)
     monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
-    monkeypatch.setattr(Runner, "_kafka_available", True)
+
+    class DummyFactory:
+        available = True
+
+        @staticmethod
+        def create_consumer(topic: str, *, bootstrap_servers: str):
+            class DummyConsumer:
+                async def start(self):
+                    return None
+
+                async def stop(self):
+                    return None
+
+                async def getmany(self, timeout_ms=None):
+                    return {}
+
+            return DummyConsumer()
+
+    monkeypatch.setattr(Runner.services(), "kafka_factory", DummyFactory())
 
     async with Runner.session(
         TQStrategy, world_id="tq_live_updates", gateway_url="http://gw"
