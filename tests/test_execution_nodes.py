@@ -233,7 +233,8 @@ def test_order_publish_node_calls_publisher():
     def _pub(o):
         calls.append(o)
 
-    prev_am = runner_module.Runner._activation_manager
+    services = runner_module.Runner.services()
+    prev_am = services.activation_manager
     runner_module.Runner.set_activation_manager(None)
     try:
         node = OrderPublishNode(src, submit_order=_pub)
@@ -267,11 +268,12 @@ def test_order_publish_node_blocks_during_freeze_and_drain():
 
     am = ActivationManager()
 
-    prev_am = runner_module.Runner._activation_manager
-    prev_service = runner_module.Runner._trade_execution_service
-    prev_http = runner_module.Runner._trade_order_http_url
-    prev_topic = runner_module.Runner._trade_order_kafka_topic
-    prev_producer = runner_module.Runner._kafka_producer
+    services = runner_module.Runner.services()
+    prev_am = services.activation_manager
+    prev_service = services.trade_execution_service
+    prev_http = services.trade_order_http_url
+    prev_topic = services.trade_order_kafka_topic
+    prev_producer = services.kafka_producer
 
     runner_module.Runner.set_trade_execution_service(None)
     runner_module.Runner.set_trade_order_http_url(None)

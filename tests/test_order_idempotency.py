@@ -17,6 +17,7 @@ def test_order_idempotency_suppresses_duplicates(monkeypatch):
     # Reload runner to get a clean class state
     runner = importlib.reload(runner_module).Runner
     runner.reset_trade_order_dedup()
+    runner.set_activation_manager(None)
 
     # Set Kafka producer and topic target
     producer = FakeKafkaProducer()

@@ -2,82 +2,63 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Mapping, Optional
-import logging
+from typing import Mapping, Optional, TYPE_CHECKING
 
 from opentelemetry import trace
 
-from qmtl.common.tracing import setup_tracing
-from qmtl.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
-from cachetools import TTLCache
 from qmtl.common import AsyncCircuitBreaker
+from qmtl.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
+from qmtl.common.tracing import setup_tracing
+
+from . import metrics as sdk_metrics
+from . import runtime
+from .execution_context import (
+    normalize_default_context,
+    resolve_execution_context,
+)
+from .optional_services import KafkaConsumerFactory, RayExecutor
+from .services import RunnerServices
+from .strategy import Strategy
+from .strategy_bootstrapper import StrategyBootstrapper
+from .tag_manager_service import TagManagerService
+
+if TYPE_CHECKING:
+    from .activation_manager import ActivationManager
+    from .gateway_client import GatewayClient
+    from .feature_store import FeatureArtifactPlane
+
+
+if "_runner_services" not in globals():
+    _runner_services = RunnerServices.default()
+else:
+    _runner_services.ray_executor = RayExecutor()
+    _runner_services.kafka_factory = KafkaConsumerFactory()
+
 
 logger = logging.getLogger(__name__)
 
 setup_tracing("sdk")
 tracer = trace.get_tracer(__name__)
 
-from .strategy import Strategy
-from .gateway_client import GatewayClient
-from .tag_manager_service import TagManagerService
-from .activation_manager import ActivationManager
-from .history_warmup_service import HistoryWarmupService
-from .strategy_bootstrapper import StrategyBootstrapper
-from .trade_dispatcher import TradeOrderDispatcher
-from . import runtime, metrics as sdk_metrics
-from .feature_store import FeatureArtifactPlane
-
-try:  # Optional aiokafka dependency
-    from aiokafka import AIOKafkaConsumer  # type: ignore
-except Exception:  # pragma: no cover - aiokafka not installed
-    AIOKafkaConsumer = None  # type: ignore
-try:  # Optional Ray dependency
-    import ray  # type: ignore
-except Exception:  # pragma: no cover - Ray not installed
-    ray = None  # type: ignore
-
-
-# Global trade execution service, kept across reloads
-if "_trade_execution_service_sentinel" not in globals():
-    _trade_execution_service_sentinel = object()
-if "_trade_execution_service" not in globals():
-    _trade_execution_service = _trade_execution_service_sentinel
-
 
 class Runner:
     """Execute strategies in various modes."""
 
-    _ray_available = ray is not None
-    _kafka_available = AIOKafkaConsumer is not None
-    _gateway_client: GatewayClient = GatewayClient()
-    _trade_execution_service = _trade_execution_service
-    _kafka_producer = None
-    _trade_order_http_url = None
-    _trade_order_kafka_topic = None
-    _activation_manager: ActivationManager | None = None
-    _enable_trade_submission: bool = True
-    _order_dedup: TTLCache[str, bool] | None = TTLCache(maxsize=10000, ttl=600)
-    _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
-    _feature_artifact_plane: FeatureArtifactPlane | None = FeatureArtifactPlane.from_env()
-    _history_service: HistoryWarmupService = HistoryWarmupService()
-    _trade_dispatcher: TradeOrderDispatcher = TradeOrderDispatcher(
-        dedup_cache=_order_dedup,
-        activation_manager=_activation_manager,
-        trade_execution_service=(
-            None
-            if _trade_execution_service is _trade_execution_service_sentinel
-            else _trade_execution_service
-        ),
-        trade_order_http_url=_trade_order_http_url,
-        kafka_producer=_kafka_producer,
-        trade_order_kafka_topic=_trade_order_kafka_topic,
-    )
+    _services: RunnerServices = _runner_services
     _default_context: dict[str, str] | None = None
+    _enable_trade_submission: bool = True
+    _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
 
-    _VALID_MODES = {"backtest", "dryrun", "live"}
-    _CLOCKS = {"virtual", "wall"}
+    @classmethod
+    def services(cls) -> RunnerServices:
+        return cls._services
+
+    @classmethod
+    def set_services(cls, services: RunnerServices) -> None:
+        cls._services = services
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -87,69 +68,22 @@ class Runner:
     @classmethod
     def set_gateway_circuit_breaker(cls, cb: AsyncCircuitBreaker | None) -> None:
         """Configure circuit breaker for Gateway communication."""
-        cls._gateway_client.set_circuit_breaker(cb)
+        cls.services().gateway_client.set_circuit_breaker(cb)
 
     @classmethod
     def set_gateway_client(cls, client: GatewayClient) -> None:
         """Inject a custom ``GatewayClient`` instance."""
-        cls._gateway_client = client
+        cls.services().set_gateway_client(client)
 
     @classmethod
     def set_activation_manager(cls, am: ActivationManager | None) -> None:
         """Inject or clear the activation manager (for tests or custom wiring)."""
-        cls._activation_manager = am
-        cls._trade_dispatcher.set_activation_manager(am)
+        cls.services().set_activation_manager(am)
 
     @classmethod
     def set_default_context(cls, context: Mapping[str, str] | None) -> None:
         """Register default compute context values for subsequent runs."""
-
-        if context is None:
-            cls._default_context = None
-            return
-        normalized: dict[str, str] = {}
-        for key, value in context.items():
-            if value is None:
-                continue
-            normalized[str(key)] = str(value)
-        cls._default_context = normalized or None
-
-    @classmethod
-    def _mode_from_domain(cls, domain: str | None) -> str | None:
-        if not domain:
-            return None
-        key = str(domain).strip().lower()
-        if key == DEFAULT_EXECUTION_DOMAIN:
-            return None
-        if key in cls._VALID_MODES:
-            return key
-        return None
-
-    @classmethod
-    def _normalize_mode(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError("execution_mode must be provided")
-        mode = str(value).strip().lower()
-        if mode not in cls._VALID_MODES:
-            raise ValueError(
-                "execution_mode must be one of 'backtest', 'dryrun', or 'live'"
-            )
-        return mode
-
-    @classmethod
-    def _merge_context(
-        cls,
-        base: dict[str, str],
-        source: Mapping[str, str] | None,
-    ) -> None:
-        if not source:
-            return
-        for key, value in source.items():
-            skey = str(key)
-            if value is None:
-                base.pop(skey, None)
-                continue
-            base[skey] = str(value)
+        cls._default_context = normalize_default_context(context)
 
     @classmethod
     def _resolve_context(
@@ -164,124 +98,40 @@ class Runner:
         offline_requested: bool,
         gateway_url: str | None,
     ) -> tuple[dict[str, str], bool]:
-        merged: dict[str, str] = {}
-        if cls._default_context:
-            merged.update(cls._default_context)
-        cls._merge_context(merged, context)
-
-        mode: str | None = None
-        if execution_mode is not None:
-            mode = cls._normalize_mode(execution_mode)
-        else:
-            derived = cls._mode_from_domain(execution_domain)
-            if derived is not None:
-                mode = derived
-        if mode is None:
-            domain_hint = merged.get("execution_domain")
-            if domain_hint:
-                derived = cls._mode_from_domain(domain_hint)
-                if derived is not None:
-                    mode = derived
-        if mode is None:
-            existing = merged.get("execution_mode")
-            if existing:
-                mode = cls._normalize_mode(existing)
-        if mode is None:
-            if cls._trade_mode == "live" and not offline_requested:
-                mode = "live"
-            elif gateway_url and not offline_requested:
-                mode = "live"
-            else:
-                mode = "backtest"
-        merged["execution_mode"] = mode
-        merged["execution_domain"] = mode
-
-        if clock is not None:
-            merged["clock"] = str(clock)
-        clock_val = merged.get("clock")
-        expected_clock = "wall" if mode == "live" else "virtual"
-        if clock_val is None:
-            merged["clock"] = expected_clock
-        else:
-            cval = str(clock_val).strip().lower()
-            if cval not in cls._CLOCKS:
-                raise ValueError("clock must be one of 'virtual' or 'wall'")
-            if cval != expected_clock:
-                raise ValueError(
-                    f"{mode} runs require '{expected_clock}' clock but received '{clock_val}'"
-                )
-            merged["clock"] = cval
-
-        if as_of is not None:
-            text = str(as_of).strip()
-            if text:
-                merged["as_of"] = text
-            else:
-                merged.pop("as_of", None)
-        elif "as_of" in merged:
-            text = str(merged["as_of"]).strip()
-            if text:
-                merged["as_of"] = text
-            else:
-                merged.pop("as_of", None)
-
-        if dataset_fingerprint is not None:
-            text = str(dataset_fingerprint).strip()
-            if text:
-                merged["dataset_fingerprint"] = text
-            else:
-                merged.pop("dataset_fingerprint", None)
-        elif "dataset_fingerprint" in merged:
-            text = str(merged["dataset_fingerprint"]).strip()
-            if text:
-                merged["dataset_fingerprint"] = text
-            else:
-                merged.pop("dataset_fingerprint", None)
-
-        force_offline = False
-        if mode != "live":
-            has_as_of = bool(merged.get("as_of"))
-            has_dataset = bool(merged.get("dataset_fingerprint"))
-            if not (has_as_of and has_dataset):
-                if gateway_url and not offline_requested:
-                    force_offline = True
-                    logger.warning(
-                        "Missing dataset metadata for %s run; forcing compute-only mode",
-                        mode,
-                    )
-                merged.pop("as_of", None)
-                merged.pop("dataset_fingerprint", None)
-        else:
-            merged.pop("as_of", None)
-            merged.pop("dataset_fingerprint", None)
-
-        return merged, force_offline
+        resolution = resolve_execution_context(
+            cls._default_context,
+            context=context,
+            execution_mode=execution_mode,
+            execution_domain=execution_domain,
+            clock=clock,
+            as_of=as_of,
+            dataset_fingerprint=dataset_fingerprint,
+            offline_requested=offline_requested,
+            gateway_url=gateway_url,
+            trade_mode=cls._trade_mode,
+        )
+        if resolution.force_offline and gateway_url and not offline_requested:
+            logger.warning(
+                "Missing dataset metadata for %s run; forcing compute-only mode",
+                resolution.context.get("execution_mode"),
+            )
+        return resolution.context, resolution.force_offline
 
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _execute_compute_fn(fn, cache_view) -> None:
-        """Run ``fn`` using Ray when available."""
-        if Runner._ray_available and not runtime.NO_RAY and ray is not None:
-            if not ray.is_initialized():  # type: ignore[attr-defined]
-                ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
-            ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]
-        else:
-            fn(cache_view)
-
     @classmethod
     def set_feature_artifact_plane(
-        cls, plane: FeatureArtifactPlane | None
+        cls, plane: "FeatureArtifactPlane | None"
     ) -> None:
         """Override the global feature artifact plane."""
 
-        cls._feature_artifact_plane = plane
+        cls.services().set_feature_plane(plane)
 
     @classmethod
-    def feature_artifact_plane(cls) -> FeatureArtifactPlane | None:
+    def feature_artifact_plane(cls) -> "FeatureArtifactPlane | None":
         """Return the configured feature artifact plane if enabled."""
 
-        return cls._feature_artifact_plane
+        return cls.services().feature_plane
 
     @staticmethod
     def _prepare(strategy_cls: type[Strategy]) -> Strategy:
@@ -296,7 +146,9 @@ class Runner:
     ) -> list[tuple[int, int]]:
         """Proxy to :class:`HistoryWarmupService` for compatibility."""
 
-        return Runner._history_service.missing_ranges(coverage, start, end, interval)
+        return Runner.services().history_service.missing_ranges(
+            coverage, start, end, interval
+        )
 
     @staticmethod
     async def _ensure_history(
@@ -309,7 +161,7 @@ class Runner:
     ) -> None:
         """Proxy to history service for backward compatibility."""
 
-        await Runner._history_service.ensure_history(
+        await Runner.services().history_service.ensure_history(
             strategy,
             start,
             end,
@@ -321,13 +173,13 @@ class Runner:
     def _hydrate_snapshots(strategy: Strategy) -> int:
         """Proxy to history service for backwards compatibility."""
 
-        return Runner._history_service.hydrate_snapshots(strategy)
+        return Runner.services().history_service.hydrate_snapshots(strategy)
 
     @staticmethod
     def _write_snapshots(strategy: Strategy) -> int:
         """Proxy to history service for backwards compatibility."""
 
-        return Runner._history_service.write_snapshots(strategy)
+        return Runner.services().history_service.write_snapshots(strategy)
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -355,7 +207,8 @@ class Runner:
         )
 
         result = None
-        plane = Runner.feature_artifact_plane()
+        services = Runner.services()
+        plane = services.feature_plane
         if ready and node.execute and node.compute_fn:
             start = time.perf_counter()
             try:
@@ -363,11 +216,11 @@ class Runner:
                     "node.process", attributes={"node.id": node.node_id}
                 ):
                     view = node.cache.view(artifact_plane=plane)
-                    if Runner._ray_available and not runtime.NO_RAY and ray is not None:
-                        Runner._execute_compute_fn(node.compute_fn, view)
-                    else:
-                        result = node.compute_fn(view)
-                        # Postprocess the result
+                    execution_result = services.ray_executor.execute(
+                        node.compute_fn, view
+                    )
+                    if execution_result is not None:
+                        result = execution_result
                         Runner._postprocess_result(node, result)
             except Exception:
                 sdk_metrics.observe_node_process_failure(node.node_id)
@@ -384,16 +237,15 @@ class Runner:
     async def _consume_node(
         node,
         *,
+        consumer_factory: KafkaConsumerFactory,
         bootstrap_servers: str,
         stop_event: asyncio.Event,
     ) -> None:
         """Consume Kafka messages for ``node`` and feed them into the cache."""
-        if not Runner._kafka_available:
+        if not consumer_factory.available:
             raise RuntimeError("aiokafka not available")
-        consumer = AIOKafkaConsumer(
-            node.kafka_topic,
-            bootstrap_servers=bootstrap_servers,
-            enable_auto_commit=True,
+        consumer = consumer_factory.create_consumer(
+            node.kafka_topic, bootstrap_servers=bootstrap_servers
         )
         await consumer.start()
         try:
@@ -430,12 +282,14 @@ class Runner:
     ) -> list[asyncio.Task]:
         """Spawn Kafka consumer tasks for nodes with a ``kafka_topic``."""
         tasks = []
+        factory = Runner.services().kafka_factory
         for n in strategy.nodes:
             if n.kafka_topic:
                 tasks.append(
                     asyncio.create_task(
                         Runner._consume_node(
                             n,
+                            consumer_factory=factory,
                             bootstrap_servers=bootstrap_servers,
                             stop_event=stop_event,
                         )
@@ -450,7 +304,7 @@ class Runner:
     ) -> list[tuple[int, any, any]]:
         """Proxy to history service for backwards compatibility."""
 
-        return Runner._history_service.collect_history_events(
+        return Runner.services().history_service.collect_history_events(
             strategy, start, end
         )
 
@@ -468,7 +322,7 @@ class Runner:
     def _replay_events_simple(strategy: Strategy) -> None:
         """Proxy to history service for deterministic replay."""
 
-        Runner._history_service.replay_events_simple(strategy)
+        Runner.services().history_service.replay_events_simple(strategy)
 
     @staticmethod
     def _maybe_int(value) -> int | None:
@@ -487,7 +341,7 @@ class Runner:
     ) -> None:
         """Proxy to history service for backward compatibility."""
 
-        await Runner._history_service.replay_history(
+        await Runner.services().history_service.replay_history(
             strategy, start, end, on_missing=on_missing
         )
 
@@ -500,7 +354,7 @@ class Runner:
     ) -> None:
         """Proxy to history service for backward compatibility."""
 
-        Runner._history_service.replay_history_events(
+        Runner.services().history_service.replay_history_events(
             strategy, events, on_missing=on_missing
         )
 
@@ -524,6 +378,7 @@ class Runner:
         The SDK does not choose execution domains or clocks. Order gating and
         promotions are driven by WorldService decisions relayed by Gateway.
         """
+        services = Runner.services()
         strategy = Runner._prepare(strategy_cls)
         # Minimal compute context; backend decisions determine effective domain.
         compute_context = ComputeContext(world_id=world_id, execution_domain=DEFAULT_EXECUTION_DOMAIN)
@@ -535,7 +390,7 @@ class Runner:
         try:
             strategy.on_start()
 
-            bootstrapper = StrategyBootstrapper(Runner._gateway_client)
+            bootstrapper = StrategyBootstrapper(services.gateway_client)
             bootstrap_result = await bootstrapper.bootstrap(
                 strategy,
                 context=compute_context,
@@ -543,10 +398,10 @@ class Runner:
                 gateway_url=gateway_url,
                 meta=meta_payload,
                 offline=effective_offline,
-                kafka_available=Runner._kafka_available,
+                kafka_available=services.kafka_factory.available,
                 trade_mode=Runner._trade_mode,
                 schema_enforcement=schema_enforcement,
-                feature_plane=Runner._feature_artifact_plane,
+                feature_plane=services.feature_plane,
                 gateway_context=None,
                 skip_gateway_submission=False,
             )
@@ -557,24 +412,23 @@ class Runner:
 
             if gateway_url and not offline_mode:
                 try:
-                    if Runner._activation_manager is None:
-                        Runner._activation_manager = ActivationManager(
-                            gateway_url, world_id=world_id, strategy_id=None
-                        )
-                    Runner._trade_dispatcher.set_activation_manager(
-                        Runner._activation_manager
+                    activation_manager = services.ensure_activation_manager(
+                        gateway_url=gateway_url, world_id=world_id
                     )
-                    await Runner._activation_manager.start()
+                    services.trade_dispatcher.set_activation_manager(
+                        activation_manager
+                    )
+                    await activation_manager.start()
                 except Exception:
                     logger.warning(
                         "Activation manager failed to start; proceeding with gates OFF by default"
                     )
             else:
-                Runner._trade_dispatcher.set_activation_manager(
-                    Runner._activation_manager
+                services.trade_dispatcher.set_activation_manager(
+                    services.activation_manager
                 )
 
-            history_service = Runner._history_service
+            history_service = services.history_service
             await history_service.warmup_strategy(
                 strategy,
                 offline_mode=offline_mode,
@@ -638,6 +492,7 @@ class Runner:
     async def offline_async(
         strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
     ) -> Strategy:
+        services = Runner.services()
         strategy = Runner._prepare(strategy_cls)
         # Lifecycle start
         try:
@@ -664,7 +519,7 @@ class Runner:
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
         # Hydrate + warm-up history (provider-driven when available), then replay
-        history_service = Runner._history_service
+        history_service = services.history_service
         await history_service.warmup_strategy(
             strategy,
             offline_mode=True,
@@ -720,7 +575,8 @@ class Runner:
                 except Exception:
                     pass
         # Stop ActivationManager if present
-        am = Runner._activation_manager
+        services = Runner.services()
+        am = services.activation_manager
         if am is not None:
             try:
                 await am.stop()
@@ -743,28 +599,22 @@ class Runner:
     @classmethod
     def set_trade_execution_service(cls, service) -> None:
         """Set the trade execution service."""
-        global _trade_execution_service
-        _trade_execution_service = service
-        cls._trade_execution_service = service
-        cls._trade_dispatcher.set_trade_execution_service(service)
+        cls.services().set_trade_execution_service(service)
 
     @classmethod
     def set_kafka_producer(cls, producer) -> None:
         """Set the Kafka producer for trade orders."""
-        cls._kafka_producer = producer
-        cls._trade_dispatcher.set_kafka_producer(producer)
+        cls.services().set_kafka_producer(producer)
 
     @classmethod
     def set_trade_order_http_url(cls, url: str | None) -> None:
         """Set HTTP URL for trade order submission."""
-        cls._trade_order_http_url = url
-        cls._trade_dispatcher.set_http_url(url)
+        cls.services().set_trade_order_http_url(url)
 
     @classmethod
     def set_trade_order_kafka_topic(cls, topic: str | None) -> None:
         """Set Kafka topic for trade order submission."""
-        cls._trade_order_kafka_topic = topic
-        cls._trade_dispatcher.set_trade_order_kafka_topic(topic)
+        cls.services().set_trade_order_kafka_topic(topic)
 
     @classmethod
     def set_enable_trade_submission(cls, enabled: bool) -> None:
@@ -792,7 +642,7 @@ class Runner:
     def _handle_trade_order(cls, order: dict) -> None:
         """Handle trade order submission via the configured dispatcher."""
 
-        cls._trade_dispatcher.dispatch(order)
+        cls.services().trade_dispatcher.dispatch(order)
 
     @staticmethod
     def _postprocess_result(node, result) -> None:
@@ -817,10 +667,7 @@ class Runner:
     @classmethod
     def reset_trade_order_dedup(cls) -> None:
         """Clear idempotency cache for tests."""
-        cache = cls._order_dedup
-        if cache is not None:
-            cache.clear()
-        cls._trade_dispatcher.reset_dedup()
+        cls.services().reset_trade_order_dedup()
 
     @classmethod
     def set_trade_mode(cls, mode: str) -> None:

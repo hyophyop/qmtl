@@ -54,7 +54,25 @@ def _make_strategy(calls, results):
 
 def test_run_offline_pipeline(monkeypatch):
     _mock_gateway(monkeypatch)
-    monkeypatch.setattr(Runner, "_kafka_available", True)
+
+    class DummyFactory:
+        available = True
+
+        @staticmethod
+        def create_consumer(*args, **kwargs):
+            class DummyConsumer:
+                async def start(self):
+                    return None
+
+                async def stop(self):
+                    return None
+
+                async def getmany(self, timeout_ms=None):
+                    return {}
+
+            return DummyConsumer()
+
+    monkeypatch.setattr(Runner.services(), "kafka_factory", DummyFactory())
     calls, results = [], []
 
     strat = Runner.offline(_make_strategy(calls, results))
@@ -68,7 +86,15 @@ def test_run_offline_pipeline(monkeypatch):
 
 def test_run_no_kafka_pipeline(monkeypatch):
     _mock_gateway(monkeypatch)
-    monkeypatch.setattr(Runner, "_kafka_available", False)
+
+    class NoKafkaFactory:
+        available = False
+
+        @staticmethod
+        def create_consumer(*args, **kwargs):
+            raise RuntimeError("no kafka")
+
+    monkeypatch.setattr(Runner.services(), "kafka_factory", NoKafkaFactory())
     calls, results = [], []
 
     strat = Runner.run(

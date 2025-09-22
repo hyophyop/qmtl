@@ -11,6 +11,7 @@ from qmtl.sdk.node import StreamInput, ProcessingNode
 from qmtl.sdk import Strategy
 from tests.sample_strategy import SampleStrategy
 from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.sdk.execution_context import resolve_execution_context
 
 
 def test_run_logs(caplog, monkeypatch):
@@ -147,7 +148,8 @@ def test_run_exits_when_all_nodes_mapped(monkeypatch, caplog):
         raise RuntimeError("should not run")
 
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        Runner.services().gateway_client,
+        "post_strategy",
         fake_post_gateway_async,
     )
     monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
@@ -175,7 +177,8 @@ def test_run_exits_when_all_nodes_mapped_live(monkeypatch, caplog):
         raise RuntimeError("should not start")
 
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
+        Runner.services().gateway_client,
+        "post_strategy",
         fake_post_gateway_async,
     )
     monkeypatch.setattr(Runner, "run_pipeline", fake_run_pipeline)
@@ -286,36 +289,19 @@ def test_no_gateway_same_ids(monkeypatch):
 def test_feed_queue_data_with_ray(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
-    class DummyRay:
-        def __init__(self):
-            self.calls = []
-            self.inited = False
-
-        def is_initialized(self):
-            return self.inited
-
-        def init(self, ignore_reinit_error=True):
-            self.inited = True
-
-        def remote(self, fn):
-            dummy = self
-
-            class Wrapper:
-                def remote(self, *args, **kwargs):
-                    dummy.calls.append((fn, args, kwargs))
-
-            return Wrapper()
-
-    dummy_ray = DummyRay()
-    import qmtl.sdk.runner as rmod
-
-    monkeypatch.setattr(rmod, "ray", dummy_ray)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
-
+    executor = Runner.services().ray_executor
     calls = []
 
+    def fake_execute(fn, view):
+        calls.append((fn, view))
+        return None
+
+    monkeypatch.setattr(executor, "execute", fake_execute)
+
+    local_calls = []
+
     def compute(view):
-        calls.append(view)
+        local_calls.append(view)
 
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=compute, name="n", interval="60s", period=2)
@@ -323,14 +309,15 @@ def test_feed_queue_data_with_ray(monkeypatch):
     Runner.feed_queue_data(node, "q", 60, 60, {"v": 1})
     Runner.feed_queue_data(node, "q", 60, 120, {"v": 2})
 
-    assert len(dummy_ray.calls) == 1
-    assert not calls
+    assert len(calls) == 1
+    assert not local_calls
 
 
 def test_feed_queue_data_without_ray(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
-    monkeypatch.setattr(Runner, "_ray_available", False)
+    executor = Runner.services().ray_executor
+    monkeypatch.setattr(executor, "execute", lambda fn, view: fn(view))
 
     calls = []
 
@@ -349,7 +336,8 @@ def test_feed_queue_data_without_ray(monkeypatch):
 def test_feed_queue_data_respects_execute_flag(monkeypatch):
     from qmtl.sdk import ProcessingNode, StreamInput
 
-    monkeypatch.setattr(Runner, "_ray_available", False)
+    executor = Runner.services().ray_executor
+    monkeypatch.setattr(executor, "execute", lambda fn, view: fn(view))
 
     calls = []
 
@@ -659,7 +647,7 @@ def test_ray_flag_auto_set(monkeypatch):
     # simulate absence of ray
     monkeypatch.delitem(sys.modules, "ray", raising=False)
     importlib.reload(rmod)
-    assert not rmod.Runner._ray_available
+    assert not rmod.Runner.services().ray_executor.available
 
     # simulate presence of ray
     class DummyModule:
@@ -667,7 +655,7 @@ def test_ray_flag_auto_set(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ray", DummyModule())
     importlib.reload(rmod)
-    assert rmod.Runner._ray_available
+    assert rmod.Runner.services().ray_executor.available
 
     # restore original state
     if original_ray is None:
@@ -685,8 +673,8 @@ def test_cli_disable_ray(monkeypatch):
     from qmtl.sdk import runtime
 
     dummy_ray = object()
-    monkeypatch.setattr(rmod, "ray", dummy_ray)
-    monkeypatch.setattr(rmod.Runner, "_ray_available", True)
+    monkeypatch.setattr(rmod.Runner.services().ray_executor, "_ray", dummy_ray, raising=False)
+    rmod.Runner.services().ray_executor.set_disabled(False)
     monkeypatch.setattr(runtime, "NO_RAY", False)
     importlib.reload(cli_mod)
 
@@ -705,7 +693,8 @@ def test_runner_defaults_to_live_when_gateway(monkeypatch):
     Runner.set_default_context(None)
     monkeypatch.setattr(Runner, "_trade_mode", "simulate", raising=False)
 
-    resolved, force_offline = Runner._resolve_context(
+    resolution = resolve_execution_context(
+        Runner._default_context,
         context=None,
         execution_mode=None,
         execution_domain=None,
@@ -714,12 +703,14 @@ def test_runner_defaults_to_live_when_gateway(monkeypatch):
         dataset_fingerprint=None,
         offline_requested=False,
         gateway_url="http://gw",
+        trade_mode=Runner._trade_mode,
     )
 
+    resolved = resolution.context
     assert resolved["execution_mode"] == "live"
     assert resolved["execution_domain"] == "live"
     assert resolved["clock"] == "wall"
-    assert not force_offline
+    assert not resolution.force_offline
 
 
 def test_runner_minimal_path_calls_gateway(monkeypatch):

@@ -57,7 +57,7 @@ def make_activation_weight_fn() -> Callable[[Mapping[str, object]], float]:
         try:
             from qmtl.sdk.runner import Runner  # Late import to avoid cycles
 
-            am = Runner._activation_manager
+            am = Runner.services().activation_manager
             if am is None:
                 return 1.0
             side = _infer_side(order)

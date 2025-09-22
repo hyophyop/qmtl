@@ -47,7 +47,8 @@ def test_cache_warmup_and_compute():
 
 
 def test_node_feed_does_not_execute(monkeypatch):
-    monkeypatch.setattr(Runner, "_ray_available", False)
+    ray_executor = Runner.services().ray_executor
+    monkeypatch.setattr(ray_executor, "execute", lambda fn, view: fn(view))
 
     calls = []
 
