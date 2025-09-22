@@ -198,6 +198,12 @@ class VolatilityControl:
 
         return self._history
 
+    @history.setter
+    def history(self, values: Iterable[Tuple[int, float]]) -> None:
+        """Replace the stored history, used for testing and state seeding."""
+
+        self._history = list(values)
+
     def update(self, timestamp: int, portfolio_value: float) -> List[RiskViolation]:
         """Record portfolio value and emit volatility violations when breached."""
 

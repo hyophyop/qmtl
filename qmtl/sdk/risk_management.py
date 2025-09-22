@@ -64,11 +64,50 @@ class RiskManager:
 
         return self._volatility_control.history
 
+    @portfolio_value_history.setter
+    def portfolio_value_history(self, values: Sequence[Tuple[int, float]]) -> None:
+        """Replace the tracked portfolio history, primarily for test scenarios."""
+
+        history_list = list(values)
+        self._volatility_control.history = history_list
+
+        if not history_list:
+            self._drawdown_control.current_drawdown = 0.0
+            return
+
+        # Default peak to provided setter value or infer from history if unset.
+        peak_value = self._drawdown_control.peak_portfolio_value
+        if peak_value <= 0:
+            peak_value = max(value for _, value in history_list)
+            self._drawdown_control.peak_portfolio_value = peak_value
+
+        current_value = history_list[-1][1]
+        if peak_value > 0:
+            self._drawdown_control.current_drawdown = (
+                peak_value - current_value
+            ) / peak_value
+        else:
+            self._drawdown_control.current_drawdown = 0.0
+
     @property
     def peak_portfolio_value(self) -> float:
         """Highest portfolio value observed so far."""
 
         return self._drawdown_control.peak_portfolio_value
+
+    @peak_portfolio_value.setter
+    def peak_portfolio_value(self, value: float) -> None:
+        """Allow tests and callers to seed the peak tracking value."""
+
+        self._drawdown_control.peak_portfolio_value = value
+        history = self._volatility_control.history
+        if history and value > 0:
+            current_value = history[-1][1]
+            self._drawdown_control.current_drawdown = (
+                value - current_value
+            ) / value
+        elif value <= 0:
+            self._drawdown_control.current_drawdown = 0.0
 
     @property
     def max_position_size(self) -> Optional[float]:
@@ -173,6 +212,24 @@ class RiskManager:
 
         total_value, aggregated = aggregate_portfolios(strategies)
         return self.validate_portfolio_risk(aggregated, total_value, timestamp)
+
+    def _check_volatility_limit(self, timestamp: int) -> List[RiskViolation]:
+        """Backwards-compatible volatility check using the configured control."""
+
+        history = self.portfolio_value_history
+        if len(history) < 2:
+            return []
+
+        # Reuse volatility control logic without mutating the primary history list.
+        control = VolatilityControl(
+            self.config.max_portfolio_volatility,
+            lookback=self.config.volatility_lookback,
+            min_samples=self.config.volatility_min_samples,
+            history=list(history),
+        )
+
+        last_value = history[-1][1]
+        return control.update(timestamp, last_value)
 
     def calculate_position_size(
         self,
