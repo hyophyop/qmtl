@@ -11,6 +11,7 @@ from qmtl.sdk.node import ProcessingNode, StreamInput
 from qmtl.sdk.runner import Runner
 from qmtl.worldservice.api import create_app
 from qmtl.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.worldservice.run_state import ApplyStage
 from qmtl.worldservice.storage import Storage
 
 
@@ -297,8 +298,8 @@ async def test_apply_rollback_restores_state(monkeypatch):
         assert stages == ["requested", "freeze", "rolled_back"]
 
         state = app.state.apply_runs["w-rollback"]
-        assert state["stage"] == "rolled_back"
-        assert state["completed"] is False
+        assert state.stage is ApplyStage.ROLLED_BACK
+        assert state.completed is False
 
         activation_events = _activation_events(bus, world_id="w-rollback")
         assert activation_events
