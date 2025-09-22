@@ -13,12 +13,12 @@ from fastapi import HTTPException
 from opentelemetry import trace
 
 from . import metrics as gw_metrics
+from .compute_context import build_strategy_compute_context
 from .commit_log import CommitLogWriter
 from .database import Database
 from .degradation import DegradationManager, DegradationLevel
 from .fsm import StrategyFSM
 from .models import StrategySubmit
-from .compute_context import build_strategy_compute_context
 
 tracer = trace.get_tracer(__name__)
 
@@ -32,7 +32,12 @@ class StrategyManager:
     insert_sentinel: bool = True
     commit_log_writer: CommitLogWriter | None = None
 
-    async def submit(self, payload: StrategySubmit) -> tuple[str, bool]:
+    async def submit(
+        self,
+        payload: StrategySubmit,
+        *,
+        skip_downgrade_metric: bool = False,
+    ) -> tuple[str, bool]:
         with tracer.start_as_current_span("gateway.submit"):
             try:
                 dag_bytes = base64.b64decode(payload.dag_json)
@@ -62,7 +67,22 @@ class StrategyManager:
                 dag_for_storage.setdefault("nodes", []).append(sentinel)
             encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
 
-            compute_ctx, context_mapping, world_list = self._build_compute_context(payload)
+            (
+                compute_ctx,
+                context_mapping,
+                world_list,
+                downgraded,
+                downgrade_reason,
+            ) = self._build_compute_context(payload)
+
+            if (
+                downgraded
+                and downgrade_reason
+                and not skip_downgrade_metric
+            ):
+                gw_metrics.strategy_compute_context_downgrade_total.labels(
+                    reason=downgrade_reason
+                ).inc()
 
             # Atomically perform dedupe (SETNX) and initial storage to avoid race duplicates
             lua = """
@@ -210,7 +230,13 @@ class StrategyManager:
 
     def _build_compute_context(
         self, payload: StrategySubmit
-    ) -> tuple[dict[str, str | None], dict[str, str], list[str]]:
+    ) -> tuple[
+        dict[str, str | bool | None],
+        dict[str, str],
+        list[str],
+        bool,
+        str | None,
+    ]:
         world_candidates: list[str] = []
         if payload.world_id:
             world_candidates.append(payload.world_id)
@@ -229,12 +255,18 @@ class StrategyManager:
                 seen.add(normalised)
                 unique_worlds.append(normalised)
         meta = payload.meta if isinstance(payload.meta, dict) else None
-        context, _downgraded, _reason = build_strategy_compute_context(meta)
-        compute_ctx: dict[str, str | None] = dict(context)
+        base_ctx, downgraded, downgrade_reason, safe_mode = build_strategy_compute_context(meta)
+        compute_ctx: dict[str, str | bool | None] = dict(base_ctx)
         compute_ctx["world_id"] = unique_worlds[0] if unique_worlds else None
+        if downgraded:
+            compute_ctx["downgraded"] = True
+            if downgrade_reason:
+                compute_ctx["downgrade_reason"] = downgrade_reason
+            if safe_mode:
+                compute_ctx["safe_mode"] = True
         context_mapping: dict[str, str] = {
             f"compute_{k}": v
             for k, v in compute_ctx.items()
             if isinstance(v, str) and v
         }
-        return compute_ctx, context_mapping, unique_worlds
+        return compute_ctx, context_mapping, unique_worlds, downgraded, downgrade_reason

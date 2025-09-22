@@ -185,3 +185,39 @@ async def test_strategy_manager_rollback_on_commit_log_failure() -> None:
     hash_key = hashlib.sha256(json.dumps(dag, sort_keys=True).encode()).hexdigest()
     assert await redis.get(f"dag_hash:{hash_key}") is None
     assert metrics.lost_requests_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
+    metrics.reset_metrics()
+    redis = InMemoryRedis()
+    db = MemoryDatabase()
+    fsm = StrategyFSM(redis=redis, database=db)
+    manager = StrategyManager(redis=redis, database=db, fsm=fsm, insert_sentinel=False)
+
+    dag = {"nodes": []}
+    dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
+    payload = StrategySubmit(
+        dag_json=dag_json,
+        meta={"execution_domain": "backtest"},
+        node_ids_crc32=0,
+    )
+
+    context, _, _, downgraded, reason = manager._build_compute_context(payload)
+    assert downgraded is True
+    assert reason == "missing_as_of"
+    assert context["execution_domain"] == "backtest"
+    assert context["safe_mode"] is True
+
+    sid, existed = await manager.submit(payload)
+    assert not existed
+    assert sid
+
+    metric_value = (
+        metrics.strategy_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+    )
+    assert metric_value == 1
+    stored_domain = await redis.hget(f"strategy:{sid}", "compute_execution_domain")
+    assert stored_domain == "backtest"
+    stored_reason = await redis.hget(f"strategy:{sid}", "compute_downgrade_reason")
+    assert stored_reason == "missing_as_of"

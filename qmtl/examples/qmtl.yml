@@ -1,3 +1,6 @@
+# Topic namespaces are enabled by default to scope Kafka topics by world and domain.
+# For local experimentation without prefixes, export ``QMTL_ENABLE_TOPIC_NAMESPACE=0``
+# before starting services.
 gateway:
   host: 0.0.0.0
   port: 8000

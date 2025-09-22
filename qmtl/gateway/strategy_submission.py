@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from fastapi import HTTPException
-
+from . import metrics as gw_metrics
 from .models import StrategySubmit
 from .compute_context import build_strategy_compute_context
 
@@ -32,6 +32,9 @@ class StrategySubmissionResult:
     strategy_id: str
     queue_map: dict[str, list[dict[str, Any] | Any]]
     sentinel_id: str
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
 
 
 class StrategySubmissionHelper:
@@ -50,11 +53,21 @@ class StrategySubmissionHelper:
         self._validate_node_ids(dag, payload.node_ids_crc32)
 
         worlds = self._extract_worlds(payload)
-        compute_ctx = self._extract_compute_context(
-            payload, emit_metrics=not config.submit
-        )
+        compute_ctx = self._extract_compute_context(payload)
+        downgraded = bool(compute_ctx.get("downgraded"))
+        downgrade_reason = compute_ctx.get("downgrade_reason")
+        safe_mode = bool(compute_ctx.get("safe_mode"))
 
-        strategy_id, existed = await self._maybe_submit(payload, config)
+        # Only emit metrics during dry runs (not real submissions).
+        # This avoids recording metrics during actual submissions.
+        if not config.submit and downgraded and downgrade_reason:
+            gw_metrics.strategy_compute_context_downgrade_total.labels(
+                reason=downgrade_reason
+            ).inc()
+
+        strategy_id, existed = await self._maybe_submit(
+            payload, config, downgraded
+        )
         if existed:
             raise HTTPException(
                 status_code=409,
@@ -118,15 +131,23 @@ class StrategySubmissionHelper:
             strategy_id=strategy_id,
             queue_map=queue_map,
             sentinel_id=sentinel_id,
+            downgraded=downgraded,
+            downgrade_reason=downgrade_reason,
+            safe_mode=safe_mode,
         )
 
     async def _maybe_submit(
-        self, payload: StrategySubmit, config: StrategySubmissionConfig
+        self,
+        payload: StrategySubmit,
+        config: StrategySubmissionConfig,
+        downgraded: bool,
     ) -> tuple[str, bool]:
         if config.submit:
             if self._manager is None:
                 raise RuntimeError("StrategyManager is required for submission")
-            return await self._manager.submit(payload)
+            return await self._manager.submit(
+                payload, skip_downgrade_metric=downgraded
+            )
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
 
@@ -156,11 +177,15 @@ class StrategySubmissionHelper:
             worlds = [payload.world_id]
         return worlds
 
-    def _extract_compute_context(
-        self, payload: StrategySubmit, *, emit_metrics: bool
-    ) -> dict[str, str | None]:
+    def _extract_compute_context(self, payload: StrategySubmit) -> dict[str, str | None]:
         meta = payload.meta if isinstance(payload.meta, dict) else None
-        context, _, _ = build_strategy_compute_context(meta, emit_metrics=emit_metrics)
+        context, downgraded, downgrade_reason, safe_mode = build_strategy_compute_context(meta)
+        if downgraded:
+            context["downgraded"] = True
+            if downgrade_reason:
+                context["downgrade_reason"] = downgrade_reason
+            if safe_mode:
+                context["safe_mode"] = True
         return context
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:

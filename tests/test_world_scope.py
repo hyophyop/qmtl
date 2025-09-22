@@ -32,7 +32,7 @@ async def test_world_scoping_topics(monkeypatch):
         self._tag_stub = StubTagStub()
     monkeypatch.setattr(DagManagerClient, "_ensure_channel", fake_ensure)
 
-    monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", "1")
+    monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
 
     q1 = await client.get_queues_by_tag(["t"], 60, world_id="w1", execution_domain="dryrun")
     q2 = await client.get_queues_by_tag(["t"], 60, world_id="w2", execution_domain="dryrun")
