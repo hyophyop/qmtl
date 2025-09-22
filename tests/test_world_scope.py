@@ -7,9 +7,19 @@ from qmtl.gateway.dagmanager_client import DagManagerClient
 
 @pytest.mark.asyncio
 async def test_world_scoping_topics(monkeypatch):
-    data = ("T", "code", "cfg", "schema")
-    nid1 = compute_node_id(*data)
-    nid2 = compute_node_id(*data)
+    data = {
+        "node_type": "T",
+        "code_hash": "code",
+        "config_hash": "cfg",
+        "schema_hash": "schema",
+        "schema_compat_id": "schema-major",
+        "interval": 10,
+        "period": 2,
+        "params": {"k": 1},
+        "dependencies": [],
+    }
+    nid1 = compute_node_id(data)
+    nid2 = compute_node_id(data)
     assert nid1 == nid2
 
     client = DagManagerClient("dummy")

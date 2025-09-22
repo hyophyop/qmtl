@@ -37,19 +37,25 @@ def test_checksum_rejects_tampered_ids(client):
         "code_hash": "ch_a",
         "config_hash": "cfg_a",
         "schema_hash": "sch_a",
+        "schema_compat_id": "sch_a_major",
+        "interval": 60,
+        "period": 5,
+        "params": {"window": 5},
+        "dependencies": [],
     }
     node_b = {
         "node_type": "IndicatorNode",
         "code_hash": "ch_b",
         "config_hash": "cfg_b",
         "schema_hash": "sch_b",
+        "schema_compat_id": "sch_b_major",
+        "interval": 60,
+        "period": 5,
+        "params": {"window": 10},
+        "dependencies": ["dep-a"],
     }
-    node_a_id = compute_node_id(
-        node_a["node_type"], node_a["code_hash"], node_a["config_hash"], node_a["schema_hash"]
-    )
-    node_b_id = compute_node_id(
-        node_b["node_type"], node_b["code_hash"], node_b["config_hash"], node_b["schema_hash"]
-    )
+    node_a_id = compute_node_id(node_a)
+    node_b_id = compute_node_id(node_b)
     dag = {
         "nodes": [
             {**node_a, "node_id": node_a_id},

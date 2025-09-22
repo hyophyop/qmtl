@@ -7,14 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from fastapi import HTTPException
-
 from . import metrics as gw_metrics
-from .compute_context import (
-    evaluate_safe_mode,
-    normalize_context_value,
-    resolve_execution_domain,
-)
 from .models import StrategySubmit
+from .compute_context import build_strategy_compute_context
 
 
 @dataclass
@@ -63,6 +58,7 @@ class StrategySubmissionHelper:
         downgrade_reason = compute_ctx.get("downgrade_reason")
         safe_mode = bool(compute_ctx.get("safe_mode"))
 
+        # Emit a downgrade metric whenever we enter safe mode due to missing context.
         if downgraded and downgrade_reason:
             gw_metrics.strategy_compute_context_downgrade_total.labels(
                 reason=downgrade_reason
@@ -180,34 +176,15 @@ class StrategySubmissionHelper:
             worlds = [payload.world_id]
         return worlds
 
-    def _extract_compute_context(
-        self, payload: StrategySubmit
-    ) -> dict[str, str | None]:
-        meta = payload.meta if isinstance(payload.meta, dict) else {}
-        raw_domain = normalize_context_value(meta.get("execution_domain"))
-        execution_domain = resolve_execution_domain(raw_domain)
-        as_of = normalize_context_value(meta.get("as_of"))
-        partition = normalize_context_value(meta.get("partition"))
-        dataset_fingerprint = normalize_context_value(meta.get("dataset_fingerprint"))
-
-        execution_domain, downgraded, downgrade_reason, safe_mode = evaluate_safe_mode(
-            execution_domain, as_of
-        )
-
-        context: dict[str, str | None] = {
-            "execution_domain": execution_domain,
-            "as_of": as_of,
-            "partition": partition,
-            "dataset_fingerprint": dataset_fingerprint,
-        }
-
+    def _extract_compute_context(self, payload: StrategySubmit) -> dict[str, str | None]:
+        meta = payload.meta if isinstance(payload.meta, dict) else None
+        context, downgraded, downgrade_reason, safe_mode = build_strategy_compute_context(meta)
         if downgraded:
             context["downgraded"] = True
             if downgrade_reason:
                 context["downgrade_reason"] = downgrade_reason
             if safe_mode:
                 context["safe_mode"] = True
-
         return context
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
@@ -231,6 +208,7 @@ class StrategySubmissionHelper:
                 "code_hash": node.get("code_hash"),
                 "config_hash": node.get("config_hash"),
                 "schema_hash": node.get("schema_hash"),
+                "schema_compat_id": node.get("schema_compat_id"),
             }
             missing = [field for field, value in required.items() if not value]
             if missing:
@@ -239,12 +217,7 @@ class StrategySubmissionHelper:
                 )
                 continue
 
-            expected = compute_node_id(
-                str(required["node_type"]),
-                str(required["code_hash"]),
-                str(required["config_hash"]),
-                str(required["schema_hash"]),
-            )
+            expected = compute_node_id(node)
             if nid != expected:
                 mismatches.append({"index": idx, "node_id": nid, "expected": expected})
 
@@ -254,7 +227,7 @@ class StrategySubmissionHelper:
                 status_code=400,
                 detail={
                     "code": "E_NODE_ID_FIELDS",
-                    "message": "node_id validation requires node_type, code_hash, config_hash and schema_hash",
+                    "message": "node_id validation requires node_type, code_hash, config_hash, schema_hash and schema_compat_id",
                     "missing_fields": missing_fields,
                     "hint": "Regenerate the DAG with an updated SDK so each node includes the hashes required by compute_node_id().",
                 },

@@ -142,7 +142,20 @@ def _build_payload(
     code_hash = "code"
     config_hash = "config"
     schema_hash = "schema"
-    expected_node_id = compute_node_id(node_type, code_hash, config_hash, schema_hash)
+    schema_compat_id = "schema-compat"
+    base_node = {
+        "node_type": node_type,
+        "code_hash": code_hash,
+        "config_hash": config_hash,
+        "schema_hash": schema_hash,
+        "schema_compat_id": schema_compat_id,
+        "params": {"tags": ["alpha"], "match_mode": "any"},
+        "dependencies": [],
+        "tags": ["alpha"],
+        "interval": 5,
+        "match_mode": "any",
+    }
+    expected_node_id = compute_node_id(base_node)
     node_id = "bad-node" if mismatch else expected_node_id
     dag = {
         "nodes": [
@@ -152,6 +165,9 @@ def _build_payload(
                 "code_hash": code_hash,
                 "config_hash": config_hash,
                 "schema_hash": schema_hash,
+                "schema_compat_id": schema_compat_id,
+                "params": {"tags": ["alpha"], "match_mode": "any"},
+                "dependencies": [],
                 "tags": ["alpha"],
                 "interval": 5,
                 "match_mode": "any",

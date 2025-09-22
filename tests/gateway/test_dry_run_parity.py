@@ -10,7 +10,17 @@ from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.proto import dagmanager_pb2
 
 
-_TAGQUERY_NODE_ID = compute_node_id("TagQueryNode", "c", "cfg", "s")
+_TAGQUERY_NODE_ID = compute_node_id(
+    {
+        "node_type": "TagQueryNode",
+        "interval": 60,
+        "period": 0,
+        "params": {"tags": ["t1"], "match_mode": "any"},
+        "dependencies": [],
+        "schema_compat_id": "s-major",
+        "code_hash": "c",
+    }
+)
 
 
 class FakeDB(Database):
@@ -88,6 +98,9 @@ def test_dry_run_matches_submit_queue_map_and_sentinel(fake_redis):
                     "code_hash": "c",
                     "config_hash": "cfg",
                     "schema_hash": "s",
+                    "schema_compat_id": "s-major",
+                    "params": {"tags": ["t1"], "match_mode": "any"},
+                    "dependencies": [],
                     "inputs": [],
                 }
             ]

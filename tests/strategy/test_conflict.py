@@ -45,10 +45,13 @@ def test_duplicate_strategy_returns_409(client):
         "code_hash": "ch",
         "config_hash": "cfg",
         "schema_hash": "sh",
+        "schema_compat_id": "sh-major",
+        "interval": 60,
+        "period": 5,
+        "params": {"window": 5},
+        "dependencies": [],
     }
-    node_id = compute_node_id(
-        node["node_type"], node["code_hash"], node["config_hash"], node["schema_hash"]
-    )
+    node_id = compute_node_id(node)
     dag = {"nodes": [{**node, "node_id": node_id}]}
     payload = make_payload(dag)
     first = client.post("/strategies", json=payload.model_dump())

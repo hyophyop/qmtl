@@ -142,6 +142,7 @@ def write_snapshot(node) -> Path | None:
         "interval": node.interval,
         "period": node.period,
         "schema_hash": node.schema_hash,
+        "schema_compat_id": getattr(node, "schema_compat_id", None),
         "runtime_fingerprint": runtime_fingerprint(),
         "state_hash": state_hash,
         "wm_ts": int(min(

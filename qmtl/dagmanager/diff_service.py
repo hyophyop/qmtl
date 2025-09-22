@@ -480,9 +480,26 @@ class DiffService:
                     buffering_nodes.append(n)
                 continue
             if rec and rec.code_hash == n.code_hash and node_compute_key not in bindings:
+                # Reuse existing topic across compute contexts; don't upsert again.
                 self._record_cross_context_hit(n, compute_context)
+                # Build namespaced topic directly without creating it again.
+                topic = topic_name(
+                    _asset_from_tags(n.tags),
+                    n.node_type,
+                    n.code_hash,
+                    version,
+                    namespace=namespace,
+                )
+                queue_map[key] = topic
                 if rec.schema_hash != n.schema_hash:
                     buffering_nodes.append(n)
+                bindings[node_compute_key] = _CachedBinding(
+                    topic=topic,
+                    code_hash=rec.code_hash,
+                    schema_hash=rec.schema_hash,
+                )
+                new_nodes.append(n)
+                continue
             try:
                 topic = self.queue_manager.upsert(
                     _asset_from_tags(n.tags),

@@ -46,9 +46,19 @@ def _payload_for(node: dict) -> StrategySubmit:
 
 
 def test_compute_node_id_collision():
-    data = ("A", "B", "C", "D")
-    first = compute_node_id(*data)
-    second = compute_node_id(*data, existing_ids={first})
+    node = {
+        "node_type": "A",
+        "code_hash": "B",
+        "config_hash": "C",
+        "schema_hash": "D",
+        "schema_compat_id": "D-major",
+        "params": {"alpha": 1},
+        "interval": 1,
+        "period": 0,
+        "dependencies": ["dep-1"],
+    }
+    first = compute_node_id(node)
+    second = compute_node_id(node, existing_ids={first})
     assert first != second
     assert second.startswith("blake3:")
 
@@ -61,6 +71,9 @@ async def test_node_id_mismatch(client_and_redis):
         "code_hash": "c",
         "config_hash": "cfg",
         "schema_hash": "s",
+        "schema_compat_id": "s-compat",
+        "params": {},
+        "dependencies": [],
         "node_id": "wrong",
     }
     payload = _payload_for(node)
@@ -81,6 +94,8 @@ async def test_missing_node_fields_rejected(client_and_redis):
         # config_hash intentionally omitted
         "schema_hash": "s",
         "node_id": "blake3:deadbeef",
+        "params": {},
+        "dependencies": [],
     }
     payload = _payload_for(node)
     resp = client.post("/strategies", json=payload.model_dump())
@@ -88,7 +103,9 @@ async def test_missing_node_fields_rejected(client_and_redis):
     detail = resp.json()["detail"]
     assert detail["code"] == "E_NODE_ID_FIELDS"
     missing = detail["missing_fields"][0]
-    assert "config_hash" in missing["missing"]
+    missing_fields = set(missing["missing"])
+    assert "config_hash" in missing_fields
+    assert "schema_compat_id" in missing_fields
     assert "hint" in detail
 
 
@@ -101,6 +118,9 @@ async def test_legacy_node_id_rejected(client_and_redis):
         "code_hash": "c",
         "config_hash": "cfg",
         "schema_hash": "s",
+        "schema_compat_id": "s-compat",
+        "params": {},
+        "dependencies": [],
         "node_id": legacy_like,
     }
     payload = StrategySubmit(
@@ -122,6 +142,9 @@ async def test_tag_query_node_id_mismatch(client_and_redis):
         "code_hash": "c",
         "config_hash": "cfg",
         "schema_hash": "s",
+        "schema_compat_id": "s-compat",
+        "params": {"tags": ["t1"], "match_mode": "any"},
+        "dependencies": [],
         "tags": ["t1"],
         "interval": 60,
         "node_id": "incorrect",

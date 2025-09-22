@@ -139,19 +139,22 @@ def test_submit_tag_query_node(client):
     c, dag = client
     dag_json = {
         "nodes": [
-            {
-                "node_id": _TAGQUERY_ID,
-                "node_type": "TagQueryNode",
-                "interval": 60,
-                "period": 2,
-                "tags": ["t1"],
-                "code_hash": "ch",
-                "config_hash": "cfg",
-                "schema_hash": "sh",
-                "inputs": [],
-            }
-        ]
-    }
+                {
+                    "node_id": _TAGQUERY_ID,
+                    "node_type": "TagQueryNode",
+                    "interval": 60,
+                    "period": 2,
+                    "tags": ["t1"],
+                    "code_hash": "ch",
+                    "config_hash": "cfg",
+                    "schema_hash": "sh",
+                    "schema_compat_id": "sh-major",
+                    "params": {"tags": ["t1"], "match_mode": "any"},
+                    "dependencies": [],
+                    "inputs": [],
+                }
+            ]
+        }
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
@@ -185,44 +188,49 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
     dag = ErrorDag()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag, enable_background=False)
     with TestClient(app) as c:
-        dag_json = {
-            "nodes": [
-                {
-                    "node_id": _TAGQUERY_ID,
-                    "node_type": "TagQueryNode",
-                    "interval": 60,
-                    "period": 2,
-                    "tags": ["good"],
-                    "code_hash": "ch",
-                    "config_hash": "cfg",
-                    "schema_hash": "sh",
-                    "inputs": [],
-                },
-                {
-                    "node_id": _TAGQUERY_ALT_ID,
-                    "node_type": "TagQueryNode",
-                    "interval": 30,
-                    "period": 2,
-                    "tags": ["bad"],
-                    "code_hash": "ch",
-                    "config_hash": "cfg2",
-                    "schema_hash": "sh",
-                    "inputs": [],
-                },
-            ]
-        }
-        payload = {
-            "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
-            "meta": None,
-            "node_ids_crc32": crc32_of_list([_TAGQUERY_ID, _TAGQUERY_ALT_ID]),
-        }
-        resp = c.post("/strategies", json=payload)
-        assert resp.status_code == 202
-        assert resp.json()["queue_map"] == {
-            _TAGQUERY_ID: [{"queue": "good_q", "global": False}],
-            _TAGQUERY_ALT_ID: [],
-        }
-        assert len(dag.calls) == 2
+            good_node = {
+                "node_type": "TagQueryNode",
+                "interval": 60,
+                "period": 2,
+                "tags": ["good"],
+                "code_hash": "ch",
+                "config_hash": "cfg",
+                "schema_hash": "sh",
+                "schema_compat_id": "sh-major",
+                "params": {"tags": ["good"], "match_mode": "any"},
+                "dependencies": [],
+                "inputs": [],
+            }
+            bad_node = {
+                "node_type": "TagQueryNode",
+                "interval": 30,
+                "period": 2,
+                "tags": ["bad"],
+                "code_hash": "ch",
+                "config_hash": "cfg2",
+                "schema_hash": "sh",
+                "schema_compat_id": "sh-major",
+                "params": {"tags": ["bad"], "match_mode": "any"},
+                "dependencies": [],
+                "inputs": [],
+            }
+            good_node_id = compute_node_id(good_node)
+            bad_node_id = compute_node_id({**bad_node})
+            good_node = {"node_id": good_node_id, **good_node}
+            bad_node = {"node_id": bad_node_id, **bad_node}
+            dag_json = {"nodes": [good_node, bad_node]}
+            payload = {
+                "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+                "meta": None,
+                "node_ids_crc32": crc32_of_list([good_node_id, bad_node_id]),
+            }
+            resp = c.post("/strategies", json=payload)
+            assert resp.status_code == 202
+            assert resp.json()["queue_map"] == {
+                good_node_id: [{"queue": "good_q", "global": False}],
+                bad_node_id: [],
+            }
+            assert len(dag.calls) == 2
     asyncio.run(dag.close())
 
 
@@ -277,5 +285,16 @@ def test_repository_match_modes():
     assert "any(" in driver.last_query.lower()
     repo.get_queues_by_tag(["a"], 60, "all")
     assert "all(" in driver.last_query.lower()
-_TAGQUERY_ID = compute_node_id("TagQueryNode", "ch", "cfg", "sh")
-_TAGQUERY_ALT_ID = compute_node_id("TagQueryNode", "ch", "cfg2", "sh")
+_TAGQUERY_SPEC = {
+    "node_type": "TagQueryNode",
+    "interval": 60,
+    "period": 2,
+    "params": {"tags": ["t1"], "match_mode": "any"},
+    "dependencies": [],
+    "schema_compat_id": "sh-major",
+    "code_hash": "ch",
+}
+_TAGQUERY_ID = compute_node_id(_TAGQUERY_SPEC)
+_TAGQUERY_ALT_ID = compute_node_id(
+    {**_TAGQUERY_SPEC, "interval": 30, "params": {"tags": ["bad"], "match_mode": "any"}}
+)

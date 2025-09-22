@@ -74,7 +74,20 @@ async def test_strategy_manager_writes_commit_log() -> None:
         commit_log_writer=writer,
     )
 
-    dag = {"nodes": [{"node_id": "n1", "node_type": "TypeA", "config_hash": "c", "code_hash": "d", "schema_hash": "s"}]}
+    dag = {
+        "nodes": [
+            {
+                "node_id": "n1",
+                "node_type": "TypeA",
+                "config_hash": "c",
+                "code_hash": "d",
+                "schema_hash": "s",
+                "schema_compat_id": "s-major",
+                "params": {},
+                "dependencies": [],
+            }
+        ]
+    }
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,

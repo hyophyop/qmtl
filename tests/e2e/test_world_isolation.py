@@ -15,9 +15,19 @@ from qmtl.sdk.metrics import node_processed_total, generate_latest, global_regis
 @pytest.mark.asyncio
 async def test_world_isolation(monkeypatch):
     # 동일 전략 노드가 world에 관계없이 동일한 ID를 갖는다
-    base = ("T", "code", "cfg", "schema")
-    nid1 = compute_node_id(*base)
-    nid2 = compute_node_id(*base)
+    base = {
+        "node_type": "T",
+        "code_hash": "code",
+        "config_hash": "cfg",
+        "schema_hash": "schema",
+        "schema_compat_id": "schema-major",
+        "interval": 15,
+        "period": 5,
+        "params": {"alpha": 1},
+        "dependencies": [],
+    }
+    nid1 = compute_node_id(base)
+    nid2 = compute_node_id(base)
     assert nid1 == nid2
 
     # world별 구독 토픽이 분리된다
