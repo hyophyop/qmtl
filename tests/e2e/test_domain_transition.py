@@ -136,7 +136,7 @@ async def test_domain_promotion_flow_respects_freeze_and_isolation(monkeypatch):
                     queues=[SimpleNamespace(**{"queue": "base", "global": False})]
                 )
 
-        monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", "1")
+        monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
         monkeypatch.setattr(
             DagManagerClient,
             "_ensure_channel",
