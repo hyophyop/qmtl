@@ -387,6 +387,7 @@ class Runner:
         meta_payload: dict | None = dict(meta) if isinstance(meta, dict) else None
 
         effective_offline = False
+        cleanup_needed = True
         try:
             strategy.on_start()
 
@@ -408,6 +409,7 @@ class Runner:
             manager = bootstrap_result.manager
             offline_mode = bootstrap_result.offline_mode
             if bootstrap_result.completed:
+                cleanup_needed = False
                 return strategy
 
             if gateway_url and not offline_mode:
@@ -441,11 +443,21 @@ class Runner:
 
             history_service.write_snapshots(strategy)
             strategy.on_finish()
+            cleanup_needed = False
             return strategy
 
         except Exception as e:
-            strategy.on_error(e)
+            try:
+                strategy.on_error(e)
+            except Exception:
+                logger.exception("strategy.on_error raised during failure handling")
             raise
+        finally:
+            if cleanup_needed:
+                try:
+                    await Runner.shutdown_async(strategy)
+                except Exception:
+                    logger.exception("Runner shutdown failed after initialization error")
 
     @staticmethod
     def run(
@@ -567,21 +579,28 @@ class Runner:
         - Stops the global ActivationManager if running
         """
         # Stop TagQueryManager attached to strategy
+        first_error: Exception | None = None
         if strategy is not None:
             mgr = getattr(strategy, "tag_query_manager", None)
             if mgr is not None:
                 try:
                     await mgr.stop()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.exception("Failed to stop TagQueryManager during shutdown")
+                    if first_error is None:
+                        first_error = exc
         # Stop ActivationManager if present
         services = Runner.services()
         am = services.activation_manager
         if am is not None:
             try:
                 await am.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.exception("Failed to stop ActivationManager during shutdown")
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     @staticmethod
     def shutdown(strategy: Strategy | None = None) -> None:
