@@ -8,7 +8,10 @@ from typing import Any, Dict, Iterable, List, Sequence
 from fastapi import HTTPException
 
 from qmtl.common.hashutils import hash_bytes
-from qmtl.transforms import equity_linearity_metrics, equity_linearity_metrics_v2
+from qmtl.transforms.linearity_metrics import (
+    equity_linearity_metrics,
+    equity_linearity_metrics_v2,
+)
 
 from .controlbus_producer import ControlBusProducer
 from .policy import GatingPolicy
