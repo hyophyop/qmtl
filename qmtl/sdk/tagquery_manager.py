@@ -9,7 +9,7 @@ import httpx
 from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
 import tempfile
 
-from .node import MatchMode
+from qmtl.common.tagquery import MatchMode
 from qmtl.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient

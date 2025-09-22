@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from qmtl.sdk.node import MatchMode
+from qmtl.common.tagquery import MatchMode
 from qmtl.sdk.snapshot import runtime_fingerprint
 
 from . import metrics as gw_metrics

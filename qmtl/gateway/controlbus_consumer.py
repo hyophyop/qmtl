@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from pydantic import ValidationError
-from qmtl.sdk.node import MatchMode
+from qmtl.common.tagquery import MatchMode
 
 from .ws import WebSocketHub
 from . import metrics as gw_metrics

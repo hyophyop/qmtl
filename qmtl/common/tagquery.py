@@ -2,15 +2,22 @@ from __future__ import annotations
 
 """Common helpers for TagQuery normalization shared by SDK and Gateway."""
 
+from enum import Enum
 from typing import Any, Iterable
 
-from qmtl.sdk.node import MatchMode
-
 __all__ = [
+    "MatchMode",
     "split_tags",
     "normalize_match_mode",
     "normalize_queues",
 ]
+
+
+class MatchMode(str, Enum):
+    """Tag matching behaviour for tag query nodes."""
+
+    ANY = "any"
+    ALL = "all"
 
 
 def split_tags(tags: str | Iterable[str] | None) -> list[str]:

@@ -9,7 +9,7 @@ import logging
 import contextlib
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from qmtl.sdk.node import MatchMode
+from qmtl.common.tagquery import MatchMode
 
 from ..common.cloudevents import format_event
 from .event_descriptor import (

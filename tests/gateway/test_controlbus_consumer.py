@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 from qmtl.gateway.api import Database
 from qmtl.gateway import metrics
-from qmtl.sdk.node import MatchMode
+from qmtl.common.tagquery import MatchMode
 
 
 class FakeHub:
