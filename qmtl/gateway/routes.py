@@ -98,6 +98,9 @@ def create_api_router(
             strategy_id=result.strategy_id,
             queue_map=result.queue_map,
             sentinel_id=result.sentinel_id,
+            downgraded=result.downgraded,
+            downgrade_reason=result.downgrade_reason,
+            safe_mode=result.safe_mode,
         )
         duration_ms = (time.perf_counter() - start) * 1000
         gw_metrics.observe_gateway_latency(duration_ms)
@@ -132,6 +135,9 @@ def create_api_router(
             strategy_id=result.strategy_id,
             queue_map=result.queue_map,
             sentinel_id=result.sentinel_id,
+            downgraded=result.downgraded,
+            downgrade_reason=result.downgrade_reason,
+            safe_mode=result.safe_mode,
         )
 
     @router.get(
