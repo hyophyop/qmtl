@@ -65,6 +65,7 @@ class DowngradeReason(str, Enum):
 
     MISSING_AS_OF = "missing_as_of"
     STALE_DECISION = "stale_decision"
+    DECISION_UNAVAILABLE = "decision_unavailable"
 
 
 def normalize_context_value(value: Any | None) -> str | None:
