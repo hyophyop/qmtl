@@ -11,21 +11,23 @@ from ..services import WorldService
 
 def create_bindings_router(service: WorldService) -> APIRouter:
     router = APIRouter()
-    store = service.store
 
     @router.post('/worlds/{world_id}/bindings', response_model=BindingsResponse)
     async def post_bindings(world_id: str, payload: DecisionsRequest) -> BindingsResponse:
+        store = service.store
         await store.add_bindings(world_id, payload.strategies)
         strategies = await store.list_bindings(world_id)
         return BindingsResponse(strategies=strategies)
 
     @router.get('/worlds/{world_id}/bindings', response_model=BindingsResponse)
     async def get_bindings(world_id: str) -> BindingsResponse:
+        store = service.store
         strategies = await store.list_bindings(world_id)
         return BindingsResponse(strategies=strategies)
 
     @router.get('/worlds/{world_id}/decide', response_model=DecisionEnvelope)
     async def get_decide(world_id: str, response: Response) -> DecisionEnvelope:
+        store = service.store
         version = await store.default_policy_version(world_id)
         now = datetime.now(timezone.utc)
         strategies = await store.get_decisions(world_id)
@@ -46,6 +48,7 @@ def create_bindings_router(service: WorldService) -> APIRouter:
 
     @router.post('/worlds/{world_id}/decisions')
     async def post_decisions(world_id: str, payload: DecisionsRequest) -> Dict:
+        store = service.store
         await store.set_decisions(world_id, payload.strategies)
         return {'strategies': payload.strategies}
 

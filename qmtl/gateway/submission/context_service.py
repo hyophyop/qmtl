@@ -11,6 +11,7 @@ from qmtl.common.compute_context import (
     build_strategy_compute_context,
     build_worldservice_compute_context,
 )
+from qmtl.gateway import metrics as gw_metrics
 
 if TYPE_CHECKING:  # pragma: no cover - typing aid
     from qmtl.gateway.models import StrategySubmit
@@ -76,18 +77,27 @@ class ComputeContextService:
 
         decision_ctx: ComputeContext | None = None
         stale_decision = False
-        if worlds and self._world_client is not None:
-            world_id = worlds[0]
-            try:
-                decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
-            except _WorldDecisionUnavailable as exc:
-                stale_decision = stale_decision or exc.stale
-                decision_ctx = None
+        decision_unavailable = False
+        if worlds:
+            if self._world_client is None:
+                decision_unavailable = True
+            else:
+                world_id = worlds[0]
+                try:
+                    decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
+                except _WorldDecisionUnavailable as exc:
+                    stale_decision = stale_decision or exc.stale
+                    decision_ctx = None
+                    decision_unavailable = True
 
         if decision_ctx is not None:
             context = self._merge_contexts(decision_ctx, base_ctx)
             if stale_decision:
                 context = self._downgrade_stale(context)
+        elif decision_unavailable and worlds:
+            gw_metrics.record_worlds_stale_response()
+            if not context.safe_mode:
+                context = self._downgrade_unavailable(context)
 
         return StrategyComputeContext(context=context, worlds=worlds)
 
@@ -126,6 +136,18 @@ class ComputeContextService:
             downgraded,
             downgraded=True,
             downgrade_reason=DowngradeReason.STALE_DECISION,
+            safe_mode=True,
+        )
+
+    def _downgrade_unavailable(self, context: ComputeContext) -> ComputeContext:
+        current_domain = (context.execution_domain or "").lower()
+        target_domain = "backtest" if current_domain != "dryrun" else "dryrun"
+        downgraded = context.with_overrides(execution_domain=target_domain)
+        reason = context.downgrade_reason or DowngradeReason.DECISION_UNAVAILABLE
+        return replace(
+            downgraded,
+            downgraded=True,
+            downgrade_reason=reason,
             safe_mode=True,
         )
 

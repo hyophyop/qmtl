@@ -16,19 +16,21 @@ from ..services import WorldService
 
 def create_worlds_router(service: WorldService) -> APIRouter:
     router = APIRouter()
-    store = service.store
 
     @router.post('/worlds', status_code=201)
     async def post_world(payload: World) -> World:
+        store = service.store
         await store.create_world(payload.model_dump())
         return payload
 
     @router.get('/worlds')
     async def get_worlds() -> List[Dict]:
+        store = service.store
         return await store.list_worlds()
 
     @router.get('/worlds/{world_id}')
     async def get_world(world_id: str) -> Dict:
+        store = service.store
         world = await store.get_world(world_id)
         if not world:
             raise HTTPException(status_code=404, detail='world not found')
@@ -36,6 +38,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
 
     @router.put('/worlds/{world_id}')
     async def put_world(world_id: str, payload: World) -> Dict:
+        store = service.store
         await store.update_world(world_id, payload.model_dump())
         world = await store.get_world(world_id)
         if not world:
@@ -44,12 +47,14 @@ def create_worlds_router(service: WorldService) -> APIRouter:
 
     @router.delete('/worlds/{world_id}', status_code=204)
     async def delete_world(world_id: str) -> Response:
+        store = service.store
         await store.delete_world(world_id)
         return Response(status_code=204)
 
     @router.get('/worlds/{world_id}/nodes', response_model=List[WorldNodeRef])
     async def get_world_nodes(world_id: str, execution_domain: str | None = None) -> List[WorldNodeRef]:
         try:
+            store = service.store
             nodes = await store.list_world_nodes(world_id, execution_domain=execution_domain)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -62,6 +67,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
         execution_domain: str | None = None,
     ) -> WorldNodeRef:
         try:
+            store = service.store
             node = await store.get_world_node(world_id, node_id, execution_domain=execution_domain)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -72,6 +78,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
     @router.put('/worlds/{world_id}/nodes/{node_id}', response_model=WorldNodeRef)
     async def put_world_node(world_id: str, node_id: str, payload: WorldNodeUpsertRequest) -> WorldNodeRef:
         try:
+            store = service.store
             node = await store.upsert_world_node(
                 world_id,
                 node_id,
@@ -91,6 +98,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
         execution_domain: str | None = None,
     ) -> Response:
         try:
+            store = service.store
             await store.delete_world_node(world_id, node_id, execution_domain=execution_domain)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -98,6 +106,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
 
     @router.get('/worlds/{world_id}/edges/overrides', response_model=List[EdgeOverrideResponse])
     async def get_edge_overrides(world_id: str) -> List[EdgeOverrideResponse]:
+        store = service.store
         overrides = await store.list_edge_overrides(world_id)
         return [EdgeOverrideResponse(**item) for item in overrides]
 
@@ -114,6 +123,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
         kwargs: Dict[str, Any] = {"active": payload.active}
         if 'reason' in payload.model_fields_set:
             kwargs['reason'] = payload.reason
+        store = service.store
         override = await store.upsert_edge_override(
             world_id,
             src_node_id,
@@ -124,6 +134,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
 
     @router.get('/worlds/{world_id}/audit')
     async def get_audit(world_id: str) -> List[Dict]:
+        store = service.store
         return await store.get_audit(world_id)
 
     return router

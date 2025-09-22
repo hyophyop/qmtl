@@ -160,7 +160,9 @@ Content‑Type: application/json
 > `strategy_compute_context_downgrade_total{reason="missing_as_of"}`. The
 > downgrade reasons are defined by the shared `DowngradeReason` enum in
 > `qmtl/common/compute_context.py` to keep replay and commit-log behavior in
-> sync.
+> sync. When WorldService is unreachable the submission also enters safe mode
+> with downgrade reason `decision_unavailable`, ensuring live domains cannot
+> execute without an authoritative decision envelope.
 
 **Example Queue Lookup**
 

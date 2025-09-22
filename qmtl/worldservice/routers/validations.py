@@ -12,7 +12,6 @@ from ..services import WorldService
 
 def create_validations_router(service: WorldService) -> APIRouter:
     router = APIRouter()
-    store = service.store
 
     @router.post(
         '/worlds/{world_id}/validations/cache/lookup',
@@ -21,6 +20,7 @@ def create_validations_router(service: WorldService) -> APIRouter:
     async def post_validation_cache_lookup(
         world_id: str, payload: ValidationCacheLookupRequest
     ) -> ValidationCacheResponse:
+        store = service.store
         entry = await store.get_validation_cache(world_id, **payload.model_dump())
         if not entry:
             return ValidationCacheResponse(cached=False)
@@ -36,6 +36,7 @@ def create_validations_router(service: WorldService) -> APIRouter:
     async def post_validation_cache(
         world_id: str, payload: ValidationCacheStoreRequest
     ) -> ValidationCacheResponse:
+        store = service.store
         entry = await store.set_validation_cache(world_id, **payload.model_dump())
         return ValidationCacheResponse(
             cached=True,
@@ -49,6 +50,7 @@ def create_validations_router(service: WorldService) -> APIRouter:
     async def delete_validation_cache(
         world_id: str, node_id: str, execution_domain: str | None = None
     ) -> Response:
+        store = service.store
         await store.invalidate_validation_cache(
             world_id, node_id=node_id, execution_domain=execution_domain
         )

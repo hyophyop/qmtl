@@ -95,6 +95,21 @@ async def test_build_marks_safe_mode_on_stale_decision() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_safe_mode_when_worldservice_unavailable() -> None:
+    client = _StubWorldClient({}, fail=True)
+    service = ComputeContextService(world_client=client)
+    payload = _make_payload()
+
+    strategy_ctx = await service.build(payload)
+
+    assert client.calls == ["world-1"]
+    assert strategy_ctx.execution_domain == "backtest"
+    assert strategy_ctx.safe_mode is True
+    assert strategy_ctx.downgraded is True
+    assert strategy_ctx.downgrade_reason == DowngradeReason.DECISION_UNAVAILABLE
+
+
+@pytest.mark.asyncio
 async def test_build_without_worlds() -> None:
     service = ComputeContextService()
     payload = StrategySubmit(

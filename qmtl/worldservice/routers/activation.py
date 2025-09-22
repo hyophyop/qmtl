@@ -19,12 +19,12 @@ from ..services import WorldService
 
 def create_activation_router(service: WorldService) -> APIRouter:
     router = APIRouter()
-    store = service.store
 
     @router.get('/worlds/{world_id}/activation', response_model=ActivationEnvelope)
     async def get_activation(
         world_id: str, strategy_id: str, side: str, response: Response
     ) -> ActivationEnvelope:
+        store = service.store
         data = await store.get_activation(world_id, strategy_id=strategy_id, side=side)
         if 'etag' not in data:
             raise HTTPException(status_code=404, detail='activation not found')
@@ -64,6 +64,7 @@ def create_activation_router(service: WorldService) -> APIRouter:
         topic_normalized = (topic or '').lower()
         if topic_normalized != 'activation':
             raise HTTPException(status_code=400, detail='unsupported topic')
+        store = service.store
         data = await store.get_activation(world_id)
         payload = json.dumps(data, sort_keys=True).encode()
         digest = hash_bytes(payload)

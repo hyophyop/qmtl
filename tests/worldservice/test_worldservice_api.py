@@ -1,9 +1,10 @@
 import httpx
 import pytest
+from pathlib import Path
 
-from qmtl.worldservice.api import create_app
+from qmtl.worldservice.api import StorageHandle, create_app
 from qmtl.worldservice.controlbus_producer import ControlBusProducer
-from qmtl.worldservice.storage import Storage
+from qmtl.worldservice.storage import PersistentStorage, Storage
 
 
 class DummyBus(ControlBusProducer):
@@ -332,3 +333,114 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
 
             bad_resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "invalid"})
             assert bad_resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_persistent_storage_survives_restart(tmp_path, fake_redis):
+    db_path = tmp_path / "worlds_api.db"
+
+    def _factory_builder():
+        async def _factory() -> StorageHandle:
+            storage = await PersistentStorage.create(
+                db_dsn=str(db_path),
+                redis_client=fake_redis,
+            )
+
+            async def _shutdown() -> None:
+                await storage.close()
+
+            return StorageHandle(storage=storage, shutdown=_shutdown)
+
+        return _factory
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    app = create_app(storage_factory=_factory_builder())
+    async with app.router.lifespan_context(app):
+        async with httpx.ASGITransport(app=app) as asgi:
+            async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+                resp = await client.post("/worlds", json={"id": "persist", "name": "Persistent"})
+                assert resp.status_code == 201
+                policy_resp = await client.post(
+                    "/worlds/persist/policies",
+                    json={"policy": {"top_k": {"metric": "m", "k": 1}}},
+                )
+                assert policy_resp.status_code == 200
+                default_resp = await client.post("/worlds/persist/set-default", json={"version": 1})
+                assert default_resp.status_code == 200
+                decisions_resp = await client.post(
+                    "/worlds/persist/decisions",
+                    json={"strategies": ["strategy-1"]},
+                )
+                assert decisions_resp.status_code == 200
+                bindings_post = await client.post(
+                    "/worlds/persist/bindings",
+                    json={"strategies": ["strategy-1"]},
+                )
+                assert bindings_post.status_code == 200
+                activation_resp = await client.put(
+                    "/worlds/persist/activation",
+                    json={
+                        "strategy_id": "strategy-1",
+                        "side": "long",
+                        "active": True,
+                        "weight": 0.75,
+                    },
+                )
+                assert activation_resp.status_code == 200
+                initial_lookup = await client.get("/worlds/persist")
+                assert initial_lookup.status_code == 200
+                worlds = await app.state.storage.list_worlds()
+                assert any(w["id"] == "persist" for w in worlds)
+
+        driver = getattr(app.state.storage, "_driver", None)
+        sqlite_conn = getattr(driver, "_conn", None)
+        conn_path = Path(getattr(sqlite_conn, "database", str(db_path)))
+
+    assert conn_path.exists(), conn_path
+    storage_inspect = await PersistentStorage.create(
+        db_dsn=str(db_path),
+        redis_client=fake_redis,
+    )
+    try:
+        persisted = await storage_inspect.get_world("persist")
+        assert persisted is not None
+    finally:
+        await storage_inspect.close()
+
+    app_restart = create_app(storage_factory=_factory_builder())
+    async with app_restart.router.lifespan_context(app_restart):
+        async with httpx.ASGITransport(app=app_restart) as asgi:
+            async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+                world_resp = await client.get("/worlds/persist")
+                assert world_resp.status_code == 200
+                assert world_resp.json()["name"] == "Persistent"
+
+                policy_resp = await client.get("/worlds/persist/policies/1")
+                assert policy_resp.status_code == 200
+                assert policy_resp.json()["top_k"] == {"metric": "m", "k": 1}
+
+                decide_resp = await client.get("/worlds/persist/decide")
+                assert decide_resp.status_code == 200
+                assert decide_resp.json()["policy_version"] == 1
+
+                activation_resp = await client.get(
+                    "/worlds/persist/activation",
+                    params={"strategy_id": "strategy-1", "side": "long"},
+                )
+                assert activation_resp.status_code == 200
+                activation = activation_resp.json()
+                assert activation["active"] is True
+                assert activation["weight"] == 0.75
+                assert activation["strategy_id"] == "strategy-1"
+
+                audit_resp = await client.get("/worlds/persist/audit")
+                assert audit_resp.status_code == 200
+                audit_events = audit_resp.json()
+                assert any(event["event"] == "activation_updated" for event in audit_events)
+
+                bindings_resp = await client.get("/worlds/persist/bindings")
+                assert bindings_resp.status_code == 200
+                assert bindings_resp.json() == {"strategies": ["strategy-1"]}
+
+                decisions = await app_restart.state.world_service.store.get_decisions("persist")
+                assert decisions == ["strategy-1"]

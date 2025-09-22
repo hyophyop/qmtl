@@ -70,8 +70,14 @@ async def test_persistent_storage_persists_state(tmp_path, fake_redis):
         assert world["name"] == "Primary"
 
         default_policy = await storage2.get_default_policy(world_id)
-        assert isinstance(default_policy, dict)
-        assert json.loads(json.dumps(default_policy))["thresholds"].keys() == {"metric"}
+        assert default_policy is not None
+        if hasattr(default_policy, "model_dump"):
+            policy_payload = default_policy.model_dump()
+        elif hasattr(default_policy, "dict"):
+            policy_payload = default_policy.dict()
+        else:
+            policy_payload = json.loads(json.dumps(default_policy))
+        assert policy_payload["thresholds"].keys() == {"metric"}
 
         decisions = await storage2.get_decisions(world_id)
         assert decisions == ["strategy-1"]

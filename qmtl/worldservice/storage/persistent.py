@@ -13,6 +13,7 @@ import aiosqlite
 import asyncpg
 
 from qmtl.common.hashutils import hash_bytes
+from qmtl.worldservice.policy_engine import Policy
 
 from .constants import DEFAULT_EDGE_OVERRIDES
 from .models import WorldActivation
@@ -366,7 +367,7 @@ class PersistentStorage:
         if not row:
             return None
         payload = json.loads(row[0])
-        return payload
+        return Policy.model_validate(payload)
 
     async def set_default_policy(self, world_id: str, version: int) -> None:
         await self._driver.execute(
