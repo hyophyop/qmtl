@@ -43,3 +43,7 @@ def test_runner_gates_orders_by_activation():
 
     assert producer.messages == [("orders", {"side": "SELL", "quantity": 1, "timestamp": 0})]
 
+    Runner.set_activation_manager(None)
+    Runner.set_trade_order_kafka_topic(None)
+    Runner.set_kafka_producer(None)
+
