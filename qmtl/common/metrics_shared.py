@@ -6,7 +6,11 @@ This module centralizes creation and observation of common metrics to avoid
 duplicate registration when both subsystems are imported in the same process.
 """
 
-from prometheus_client import Counter, Gauge, REGISTRY as global_registry
+from qmtl.common.metrics_factory import (
+    get_or_create_counter,
+    get_or_create_gauge,
+    reset_metrics,
+)
 
 __all__ = [
     "get_nodecache_resident_bytes",
@@ -26,19 +30,13 @@ def get_nodecache_resident_bytes():
     Ensures a consistent instance and attaches an internal ``_vals`` store
     used by tests in both SDK and DAG Manager modules.
     """
-    if "nodecache_resident_bytes" in global_registry._names_to_collectors:  # type: ignore[attr-defined]
-        g = global_registry._names_to_collectors["nodecache_resident_bytes"]  # type: ignore[index]
-    else:
-        g = Gauge(
-            "nodecache_resident_bytes",
-            "Resident bytes held in node caches",
-            ["node_id", "scope"],
-            registry=global_registry,
-        )
-    # Attach test-visible storage if not present
-    if not hasattr(g, "_vals"):
-        g._vals = {}  # type: ignore[attr-defined]
-    return g
+    return get_or_create_gauge(
+        "nodecache_resident_bytes",
+        "Resident bytes held in node caches",
+        ["node_id", "scope"],
+        test_value_attr="_vals",
+        test_value_factory=dict,
+    )
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
@@ -56,9 +54,7 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
 
 
 def clear_nodecache_resident_bytes() -> None:
-    g = get_nodecache_resident_bytes()
-    g.clear()
-    g._vals = {}  # type: ignore[attr-defined]
+    reset_metrics(["nodecache_resident_bytes"])
 
 
 def get_cross_context_cache_hit_counter():
@@ -71,31 +67,13 @@ def get_cross_context_cache_hit_counter():
         "as_of",
         "partition",
     ]
-    if "cross_context_cache_hit_total" in global_registry._names_to_collectors:  # type: ignore[attr-defined]
-        counter = global_registry._names_to_collectors["cross_context_cache_hit_total"]  # type: ignore[index]
-        try:
-            labelnames = list(counter._labelnames)  # type: ignore[attr-defined]
-        except Exception:
-            labelnames = expected_labels
-        if labelnames != expected_labels:
-            global_registry.unregister(counter)
-            counter = Counter(
-                "cross_context_cache_hit_total",
-                "Number of cache hits observed with mismatched context",
-                expected_labels,
-                registry=global_registry,
-            )
-    else:
-        counter = Counter(
-            "cross_context_cache_hit_total",
-            "Number of cache hits observed with mismatched context",
-            expected_labels,
-            registry=global_registry,
-        )
-
-    if not hasattr(counter, "_vals"):
-        counter._vals = {}  # type: ignore[attr-defined]
-    return counter
+    return get_or_create_counter(
+        "cross_context_cache_hit_total",
+        "Number of cache hits observed with mismatched context",
+        expected_labels,
+        test_value_attr="_vals",
+        test_value_factory=dict,
+    )
 
 
 def _normalise(value: str | None) -> str:
@@ -127,6 +105,4 @@ def observe_cross_context_cache_hit(
 
 
 def clear_cross_context_cache_hits() -> None:
-    counter = get_cross_context_cache_hit_counter()
-    counter.clear()
-    counter._vals = {}  # type: ignore[attr-defined]
+    reset_metrics(["cross_context_cache_hit_total"])

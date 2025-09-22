@@ -3,289 +3,282 @@ from __future__ import annotations
 """Prometheus metrics for the SDK cache layer."""
 
 import time
+from collections.abc import Sequence
+
 from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
     generate_latest,
     start_http_server,
     REGISTRY as global_registry,
 )
+from qmtl.common.metrics_factory import (
+    get_or_create_counter,
+    get_or_create_gauge,
+    get_or_create_histogram,
+    reset_metrics as reset_registered_metrics,
+)
 from qmtl.common.metrics_shared import (
-    get_nodecache_resident_bytes,
-    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
-    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
     get_cross_context_cache_hit_counter,
+    get_nodecache_resident_bytes,
     observe_cross_context_cache_hit as _observe_cross_context_cache_hit,
+    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
     clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
+    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
 )
 
 _WORLD_ID = "default"
+_REGISTERED_METRICS: set[str] = set()
+
+
+def _counter(
+    name: str,
+    documentation: str,
+    labelnames: Sequence[str] | None = None,
+    **kwargs,
+):
+    metric = get_or_create_counter(name, documentation, labelnames, **kwargs)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
+
+
+def _gauge(
+    name: str,
+    documentation: str,
+    labelnames: Sequence[str] | None = None,
+    **kwargs,
+):
+    metric = get_or_create_gauge(name, documentation, labelnames, **kwargs)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
+
+
+def _histogram(
+    name: str,
+    documentation: str,
+    labelnames: Sequence[str] | None = None,
+    **kwargs,
+):
+    metric = get_or_create_histogram(name, documentation, labelnames, **kwargs)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
 
 
 def set_world_id(world_id: str) -> None:
     global _WORLD_ID
     _WORLD_ID = str(world_id)
 
-# Guard against re-registration when tests reload this module
-if "cache_read_total" in global_registry._names_to_collectors:
-    cache_read_total = global_registry._names_to_collectors["cache_read_total"]
-else:
-    cache_read_total = Counter(
-        "cache_read_total",
-        "Total number of cache reads grouped by upstream and interval",
-        ["upstream_id", "interval"],
-        registry=global_registry,
-    )
-
-if "cache_last_read_timestamp" in global_registry._names_to_collectors:
-    cache_last_read_timestamp = global_registry._names_to_collectors["cache_last_read_timestamp"]
-else:
-    cache_last_read_timestamp = Gauge(
-        "cache_last_read_timestamp",
-        "Unix timestamp of the most recent cache read",
-        ["upstream_id", "interval"],
-        registry=global_registry,
-    )
-
-# Cross-context cache guard (SLO: 0)
-if "cross_context_cache_hit_total" in global_registry._names_to_collectors:
-    cross_context_cache_hit_total = global_registry._names_to_collectors[
-        "cross_context_cache_hit_total"
-    ]
-else:
-    cross_context_cache_hit_total = Counter(
-        "cross_context_cache_hit_total",
-        "Number of cache hits where compute context mismatched",
-        ["node_id", "world_id", "execution_domain"],
-        registry=global_registry,
-    )
-
-# Expose recorded values for tests
-cache_read_total._vals = {}  # type: ignore[attr-defined]
-cache_last_read_timestamp._vals = {}  # type: ignore[attr-defined]
-cross_context_cache_hit_total._vals = {}  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
-# Backfill metrics
-if "backfill_last_timestamp" in global_registry._names_to_collectors:
-    backfill_last_timestamp = global_registry._names_to_collectors[
-        "backfill_last_timestamp"
-    ]
-else:
-    backfill_last_timestamp = Gauge(
-        "backfill_last_timestamp",
-        "Latest timestamp successfully backfilled",
-        ["node_id", "interval"],
-        registry=global_registry,
-    )
-
-if "backfill_jobs_in_progress" in global_registry._names_to_collectors:
-    backfill_jobs_in_progress = global_registry._names_to_collectors[
-        "backfill_jobs_in_progress"
-    ]
-else:
-    backfill_jobs_in_progress = Gauge(
-        "backfill_jobs_in_progress",
-        "Number of active backfill jobs",
-        registry=global_registry,
-    )
-
-if "backfill_failure_total" in global_registry._names_to_collectors:
-    backfill_failure_total = global_registry._names_to_collectors[
-        "backfill_failure_total"
-    ]
-else:
-    backfill_failure_total = Counter(
-        "backfill_failure_total",
-        "Total number of backfill jobs that ultimately failed",
-        ["node_id", "interval"],
-        registry=global_registry,
-    )
-
-if "backfill_retry_total" in global_registry._names_to_collectors:
-    backfill_retry_total = global_registry._names_to_collectors[
-        "backfill_retry_total"
-    ]
-else:
-    backfill_retry_total = Counter(
-        "backfill_retry_total",
-        "Total number of backfill retry attempts",
-        ["node_id", "interval"],
-        registry=global_registry,
-    )
-
-backfill_last_timestamp._vals = {}  # type: ignore[attr-defined]
-backfill_jobs_in_progress._val = 0  # type: ignore[attr-defined]
-backfill_failure_total._vals = {}  # type: ignore[attr-defined]
-backfill_retry_total._vals = {}  # type: ignore[attr-defined]
-
+# Cache metrics
 # ---------------------------------------------------------------------------
-# Shared metric instance (avoids duplicate registration when importing
-# qmtl.dagmanager.metrics in the same process)
-nodecache_resident_bytes = get_nodecache_resident_bytes()
+cache_read_total = _counter(
+    "cache_read_total",
+    "Total number of cache reads grouped by upstream and interval",
+    ["upstream_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-# ---------------------------------------------------------------------------
+cache_last_read_timestamp = _gauge(
+    "cache_last_read_timestamp",
+    "Unix timestamp of the most recent cache read",
+    ["upstream_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
 # ---------------------------------------------------------------------------
-if "node_processed_total" in global_registry._names_to_collectors:
-    node_processed_total = global_registry._names_to_collectors[
-        "node_processed_total"
-    ]
-else:
-    node_processed_total = Counter(
-        "node_processed_total",
-        "Total number of node compute executions",
-        ["node_id"],
-        registry=global_registry,
-    )
+# Backfill metrics
+# ---------------------------------------------------------------------------
+backfill_last_timestamp = _gauge(
+    "backfill_last_timestamp",
+    "Latest timestamp successfully backfilled",
+    ["node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-if "node_process_duration_ms" in global_registry._names_to_collectors:
-    node_process_duration_ms = global_registry._names_to_collectors[
-        "node_process_duration_ms"
-    ]
-else:
-    node_process_duration_ms = Histogram(
-        "node_process_duration_ms",
-        "Duration of node compute execution in milliseconds",
-        ["node_id"],
-        registry=global_registry,
-    )
+backfill_jobs_in_progress = _gauge(
+    "backfill_jobs_in_progress",
+    "Number of active backfill jobs",
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
+)
 
-if "node_process_failure_total" in global_registry._names_to_collectors:
-    node_process_failure_total = global_registry._names_to_collectors[
-        "node_process_failure_total"
-    ]
-else:
-    node_process_failure_total = Counter(
-        "node_process_failure_total",
-        "Total number of node compute failures",
-        ["node_id"],
-        registry=global_registry,
-    )
+backfill_failure_total = _counter(
+    "backfill_failure_total",
+    "Total number of backfill jobs that ultimately failed",
+    ["node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-node_processed_total._vals = {}  # type: ignore[attr-defined]
-node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
-node_process_failure_total._vals = {}  # type: ignore[attr-defined]
+backfill_retry_total = _counter(
+    "backfill_retry_total",
+    "Total number of backfill retry attempts",
+    ["node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+# Shared node cache metrics
+nodecache_resident_bytes = get_nodecache_resident_bytes()
+
+# ---------------------------------------------------------------------------
+# Node execution metrics
+# ---------------------------------------------------------------------------
+node_processed_total = _counter(
+    "node_processed_total",
+    "Total number of node compute executions",
+    ["node_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+node_process_duration_ms = _histogram(
+    "node_process_duration_ms",
+    "Duration of node compute execution in milliseconds",
+    ["node_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+node_process_failure_total = _counter(
+    "node_process_failure_total",
+    "Total number of node compute failures",
+    ["node_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
 # ---------------------------------------------------------------------------
 # Order lifecycle metrics (SDK-side)
-if "orders_published_total" in global_registry._names_to_collectors:
-    orders_published_total = global_registry._names_to_collectors[
-        "orders_published_total"
-    ]
-else:
-    orders_published_total = Counter(
-        "orders_published_total",
-        "Total orders published by SDK",
-        ["world_id"],
-        registry=global_registry,
-    )
+# ---------------------------------------------------------------------------
+orders_published_total = _counter(
+    "orders_published_total",
+    "Total orders published by SDK",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-if "fills_ingested_total" in global_registry._names_to_collectors:
-    fills_ingested_total = global_registry._names_to_collectors[
-        "fills_ingested_total"
-    ]
-else:
-    fills_ingested_total = Counter(
-        "fills_ingested_total",
-        "Total fills ingested by SDK",
-        ["world_id"],
-        registry=global_registry,
-    )
+fills_ingested_total = _counter(
+    "fills_ingested_total",
+    "Total fills ingested by SDK",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-if "orders_rejected_total" in global_registry._names_to_collectors:
-    orders_rejected_total = global_registry._names_to_collectors[
-        "orders_rejected_total"
-    ]
-else:
-    orders_rejected_total = Counter(
-        "orders_rejected_total",
-        "Total pre-trade rejections at SDK",
-        ["world_id", "reason"],
-        registry=global_registry,
-    )
+orders_rejected_total = _counter(
+    "orders_rejected_total",
+    "Total pre-trade rejections at SDK",
+    ["world_id", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 
-orders_published_total._vals = {}  # type: ignore[attr-defined]
-fills_ingested_total._vals = {}  # type: ignore[attr-defined]
-orders_rejected_total._vals = {}  # type: ignore[attr-defined]
+# ---------------------------------------------------------------------------
+# Alpha performance metrics
+# ---------------------------------------------------------------------------
+alpha_sharpe = _gauge(
+    "alpha_sharpe",
+    "Alpha strategy Sharpe ratio",
+    reset=lambda g: g.set(0.0),
+    test_value_attr="_val",
+    test_value_factory=lambda: 0.0,
+)
+
+alpha_max_drawdown = _gauge(
+    "alpha_max_drawdown",
+    "Alpha strategy maximum drawdown",
+    reset=lambda g: g.set(0.0),
+    test_value_attr="_val",
+    test_value_factory=lambda: 0.0,
+)
+
+# ---------------------------------------------------------------------------
+# Pre-trade rejection metrics (SDK-side)
+# ---------------------------------------------------------------------------
+pretrade_attempts_total = _counter(
+    "pretrade_attempts_total",
+    "Total number of pre-trade validation attempts",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+pretrade_rejections_total = _counter(
+    "pretrade_rejections_total",
+    "Total number of pre-trade rejections grouped by reason",
+    ["world_id", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+pretrade_rejection_ratio = _gauge(
+    "pretrade_rejection_ratio",
+    "Ratio of rejected to attempted pre-trade validations",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+# ---------------------------------------------------------------------------
+# Snapshot and warmup metrics
+# ---------------------------------------------------------------------------
+snapshot_write_duration_ms = _histogram(
+    "snapshot_write_duration_ms",
+    "Duration of snapshot writes in milliseconds",
+)
+
+warmup_ready_nodes_total = _counter(
+    "warmup_ready_nodes_total",
+    "Total number of nodes that completed warmup",
+    ["node_id"],
+)
+
+warmup_ready_duration_ms = _histogram(
+    "warmup_ready_duration_ms",
+    "Duration from node creation to ready state in milliseconds",
+    ["node_id"],
+)
+
+snapshot_bytes_total = _counter(
+    "snapshot_bytes_total",
+    "Total bytes written to snapshots",
+)
+
+snapshot_hydration_success_total = _counter(
+    "snapshot_hydration_success_total",
+    "Total number of successful snapshot hydrations",
+)
+
+snapshot_hydration_fallback_total = _counter(
+    "snapshot_hydration_fallback_total",
+    "Total number of hydration fallbacks due to snapshot mismatch",
+)
+
 
 def record_order_published() -> None:
     w = _WORLD_ID
     orders_published_total.labels(world_id=w).inc()
     orders_published_total._vals[w] = orders_published_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
 
+
 def record_fill_ingested() -> None:
     w = _WORLD_ID
     fills_ingested_total.labels(world_id=w).inc()
     fills_ingested_total._vals[w] = fills_ingested_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+
 
 def record_order_rejected(reason: str) -> None:
     w = _WORLD_ID
     orders_rejected_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
     orders_rejected_total._vals[key] = orders_rejected_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
-
-# ---------------------------------------------------------------------------
-# Alpha performance metrics
-if "alpha_sharpe" in global_registry._names_to_collectors:
-    alpha_sharpe = global_registry._names_to_collectors["alpha_sharpe"]
-else:
-    alpha_sharpe = Gauge(
-        "alpha_sharpe",
-        "Alpha strategy Sharpe ratio",
-        registry=global_registry,
-    )
-
-if "alpha_max_drawdown" in global_registry._names_to_collectors:
-    alpha_max_drawdown = global_registry._names_to_collectors["alpha_max_drawdown"]
-else:
-    alpha_max_drawdown = Gauge(
-        "alpha_max_drawdown",
-        "Alpha strategy maximum drawdown",
-        registry=global_registry,
-    )
-
-alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
-alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]
-
-# ---------------------------------------------------------------------------
-# Pre-trade rejection metrics (SDK-side)
-if "pretrade_attempts_total" in global_registry._names_to_collectors:
-    pretrade_attempts_total = global_registry._names_to_collectors["pretrade_attempts_total"]
-else:
-    pretrade_attempts_total = Counter(
-        "pretrade_attempts_total",
-        "Total number of pre-trade validation attempts",
-        ["world_id"],
-        registry=global_registry,
-    )
-
-if "pretrade_rejections_total" in global_registry._names_to_collectors:
-    pretrade_rejections_total = global_registry._names_to_collectors["pretrade_rejections_total"]
-else:
-    pretrade_rejections_total = Counter(
-        "pretrade_rejections_total",
-        "Total number of pre-trade rejections grouped by reason",
-        ["world_id", "reason"],
-        registry=global_registry,
-    )
-
-if "pretrade_rejection_ratio" in global_registry._names_to_collectors:
-    pretrade_rejection_ratio = global_registry._names_to_collectors["pretrade_rejection_ratio"]
-else:
-    pretrade_rejection_ratio = Gauge(
-        "pretrade_rejection_ratio",
-        "Ratio of rejected to attempted pre-trade validations",
-        ["world_id"],
-        registry=global_registry,
-    )
-
-# Expose values for tests
-pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
 
 
 def _update_pretrade_ratio() -> None:
@@ -326,19 +319,21 @@ def observe_cache_read(upstream_id: str, interval: int) -> None:
 
 
 def observe_cross_context_cache_hit(
-    node_id: str, world_id: str, execution_domain: str
+    node_id: str,
+    world_id: str,
+    execution_domain: str,
+    *,
+    as_of: str | None = None,
+    partition: str | None = None,
 ) -> None:
-    """Record a cross-context cache guard event (policy violation)."""
+    """Record a cache hit where the execution context mismatched."""
 
-    n = str(node_id)
-    w = str(world_id or "")
-    d = str(execution_domain or "")
-    cross_context_cache_hit_total.labels(
-        node_id=n, world_id=w, execution_domain=d
-    ).inc()
-    key = (n, w, d)
-    cross_context_cache_hit_total._vals[key] = (  # type: ignore[attr-defined]
-        cross_context_cache_hit_total._vals.get(key, 0) + 1
+    _observe_cross_context_cache_hit(
+        node_id,
+        world_id,
+        execution_domain,
+        as_of=as_of,
+        partition=partition,
     )
 
 
@@ -378,25 +373,6 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     _observe_nodecache_resident_bytes(node_id, resident)
 
 
-def observe_cross_context_cache_hit(
-    node_id: str,
-    world_id: str,
-    execution_domain: str,
-    *,
-    as_of: str | None = None,
-    partition: str | None = None,
-) -> None:
-    """Record a cache hit where the execution context mismatched."""
-
-    _observe_cross_context_cache_hit(
-        node_id,
-        world_id,
-        execution_domain,
-        as_of=as_of,
-        partition=partition,
-    )
-
-
 def observe_node_process(node_id: str, duration_ms: float) -> None:
     """Record execution duration and increment counter for ``node_id``."""
     n = str(node_id)
@@ -413,6 +389,12 @@ def observe_node_process_failure(node_id: str) -> None:
     node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
 
 
+def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
+    n = str(node_id)
+    warmup_ready_nodes_total.labels(node_id=n).inc()
+    warmup_ready_duration_ms.labels(node_id=n).observe(duration_ms)
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Expose metrics via an HTTP server."""
     start_http_server(port, registry=global_registry)
@@ -425,120 +407,6 @@ def collect_metrics() -> str:
 
 def reset_metrics() -> None:
     """Reset metric values for tests."""
-    cache_read_total.clear()
-    cache_read_total._vals = {}  # type: ignore[attr-defined]
-    cache_last_read_timestamp.clear()
-    cache_last_read_timestamp._vals = {}  # type: ignore[attr-defined]
-    cross_context_cache_hit_total.clear()
-    cross_context_cache_hit_total._vals = {}  # type: ignore[attr-defined]
-    backfill_last_timestamp.clear()
-    backfill_last_timestamp._vals = {}  # type: ignore[attr-defined]
-    backfill_jobs_in_progress.set(0)
-    backfill_jobs_in_progress._val = 0  # type: ignore[attr-defined]
-    backfill_failure_total.clear()
-    backfill_failure_total._vals = {}  # type: ignore[attr-defined]
-    backfill_retry_total.clear()
-    backfill_retry_total._vals = {}  # type: ignore[attr-defined]
+    reset_registered_metrics(_REGISTERED_METRICS)
     _clear_nodecache_resident_bytes()
     _clear_cross_context_cache_hits()
-    node_processed_total.clear()
-    node_processed_total._vals = {}  # type: ignore[attr-defined]
-    node_process_duration_ms.clear()
-    node_process_duration_ms._vals = {}  # type: ignore[attr-defined]
-    node_process_failure_total.clear()
-    node_process_failure_total._vals = {}  # type: ignore[attr-defined]
-    alpha_sharpe.set(0.0)
-    alpha_sharpe._val = 0.0  # type: ignore[attr-defined]
-    alpha_max_drawdown.set(0.0)
-    alpha_max_drawdown._val = 0.0  # type: ignore[attr-defined]
-    pretrade_attempts_total.clear()
-    pretrade_attempts_total._vals = {}  # type: ignore[attr-defined]
-    pretrade_rejections_total.clear()
-    pretrade_rejections_total._vals = {}  # type: ignore[attr-defined]
-    pretrade_rejection_ratio.clear()
-    pretrade_rejection_ratio._vals = {}  # type: ignore[attr-defined]
-    # Snapshot metrics reset
-    try:
-        snapshot_write_duration_ms.clear()  # type: ignore[attr-defined]
-        snapshot_bytes_total._value.set(0)  # type: ignore[attr-defined]
-        snapshot_hydration_success_total._value.set(0)  # type: ignore[attr-defined]
-        snapshot_hydration_fallback_total._value.set(0)  # type: ignore[attr-defined]
-    except Exception:
-        pass
-
-# ---------------------------------------------------------------------------
-# Snapshot metrics
-if "snapshot_write_duration_ms" in global_registry._names_to_collectors:
-    snapshot_write_duration_ms = global_registry._names_to_collectors[
-        "snapshot_write_duration_ms"
-    ]
-else:
-    snapshot_write_duration_ms = Histogram(
-        "snapshot_write_duration_ms",
-        "Duration of snapshot writes in milliseconds",
-        registry=global_registry,
-    )
-
-# ---------------------------------------------------------------------------
-# Warmup SLO metrics
-if "warmup_ready_nodes_total" in global_registry._names_to_collectors:
-    warmup_ready_nodes_total = global_registry._names_to_collectors[
-        "warmup_ready_nodes_total"
-    ]
-else:
-    warmup_ready_nodes_total = Counter(
-        "warmup_ready_nodes_total",
-        "Total number of nodes that completed warmup",
-        ["node_id"],
-        registry=global_registry,
-    )
-
-if "warmup_ready_duration_ms" in global_registry._names_to_collectors:
-    warmup_ready_duration_ms = global_registry._names_to_collectors[
-        "warmup_ready_duration_ms"
-    ]
-else:
-    warmup_ready_duration_ms = Histogram(
-        "warmup_ready_duration_ms",
-        "Duration from node creation to ready state in milliseconds",
-        ["node_id"],
-        registry=global_registry,
-    )
-
-def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
-    n = str(node_id)
-    warmup_ready_nodes_total.labels(node_id=n).inc()
-    warmup_ready_duration_ms.labels(node_id=n).observe(duration_ms)
-
-if "snapshot_bytes_total" in global_registry._names_to_collectors:
-    snapshot_bytes_total = global_registry._names_to_collectors[
-        "snapshot_bytes_total"
-    ]
-else:
-    snapshot_bytes_total = Counter(
-        "snapshot_bytes_total",
-        "Total bytes written to snapshots",
-        registry=global_registry,
-    )
-
-if "snapshot_hydration_success_total" in global_registry._names_to_collectors:
-    snapshot_hydration_success_total = global_registry._names_to_collectors[
-        "snapshot_hydration_success_total"
-    ]
-else:
-    snapshot_hydration_success_total = Counter(
-        "snapshot_hydration_success_total",
-        "Total number of successful snapshot hydrations",
-        registry=global_registry,
-    )
-
-if "snapshot_hydration_fallback_total" in global_registry._names_to_collectors:
-    snapshot_hydration_fallback_total = global_registry._names_to_collectors[
-        "snapshot_hydration_fallback_total"
-    ]
-else:
-    snapshot_hydration_fallback_total = Counter(
-        "snapshot_hydration_fallback_total",
-        "Total number of hydration fallbacks due to snapshot mismatch",
-        registry=global_registry,
-    )
