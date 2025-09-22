@@ -59,11 +59,12 @@ class StrategyManager:
         payload: StrategySubmit,
         *,
         skip_downgrade_metric: bool = False,
+        strategy_context: StrategyComputeContext | None = None,
     ) -> tuple[str, bool]:
         with tracer.start_as_current_span("gateway.submit"):
             decoded = self._decode_dag(payload)
 
-            strategy_ctx = self._build_compute_context(payload)
+            strategy_ctx = strategy_context or await self._build_compute_context(payload)
             compute_ctx = strategy_ctx.context
             compute_ctx_payload = strategy_ctx.commit_log_payload()
             context_mapping = strategy_ctx.redis_mapping()
@@ -269,9 +270,9 @@ class StrategyManager:
             return text or None
         return None
 
-    def _build_compute_context(
+    async def _build_compute_context(
         self, payload: StrategySubmit
     ) -> StrategyComputeContext:
         if self.context_service is None:
             self.context_service = ComputeContextService()
-        return self.context_service.build(payload)
+        return await self.context_service.build(payload)

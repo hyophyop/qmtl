@@ -56,11 +56,11 @@ class SubmissionPipeline:
         self._diff_executor = diff_executor or DiffExecutor(dagmanager)
         self._queue_map_resolver = queue_map_resolver or QueueMapResolver(dagmanager)
 
-    def prepare(self, payload: "StrategySubmit") -> PreparedSubmission:
+    async def prepare(self, payload: "StrategySubmit") -> PreparedSubmission:
         loaded = self._dag_loader.load(payload.dag_json)
         dag = loaded.dag
         self._node_validator.validate(dag, payload.node_ids_crc32)
-        strategy_context = self._context_service.build(payload)
+        strategy_context = await self._context_service.build(payload)
         return PreparedSubmission(
             dag=dag,
             strategy_context=strategy_context,

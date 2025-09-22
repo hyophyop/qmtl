@@ -16,6 +16,7 @@ from qmtl.gateway.strategy_submission import (
     StrategySubmissionConfig,
     StrategySubmissionHelper,
 )
+from qmtl.gateway.submission.context_service import StrategyComputeContext
 
 from tests.gateway.helpers import build_strategy_payload
 
@@ -24,12 +25,18 @@ class DummyManager:
     def __init__(self) -> None:
         self.calls: list[StrategySubmit] = []
         self.skip_flags: list[bool] = []
+        self.contexts: list[object] = []
 
     async def submit(
-        self, payload: StrategySubmit, *, skip_downgrade_metric: bool = False
+        self,
+        payload: StrategySubmit,
+        *,
+        skip_downgrade_metric: bool = False,
+        strategy_context=None,
     ) -> tuple[str, bool]:
         self.calls.append(payload)
         self.skip_flags.append(skip_downgrade_metric)
+        self.contexts.append(strategy_context)
         return "strategy-abc", False
 
 
@@ -158,6 +165,7 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
     assert database.bindings == [("world-1", "strategy-abc")]
     assert dagmanager.diff_calls, "diff should be invoked for sentinel lookup"
     strategy_id, world_id, domain, as_of, partition, dataset_fingerprint = dagmanager.diff_calls[0]
+    assert manager.contexts and isinstance(manager.contexts[0], StrategyComputeContext)
     assert strategy_id == "strategy-abc"
     assert domain == "backtest"
     assert as_of == "2025-01-01T00:00:00Z"

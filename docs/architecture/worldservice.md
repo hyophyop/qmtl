@@ -43,6 +43,13 @@ WorldAuditLog (DB)
 - id, world_id, actor, event (create/update/apply/evaluate/activate/override)
 - request, result, created_at, correlation_id
 
+Implementation note: the reference service now ships with a persistent backend
+(`qmtl.worldservice.storage.PersistentStorage`) that stores these relational
+surfaces in SQL (SQLite or Postgres) and activation state in Redis. Production
+deployments wire this backend by default, while unit tests can continue using
+the in-memory façade for lightweight fixtures. All APIs described below operate
+against this durable adapter.
+
 ### 1‑A. WVG Data Model (normative)
 
 WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes (Global Strategy Graph=GSG):

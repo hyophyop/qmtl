@@ -19,6 +19,7 @@ from .metrics import (
     sentinel_gap_count,
     diff_requests_total,
     diff_failures_total,
+    cross_context_cache_violation_total,
 )
 from .models import (
     BufferInstruction,
@@ -55,6 +56,53 @@ class _CachedBinding:
     topic: str
     code_hash: str
     schema_hash: str
+    context: ComputeContext
+
+
+class CrossContextTopicReuseError(RuntimeError):
+    """Raised when a node attempts to reuse a topic across compute domains."""
+
+    def __init__(
+        self,
+        node_id: str,
+        *,
+        attempted_context: ComputeContext,
+        existing_context: ComputeContext | None,
+    ) -> None:
+        self.node_id = node_id
+        self.attempted_context = attempted_context
+        self.existing_context = existing_context
+        message = self._build_message(node_id, attempted_context, existing_context)
+        super().__init__(message)
+
+    @staticmethod
+    def _format_context(context: ComputeContext | None) -> str:
+        if context is None:
+            return "<unknown>"
+        world = context.world_id or "<unset>"
+        domain = context.execution_domain or "<unset>"
+        as_of = context.as_of or "<unset>"
+        partition = context.partition or "<unset>"
+        dataset = context.dataset_fingerprint or "<unset>"
+        return (
+            f"world={world}, domain={domain}, as_of={as_of}, "
+            f"partition={partition}, dataset={dataset}"
+        )
+
+    @classmethod
+    def _build_message(
+        cls,
+        node_id: str,
+        attempted: ComputeContext,
+        existing: ComputeContext | None,
+    ) -> str:
+        attempted_str = cls._format_context(attempted)
+        existing_str = cls._format_context(existing)
+        return (
+            "Cross-context topic reuse detected for node "
+            f"'{node_id}'. Attempted context: {attempted_str}. "
+            f"Existing context: {existing_str}."
+        )
 
 
 
@@ -228,6 +276,18 @@ class DiffService:
             as_of=context.as_of or None,
             partition=context.partition or None,
         )
+        world_label = context.world_id or "__unset__"
+        domain_label = context.execution_domain or "__unset__"
+        counter = cross_context_cache_violation_total.labels(
+            node_id=str(node.node_id),
+            world_id=str(world_label),
+            execution_domain=str(domain_label),
+        )
+        counter.inc()
+        key = (str(node.node_id), str(world_label), str(domain_label))
+        cross_context_cache_violation_total._vals[key] = (  # type: ignore[attr-defined]
+            cross_context_cache_violation_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+        )
 
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
@@ -304,31 +364,22 @@ class DiffService:
                     topic=topic,
                     code_hash=rec.code_hash,
                     schema_hash=rec.schema_hash,
+                    context=compute_context,
                 )
                 if rec.schema_hash != n.schema_hash:
                     buffering_nodes.append(n)
                 continue
             if rec and rec.code_hash == n.code_hash and node_compute_key not in bindings:
-                # Reuse existing topic across compute contexts; don't upsert again.
+                existing_binding = next(iter(bindings.values()), None)
+                existing_context = (
+                    existing_binding.context if existing_binding else None
+                )
                 self._record_cross_context_hit(n, compute_context)
-                # Build namespaced topic directly without creating it again.
-                topic = topic_name(
-                    _asset_from_tags(n.tags),
-                    n.node_type,
-                    n.code_hash,
-                    version,
-                    namespace=namespace,
+                raise CrossContextTopicReuseError(
+                    n.node_id,
+                    attempted_context=compute_context,
+                    existing_context=existing_context,
                 )
-                queue_map[key] = topic
-                if rec.schema_hash != n.schema_hash:
-                    buffering_nodes.append(n)
-                bindings[node_compute_key] = _CachedBinding(
-                    topic=topic,
-                    code_hash=rec.code_hash,
-                    schema_hash=rec.schema_hash,
-                )
-                new_nodes.append(n)
-                continue
             try:
                 topic = self.queue_manager.upsert(
                     _asset_from_tags(n.tags),
@@ -348,6 +399,7 @@ class DiffService:
                 topic=topic,
                 code_hash=n.code_hash,
                 schema_hash=n.schema_hash,
+                context=compute_context,
             )
         return queue_map, new_nodes, buffering_nodes
 

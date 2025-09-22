@@ -86,7 +86,7 @@ async def test_publish_submission_noop_without_writer(
 ) -> None:
     payload = _make_payload()
     decoded = strategy_manager._decode_dag(payload)
-    strategy_ctx = strategy_manager._build_compute_context(payload)
+    strategy_ctx = await strategy_manager._build_compute_context(payload)
     compute_ctx_payload = strategy_ctx.commit_log_payload()
     worlds = strategy_ctx.worlds_list()
 
@@ -118,7 +118,7 @@ async def test_publish_submission_failure_rolls_back(
     )
 
     strategy_manager.commit_log_writer = _ExplodingWriter()
-    strategy_ctx = strategy_manager._build_compute_context(payload)
+    strategy_ctx = await strategy_manager._build_compute_context(payload)
     compute_ctx_payload = strategy_ctx.commit_log_payload()
     worlds = strategy_ctx.worlds_list()
 

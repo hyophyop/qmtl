@@ -10,6 +10,7 @@ from .constants import (
     WORLD_NODE_STATUSES,
 )
 from .facade import Storage
+from .persistent import PersistentStorage
 from .models import ValidationCacheEntry, WorldActivation, WorldAuditLog, WorldPolicies
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "EXECUTION_DOMAINS",
     "WORLD_NODE_STATUSES",
     "Storage",
+    "PersistentStorage",
     "ValidationCacheEntry",
     "WorldActivation",
     "WorldAuditLog",

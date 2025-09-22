@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from qmtl.common.compute_context import ComputeContext
@@ -32,7 +30,7 @@ class _Validator:
 
 
 class _ContextService:
-    def build(self, payload):
+    async def build(self, payload):
         context = ComputeContext(world_id="w1", execution_domain="live")
         return StrategyComputeContext(context=context, worlds=("w1",))
 
@@ -77,7 +75,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
         queue_map_resolver=resolver,
     )
 
-    prepared = pipeline.prepare(_Payload())
+    prepared = await pipeline.prepare(_Payload())
     assert isinstance(prepared, PreparedSubmission)
     assert prepared.dag == {"nodes": ["n"]}
     assert prepared.compute_context.execution_domain == "live"

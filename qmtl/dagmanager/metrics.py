@@ -72,6 +72,14 @@ diff_failures_total = Counter(
 
 cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
+cross_context_cache_violation_total = Counter(
+    "cross_context_cache_violation_total",
+    "Total number of cross-context cache violations detected during diff",
+    ["node_id", "world_id", "execution_domain"],
+    registry=global_registry,
+)
+cross_context_cache_violation_total._vals = {}  # type: ignore[attr-defined]
+
 sentinel_gap_count = Gauge(
     "sentinel_gap_count",
     "Number of missing sentinel events detected",
@@ -241,6 +249,8 @@ def reset_metrics() -> None:
     queue_lag_threshold_seconds._vals = {}  # type: ignore[attr-defined]
     if hasattr(cross_context_cache_hit_total, "clear"):
         cross_context_cache_hit_total.clear()
+    cross_context_cache_violation_total.clear()
+    cross_context_cache_violation_total._vals = {}  # type: ignore[attr-defined]
     if hasattr(dagmanager_active_version_weight, "clear"):
         dagmanager_active_version_weight.clear()
     dagmanager_active_version_weight._vals = {}  # type: ignore[attr-defined]

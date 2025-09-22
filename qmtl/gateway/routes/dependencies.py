@@ -8,7 +8,7 @@ from qmtl.gateway.dagmanager_client import DagManagerClient
 from qmtl.gateway.degradation import DegradationManager
 from qmtl.gateway.strategy_manager import StrategyManager
 from qmtl.gateway.strategy_submission import StrategySubmissionHelper
-from qmtl.gateway.submission import SubmissionPipeline
+from qmtl.gateway.submission import ComputeContextService, SubmissionPipeline
 from qmtl.gateway.ws import WebSocketHub
 from qmtl.gateway.world_client import WorldServiceClient
 
@@ -39,7 +39,14 @@ class GatewayDependencyProvider:
         self._world_client = world_client
         self._enforce_live_guard = enforce_live_guard
         self._fill_producer = fill_producer
-        self._pipeline = submission_pipeline or SubmissionPipeline(dagmanager)
+        if submission_pipeline is not None:
+            self._pipeline = submission_pipeline
+        else:
+            context_service = ComputeContextService(world_client)
+            self._pipeline = SubmissionPipeline(
+                dagmanager,
+                context_service=context_service,
+            )
         self._submission_helper = StrategySubmissionHelper(
             manager,
             dagmanager,
