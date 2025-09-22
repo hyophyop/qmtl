@@ -57,9 +57,7 @@ def test_run_offline_pipeline(monkeypatch):
     monkeypatch.setattr(Runner, "_kafka_available", True)
     calls, results = [], []
 
-    strat = Runner.run(
-        _make_strategy(calls, results), world_id="w", gateway_url="http://gw", offline=True
-    )
+    strat = Runner.offline(_make_strategy(calls, results))
     src = strat.src
     src.cache.backfill_bulk(src.node_id, 60, [(60, {"v": 1}), (120, {"v": 2})])
     Runner.run_pipeline(strat)

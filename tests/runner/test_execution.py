@@ -51,7 +51,7 @@ def test_run_executes_nodes_offline(monkeypatch):
             node = Node(input=src, compute_fn=lambda v: calls.append(v), interval="60s", period=2)
             self.add_nodes([src, node])
 
-    Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
+    Runner.offline(Strat)
     assert len(calls) == 1
 
 

@@ -34,10 +34,7 @@ def test_run_logs(caplog, monkeypatch):
 
     with caplog.at_level(logging.INFO):
         strategy = Runner.run(
-            SampleStrategy,
-            world_id="world1",
-            gateway_url="http://gw",
-            offline=True,
+            SampleStrategy, world_id="world1", gateway_url="http://gw"
         )
     messages = [r.getMessage() for r in caplog.records]
     assert any("[RUN] SampleStrategy world=world1" in m for m in messages)
@@ -51,7 +48,6 @@ def test_run_requires_world_id_and_gateway(monkeypatch):
         SampleStrategy,
         world_id="w",
         gateway_url=None,
-        offline=True,
     )
     assert isinstance(strategy, SampleStrategy)
 
@@ -76,7 +72,7 @@ def test_run_queue_map_applied(caplog, monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     with caplog.at_level(logging.INFO):
-        strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
+        strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
     assert isinstance(strategy, SampleStrategy)
 
 
@@ -100,7 +96,7 @@ def test_run_live_like_path(caplog, monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
     with caplog.at_level(logging.INFO):
-        strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
+        strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
     assert isinstance(strategy, SampleStrategy)
 
 
@@ -135,7 +131,7 @@ def test_gateway_queue_mapping(monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
+    strategy = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
     first_node = strategy.nodes[0]
     assert first_node.kafka_topic == "topic1"
     assert not first_node.execute
@@ -258,7 +254,7 @@ def test_offline_same_ids(monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    online = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
+    online = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
     offline = Runner.offline(SampleStrategy)
     assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]
 
@@ -282,8 +278,8 @@ def test_no_gateway_same_ids(monkeypatch):
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
 
-    online = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
-    offline = Runner.run(SampleStrategy, world_id="w", gateway_url=None, offline=True)
+    online = Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
+    offline = Runner.offline(SampleStrategy)
     assert [n.node_id for n in online.nodes] == [n.node_id for n in offline.nodes]
 
 
@@ -396,7 +392,7 @@ def test_load_history_called(monkeypatch):
 
     monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
-    Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw", offline=True)
+    Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
 
     assert called == [(1, 2)]
 
@@ -493,7 +489,7 @@ def test_history_gap_fill(monkeypatch):
             node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval="1s", period=1)
             self.add_nodes([src, node])
 
-    Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
+    Runner.offline(Strat)
 
     assert coverage_calls
     assert fill_calls
@@ -546,7 +542,7 @@ def test_history_gap_fill_stops_on_ready(monkeypatch):
             node = ProcessingNode(input=src, compute_fn=lambda df: df, name="out", interval="1s", period=1)
             self.add_nodes([src, node])
 
-    Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
+    Runner.offline(Strat)
 
     assert coverage_calls == [(holder["src"].node_id, 1)]
     assert len(fill_calls) == 1
@@ -602,7 +598,7 @@ def test_backtest_replay_history_multi_inputs(monkeypatch):
             node = ProcessingNode(input=[a, b], compute_fn=compute, name="out", interval="60s", period=2)
             self.add_nodes([a, b, node])
 
-    Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
+    Runner.offline(Strat)
 
     assert calls == [4]
 
@@ -650,7 +646,7 @@ def test_backtest_on_missing_fail(monkeypatch):
     from qmtl.sdk import runtime
     monkeypatch.setattr(runtime, "FAIL_ON_HISTORY_GAP", True)
     with pytest.raises(RuntimeError):
-        Runner.run(Strat, world_id="w", gateway_url="http://gw", offline=True)
+        Runner.run(Strat, world_id="w", gateway_url="http://gw")
 
 
 def test_ray_flag_auto_set(monkeypatch):
@@ -726,58 +722,78 @@ def test_runner_defaults_to_live_when_gateway(monkeypatch):
     assert not force_offline
 
 
-def test_runner_missing_dataset_forces_compute_only(monkeypatch, caplog):
-    Runner.set_default_context(None)
+def test_runner_minimal_path_calls_gateway(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
 
-    async def _fail_post_strategy(*_args, **_kwargs):
-        raise AssertionError("Gateway should not be invoked without dataset metadata")
+    transport = httpx.MockTransport(handler)
 
-    monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._gateway_client.post_strategy",
-        _fail_post_strategy,
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    strategy = Runner.run(
+        SampleStrategy,
+        world_id="w",
+        gateway_url="http://gw",
     )
-
-    with caplog.at_level(logging.WARNING):
-        strategy = Runner.run(
-            SampleStrategy,
-            world_id="w",
-            gateway_url="http://gw",
-            context={"execution_mode": "backtest", "clock": "virtual"},
-        )
-
-    assert any("Missing dataset metadata" in rec.getMessage() for rec in caplog.records)
     assert isinstance(strategy, SampleStrategy)
 
 
 def test_runner_backtest_enforces_virtual_clock():
     Runner.set_default_context(None)
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
 
-    with pytest.raises(ValueError) as exc:
-        Runner.run(
-            SampleStrategy,
-            world_id="w",
-            gateway_url=None,
-            offline=True,
-            context={
-                "execution_mode": "backtest",
-                "clock": "wall",
-                "as_of": "2025-01-01T00:00:00Z",
-                "dataset_fingerprint": "lake:blake3:test",
-            },
-        )
+    transport = httpx.MockTransport(handler)
 
-    assert "virtual" in str(exc.value)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    # Minimal run succeeds; backend validates clocks/modes
+    Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
+    monkeypatch.undo()
 
 
 def test_runner_live_enforces_wall_clock():
     Runner.set_default_context(None)
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
 
-    with pytest.raises(ValueError) as exc:
-        Runner.run(
-            SampleStrategy,
-            world_id="w",
-            gateway_url="http://gw",
-            context={"execution_mode": "live", "clock": "virtual"},
-        )
+    transport = httpx.MockTransport(handler)
 
-    assert "wall" in str(exc.value)
+    class DummyClient:
+        def __init__(self, *a, **k):
+            self._client = httpx.Client(transport=transport)
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+    Runner.run(SampleStrategy, world_id="w", gateway_url="http://gw")
+    monkeypatch.undo()

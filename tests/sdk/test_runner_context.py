@@ -27,8 +27,7 @@ class CountingStrategy(Strategy):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("offline", [False, True])
-async def test_runner_applies_context_once(monkeypatch, offline: bool) -> None:
+async def test_runner_applies_context_once(monkeypatch) -> None:
     before_counts: list[list[int]] = []
     after_counts: list[list[int]] = []
     received_offline: list[bool] = []
@@ -62,17 +61,17 @@ async def test_runner_applies_context_once(monkeypatch, offline: bool) -> None:
     strategy = await Runner.run_async(
         CountingStrategy,
         world_id="world",
-        offline=offline,
+        gateway_url="http://gw",
         schema_enforcement="strict",
     )
 
     assert before_counts == [[0]]
     assert after_counts == [[1]]
-    assert received_offline == [offline]
+    # Runner.run_async uses online path; offline flag passed to bootstrap is False.
+    assert received_offline == [False]
 
     node = strategy.nodes[0]
     assert isinstance(node, CountingStreamInput)
     assert node.apply_calls == 1
     assert getattr(node, "_schema_enforcement") == "strict"
     assert len(node.seen_contexts) == 1
-

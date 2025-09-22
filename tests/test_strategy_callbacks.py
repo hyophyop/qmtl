@@ -47,7 +47,7 @@ def test_lifecycle_hooks_called(monkeypatch):
         lambda self, strategy, world_id=None: DummyManager(),
     )
 
-    strategy = Runner.run(CallbackStrategy, world_id="w", gateway_url=None, offline=True)
+    strategy = Runner.offline(CallbackStrategy)
     assert strategy.events == ["start", "finish"]
 
 
@@ -58,7 +58,7 @@ def test_on_error_called(monkeypatch):
     monkeypatch.setattr("qmtl.sdk.runner.TagManagerService.init", fail_init)
 
     with pytest.raises(RuntimeError):
-        Runner.run(ErrorStrategy, world_id="w", gateway_url=None, offline=True)
+        Runner.run(ErrorStrategy, world_id="w", gateway_url=None)
 
     assert isinstance(ErrorStrategy.instances[-1].error, RuntimeError)
 

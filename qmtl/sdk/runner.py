@@ -511,61 +511,27 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
-        context: Mapping[str, str] | None = None,
-        execution_mode: str | None = None,
-        clock: str | None = None,
-        offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
-        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
-        as_of: object | None = None,
-        partition: object | None = None,
-        dataset_fingerprint: str | None = None,
     ) -> Strategy:
-        """Run a strategy under a given world, following WS decisions/activation.
+        """Run a strategy for ``world_id`` with minimal caller input.
 
-        In offline mode or when Kafka is unavailable, executes compute‑only locally.
+        Preferred usage defers execution decisions entirely to backend services:
+
+            Runner.run_async(StrategyCls, world_id=..., gateway_url=...)
+
+        The SDK does not choose execution domains or clocks. Order gating and
+        promotions are driven by WorldService decisions relayed by Gateway.
         """
         strategy = Runner._prepare(strategy_cls)
-        resolved_context, force_offline = Runner._resolve_context(
-            context=context,
-            execution_mode=execution_mode,
-            execution_domain=execution_domain,
-            clock=clock,
-            as_of=as_of,
-            dataset_fingerprint=dataset_fingerprint,
-            offline_requested=offline,
-            gateway_url=gateway_url,
-        )
+        # Minimal compute context; backend decisions determine effective domain.
+        compute_context = ComputeContext(world_id=world_id, execution_domain=DEFAULT_EXECUTION_DOMAIN)
+        setattr(strategy, "compute_context", {"world_id": world_id})
 
-        domain = resolved_context.get("execution_domain", DEFAULT_EXECUTION_DOMAIN)
-        as_of_value = resolved_context.get("as_of")
-        compute_context = ComputeContext(
-            world_id=world_id,
-            execution_domain=domain,
-            as_of=as_of_value,
-            partition=partition,
-        )
+        meta_payload: dict | None = dict(meta) if isinstance(meta, dict) else None
 
-        setattr(strategy, "compute_context", dict(resolved_context))
-
-        gateway_context = {
-            key: value
-            for key, value in resolved_context.items()
-            if key in {"execution_mode", "clock", "as_of", "dataset_fingerprint"}
-        }
-
-        meta_payload: dict | None = None
-        if meta is not None:
-            meta_payload = dict(meta)
-        dataset_fp = resolved_context.get("dataset_fingerprint")
-        if dataset_fp:
-            if meta_payload is None:
-                meta_payload = {}
-            meta_payload.setdefault("dataset_fingerprint", dataset_fp)
-
-        effective_offline = offline or force_offline
+        effective_offline = False
         try:
             strategy.on_start()
 
@@ -581,8 +547,8 @@ class Runner:
                 trade_mode=Runner._trade_mode,
                 schema_enforcement=schema_enforcement,
                 feature_plane=Runner._feature_artifact_plane,
-                gateway_context=gateway_context or None,
-                skip_gateway_submission=force_offline,
+                gateway_context=None,
+                skip_gateway_submission=False,
             )
             manager = bootstrap_result.manager
             offline_mode = bootstrap_result.offline_mode
@@ -634,35 +600,28 @@ class Runner:
         world_id: str,
         gateway_url: str | None = None,
         meta: Optional[dict] = None,
-        context: Mapping[str, str] | None = None,
-        execution_mode: str | None = None,
-        clock: str | None = None,
-        offline: bool = False,
         history_start: object | None = None,
         history_end: object | None = None,
         schema_enforcement: str = "fail",
-        execution_domain: str = DEFAULT_EXECUTION_DOMAIN,
-        as_of: object | None = None,
-        partition: object | None = None,
-        dataset_fingerprint: str | None = None,
     ) -> Strategy:
+        """Synchronous wrapper around :meth:`run_async`.
+
+        Prefer the minimal form:
+
+            Runner.run(StrategyCls, world_id=..., gateway_url=...)
+
+        This call keeps parameters minimal and does not expose execution domain
+        or clock controls. For offline/local runs, use :meth:`offline`.
+        """
         return asyncio.run(
             Runner.run_async(
                 strategy_cls,
                 world_id=world_id,
                 gateway_url=gateway_url,
                 meta=meta,
-                context=context,
-                execution_mode=execution_mode,
-                clock=clock,
-                offline=offline,
                 history_start=history_start,
                 history_end=history_end,
                 schema_enforcement=schema_enforcement,
-                execution_domain=execution_domain,
-                as_of=as_of,
-                partition=partition,
-                dataset_fingerprint=dataset_fingerprint,
             )
         )
 
@@ -680,6 +639,12 @@ class Runner:
         strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
     ) -> Strategy:
         strategy = Runner._prepare(strategy_cls)
+        # Lifecycle start
+        try:
+            strategy.on_start()
+        except Exception as e:
+            strategy.on_error(e)
+            raise
         context = ComputeContext(world_id="w", execution_domain="offline")
         for n in strategy.nodes:
             setattr(n, "_schema_enforcement", schema_enforcement)
@@ -695,27 +660,25 @@ class Runner:
         except TypeError:
             manager = tag_service.init(strategy)
         logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
-        resolved_context, _ = Runner._resolve_context(
-            context=None,
-            execution_mode="backtest",
-            execution_domain=None,
-            clock=None,
-            as_of=None,
-            dataset_fingerprint=None,
-            offline_requested=True,
-            gateway_url=None,
-        )
-        resolved_context["execution_domain"] = "offline"
-        setattr(strategy, "compute_context", dict(resolved_context))
+        setattr(strategy, "compute_context", {"world_id": "w", "execution_domain": "offline"})
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
-        # Hydrate from snapshots first, then fill any gaps from history
+        # Hydrate + warm-up history (provider-driven when available), then replay
         history_service = Runner._history_service
-        history_service.hydrate_snapshots(strategy)
-        await history_service.load_history(strategy, None, None)
+        await history_service.warmup_strategy(
+            strategy,
+            offline_mode=True,
+            history_start=None,
+            history_end=None,
+        )
         # After replay, write a fresh snapshot for faster next start
         history_service.write_snapshots(strategy)
-        await history_service.replay_history(strategy, None, None)
+        # Lifecycle finish
+        try:
+            strategy.on_finish()
+        except Exception as e:
+            strategy.on_error(e)
+            raise
         return strategy
 
     # ------------------------------------------------------------------

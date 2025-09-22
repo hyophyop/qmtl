@@ -31,12 +31,7 @@ def test_run_offline_minimal(monkeypatch):
             stream = StreamInput(interval="60s", period=2)
             self.add_nodes([stream])
 
-    strategy = Runner.run(
-        TestStrategy,
-        world_id="w",
-        gateway_url="http://gw",
-        offline=True,
-    )
+    strategy = Runner.offline(TestStrategy)
     assert isinstance(strategy, TestStrategy)
 
 
@@ -69,12 +64,7 @@ def test_run_offline_with_cached_data(monkeypatch):
             stream.cache.append("test_queue", 60, 120, {"close": 10.1})
             self.add_nodes([stream])
 
-    strategy = Runner.run(
-        TestStrategy,
-        world_id="w",
-        gateway_url="http://gw",
-        offline=True,
-    )
+    strategy = Runner.offline(TestStrategy)
     assert isinstance(strategy, TestStrategy)
 
 
@@ -107,10 +97,5 @@ def test_run_offline_with_larger_moves(monkeypatch):
             stream.cache.append("test_queue", 60, 120, {"close": 12.0})  # 20% change
             self.add_nodes([stream])
 
-    strategy = Runner.run(
-        TestStrategy,
-        world_id="w",
-        gateway_url="http://gw",
-        offline=True,
-    )
+    strategy = Runner.offline(TestStrategy)
     assert isinstance(strategy, TestStrategy)

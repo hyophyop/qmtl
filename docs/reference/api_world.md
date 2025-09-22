@@ -87,7 +87,9 @@ backwards-compatible (`validate|compute-only|paper|live`). Gateway and
 SDK clients MUST derive `execution_domain` from it using the normative
 mapping: `validate → backtest (orders gated OFF)`, `compute-only →
 backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved
-for operator-controlled dual runs.
+for operator-controlled dual runs. SDKs treat this mapping as
+read-only annotation for local state/metrics; it MUST NOT override
+backend decisions or change execution behavior client-side.
 Schema: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash
