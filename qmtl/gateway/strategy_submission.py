@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from fastapi import HTTPException
 from . import metrics as gw_metrics
 from .models import StrategySubmit
-from .compute_context import build_strategy_compute_context
+from .submission import SubmissionPipeline
 
 
 @dataclass
@@ -40,23 +38,29 @@ class StrategySubmissionResult:
 class StrategySubmissionHelper:
     """Normalize DAG processing for ingestion and dry-run endpoints."""
 
-    def __init__(self, manager, dagmanager, database) -> None:
+    def __init__(
+        self,
+        manager,
+        dagmanager,
+        database,
+        *,
+        pipeline: SubmissionPipeline | None = None,
+    ) -> None:
         self._manager = manager
         self._dagmanager = dagmanager
         self._database = database
+        self._pipeline = pipeline or SubmissionPipeline(dagmanager)
 
     async def process(
         self, payload: StrategySubmit, config: StrategySubmissionConfig
     ) -> StrategySubmissionResult:
-        dag = self._decode_dag(payload.dag_json)
-        self._validate_dag(dag)
-        self._validate_node_ids(dag, payload.node_ids_crc32)
-
-        worlds = self._extract_worlds(payload)
-        compute_ctx = self._extract_compute_context(payload)
-        downgraded = bool(compute_ctx.get("downgraded"))
-        downgrade_reason = compute_ctx.get("downgrade_reason")
-        safe_mode = bool(compute_ctx.get("safe_mode"))
+        prepared = self._pipeline.prepare(payload)
+        dag = prepared.dag
+        compute_ctx = prepared.compute_context
+        worlds = prepared.worlds
+        downgraded = compute_ctx.downgraded
+        downgrade_reason = compute_ctx.downgrade_reason
+        safe_mode = compute_ctx.safe_mode
 
         # Emit a downgrade metric whenever we enter safe mode due to missing context.
         if downgraded and downgrade_reason:
@@ -77,7 +81,7 @@ class StrategySubmissionHelper:
             await self._persist_world_bindings(worlds, payload.world_id, strategy_id)
 
         queue_map = {}
-        exec_domain = compute_ctx.get("execution_domain")
+        exec_domain = compute_ctx.execution_domain or None
 
         prefer_diff = config.prefer_diff_queue_map
         diff_strategy_id = config.diff_strategy_id or strategy_id
@@ -93,7 +97,7 @@ class StrategySubmissionHelper:
         diff_queue_map: dict[str, list[dict[str, Any]]] | None = None
         diff_error = False
         try:
-            sentinel_id, diff_queue_map = await self._run_diff(
+            sentinel_id, diff_queue_map = await self._pipeline.run_diff(
                 strategy_id=diff_strategy_id,
                 dag_json=dag_json,
                 worlds=worlds,
@@ -112,7 +116,7 @@ class StrategySubmissionHelper:
         if prefer_diff and not diff_error and diff_queue_map is not None:
             queue_map = diff_queue_map
         else:
-            queue_map = await self._build_queue_map_from_queries(
+            queue_map = await self._pipeline.build_queue_map(
                 dag, worlds, payload.world_id, exec_domain
             )
             if (
@@ -149,43 +153,6 @@ class StrategySubmissionHelper:
             )
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
-
-    def _decode_dag(self, dag_json: str) -> dict[str, Any]:
-        try:
-            dag_bytes = base64.b64decode(dag_json)
-            return json.loads(dag_bytes.decode())
-        except Exception:
-            return json.loads(dag_json)
-
-    def _validate_dag(self, dag: dict[str, Any]) -> None:
-        from qmtl.dagmanager.schema_validator import validate_dag
-
-        ok, _version, verrors = validate_dag(dag)
-        if not ok:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "E_SCHEMA_INVALID", "errors": verrors},
-            )
-
-    def _extract_worlds(self, payload: StrategySubmit) -> list[str]:
-        worlds: list[str] = []
-        wid_list = getattr(payload, "world_ids", None)
-        if wid_list:
-            worlds = list(dict.fromkeys([w for w in (wid_list or []) if w]))
-        elif payload.world_id:
-            worlds = [payload.world_id]
-        return worlds
-
-    def _extract_compute_context(self, payload: StrategySubmit) -> dict[str, str | None]:
-        meta = payload.meta if isinstance(payload.meta, dict) else None
-        context, downgraded, downgrade_reason, safe_mode = build_strategy_compute_context(meta)
-        if downgraded:
-            context["downgraded"] = True
-            if downgrade_reason:
-                context["downgrade_reason"] = downgrade_reason
-            if safe_mode:
-                context["safe_mode"] = True
-        return context
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
         from qmtl.common import crc32_of_list, compute_node_id
@@ -263,139 +230,6 @@ class StrategySubmissionHelper:
                 await self._database.upsert_wsb(world_id, strategy_id)
             except Exception:
                 pass
-
-    async def _build_queue_map_from_queries(
-        self,
-        dag: dict[str, Any],
-        worlds: list[str],
-        default_world: str | None,
-        execution_domain: str | None,
-    ) -> dict[str, list[dict[str, Any] | Any]]:
-        queue_map: dict[str, list[dict[str, Any] | Any]] = {}
-        queries: list[asyncio.Future] = []
-        query_targets: list[tuple[str, str | None]] = []
-
-        nodes = dag.get("nodes", [])
-        for node in nodes:
-            if node.get("node_type") != "TagQueryNode":
-                continue
-            nid = node.get("node_id")
-            if not isinstance(nid, str) or not nid:
-                continue
-            tags = node.get("tags", [])
-            interval = int(node.get("interval", 0))
-            match_mode = node.get("match_mode", "any")
-            if worlds:
-                for world_id in worlds:
-                    queries.append(
-                        self._dagmanager.get_queues_by_tag(
-                            tags, interval, match_mode, world_id, execution_domain
-                        )
-                    )
-                    query_targets.append((nid, world_id))
-            else:
-                queries.append(
-                    self._dagmanager.get_queues_by_tag(
-                        tags, interval, match_mode, default_world, execution_domain
-                    )
-                )
-                query_targets.append((nid, default_world))
-
-        results: Iterable[Any] = []
-        if queries:
-            results = await asyncio.gather(*queries, return_exceptions=True)
-
-        seen: dict[str, set[str]] = {}
-        for (nid, _world_id), result in zip(query_targets, results):
-            lst = queue_map.setdefault(nid, [])
-            seen.setdefault(nid, set())
-            if isinstance(result, Exception):
-                continue
-            for item in result:
-                queue_name = (
-                    item.get("queue")
-                    if isinstance(item, dict)
-                    else str(item)
-                )
-                if queue_name not in seen[nid]:
-                    lst.append(item)
-                    seen[nid].add(queue_name)
-
-        return queue_map
-
-    async def _run_diff(
-        self,
-        *,
-        strategy_id: str,
-        dag_json: str,
-        worlds: list[str],
-        fallback_world_id: str | None,
-        compute_ctx: dict[str, str | None],
-        timeout: float,
-        prefer_queue_map: bool,
-    ) -> tuple[str | None, dict[str, list[dict[str, Any]]] | None]:
-        diff_kwargs = {
-            "execution_domain": compute_ctx.get("execution_domain"),
-            "as_of": compute_ctx.get("as_of"),
-            "partition": compute_ctx.get("partition"),
-            "dataset_fingerprint": compute_ctx.get("dataset_fingerprint"),
-        }
-
-        async def _invoke(world: str | None):
-            return await self._dagmanager.diff(
-                strategy_id,
-                dag_json,
-                world_id=world,
-                **diff_kwargs,
-            )
-
-        sentinel_id: str | None = None
-        queue_map: dict[str, list[dict[str, Any]]] | None = None
-
-        if prefer_queue_map and len(worlds) > 1:
-            tasks = [
-                _invoke(world_id)
-                for world_id in worlds
-            ]
-            chunks = await asyncio.gather(*tasks, return_exceptions=True)
-            queue_map = {}
-            for chunk in chunks:
-                if isinstance(chunk, Exception) or chunk is None:
-                    continue
-                if not sentinel_id:
-                    sentinel_id = getattr(chunk, "sentinel_id", None)
-                for key, topic in dict(getattr(chunk, "queue_map", {})).items():
-                    node_id = self._node_id_from_partition_key(str(key))
-                    lst = queue_map.setdefault(node_id, [])
-                    if topic not in [d.get("queue") for d in lst]:
-                        lst.append({"queue": topic, "global": False})
-            return sentinel_id, queue_map
-
-        world = worlds[0] if worlds else fallback_world_id
-        if world is None and prefer_queue_map and not worlds:
-            queue_map = {}
-
-        chunk = await asyncio.wait_for(_invoke(world), timeout=timeout)
-        if chunk is None:
-            return sentinel_id, queue_map
-
-        sentinel_id = getattr(chunk, "sentinel_id", None)
-        if prefer_queue_map:
-            queue_map = {}
-            for key, topic in dict(getattr(chunk, "queue_map", {})).items():
-                node_id = self._node_id_from_partition_key(str(key))
-                queue_map.setdefault(node_id, []).append(
-                    {"queue": topic, "global": False}
-                )
-
-        return sentinel_id, queue_map
-
-    def _node_id_from_partition_key(self, identifier: str) -> str:
-        base, _, _ = identifier.partition("#")
-        token = base or identifier
-        if ":" in token:
-            return token.rsplit(":", 2)[0]
-        return token
 
     def _crc_sentinel(self, dag: dict[str, Any]) -> str:
         from qmtl.common import crc32_of_list

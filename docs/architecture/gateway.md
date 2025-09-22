@@ -42,7 +42,7 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 
 **Ax‑1** SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
 **Ax‑2** Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.
-**Ax‑3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies.
+**Ax‑3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/common/compute_context.py` and is consumed by Gateway, DAG Manager, and the SDK.
 
 ### Non‑Goals
 - Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
@@ -282,6 +282,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
   - Clients may include `world_id` (single) **or** `world_ids[]` (multiple). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
   - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context and writes it to envelopes it relays: `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` is reserved and must be explicitly requested by operators. SDK/Runner treats this mapping as input only.
   - Gateway forwards a compute context `{ world_id, execution_domain, as_of (if backtest), partition }` with diff/ingest requests so DAG Manager derives a Domain‑Scoped ComputeKey and isolates caches per domain. When a caller does not supply backtest metadata, Gateway either derives the context from WS or omits optional fields; DAG Manager then applies safe defaults and context‑scoped isolation.
+  - The HTTP `/strategies` flow is implemented by the composable services in `qmtl/gateway/submission/` (see `SubmissionPipeline`). Each stage—DAG decoding/validation, node identity verification, compute-context normalization, diff execution, and TagQuery fallback—has focused coverage so future changes only affect the relevant module.
   - Backtest/dryrun submissions MUST include `as_of` (dataset commit) and MAY include `dataset_fingerprint`; when absent Gateway rejects or falls back to compute-only mode to avoid mixing datasets.
 
 ### Event Stream Descriptor

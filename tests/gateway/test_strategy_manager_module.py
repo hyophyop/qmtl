@@ -226,11 +226,11 @@ async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
         node_ids_crc32=0,
     )
 
-    context, _, _, downgraded, reason = manager._build_compute_context(payload)
-    assert downgraded is True
-    assert reason == "missing_as_of"
-    assert context["execution_domain"] == "backtest"
-    assert context["safe_mode"] is True
+    context, context_payload, _, _ = manager._build_compute_context(payload)
+    assert context.downgraded is True
+    assert context.downgrade_reason == "missing_as_of"
+    assert context_payload["execution_domain"] == "backtest"
+    assert context_payload["safe_mode"] is True
 
     sid, existed = await manager.submit(payload)
     assert not existed

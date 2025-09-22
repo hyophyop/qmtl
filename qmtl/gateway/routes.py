@@ -36,6 +36,7 @@ from .strategy_submission import (
     StrategySubmissionConfig,
     StrategySubmissionHelper,
 )
+from .submission import SubmissionPipeline
 from .ws import WebSocketHub
 from .world_client import WorldServiceClient
 
@@ -53,12 +54,16 @@ def create_api_router(
     world_client: Optional[WorldServiceClient],
     enforce_live_guard: bool,
     fill_producer: Any | None = None,
+    submission_pipeline: SubmissionPipeline | None = None,
 
 ) -> APIRouter:
 
     router = APIRouter()
 
-    submission_helper = StrategySubmissionHelper(manager, dagmanager, database_obj)
+    pipeline = submission_pipeline or SubmissionPipeline(dagmanager)
+    submission_helper = StrategySubmissionHelper(
+        manager, dagmanager, database_obj, pipeline=pipeline
+    )
 
     @router.get("/status")
     async def status_endpoint() -> dict[str, Any]:

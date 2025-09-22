@@ -30,6 +30,7 @@ from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
 from .commit_log_consumer import CommitLogConsumer
 from .commit_log import CommitLogWriter
+from .submission import SubmissionPipeline
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -220,6 +221,8 @@ def create_app(
             return Response(status_code=503)
         return await call_next(request)
 
+    submission_pipeline = SubmissionPipeline(dagmanager)
+
     api_router = create_api_router(
         manager,
         redis_conn,
@@ -230,6 +233,7 @@ def create_app(
         world_client_local,
         enforce_live_guard,
         fill_producer,
+        submission_pipeline=submission_pipeline,
     )
     app.include_router(api_router)
     # Expose event endpoints (subscribe/JWKS and WS bridge). Pass world and
