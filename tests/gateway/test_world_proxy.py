@@ -6,6 +6,7 @@ import json
 from qmtl.common import AsyncCircuitBreaker
 from qmtl.gateway.api import create_app, Database
 from qmtl.gateway.world_client import WorldServiceClient, Budget
+from qmtl.common.compute_context import DowngradeReason
 from qmtl.gateway import metrics
 
 
@@ -189,9 +190,11 @@ async def test_decide_compute_context_downgrade_missing_as_of(fake_redis):
     assert context["execution_domain"] == "backtest"
     assert context["as_of"] is None
     assert context["downgraded"] is True
-    assert context["downgrade_reason"] == "missing_as_of"
+    assert context["downgrade_reason"] == DowngradeReason.MISSING_AS_OF
     metric_value = (
-        metrics.worlds_compute_context_downgrade_total.labels(reason="missing_as_of")._value.get()
+        metrics.worlds_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.MISSING_AS_OF
+        )._value.get()
     )
     assert metric_value == 1
 

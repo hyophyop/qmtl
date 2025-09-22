@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+from qmtl.common.compute_context import DowngradeReason
 from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.submission.context_service import ComputeContextService
+from qmtl.gateway.submission.context_service import (
+    ComputeContextService,
+    StrategyComputeContext,
+)
 
 
 def _make_payload(**meta_overrides) -> StrategySubmit:
@@ -27,10 +31,13 @@ def test_build_returns_unique_worlds() -> None:
     service = ComputeContextService()
     payload = _make_payload()
 
-    context, payload_dict, mapping, worlds = service.build(payload)
+    strategy_ctx = service.build(payload)
 
-    assert context.world_id == "world-1"
-    assert worlds == ["world-1", "world-2"]
+    assert isinstance(strategy_ctx, StrategyComputeContext)
+    assert strategy_ctx.context.world_id == "world-1"
+    assert strategy_ctx.worlds_list() == ["world-1", "world-2"]
+    payload_dict = strategy_ctx.commit_log_payload()
+    mapping = strategy_ctx.redis_mapping()
     assert payload_dict["execution_domain"] == "live"
     assert mapping["compute_execution_domain"] == "live"
 
@@ -39,10 +46,12 @@ def test_build_handles_missing_as_of() -> None:
     service = ComputeContextService()
     payload = _make_payload(as_of=None, execution_domain="dryrun")
 
-    context, payload_dict, _, _ = service.build(payload)
+    strategy_ctx = service.build(payload)
+    payload_dict = strategy_ctx.commit_log_payload()
 
-    assert context.execution_domain == "backtest"
-    assert context.downgraded is True
+    assert strategy_ctx.execution_domain == "backtest"
+    assert strategy_ctx.downgraded is True
+    assert strategy_ctx.downgrade_reason == DowngradeReason.MISSING_AS_OF
     assert payload_dict["safe_mode"] is True
 
 
@@ -55,9 +64,12 @@ def test_build_without_worlds() -> None:
         node_ids_crc32=0,
     )
 
-    context, payload_dict, mapping, worlds = service.build(payload)
-    assert context.world_id == ""
-    assert worlds == []
+    strategy_ctx = service.build(payload)
+    payload_dict = strategy_ctx.commit_log_payload()
+    mapping = strategy_ctx.redis_mapping()
+
+    assert strategy_ctx.context.world_id == ""
+    assert strategy_ctx.worlds_list() == []
     assert mapping == {}
     assert payload_dict["execution_domain"] in {None, ""}
 
