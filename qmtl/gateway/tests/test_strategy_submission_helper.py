@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from qmtl.common import compute_node_id, crc32_of_list
+from qmtl.common import crc32_of_list
 from qmtl.common.compute_context import DowngradeReason
 from qmtl.gateway import metrics
 from qmtl.gateway.database import MemoryDatabase, PostgresDatabase, SQLiteDatabase
@@ -16,6 +16,8 @@ from qmtl.gateway.strategy_submission import (
     StrategySubmissionConfig,
     StrategySubmissionHelper,
 )
+
+from tests.gateway.helpers import build_strategy_payload
 
 
 class DummyManager:
@@ -132,75 +134,16 @@ async def _build_postgres_db(monkeypatch):
     return db, fetch_bindings, cleanup
 
 
-def _build_payload(
-    mismatch: bool = False,
-    *,
-    execution_domain: str | None = " sim ",
-    include_as_of: bool = True,
-    as_of_value: str = "2025-01-01T00:00:00Z",
-) -> tuple[StrategySubmit, dict, str]:
-    node_type = "TagQueryNode"
-    code_hash = "code"
-    config_hash = "config"
-    schema_hash = "schema"
-    schema_compat_id = "schema-compat"
-    base_node = {
-        "node_type": node_type,
-        "code_hash": code_hash,
-        "config_hash": config_hash,
-        "schema_hash": schema_hash,
-        "schema_compat_id": schema_compat_id,
-        "params": {"tags": ["alpha"], "match_mode": "any"},
-        "dependencies": [],
-        "tags": ["alpha"],
-        "interval": 5,
-        "match_mode": "any",
-    }
-    expected_node_id = compute_node_id(base_node)
-    node_id = "bad-node" if mismatch else expected_node_id
-    dag = {
-        "nodes": [
-            {
-                "node_id": node_id,
-                "node_type": node_type,
-                "code_hash": code_hash,
-                "config_hash": config_hash,
-                "schema_hash": schema_hash,
-                "schema_compat_id": schema_compat_id,
-                "params": {"tags": ["alpha"], "match_mode": "any"},
-                "dependencies": [],
-                "tags": ["alpha"],
-                "interval": 5,
-                "match_mode": "any",
-            }
-        ]
-    }
-    dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
-    crc = crc32_of_list([node_id])
-    meta: dict[str, object] = {}
-    if execution_domain is not None:
-        meta["execution_domain"] = execution_domain
-    if include_as_of:
-        meta["as_of"] = as_of_value
-    payload = StrategySubmit(
-        dag_json=dag_json,
-        meta=meta or None,
-        world_id="world-1",
-        node_ids_crc32=crc,
-    )
-    return payload, dag, expected_node_id
-
-
 @pytest.mark.asyncio
 async def test_process_submission_uses_queries_and_diff_for_strategy():
     manager = DummyManager()
     dagmanager = DummyDagManager()
     database = DummyDatabase()
     helper = StrategySubmissionHelper(manager, dagmanager, database)
-    payload, _, expected_node_id = _build_payload()
+    bundle = build_strategy_payload()
 
     result = await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=True,
             diff_timeout=0.1,
@@ -209,8 +152,8 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
 
     assert result.strategy_id == "strategy-abc"
     assert result.sentinel_id == "diff-sentinel"
-    assert result.queue_map.keys() == {expected_node_id}
-    queues = result.queue_map[expected_node_id]
+    assert result.queue_map.keys() == {bundle.expected_node_id}
+    queues = result.queue_map[bundle.expected_node_id]
     assert queues and queues[0]["queue"] == "world-1:alpha"
     assert database.bindings == [("world-1", "strategy-abc")]
     assert dagmanager.diff_calls, "diff should be invoked for sentinel lookup"
@@ -227,10 +170,10 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
 async def test_process_dry_run_prefers_diff_queue_map():
     dagmanager = DummyDagManager()
     helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
-    payload, _, _ = _build_payload()
+    bundle = build_strategy_payload()
 
     result = await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=False,
             strategy_id="dryrun",
@@ -253,13 +196,13 @@ async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
     metrics.reset_metrics()
     dagmanager = DummyDagManager()
     helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
-    payload, _, expected_node_id = _build_payload(
+    bundle = build_strategy_payload(
         execution_domain="dryrun",
         include_as_of=False,
     )
 
     result = await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=False,
             strategy_id="dryrun",
@@ -267,7 +210,7 @@ async def test_process_dryrun_missing_as_of_downgrades_to_backtest():
         ),
     )
 
-    assert result.queue_map.keys() == {expected_node_id}
+    assert result.queue_map.keys() == {bundle.expected_node_id}
     assert dagmanager.diff_calls
     _, _, domain, as_of, _, _ = dagmanager.diff_calls[0]
     assert domain == "backtest"
@@ -290,20 +233,20 @@ async def test_process_backtest_missing_as_of_enters_safe_mode():
     manager = DummyManager()
     dagmanager = DummyDagManager()
     helper = StrategySubmissionHelper(manager, dagmanager, DummyDatabase())
-    payload, _, expected_node_id = _build_payload(
+    bundle = build_strategy_payload(
         execution_domain="backtest",
         include_as_of=False,
     )
 
     result = await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=True,
             diff_timeout=0.2,
         ),
     )
 
-    assert result.queue_map.keys() == {expected_node_id}
+    assert result.queue_map.keys() == {bundle.expected_node_id}
     assert result.downgraded is True
     assert result.safe_mode is True
     assert result.downgrade_reason == DowngradeReason.MISSING_AS_OF
@@ -325,10 +268,10 @@ async def test_process_dryrun_synonym_with_as_of_keeps_domain():
     metrics.reset_metrics()
     dagmanager = DummyDagManager()
     helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
-    payload, _, _ = _build_payload(execution_domain="paper")
+    bundle = build_strategy_payload(execution_domain="paper")
 
     await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=False,
             strategy_id="dryrun",
@@ -368,10 +311,10 @@ async def test_process_dryrun_synonym_with_as_of_keeps_domain():
 )
 async def test_shared_validation_path(config: StrategySubmissionConfig) -> None:
     helper = StrategySubmissionHelper(DummyManager(), DummyDagManager(), DummyDatabase())
-    payload, _, _ = _build_payload(mismatch=True)
+    bundle = build_strategy_payload(mismatch=True)
 
     with pytest.raises(HTTPException) as exc:
-        await helper.process(payload, config)
+        await helper.process(bundle.payload, config)
 
     detail = exc.value.detail
     assert detail["code"] == "E_NODE_ID_MISMATCH"
@@ -382,10 +325,10 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
     dagmanager = DummyDagManager()
     dagmanager.raise_diff = True
     helper = StrategySubmissionHelper(DummyManager(), dagmanager, DummyDatabase())
-    payload, dag, expected_node_id = _build_payload()
+    bundle = build_strategy_payload()
 
     result = await helper.process(
-        payload,
+        bundle.payload,
         StrategySubmissionConfig(
             submit=False,
             strategy_id="dryrun",
@@ -397,9 +340,11 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
         ),
     )
 
-    assert result.queue_map.keys() == {expected_node_id}
-    assert result.queue_map[expected_node_id][0]["queue"] == "world-1:alpha"
-    expected_crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
+    assert result.queue_map.keys() == {bundle.expected_node_id}
+    assert result.queue_map[bundle.expected_node_id][0]["queue"] == "world-1:alpha"
+    expected_crc = crc32_of_list(
+        n.get("node_id", "") for n in bundle.dag.get("nodes", [])
+    )
     assert result.sentinel_id == f"dryrun:{expected_crc:08x}"
 
 
@@ -412,12 +357,12 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
 async def test_world_bindings_persist_for_all_databases(db_builder, monkeypatch) -> None:
     db, fetch_bindings, cleanup = await db_builder(monkeypatch)
     helper = StrategySubmissionHelper(DummyManager(), DummyDagManager(), db)
-    payload, _, _ = _build_payload()
+    bundle = build_strategy_payload()
     config = StrategySubmissionConfig(submit=True, diff_timeout=0.1)
 
     try:
-        await helper.process(payload, config)
-        await helper.process(payload, config)
+        await helper.process(bundle.payload, config)
+        await helper.process(bundle.payload, config)
         bindings = await fetch_bindings()
         assert bindings == {("world-1", "strategy-abc")}
     finally:
