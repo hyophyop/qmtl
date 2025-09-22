@@ -14,6 +14,7 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and build distributable wheels via `uv pip wheel .`.
+- When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
 
 ## Architecture
 
