@@ -18,6 +18,7 @@ from .database import Database
 from .degradation import DegradationManager, DegradationLevel
 from .fsm import StrategyFSM
 from .models import StrategySubmit
+from .compute_context import build_strategy_compute_context
 
 tracer = trace.get_tracer(__name__)
 
@@ -227,19 +228,10 @@ class StrategyManager:
             if normalised not in seen:
                 seen.add(normalised)
                 unique_worlds.append(normalised)
-        compute_ctx: dict[str, str | None] = {
-            "world_id": unique_worlds[0] if unique_worlds else None,
-        }
-        meta = payload.meta if isinstance(payload.meta, dict) else {}
-        for key in (
-            "execution_domain",
-            "as_of",
-            "partition",
-            "dataset_fingerprint",
-        ):
-            val = self._ctx_value(meta.get(key)) if meta else None
-            if val:
-                compute_ctx[key] = val
+        meta = payload.meta if isinstance(payload.meta, dict) else None
+        context, _downgraded, _reason = build_strategy_compute_context(meta)
+        compute_ctx: dict[str, str | None] = dict(context)
+        compute_ctx["world_id"] = unique_worlds[0] if unique_worlds else None
         context_mapping: dict[str, str] = {
             f"compute_{k}": v
             for k, v in compute_ctx.items()

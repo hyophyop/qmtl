@@ -94,7 +94,8 @@ class DummyMetrics:
 def _make_dag():
     return (
         '{"nodes": ['
-        '{"node_id": "A", "node_type": "N", "code_hash": "c", "schema_hash": "s"}'
+        '{"node_id": "A", "node_type": "N", "code_hash": "c", "config_hash": "cfg", '
+        '"schema_hash": "s", "schema_compat_id": "s-major", "params": {}, "dependencies": []}'
         ']}'
     )
 

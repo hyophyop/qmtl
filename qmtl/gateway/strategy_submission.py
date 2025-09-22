@@ -3,14 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from fastapi import HTTPException
 
-from . import metrics as gw_metrics
 from .models import StrategySubmit
+from .compute_context import build_strategy_compute_context
 
 
 @dataclass
@@ -38,31 +37,6 @@ class StrategySubmissionResult:
 class StrategySubmissionHelper:
     """Normalize DAG processing for ingestion and dry-run endpoints."""
 
-    _BACKTEST_TOKENS = {
-        "backtest",
-        "backtesting",
-        "compute",
-        "computeonly",
-        "offline",
-        "sandbox",
-        "sim",
-        "simulation",
-        "simulated",
-        "validate",
-        "validation",
-    }
-    _DRYRUN_TOKENS = {
-        "dryrun",
-        "dryrunmode",
-        "papermode",
-        "paper",
-        "papertrade",
-        "papertrading",
-        "papertrader",
-    }
-    _LIVE_TOKENS = {"live", "prod", "production"}
-    _SHADOW_TOKENS = {"shadow"}
-
     def __init__(self, manager, dagmanager, database) -> None:
         self._manager = manager
         self._dagmanager = dagmanager
@@ -76,7 +50,9 @@ class StrategySubmissionHelper:
         self._validate_node_ids(dag, payload.node_ids_crc32)
 
         worlds = self._extract_worlds(payload)
-        compute_ctx = self._extract_compute_context(payload)
+        compute_ctx = self._extract_compute_context(
+            payload, emit_metrics=not config.submit
+        )
 
         strategy_id, existed = await self._maybe_submit(payload, config)
         if existed:
@@ -181,57 +157,11 @@ class StrategySubmissionHelper:
         return worlds
 
     def _extract_compute_context(
-        self, payload: StrategySubmit
+        self, payload: StrategySubmit, *, emit_metrics: bool
     ) -> dict[str, str | None]:
-        meta = payload.meta if isinstance(payload.meta, dict) else {}
-        raw_domain = self._normalize_context_value(
-            meta.get("execution_domain") if meta else None
-        )
-        execution_domain = self._resolve_execution_domain(raw_domain)
-        as_of = self._normalize_context_value(meta.get("as_of") if meta else None)
-        partition = self._normalize_context_value(meta.get("partition") if meta else None)
-        dataset_fingerprint = self._normalize_context_value(
-            meta.get("dataset_fingerprint") if meta else None
-        )
-
-        if execution_domain in {"backtest", "dryrun"} and not as_of:
-            gw_metrics.strategy_compute_context_downgrade_total.labels(
-                reason="missing_as_of"
-            ).inc()
-            if execution_domain == "dryrun":
-                execution_domain = "backtest"
-
-        return {
-            "execution_domain": execution_domain,
-            "as_of": as_of,
-            "partition": partition,
-            "dataset_fingerprint": dataset_fingerprint,
-        }
-
-    def _normalize_context_value(self, value: object | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, (str, int, float)):
-            text = str(value).strip()
-            return text or None
-        return None
-
-    def _resolve_execution_domain(self, value: str | None) -> str | None:
-        if value is None:
-            return None
-        lowered = value.lower()
-        segments = re.split(r"[/:]", lowered)
-        for segment in segments:
-            token = re.sub(r"[\s_-]+", "", segment)
-            if token in self._BACKTEST_TOKENS:
-                return "backtest"
-            if token in self._DRYRUN_TOKENS:
-                return "dryrun"
-            if token in self._LIVE_TOKENS:
-                return "live"
-            if token in self._SHADOW_TOKENS:
-                return "shadow"
-        return lowered
+        meta = payload.meta if isinstance(payload.meta, dict) else None
+        context, _, _ = build_strategy_compute_context(meta, emit_metrics=emit_metrics)
+        return context
 
     def _validate_node_ids(self, dag: dict[str, Any], node_ids_crc32: int) -> None:
         from qmtl.common import crc32_of_list, compute_node_id
@@ -254,6 +184,7 @@ class StrategySubmissionHelper:
                 "code_hash": node.get("code_hash"),
                 "config_hash": node.get("config_hash"),
                 "schema_hash": node.get("schema_hash"),
+                "schema_compat_id": node.get("schema_compat_id"),
             }
             missing = [field for field, value in required.items() if not value]
             if missing:
@@ -262,12 +193,7 @@ class StrategySubmissionHelper:
                 )
                 continue
 
-            expected = compute_node_id(
-                str(required["node_type"]),
-                str(required["code_hash"]),
-                str(required["config_hash"]),
-                str(required["schema_hash"]),
-            )
+            expected = compute_node_id(node)
             if nid != expected:
                 mismatches.append({"index": idx, "node_id": nid, "expected": expected})
 
@@ -277,7 +203,7 @@ class StrategySubmissionHelper:
                 status_code=400,
                 detail={
                     "code": "E_NODE_ID_FIELDS",
-                    "message": "node_id validation requires node_type, code_hash, config_hash and schema_hash",
+                    "message": "node_id validation requires node_type, code_hash, config_hash, schema_hash and schema_compat_id",
                     "missing_fields": missing_fields,
                     "hint": "Regenerate the DAG with an updated SDK so each node includes the hashes required by compute_node_id().",
                 },

@@ -546,6 +546,20 @@ class Node:
         self.execute = True
         self.kafka_topic: str | None = None
         self.enable_feature_artifacts = bool(self.config.get("enable_feature_artifacts", False))
+        compat_id: str | None = None
+        if isinstance(self.schema, dict):
+            compat_id = (
+                self.schema.get("schema_compat_id")
+                or self.schema.get("compat_id")
+                or self.schema.get("compatId")
+            )
+        if compat_id is None and isinstance(self.expected_schema, dict):
+            compat_id = (
+                self.expected_schema.get("schema_compat_id")
+                or self.expected_schema.get("compat_id")
+                or self.expected_schema.get("compatId")
+            )
+        self.schema_compat_id: str = str(compat_id) if compat_id is not None else self.schema_hash
         if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
             self.cache = arrow_cache.NodeCacheArrow(period_val or 0)
         else:
@@ -603,12 +617,16 @@ class Node:
 
     @property
     def node_id(self) -> str:
-        return compute_node_id(
-            self.node_type,
-            self.code_hash,
-            self.config_hash,
-            self.schema_hash,
-        )
+        spec = {
+            "node_type": self.node_type,
+            "interval": int(self.interval or 0),
+            "period": int(self.period or 0),
+            "params": self.config,
+            "dependencies": [n.node_id for n in self.inputs],
+            "schema_compat_id": self.schema_compat_id,
+            "code_hash": self.code_hash,
+        }
+        return compute_node_id(spec)
 
     @property
     def node_hash(self) -> str:
@@ -823,6 +841,8 @@ class Node:
             "code_hash": self.code_hash,
             "config_hash": self.config_hash,
             "schema_hash": self.schema_hash,
+            "schema_compat_id": self.schema_compat_id,
+            "params": self.config,
             "pre_warmup": self.pre_warmup,
             "expected_schema": self.expected_schema,
         }

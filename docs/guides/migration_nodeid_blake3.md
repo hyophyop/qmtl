@@ -13,7 +13,9 @@ The NodeID algorithm uses BLAKE3 with a mandatory `blake3:` prefix and must not 
 
 ## Changes
 
-- `compute_node_id` returns `blake3:<digest>` computed from `(node_type, code_hash, config_hash, schema_hash)` without `world_id`.
+- `compute_node_id` returns `blake3:<digest>` computed from the canonical node specification:
+  `(node_type, interval, period, params(canonical JSON), dependencies(sorted), schema_compat_id, code_hash)`.
+  `schema_hash` and `config_hash` remain part of the submitted node payload for validation but are no longer inputs to the digest.
 - The legacy helper `compute_legacy_node_id` has been removed; Gateways reject non-canonical IDs.
 
 ## Actions
@@ -21,6 +23,7 @@ The NodeID algorithm uses BLAKE3 with a mandatory `blake3:` prefix and must not 
 - Ensure all code paths use `compute_node_id` exclusively.
 - Migrate any stored NodeIDs to the canonical `blake3:` form.
 - Remove any references to `compute_legacy_node_id` in your codebase.
-- Update DAG serialization to include `config_hash` alongside `code_hash` and `schema_hash` so Gateway validation can recompute canonical IDs.
+- Update DAG serialization to include `schema_compat_id`, canonical `params` (or `config`) values, and the sorted dependency list so Gateway validation can recompute canonical IDs.
+- Continue to ship `code_hash`, `config_hash`, and `schema_hash` for compatibility checks; Gateway now verifies their presence in addition to `schema_compat_id`.
 
 {{ nav_links() }}

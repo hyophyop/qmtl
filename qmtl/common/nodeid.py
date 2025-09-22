@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 """Deterministic NodeID helpers."""
-from typing import Iterable
+
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from blake3 import blake3
+
+from .nodespec import serialize_nodespec
 
 
 def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
@@ -40,15 +44,17 @@ def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
 
 
 def compute_node_id(
-    node_type: str,
-    code_hash: str,
-    config_hash: str,
-    schema_hash: str,
+    node: Mapping[str, Any],
+    *,
     existing_ids: Iterable[str] | None = None,
 ) -> str:
-    """Return canonical BLAKE3-based NodeID with ``blake3:`` prefix."""
+    """Return canonical BLAKE3-based NodeID with ``blake3:`` prefix.
 
-    data = f"{node_type}:{code_hash}:{config_hash}:{schema_hash}".encode()
+    The digest is computed from the canonical serialization of the node as
+    produced by :func:`qmtl.common.nodespec.serialize_nodespec`.
+    """
+
+    data = serialize_nodespec(node)
     return hash_blake3(data, existing_ids=existing_ids)
 
 

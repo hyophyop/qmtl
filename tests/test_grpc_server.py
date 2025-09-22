@@ -102,7 +102,16 @@ async def test_grpc_diff_multiple_chunks():
     server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
     await server.start()
     nodes = [
-        {"node_id": str(i), "node_type": "N", "code_hash": "c", "schema_hash": "s"}
+        {
+            "node_id": str(i),
+            "node_type": "N",
+            "code_hash": "c",
+            "config_hash": "cfg",
+            "schema_hash": "s",
+            "schema_compat_id": "s-major",
+            "params": {},
+            "dependencies": [],
+        }
         for i in range(120)
     ]
     dag_json = json.dumps({"nodes": nodes})
@@ -322,7 +331,11 @@ async def test_grpc_diff_publishes_controlbus():
                     "node_id": "n1",
                     "node_type": "N",
                     "code_hash": "c",
+                    "config_hash": "cfg",
                     "schema_hash": "s",
+                    "schema_compat_id": "s-major",
+                    "params": {},
+                    "dependencies": [],
                     "interval": 60,
                     "tags": ["x"],
                 }

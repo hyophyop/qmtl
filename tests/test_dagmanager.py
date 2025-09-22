@@ -2,19 +2,37 @@ from blake3 import blake3
 import hashlib
 
 from qmtl.dagmanager import compute_node_id
+from qmtl.common.nodespec import serialize_nodespec
 from qmtl.dagmanager.neo4j_init import get_schema_queries
 
 
 def test_compute_node_id_blake3():
-    node_id = compute_node_id("type", "code", "cfg", "schema")
-    expected = blake3(b"type:code:cfg:schema").hexdigest()
+    spec = {
+        "node_type": "type",
+        "interval": 5,
+        "period": 1,
+        "params": {"alpha": 1, "beta": 2},
+        "dependencies": ["dep-b", "dep-a"],
+        "schema_compat_id": "schema-major",
+        "code_hash": "code",
+    }
+    node_id = compute_node_id(spec)
+    expected = blake3(serialize_nodespec(spec)).hexdigest()
     assert node_id == f"blake3:{expected}"
 
 
 def test_compute_node_id_collision():
-    data = ("A", "B", "C", "D")
-    first = compute_node_id(*data)
-    second = compute_node_id(*data, existing_ids={first})
+    data = {
+        "node_type": "A",
+        "interval": 1,
+        "period": 1,
+        "params": {"foo": 1},
+        "dependencies": ["dep-1"],
+        "schema_compat_id": "schema-major",
+        "code_hash": "B",
+    }
+    first = compute_node_id(data)
+    second = compute_node_id(data, existing_ids={first})
     assert first != second
     assert second.startswith("blake3:")
 

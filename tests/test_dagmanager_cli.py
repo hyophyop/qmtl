@@ -27,7 +27,19 @@ class DummyRpcError(grpc.RpcError):
         return self._msg
 
 def test_cli_diff_dry_run(tmp_path, capsys):
-    dag = {"nodes": [{"node_id": "n1", "code_hash": "c", "schema_hash": "s"}]}
+    dag = {
+        "nodes": [
+            {
+                "node_id": "n1",
+                "code_hash": "c",
+                "config_hash": "cfg",
+                "schema_hash": "s",
+                "schema_compat_id": "s-major",
+                "params": {},
+                "dependencies": [],
+            }
+        ]
+    }
     path = tmp_path / "dag.json"
     path.write_text(json.dumps(dag))
     main(["diff", "--file", str(path), "--dry_run"])
@@ -183,7 +195,19 @@ def test_cli_queue_stats_grpc_error(monkeypatch, capsys):
 
 
 def test_cli_snapshot_freeze_and_verify(tmp_path, capsys):
-    dag = {"nodes": [{"node_id": "n1", "code_hash": "c", "schema_hash": "s"}]}
+    dag = {
+        "nodes": [
+            {
+                "node_id": "n1",
+                "code_hash": "c",
+                "config_hash": "cfg",
+                "schema_hash": "s",
+                "schema_compat_id": "s-major",
+                "params": {},
+                "dependencies": [],
+            }
+        ]
+    }
     dag_path = tmp_path / "dag.json"
     dag_path.write_text(json.dumps(dag))
     snap_path = tmp_path / "snap.json"
