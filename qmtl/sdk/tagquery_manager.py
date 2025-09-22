@@ -44,6 +44,7 @@ class TagQueryManager:
         self._nodes: Dict[Tuple[Tuple[str, ...], int, MatchMode], List[TagQueryNode]] = {}
         self._poll_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        self._started = False
         # Best-effort idempotency for queue_update events: remember last
         # applied queue set per (tags, interval, match_mode) key to drop
         # duplicates that may occur during reconnects/retries.
@@ -202,11 +203,19 @@ class TagQueryManager:
 
     # ------------------------------------------------------------------
     async def start(self) -> None:
+        if self._started:
+            if self._poll_task is not None and self._poll_task.done():
+                self._poll_task = None
+                self._started = False
+            else:
+                return
+
         if self.client:
             await self.client.start()
             if self.gateway_url:
                 self._stop_event.clear()
                 self._poll_task = asyncio.create_task(self._poll_loop())
+            self._started = True
             return
         if not self.gateway_url:
             return
@@ -235,6 +244,7 @@ class TagQueryManager:
                         # Start periodic reconcile loop for explicit status queries
                         self._stop_event.clear()
                         self._poll_task = asyncio.create_task(self._poll_loop())
+                        self._started = True
                         return
         except Exception:
             return
@@ -245,6 +255,7 @@ class TagQueryManager:
             if self.gateway_url:
                 self._stop_event.clear()
                 self._poll_task = asyncio.create_task(self._poll_loop())
+            self._started = True
             return
 
         # No legacy watch fallback; WebSocket is required
@@ -258,7 +269,9 @@ class TagQueryManager:
                 await self._poll_task
             except asyncio.CancelledError:
                 pass
-            self._poll_task = None
+            finally:
+                self._poll_task = None
+        self._started = False
 
     async def _poll_loop(self) -> None:
         # Periodically reconcile tag queries via HTTP GET to avoid depending
