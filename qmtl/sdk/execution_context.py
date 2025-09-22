@@ -66,6 +66,17 @@ def _normalize_mode(value: str | None) -> str:
     return mode
 
 
+def _validate_clock(value: object, *, expected: str, mode: str | None = None) -> str:
+    cval = str(value).strip().lower()
+    if cval not in _CLOCKS:
+        raise ValueError("clock must be one of 'virtual' or 'wall'")
+    if cval != expected:
+        if mode:
+            raise ValueError(f"{mode} runs require '{expected}' clock but received '{value}'")
+        raise ValueError(f"runs require '{expected}' clock but received '{value}'")
+    return cval
+
+
 def merge_context(base: MutableMapping[str, str], source: Mapping[str, str] | None) -> None:
     """Merge ``source`` context values into ``base`` in-place."""
 
@@ -134,16 +145,15 @@ def resolve_execution_context(
 
     expected_clock = "wall" if mode == "live" else "virtual"
     if clock is not None:
-        cval = str(clock).strip().lower()
-        if cval not in _CLOCKS:
-            raise ValueError("clock must be one of 'virtual' or 'wall'")
-        if cval != expected_clock:
-            raise ValueError(
-                f"{mode} runs require '{expected_clock}' clock but received '{clock}'"
-            )
-        merged["clock"] = cval
+        merged["clock"] = _validate_clock(clock, expected=expected_clock, mode=mode)
     else:
-        merged.setdefault("clock", expected_clock)
+        existing_clock = merged.get("clock")
+        if existing_clock is not None:
+            merged["clock"] = _validate_clock(
+                existing_clock, expected=expected_clock, mode=mode
+            )
+        else:
+            merged["clock"] = expected_clock
 
     if as_of is not None:
         text = str(as_of).strip()
