@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 from qmtl.common import compute_node_id, crc32_of_list
@@ -186,13 +188,81 @@ def node_ids_crc32(nodes: Iterable[Mapping[str, Any]] | None) -> int:
 
     if not nodes:
         return 0
-    return crc32_of_list(node.get("node_id") for node in nodes if node.get("node_id"))
+    return crc32_of_list(
+        node["node_id"] for node in nodes if isinstance(node, Mapping) and node.get("node_id")
+    )
+
+
+def _default_node_template() -> dict[str, Any]:
+    return {
+        "node_type": "TagQueryNode",
+        "interval": 60,
+        "params": {"tags": ["universe"], "match_mode": "any"},
+        "dependencies": [],
+        "schema_hash": "tag-schema",
+        "schema_compat_id": "tag-schema-major",
+        "code_hash": "tag-code",
+        "config_hash": "cfg",
+        "tags": ["universe"],
+    }
+
+
+@dataclass(slots=True)
+class NodeFactory:
+    """Build canonical nodes with deterministic ``node_id`` values."""
+
+    template: Mapping[str, Any] = field(default_factory=_default_node_template)
+
+    def build(self, *, assign_id: bool = True, **overrides: Any) -> dict[str, Any]:
+        values: dict[str, Any] = deepcopy(dict(self.template))
+        values.update(overrides)
+        include_node_id = values.pop("include_node_id", assign_id)
+        node_type = values.pop("node_type", "TagQueryNode")
+        interval = values.pop("interval", 0)
+        period = values.pop("period", 0)
+        params = values.pop("params", None)
+        config = values.pop("config", None)
+        dependencies = values.pop("dependencies", None)
+        inputs = values.pop("inputs", None)
+        schema_hash = values.pop("schema_hash", "schema")
+        schema_compat_id = values.pop("schema_compat_id", None)
+        code_hash = values.pop("code_hash", "code")
+        config_hash = values.pop("config_hash", "cfg")
+        payload = canonical_node_payload(
+            node_type=node_type,
+            interval=interval,
+            period=period,
+            params=params,
+            config=config,
+            dependencies=dependencies,
+            inputs=inputs,
+            schema_hash=schema_hash,
+            schema_compat_id=schema_compat_id,
+            code_hash=code_hash,
+            config_hash=config_hash,
+            include_node_id=include_node_id,
+            extras=values,
+        )
+        return payload
+
+    def build_without_id(self, **overrides: Any) -> dict[str, Any]:
+        node = self.build(assign_id=False, **overrides)
+        node.pop("node_id", None)
+        return node
+
+
+def make_node(**overrides: Any) -> dict[str, Any]:
+    """Convenience helper returning a node with a computed ``node_id``."""
+
+    return NodeFactory().build(**overrides)
 
 
 __all__ = [
+    "NodeFactory",
     "canonical_dag",
     "canonical_node_payload",
     "indicator_node_payload",
+    "make_node",
     "node_ids_crc32",
     "tag_query_node_payload",
 ]
