@@ -77,7 +77,7 @@ class ComputeContextService:
 
         decision_ctx: ComputeContext | None = None
         stale_decision = False
-        decision_unavailable = False
+        downgrade_missing_decision = False
         if worlds and self._world_client is not None:
             world_id = worlds[0]
             try:
@@ -85,13 +85,13 @@ class ComputeContextService:
             except _WorldDecisionUnavailable as exc:
                 stale_decision = stale_decision or exc.stale
                 decision_ctx = None
-                decision_unavailable = True
+                downgrade_missing_decision = True
 
         if decision_ctx is not None:
             context = self._merge_contexts(decision_ctx, base_ctx)
             if stale_decision:
                 context = self._downgrade_stale(context)
-        elif decision_unavailable and worlds:
+        elif downgrade_missing_decision and worlds:
             gw_metrics.record_worlds_stale_response()
             if not context.safe_mode:
                 context = self._downgrade_unavailable(context)

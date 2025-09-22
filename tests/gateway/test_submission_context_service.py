@@ -110,6 +110,18 @@ async def test_build_safe_mode_when_worldservice_unavailable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_preserves_live_domain_without_worldservice() -> None:
+    service = ComputeContextService()
+    payload = _make_payload()
+
+    strategy_ctx = await service.build(payload)
+
+    assert strategy_ctx.execution_domain == "live"
+    assert strategy_ctx.safe_mode is False
+    assert strategy_ctx.downgraded is False
+
+
+@pytest.mark.asyncio
 async def test_build_without_worlds() -> None:
     service = ComputeContextService()
     payload = StrategySubmit(
