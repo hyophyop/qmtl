@@ -1,5 +1,6 @@
-from blake3 import blake3
 import hashlib
+
+from blake3 import blake3
 
 from qmtl.dagmanager import compute_node_id
 from qmtl.common.nodespec import serialize_nodespec
