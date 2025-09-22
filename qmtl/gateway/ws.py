@@ -8,7 +8,7 @@ from typing import Optional, Set, Any, Dict
 
 from fastapi import WebSocket
 
-from qmtl.sdk.node import MatchMode
+from qmtl.common.tagquery import MatchMode
 
 from ..common.cloudevents import format_event
 from . import metrics
