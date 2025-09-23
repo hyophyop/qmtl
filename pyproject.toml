@@ -66,6 +66,7 @@ include = ["qmtl*"]
 "qmtl.examples" = [
   "*.py",
   "*.yml",
+  "templates/*.yml",
   "gitignore",
   "README.md",
   "data/*.csv",
