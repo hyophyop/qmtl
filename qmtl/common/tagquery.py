@@ -21,11 +21,18 @@ class MatchMode(str, Enum):
 
 
 def split_tags(tags: str | Iterable[str] | None) -> list[str]:
+    """Normalize a raw ``tags`` payload into a list of tag strings."""
+
     if tags is None:
         return []
     if isinstance(tags, str):
-        return [t for t in tags.split(",") if t]
-    return [str(t) for t in tags]
+        return [segment for segment in (part.strip() for part in tags.split(",")) if segment]
+    normalized: list[str] = []
+    for item in tags:
+        text = str(item).strip()
+        if text:
+            normalized.append(text)
+    return normalized
 
 
 def normalize_match_mode(match_mode: str | None) -> MatchMode:
