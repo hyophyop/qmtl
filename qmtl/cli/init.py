@@ -11,7 +11,7 @@ def run(argv: List[str] | None = None) -> None:
     """Entry point for the ``init`` subcommand."""
 
     parser = argparse.ArgumentParser(
-        prog="qmtl init",
+        prog="qmtl project init",
         description="Initialize new project (see docs/guides/strategy_workflow.md)",
     )
     parser.add_argument("--path", required=True, help="Project directory to create scaffolding")

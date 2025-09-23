@@ -10,7 +10,7 @@ last_modified: 2025-09-24
 # **러닝 경로 요약**
 
 1. [MVP 전략 예제]({{ code_url('qmtl/examples/templates/single_indicator.py') }})
-   - `qmtl init --path mvp --strategy single_indicator --with-sample-data`
+   - `qmtl project init --path mvp --strategy single_indicator --with-sample-data`
    - `uv run python strategy.py` 실행 후 `uv run qmtl report run.log`로 리포트 생성
 2. [전략 템플릿 모음](../reference/templates.md)
 3. [아키텍처 상세](../architecture/architecture.md)
@@ -151,17 +151,17 @@ Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
 
 ## CLI 도움말
 
-`qmtl sdk run` 명령으로 전략을 실행할 때는 `--world-id`를 반드시 지정합니다.
+`qmtl tools sdk run` 명령으로 전략을 실행할 때는 `--world-id`를 반드시 지정합니다.
 
 ```bash
-qmtl sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
+qmtl tools sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
 ```
 
 환경 변수로 값을 주입할 수도 있습니다.
 
 ```bash
 export WORLD_ID=demo_world
-qmtl sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
+qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
 ```
 
 구성 파일에서 값을 읽어오는 방법의 예시는 다음과 같습니다.
@@ -175,19 +175,19 @@ gateway_url: http://gw
 ```bash
 WORLD_ID=$(yq '.world_id' config.yml)
 GATEWAY_URL=$(yq '.gateway_url' config.yml)
-qmtl sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWAY_URL
+qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWAY_URL
 ```
 
 전체 옵션은 아래 명령으로 확인할 수 있습니다.
 
 ```bash
-python -m qmtl.sdk --help
+qmtl tools sdk --help
 ```
 
-`qmtl sdk run` 명령은 Clock/데이터 메타데이터를 직접 설정할 수 있는 옵션을 제공합니다.
+`qmtl tools sdk run` 명령은 Clock/데이터 메타데이터를 직접 설정할 수 있는 옵션을 제공합니다.
 
 ```bash
-qmtl sdk run strategies.my:MyStrategy \
+qmtl tools sdk run strategies.my:MyStrategy \
   --world-id demo_world \
   --gateway-url http://gw \
   --mode backtest \

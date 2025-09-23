@@ -120,8 +120,8 @@ def apply_hysteresis(prev, checks, h):
 월드 정책이 “실행 모드”를 결정하도록 Runner 실행을 일원화한다.
 
 - CLI
-  - `qmtl sdk run --world-id <id> --gateway-url <url>`: 월드‑우선 실행.
-  - `qmtl sdk offline`: 게이트웨이 없이 로컬 실행.
+  - `qmtl tools sdk run --world-id <id> --gateway-url <url>`: 월드‑우선 실행.
+  - `qmtl tools sdk offline`: 게이트웨이 없이 로컬 실행.
 - 실행 흐름(요지)
   1) Runner가 `--world`를 받으면 Gateway `GET /worlds/{id}/decide`를 호출해 `effective_mode`와 이유/파라미터를 얻는다.
   2) Runner는 별도 모드로 분기하지 않고, WS 결정에 따라 주문 게이트/검증만 제어한다.
@@ -191,13 +191,13 @@ Phase 4 — 멀티‑월드 최적화(선택적)
 ### 10.1 Runner/CLI 단계적 전환(월드‑우선)
 
 - Phase R1 — 기능 추가(비파괴)
-  - CLI: `qmtl sdk run --world-id <id> --gateway-url <url>`, `qmtl sdk offline`.
+  - CLI: `qmtl tools sdk run --world-id <id> --gateway-url <url>`, `qmtl tools sdk offline`.
   - Runner: WS 결정에 따르는 단일 경로(`run`/`offline`)만 유지.
   - 문서/예제: 월드‑우선 실행 예제와 즉시‑라이브 월드 YAML 제공.
 
 로컬 실행 예시
 ```bash
-qmtl sdk run strategies.my:Alpha --world-id crypto_mom_1h --gateway-url http://localhost:8000
+qmtl tools sdk run strategies.my:Alpha --world-id crypto_mom_1h --gateway-url http://localhost:8000
 ```
 
 ## 11. 경계·원칙(정책)

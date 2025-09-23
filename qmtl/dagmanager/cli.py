@@ -239,13 +239,13 @@ def _cmd_neo4j_init(args: argparse.Namespace) -> None:
 
 
 async def _main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="qmtl dagmanager")
-    parser.add_argument("--target", help="gRPC service target", default="localhost:50051")
+    parser = argparse.ArgumentParser(prog="qmtl service dagmanager")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_diff = sub.add_parser("diff", help="Run diff")
     p_diff.add_argument("--file", required=True)
-    p_diff.add_argument("--dry_run", action="store_true")
+    p_diff.add_argument("--dry-run", action="store_true")
+    p_diff.add_argument("--target", help="gRPC service target", default="localhost:50051")
 
     p_snap = sub.add_parser("snapshot", help="Create or verify DAG snapshot")
     p_snap.add_argument("--file", required=True)
@@ -257,13 +257,16 @@ async def _main(argv: list[str] | None = None) -> None:
     p_stats = sub.add_parser("queue-stats", help="Get queue statistics")
     p_stats.add_argument("--tag", default="")
     p_stats.add_argument("--interval", default="1h")
+    p_stats.add_argument("--target", help="gRPC service target", default="localhost:50051")
 
     p_gc = sub.add_parser("gc", help="Trigger GC for sentinel")
     p_gc.add_argument("--sentinel", required=True)
+    p_gc.add_argument("--target", help="gRPC service target", default="localhost:50051")
 
     p_rdiff = sub.add_parser("redo-diff", help="Redo diff for sentinel")
     p_rdiff.add_argument("--sentinel", required=True)
     p_rdiff.add_argument("--file", required=True)
+    p_rdiff.add_argument("--target", help="gRPC service target", default="localhost:50051")
 
     p_exp = sub.add_parser("export-schema", help="Export Neo4j schema")
     p_exp.add_argument("--uri", default="bolt://localhost:7687")
@@ -280,6 +283,12 @@ async def _main(argv: list[str] | None = None) -> None:
     p_rb.add_argument("--uri", default="bolt://localhost:7687", help="Neo4j connection URI")
     p_rb.add_argument("--user", default="neo4j", help="Neo4j username")
     p_rb.add_argument("--password", default="neo4j", help="Neo4j password")
+
+    p_server = sub.add_parser("server", help="Run DAG Manager gRPC/HTTP services")
+    p_server.add_argument("--config", help="Path to configuration file")
+
+    p_metrics = sub.add_parser("metrics", help="Expose DAG Manager Prometheus metrics")
+    p_metrics.add_argument("--port", type=int, default=8000, help="Port to expose metrics on")
 
     args = parser.parse_args(argv)
 
@@ -299,6 +308,17 @@ async def _main(argv: list[str] | None = None) -> None:
         _cmd_neo4j_init(args)
     elif args.cmd == "neo4j-rollback":
         neo4j_rollback(args.uri, args.user, args.password)
+    elif args.cmd == "server":
+        from .server import main as server_main
+
+        server_args: list[str] = []
+        if args.config:
+            server_args.extend(["--config", args.config])
+        server_main(server_args)
+    elif args.cmd == "metrics":
+        from .metrics import main as metrics_main
+
+        metrics_main(["--port", str(args.port)])
 
 
 def main(argv: list[str] | None = None) -> None:

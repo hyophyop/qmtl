@@ -238,10 +238,10 @@ Run the Gateway service. The ``--config`` flag is optional:
 
 ```bash
 # start with built-in defaults
-qmtl gw
+qmtl service gateway
 
 # specify a configuration file
-qmtl gw --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
 ```
 
 When provided, the command reads the ``gateway`` section of

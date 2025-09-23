@@ -97,10 +97,10 @@ CLI 사용법:
 
 ```
 # 스키마 초기화 (idempotent)
-qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
 
 # 현재 스키마 내보내기
-qmtl dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
+qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 ### 1.3 NodeID Generation
 - NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
@@ -350,13 +350,13 @@ add Kafka brokers to sustain ingest throughput.
 
 ```shell
 # Diff example (non-destructive read)
-qmtl dagmanager diff --file dag.json
+qmtl service dagmanager diff --file dag.json
 # queue stats
-qmtl dagmanager queue-stats --tag indicator --interval 1h
+qmtl service dagmanager queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
-qmtl dagmanager gc --sentinel v1.2.3
+qmtl service dagmanager gc --sentinel v1.2.3
 # export schema DDL
-qmtl dagmanager export-schema --out schema.cypher
+qmtl service dagmanager export-schema --out schema.cypher
 ```
 
 For canary deployment steps see
@@ -364,7 +364,7 @@ For canary deployment steps see
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl dagmanager-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
+`qmtl service dagmanager server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
 아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
 
 예시:
@@ -376,16 +376,16 @@ neo4j_password: secret
 kafka_dsn: localhost:9092
 ```
 
-The sample file installed by ``qmtl init`` instead defaults to in-memory
+The sample file installed by ``qmtl project init`` instead defaults to in-memory
 repositories and queues for local development. Uncommenting the DSN lines above
 enables Neo4j and Kafka integrations respectively.
 
 ```
 # 기본값으로 실행
-qmtl dagmanager-server
+qmtl service dagmanager server
 
 # YAML 설정 파일로 실행
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.

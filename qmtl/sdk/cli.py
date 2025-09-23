@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _main(argv: List[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="qmtl sdk", description="Run QMTL strategy")
+    parser = argparse.ArgumentParser(prog="qmtl tools sdk", description="Run QMTL strategy")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run_p = sub.add_parser("run", help="Run under WorldService decisions")

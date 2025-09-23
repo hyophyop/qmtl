@@ -112,7 +112,7 @@ dagmanager:
   notes:
     - >-
       After provisioning Neo4j, initialise schema with:
-      qmtl dagmanager neo4j-init --uri ${backends.neo4j.dsn} \
+      qmtl service dagmanager neo4j-init --uri ${backends.neo4j.dsn} \
         --user ${backends.neo4j.user} --password <secret>
 
 # Additional operational hints for the full stack.

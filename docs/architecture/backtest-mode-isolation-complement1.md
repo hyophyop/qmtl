@@ -179,7 +179,7 @@ gating_policy:
     audit_topic: "gating.alerts"
 
 3‑8. observability.md → CLI 연계 문구
-	•	qmtl dagmanager diff --file dag.json --dry_run로 게이트 전/후 그래프 차이 확인.
+	•	qmtl service dagmanager diff --file dag.json --dry-run로 게이트 전/후 그래프 차이 확인.
 	•	문서 현황은 docs/dashboard.json으로 트래킹.  ￼
 
 3‑9. adr/0001-execution-domain.md (요지)

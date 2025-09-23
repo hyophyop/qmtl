@@ -1,6 +1,6 @@
 # QMTL Strategy Project
 
-This README serves as a template for projects created with `qmtl init`.
+This README serves as a template for projects created with `qmtl project init`.
 It outlines basic setup and testing instructions.
 
 ## Setup

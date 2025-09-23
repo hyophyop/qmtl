@@ -7,14 +7,14 @@ This page describes how to initialize, inspect, and roll back the DAG Manager’
 All DDL uses `IF NOT EXISTS`, so re-running is safe:
 
 ```
-qmtl dagmanager neo4j-init \
+qmtl service dagmanager neo4j-init \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
 ## Export current schema
 
 ```
-qmtl dagmanager export-schema \
+qmtl service dagmanager export-schema \
   --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 
@@ -23,7 +23,7 @@ qmtl dagmanager export-schema \
 Drops the constraints and indexes created by `neo4j-init` using `DROP ... IF EXISTS`:
 
 ```
-qmtl dagmanager neo4j-rollback \
+qmtl service dagmanager neo4j-rollback \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 

@@ -82,8 +82,8 @@ qmtl:
     gateway.worldservice_url: ${gateway.worldservice_url}
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
-    - "qmtl gw --config ${qmtl.config_file}"
-    - "qmtl dagmanager-server --config ${qmtl.config_file}"
+    - "qmtl service gateway --config ${qmtl.config_file}"
+    - "qmtl service dagmanager server --config ${qmtl.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"

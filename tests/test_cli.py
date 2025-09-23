@@ -12,9 +12,9 @@ STRATEGY_PATH = "tests.sample_strategy:SampleStrategy"
 
 
 def test_cli_help():
-    result = subprocess.run([sys.executable, "-m", "qmtl", "sdk", "--help"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-m", "qmtl", "tools", "sdk", "--help"], capture_output=True, text=True)
     assert result.returncode == 0
-    assert "usage: qmtl sdk" in result.stdout
+    assert "usage: qmtl tools sdk" in result.stdout
 
 
 def test_cli_run_requires_args():
@@ -23,6 +23,7 @@ def test_cli_run_requires_args():
         sys.executable,
         "-m",
         "qmtl",
+        "tools",
         "sdk",
         "run",
         STRATEGY_PATH,
@@ -36,6 +37,7 @@ def test_cli_offline():
         sys.executable,
         "-m",
         "qmtl",
+        "tools",
         "sdk",
         "offline",
         STRATEGY_PATH,

@@ -45,8 +45,8 @@ available templates, then initialize the project with a chosen template and
 optional sample data:
 
 ```bash
-qmtl init --list-templates
-qmtl init --path my_qmtl_project --strategy branching --with-sample-data
+qmtl project init --list-templates
+qmtl project init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
@@ -133,12 +133,12 @@ Execution domains are now surfaced explicitly on envelopes:
 
 ```bash
 # start with built-in defaults
-qmtl gw
-qmtl dagmanager-server
+qmtl service gateway
+qmtl service dagmanager server
 
 # or load a custom configuration
-qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
 Multiple strategies can be executed in parallel by launching separate processes

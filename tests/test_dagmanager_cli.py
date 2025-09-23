@@ -42,7 +42,7 @@ def test_cli_diff_dry_run(tmp_path, capsys):
     }
     path = tmp_path / "dag.json"
     path.write_text(json.dumps(dag))
-    main(["diff", "--file", str(path), "--dry_run"])
+    main(["diff", "--file", str(path), "--dry-run"])
     out = capsys.readouterr().out
     assert "n1" in out
 
@@ -145,7 +145,7 @@ def test_cli_export_schema(monkeypatch, tmp_path):
 
 def test_cli_diff_file_error(capsys):
     with pytest.raises(SystemExit):
-        main(["diff", "--file", "missing.json", "--dry_run"])
+        main(["diff", "--file", "missing.json", "--dry-run"])
     err = capsys.readouterr().err
     assert "Failed to read file" in err
 
