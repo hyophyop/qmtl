@@ -6,8 +6,10 @@ from typing import Optional
 
 import httpx
 from opentelemetry.propagate import inject
+from pydantic import ValidationError
 
 from qmtl.common import AsyncCircuitBreaker, crc32_of_list
+from qmtl.gateway.models import StrategyAck
 from . import runtime
 
 
@@ -29,7 +31,7 @@ class GatewayClient:
         meta: Optional[dict],
         context: Optional[dict[str, str]] = None,
         world_id: Optional[str] = None,
-    ) -> dict:
+    ) -> StrategyAck | dict[str, object]:
         """Submit a strategy DAG to the gateway."""
         url = gateway_url.rstrip("/") + "/strategies"
         payload = {
@@ -62,7 +64,15 @@ class GatewayClient:
         if resp.status_code == 202:
             if self._circuit_breaker is not None:
                 self._circuit_breaker.reset()
-            return resp.json().get("queue_map", {})
+            payload = resp.json()
+            try:
+                if hasattr(StrategyAck, "model_validate"):
+                    ack = StrategyAck.model_validate(payload)  # type: ignore[attr-defined]
+                else:  # pragma: no cover - pydantic v1 fallback
+                    ack = StrategyAck.parse_obj(payload)  # type: ignore[attr-defined]
+            except ValidationError:
+                return {"error": "invalid gateway response"}
+            return ack
         if resp.status_code == 409:
             return {"error": "duplicate strategy"}
         if resp.status_code == 422:

@@ -54,6 +54,7 @@ async def test_runner_applies_context_once(monkeypatch) -> None:
             dataset_fingerprint=None,
             tag_service=object(),
             dag_meta=None,
+            strategy_id=None,
         )
 
     monkeypatch.setattr(StrategyBootstrapper, "bootstrap", fake_bootstrap, raising=False)

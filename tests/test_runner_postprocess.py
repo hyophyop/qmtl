@@ -1,5 +1,6 @@
 from typing import Any
 
+from qmtl.gateway.models import StrategyAck
 from qmtl.sdk.runner import Runner
 from qmtl.sdk.node import Node
 from qmtl.sdk.strategy import Strategy
@@ -48,7 +49,7 @@ def test_run_hooks_offline(monkeypatch):
         orders.append(order)
 
     async def fake_gateway(**kwargs):
-        return {}
+        return StrategyAck(strategy_id="strategy-offline", queue_map={})
 
     class DummyManager:
         async def resolve_tags(self, offline=False):
@@ -133,7 +134,7 @@ def test_run_hooks_live_like(monkeypatch):
         orders.append(order)
 
     async def fake_gateway(**kwargs):
-        return {}
+        return StrategyAck(strategy_id="strategy-offline", queue_map={})
 
     class DummyManager:
         async def resolve_tags(self, offline=False):
