@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 DEFAULT_EXECUTION_DOMAIN = "default"
+_COMPUTE_ONLY_DOMAIN = "backtest"
 
 _BACKTEST_TOKENS = {
     "backtest",
@@ -104,6 +105,15 @@ def resolve_execution_domain(value: str | None) -> str | None:
     return lowered
 
 
+def _is_missing_execution_domain(value: str | None) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        return True
+    return text.lower() == DEFAULT_EXECUTION_DOMAIN
+
+
 def evaluate_safe_mode(
     execution_domain: str | None, as_of: str | None
 ) -> tuple[str | None, bool, DowngradeReason | None, bool]:
@@ -113,11 +123,20 @@ def evaluate_safe_mode(
     downgrade_reason: DowngradeReason | None = None
     safe_mode = False
 
-    if execution_domain in {"backtest", "dryrun"} and not as_of:
+    if _is_missing_execution_domain(execution_domain):
         downgraded = True
-        downgrade_reason = DowngradeReason.MISSING_AS_OF
+        downgrade_reason = DowngradeReason.DECISION_UNAVAILABLE
         safe_mode = True
-        execution_domain = "backtest"
+        execution_domain = _COMPUTE_ONLY_DOMAIN
+    else:
+        domain = str(execution_domain).strip().lower()
+        if domain in {"backtest", "dryrun"} and not as_of:
+            downgraded = True
+            downgrade_reason = DowngradeReason.MISSING_AS_OF
+            safe_mode = True
+            execution_domain = _COMPUTE_ONLY_DOMAIN
+        else:
+            execution_domain = domain
 
     return execution_domain, downgraded, downgrade_reason, safe_mode
 
@@ -134,6 +153,19 @@ class ComputeContext:
     downgraded: bool = False
     downgrade_reason: DowngradeReason | None = None
     safe_mode: bool = False
+
+    def __post_init__(self) -> None:
+        final_domain, downgraded, reason, safe_mode = evaluate_safe_mode(
+            self.execution_domain, self.as_of
+        )
+        if final_domain != self.execution_domain:
+            object.__setattr__(self, "execution_domain", final_domain or "")
+        if downgraded and not self.downgraded:
+            object.__setattr__(self, "downgraded", True)
+        if reason is not None and self.downgrade_reason is None:
+            object.__setattr__(self, "downgrade_reason", reason)
+        if safe_mode and not self.safe_mode:
+            object.__setattr__(self, "safe_mode", True)
 
     def with_world(self, world_id: str | None) -> "ComputeContext":
         return replace(self, world_id=_normalize_optional(world_id) or "")
@@ -201,16 +233,16 @@ class ComputeContext:
         }
 
     def metrics_labels(self) -> tuple[str, str, str | None, str | None]:
-        return (
-            self.world_id or "",
-            self.execution_domain or DEFAULT_EXECUTION_DOMAIN,
-            self.as_of,
-            self.partition,
-        )
+        domain = self.execution_domain or ""
+        if _is_missing_execution_domain(domain):
+            domain = _COMPUTE_ONLY_DOMAIN
+        return (self.world_id or "", domain, self.as_of, self.partition)
 
     def hash_components(self) -> tuple[str, str, str, str]:
         world = self.world_id or ""
-        domain = self.execution_domain or DEFAULT_EXECUTION_DOMAIN
+        domain = self.execution_domain or ""
+        if _is_missing_execution_domain(domain):
+            domain = _COMPUTE_ONLY_DOMAIN
         as_of = "" if self.as_of is None else str(self.as_of)
         partition = "" if self.partition is None else str(self.partition)
         return world, domain, as_of, partition

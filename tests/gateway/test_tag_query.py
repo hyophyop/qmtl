@@ -161,7 +161,7 @@ def test_submit_tag_query_node(client):
             {"queue": "q2", "global": False},
         ]
     }
-    assert dag.called_with == (["t1"], 60, "any", None, None)
+    assert dag.called_with == (["t1"], 60, "any", None, "backtest")
 
 
 def test_multiple_tag_query_nodes_handle_errors(fake_redis):
