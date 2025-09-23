@@ -17,7 +17,7 @@ class DagManagerConfig:
     grpc_host: str = "0.0.0.0"
     grpc_port: int = 50051
     http_host: str = "0.0.0.0"
-    http_port: int = 8000
+    http_port: int = 8001
     controlbus_dsn: Optional[str] = None
     controlbus_queue_topic: str = "queue"
 
