@@ -38,14 +38,14 @@ runner.offline(strategy)
 **Before**
 
 ```bash
-qmtl sdk --mode backtest --world-id demo --gateway-url http://localhost:8000
+qmtl tools sdk --mode backtest --world-id demo --gateway-url http://localhost:8000
 ```
 
 **After**
 
 ```bash
-qmtl sdk run --world-id demo --gateway-url http://localhost:8000
-qmtl sdk offline  # local execution
+qmtl tools sdk run --world-id demo --gateway-url http://localhost:8000
+qmtl tools sdk offline  # local execution
 ```
 
 ## Gateway `/strategies`

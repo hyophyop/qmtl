@@ -23,8 +23,8 @@ def _build_report(metrics: dict[str, float]) -> str:
 
 
 def run(argv: List[str] | None = None) -> None:
-    """Entrypoint for ``qmtl report`` subcommand."""
-    parser = argparse.ArgumentParser(prog="qmtl report", description="Generate performance report from results.json")
+    """Entrypoint for ``qmtl tools report`` subcommand."""
+    parser = argparse.ArgumentParser(prog="qmtl tools report", description="Generate performance report from results.json")
     parser.add_argument("--from", dest="input", required=True, help="Path to results JSON containing a 'returns' array")
     parser.add_argument("--out", dest="output", default="report.md", help="Output markdown file path")
     parser.add_argument("--risk-free", dest="risk_free", type=float, default=0.0, help="Risk free rate")

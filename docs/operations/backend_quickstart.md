@@ -41,13 +41,13 @@ uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 
 - Start Gateway with the config:
 
 ```bash
-qmtl gw --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
 ```
 
 3) Start DAG Manager (same config)
 
 ```bash
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
 Notes
@@ -79,7 +79,7 @@ Stop stacks with `docker compose down` (add `-v` to remove volumes).
 - Neo4j init (if using Neo4j):
 
 ```bash
-qmtl dagmanager neo4j-init \
+qmtl service dagmanager neo4j-init \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 

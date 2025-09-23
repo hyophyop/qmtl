@@ -13,23 +13,25 @@ SDKs submit strategies through the Gateway, but activation and queue updates alo
 Use the DAG Manager CLI to preview DAG structures:
 
 ```bash
-qmtl dagmanager diff --file dag.json --dry_run
+qmtl service dagmanager diff --file dag.json --dry-run
 ```
 
 Initialize a Neo4j database with the required constraints and indexes:
 
 ```bash
-qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
 Every subcommand now exposes its own help message. For example:
 
 ```bash
-qmtl gw --help
-qmtl dagmanager --help
-qmtl dagmanager-server --help
-qmtl sdk --help
+qmtl service --help
+qmtl service gateway --help
+qmtl service dagmanager --help
+qmtl tools sdk --help
 ```
+
+Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Legacy aliases like `qmtl gw` continue to function but emit deprecation warnings to ease migration.
 
 The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
 
@@ -54,21 +56,21 @@ uv pip install -e .[io]
 
 ## Project Initialization
 
-Create a new working directory with `qmtl init`. The command generates a
+Create a new working directory with `qmtl project init`. The command generates a
 project scaffold containing extension packages and a sample strategy.
 Use `--strategy` to select from the built-in templates, `--list-templates` to
 see the choices and `--with-sample-data` to copy an example OHLCV CSV and
 notebook:
 
 ```bash
-qmtl init --path my_qmtl_project
+qmtl project init --path my_qmtl_project
 # list available templates
-qmtl init --list-templates
+qmtl project init --list-templates
 
 # create project with the branching template
-qmtl init --path my_qmtl_project --strategy branching
+qmtl project init --path my_qmtl_project --strategy branching
 # include sample data
-qmtl init --path my_qmtl_project --with-sample-data
+qmtl project init --path my_qmtl_project --with-sample-data
 cd my_qmtl_project
 ```
 
@@ -170,7 +172,7 @@ uv run -m pytest -n auto
 
 ## Monitoring
 
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl service dagmanager metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
 
 ## Running Services
 
@@ -182,17 +184,17 @@ demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 
 ```bash
 # start the gateway HTTP server with defaults
-qmtl gw
+qmtl service gateway
 
 # start the DAG Manager with defaults
-qmtl dagmanager-server
+qmtl service dagmanager server
 
 # use a custom configuration file
-qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 
 # submit a DAG diff
-qmtl dagmanager diff --file dag.json --target localhost:50051
+qmtl service dagmanager diff --file dag.json --target localhost:50051
 ```
 
 Customize the sample YAML files in `qmtl/examples/` to match your environment.
@@ -222,7 +224,7 @@ uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 
 Then run Gateway with that config:
 
 ```bash
-qmtl gw --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
 ```
 
 With the proxy enabled, SDKs can fetch decisions and activation via the

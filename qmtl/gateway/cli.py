@@ -24,7 +24,7 @@ except Exception:  # pragma: no cover - import guard
 
 async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
-    parser = argparse.ArgumentParser(prog="qmtl gw")
+    parser = argparse.ArgumentParser(prog="qmtl service gateway")
     parser.add_argument("--config", help="Path to configuration file")
     parser.add_argument(
         "--no-sentinel",

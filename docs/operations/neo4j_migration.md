@@ -2,7 +2,7 @@
 
 This guide covers initializing and re-running the DAG Manager’s Neo4j schema setup.
 
-- Command: `qmtl dagmanager neo4j-init`
+- Command: `qmtl service dagmanager neo4j-init`
 - Behavior: idempotent — safe to re-run at any time
 - Scope: creates constraints and indexes used by high-traffic queries
 
@@ -25,7 +25,7 @@ These support fast paths for:
 ## Usage
 
 ```bash
-qmtl dagmanager neo4j-init \
+qmtl service dagmanager neo4j-init \
   --uri bolt://localhost:7687 \
   --user neo4j \
   --password neo4j

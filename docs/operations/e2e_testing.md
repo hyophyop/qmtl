@@ -38,8 +38,8 @@ entrypoint is available:
 docker compose -f tests/docker-compose.e2e.yml up --build -d
 ```
 
-This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl gw` and
-`qmtl dagmanager` containers. The gateway exposes port `8000` and the DAG
+This launches Redis, Postgres, Neo4j, Kafka, Zookeeper and the `qmtl service gateway` and
+`qmtl service dagmanager server` containers. The gateway exposes port `8000` and the DAG
 Manager gRPC endpoint is available on `50051`.
 
 ## Running the tests
@@ -81,8 +81,7 @@ Start a backfill when executing a strategy to load historical data before
 live processing begins:
 
 ```bash
-python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
-       sdk run \
+qmtl tools sdk run tests.sample_strategy:SampleStrategy \
        --start-time 1700000000 \
        --end-time 1700003600
 ```

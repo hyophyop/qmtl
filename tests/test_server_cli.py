@@ -1,5 +1,7 @@
 import pytest
+import pytest
 import yaml
+
 from qmtl.dagmanager.server import main
 
 
@@ -7,7 +9,7 @@ def test_server_help(capsys):
     with pytest.raises(SystemExit):
         main(["--help"])
     out = capsys.readouterr().out
-    assert "qmtl dagmanager-server" in out
+    assert "qmtl service dagmanager server" in out
     assert "--config" in out
 
 

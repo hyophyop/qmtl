@@ -1,13 +1,48 @@
 import subprocess
 import sys
+
 import pytest
 
 
-@pytest.mark.parametrize("cmd", ["gw", "dagmanager", "dagmanager-server", "dagmanager-metrics", "sdk"])
-def test_cli_subcommand_help(cmd):
-    result = subprocess.run([sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True)
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["service", "--help"], "usage: qmtl service"),
+        (["service", "gateway", "--help"], "usage: qmtl service gateway"),
+        (["service", "dagmanager", "--help"], "usage: qmtl service dagmanager"),
+        (["service", "dagmanager", "server", "--help"], "usage: qmtl service dagmanager server"),
+        (["service", "dagmanager", "metrics", "--help"], "usage: qmtl service dagmanager metrics"),
+        (["tools", "--help"], "usage: qmtl tools"),
+        (["tools", "sdk", "--help"], "usage: qmtl tools sdk"),
+        (["project", "--help"], "usage: qmtl project"),
+        (["project", "init", "--help"], "usage: qmtl project init"),
+    ],
+)
+def test_cli_subcommand_help(args, expected):
+    result = subprocess.run([sys.executable, "-m", "qmtl", *args], capture_output=True, text=True)
     assert result.returncode == 0
-    assert f"usage: qmtl {cmd}" in result.stdout
+    assert expected in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("alias", "forward"),
+    [
+        ("gw", "service gateway"),
+        ("gateway", "service gateway"),
+        ("dagmanager", "service dagmanager"),
+        ("dagmanager-server", "service dagmanager server"),
+        ("dagmanager-metrics", "service dagmanager metrics"),
+        ("sdk", "tools sdk"),
+        ("taglint", "tools taglint"),
+        ("report", "tools report"),
+        ("init", "project init"),
+    ],
+)
+def test_legacy_aliases_forward(alias, forward):
+    result = subprocess.run([sys.executable, "-m", "qmtl", alias, "--help"], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert f"usage: qmtl {forward}" in result.stdout
+    assert "deprecated" in result.stderr
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):

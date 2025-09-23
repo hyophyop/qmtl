@@ -203,7 +203,7 @@ def _run_forever(stop_event: threading.Event | None = None) -> None:
 
 def main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="qmtl dagmanager-metrics",
+        prog="qmtl service dagmanager metrics",
         description="Expose DAG Manager metrics",
     )
     parser.add_argument(

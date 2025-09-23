@@ -35,7 +35,7 @@ WorldService gating flow.
    - Gateway (optionally proxying WorldService):
      - In `qmtl/examples/qmtl.yml` set `gateway.worldservice_url: http://localhost:8080`
        and `gateway.enable_worldservice_proxy: true`.
-     - Start: `qmtl gw --config qmtl/examples/qmtl.yml`
+    - Start: `qmtl service gateway --config qmtl/examples/qmtl.yml`
    - Alternatively, use the provided Docker Compose stack.
 2. Inspect the payload without side effects:
    ```bash
