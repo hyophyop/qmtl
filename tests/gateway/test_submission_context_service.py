@@ -135,4 +135,7 @@ async def test_build_without_worlds() -> None:
 
     assert strategy_ctx.context.world_id == ""
     assert strategy_ctx.worlds_list() == []
-    assert strategy_ctx.redis_mapping() == {}
+    assert strategy_ctx.redis_mapping() == {
+        "compute_execution_domain": "backtest",
+        "compute_downgrade_reason": "decision_unavailable",
+    }

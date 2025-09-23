@@ -19,6 +19,6 @@ def compute_compute_key(node_hash: str, context: ComputeContext) -> str:
     node_part = str(node_hash or "")
     world, domain, as_of, partition = context.hash_components()
     if not domain:
-        domain = DEFAULT_EXECUTION_DOMAIN
+        domain = "backtest"
     payload = "\x1f".join((node_part, world, domain, as_of, partition)).encode()
     return f"blake3:{blake3(payload).hexdigest()}"

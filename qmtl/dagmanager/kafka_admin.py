@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Protocol, Mapping, Dict, Iterable
 
-from qmtl.common import AsyncCircuitBreaker, hash_bytes
+from qmtl.common import AsyncCircuitBreaker, ComputeContext, compute_compute_key
 from . import metrics
 
 from .topic import TopicConfig
@@ -23,22 +23,21 @@ def compute_key(
 ) -> str:
     """Return the domain-scoped compute key for ``node_id``.
 
-    The key is derived from the canonical ``node_id`` and compute context
-    components to enforce isolation across worlds, execution domains and data
-    snapshots. Optional context values default to empty strings (or ``"live"``
-    for the execution domain) to maintain backward compatibility.
+    The helper mirrors :func:`qmtl.common.compute_compute_key` so that
+    cache/topic isolation semantics remain aligned with the documented
+    architecture. ``dataset_fingerprint`` is accepted for compatibility but
+    does not affect the resulting key – callers relying on dataset-level
+    isolation should include the fingerprint in their node identifiers.
     """
 
-    components = [
-        node_id or "",
-        (world_id or "").strip(),
-        (execution_domain or "live").strip() or "live",
-        (as_of or "").strip(),
-        (partition or "").strip(),
-        (dataset_fingerprint or "").strip(),
-    ]
-    payload = "|".join(components)
-    return hash_bytes(payload.encode())
+    context = ComputeContext().with_world(world_id)
+    context = context.with_overrides(
+        execution_domain=execution_domain,
+        as_of=as_of,
+        partition=partition,
+        dataset_fingerprint=dataset_fingerprint,
+    )
+    return compute_compute_key(node_id, context)
 
 
 def partition_key(
