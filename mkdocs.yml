@@ -82,7 +82,10 @@ nav:
       - Policy Engine: world/policy_engine.md
   - Archive: archive/README.md
   - Tags: tags.md
-  - Template: templates/template.md
+  - Templates:
+      - Index: templates/index.md
+      - Document Skeleton: templates/template.md
+      - Backend Stack Config: templates/backend_stack.example.yml
 plugins:
   - search
   - macros

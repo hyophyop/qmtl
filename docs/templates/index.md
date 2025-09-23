@@ -1,3 +1,4 @@
 # Index of templates
 
-- [template](template.md)
+- [Document skeleton](template.md)
+- [Backend stack configuration template](backend_stack.example.yml)
