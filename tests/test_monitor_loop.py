@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from qmtl.dagmanager.monitor import MonitorLoop
+from qmtl.services.dagmanager.monitor import MonitorLoop
 
 
 class DummyMonitor:

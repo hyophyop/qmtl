@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 
-from qmtl.sdk.execution_modeling import ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv
-from qmtl.sdk.brokerage_backtest import BrokerageBacktestEngine, ExecCompatParams, make_brokerage_model_for_compat
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv
+from qmtl.runtime.sdk.brokerage_backtest import BrokerageBacktestEngine, ExecCompatParams, make_brokerage_model_for_compat
 
 
 def almost_equal(a: float, b: float, tol: float = 1e-9) -> bool:

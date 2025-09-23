@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.dagmanager import metrics
-from qmtl.dagmanager.diff_service import DiffService
+from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.diff_service import DiffService
 
 from .diff_fakes import FakeQueue, FakeRepo, FakeStream
 from .diff_helpers import make_diff_request, reset_diff_metrics

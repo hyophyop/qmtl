@@ -1,4 +1,8 @@
-from .policy_engine import Policy, evaluate_policy, parse_policy
-from .api import create_app
+from __future__ import annotations
 
-__all__ = ["Policy", "evaluate_policy", "parse_policy", "create_app"]
+ALIAS = __name__
+
+from .._compat import deprecated_module, mirror_module_globals
+
+_target = deprecated_module(ALIAS, "qmtl.services.worldservice")
+mirror_module_globals(_target, globals(), alias=ALIAS)

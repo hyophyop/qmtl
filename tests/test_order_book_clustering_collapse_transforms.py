@@ -1,7 +1,7 @@
 import pytest
 import math
 
-from qmtl.transforms.order_book_clustering_collapse import (
+from qmtl.runtime.transforms.order_book_clustering_collapse import (
     hazard_probability,
     direction_gating,
     execution_cost,

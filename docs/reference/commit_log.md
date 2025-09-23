@@ -31,7 +31,7 @@ is disabled.
 Every accepted strategy submission is written to the commit log before the
 request is queued. The record value is encoded as the tuple
 ``["gateway.ingest", <timestamp_ms>, <strategy_id>, <payload>]`` so it remains
-compatible with :class:`~qmtl.gateway.commit_log_consumer.CommitLogConsumer`.
+compatible with :class:`~qmtl.services.gateway.commit_log_consumer.CommitLogConsumer`.
 The message key is ``ingest:<strategy_id>`` to preserve append-only semantics.
 
 The payload object contains all data required to replay an ingestion event:

@@ -1,4 +1,4 @@
-from qmtl.sdk.execution_modeling import OrderSide, OrderType
+from qmtl.runtime.sdk.execution_modeling import OrderSide, OrderType
 
 
 def test_simulate_market_order(execution_model, liquid_market_data):

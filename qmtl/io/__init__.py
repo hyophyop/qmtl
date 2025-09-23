@@ -1,16 +1,8 @@
-"""Data fetching and persistence helpers."""
+from __future__ import annotations
 
-from .datafetcher import DataFetcher
-from qmtl.sdk.data_io import HistoryProvider, EventRecorder
-from .historyprovider import QuestDBLoader
-from .eventrecorder import QuestDBRecorder
-from .binance_fetcher import BinanceFetcher
+ALIAS = __name__
 
-__all__ = [
-    "DataFetcher",
-    "HistoryProvider",
-    "QuestDBLoader",
-    "EventRecorder",
-    "QuestDBRecorder",
-    "BinanceFetcher",
-]
+from .._compat import deprecated_module, mirror_module_globals
+
+_target = deprecated_module(ALIAS, "qmtl.runtime.io")
+mirror_module_globals(_target, globals(), alias=ALIAS)

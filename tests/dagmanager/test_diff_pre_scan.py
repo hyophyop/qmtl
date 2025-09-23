@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from qmtl.dagmanager.diff_service import DiffRequest
+from qmtl.services.dagmanager.diff_service import DiffRequest
 
 from .diff_helpers import build_dag, dag_node
 
@@ -48,7 +48,7 @@ def test_pre_scan_uses_custom_json_loader(monkeypatch, diff_service):
         calls.append(data)
         return {"nodes": []}
 
-    import qmtl.dagmanager.diff_service as mod
+    import qmtl.services.dagmanager.diff_service as mod
 
     monkeypatch.setattr(mod, "_json_loads", fake_loads)
 
@@ -59,7 +59,7 @@ def test_pre_scan_uses_custom_json_loader(monkeypatch, diff_service):
 
 def test_diff_with_sdk_nodes(diff_service):
     """End-to-end check with nodes serialized by the SDK."""
-    from qmtl.sdk import ProcessingNode, Strategy, StreamInput
+    from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput
 
     class _S(Strategy):
         def setup(self):

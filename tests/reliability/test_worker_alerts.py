@@ -1,10 +1,10 @@
 import asyncio
 import pytest
 
-from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.redis_queue import RedisTaskQueue
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.database import Database
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.database import Database
 
 
 class DummyManager:

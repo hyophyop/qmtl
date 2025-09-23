@@ -10,17 +10,17 @@ pytestmark = [
     pytest.mark.filterwarnings('ignore:unclosed event loop'),
 ]
 
-from qmtl.gateway.api import create_app as gw_create_app
-from qmtl.dagmanager.api import create_app as dag_api_create_app
-from qmtl.dagmanager.garbage_collector import QueueInfo
-from qmtl.dagmanager.diff_service import StreamSender
-from qmtl.dagmanager.monitor import AckStatus
-from qmtl.gateway.redis_queue import RedisTaskQueue
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.gateway.ws import WebSocketHub
-from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.database import PostgresDatabase
+from qmtl.services.gateway.api import create_app as gw_create_app
+from qmtl.services.dagmanager.api import create_app as dag_api_create_app
+from qmtl.services.dagmanager.garbage_collector import QueueInfo
+from qmtl.services.dagmanager.diff_service import StreamSender
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.ws import WebSocketHub
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.database import PostgresDatabase
 
 import grpc
 import asyncio
@@ -93,7 +93,7 @@ def test_gateway_health_live_guard_disabled(fake_redis):
 
 @pytest.mark.asyncio
 async def test_grpc_health():
-    from qmtl.dagmanager.grpc_server import serve
+    from qmtl.services.dagmanager.grpc_server import serve
 
     class FakeDriver:
         def session(self):

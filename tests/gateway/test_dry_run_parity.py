@@ -3,10 +3,10 @@ import json
 
 from fastapi.testclient import TestClient
 
-from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.models import StrategySubmit
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
-from qmtl.proto import dagmanager_pb2
+from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.foundation.proto import dagmanager_pb2
 from tests.factories import node_ids_crc32, tag_query_node_payload
 
 

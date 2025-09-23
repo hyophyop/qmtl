@@ -1,4 +1,4 @@
-from qmtl.generators import GarchInput, HestonInput, RoughBergomiInput
+from qmtl.runtime.generators import GarchInput, HestonInput, RoughBergomiInput
 
 
 def _test_stream(cls):

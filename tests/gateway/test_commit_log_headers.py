@@ -1,8 +1,8 @@
 import json
 import pytest
 
-from qmtl.dagmanager.kafka_admin import compute_key
-from qmtl.gateway.commit_log import CommitLogWriter
+from qmtl.services.dagmanager.kafka_admin import compute_key
+from qmtl.services.gateway.commit_log import CommitLogWriter
 
 
 class ProducerWithHeaders:

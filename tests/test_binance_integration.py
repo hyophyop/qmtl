@@ -1,6 +1,6 @@
-from qmtl.sdk import StreamInput, EventRecorderService
-from qmtl.io import QuestDBLoader, QuestDBRecorder, BinanceFetcher
-from qmtl.io import binance_fetcher as bf_mod
+from qmtl.runtime.sdk import StreamInput, EventRecorderService
+from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder, BinanceFetcher
+from qmtl.runtime.io import binance_fetcher as bf_mod
 
 
 def test_binance_stream_components(monkeypatch) -> None:

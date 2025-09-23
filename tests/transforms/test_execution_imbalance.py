@@ -1,6 +1,6 @@
-from qmtl.transforms import execution_imbalance_node, rate_of_change
-from qmtl.sdk.node import SourceNode
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.transforms import execution_imbalance_node, rate_of_change
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_execution_imbalance_compute():

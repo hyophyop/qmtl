@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner, metrics
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics
 
 
 class MA1(Strategy):

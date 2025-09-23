@@ -1,6 +1,6 @@
 """Tests for BrokerageProfile overrides and SecurityInitializer mapping."""
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     BrokerageProfile,
     SecurityInitializer,
     CashBuyingPowerModel,

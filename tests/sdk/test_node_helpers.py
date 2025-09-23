@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from qmtl.sdk import hash_utils, node_validation
-from qmtl.sdk.nodes.config import NodeConfig
-from qmtl.sdk.nodes.mixins import LateEventPolicy
+from qmtl.runtime.sdk import hash_utils, node_validation
+from qmtl.runtime.sdk.nodes.config import NodeConfig
+from qmtl.runtime.sdk.nodes.mixins import LateEventPolicy
 
 
 def _dummy_compute(view) -> None:  # pragma: no cover - simple stub

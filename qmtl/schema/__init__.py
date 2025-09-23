@@ -1,22 +1,8 @@
-from .registry import SchemaRegistryClient, Schema
-from .validator import SCHEMAS, validate_schema
-from .order_events import (
-    OrderAck,
-    OrderPayload,
-    ExecutionFillEvent,
-    PortfolioSnapshot,
-    register_order_schemas,
-)
+from __future__ import annotations
 
-__all__ = [
-    "SchemaRegistryClient",
-    "Schema",
-    "SCHEMAS",
-    "validate_schema",
-    "OrderPayload",
-    "OrderAck",
-    "ExecutionFillEvent",
-    "PortfolioSnapshot",
-    "register_order_schemas",
-]
+ALIAS = __name__
 
+from .._compat import deprecated_module, mirror_module_globals
+
+_target = deprecated_module(ALIAS, "qmtl.foundation.schema")
+mirror_module_globals(_target, globals(), alias=ALIAS)

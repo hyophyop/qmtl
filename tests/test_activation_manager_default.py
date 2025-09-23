@@ -1,7 +1,7 @@
 import importlib
 
-import qmtl.sdk.runner as runner_module
-from qmtl.sdk.activation_manager import ActivationManager
+import qmtl.runtime.sdk.runner as runner_module
+from qmtl.runtime.sdk.activation_manager import ActivationManager
 
 
 class FakeKafkaProducer:
@@ -14,7 +14,7 @@ class FakeKafkaProducer:
 
 def test_runner_blocks_without_activation():
     importlib.reload(runner_module)
-    from qmtl.sdk.runner import Runner
+    from qmtl.runtime.sdk.runner import Runner
 
     producer = FakeKafkaProducer()
     Runner.set_kafka_producer(producer)

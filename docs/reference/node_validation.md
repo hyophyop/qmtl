@@ -1,6 +1,6 @@
 # Node Identity Validation
 
-`qmtl.common.node_validation` centralizes the checksum and field checks that
+`qmtl.foundation.common.node_validation` centralizes the checksum and field checks that
 back Gateway ingestion, CLI tooling, and SDK dry-run paths. The helpers wrap the
 canonical [`compute_node_id`](../architecture/gateway.md) routine so every entry
 point enforces identical contracts.
@@ -33,7 +33,7 @@ The `NodeValidationError.detail` payload mirrors FastAPI responses emitted by
 ## Usage Example
 
 ```python
-from qmtl.common import crc32_of_list, enforce_node_identity
+from qmtl.foundation.common import crc32_of_list, enforce_node_identity
 
 def validate_payload(dag: dict[str, object], checksum: int) -> None:
     nodes = dag.get("nodes", [])

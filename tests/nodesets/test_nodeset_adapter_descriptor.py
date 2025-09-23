@@ -1,7 +1,7 @@
-from qmtl.sdk import Node, StreamInput
-from qmtl.nodesets.adapters import CcxtSpotAdapter
-from qmtl.nodesets.options import NodeSetOptions
-from qmtl.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.nodesets.adapters import CcxtSpotAdapter
+from qmtl.runtime.nodesets.options import NodeSetOptions
+from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 
 
 def test_ccxt_adapter_populates_ports_and_capabilities_in_describe():

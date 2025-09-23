@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, Callable
 import httpx
 import pytest
 
-from qmtl.gateway import metrics
+from qmtl.services.gateway import metrics
 
 from tests.gateway.helpers import (
     GatewayTestContext,

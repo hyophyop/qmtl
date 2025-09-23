@@ -5,10 +5,10 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from qmtl.gateway.event_handlers import create_event_router, normalize_topics
-from qmtl.gateway.event_descriptor import EventDescriptorConfig
-from qmtl.gateway.ws import WebSocketHub
-from qmtl.gateway.api import create_app
+from qmtl.services.gateway.event_handlers import create_event_router, normalize_topics
+from qmtl.services.gateway.event_descriptor import EventDescriptorConfig
+from qmtl.services.gateway.ws import WebSocketHub
+from qmtl.services.gateway.api import create_app
 
 
 class NoServerHub(WebSocketHub):

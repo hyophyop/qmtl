@@ -1,7 +1,7 @@
 """Example strategy that can run under WS or offline."""
 
 import argparse
-from qmtl.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
 
 
 class ValidationStrategy(Strategy):

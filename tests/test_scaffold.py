@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from qmtl.scaffold import (
+from qmtl.interfaces.scaffold import (
     copy_base_files,
     copy_dags,
     copy_docs,

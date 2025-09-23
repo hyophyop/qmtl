@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.sdk.node import Node, ProcessingNode
-from qmtl.sdk.watermark import (
+from qmtl.runtime.sdk.node import Node, ProcessingNode
+from qmtl.runtime.sdk.watermark import (
     WatermarkGate,
     clear_watermarks,
     get_watermark,

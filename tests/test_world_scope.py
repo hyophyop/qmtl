@@ -1,8 +1,8 @@
 import pytest
 from types import SimpleNamespace
 
-from qmtl.common import compute_node_id
-from qmtl.gateway.dagmanager_client import DagManagerClient
+from qmtl.foundation.common import compute_node_id
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 
 
 @pytest.mark.asyncio

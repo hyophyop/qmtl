@@ -1,4 +1,4 @@
-from qmtl.transforms.fill_dlq import validate_fill_or_dlq
+from qmtl.runtime.transforms.fill_dlq import validate_fill_or_dlq
 
 
 def test_fill_dlq_valid():

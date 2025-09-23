@@ -28,7 +28,7 @@ You can pass an instance of :class:`RiskConfig` directly or override specific
 fields inline:
 
 ```python
-from qmtl.sdk.risk_management import RiskConfig, RiskManager
+from qmtl.runtime.sdk.risk_management import RiskConfig, RiskManager
 
 config = RiskConfig(position_size_limit_pct=0.10)
 risk_mgr = RiskManager(config=config, max_leverage=2.0)

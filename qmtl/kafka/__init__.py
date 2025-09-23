@@ -1,16 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+ALIAS = __name__
 
+from .._compat import deprecated_module, mirror_module_globals
 
-class Producer(Protocol):
-    """Minimal Kafka producer interface used by :class:`Pipeline`."""
-
-    def produce(self, topic: str, value: Any) -> None:  # pragma: no cover - interface
-        ...
-
-    def flush(self) -> None:  # pragma: no cover - interface
-        ...
-
-
-__all__ = ["Producer"]
+_target = deprecated_module(ALIAS, "qmtl.foundation.kafka")
+mirror_module_globals(_target, globals(), alias=ALIAS)

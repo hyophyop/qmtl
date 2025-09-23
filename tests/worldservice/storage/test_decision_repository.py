@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.decisions import DecisionRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.decisions import DecisionRepository
 
 
 def test_decision_repository_sets_snapshots() -> None:

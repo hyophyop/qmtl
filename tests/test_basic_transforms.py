@@ -1,11 +1,11 @@
-from qmtl.transforms import (
+from qmtl.runtime.transforms import (
     volume_stats,
     order_book_imbalance,
     execution_imbalance,
     rate_of_change_series,
     price_delta,
 )
-from qmtl.indicators import volatility
+from qmtl.runtime.indicators import volatility
 
 
 def test_volume_stats():

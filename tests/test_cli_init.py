@@ -1,4 +1,4 @@
-from qmtl.cli import init as init_cli
+from qmtl.interfaces.cli import init as init_cli
 
 
 def test_cli_init(tmp_path):

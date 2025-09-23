@@ -67,7 +67,7 @@ Tip
 - Example (scaffold):
 
 ```python
-from qmtl.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.base import NodeSetBuilder
 
 nodeset = NodeSetBuilder().attach(signal, world_id="demo")
 strategy.add_nodes([price, alpha, signal, nodeset])  # NodeSet accepted directly
@@ -81,7 +81,7 @@ caps = nodeset.capabilities()    # { modes: [...], portfolio_scope: ... }
   instantiate via the registry:
 
 ```python
-from qmtl.nodesets.registry import make
+from qmtl.runtime.nodesets.registry import make
 nodeset = make("ccxt_spot", signal, "demo-world", exchange_id="binance")
 ```
 
@@ -99,32 +99,32 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 
 ## Node Contracts
 
-- [PreTradeGateNode]({{ code_url('qmtl/transforms/execution_nodes.py#L34') }})
+- [PreTradeGateNode]({{ code_url('qmtl/runtime/transforms/execution_nodes.py#L34') }})
   - Inputs: Activation (from WS via Gateway), Symbol/Hours/Shortable providers, Account/BuyingPower
   - Output: Either a pass‑through order intent or a structured rejection with `RejectionReason`
-  - Backed by: `qmtl/sdk/pretrade.py`, `qmtl/common/pretrade.py`, `qmtl/brokerage/*`
-  - Watermark Gating: configure via `qmtl.sdk.watermark.WatermarkGate` (enable/disable, `topic`, `lag`). Use `WatermarkGate.for_mode("simulate"|"paper"|"live")` for defaults—simulate/backtest disable gating; paper/live enable it.
+  - Backed by: `qmtl/runtime/sdk/pretrade.py`, `qmtl/foundation/common/pretrade.py`, `qmtl/runtime/brokerage/*`
+  - Watermark Gating: configure via `qmtl.runtime.sdk.watermark.WatermarkGate` (enable/disable, `topic`, `lag`). Use `WatermarkGate.for_mode("simulate"|"paper"|"live")` for defaults—simulate/backtest disable gating; paper/live enable it.
 
-- [SizingNode]({{ code_url('qmtl/transforms/execution_nodes.py#L80') }})
+- [SizingNode]({{ code_url('qmtl/runtime/transforms/execution_nodes.py#L80') }})
   - Inputs: Order intent, Portfolio snapshot (t−1)
   - Output: Sized order (quantity) using helpers (value/percent/target_percent)
   - Soft Gating: optionally applies an activation weight (`0..1`) via a `weight_fn` callback; Node Sets pass a function backed by SDK `ActivationManager.weight_for_side(…)` using the intent’s inferred side.
-  - Backed by: `qmtl/sdk/portfolio.py`, `qmtl/sdk/activation_manager.py`
+  - Backed by: `qmtl/runtime/sdk/portfolio.py`, `qmtl/runtime/sdk/activation_manager.py`
 
 - MicroBatchNode
   - Purpose: reduce per-item overhead by emitting a list of payloads for the latest bucket.
   - Usage: place after order publish (or fill ingest) to micro-batch downstream handling.
-  - Backed by: `qmtl/pipeline/micro_batch.py`
+  - Backed by: `qmtl/runtime/pipeline/micro_batch.py`
 
 - ExecutionNode
   - Inputs: Sized order, Market data (OHLCV/quotes), Brokerage profile
   - Outputs: Execution fills (simulate/paper) or OrderPayload (live)
-  - Backed by: `qmtl/brokerage/*`, `qmtl/sdk/execution_modeling.py`
+  - Backed by: `qmtl/runtime/brokerage/*`, `qmtl/runtime/sdk/execution_modeling.py`
 
 - OrderPublishNode
   - Inputs: OrderPayload
   - Outputs: Routed orders (HTTP/Kafka/custom service) via Runner hooks
-  - Backed by: `qmtl/transforms/publisher.py`, `qmtl/sdk/runner.py`
+  - Backed by: `qmtl/runtime/transforms/publisher.py`, `qmtl/runtime/sdk/runner.py`
 
 - FillIngestNode
   - Inputs: Broker fill/partial/cancel events via webhook→Kafka or client polling
@@ -133,18 +133,18 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 - PortfolioNode
   - Inputs: Fills stream
   - Outputs: Portfolio/positions snapshot stream (compacted), risk features
-  - Backed by: `qmtl/sdk/portfolio.py`
+  - Backed by: `qmtl/runtime/sdk/portfolio.py`
   - Watermark Topic: emits readiness markers to `watermark_topic` (default `trade.portfolio`). Align overrides with the gate topic.
 
 - RiskControlNode
   - Inputs: Portfolio snapshots, per‑symbol metrics
   - Outputs: Limit/adjust decisions (e.g., clamp position size)
-  - Backed by: `qmtl/sdk/risk_management.py`
+  - Backed by: `qmtl/runtime/sdk/risk_management.py`
 
 - TimingGateNode
   - Inputs: Timestamp, calendar/hours policy
   - Outputs: Allow/deny with reason, next valid time hint
-  - Backed by: `qmtl/sdk/timing_controls.py`
+  - Backed by: `qmtl/runtime/sdk/timing_controls.py`
 
 ## Feedback Without Cycles
 
@@ -282,7 +282,7 @@ Freeze/Drain Semantics
 
 Built-in Node Set builders obtain these scopes through a shared helper that
 returns both the activation weight function (soft gating) and the correctly
-scoped :class:`~qmtl.sdk.portfolio.Portfolio` instance keyed by ``world_id``.
+scoped :class:`~qmtl.runtime.sdk.portfolio.Portfolio` instance keyed by ``world_id``.
 
 When ``portfolio_scope="world"``, ``RiskControlNode`` evaluates leverage and
 concentration across the combined positions of every participating strategy.

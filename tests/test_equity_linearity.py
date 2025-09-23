@@ -1,4 +1,4 @@
-from qmtl.transforms.linearity_metrics import equity_linearity_metrics
+from qmtl.runtime.transforms.linearity_metrics import equity_linearity_metrics
 
 
 def test_equity_linearity_perfect_linear_up():

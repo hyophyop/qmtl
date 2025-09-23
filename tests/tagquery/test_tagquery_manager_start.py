@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
 class DummyClient:

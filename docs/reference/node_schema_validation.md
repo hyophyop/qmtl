@@ -16,7 +16,7 @@ checked automatically when data is fed into a node.
 ## Declaring Schemas
 
 ```python
-from qmtl.sdk import SourceNode
+from qmtl.runtime.sdk import SourceNode
 
 price = SourceNode(
     interval="1s",
@@ -35,7 +35,7 @@ Schema checking is controlled by the Runner via the
 - `off`: skip validation
 
 ```python
-from qmtl.sdk import Runner
+from qmtl.runtime.sdk import Runner
 
 Runner.offline(MyStrategy, schema_enforcement="warn")
 ```

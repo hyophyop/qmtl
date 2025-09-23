@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from qmtl.sdk.brokerage_client import CcxtBrokerageClient
+from qmtl.runtime.sdk.brokerage_client import CcxtBrokerageClient
 
 
 def main() -> None:

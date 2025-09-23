@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.common.compute_context import ComputeContext
-from qmtl.gateway.submission import (
+from qmtl.foundation.common.compute_context import ComputeContext
+from qmtl.services.gateway.submission import (
     PreparedSubmission,
     StrategyComputeContext,
     SubmissionPipeline,

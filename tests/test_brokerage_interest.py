@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from qmtl.brokerage import Cashbook, MarginInterestModel
+from qmtl.runtime.brokerage import Cashbook, MarginInterestModel
 
 
 def test_margin_interest_daily_accrual():

@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
     CashBuyingPowerModel,

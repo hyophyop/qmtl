@@ -1,6 +1,6 @@
-from qmtl.indicators import sma
-from qmtl.sdk.node import SourceNode
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.indicators import sma
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_sma_compute():
@@ -10,7 +10,7 @@ def test_sma_compute():
     view = CacheView(data)
     assert node.compute_fn(view) == 2
 
-from qmtl.indicators import (
+from qmtl.runtime.indicators import (
     ema,
     rsi,
     bollinger_bands,

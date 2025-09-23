@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.policies import PolicyRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.policies import PolicyRepository
 
 
 def test_policy_repository_tracks_versions() -> None:

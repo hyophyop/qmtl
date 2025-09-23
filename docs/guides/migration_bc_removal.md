@@ -25,7 +25,7 @@ runner.backtest(strategy)
 **After**
 
 ```python
-from qmtl import Runner
+from qmtl.runtime.sdk import Runner
 
 runner = Runner(...)
 runner.run(strategy, world_id="demo", gateway_url="http://localhost:8000")
@@ -73,13 +73,13 @@ qmtl tools sdk offline  # local execution
 **Before**
 
 ```python
-from qmtl.brokerage.simple import PerShareFeeModel, VolumeShareSlippageModel
+from qmtl.runtime.brokerage.simple import PerShareFeeModel, VolumeShareSlippageModel
 ```
 
 **After**
 
 ```python
-from qmtl.brokerage import PerShareFeeModel, VolumeShareSlippageModel
+from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 ```
 
 ## Checklist
@@ -87,7 +87,7 @@ from qmtl.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 - [ ] Replace `Runner.backtest`, `Runner.dryrun`, and `Runner.live` with `Runner.run` or `Runner.offline`.
 - [ ] Update CLI usage from `--mode` to `run`/`offline` subcommands.
 - [ ] Drop `run_type` from Gateway `/strategies` requests and pass `world_id` if needed.
-- [ ] Import brokerage helpers from `qmtl.brokerage`, not `qmtl.brokerage.simple`.
+- [ ] Import brokerage helpers from `qmtl.runtime.brokerage`, not `qmtl.runtime.brokerage.simple`.
 
 {{ nav_links() }}
 

@@ -1,4 +1,4 @@
-from qmtl.transforms import scale_transform_node
+from qmtl.runtime.transforms import scale_transform_node
 
 
 def test_scale_transform_node_scales_average():

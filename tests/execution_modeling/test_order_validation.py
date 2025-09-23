@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.execution_modeling import OrderSide
+from qmtl.runtime.sdk.execution_modeling import OrderSide
 
 
 def test_validate_order_success(execution_model, liquid_market_data):

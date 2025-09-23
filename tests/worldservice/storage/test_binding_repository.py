@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.bindings import BindingRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.bindings import BindingRepository
 
 
 def test_binding_repository_merges_strategies() -> None:

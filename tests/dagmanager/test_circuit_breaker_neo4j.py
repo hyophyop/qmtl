@@ -2,9 +2,9 @@ import sys
 import types
 import pytest
 
-from qmtl.common import AsyncCircuitBreaker
-from qmtl.common.reconnect import ReconnectingNeo4j
-from qmtl.dagmanager.diff_service import Neo4jNodeRepository
+from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.foundation.common.reconnect import ReconnectingNeo4j
+from qmtl.services.dagmanager.diff_service import Neo4jNodeRepository
 
 
 class DummySession:

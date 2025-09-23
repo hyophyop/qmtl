@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import RiskManager, RiskViolationType
+from qmtl.runtime.sdk.risk_management import RiskManager, RiskViolationType
 
 
 @pytest.mark.parametrize(

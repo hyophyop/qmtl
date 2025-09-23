@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.common import crc32_of_list, enforce_node_identity, validate_node_identity
-from qmtl.common.node_validation import NodeValidationError
+from qmtl.foundation.common import crc32_of_list, enforce_node_identity, validate_node_identity
+from qmtl.foundation.common.node_validation import NodeValidationError
 from tests.factories import NodeFactory
 
 

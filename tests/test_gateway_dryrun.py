@@ -1,9 +1,9 @@
-from qmtl.gateway.routes import JSONResponse  # import to ensure module loads
+from qmtl.services.gateway.routes import JSONResponse  # import to ensure module loads
 
 
 def test_dryrun_fallback_sentinel_helper_crc32(monkeypatch):
     # Import inside to access module-level function via attributes if exposed
-    import qmtl.gateway.routes as routes
+    import qmtl.services.gateway.routes as routes
 
     # Build a minimal DAG with stable node_ids
     dag = {
@@ -14,7 +14,7 @@ def test_dryrun_fallback_sentinel_helper_crc32(monkeypatch):
     }
 
     # Use the same logic as the route for CRC32 derivation
-    from qmtl.common import crc32_of_list
+    from qmtl.foundation.common import crc32_of_list
 
     expected_crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
     expected = f"dryrun:{expected_crc:08x}"

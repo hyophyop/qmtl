@@ -1,4 +1,4 @@
-from qmtl.dagmanager.normalize import (
+from qmtl.services.dagmanager.normalize import (
     normalize_execution_domain,
     normalize_version,
     stringify,

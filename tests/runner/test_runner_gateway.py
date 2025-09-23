@@ -5,10 +5,10 @@ import logging
 import httpx
 import pytest
 
-from qmtl.dagmanager.kafka_admin import compute_key, partition_key
-from qmtl.gateway.models import StrategyAck
-from qmtl.sdk.execution_context import resolve_execution_context
-from qmtl.sdk.runner import Runner
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.gateway.models import StrategyAck
+from qmtl.runtime.sdk.execution_context import resolve_execution_context
+from qmtl.runtime.sdk.runner import Runner
 from tests.sample_strategy import SampleStrategy
 
 
@@ -83,7 +83,7 @@ def test_run_exits_when_all_nodes_mapped(monkeypatch, caplog):
 
 
 def test_run_exits_when_all_nodes_mapped_live(monkeypatch, caplog):
-    from qmtl.sdk.tagquery_manager import TagQueryManager
+    from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
     async def fake_post_gateway_async(*, gateway_url, dag, meta, context=None, world_id=None):
         queue_map = {node["node_id"]: "topic" for node in dag["nodes"]}

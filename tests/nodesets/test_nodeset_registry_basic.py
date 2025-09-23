@@ -1,5 +1,5 @@
-from qmtl.sdk import Node, StreamInput
-from qmtl.nodesets.registry import make, list_registered
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.nodesets.registry import make, list_registered
 
 
 def test_nodeset_registry_has_ccxt_spot():

@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.common.tagquery import split_tags
+from qmtl.foundation.common.tagquery import split_tags
 
 
 @pytest.mark.parametrize(

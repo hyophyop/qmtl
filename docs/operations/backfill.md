@@ -42,7 +42,7 @@ structure.  When a provider is created without a fetcher, calling
 The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
 
 ```python
-from qmtl.sdk import QuestDBLoader
+from qmtl.runtime.sdk import QuestDBLoader
 
 source = QuestDBLoader(
     dsn="postgresql://user:pass@localhost:8812/qdb",
@@ -64,7 +64,7 @@ Below is a minimal fetcher that reads candlesticks from Binance:
 ```python
 import httpx
 import pandas as pd
-from qmtl.sdk import DataFetcher
+from qmtl.runtime.sdk import DataFetcher
 
 class BinanceFetcher:
     async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
@@ -107,7 +107,7 @@ SDK.
 Historical data and event recording can be supplied when creating a `StreamInput`:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
+from qmtl.runtime.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 stream = StreamInput(
     interval="60s",
@@ -141,7 +141,7 @@ prior to loading history. This primes caches before computation continues.
 Integrated run (world‑driven):
 
 ```python
-from qmtl.sdk import Runner
+from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
 Runner.run(
@@ -154,7 +154,7 @@ Runner.run(
 Offline priming for local testing:
 
 ```python
-from qmtl.sdk import Runner
+from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
 Runner.offline(SampleStrategy)
@@ -166,7 +166,7 @@ is enabled, compute functions may run concurrently during this replay phase.
 
 ## Monitoring Progress
 
-Backfill operations emit Prometheus metrics via `qmtl.sdk.metrics`:
+Backfill operations emit Prometheus metrics via `qmtl.runtime.sdk.metrics`:
 
 - `backfill_jobs_in_progress`: number of active jobs
 - `backfill_last_timestamp{node_id,interval}`: latest timestamp successfully backfilled
@@ -176,7 +176,7 @@ Backfill operations emit Prometheus metrics via `qmtl.sdk.metrics`:
 Start the metrics server to scrape these values:
 
 ```python
-from qmtl.sdk import metrics
+from qmtl.runtime.sdk import metrics
 
 metrics.start_metrics_server(port=8000)
 ```
@@ -194,7 +194,7 @@ rows into the node cache using
 ``BackfillState`` so subsequent calls can skip already processed data.
 
 ```python
-from qmtl.sdk import StreamInput
+from qmtl.runtime.sdk import StreamInput
 
 stream = StreamInput(...)
 await stream.load_history(start_ts, end_ts)

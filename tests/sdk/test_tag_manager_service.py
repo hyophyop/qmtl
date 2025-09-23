@@ -1,9 +1,9 @@
 import logging
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
-from qmtl.sdk.tag_manager_service import TagManagerService
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
+from qmtl.runtime.sdk.tag_manager_service import TagManagerService
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class _Strat(Strategy):
@@ -42,7 +42,7 @@ def test_apply_queue_map_updates_nodes(caplog):
             compute_key=compute_key(strat.tq.node_id),
         ): ["q1"],
     }
-    caplog.set_level(logging.DEBUG, logger="qmtl.sdk.tag_manager_service")
+    caplog.set_level(logging.DEBUG, logger="qmtl.runtime.sdk.tag_manager_service")
     service.apply_queue_map(strat, mapping)
     assert strat.proc.kafka_topic == "topic1"
     assert not strat.proc.execute
@@ -50,7 +50,7 @@ def test_apply_queue_map_updates_nodes(caplog):
     msgs = [
         r.getMessage()
         for r in caplog.records
-        if r.name == "qmtl.sdk.tag_manager_service"
+        if r.name == "qmtl.runtime.sdk.tag_manager_service"
     ]
     assert any(strat.proc.node_id in m for m in msgs)
 

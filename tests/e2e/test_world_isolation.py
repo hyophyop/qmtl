@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 import httpx
 
-from qmtl.common import compute_node_id
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.gateway.event_handlers import create_event_router
-from qmtl.gateway.event_descriptor import EventDescriptorConfig, validate_event_token
-from qmtl.sdk.activation_manager import ActivationManager
-from qmtl.sdk.metrics import node_processed_total, generate_latest, global_registry
+from qmtl.foundation.common import compute_node_id
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.event_handlers import create_event_router
+from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, validate_event_token
+from qmtl.runtime.sdk.activation_manager import ActivationManager
+from qmtl.runtime.sdk.metrics import node_processed_total, generate_latest, global_registry
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from qmtl.schema import SchemaRegistryClient
+from qmtl.foundation.schema import SchemaRegistryClient
 
 
 class _Resp:

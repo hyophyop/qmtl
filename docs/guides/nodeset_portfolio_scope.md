@@ -7,10 +7,10 @@ See Exchange Node Sets architecture for the end‑to‑end design: ../architectu
 ## Usage
 
 ```python
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.options import NodeSetOptions
-from qmtl.sdk import Strategy, StreamInput, Node
-from qmtl.transforms import TradeSignalGeneratorNode
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.options import NodeSetOptions
+from qmtl.runtime.sdk import Strategy, StreamInput, Node
+from qmtl.runtime.transforms import TradeSignalGeneratorNode
 
 
 class WorldScopeNodeSetStrategy(Strategy):

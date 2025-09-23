@@ -1,6 +1,6 @@
-from qmtl.transforms import volume_features, avg_volume_node
-from qmtl.sdk.node import SourceNode
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.transforms import volume_features, avg_volume_node
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_volume_features_compute():

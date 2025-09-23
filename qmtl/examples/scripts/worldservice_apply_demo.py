@@ -3,7 +3,7 @@
 The script loads the example gating policy, attaches dummy evaluation
 metrics, and posts the payload to a WorldService instance. Use it to
 exercise the new gating hooks locally after spinning up Gateway and
-WorldService (e.g., ``uv run uvicorn qmtl.worldservice.api:create_app --factory``)
+WorldService (e.g., ``uv run uvicorn qmtl.services.worldservice.api:create_app --factory``)
 or via Docker Compose.
 """
 
@@ -18,7 +18,7 @@ from typing import Any, Mapping
 
 import httpx
 
-from qmtl.worldservice.policy import parse_gating_policy
+from qmtl.services.worldservice.policy import parse_gating_policy
 
 
 _DEFAULT_POLICY_PATH = (

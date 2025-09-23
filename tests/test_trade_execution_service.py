@@ -5,9 +5,9 @@ import pytest
 
 import importlib
 
-import qmtl.sdk.runner as runner_module
-from qmtl.sdk import TradeExecutionService
-from qmtl.sdk import trade_dispatcher as dispatcher_module
+import qmtl.runtime.sdk.runner as runner_module
+from qmtl.runtime.sdk import TradeExecutionService
+from qmtl.runtime.sdk import trade_dispatcher as dispatcher_module
 
 
 class DummyResponse:

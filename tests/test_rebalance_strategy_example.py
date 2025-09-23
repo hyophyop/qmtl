@@ -14,7 +14,7 @@ def _load_module(path: str, name: str):
 
 def test_rebalance_example_function_works_with_portfolio_helpers():
     # Load portfolio and example modules without importing qmtl package
-    pf = _load_module("qmtl/sdk/portfolio.py", "qmtl.sdk.portfolio")
+    pf = _load_module("qmtl/runtime/sdk/portfolio.py", "qmtl.runtime.sdk.portfolio")
     reb = _load_module(
         "qmtl/examples/strategies/rebalance_strategy.py",
         "qmtl.examples.strategies.rebalance_strategy",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 
 
 class ModeSwitchStrategy(Strategy):

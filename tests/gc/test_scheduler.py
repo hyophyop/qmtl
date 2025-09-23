@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from qmtl.dagmanager.gc_scheduler import GCScheduler
+from qmtl.services.dagmanager.gc_scheduler import GCScheduler
 
 
 class DummyGC:

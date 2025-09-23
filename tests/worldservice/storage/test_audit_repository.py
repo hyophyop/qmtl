@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
 
 
 def test_audit_repository_round_trip() -> None:

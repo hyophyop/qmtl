@@ -2,7 +2,7 @@ import urllib.request
 
 from prometheus_client import start_http_server
 
-from qmtl.sdk import metrics
+from qmtl.runtime.sdk import metrics
 
 
 def test_metrics_server_reports_backfill_gauges() -> None:

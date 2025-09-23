@@ -1,10 +1,10 @@
 import asyncio
 import pytest
 
-from qmtl.common import AsyncCircuitBreaker
-from qmtl.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
-from qmtl.dagmanager import metrics
-from qmtl.dagmanager.topic import TopicConfig
+from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
+from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.topic import TopicConfig
 
 
 class FailingAdmin:

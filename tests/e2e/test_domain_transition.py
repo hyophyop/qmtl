@@ -3,16 +3,16 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from qmtl.common import ComputeContext, compute_compute_key
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.sdk.activation_manager import ActivationManager
-from qmtl.sdk import metrics as sdk_metrics
-from qmtl.sdk.node import ProcessingNode, StreamInput
-from qmtl.sdk.runner import Runner
-from qmtl.worldservice.api import create_app
-from qmtl.worldservice.controlbus_producer import ControlBusProducer
-from qmtl.worldservice.run_state import ApplyStage
-from qmtl.worldservice.storage import Storage
+from qmtl.foundation.common import ComputeContext, compute_compute_key
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.runtime.sdk.activation_manager import ActivationManager
+from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.services.worldservice.api import create_app
+from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.services.worldservice.run_state import ApplyStage
+from qmtl.services.worldservice.storage import Storage
 
 
 class RecordingBus(ControlBusProducer):

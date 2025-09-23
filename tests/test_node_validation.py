@@ -1,6 +1,6 @@
 import pytest
-from qmtl.sdk.node import SourceNode, ProcessingNode
-from qmtl.sdk.exceptions import InvalidIntervalError, InvalidPeriodError, NodeValidationError
+from qmtl.runtime.sdk.node import SourceNode, ProcessingNode
+from qmtl.runtime.sdk.exceptions import InvalidIntervalError, InvalidPeriodError, NodeValidationError
 
 @pytest.mark.parametrize(
     "interval,period",

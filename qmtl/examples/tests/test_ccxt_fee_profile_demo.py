@@ -9,7 +9,7 @@ def test_ccxt_fee_profile_demo_builds_models_and_applies_fees():
         build_futures_model,
         run_demo,
     )
-    from qmtl.brokerage import BrokerageModel, Order, OrderType, TimeInForce
+    from qmtl.runtime.brokerage import BrokerageModel, Order, OrderType, TimeInForce
 
     # Build models without ccxt (deterministic defaults)
     spot = build_spot_model(detect_fees=False, defaults=(0.001, 0.002))

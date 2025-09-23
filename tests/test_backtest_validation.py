@@ -2,8 +2,8 @@
 
 import pytest
 import pandas as pd
-from qmtl.sdk.backtest_validation import BacktestDataValidator, DataQualityReport, validate_backtest_data
-from qmtl.sdk import Strategy, StreamInput, Node
+from qmtl.runtime.sdk.backtest_validation import BacktestDataValidator, DataQualityReport, validate_backtest_data
+from qmtl.runtime.sdk import Strategy, StreamInput, Node
 
 
 class TestBacktestDataValidator:

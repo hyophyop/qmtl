@@ -1,6 +1,6 @@
-from qmtl.sdk import Node, StreamInput
-from qmtl.nodesets.recipes import make_ccxt_spot_nodeset
-from qmtl.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.nodesets.recipes import make_ccxt_spot_nodeset
+from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 
 
 def test_ccxt_nodeset_exec_carries_symbol_and_defaults():

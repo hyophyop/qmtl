@@ -1,5 +1,5 @@
-from qmtl.gateway.controlbus_codec import encode, decode, PROTO_CONTENT_TYPE
-from qmtl.gateway.controlbus_consumer import ControlBusConsumer
+from qmtl.services.gateway.controlbus_codec import encode, decode, PROTO_CONTENT_TYPE
+from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer
 
 
 class _Msg:

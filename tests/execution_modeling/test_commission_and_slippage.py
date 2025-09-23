@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from qmtl.sdk.execution_modeling import OrderSide, OrderType
+from qmtl.runtime.sdk.execution_modeling import OrderSide, OrderType
 
 
 @pytest.mark.parametrize(

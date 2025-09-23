@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import importlib
 
-import qmtl.sdk.runner as runner_module
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.transforms.publisher import TradeOrderPublisherNode
+import qmtl.runtime.sdk.runner as runner_module
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.transforms.publisher import TradeOrderPublisherNode
 
 
 class DummyService:
@@ -18,7 +18,7 @@ class DummyService:
 
 def test_runner_can_disable_trade_submission():
     importlib.reload(runner_module)
-    from qmtl.sdk.runner import Runner  # re-import after reload
+    from qmtl.runtime.sdk.runner import Runner  # re-import after reload
 
     Runner.set_enable_trade_submission(False)
     service = DummyService()

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.pipeline.micro_batch import MicroBatchNode
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.pipeline.micro_batch import MicroBatchNode
 
 
 def test_micro_batch_aggregates_same_timestamp():

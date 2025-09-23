@@ -3,14 +3,14 @@ import sys
 
 import httpx
 
-from qmtl.sdk import runtime
+from qmtl.runtime.sdk import runtime
 
 
 def test_cli_execution(monkeypatch, gateway_mock):
     monkeypatch.setenv("QMTL_TEST_MODE", "1")
-    from qmtl.sdk.cli import main
-    from qmtl.sdk.runner import Runner
-    from qmtl.sdk import StreamInput
+    from qmtl.runtime.sdk.cli import main
+    from qmtl.runtime.sdk.runner import Runner
+    from qmtl.runtime.sdk import StreamInput
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})
@@ -25,7 +25,7 @@ def test_cli_execution(monkeypatch, gateway_mock):
     monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
 
     argv = [
-        "qmtl.sdk",
+        "qmtl.runtime.sdk",
         "run",
         "tests.sample_strategy:SampleStrategy",
         "--world-id",
@@ -40,7 +40,7 @@ def test_cli_execution(monkeypatch, gateway_mock):
 
 
 def test_ray_flag_auto_set(monkeypatch):
-    import qmtl.sdk.runner as runner_mod
+    import qmtl.runtime.sdk.runner as runner_mod
 
     original_ray = sys.modules.get("ray")
     monkeypatch.delitem(sys.modules, "ray", raising=False)
@@ -62,8 +62,8 @@ def test_ray_flag_auto_set(monkeypatch):
 
 
 def test_cli_disable_ray(monkeypatch):
-    import qmtl.sdk.cli as cli_mod
-    import qmtl.sdk.runner as runner_mod
+    import qmtl.runtime.sdk.cli as cli_mod
+    import qmtl.runtime.sdk.runner as runner_mod
 
     dummy_ray = object()
     monkeypatch.setattr(runner_mod.Runner.services().ray_executor, "_ray", dummy_ray, raising=False)
@@ -72,7 +72,7 @@ def test_cli_disable_ray(monkeypatch):
     importlib.reload(cli_mod)
 
     argv = [
-        "qmtl.sdk",
+        "qmtl.runtime.sdk",
         "offline",
         "tests.sample_strategy:SampleStrategy",
         "--no-ray",

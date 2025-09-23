@@ -2,11 +2,11 @@
 
 import pytest
 from datetime import datetime, timezone
-from qmtl.sdk import Runner, Strategy, StreamInput
-from qmtl.sdk.backtest_validation import BacktestDataValidator
-from qmtl.sdk.execution_modeling import ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv
-from qmtl.sdk.timing_controls import TimingController
-from qmtl.sdk.risk_management import RiskManager, PositionInfo
+from qmtl.runtime.sdk import Runner, Strategy, StreamInput
+from qmtl.runtime.sdk.backtest_validation import BacktestDataValidator
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv
+from qmtl.runtime.sdk.timing_controls import TimingController
+from qmtl.runtime.sdk.risk_management import RiskManager, PositionInfo
 
 
 def test_comprehensive_backtest_accuracy_enhancements():
@@ -128,7 +128,7 @@ def test_comprehensive_backtest_accuracy_enhancements():
     assert len(violations) == 0
     
     # 6. Enhanced Alpha Performance (with execution costs)
-    from qmtl.transforms.alpha_performance import alpha_performance_node
+    from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
     
     raw_returns = [0.02, 0.01, -0.005, 0.015, -0.01]
     
@@ -175,7 +175,7 @@ def test_strategy_integration_with_validation():
             node.cache.append("test_queue", 60, weekday_ts2, {"close": 101.0, "volume": 12000})
     
     # Test data validation
-    from qmtl.sdk.backtest_validation import validate_backtest_data
+    from qmtl.runtime.sdk.backtest_validation import validate_backtest_data
     reports = validate_backtest_data(strategy)
     
     # Should have good quality data
@@ -183,7 +183,7 @@ def test_strategy_integration_with_validation():
         assert report.data_quality_score >= 0.8
     
     # Test timing validation
-    from qmtl.sdk.timing_controls import validate_backtest_timing
+    from qmtl.runtime.sdk.timing_controls import validate_backtest_timing
     timing_issues = validate_backtest_timing(strategy)
     
     # Should have no timing issues for weekday data
@@ -195,8 +195,8 @@ def test_strategy_integration_with_validation():
 def test_performance_with_realistic_costs():
     """Test performance calculation with realistic execution costs."""
     
-    from qmtl.sdk.execution_modeling import ExecutionFill, OrderSide
-    from qmtl.transforms.alpha_performance import (
+    from qmtl.runtime.sdk.execution_modeling import ExecutionFill, OrderSide
+    from qmtl.runtime.transforms.alpha_performance import (
         calculate_execution_metrics,
         adjust_returns_for_costs,
     )

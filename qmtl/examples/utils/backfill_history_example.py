@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.io import QuestDBLoader, BinanceFetcher
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.io import QuestDBLoader, BinanceFetcher
 
 
 fetcher = BinanceFetcher()

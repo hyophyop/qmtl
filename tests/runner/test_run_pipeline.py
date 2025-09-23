@@ -1,6 +1,6 @@
 import httpx
 
-from qmtl.sdk import Runner, Strategy, StreamInput, ProcessingNode
+from qmtl.runtime.sdk import Runner, Strategy, StreamInput, ProcessingNode
 
 
 def _mock_gateway(monkeypatch):

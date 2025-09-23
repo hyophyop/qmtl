@@ -4,7 +4,7 @@ Run with: uv run python qmtl/examples/brokerage_demo/bracket_demo.py
 
 from __future__ import annotations
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
     CashBuyingPowerModel,

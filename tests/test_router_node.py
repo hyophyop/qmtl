@@ -1,6 +1,6 @@
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.pipeline.execution_nodes import RouterNode
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.pipeline.execution_nodes import RouterNode
 
 
 def test_router_node_assigns_target():

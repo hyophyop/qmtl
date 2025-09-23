@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from qmtl.sdk import ProcessingNode, StreamInput, Strategy, Runner
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, Strategy, Runner
 
 class DummyStrategy(Strategy):
     def __init__(self, nodes):

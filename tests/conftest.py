@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 from fakeredis.aioredis import FakeRedis
 
-from qmtl.sdk.runner import Runner
+from qmtl.runtime.sdk.runner import Runner
 
 @pytest_asyncio.fixture
 async def fake_redis():

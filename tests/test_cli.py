@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from qmtl.sdk import cli as sdk_cli, runtime
+from qmtl.runtime.sdk import cli as sdk_cli, runtime
 
 STRATEGY_PATH = "tests.sample_strategy:SampleStrategy"
 

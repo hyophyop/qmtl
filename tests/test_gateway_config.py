@@ -4,8 +4,8 @@ import logging
 import pytest
 import yaml
 
-from qmtl.config import load_config
-from qmtl.gateway.config import GatewayConfig
+from qmtl.foundation.config import load_config
+from qmtl.services.gateway.config import GatewayConfig
 
 
 def test_load_config_gateway_yaml(tmp_path: Path) -> None:

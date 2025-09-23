@@ -6,15 +6,15 @@ from types import SimpleNamespace
 import asyncio
 import pytest
 
-from qmtl.gateway import metrics
-from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer
-from qmtl.gateway.database import PostgresDatabase, Database
-from qmtl.gateway.ownership import OwnershipManager
-from qmtl.gateway.redis_queue import RedisTaskQueue
-from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.commit_log import CommitLogWriter
+from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.services.gateway.database import PostgresDatabase, Database
+from qmtl.services.gateway.ownership import OwnershipManager
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class FakeConn:

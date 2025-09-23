@@ -7,12 +7,12 @@ from __future__ import annotations
 
 # Prefer the public SDK import, but allow running without full dependencies
 try:
-    from qmtl.sdk import portfolio as pf  # type: ignore
+    from qmtl.runtime.sdk import portfolio as pf  # type: ignore
 except Exception:  # pragma: no cover - fallback for lean test environments
     import importlib.util, sys
 
     spec = importlib.util.spec_from_file_location(
-        "qmtl.sdk.portfolio", "qmtl/sdk/portfolio.py"
+        "qmtl.runtime.sdk.portfolio", "qmtl/runtime/sdk/portfolio.py"
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

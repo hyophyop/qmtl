@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.sdk.history_coverage import (
+from qmtl.runtime.sdk.history_coverage import (
     WarmupWindow,
     compute_missing_ranges,
     ensure_strict_history,
 )
-from qmtl.sdk.history_warmup_polling import HistoryWarmupPoller, WarmupRequest
+from qmtl.runtime.sdk.history_warmup_polling import HistoryWarmupPoller, WarmupRequest
 
 
 class DummyProvider:

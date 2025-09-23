@@ -5,12 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 import asyncio
 
-from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.dagmanager.grpc_server import serve
-from qmtl.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
+from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.dagmanager.grpc_server import serve
+from qmtl.services.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
 import grpc
-from qmtl.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.monitor import AckStatus
 from tests.factories import node_ids_crc32, tag_query_node_payload
 
 

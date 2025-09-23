@@ -4,7 +4,7 @@ import logging
 import pytest
 import yaml
 
-from qmtl.config import load_config, UnifiedConfig
+from qmtl.foundation.config import load_config, UnifiedConfig
 
 
 def test_load_unified_config_yaml(tmp_path: Path) -> None:

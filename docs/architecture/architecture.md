@@ -137,7 +137,7 @@ sequenceDiagram
 - 공유 원칙: 도메인 간 공유는 Feature Artifact 파일만 읽기 전용으로 허용한다(SHALL). 런타임 캐시(ComputeKey 기반)나 상태는 도메인 간 공유가 금지된다.
 - Retention/Backfill: 아티팩트는 버전 관리되며, 백테스트/리플레이 요구에 맞춰 보존 정책과 백필 경로를 문서화한다(SHOULD). 삭제 전에는 소비자 영향도를 평가한다.
 - ComputeKey 연계: 런타임에서 캐시 히트가 발생하면 `ComputeKey`는 현 도메인의 값만 참조해야 하며, Feature Artifact는 입력 창구로만 사용한다.
-- 구현 상태: SDK Runner는 `qmtl.sdk.feature_store` 계층(FileSystem 기본 어댑터, `QMTL_FEATURE_ARTIFACT_DIR` · `QMTL_FEATURE_ARTIFACT_VERSIONS` 환경변수 지원)을 통해 백테스트/드라이런 도메인에서 자동으로 아티팩트를 기록하고, `CacheView.feature_artifacts()`로 라이브/섀도우 도메인에서 읽기 전용 소비를 보장한다.
+- 구현 상태: SDK Runner는 `qmtl.runtime.sdk.feature_store` 계층(FileSystem 기본 어댑터, `QMTL_FEATURE_ARTIFACT_DIR` · `QMTL_FEATURE_ARTIFACT_VERSIONS` 환경변수 지원)을 통해 백테스트/드라이런 도메인에서 자동으로 아티팩트를 기록하고, `CacheView.feature_artifacts()`로 라이브/섀도우 도메인에서 읽기 전용 소비를 보장한다.
 - Dataset Fingerprint: 모든 아티팩트·스냅샷은 `dataset_fingerprint`에 고정된다. Fingerprint가 일치하지 않으면 하이드레이션/조회가 차단되어 프로모션 경로에서 데이터 혼합을 방지한다.
 - CLI/Backfill 워크플로: 로컬 백필 시 `QMTL_FEATURE_ARTIFACT_DIR=/mnt/artifacts`처럼 경로를 고정하고, 필요 시 `QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS`로 쓰기 허용 도메인을 제한하여 리플레이와 검증 파이프라인을 분리한다.
 
@@ -183,7 +183,7 @@ sequenceDiagram
 ```
 
 ```python
-from qmtl.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
 
 class FlowExample(Strategy):
     def setup(self):
@@ -385,7 +385,7 @@ Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `p
 다음은 QMTL 아키텍처의 핵심 요구사항을 모두 충족하는 일반 전략 예시이다. 이 전략은 사용자 정의 연산 함수를 사용하고, 노드 간 직접 참조를 기반으로 DAG을 구성하며, interval/period 기반 캐싱, 실행 모드 구분, pre-warmup 제약 조건 등을 모두 반영한다.
 
 ```python
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 import pandas as pd
 
 # 사용자 정의 시그널 생성 함수
@@ -427,7 +427,7 @@ if __name__ == "__main__":
 아래 예시는 글로벌 DAG에 이미 존재하는 1시간 단위 RSI, MFI 지표 노드들이 `tags=["ta-indicator"]` 로 태깅되어 있을 때, 이를 **TagQueryNode** 를 통해 한 번에 업스트림으로 끌어와 상관계수를 계산(correlation)하는 전략이다.
 
 ```python
-from qmtl.sdk import Strategy, Node, TagQueryNode, run_strategy, MatchMode
+from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, run_strategy, MatchMode
 import pandas as pd
 
 # 사용자 정의 상관계수 계산 함수
@@ -496,7 +496,7 @@ sequenceDiagram
 비트코인 가격(Binance) 상승이 일정 시차(예: 90분) 후 마이크로스트레티지(MSTR, Nasdaq) 주가 상승으로 이어진다는 가설을 검증·운용하는 전략 예시이다. 입력·출력 시장이 서로 다르므로, **데이터 수집(암호화폐)** 과 **매매 판단(주식)** 노드를 분리하고, 실시간에서는 먼저 `dry-run`으로 성과를 확인한 뒤 `live`로 전환한다.
 
 ```python
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 import pandas as pd
 
 def lagged_corr(view) -> pd.DataFrame:

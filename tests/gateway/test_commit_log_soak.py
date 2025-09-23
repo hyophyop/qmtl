@@ -1,10 +1,10 @@
 import json
 import pytest
 
-from qmtl.dagmanager.kafka_admin import compute_key
-from qmtl.gateway import metrics
-from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.services.dagmanager.kafka_admin import compute_key
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.commit_log import CommitLogWriter
+from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
 
 
 class P:

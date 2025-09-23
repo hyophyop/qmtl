@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.transforms.acceptable_price_band import (
+from qmtl.runtime.transforms.acceptable_price_band import (
     estimate_band,
     overshoot,
     volume_surprise,

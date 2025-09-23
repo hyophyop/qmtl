@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk.activation_manager import ActivationManager
+from qmtl.runtime.sdk.activation_manager import ActivationManager
 
 
 async def _emit(am: ActivationManager, side: str, **fields) -> None:

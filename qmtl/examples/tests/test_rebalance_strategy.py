@@ -6,7 +6,7 @@ import sys
 
 def _load_portfolio_module() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
-        "qmtl.sdk.portfolio", "qmtl/sdk/portfolio.py"
+        "qmtl.runtime.sdk.portfolio", "qmtl/runtime/sdk/portfolio.py"
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

@@ -6,7 +6,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from qmtl.gateway.submission.dag_loader import DagLoader
+from qmtl.services.gateway.submission.dag_loader import DagLoader
 
 
 def test_decode_accepts_base64_payload() -> None:
@@ -30,7 +30,7 @@ def test_load_validates_schema(monkeypatch) -> None:
         return True, "v1", []
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.schema_validator.validate_dag",
+        "qmtl.services.dagmanager.schema_validator.validate_dag",
         fake_validate,
     )
 
@@ -46,7 +46,7 @@ def test_load_raises_on_invalid_schema(monkeypatch) -> None:
         return False, "v1", ["broken"]
 
     monkeypatch.setattr(
-        "qmtl.dagmanager.schema_validator.validate_dag",
+        "qmtl.services.dagmanager.schema_validator.validate_dag",
         fake_validate,
     )
 

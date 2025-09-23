@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from qmtl.worldservice.api import create_app
+from qmtl.services.worldservice.api import create_app
 
 
 @pytest.mark.asyncio

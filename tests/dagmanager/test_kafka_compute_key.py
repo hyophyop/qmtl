@@ -1,6 +1,6 @@
-from qmtl.common.compute_context import ComputeContext
-from qmtl.common.compute_key import compute_compute_key
-from qmtl.dagmanager.kafka_admin import compute_key
+from qmtl.foundation.common.compute_context import ComputeContext
+from qmtl.foundation.common.compute_key import compute_compute_key
+from qmtl.services.dagmanager.kafka_admin import compute_key
 
 
 def test_compute_key_matches_common_helper() -> None:

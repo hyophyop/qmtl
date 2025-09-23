@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.worldservice.policy_engine import Policy, ThresholdRule
-from qmtl.worldservice.schemas import EvaluateRequest, StrategySeries
-from qmtl.worldservice.services import WorldService
+from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
+from qmtl.services.worldservice.schemas import EvaluateRequest, StrategySeries
+from qmtl.services.worldservice.services import WorldService
 
 
 class _StubStore:

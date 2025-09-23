@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.portfolio import (
+from qmtl.runtime.sdk.portfolio import (
     Portfolio,
     Position,
     order_percent,

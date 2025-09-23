@@ -2,9 +2,9 @@ import asyncio
 import pytest
 import grpc
 
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class DummyChannel:

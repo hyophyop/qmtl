@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput, ProcessingNode, Runner, buy_signal
+from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, Runner, buy_signal
 
 
 class CallbackStrategy(Strategy):
@@ -43,7 +43,7 @@ def test_lifecycle_hooks_called(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "qmtl.sdk.runner.TagManagerService.init",
+        "qmtl.runtime.sdk.runner.TagManagerService.init",
         lambda self, strategy, world_id=None: DummyManager(),
     )
 
@@ -55,7 +55,7 @@ def test_on_error_called(monkeypatch):
     def fail_init(self, strategy, world_id=None):
         raise RuntimeError("fail")
 
-    monkeypatch.setattr("qmtl.sdk.runner.TagManagerService.init", fail_init)
+    monkeypatch.setattr("qmtl.runtime.sdk.runner.TagManagerService.init", fail_init)
 
     with pytest.raises(RuntimeError):
         Runner.run(ErrorStrategy, world_id="w", gateway_url=None)

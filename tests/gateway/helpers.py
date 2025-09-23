@@ -8,10 +8,10 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 import httpx
 
-from qmtl.common import compute_node_id, crc32_of_list
-from qmtl.gateway.api import Database, create_app
-from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.world_client import WorldServiceClient
+from qmtl.foundation.common import compute_node_id, crc32_of_list
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway.world_client import WorldServiceClient
 
 
 Handler = Callable[[httpx.Request], Awaitable[httpx.Response]]

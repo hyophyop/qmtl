@@ -3,9 +3,9 @@ from types import MethodType
 
 import pytest
 
-from qmtl.gateway.models import StrategyAck
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.tag_manager_service import TagManagerService
+from qmtl.services.gateway.models import StrategyAck
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.tag_manager_service import TagManagerService
 from tests.sample_strategy import SampleStrategy
 
 

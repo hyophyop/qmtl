@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.worlds import WorldRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.worlds import WorldRepository
 
 
 def test_world_repository_persists_records_and_audits() -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from qmtl.gateway import metrics
+from qmtl.services.gateway import metrics
 
 
 @pytest.mark.asyncio

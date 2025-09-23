@@ -1,7 +1,7 @@
 """Tests for enhanced error handling and input validation."""
 
 import pytest
-from qmtl.sdk import (
+from qmtl.runtime.sdk import (
     SourceNode, 
     ProcessingNode, 
     TagQueryNode,

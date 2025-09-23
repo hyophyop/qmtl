@@ -1,4 +1,4 @@
-from qmtl.worldservice.policy_engine import (
+from qmtl.services.worldservice.policy_engine import (
     Policy,
     ThresholdRule,
     TopKRule,

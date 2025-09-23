@@ -1,6 +1,6 @@
 from datetime import datetime, date, time
 
-from qmtl.brokerage import ExchangeHoursProvider
+from qmtl.runtime.brokerage import ExchangeHoursProvider
 
 
 def test_holiday_closure_and_early_close():

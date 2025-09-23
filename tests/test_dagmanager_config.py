@@ -4,8 +4,8 @@ import logging
 import pytest
 import yaml
 
-from qmtl.config import load_config
-from qmtl.dagmanager.config import DagManagerConfig
+from qmtl.foundation.config import load_config
+from qmtl.services.dagmanager.config import DagManagerConfig
 
 
 def test_dagmanager_config_custom_values() -> None:

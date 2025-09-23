@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import PositionInfo, RiskManager
+from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager
 
 
 def test_integration_risk_workflow():

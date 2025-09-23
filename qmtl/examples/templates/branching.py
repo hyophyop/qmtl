@@ -14,7 +14,7 @@ ASCII DAG::
 
 from pathlib import Path
 import argparse
-from qmtl.sdk import Strategy, StreamInput, Node, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner
 import pandas as pd
 
 

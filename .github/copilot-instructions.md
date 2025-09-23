@@ -63,10 +63,10 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
 6. **Generate protobuf files** (REQUIRED before testing):
    ```bash
    uv run python -m grpc_tools.protoc \
-     --proto_path=qmtl/proto \
-     --python_out=qmtl/proto \
-     --grpc_python_out=qmtl/proto \
-     qmtl/proto/dagmanager.proto
+     --proto_path=qmtl/foundation/proto \
+     --python_out=qmtl/foundation/proto \
+     --grpc_python_out=qmtl/foundation/proto \
+     qmtl/foundation/proto/dagmanager.proto
    ```
 
 ## Testing
@@ -75,7 +75,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
 
 - **Run full test suite** (takes ~70 seconds, NEVER CANCEL):
   ```bash
-  PYTHONPATH=qmtl/proto uv run pytest -W error
+  uv run pytest -W error
   ```
   Set timeout to 120+ seconds. Expected: 445+ tests pass, 12 known failures.
 
@@ -91,7 +91,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
   uv run pytest tests/test_cli.py -v
   ```
 
-- **Known test failures**: Tests fail for missing modules (qmtl.tools, some Runner methods). These are development artifacts and do not affect core functionality.
+- **Known test failures**: Tests fail for missing modules (qmtl.interfaces.tools, some Runner methods). These are development artifacts and do not affect core functionality.
 
 ## Building and Running
 
@@ -196,7 +196,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
 
 - **Gateway service startup error**: The command `uv run qmtl gw` may fail with asyncio errors in some environments. Use DAG Manager for basic testing instead.
 
-- **Missing modules**: Tests for `qmtl.tools.taglint` and some `Runner` methods fail due to incomplete implementation. Skip these tests when validating changes.
+- **Missing modules**: Tests for `qmtl.interfaces.tools.taglint` and some `Runner` methods fail due to incomplete implementation. Skip these tests when validating changes.
 
 - **Import errors in scaffolded projects**: When running scaffolded project strategies directly, ensure PYTHONPATH includes the QMTL source: `PYTHONPATH=/path/to/qmtl python strategy.py`
 
@@ -238,7 +238,7 @@ Common validated commands with expected execution times:
 uv venv && uv pip install -e .[dev]
 
 # Testing (70 seconds, NEVER CANCEL)  
-PYTHONPATH=qmtl/proto uv run pytest -W error
+uv run pytest -W error
 
 # Services (run indefinitely)
 uv run qmtl dagmanager-server

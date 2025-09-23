@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.dagmanager.topic import topic_namespace_enabled
+from qmtl.services.dagmanager.topic import topic_namespace_enabled
 
 
 @pytest.mark.parametrize("value", [None, "1", "true", "yes", "ON", "unexpected"])

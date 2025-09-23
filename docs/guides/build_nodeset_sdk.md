@@ -8,8 +8,8 @@ or UIs.
 ## Compose with steps
 
 ```python
-from qmtl.sdk import StreamInput, Node
-from qmtl.nodesets.steps import pretrade, sizing, execution, fills, portfolio, risk, timing, compose
+from qmtl.runtime.sdk import StreamInput, Node
+from qmtl.runtime.nodesets.steps import pretrade, sizing, execution, fills, portfolio, risk, timing, compose
 
 price = StreamInput(interval="60s", period=2)
 alpha = Node(input=price, compute_fn=lambda v: 0.1, name="alpha")
@@ -26,7 +26,7 @@ caps = nodeset.capabilities()
 ## Custom execution step
 
 ```python
-from qmtl.nodesets.steps import execution
+from qmtl.runtime.nodesets.steps import execution
 
 # Define execution compute bound to the sized upstream by the DSL
 
@@ -51,7 +51,7 @@ Notes
 여러 시그널을 단일 시그널로 합치려면 간단한 블렌더 노드를 직접 구성할 수 있습니다.
 
 ```python
-from qmtl.sdk import Node
+from qmtl.runtime.sdk import Node
 
 signals = [sig_a, sig_b]
 weights = [0.6, 0.4]
@@ -84,9 +84,9 @@ exec_nodeset = compose(combined_signal, steps=[pretrade(), sizing(), execution()
 Compose 브랜칭(합류) 패턴은 DSL의 `compose()` 대신 직접 노드를 생성해 구현합니다. `Node(input=[...])`로 다중 업스트림을 받을 수 있습니다.
 
 ```python
-from qmtl.sdk import Node
-from qmtl.nodesets.base import NodeSet
-from qmtl.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
+from qmtl.runtime.sdk import Node
+from qmtl.runtime.nodesets.base import NodeSet
+from qmtl.runtime.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
 
 # 1) 선형으로 pretrade → sizing 까지 구성하여 sized 업스트림을 확보합니다.
 pre = pretrade()(signal)

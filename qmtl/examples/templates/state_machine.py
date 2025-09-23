@@ -10,7 +10,7 @@ ASCII DAG::
 
 import argparse
 import pandas as pd
-from qmtl.sdk import Strategy, StreamInput, Node, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner
 
 
 class StateMachineStrategy(Strategy):

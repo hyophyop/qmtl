@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import RiskManager
+from qmtl.runtime.sdk.risk_management import RiskManager
 
 
 def test_calculate_position_size_basic():

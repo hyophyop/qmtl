@@ -7,7 +7,7 @@ See [Exchange Node Sets](../architecture/exchange_node_sets.md) for design detai
 ## Usage
 
 ```python
-from qmtl.nodesets.registry import make
+from qmtl.runtime.nodesets.registry import make
 
 nodeset = make(
     "ccxt_spot",
@@ -25,7 +25,7 @@ strategy.add_nodes([price, alpha, history, signal, nodeset])  # NodeSet accepted
 Direct recipe import is also available:
 
 ```python
-from qmtl.nodesets.recipes import make_ccxt_spot_nodeset
+from qmtl.runtime.nodesets.recipes import make_ccxt_spot_nodeset
 nodeset = make_ccxt_spot_nodeset(signal_node, "demo-world", exchange_id="binance")
 ```
 
@@ -34,9 +34,9 @@ nodeset = make_ccxt_spot_nodeset(signal_node, "demo-world", exchange_id="binance
 CCXT 레시피를 확장해 시세 스트림을 실행 단계에 합류시키는 예시입니다. DSL의 `compose()` 대신 직접 노드를 생성해 합류를 구현합니다.
 
 ```python
-from qmtl.sdk import Node
-from qmtl.nodesets.base import NodeSet
-from qmtl.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
+from qmtl.runtime.sdk import Node
+from qmtl.runtime.nodesets.base import NodeSet
+from qmtl.runtime.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
 
 pre = pretrade()(signal_node)
 siz = sizing()(pre)

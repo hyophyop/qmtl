@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.worldservice.edge_overrides import EdgeOverrideManager
-from qmtl.worldservice.policy import GatingPolicy
+from qmtl.services.worldservice.edge_overrides import EdgeOverrideManager
+from qmtl.services.worldservice.policy import GatingPolicy
 
 
 class _StubStore:

@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from qmtl.cli import report
-from qmtl.transforms.alpha_performance import alpha_performance_node
+from qmtl.interfaces.cli import report
+from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
 
 
 def test_report_cli_generates_markdown(tmp_path: Path) -> None:

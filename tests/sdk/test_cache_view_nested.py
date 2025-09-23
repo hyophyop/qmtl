@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_attr_access_for_mapping_key():

@@ -1,12 +1,12 @@
 import time
 import pytest
 
-from qmtl.sdk import arrow_cache
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.sdk import arrow_cache
+from qmtl.runtime.sdk.cache_view import CacheView
 
-from qmtl.sdk import ProcessingNode, StreamInput
-from qmtl.sdk import metrics as sdk_metrics
-import qmtl.sdk.arrow_cache.eviction as eviction
+from qmtl.runtime.sdk import ProcessingNode, StreamInput
+from qmtl.runtime.sdk import metrics as sdk_metrics
+import qmtl.runtime.sdk.arrow_cache.eviction as eviction
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),
@@ -53,7 +53,7 @@ def test_drop_upstream_removes_data_and_is_idempotent():
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
 def test_no_ray_forces_thread(monkeypatch):
     monkeypatch.setattr(eviction, "RAY_AVAILABLE", True)
-    import qmtl.sdk.runtime as runtime
+    import qmtl.runtime.sdk.runtime as runtime
     monkeypatch.setattr(runtime, "NO_RAY", True)
 
     cache = arrow_cache.NodeCacheArrow(period=2)

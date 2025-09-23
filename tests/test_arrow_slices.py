@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.arrow_cache import ARROW_AVAILABLE, _Slice, _SliceView
+from qmtl.runtime.sdk.arrow_cache import ARROW_AVAILABLE, _Slice, _SliceView
 
 
 @pytest.mark.skipif(not ARROW_AVAILABLE, reason="pyarrow missing")

@@ -5,8 +5,8 @@ import hashlib
 
 import pytest
 
-from qmtl.common import hash_bytes as exported_hash_bytes
-from qmtl.common.hashutils import hash_bytes
+from qmtl.foundation.common import hash_bytes as exported_hash_bytes
+from qmtl.foundation.common.hashutils import hash_bytes
 
 try:  # pragma: no cover - optional dependency in tests
     from blake3 import blake3 as _blake3
@@ -23,14 +23,14 @@ def test_hash_bytes_prefers_blake3() -> None:
 
 
 def test_hash_bytes_falls_back_to_sha256(monkeypatch: pytest.MonkeyPatch) -> None:
-    module = importlib.import_module("qmtl.common.hashutils")
+    module = importlib.import_module("qmtl.foundation.common.hashutils")
     monkeypatch.setattr(module, "_blake3", None)
     digest = module.hash_bytes(b"fallback")
     assert digest == f"sha256:{hashlib.sha256(b'fallback').hexdigest()}"
 
 
 def test_hash_bytes_falls_back_on_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    module = importlib.import_module("qmtl.common.hashutils")
+    module = importlib.import_module("qmtl.foundation.common.hashutils")
 
     class BrokenHash:
         def __call__(self, data: bytes):  # type: ignore[override]

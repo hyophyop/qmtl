@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from qmtl.worldservice.apply_flow import ApplyCoordinator
-from qmtl.worldservice.decision import DecisionEvaluator
-from qmtl.worldservice.policy import GatingPolicy
-from qmtl.worldservice.run_state import ApplyRunRegistry, ApplyStage
-from qmtl.worldservice.schemas import ApplyPlan, ApplyRequest
+from qmtl.services.worldservice.apply_flow import ApplyCoordinator
+from qmtl.services.worldservice.decision import DecisionEvaluator
+from qmtl.services.worldservice.policy import GatingPolicy
+from qmtl.services.worldservice.run_state import ApplyRunRegistry, ApplyStage
+from qmtl.services.worldservice.schemas import ApplyPlan, ApplyRequest
 
 
 class _StubActivationPublisher:

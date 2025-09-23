@@ -3,7 +3,7 @@ import sys
 import types
 import redis.asyncio as redis
 
-from qmtl.common.reconnect import ReconnectingRedis, ReconnectingNeo4j
+from qmtl.foundation.common.reconnect import ReconnectingRedis, ReconnectingNeo4j
 
 
 class DummyRedis:

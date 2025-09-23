@@ -5,9 +5,9 @@ import json
 import httpx
 import pytest
 
-from qmtl.common import AsyncCircuitBreaker
-from qmtl.gateway.api import create_app
-from qmtl.gateway.world_client import Budget
+from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.world_client import Budget
 from tests.gateway.helpers import make_jwt
 
 
@@ -89,7 +89,7 @@ async def test_status_reports_worldservice_breaker(
         raise httpx.ConnectError("boom")
 
     breaker = AsyncCircuitBreaker(max_failures=1)
-    from qmtl.gateway import gateway_health
+    from qmtl.services.gateway import gateway_health
 
     gateway_health._STATUS_CACHE = None
     gateway_health._STATUS_CACHE_TS = 0.0

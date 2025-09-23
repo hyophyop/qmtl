@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from qmtl.common.compute_context import DowngradeReason
-from qmtl.gateway import metrics
+from qmtl.foundation.common.compute_context import DowngradeReason
+from qmtl.services.gateway import metrics
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import PositionInfo, RiskManager, RiskViolationType
+from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager, RiskViolationType
 
 
 def test_validate_portfolio_risk_leverage_violation(sample_positions):

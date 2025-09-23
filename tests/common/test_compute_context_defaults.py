@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.common.compute_context import ComputeContext, DowngradeReason
+from qmtl.foundation.common.compute_context import ComputeContext, DowngradeReason
 
 
 def test_default_context_enters_safe_mode_when_domain_missing() -> None:

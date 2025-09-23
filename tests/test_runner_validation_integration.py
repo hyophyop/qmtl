@@ -2,7 +2,7 @@
 
 import pytest
 import httpx
-from qmtl.sdk import Runner, Strategy, StreamInput
+from qmtl.runtime.sdk import Runner, Strategy, StreamInput
 
 
 def test_run_offline_minimal(monkeypatch):

@@ -1,5 +1,8 @@
-"""Execution pipeline utilities."""
+from __future__ import annotations
 
-from .pipeline import Pipeline
+ALIAS = __name__
 
-__all__ = ["Pipeline"]
+from .._compat import deprecated_module, mirror_module_globals
+
+_target = deprecated_module(ALIAS, "qmtl.runtime.pipeline")
+mirror_module_globals(_target, globals(), alias=ALIAS)

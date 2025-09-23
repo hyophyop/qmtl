@@ -8,10 +8,10 @@ pytestmark = [
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
     pytest.mark.filterwarnings('ignore:unclosed event loop'),
 ]
-from qmtl.dagmanager.cli import main
-from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.dagmanager.cli import main
+from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 import grpc
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
 class DummyChannel:
     async def close(self):
@@ -156,8 +156,8 @@ def test_cli_export_schema(monkeypatch, tmp_path):
         captured["driver"] = driver
         return ["CREATE CONSTRAINT c"]
 
-    monkeypatch.setattr("qmtl.dagmanager.cli.connect", fake_connect)
-    monkeypatch.setattr("qmtl.dagmanager.cli.export_schema", fake_export)
+    monkeypatch.setattr("qmtl.services.dagmanager.cli.connect", fake_connect)
+    monkeypatch.setattr("qmtl.services.dagmanager.cli.export_schema", fake_export)
 
     out = tmp_path / "schema.cql"
     main(["export-schema", "--uri", "bolt://db", "--out", str(out)])
@@ -195,7 +195,7 @@ def test_cli_diff_grpc_error(monkeypatch, tmp_path, capsys):
         async def close(self):
             pass
 
-    monkeypatch.setattr("qmtl.dagmanager.cli.DagManagerClient", DummyClient)
+    monkeypatch.setattr("qmtl.services.dagmanager.cli.DagManagerClient", DummyClient)
     with pytest.raises(SystemExit):
         main(["diff", "--file", str(path)])
     err = capsys.readouterr().err

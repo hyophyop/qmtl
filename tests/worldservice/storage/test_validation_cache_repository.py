@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.models import ValidationCacheEntry
-from qmtl.worldservice.storage.validation_cache import ValidationCacheRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.models import ValidationCacheEntry
+from qmtl.services.worldservice.storage.validation_cache import ValidationCacheRepository
 
 
 @pytest.mark.parametrize("domain", ["BACKTEST", "Backtest", "backtest"])

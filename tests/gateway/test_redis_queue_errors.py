@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from qmtl.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
 
 
 class _FailPushRedis:

@@ -5,7 +5,7 @@ import logging
 import pytest
 import websockets
 
-from qmtl.sdk.ws_client import WebSocketClient
+from qmtl.runtime.sdk.ws_client import WebSocketClient
 
 
 @pytest.mark.asyncio

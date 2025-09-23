@@ -4,9 +4,9 @@ import time
 
 import pytest
 
-from qmtl.gateway import metrics
-from qmtl.gateway.ws import WebSocketHub
-from qmtl.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.ws import WebSocketHub
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 
 
 class DummyWS:
