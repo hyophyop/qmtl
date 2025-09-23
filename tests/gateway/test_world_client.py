@@ -72,7 +72,7 @@ async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
         assert stale_first is False
 
         # Force cache expiration to trigger a new request that will fail.
-        client._decision_cache["w1"].expires_at = 0
+        client._decision_cache.expire("w1")
 
         second, stale_second = await client.get_decide("w1")
         assert second == {"decision": "ok"}
