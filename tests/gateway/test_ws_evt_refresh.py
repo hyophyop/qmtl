@@ -39,11 +39,11 @@ def test_refresh_updates_topics_and_filters():
             ws.send_json({"type": "refresh", "token": tok2})
             ack = ws.receive_json()
             assert ack["type"] == "refresh_ack"
-            topics = next(iter(hub._topics.values()))
+            topics = next(iter(hub._registry._topics.values()))  # type: ignore[attr-defined]
             assert topics == {"policy"}
-            filt = next(iter(hub._filters.values()))
-            assert filt["world_id"] == "w2"
-            assert filt["strategy_id"] == "s2"
+            filt = next(iter(hub._registry._filters.values()))  # type: ignore[attr-defined]
+            assert filt.world_id == "w2"
+            assert filt.strategy_id == "s2"
 
 
 def test_invalid_refresh_closes_connection():

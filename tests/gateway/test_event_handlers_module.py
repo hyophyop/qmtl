@@ -12,12 +12,11 @@ from qmtl.gateway.api import create_app
 
 
 class NoServerHub(WebSocketHub):
-    async def start(self) -> int:  # type: ignore[override]
-        return 0
+    async def start(self, *, start_server: bool = False) -> int:  # type: ignore[override]
+        return await super().start(start_server=False)
 
     async def stop(self) -> None:  # type: ignore[override]
-        async with self._lock:
-            self._clients.clear()
+        await super().stop()
 
 
 def test_normalize_topics_aliases() -> None:
