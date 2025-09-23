@@ -1,0 +1,105 @@
+---
+title: "Backend Quickstart"
+tags: [quickstart, gateway, dagmanager, worldservice]
+author: "QMTL Team"
+last_modified: 2025-09-23
+---
+
+{{ nav_links() }}
+
+# Backend Quickstart (WS + GW + DM)
+
+This quickstart brings up the core QMTL backend services for local development:
+
+- WorldService (WS) – worlds, policies, decisions, activation
+- Gateway (GW) – client-facing API, proxy to WS, ingest to DAG Manager
+- DAG Manager (DM) – global DAG SSOT, diff, queue orchestration
+
+See also: Docker usage and full stack notes in [Docker & Compose](docker.md) and
+end-to-end tests in [E2E Testing](e2e_testing.md).
+
+## Prerequisites
+
+- Python environment managed by uv: `uv venv && uv pip install -e .[dev]`
+- Optional: Docker/Compose for infra services
+
+## Option A — Run locally (no Docker)
+
+1) Start WorldService (SQLite + Redis example)
+
+```bash
+export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
+export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+```
+
+2) Configure and start Gateway
+
+- Edit `qmtl/examples/qmtl.yml`:
+  - `gateway.worldservice_url: http://localhost:8080`
+  - `gateway.enable_worldservice_proxy: true`
+- Start Gateway with the config:
+
+```bash
+qmtl gw --config qmtl/examples/qmtl.yml
+```
+
+3) Start DAG Manager (same config)
+
+```bash
+qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+```
+
+Notes
+- For production-like topics, set Kafka/Neo4j in the YAML. Without them, DM uses in-memory repo and queues.
+- Topic namespaces are on by default. For simple local testing without prefixes: `export QMTL_ENABLE_TOPIC_NAMESPACE=0` before starting services.
+
+## Option B — Docker Compose
+
+Use the E2E stack to run infra + services:
+
+```bash
+docker compose -f tests/docker-compose.e2e.yml up --build -d
+# Gateway: http://localhost:8000, DAG Manager gRPC: 50051
+```
+
+Or the fuller root stack with health checks and volumes:
+
+```bash
+docker compose up -d
+# Gateway: http://localhost:8000, DAG Manager HTTP: http://localhost:8001/health
+```
+
+Stop stacks with `docker compose down` (add `-v` to remove volumes).
+
+## Verify
+
+- Gateway status: `curl http://localhost:8000/status`
+- DAG Manager HTTP health (root stack): `curl http://localhost:8001/health`
+- Neo4j init (if using Neo4j):
+
+```bash
+qmtl dagmanager neo4j-init \
+  --uri bolt://localhost:7687 --user neo4j --password neo4j
+```
+
+## Try a Strategy (Gateway + WorldService)
+
+Run a sample strategy against Gateway with a world id:
+
+```bash
+python -m qmtl.examples.general_strategy \
+  --gateway-url http://localhost:8000 \
+  --world-id demo
+```
+
+For offline runs (no WS/GW): `python -m qmtl.examples.general_strategy`.
+
+## Troubleshooting
+
+- Ports in use: ensure 8000 (GW), 50051/8001 (DM), 6379 (Redis), 7687/7474 (Neo4j), 9092 (Kafka) are free.
+- WorldService proxy disabled: Gateway will still run; SDKs fall back to offline/backtest modes.
+- Apple Silicon: add `platform: linux/amd64` to services that lack arm64 images.
+
+{{ nav_links() }}
+

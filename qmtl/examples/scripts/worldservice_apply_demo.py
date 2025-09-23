@@ -3,7 +3,8 @@
 The script loads the example gating policy, attaches dummy evaluation
 metrics, and posts the payload to a WorldService instance. Use it to
 exercise the new gating hooks locally after spinning up Gateway and
-WorldService with ``uv run qmtl dev`` or docker-compose.
+WorldService (e.g., ``uv run uvicorn qmtl.worldservice.api:create_app --factory``)
+or via Docker Compose.
 """
 
 from __future__ import annotations

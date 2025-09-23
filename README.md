@@ -200,6 +200,35 @@ Customize the sample YAML files in `qmtl/examples/` to match your environment.
 See [gateway.md](docs/architecture/gateway.md) and [dag-manager.md](docs/architecture/dag-manager.md) for more
 information on configuration and advanced usage.
 
+### WorldService
+
+WorldService owns world policies, decisions and activation state. Run it as a
+stand‑alone FastAPI app and enable the Gateway proxy when needed.
+
+1) Start WorldService (SQLite + Redis example)
+
+```bash
+export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
+export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+```
+
+2) Point Gateway at WorldService (optional proxy)
+
+- In `qmtl/examples/qmtl.yml`, set:
+  - `gateway.worldservice_url: http://localhost:8080`
+  - `gateway.enable_worldservice_proxy: true`
+
+Then run Gateway with that config:
+
+```bash
+qmtl gw --config qmtl/examples/qmtl.yml
+```
+
+With the proxy enabled, SDKs can fetch decisions and activation via the
+Gateway. When the proxy is disabled, SDKs operate in offline/backtest modes
+without world decisions.
+
 ## SDK Tutorial
 
 For instructions on implementing strategies with the SDK, see

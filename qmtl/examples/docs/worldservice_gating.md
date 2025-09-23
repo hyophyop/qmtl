@@ -25,8 +25,18 @@ WorldService gating flow.
 
 ## Running the demo
 
-1. Start Gateway and WorldService (for example via `uv run qmtl dev` or the
-   provided Docker compose).
+1. Start Gateway and WorldService. For a local run without Docker:
+   - WorldService (SQLite + Redis):
+     ```bash
+     export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
+     export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+     uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+     ```
+   - Gateway (optionally proxying WorldService):
+     - In `qmtl/examples/qmtl.yml` set `gateway.worldservice_url: http://localhost:8080`
+       and `gateway.enable_worldservice_proxy: true`.
+     - Start: `qmtl gw --config qmtl/examples/qmtl.yml`
+   - Alternatively, use the provided Docker Compose stack.
 2. Inspect the payload without side effects:
    ```bash
    python -m qmtl.examples.scripts.worldservice_apply_demo --world-id demo --dry-run
