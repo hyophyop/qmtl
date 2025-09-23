@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService
+from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService, MatchMode
 from qmtl.io import QuestDBRecorder
 
 
@@ -14,7 +14,7 @@ class TagQueryAggregationStrategy(Strategy):
             query_tags=["ta-indicator"],
             interval="1h",
             period=24,
-            match_mode="any",  # subscribe to any matching tag
+            match_mode=MatchMode.ANY,  # subscribe to any matching tag
         )
         # Runner takes care of queue resolution and subscriptions via TagQueryManager
 

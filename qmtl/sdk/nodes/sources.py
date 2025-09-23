@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from qmtl.common.tagquery import MatchMode
+from qmtl.common.tagquery import MatchMode, normalize_match_mode
 
 from .. import hash_utils as default_hash_utils
 from .. import node_validation as default_validator
@@ -123,6 +123,8 @@ class TagQueryNode(SourceNode):
     match_mode:
         Tag matching mode. ``MatchMode.ANY`` subscribes to queues containing
         any of ``query_tags`` while ``MatchMode.ALL`` requires every tag.
+        Strings such as ``"any"`` or ``"all"`` are also accepted and
+        normalized to the corresponding :class:`MatchMode` value.
     """
 
     def __init__(
@@ -131,7 +133,7 @@ class TagQueryNode(SourceNode):
         *,
         interval: int | str,
         period: int,
-        match_mode: MatchMode = MatchMode.ANY,
+        match_mode: MatchMode | str = MatchMode.ANY,
         compute_fn=None,
         name: str | None = None,
     ) -> None:
@@ -149,6 +151,11 @@ class TagQueryNode(SourceNode):
             seen_tags.add(validated_tag)
             validated_query_tags.append(validated_tag)
 
+        if isinstance(match_mode, MatchMode):
+            normalized_mode = match_mode
+        else:
+            normalized_mode = normalize_match_mode(match_mode)
+
         super().__init__(
             input=None,
             compute_fn=compute_fn,
@@ -158,7 +165,7 @@ class TagQueryNode(SourceNode):
             tags=list(validated_query_tags),
         )
         self.query_tags = validated_query_tags
-        self.match_mode = match_mode
+        self.match_mode = normalized_mode
         self.upstreams: list[str] = []
         self.execute = False
 

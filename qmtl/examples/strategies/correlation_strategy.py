@@ -1,4 +1,4 @@
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner
+from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, MatchMode
 import pandas as pd
 
 class CorrelationStrategy(Strategy):
@@ -7,7 +7,7 @@ class CorrelationStrategy(Strategy):
             query_tags=["ta-indicator"],
             interval="1h",
             period=24,
-            match_mode="any",  # default OR matching
+            match_mode=MatchMode.ANY,  # default OR matching
         )
         # Queue resolution and subscription are handled automatically by Runner
         # through TagQueryManager.

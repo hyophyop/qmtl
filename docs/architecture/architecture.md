@@ -427,7 +427,7 @@ if __name__ == "__main__":
 아래 예시는 글로벌 DAG에 이미 존재하는 1시간 단위 RSI, MFI 지표 노드들이 `tags=["ta-indicator"]` 로 태깅되어 있을 때, 이를 **TagQueryNode** 를 통해 한 번에 업스트림으로 끌어와 상관계수를 계산(correlation)하는 전략이다.
 
 ```python
-from qmtl.sdk import Strategy, Node, TagQueryNode, run_strategy
+from qmtl.sdk import Strategy, Node, TagQueryNode, run_strategy, MatchMode
 import pandas as pd
 
 # 사용자 정의 상관계수 계산 함수
@@ -444,7 +444,7 @@ class CorrelationStrategy(Strategy):
             query_tags=["ta-indicator"],  # RSI, MFI 등 사전 계산 지표 노드들과 매칭
             interval="1h",               # 1시간 바 기준
             period=24,                    # 24시간 캐시(24개)
-            match_mode="any",             # 기본값은 OR 매칭
+            match_mode=MatchMode.ANY,     # 기본값은 OR 매칭
             compute_fn=calc_corr          # 병합 후 바로 상관계수 계산
         )
 
@@ -456,8 +456,8 @@ class CorrelationStrategy(Strategy):
 
         self.add_nodes([indicators, corr_node])
 
-        # match_mode="any" 는 하나 이상의 태그가 일치하면 매칭되며,
-        # "all" 로 지정하면 모든 태그가 존재하는 큐만 선택된다.
+        # match_mode=MatchMode.ANY 는 하나 이상의 태그가 일치하면 매칭되며,
+        # MatchMode.ALL 로 지정하면 모든 태그가 존재하는 큐만 선택된다.
 
 # 실시간 실행 예시 (월드 주도)
 if __name__ == "__main__":

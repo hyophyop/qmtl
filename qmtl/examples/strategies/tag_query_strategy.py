@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner
+from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, MatchMode
 import pandas as pd
 
 
@@ -12,7 +12,7 @@ class TagQueryStrategy(Strategy):
             query_tags=["ta-indicator"],
             interval="1h",
             period=24,
-            match_mode="any",  # default OR matching
+            match_mode=MatchMode.ANY,  # default OR matching
         )
         # Runner creates TagQueryManager so the node receives queue mappings
         # and subscriptions automatically.

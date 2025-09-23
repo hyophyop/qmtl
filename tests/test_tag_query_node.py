@@ -1,6 +1,6 @@
 import logging
 
-from qmtl.sdk import TagQueryNode
+from qmtl.sdk import TagQueryNode, MatchMode
 
 
 def test_update_queues_warmup_and_drop():
@@ -26,3 +26,8 @@ def test_update_queues_logs_warning_when_empty(caplog):
     with caplog.at_level(logging.WARNING):
         node.update_queues([])
     assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+def test_tag_query_node_accepts_string_match_mode():
+    node = TagQueryNode(["t"], interval="60s", period=1, match_mode="all")
+    assert node.match_mode is MatchMode.ALL
