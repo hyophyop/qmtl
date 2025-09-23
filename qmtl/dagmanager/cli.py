@@ -5,7 +5,7 @@ import asyncio
 import json
 import hashlib
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Sequence
 
 import grpc
 import sys
@@ -198,6 +198,51 @@ def _dag_hash(dag_json: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+_LEGACY_TARGET_COMMANDS = {"diff", "queue-stats", "gc", "redo-diff"}
+
+
+def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
+    """Rewrite legacy dagmanager CLI arguments for compatibility."""
+
+    args = list(sys.argv[1:] if argv is None else argv)
+    for idx, token in enumerate(args):
+        if token in _LEGACY_TARGET_COMMANDS:
+            subcmd_index = idx
+            subcmd = token
+            break
+    else:
+        return args
+
+    leading = args[:subcmd_index]
+    target_value: str | None = None
+    normalized_leading: list[str] = []
+    skip_next = False
+
+    for i, token in enumerate(leading):
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--target":
+            if i == len(leading) - 1:
+                return args  # argparse will raise the appropriate error
+            target_value = leading[i + 1]
+            skip_next = True
+            continue
+        if token.startswith("--target="):
+            target_value = token.split("=", 1)[1]
+            continue
+        normalized_leading.append(token)
+
+    if target_value is None:
+        return args
+
+    tail = args[subcmd_index + 1 :]
+    if any(part == "--target" or part.startswith("--target=") for part in tail):
+        return normalized_leading + [subcmd, *tail]
+
+    return normalized_leading + [subcmd, "--target", target_value, *tail]
+
+
 def _cmd_snapshot(args: argparse.Namespace) -> None:
     dag_text = _read_file(args.file)
     digest = _dag_hash(dag_text)
@@ -239,6 +284,8 @@ def _cmd_neo4j_init(args: argparse.Namespace) -> None:
 
 
 async def _main(argv: list[str] | None = None) -> None:
+    normalized_argv = _normalize_argv(argv)
+
     parser = argparse.ArgumentParser(prog="qmtl service dagmanager")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -290,7 +337,7 @@ async def _main(argv: list[str] | None = None) -> None:
     p_metrics = sub.add_parser("metrics", help="Expose DAG Manager Prometheus metrics")
     p_metrics.add_argument("--port", type=int, default=8000, help="Port to expose metrics on")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(normalized_argv)
 
     if args.cmd == "diff":
         await _cmd_diff(args)

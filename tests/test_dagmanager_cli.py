@@ -66,6 +66,30 @@ def test_cli_queue_stats(monkeypatch, capsys):
     assert data == {"q": 1}
     assert captured["target"] == "localhost:50051"
 
+
+def test_cli_queue_stats_legacy_target(monkeypatch, capsys):
+    class Stub:
+        def __init__(self, channel):
+            pass
+
+        async def GetQueueStats(self, request):
+            return dagmanager_pb2.QueueStats(sizes={"q": 1})
+
+    captured = {}
+
+    def fake_channel(target):
+        captured["target"] = target
+        return DummyChannel()
+
+    monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
+    monkeypatch.setattr(grpc.aio, "insecure_channel", fake_channel)
+    main(["--target", "remote:1234", "queue-stats"])
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data == {"q": 1}
+    assert captured["target"] == "remote:1234"
+
+
 def test_cli_gc(monkeypatch, capsys):
     called = {}
     class Stub:
