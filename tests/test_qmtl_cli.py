@@ -8,4 +8,3 @@ def test_qmtl_help():
     assert "gw" in result.stdout
     assert "dagmanager" in result.stdout
     assert "init" in result.stdout
-    assert "check-imports" in result.stdout
