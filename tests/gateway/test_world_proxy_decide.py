@@ -130,7 +130,7 @@ async def test_decide_stale_on_backend_error(
 
     async with gateway_app_factory(handler) as ctx:
         r1 = await ctx.client.get("/worlds/abc/decide")
-        ctx.world_client._decision_cache["abc"].expires_at = 0
+        ctx.world_client._decision_cache.expire("abc")
         r2 = await ctx.client.get("/worlds/abc/decide")
 
     assert r1.json() == {"v": 1}

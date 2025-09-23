@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Literal
-import uuid
+from typing import Any, Dict, Literal, Optional
 
 import httpx
 
 from qmtl.common import AsyncCircuitBreaker
-from qmtl.common.compute_context import (
-    ComputeContext,
-    build_worldservice_compute_context,
-)
+from qmtl.common.compute_context import ComputeContext
+
 from . import metrics as gw_metrics
+from .caches import ActivationCache, TTLCache, TTLCacheResult
+from .transport import BreakerRetryTransport
+from .world_payloads import augment_decision_payload
 
 
 @dataclass
@@ -24,39 +23,7 @@ class Budget:
     retries: int = 2
 
 
-class TTLCacheEntry:
-    """Internal structure for TTL cached items."""
-
-    __slots__ = ("value", "expires_at")
-
-    def __init__(self, value: Any, ttl: float) -> None:
-        self.value = value
-        self.expires_at = time.time() + ttl
-
-    def valid(self) -> bool:
-        return time.time() < self.expires_at
-
-
 ExecutionDomain = Literal["backtest", "dryrun", "live", "shadow"]
-
-
-def _assemble_compute_context(world_id: str, payload: dict[str, Any]) -> ComputeContext:
-    context = build_worldservice_compute_context(world_id, payload)
-    if context.downgraded and context.downgrade_reason:
-        reason = getattr(context.downgrade_reason, "value", context.downgrade_reason)
-        gw_metrics.worlds_compute_context_downgrade_total.labels(reason=reason).inc()
-    return context
-
-
-def _augment_decision_payload(world_id: str, payload: Any) -> Any:
-    if not isinstance(payload, dict):
-        return payload
-    if "effective_mode" not in payload:
-        return payload
-    context = _assemble_compute_context(world_id, payload)
-    payload["execution_domain"] = context.execution_domain or None
-    payload["compute_context"] = context.to_dict(include_flags=True)
-    return payload
 
 
 class WorldServiceClient:
@@ -77,8 +44,8 @@ class WorldServiceClient:
         self._base = base_url.rstrip("/")
         self._budget = budget or Budget()
         self._client = client or httpx.AsyncClient()
-        self._decision_cache: Dict[str, TTLCacheEntry] = {}
-        self._activation_cache: Dict[str, tuple[str, Any]] = {}
+        self._decision_cache: TTLCache[Any] = TTLCache()
+        self._activation_cache: ActivationCache[Any] = ActivationCache()
         self._breaker = breaker or AsyncCircuitBreaker(
             on_open=lambda: (
                 gw_metrics.worlds_breaker_state.set(1),
@@ -92,6 +59,22 @@ class WorldServiceClient:
         )
         gw_metrics.worlds_breaker_state.set(0)
         gw_metrics.worlds_breaker_failures.set(0)
+
+        async def _backoff(_: int, __: Exception) -> None:
+            await self._wait_for_service()
+
+        def _after_success(_: AsyncCircuitBreaker) -> None:
+            gw_metrics.worlds_breaker_failures.set(self._breaker.failures)
+
+        self._transport = BreakerRetryTransport(
+            self._client,
+            self._breaker,
+            timeout=self._budget.timeout,
+            retries=self._budget.retries,
+            wait_for_service=_backoff,
+            observe_latency=gw_metrics.observe_worlds_proxy_latency,
+            on_success=_after_success,
+        )
 
     async def _wait_for_service(self, timeout: float = 5.0) -> None:
         """Poll the WorldService health endpoint until it is ready."""
@@ -118,28 +101,7 @@ class WorldServiceClient:
         return f"{self._base}{path}"
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        @self._breaker
-        async def _call() -> httpx.Response:
-            for attempt in range(self._budget.retries + 1):
-                try:
-                    start = time.perf_counter()
-                    resp = await self._client.request(
-                        method, url, timeout=self._budget.timeout, **kwargs
-                    )
-                    gw_metrics.observe_worlds_proxy_latency(
-                        (time.perf_counter() - start) * 1000
-                    )
-                    return resp
-                except Exception:
-                    if attempt == self._budget.retries:
-                        raise
-                    await self._wait_for_service()
-            raise RuntimeError("unreachable")
-
-        resp = await _call()
-        self._breaker.reset()
-        gw_metrics.worlds_breaker_failures.set(self._breaker.failures)
-        return resp
+        return await self._transport.request(method, url, **kwargs)
 
     async def _request_json(
         self,
@@ -186,10 +148,10 @@ class WorldServiceClient:
     async def get_decide(
         self, world_id: str, headers: Optional[Dict[str, str]] = None
     ) -> tuple[Any, bool]:
-        entry = self._decision_cache.get(world_id)
-        if entry and entry.valid():
+        cached: TTLCacheResult[Any] = self._decision_cache.lookup(world_id)
+        if cached.fresh:
             gw_metrics.record_worlds_cache_hit()
-            return entry.value, False
+            return cached.value, False
         try:
             resp = await self._request(
                 "GET",
@@ -197,13 +159,13 @@ class WorldServiceClient:
                 headers=headers,
             )
         except Exception:
-            if entry is not None:
+            if cached.present:
                 gw_metrics.record_worlds_stale_response()
-                return entry.value, True
+                return cached.value, True
             raise
-        if resp.status_code >= 500 and entry is not None:
+        if resp.status_code >= 500 and cached.present:
             gw_metrics.record_worlds_stale_response()
-            return entry.value, True
+            return cached.value, True
         resp.raise_for_status()
         data = resp.json()
         cache_control = resp.headers.get("Cache-Control", "")
@@ -216,16 +178,16 @@ class WorldServiceClient:
 
         # Header max-age takes precedence if positive
         if ttl > 0:
-            augmented = _augment_decision_payload(world_id, data)
-            self._decision_cache[world_id] = TTLCacheEntry(augmented, ttl)
+            augmented = augment_decision_payload(world_id, data)
+            self._decision_cache.set(world_id, augmented, ttl)
             return augmented, False
 
         # Fallback to envelope ttl semantics when header is missing or <= 0
         tval = data.get("ttl") if isinstance(data, dict) else None
         if tval is None:
             # Spec default when envelope omits ttl
-            augmented = _augment_decision_payload(world_id, data)
-            self._decision_cache[world_id] = TTLCacheEntry(augmented, 300)
+            augmented = augment_decision_payload(world_id, data)
+            self._decision_cache.set(world_id, augmented, 300)
             return augmented, False
 
         # Envelope provided ttl; honor zero as "do not cache"
@@ -244,13 +206,13 @@ class WorldServiceClient:
 
         if env_ttl is None:
             # Invalid ttl provided → be conservative and do not cache
-            return _augment_decision_payload(world_id, data), False
+            return augment_decision_payload(world_id, data), False
         if env_ttl <= 0:
             # Explicit no-cache
-            return _augment_decision_payload(world_id, data), False
+            return augment_decision_payload(world_id, data), False
 
-        augmented = _augment_decision_payload(world_id, data)
-        self._decision_cache[world_id] = TTLCacheEntry(augmented, env_ttl)
+        augmented = augment_decision_payload(world_id, data)
+        self._decision_cache.set(world_id, augmented, env_ttl)
         return augmented, False
 
     async def get_activation(
@@ -261,10 +223,9 @@ class WorldServiceClient:
         headers: Optional[Dict[str, str]] = None,
     ) -> tuple[Any, bool]:
         key = f"{world_id}:{strategy_id}:{side}"
-        etag, cached = self._activation_cache.get(key, (None, None))
-        req_headers = dict(headers or {})
-        if etag:
-            req_headers["If-None-Match"] = etag
+        cached_entry = self._activation_cache.get(key)
+        cached_payload = cached_entry.payload if cached_entry else None
+        req_headers = self._activation_cache.conditional_headers(key, headers)
         try:
             resp = await self._request(
                 "GET",
@@ -273,21 +234,21 @@ class WorldServiceClient:
                 params={"strategy_id": strategy_id, "side": side},
             )
         except Exception:
-            if cached is not None:
+            if cached_entry is not None:
                 gw_metrics.record_worlds_stale_response()
-                return cached, True
+                return cached_payload, True
             raise
-        if resp.status_code == 304 and cached is not None:
+        if resp.status_code == 304 and cached_entry is not None:
             gw_metrics.record_worlds_cache_hit()
-            return cached, False
-        if resp.status_code >= 500 and cached is not None:
+            return cached_payload, False
+        if resp.status_code >= 500 and cached_entry is not None:
             gw_metrics.record_worlds_stale_response()
-            return cached, True
+            return cached_payload, True
         resp.raise_for_status()
         data = resp.json()
         new_etag = resp.headers.get("ETag")
         if new_etag:
-            self._activation_cache[key] = (new_etag, data)
+            self._activation_cache.set(key, new_etag, data)
         return data, False
 
 
