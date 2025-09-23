@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from typing import Mapping
-
-import pandas as pd
-from pandas.api.types import DatetimeTZDtype
+from typing import Mapping, TYPE_CHECKING
 
 from qmtl.runtime.sdk.exceptions import InvalidSchemaError
+
+try:  # pragma: no cover - optional dependency shim
+    import pandas as _pd
+    from pandas.api.types import DatetimeTZDtype
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised when pandas missing
+    _PANDAS_IMPORT_ERROR = exc
+    _pd = None  # type: ignore[assignment]
+    DatetimeTZDtype = None  # type: ignore[assignment]
+else:  # pragma: no cover - import side effects only
+    _PANDAS_IMPORT_ERROR = None
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import pandas as pd
+else:  # pragma: no cover - optional dependency available at runtime
+    pd = _pd
 
 # Built-in DataFrame schemas for node I/O
 SCHEMAS: dict[str, dict[str, str]] = {
@@ -41,7 +53,7 @@ def _resolve_schema(expected: str | Mapping[str, str]) -> Mapping[str, str]:
     return expected
 
 
-def validate_schema(df: pd.DataFrame, expected: str | Mapping[str, str]) -> None:
+def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> None:
     """Validate that ``df`` conforms to ``expected`` schema.
 
     Parameters
@@ -58,6 +70,11 @@ def validate_schema(df: pd.DataFrame, expected: str | Mapping[str, str]) -> None
         If the dataframe is missing required columns, has unexpected columns or
         column dtypes do not match the schema.
     """
+
+    if pd is None or DatetimeTZDtype is None:
+        raise ModuleNotFoundError(
+            "pandas is required for schema validation; install the 'io' extra"
+        ) from _PANDAS_IMPORT_ERROR
 
     spec = _resolve_schema(expected)
 
