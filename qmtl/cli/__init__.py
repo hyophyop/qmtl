@@ -48,7 +48,7 @@ def _build_top_help_parser() -> argparse.ArgumentParser:
           tools     Developer tooling including SDK runners and linters.
           project   Project scaffolding and template helpers.
 
-        Legacy aliases (e.g. ``qmtl gw``) remain available but emit a
+        Legacy aliases (e.g. ``qmtl dagmanager``, ``qmtl gw``, or ``qmtl init``) remain available but emit a
         deprecation warning and forward to the new hierarchy.
         """
     ).strip()
