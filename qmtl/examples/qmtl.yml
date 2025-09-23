@@ -35,4 +35,4 @@ dagmanager:
   grpc_host: 0.0.0.0
   grpc_port: 50051
   http_host: 0.0.0.0
-  http_port: 8000
+  http_port: 8001
