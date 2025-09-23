@@ -37,6 +37,7 @@ nav:
       - HTTPX Usage: guides/httpx_usage.md
   - Operations:
       - Overview: operations/README.md
+      - Backend Quickstart: operations/backend_quickstart.md
       - Docker & Compose: operations/docker.md
       - Backfill: operations/backfill.md
       - Canary Rollout: operations/canary_rollout.md
