@@ -7,9 +7,9 @@ See the spec for Exchange Node Sets: ../architecture/exchange_node_sets.md
 ## Attach a minimal Node Set in tests
 
 ```python
-from qmtl.sdk.node import Node
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.testkit import attach_minimal
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.testkit import attach_minimal
 
 
 def test_nodeset_attach_minimal():
@@ -24,7 +24,7 @@ def test_nodeset_attach_minimal():
 ## Create a fake fill webhook event
 
 ```python
-from qmtl.nodesets.testkit import fake_fill_webhook
+from qmtl.runtime.nodesets.testkit import fake_fill_webhook
 
 
 def test_fake_fill_webhook_shape():

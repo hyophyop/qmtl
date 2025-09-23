@@ -2,7 +2,7 @@ import asyncio
 import json
 import pytest
 
-from qmtl.gateway.database import SQLiteDatabase
+from qmtl.services.gateway.database import SQLiteDatabase
 
 
 @pytest.mark.asyncio

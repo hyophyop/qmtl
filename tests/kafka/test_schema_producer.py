@@ -1,4 +1,4 @@
-from qmtl.kafka.schema_producer import SchemaAwareProducer
+from qmtl.foundation.kafka.schema_producer import SchemaAwareProducer
 
 
 class DummyProducer:

@@ -2,7 +2,7 @@ import pytest
 import pytest
 import yaml
 
-from qmtl.dagmanager.server import main
+from qmtl.services.dagmanager.server import main
 
 
 def test_server_help(capsys):
@@ -20,7 +20,7 @@ def test_server_defaults(monkeypatch, tmp_path):
         captured["neo4j"] = config.neo4j_dsn
         captured["kafka"] = config.kafka_dsn
 
-    monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
+    monkeypatch.setattr("qmtl.services.dagmanager.server._run", fake_run)
     monkeypatch.chdir(tmp_path)
     main([])
     assert captured["neo4j"] is None
@@ -38,7 +38,7 @@ def test_server_config_file(monkeypatch, tmp_path):
     async def fake_run(config):
         captured["uri"] = config.neo4j_dsn
 
-    monkeypatch.setattr("qmtl.dagmanager.server._run", fake_run)
+    monkeypatch.setattr("qmtl.services.dagmanager.server._run", fake_run)
     monkeypatch.chdir(tmp_path)
     main([])
     assert captured["uri"] == "bolt://test:7687"

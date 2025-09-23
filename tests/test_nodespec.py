@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.common import CanonicalNodeSpec, compute_node_id
-from qmtl.common.nodespec import serialize_nodespec
+from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
+from qmtl.foundation.common.nodespec import serialize_nodespec
 
 
 def test_canonical_nodespec_serialization_matches_legacy() -> None:

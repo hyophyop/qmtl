@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from qmtl.worldservice.policy_engine import Policy, ThresholdRule
-from qmtl.worldservice.storage import PersistentStorage
+from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
+from qmtl.services.worldservice.storage import PersistentStorage
 
 
 @pytest.mark.asyncio

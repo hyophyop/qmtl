@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.indicators import volatility_node
-from qmtl.sdk.cache_view import CacheView
-from qmtl.sdk.node import SourceNode
+from qmtl.runtime.indicators import volatility_node
+from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import SourceNode
 
 
 @pytest.mark.parametrize(

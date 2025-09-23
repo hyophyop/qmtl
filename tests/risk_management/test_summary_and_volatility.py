@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import RiskManager, RiskViolation, RiskViolationType
+from qmtl.runtime.sdk.risk_management import RiskManager, RiskViolation, RiskViolationType
 
 
 def test_get_risk_summary():

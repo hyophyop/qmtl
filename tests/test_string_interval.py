@@ -1,4 +1,4 @@
-from qmtl.sdk import Node, ProcessingNode, Runner, StreamInput
+from qmtl.runtime.sdk import Node, ProcessingNode, Runner, StreamInput
 
 
 def _compute(view):

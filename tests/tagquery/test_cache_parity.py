@@ -2,8 +2,8 @@ import json
 import httpx
 import pytest
 
-from qmtl.sdk import TagQueryNode
-from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk import TagQueryNode
+from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
 class DummyClient:

@@ -1,6 +1,6 @@
 import logging
 
-from qmtl.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk import TagQueryNode, MatchMode
 
 
 def test_update_queues_warmup_and_drop():

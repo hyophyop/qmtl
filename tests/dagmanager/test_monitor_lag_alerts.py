@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.dagmanager.monitor import Monitor, AckStatus
-from qmtl.dagmanager.alerts import AlertManager
+from qmtl.services.dagmanager.monitor import Monitor, AckStatus
+from qmtl.services.dagmanager.alerts import AlertManager
 
 
 class LagMetrics:

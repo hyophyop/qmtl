@@ -40,7 +40,7 @@ Example:
 
 ```python
 import pandas as pd
-from qmtl.schema import validate_schema
+from qmtl.foundation.schema import validate_schema
 
 df = pd.DataFrame(
     {
@@ -60,13 +60,13 @@ validate_schema(df, "bar")
 
 When `QMTL_SCHEMA_REGISTRY_URL` is set, components can resolve `schema_id`s via
 an external Schema Registry. A lightweight in-memory client is available at
-`qmtl/schema/registry.py`. Production deployments can swap in Confluent or
+`qmtl/foundation/schema/registry.py`. Production deployments can swap in Confluent or
 Redpanda clients.
 
 ## ControlBus CloudEvents — Protobuf Migration Path
 
 ControlBus supports JSON today. A migration path to CloudEvents-over-Protobuf is
-available via the placeholder codec in `qmtl/gateway/controlbus_codec.py` which
+available via the placeholder codec in `qmtl/services/gateway/controlbus_codec.py` which
 attaches `content_type=application/cloudevents+proto` and keeps a JSON payload
 for compatibility. Consumers route based on the header and decode accordingly.
 Rollout can proceed using dual publishing until all consumers understand the

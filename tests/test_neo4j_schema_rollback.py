@@ -1,4 +1,4 @@
-from qmtl.dagmanager.neo4j_init import get_schema_queries, get_drop_queries
+from qmtl.services.dagmanager.neo4j_init import get_schema_queries, get_drop_queries
 
 
 def test_get_drop_queries_covers_all_created_objects():

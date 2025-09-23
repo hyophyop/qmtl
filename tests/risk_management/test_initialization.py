@@ -1,4 +1,4 @@
-from qmtl.sdk.risk_management import RiskManager
+from qmtl.runtime.sdk.risk_management import RiskManager
 
 
 def test_default_initialization(default_risk_manager):

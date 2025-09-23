@@ -2,8 +2,8 @@ import asyncio
 import httpx
 import pytest
 
-from qmtl.sdk import TagQueryNode, MatchMode
-from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
 @pytest.mark.asyncio
@@ -230,7 +230,7 @@ async def test_start_uses_event_descriptor(monkeypatch):
 
     FakeClient = type("FakeClient", (), {"__aenter__": aenter, "__aexit__": aexit, "post": fake_post})
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: FakeClient())
-    monkeypatch.setattr("qmtl.sdk.tagquery_manager.WebSocketClient", DummyWS)
+    monkeypatch.setattr("qmtl.runtime.sdk.tagquery_manager.WebSocketClient", DummyWS)
 
     await manager.start()
     assert isinstance(manager.client, DummyWS)

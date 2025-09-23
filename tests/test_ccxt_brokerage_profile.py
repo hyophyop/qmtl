@@ -47,15 +47,15 @@ def test_symbol_specific_fees_take_precedence(monkeypatch):
     }
     _install_ccxt_stub(markets=markets, trading_fee=(0.01, 0.02))
 
-    from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
-    import qmtl.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
+    import qmtl.runtime.brokerage.ccxt_profile as cp
     cp._FEE_CACHE.clear()
 
     model = make_ccxt_brokerage(
         "binance", product="spot", symbol="BTC/USDT", detect_fees=True
     )
     fee = model.fee_model
-    from qmtl.brokerage.fees import MakerTakerFeeModel
+    from qmtl.runtime.brokerage.fees import MakerTakerFeeModel
 
     assert isinstance(fee, MakerTakerFeeModel)
     assert fee.maker_rate == pytest.approx(0.001)
@@ -65,13 +65,13 @@ def test_symbol_specific_fees_take_precedence(monkeypatch):
 def test_exchange_level_fees_used_when_no_markets():
     sys.modules.pop("ccxt", None)
     _install_ccxt_stub(markets={}, trading_fee=(0.005, 0.007))
-    from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
-    import qmtl.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
+    import qmtl.runtime.brokerage.ccxt_profile as cp
     cp._FEE_CACHE.clear()
 
     model = make_ccxt_brokerage("binance", product="spot", detect_fees=True)
     fee = model.fee_model
-    from qmtl.brokerage.fees import MakerTakerFeeModel
+    from qmtl.runtime.brokerage.fees import MakerTakerFeeModel
 
     assert isinstance(fee, MakerTakerFeeModel)
     assert fee.maker_rate == pytest.approx(0.005)
@@ -82,8 +82,8 @@ def test_defaults_used_when_ccxt_absent_or_detection_disabled(monkeypatch):
     # Ensure ccxt is not importable
     sys.modules.pop("ccxt", None)
 
-    from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
-    import qmtl.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
+    import qmtl.runtime.brokerage.ccxt_profile as cp
     cp._FEE_CACHE.clear()
 
     # Detection disabled: use explicit defaults
@@ -94,7 +94,7 @@ def test_defaults_used_when_ccxt_absent_or_detection_disabled(monkeypatch):
         defaults=(0.0003, 0.0008),
     )
     fee = model.fee_model
-    from qmtl.brokerage.fees import MakerTakerFeeModel
+    from qmtl.runtime.brokerage.fees import MakerTakerFeeModel
 
     assert isinstance(fee, MakerTakerFeeModel)
     assert fee.maker_rate == pytest.approx(0.0003)
@@ -112,8 +112,8 @@ def test_fee_detection_cached_load_markets_called_once():
     stub = _install_ccxt_stub(
         markets={"BTC/USDT": {"maker": 0.001, "taker": 0.002}}, trading_fee=(0.0, 0.0)
     )
-    from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
-    import qmtl.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
+    import qmtl.runtime.brokerage.ccxt_profile as cp
     cp._FEE_CACHE.clear()
 
     # First call
@@ -133,7 +133,7 @@ def test_enum_and_validation_helper():
     # Install stub to provide .exchanges list for validation
     sys.modules.pop("ccxt", None)
     _install_ccxt_stub(markets={}, trading_fee=(0.001, 0.002))
-    from qmtl.sdk.exchanges import CcxtExchange, ensure_ccxt_exchange
+    from qmtl.runtime.sdk.exchanges import CcxtExchange, ensure_ccxt_exchange
 
     assert ensure_ccxt_exchange(CcxtExchange.BINANCE) == "binance"
     assert ensure_ccxt_exchange("kraken") == "kraken"

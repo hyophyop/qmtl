@@ -11,8 +11,8 @@ import pytest
 import uvicorn
 
 from tests.e2e.world_smoke.servers.worldservice_stub import app as ws_app
-from qmtl.gateway.api import create_app
-from qmtl.gateway.ws import WebSocketHub
+from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 def _find_free_port() -> int:

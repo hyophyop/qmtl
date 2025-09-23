@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.sdk.risk.controls import (
+from qmtl.runtime.sdk.risk.controls import (
     DrawdownControl,
     VolatilityControl,
     evaluate_concentration,
     evaluate_leverage,
     evaluate_position_size,
 )
-from qmtl.sdk.risk.models import PositionInfo, RiskViolationType
+from qmtl.runtime.sdk.risk.models import PositionInfo, RiskViolationType
 
 
 @pytest.fixture

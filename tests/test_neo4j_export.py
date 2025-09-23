@@ -1,4 +1,4 @@
-from qmtl.dagmanager.neo4j_export import export_schema
+from qmtl.services.dagmanager.neo4j_export import export_schema
 
 class FakeSession:
     def __init__(self):

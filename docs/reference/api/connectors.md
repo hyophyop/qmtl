@@ -19,7 +19,7 @@ Key goals:
 ## BrokerageClient
 
 ```python
-from qmtl.sdk import HttpBrokerageClient, FakeBrokerageClient, CcxtBrokerageClient
+from qmtl.runtime.sdk import HttpBrokerageClient, FakeBrokerageClient, CcxtBrokerageClient
 
 client = HttpBrokerageClient("https://broker/api/orders", max_retries=3, backoff=0.1)
 resp = client.post_order({
@@ -53,7 +53,7 @@ Binance Spot Testnet can be enabled by passing `sandbox=True` (alias `testnet=Tr
 Example:
 
 ```python
-from qmtl.sdk import CcxtBrokerageClient
+from qmtl.runtime.sdk import CcxtBrokerageClient
 
 client = CcxtBrokerageClient(
     "binance",
@@ -80,7 +80,7 @@ See runnable example: `qmtl/examples/brokerage_demo/ccxt_binance_sandbox_demo.py
 Use `FuturesCcxtBrokerageClient` targeting `binanceusdm` and enable `sandbox=True`. You can optionally set `leverage`, `margin_mode` (cross/isolated), and `hedge_mode` (dual‑side) if supported. The client maps futures extras like `position_side` and `reduce_only`, and it can apply per-order leverage changes on exchanges that allow it.
 
 ```python
-from qmtl.sdk import FuturesCcxtBrokerageClient
+from qmtl.runtime.sdk import FuturesCcxtBrokerageClient
 
 client = FuturesCcxtBrokerageClient(
     "binanceusdm",
@@ -110,14 +110,14 @@ Runnable demo: `qmtl/examples/brokerage_demo/ccxt_binance_futures_sandbox_demo.p
 
 ### Retry & Timeouts
 
-- HTTP timeouts use `qmtl.sdk.runtime.HTTP_TIMEOUT_SECONDS` (2s default; 1.5s in tests).
+- HTTP timeouts use `qmtl.runtime.sdk.runtime.HTTP_TIMEOUT_SECONDS` (2s default; 1.5s in tests).
 - `TradeExecutionService` performs up to `max_retries` with `backoff` between attempts, and short-circuits if `poll_order_status` reports completion.
 - For CCXT, rate limit handling is delegated to the library’s `enableRateLimit`.
 
 ## LiveDataFeed
 
 ```python
-from qmtl.sdk import WebSocketFeed, FakeLiveDataFeed
+from qmtl.runtime.sdk import WebSocketFeed, FakeLiveDataFeed
 
 async def on_msg(evt: dict) -> None:
     if evt.get("event") == "queue_update":
@@ -163,7 +163,7 @@ YAML integration: you can mirror these settings in your project config and load 
 For live order submission via Runner’s pipeline (e.g., `TradeOrderPublisherNode`):
 
 ```python
-from qmtl.sdk import Runner, TradeExecutionService
+from qmtl.runtime.sdk import Runner, TradeExecutionService
 
 svc = TradeExecutionService("https://broker/api/orders", max_retries=3)
 Runner.set_trade_execution_service(svc)

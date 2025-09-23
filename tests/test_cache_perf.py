@@ -1,8 +1,8 @@
 import time
 import pytest
 
-from qmtl.sdk.node import NodeCache
-from qmtl.sdk import arrow_cache
+from qmtl.runtime.sdk.node import NodeCache
+from qmtl.runtime.sdk import arrow_cache
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")

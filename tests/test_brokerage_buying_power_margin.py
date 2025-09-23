@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     Account,
     AccountType,
     BrokerageModel,

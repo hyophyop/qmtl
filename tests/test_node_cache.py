@@ -1,9 +1,9 @@
 import pytest
 import pytest
 import xarray as xr
-from qmtl.sdk import ProcessingNode, StreamInput, Runner, NodeCache
-from qmtl.common.compute_key import ComputeContext
-from qmtl.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, Runner, NodeCache
+from qmtl.foundation.common.compute_key import ComputeContext
+from qmtl.runtime.sdk import metrics as sdk_metrics
 
 
 def test_input_window_hash_changes():

@@ -3,9 +3,9 @@ import pytest
 
 import asyncio
 
-from qmtl.dagmanager.buffer_scheduler import BufferingScheduler
-from qmtl.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, NodeRecord
-from qmtl.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.buffer_scheduler import BufferingScheduler
+from qmtl.services.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, NodeRecord
+from qmtl.services.dagmanager.topic import topic_name
 
 
 class FakeRepo(NodeRepository):

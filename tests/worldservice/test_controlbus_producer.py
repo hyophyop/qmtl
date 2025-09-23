@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from qmtl.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 
 
 class DummyProducer:

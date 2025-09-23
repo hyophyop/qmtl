@@ -1,4 +1,4 @@
-from qmtl.schema import SchemaRegistryClient
+from qmtl.foundation.schema import SchemaRegistryClient
 
 
 def test_register_and_latest():

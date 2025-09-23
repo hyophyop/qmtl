@@ -1,8 +1,8 @@
 import importlib
 from unittest.mock import MagicMock
 
-import qmtl.sdk.runner as runner_module
-from qmtl.sdk.node import Node
+import qmtl.runtime.sdk.runner as runner_module
+from qmtl.runtime.sdk.node import Node
 
 
 class TradeOrderPublisherNode(Node):

@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk import ProcessingNode, StreamInput
+from qmtl.runtime.sdk import ProcessingNode, StreamInput
 
 
 def test_processing_node_accepts_list_or_node():

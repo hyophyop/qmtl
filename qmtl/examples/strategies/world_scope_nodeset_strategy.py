@@ -7,10 +7,10 @@ uses stub nodes to establish the contract.
 
 from __future__ import annotations
 
-from qmtl.sdk import Strategy, StreamInput, Node
-from qmtl.transforms import TradeSignalGeneratorNode
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.options import NodeSetOptions
+from qmtl.runtime.sdk import Strategy, StreamInput, Node
+from qmtl.runtime.transforms import TradeSignalGeneratorNode
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.options import NodeSetOptions
 
 
 class WorldScopeNodeSetStrategy(Strategy):

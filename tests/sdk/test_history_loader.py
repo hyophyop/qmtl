@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput
-from qmtl.sdk.history_loader import HistoryLoader
+from qmtl.runtime.sdk import Strategy, StreamInput
+from qmtl.runtime.sdk.history_loader import HistoryLoader
 
 
 class _Strat(Strategy):

@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from qmtl.gateway.ws.connections import ConnectionRegistry
-from qmtl.gateway.ws.duplicate import DuplicateTracker
-from qmtl.gateway.ws.filters import FilterEvaluator
-from qmtl.gateway.ws.rate_limit import TokenBucketRateLimiter
+from qmtl.services.gateway.ws.connections import ConnectionRegistry
+from qmtl.services.gateway.ws.duplicate import DuplicateTracker
+from qmtl.services.gateway.ws.filters import FilterEvaluator
+from qmtl.services.gateway.ws.rate_limit import TokenBucketRateLimiter
 
 
 class DummyWebSocket:

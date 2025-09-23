@@ -1,10 +1,10 @@
 from typing import Any
 
-from qmtl.gateway.models import StrategyAck
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.node import Node
-from qmtl.sdk.strategy import Strategy
-from qmtl.sdk.tag_manager_service import TagManagerService
+from qmtl.services.gateway.models import StrategyAck
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.strategy import Strategy
+from qmtl.runtime.sdk.tag_manager_service import TagManagerService
 
 
 class AlphaPerformanceNode(Node):
@@ -66,10 +66,10 @@ def test_run_hooks_offline(monkeypatch):
         lambda self, strategy: DummyManager(),
     )
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
+        "qmtl.runtime.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
     )
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
+        "qmtl.runtime.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
     )
 
     strategy = Runner.offline(DummyStrategy)
@@ -99,8 +99,8 @@ def test_handle_trade_order_http_and_kafka(monkeypatch):
         posted["json"] = json
 
     import importlib
-    import qmtl.sdk.runner as runner_module
-    from qmtl.sdk import trade_dispatcher as dispatcher_module
+    import qmtl.runtime.sdk.runner as runner_module
+    from qmtl.runtime.sdk import trade_dispatcher as dispatcher_module
 
     runner_module = importlib.reload(runner_module)
     monkeypatch.setattr(dispatcher_module.HttpPoster, "post", fake_post)
@@ -146,7 +146,7 @@ def test_run_hooks_live_like(monkeypatch):
         fake_gateway,
     )
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner.run_pipeline", staticmethod(lambda s: None)
+        "qmtl.runtime.sdk.runner.Runner.run_pipeline", staticmethod(lambda s: None)
     )
     monkeypatch.setattr(
         TagManagerService,
@@ -154,10 +154,10 @@ def test_run_hooks_live_like(monkeypatch):
         lambda self, strategy: DummyManager(),
     )
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
+        "qmtl.runtime.sdk.runner.Runner._handle_alpha_performance", staticmethod(fake_alpha)
     )
     monkeypatch.setattr(
-        "qmtl.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
+        "qmtl.runtime.sdk.runner.Runner._handle_trade_order", staticmethod(fake_order)
     )
 
     strategy = Runner.offline(DummyStrategy)
@@ -172,7 +172,7 @@ def test_run_hooks_live_like(monkeypatch):
 
 
 def test_handle_alpha_performance_updates_metrics():
-    from qmtl.sdk import metrics as sdk_metrics
+    from qmtl.runtime.sdk import metrics as sdk_metrics
 
     sdk_metrics.reset_metrics()
     Runner._handle_alpha_performance({"sharpe": 1.23, "max_drawdown": -0.5})

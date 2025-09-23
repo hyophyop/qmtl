@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from qmtl.sdk import SourceNode, Runner, Strategy, NodeValidationError
+from qmtl.runtime.sdk import SourceNode, Runner, Strategy, NodeValidationError
 
 
 class _SchemaStrategy(Strategy):

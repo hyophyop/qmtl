@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.transforms.gap_amplification import (
+from qmtl.runtime.transforms.gap_amplification import (
     gap_over_depth_sum,
     hazard_probability,
     gati_side,

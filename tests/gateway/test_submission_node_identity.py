@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.gateway.submission.node_identity import NodeIdentityValidator
+from qmtl.services.gateway.submission.node_identity import NodeIdentityValidator
 from tests.factories import NodeFactory, node_ids_crc32
 
 

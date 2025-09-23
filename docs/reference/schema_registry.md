@@ -13,7 +13,7 @@ incrementing ids and versions per subject.
 Example:
 
 ```python
-from qmtl.schema import SchemaRegistryClient
+from qmtl.foundation.schema import SchemaRegistryClient
 
 reg = SchemaRegistryClient()
 sch1 = reg.register("prices", '{"a": 1}')
@@ -33,7 +33,7 @@ export QMTL_SCHEMA_REGISTRY_URL="http://registry:8081"
 ```
 
 ```python
-from qmtl.schema import SchemaRegistryClient
+from qmtl.foundation.schema import SchemaRegistryClient
 
 reg = SchemaRegistryClient.from_env()  # returns RemoteSchemaRegistryClient
 reg.register("prices", '{"a": 1}')
@@ -52,7 +52,7 @@ exception type.
 
 ## Kafka Integration
 
-`qmtl.kafka.schema_producer.SchemaAwareProducer` uses `SchemaRegistryClient.from_env()`
+`qmtl.foundation.kafka.schema_producer.SchemaAwareProducer` uses `SchemaRegistryClient.from_env()`
 when a registry is not explicitly provided. This makes it easy to switch between
 in-memory and remote registries via environment configuration.
 

@@ -2,8 +2,8 @@ import httpx
 import pandas as pd
 import pytest
 
-from qmtl.io import BinanceFetcher
-from qmtl.io import binance_fetcher as bf_mod
+from qmtl.runtime.io import BinanceFetcher
+from qmtl.runtime.io import binance_fetcher as bf_mod
 
 
 class DummyClient:

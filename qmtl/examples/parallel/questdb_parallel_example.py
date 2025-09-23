@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import pandas as pd
 
-from qmtl.io import QuestDBRecorder
-from qmtl.sdk import StreamInput, Node, Runner, metrics, EventRecorderService
+from qmtl.runtime.io import QuestDBRecorder
+from qmtl.runtime.sdk import StreamInput, Node, Runner, metrics, EventRecorderService
 from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
 
 

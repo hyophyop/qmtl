@@ -21,7 +21,7 @@ to configure `MarketHours` with lunch breaks and early closes.
 
 ```python
 from datetime import date, time
-from qmtl.sdk.timing_controls import MarketHours
+from qmtl.runtime.sdk.timing_controls import MarketHours
 
 hours = MarketHours(
     pre_market_start=time(4, 0),

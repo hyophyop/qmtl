@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from qmtl.tools.taglint import (
+from qmtl.interfaces.tools.taglint import (
     REQUIRED_KEYS,
     RECOMMENDED_KEYS,
     apply_fixes,

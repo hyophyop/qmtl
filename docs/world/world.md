@@ -105,7 +105,7 @@ def apply_hysteresis(prev, checks, h):
 ```
 
 지표 소스
-- 성능 지표(Sharpe, MDD 등)는 전략이 노드로 산출하거나 SDK 메트릭(qmtl/sdk/metrics.py)을 연계해 Prometheus에서 수집한다.
+- 성능 지표(Sharpe, MDD 등)는 전략이 노드로 산출하거나 SDK 메트릭(qmtl/runtime/sdk/metrics.py)을 연계해 Prometheus에서 수집한다.
 - 표본 수·체결 수 등은 이벤트 레코더/리포지토리(예: QuestDB)에서 조회한다.
 
 ## 6. 통합 지점(기존 기능 재사용)
@@ -436,7 +436,7 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
 
 ### 15.5 개발 단위 매핑
 
-- qmtl/sdk/
+- qmtl/runtime/sdk/
   - Runner: `run_async(world_id)`, `OrderGateNode`, TagQueryManager(WS/폴백)
 - gateway/
   - api: `/worlds/*` 프록시, `/events/subscribe`, ControlBus 구독자, 캐시/서킷

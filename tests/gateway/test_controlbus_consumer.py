@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 import pytest
 from fastapi import FastAPI
 
-from qmtl.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
-from qmtl.gateway.api import Database
-from qmtl.gateway import metrics
-from qmtl.common.tagquery import MatchMode
+from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
+from qmtl.services.gateway.api import Database
+from qmtl.services.gateway import metrics
+from qmtl.foundation.common.tagquery import MatchMode
 
 
 class FakeHub:

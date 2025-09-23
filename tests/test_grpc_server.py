@@ -11,15 +11,15 @@ pytestmark = [
 ]
 import json
 
-from qmtl.dagmanager.diff_service import StreamSender
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
-from qmtl.dagmanager.grpc_server import serve
-from qmtl.dagmanager.api import create_app
-from qmtl.dagmanager import metrics
-from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
-from qmtl.proto import dagmanager_pb2, dagmanager_pb2_grpc
-from qmtl.dagmanager.monitor import AckStatus
-from qmtl.dagmanager.controlbus_producer import ControlBusProducer
+from qmtl.services.dagmanager.diff_service import StreamSender
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.grpc_server import serve
+from qmtl.services.dagmanager.api import create_app
+from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
+from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
 
 
 class FakeSession:
@@ -152,7 +152,7 @@ async def test_grpc_diff_no_nodes():
 async def test_grpc_redo_diff(monkeypatch):
     called = {}
 
-    from qmtl.dagmanager.diff_service import DiffChunk, DiffRequest
+    from qmtl.services.dagmanager.diff_service import DiffChunk, DiffRequest
 
     class DummyDiff:
         def __init__(self, *a, **k):
@@ -183,7 +183,7 @@ async def test_grpc_redo_diff(monkeypatch):
         async def diff_async(self, request: DiffRequest):
             return self.diff(request)
 
-    monkeypatch.setattr("qmtl.dagmanager.grpc_server.DiffService", DummyDiff)
+    monkeypatch.setattr("qmtl.services.dagmanager.grpc_server.DiffService", DummyDiff)
 
     driver = FakeDriver()
     admin = FakeAdmin()

@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from qmtl.scaffold import create_project
+from qmtl.interfaces.scaffold import create_project
 
 
 def _assert_backend_templates(dest: Path) -> None:

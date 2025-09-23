@@ -1,9 +1,9 @@
 import json
 import pytest
 
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
-from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.sdk.node import NodeCache
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.gateway.commit_log import CommitLogWriter
+from qmtl.runtime.sdk.node import NodeCache
 
 
 class FakeProducer:

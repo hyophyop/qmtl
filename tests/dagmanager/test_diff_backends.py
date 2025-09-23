@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.dagmanager.diff_service import (
+from qmtl.services.dagmanager.diff_service import (
     DiffService,
     KafkaQueueManager,
     Neo4jNodeRepository,
     NodeRecord,
 )
-from qmtl.dagmanager.kafka_admin import KafkaAdmin
-from qmtl.dagmanager.node_repository import MemoryNodeRepository
-from qmtl.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.services.dagmanager.node_repository import MemoryNodeRepository
+from qmtl.services.dagmanager.topic import topic_name
 
 from .diff_fakes import FakeAdmin, FakeDriver, FakeQueue, FakeStream
 from .diff_helpers import dag_node, make_diff_request, partition_with_context

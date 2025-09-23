@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from qmtl.sdk.node import Node
-from qmtl.sdk.portfolio import Portfolio
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.risk_management import RiskManager
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.portfolio import Portfolio
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.risk_management import RiskManager
 
-from qmtl.pipeline.execution_nodes.risk import RiskControlNode
+from qmtl.runtime.pipeline.execution_nodes.risk import RiskControlNode
 
 
 def test_risk_control_node_rejects_large_position() -> None:

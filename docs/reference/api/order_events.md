@@ -30,7 +30,7 @@ Partitioning: Choose keys to keep per‑strategy (or per‑world) order while al
 ## Schemas
 
 Formal JSON Schemas are available in `reference/schemas` and can be
-registered programmatically with `qmtl.schema.register_order_schemas`.
+registered programmatically with `qmtl.foundation.schema.register_order_schemas`.
 
 OrderPayload
 ```json

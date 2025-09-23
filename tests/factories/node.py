@@ -7,8 +7,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
-from qmtl.common import compute_node_id, crc32_of_list
-from qmtl.common.nodespec import serialize_nodespec
+from qmtl.foundation.common import compute_node_id, crc32_of_list
+from qmtl.foundation.common.nodespec import serialize_nodespec
 
 
 def _normalize_dependencies(deps: Sequence[Any] | None) -> list[str]:

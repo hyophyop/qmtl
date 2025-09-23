@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient
-from qmtl.dagmanager.lag_monitor import LagMonitor, QueueLagInfo
-from qmtl.dagmanager import metrics
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient
+from qmtl.services.dagmanager.lag_monitor import LagMonitor, QueueLagInfo
+from qmtl.services.dagmanager import metrics
 
 
 class DummyStore:

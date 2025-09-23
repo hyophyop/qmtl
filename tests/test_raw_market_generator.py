@@ -1,4 +1,4 @@
-from qmtl.generators.raw_market import RawMarketInput
+from qmtl.runtime.generators.raw_market import RawMarketInput
 
 
 def test_raw_market_step_keys():

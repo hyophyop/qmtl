@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.gateway.database import PostgresDatabase
-from qmtl.gateway.ownership import OwnershipManager
+from qmtl.services.gateway.database import PostgresDatabase
+from qmtl.services.gateway.ownership import OwnershipManager
 
 
 class FakeConn:

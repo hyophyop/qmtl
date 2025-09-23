@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.sdk.execution_modeling import (
+from qmtl.runtime.sdk.execution_modeling import (
     MarketData,
     apply_latency,
     calculate_market_impact,

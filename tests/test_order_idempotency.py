@@ -1,9 +1,9 @@
 import importlib
 
-import qmtl.sdk.runner as runner_module
-from qmtl.sdk.cache_view import CacheView
-from qmtl.sdk.node import Node
-from qmtl.transforms import TradeOrderPublisherNode
+import qmtl.runtime.sdk.runner as runner_module
+from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.transforms import TradeOrderPublisherNode
 
 
 class FakeKafkaProducer:

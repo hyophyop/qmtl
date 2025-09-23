@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput, ProcessingNode
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
+from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
 
 
 class _ArtifactStrategy(Strategy):

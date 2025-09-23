@@ -15,8 +15,8 @@ ASCII DAG::
 """
 
 import argparse
-from qmtl.indicators import ema, rsi
-from qmtl.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.indicators import ema, rsi
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
 
 
 class MultiIndicatorStrategy(Strategy):

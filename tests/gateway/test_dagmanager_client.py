@@ -1,8 +1,8 @@
 import pytest
 import grpc
 
-from qmtl.gateway.dagmanager_client import DagManagerClient
-from qmtl.proto import dagmanager_pb2_grpc
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.foundation.proto import dagmanager_pb2_grpc
 
 class DummyChannel:
     def __init__(self):

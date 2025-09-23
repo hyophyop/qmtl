@@ -1,6 +1,6 @@
-from qmtl.transforms import rate_of_change, stochastic, angle
-from qmtl.sdk.node import SourceNode
-from qmtl.sdk.cache_view import CacheView
+from qmtl.runtime.transforms import rate_of_change, stochastic, angle
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_rate_of_change_compute():

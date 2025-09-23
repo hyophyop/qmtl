@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.risk_management import PositionInfo, RiskViolation, RiskViolationType
+from qmtl.runtime.sdk.risk_management import PositionInfo, RiskViolation, RiskViolationType
 
 
 def test_position_info_exposure():

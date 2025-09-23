@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk import ProcessingNode, StreamInput, TagQueryNode
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, TagQueryNode
 
 
 def test_multi_input_serialization_list():

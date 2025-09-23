@@ -45,7 +45,7 @@ worldservice:
     QMTL_WORLDSERVICE_REDIS_DSN: ${worldservice.storage.redis_dsn}
   notes:
     - "Unset the env vars above to use the bundled in-memory storage façade (handy for unit tests)."
-    - "Run with: uv run uvicorn qmtl.worldservice.api:create_app --factory --host ${worldservice.host} --port ${worldservice.port}"
+    - "Run with: uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host ${worldservice.host} --port ${worldservice.port}"
 gateway:
   host: 0.0.0.0
   port: 8000
@@ -82,8 +82,8 @@ qmtl:
     gateway.worldservice_url: ${gateway.worldservice_url}
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
-    - "qmtl service gateway --config ${qmtl.config_file}"
-    - "qmtl service dagmanager server --config ${qmtl.config_file}"
+    - "qmtl service gateway --config ${qmtl.foundation.config_file}"
+    - "qmtl service dagmanager server --config ${qmtl.foundation.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"

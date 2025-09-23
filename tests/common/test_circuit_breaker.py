@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from qmtl.common import AsyncCircuitBreaker
+from qmtl.foundation.common import AsyncCircuitBreaker
 
 
 @pytest.mark.asyncio

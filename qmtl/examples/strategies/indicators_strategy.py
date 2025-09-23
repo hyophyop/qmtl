@@ -1,5 +1,5 @@
-from qmtl.sdk import Strategy, StreamInput, Runner
-from qmtl.indicators import ema
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.indicators import ema
 
 
 class EmaStrategy(Strategy):

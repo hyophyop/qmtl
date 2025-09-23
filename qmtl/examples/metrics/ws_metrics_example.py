@@ -1,6 +1,6 @@
 import asyncio
 
-from qmtl.sdk import WebSocketClient, metrics
+from qmtl.runtime.sdk import WebSocketClient, metrics
 
 
 async def main() -> None:

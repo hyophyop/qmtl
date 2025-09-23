@@ -78,7 +78,7 @@ The `feed()` method now validates all parameters:
 
 ### Basic Usage
 ```python
-from qmtl.sdk import SourceNode, InvalidTagError, InvalidParameterError
+from qmtl.runtime.sdk import SourceNode, InvalidTagError, InvalidParameterError
 
 # Valid usage
 node = SourceNode(
@@ -116,7 +116,7 @@ success = node.feed("upstream_1", 60, 1234567890, {"data": "value"})
 
 ### Exception Handling
 ```python
-from qmtl.sdk import QMTLValidationError, NodeValidationError
+from qmtl.runtime.sdk import QMTLValidationError, NodeValidationError
 
 try:
     node = SourceNode(interval="25h", period=1)  # Too large

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.sdk.node import StreamInput
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.strategy import Strategy
-from qmtl.sdk.strategy_bootstrapper import BootstrapResult, StrategyBootstrapper
+from qmtl.runtime.sdk.node import StreamInput
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.strategy import Strategy
+from qmtl.runtime.sdk.strategy_bootstrapper import BootstrapResult, StrategyBootstrapper
 
 
 class CountingStreamInput(StreamInput):

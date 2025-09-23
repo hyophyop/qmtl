@@ -66,7 +66,7 @@ Gateway는 `/events/subscribe` 엔드포인트를 통해 WebSocket 이벤트를 
 
 
 ```python
-from qmtl.sdk import Strategy, ProcessingNode, StreamInput
+from qmtl.runtime.sdk import Strategy, ProcessingNode, StreamInput
 
 class MyStrategy(Strategy):
     def setup(self):
@@ -87,7 +87,7 @@ class MyStrategy(Strategy):
 - `Runner.offline(MyStrategy)` — Gateway 없이 로컬에서만 실행합니다. 태그 기반 노드는 빈 큐 목록으로 초기화됩니다.
 
 ```python
-from qmtl.sdk import Runner
+from qmtl.runtime.sdk import Runner
 
 # 월드 주도 실행
 Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
@@ -130,7 +130,7 @@ sequenceDiagram
 ```
 
 ```python
-from qmtl.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
 
 class WorldStrategy(Strategy):
     def setup(self):
@@ -220,12 +220,12 @@ PyArrow가 설치되어 있고 `QMTL_ARROW_CACHE=1`을 설정하면 `NodeCacheAr
 활성화됩니다. 만료된 슬라이스는 `QMTL_CACHE_EVICT_INTERVAL` 초 간격으로 제거되며
 Ray가 켜져 있고 `--no-ray`를 사용하지 않는 경우 Actor에서, 그렇지 않으면 백그라운드 스레드에서 실행됩니다.
 
-캐시 조회 수는 `qmtl.sdk.metrics` 모듈의 `cache_read_total` 및
+캐시 조회 수는 `qmtl.runtime.sdk.metrics` 모듈의 `cache_read_total` 및
 `cache_last_read_timestamp` 지표로 모니터링할 수 있습니다. 다음과 같이 메트릭 서버를
 시작하면 `/metrics` 경로에서 값을 확인할 수 있습니다.
 
 ```python
-from qmtl.sdk import metrics
+from qmtl.runtime.sdk import metrics
 
 metrics.start_metrics_server(port=8000)
 ```
@@ -237,7 +237,7 @@ metrics.start_metrics_server(port=8000)
 병렬로 개발할 수 있습니다.
 
 ```python
-from qmtl.transforms import alpha_history_node, alpha_performance_from_history_node
+from qmtl.runtime.transforms import alpha_history_node, alpha_performance_from_history_node
 
 history = alpha_history_node(alpha, window=30)
 perf = alpha_performance_from_history_node(history)
@@ -250,7 +250,7 @@ perf = alpha_performance_from_history_node(history)
 window of recent alpha values:
 
 ```python
-from qmtl.indicators import alpha_indicator_with_history
+from qmtl.runtime.indicators import alpha_indicator_with_history
 
 history = alpha_indicator_with_history(my_alpha_fn, inputs=[src], window=30)
 ```
@@ -262,7 +262,7 @@ signals. Combine it with `alpha_history_node` to produce orders based on the
 latest alpha value:
 
 ```python
-from qmtl.transforms import TradeSignalGeneratorNode
+from qmtl.runtime.transforms import TradeSignalGeneratorNode
 
 history = alpha_history_node(alpha, window=30)
 signal = TradeSignalGeneratorNode(
@@ -278,11 +278,11 @@ signal = TradeSignalGeneratorNode(
 생성된 `ExecutionFill` 목록을 `alpha_performance_node`에 전달하면 비용을 반영한 성과 지표를 계산할 수 있습니다.
 
 ```python
-from qmtl.sdk.execution_modeling import (
+from qmtl.runtime.sdk.execution_modeling import (
     ExecutionModel, OrderSide, OrderType, create_market_data_from_ohlcv,
 )
-from qmtl.transforms import TradeSignalGeneratorNode, alpha_history_node
-from qmtl.transforms.alpha_performance import alpha_performance_node
+from qmtl.runtime.transforms import TradeSignalGeneratorNode, alpha_history_node
+from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
 
 ## Timing Controls
 
@@ -290,7 +290,7 @@ from qmtl.transforms.alpha_performance import alpha_performance_node
 
 ```python
 from datetime import time
-from qmtl.sdk.timing_controls import MarketHours, TimingController
+from qmtl.runtime.sdk.timing_controls import MarketHours, TimingController
 
 # 조기폐장(13:00) 시나리오
 hours = MarketHours(
@@ -354,7 +354,7 @@ Combine these hooks with a simple pipeline to convert alpha values into
 standardized orders:
 
 ```python
-from qmtl.transforms import (
+from qmtl.runtime.transforms import (
     alpha_history_node,
     TradeSignalGeneratorNode,
     TradeOrderPublisherNode,
@@ -364,7 +364,7 @@ history = alpha_history_node(alpha, window=30)
 signal = TradeSignalGeneratorNode(history, long_threshold=0.5, short_threshold=-0.5)
 orders = TradeOrderPublisherNode(signal)
 
-from qmtl.sdk import Runner, TradeExecutionService
+from qmtl.runtime.sdk import Runner, TradeExecutionService
 
 service = TradeExecutionService("http://broker")
 Runner.set_trade_execution_service(service)

@@ -2,9 +2,9 @@ import httpx
 import pandas as pd
 import pytest
 
-from qmtl.sdk import ProcessingNode, StreamInput, Strategy
-from qmtl.sdk import runtime
-from qmtl.sdk.runner import Runner
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, Strategy
+from qmtl.runtime.sdk import runtime
+from qmtl.runtime.sdk.runner import Runner
 from tests.sample_strategy import SampleStrategy
 
 

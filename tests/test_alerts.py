@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from qmtl.dagmanager.alerts import PagerDutyClient, SlackClient
+from qmtl.services.dagmanager.alerts import PagerDutyClient, SlackClient
 
 
 @pytest.mark.asyncio

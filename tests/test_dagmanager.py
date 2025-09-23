@@ -2,9 +2,9 @@ import hashlib
 
 from blake3 import blake3
 
-from qmtl.dagmanager import compute_node_id
-from qmtl.common.nodespec import serialize_nodespec
-from qmtl.dagmanager.neo4j_init import get_schema_queries
+from qmtl.services.dagmanager import compute_node_id
+from qmtl.foundation.common.nodespec import serialize_nodespec
+from qmtl.services.dagmanager.neo4j_init import get_schema_queries
 
 
 def test_compute_node_id_blake3():
@@ -40,7 +40,7 @@ def test_compute_node_id_collision():
 
 def test_no_legacy_nodeid_helper_present():
     # Legacy helper has been removed; ensure import path no longer exposes it
-    import qmtl.common as common
+    import qmtl.foundation.common as common
     assert not hasattr(common, "compute_legacy_node_id")
 
 

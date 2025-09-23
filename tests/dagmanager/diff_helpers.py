@@ -5,9 +5,9 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
-from qmtl.dagmanager import metrics
-from qmtl.dagmanager.diff_service import DiffRequest
-from qmtl.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.diff_service import DiffRequest
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 
 
 def build_dag(nodes: Iterable[dict[str, Any]], meta: dict[str, Any] | None = None) -> str:

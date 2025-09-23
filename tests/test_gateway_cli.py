@@ -62,7 +62,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     class DummyDB:
         async def connect(self):
@@ -112,7 +112,7 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     class DummyRedis:
         pass
@@ -156,7 +156,7 @@ def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     def fake_create_app(**kwargs):
         captured["insert_sentinel"] = kwargs.get("insert_sentinel")
@@ -187,7 +187,7 @@ def test_gateway_cli_allow_live_flag(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     def fake_create_app(**kwargs):
         captured["enforce_live_guard"] = kwargs.get("enforce_live_guard")
@@ -217,7 +217,7 @@ def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):
     )
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     class DummyDB:
         async def connect(self):
@@ -260,7 +260,7 @@ def test_gateway_cli_db_close_failure(monkeypatch, tmp_path):
     )
 
     from types import SimpleNamespace
-    from qmtl.gateway import cli
+    from qmtl.services.gateway import cli
 
     class DummyDB:
         async def connect(self):

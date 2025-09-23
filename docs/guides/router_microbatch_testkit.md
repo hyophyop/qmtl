@@ -7,7 +7,7 @@ This short guide shows how to route orders to different targets, micro‑batch p
 Route orders by computing a `route` key (e.g., exchange) from each order. Downstream connectors branch on `order["route"]`.
 
 ```python
-from qmtl.pipeline.execution_nodes import RouterNode
+from qmtl.runtime.pipeline.execution_nodes import RouterNode
 
 def route_fn(order: dict) -> str:
     sym = order.get("symbol", "")
@@ -21,7 +21,7 @@ routed = RouterNode(orders, route_fn=route_fn)
 Reduce per‑item overhead by emitting a list of payloads for the latest complete bucket. The node flushes the previous bucket when a new timestamp arrives.
 
 ```python
-from qmtl.pipeline.micro_batch import MicroBatchNode
+from qmtl.runtime.pipeline.micro_batch import MicroBatchNode
 
 batches = MicroBatchNode(routed)
 # Example batch shape: [{"symbol": "BTCUSDT", ...}, {"symbol": "ETHUSDT", ...}]
@@ -34,8 +34,8 @@ See also: Architecture → Exchange Node Sets for where to place batching in the
 Attach a Node Set behind a signal in tests and create fake fill events for webhook simulation.
 
 ```python
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.testkit import attach_minimal, fake_fill_webhook
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.testkit import attach_minimal, fake_fill_webhook
 
 ns = attach_minimal(NodeSetBuilder(), signal, world_id="demo")
 evt = fake_fill_webhook("AAPL", 1.0, 10.0)

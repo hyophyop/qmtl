@@ -28,9 +28,9 @@ last_modified: 2025-09-23
 
 ## Timing & Timeouts
 
-- HTTP timeout: `qmtl.sdk.runtime.HTTP_TIMEOUT_SECONDS` (default 2.0s; 1.5s in tests).
-- WebSocket receive timeout: `qmtl.sdk.runtime.WS_RECV_TIMEOUT_SECONDS` (default 30s; 5s in tests).
-- Reconcile poll interval: `qmtl.sdk.runtime.POLL_INTERVAL_SECONDS` (default 10s; 2s in tests).
+- HTTP timeout: `qmtl.runtime.sdk.runtime.HTTP_TIMEOUT_SECONDS` (default 2.0s; 1.5s in tests).
+- WebSocket receive timeout: `qmtl.runtime.sdk.runtime.WS_RECV_TIMEOUT_SECONDS` (default 30s; 5s in tests).
+- Reconcile poll interval: `qmtl.runtime.sdk.runtime.POLL_INTERVAL_SECONDS` (default 10s; 2s in tests).
 - Test mode: Set `QMTL_TEST_MODE=1` to activate conservative time budgets for CI and local tests.
 
 {{ nav_links() }}

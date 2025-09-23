@@ -1,4 +1,4 @@
-from qmtl.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk import metrics as sdk_metrics
 
 
 def test_order_lifecycle_counters_increment():

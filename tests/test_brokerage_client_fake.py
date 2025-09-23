@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qmtl.sdk.brokerage_client import FakeBrokerageClient
+from qmtl.runtime.sdk.brokerage_client import FakeBrokerageClient
 
 
 def test_fake_brokerage_post_returns_completed_and_id():

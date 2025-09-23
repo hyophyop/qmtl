@@ -141,10 +141,10 @@ Use consistent naming for connection strings across the project. Prefer the `*_d
 
 Install additional functionality on demand:
 
-- [Indicators](qmtl/indicators/README.md)
+- [Indicators](qmtl/runtime/indicators/README.md)
 - [IO](qmtl/io) &mdash; `pip install qmtl[io]`
-- [Generators](qmtl/generators/README.md)
-- [Transforms](qmtl/transforms/README.md)
+- [Generators](qmtl/runtime/generators/README.md)
+- [Transforms](qmtl/runtime/transforms/README.md)
 
 ## End-to-End Testing
 
@@ -212,7 +212,7 @@ stand‑alone FastAPI app and enable the Gateway proxy when needed.
 ```bash
 export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
 export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
-uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
 2) Point Gateway at WorldService (optional proxy)
@@ -285,7 +285,7 @@ and cannot be reassigned later. The same guide covers persisting data via
 Example injection:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
+from qmtl.runtime.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 stream = StreamInput(
     interval="60s",
@@ -309,7 +309,7 @@ stream = StreamInput(
 ```python
 import httpx
 import pandas as pd
-from qmtl.sdk import DataFetcher, QuestDBLoader
+from qmtl.runtime.sdk import DataFetcher, QuestDBLoader
 
 class BinanceFetcher:
     async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:

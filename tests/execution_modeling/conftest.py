@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.execution_modeling import ExecutionModel, MarketData
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel, MarketData
 
 
 @pytest.fixture

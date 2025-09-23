@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk.node import SourceNode
+from qmtl.runtime.sdk.node import SourceNode
 
 
 def test_add_tag():

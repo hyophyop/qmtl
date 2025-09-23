@@ -2,19 +2,19 @@ from datetime import datetime, timedelta, UTC
 
 import pytest
 
-from qmtl.dagmanager.diff_service import (
+from qmtl.services.dagmanager.diff_service import (
     DiffService,
     DiffRequest,
     NodeRepository,
     QueueManager,
     StreamSender,
 )
-from qmtl.dagmanager.topic import topic_name
-from qmtl.dagmanager.garbage_collector import GarbageCollector, QueueInfo
+from qmtl.services.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 import httpx
 import time
-from qmtl.dagmanager import metrics
-from qmtl.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.monitor import AckStatus
 
 
 class FakeRepo(NodeRepository):
@@ -165,8 +165,8 @@ def test_metrics_server_exposes_http():
 
 
 def test_cache_view_metrics_increment():
-    from qmtl.sdk import metrics as sdk_metrics
-    from qmtl.sdk.node import NodeCache
+    from qmtl.runtime.sdk import metrics as sdk_metrics
+    from qmtl.runtime.sdk.node import NodeCache
 
     sdk_metrics.reset_metrics()
     cache = NodeCache(period=2)
@@ -195,9 +195,9 @@ def test_dagmanager_nodecache_metric_aggregates():
 
 
 def test_sdk_nodecache_metric_updates():
-    from qmtl.sdk import metrics as sdk_metrics
-    from qmtl.sdk.node import StreamInput, ProcessingNode
-    from qmtl.sdk.runner import Runner
+    from qmtl.runtime.sdk import metrics as sdk_metrics
+    from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
+    from qmtl.runtime.sdk.runner import Runner
 
     sdk_metrics.reset_metrics()
     src = StreamInput(interval="60s", period=2)

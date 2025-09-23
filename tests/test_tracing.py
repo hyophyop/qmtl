@@ -9,8 +9,8 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-from qmtl.sdk.gateway_client import GatewayClient
-from qmtl.sdk.node import Node
+from qmtl.runtime.sdk.gateway_client import GatewayClient
+from qmtl.runtime.sdk.node import Node
 
 
 @pytest.mark.asyncio

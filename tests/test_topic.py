@@ -1,5 +1,5 @@
-from qmtl.dagmanager.topic import topic_name, get_config, TopicConfig
-from qmtl.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
+from qmtl.services.dagmanager.topic import topic_name, get_config, TopicConfig
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
 
 
 class FakeAdmin:

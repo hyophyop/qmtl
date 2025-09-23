@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.options import NodeSetOptions
-from qmtl.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.options import NodeSetOptions
+from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 
 
 def test_nodeset_attach_passes_through():

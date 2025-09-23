@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from qmtl.brokerage import Account, Order, OrderType, TimeInForce
+from qmtl.runtime.brokerage import Account, Order, OrderType, TimeInForce
 from qmtl.examples.brokerage_demo.advanced_demo import build_model
 
 

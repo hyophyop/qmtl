@@ -1,4 +1,4 @@
-from qmtl.schema import (
+from qmtl.foundation.schema import (
     OrderAck,
     OrderPayload,
     ExecutionFillEvent,

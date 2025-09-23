@@ -3,9 +3,9 @@ import json
 import httpx
 import pytest
 
-from qmtl.sdk import Strategy, TagQueryNode, Runner, MatchMode
-from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.ws import WebSocketHub
+from qmtl.runtime.sdk import Strategy, TagQueryNode, Runner, MatchMode
+from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 async def wait_for(condition, timeout: float = 1.0) -> None:
@@ -102,7 +102,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
     transport = httpx.ASGITransport(gw_app)
 
     real_client = httpx.AsyncClient
-    monkeypatch.setattr("qmtl.sdk.tagquery_manager.WebSocketClient", ws_factory)
+    monkeypatch.setattr("qmtl.runtime.sdk.tagquery_manager.WebSocketClient", ws_factory)
 
     class DummyClient:
         def __init__(self, *a, **k):
@@ -123,8 +123,8 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
         async def get(self, url, params=None):
             return await self._client.get(url, params=params)
 
-    monkeypatch.setattr("qmtl.sdk.gateway_client.httpx.AsyncClient", DummyClient)
-    monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr("qmtl.runtime.sdk.gateway_client.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr("qmtl.runtime.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
 
     class DummyFactory:
         available = True

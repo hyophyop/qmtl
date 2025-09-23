@@ -1,10 +1,10 @@
 import pytest
 
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.pipeline.execution_nodes import SizingNode
-from qmtl.sdk.portfolio import Portfolio
-from qmtl.sdk.activation_manager import ActivationManager
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.pipeline.execution_nodes import SizingNode
+from qmtl.runtime.sdk.portfolio import Portfolio
+from qmtl.runtime.sdk.activation_manager import ActivationManager
 
 
 async def _emit(am: ActivationManager, side: str, **fields) -> None:

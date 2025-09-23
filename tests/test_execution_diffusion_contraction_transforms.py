@@ -1,7 +1,7 @@
 import math
 import pytest
 
-from qmtl.transforms.execution_diffusion_contraction import (
+from qmtl.runtime.transforms.execution_diffusion_contraction import (
     concentration_scores,
     depth_wedge,
     hazard_probability,

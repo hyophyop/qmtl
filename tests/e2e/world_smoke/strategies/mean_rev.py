@@ -62,7 +62,7 @@ def run_qmtl_mode(world_id: str, duration_sec: int = 5):
     QMTL이 import 불가하면 SDK fallback으로 대체합니다.
     """
     try:
-        from qmtl.sdk import Runner, Strategy  # type: ignore
+        from qmtl.runtime.sdk import Runner, Strategy  # type: ignore
     except Exception:
         run_sdk_mode(world_id, duration_sec)
         return

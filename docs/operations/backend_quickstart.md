@@ -30,7 +30,7 @@ end-to-end tests in [E2E Testing](e2e_testing.md).
 ```bash
 export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
 export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
-uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
 2) Configure and start Gateway

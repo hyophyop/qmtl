@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from qmtl.schema import validate_schema
-from qmtl.sdk.exceptions import InvalidSchemaError
+from qmtl.foundation.schema import validate_schema
+from qmtl.runtime.sdk.exceptions import InvalidSchemaError
 
 
 def test_missing_column_raises_friendly_error():

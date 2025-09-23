@@ -5,12 +5,12 @@ import pytest
 
 from types import SimpleNamespace
 
-from qmtl.gateway.redis_queue import RedisTaskQueue
-from qmtl.gateway.worker import StrategyWorker
-from qmtl.gateway.database import Database
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.ws import WebSocketHub
-from qmtl.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.database import Database
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.ws import WebSocketHub
+from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 import zlib
 
 

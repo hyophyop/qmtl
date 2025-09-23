@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.pipeline import Pipeline
-from qmtl.sdk import ProcessingNode, StreamInput
+from qmtl.runtime.pipeline import Pipeline
+from qmtl.runtime.sdk import ProcessingNode, StreamInput
 
 
 class DummyProducer:

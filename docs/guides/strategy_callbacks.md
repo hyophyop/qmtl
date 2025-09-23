@@ -16,7 +16,7 @@ embedding imperative logic in the DAG nodes.
 ## Example
 
 ```python
-from qmtl.sdk import Strategy, buy_signal
+from qmtl.runtime.sdk import Strategy, buy_signal
 
 class MyStrategy(Strategy):
     def __init__(self):

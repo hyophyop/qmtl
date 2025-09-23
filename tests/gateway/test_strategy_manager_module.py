@@ -7,15 +7,15 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
-from qmtl.common.compute_context import ComputeContext, DowngradeReason
-from qmtl.gateway import metrics
-from qmtl.gateway.commit_log import CommitLogWriter
-from qmtl.gateway.database import MemoryDatabase
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.redis_client import InMemoryRedis
-from qmtl.gateway.strategy_manager import StrategyManager
-from qmtl.gateway.submission.context_service import StrategyComputeContext
+from qmtl.foundation.common.compute_context import ComputeContext, DowngradeReason
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.commit_log import CommitLogWriter
+from qmtl.services.gateway.database import MemoryDatabase
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway.redis_client import InMemoryRedis
+from qmtl.services.gateway.strategy_manager import StrategyManager
+from qmtl.services.gateway.submission.context_service import StrategyComputeContext
 from tests.factories import canonical_node_payload
 
 

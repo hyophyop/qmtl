@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from qmtl.worldservice.storage.auditable import AuditableRepository, AuditSink
+from qmtl.services.worldservice.storage.auditable import AuditableRepository, AuditSink
 
 
 class _Recorder(AuditSink):  # type: ignore[misc]

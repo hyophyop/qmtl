@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
     MarketFillModel,

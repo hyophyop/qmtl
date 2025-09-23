@@ -2,7 +2,7 @@ import httpx
 import pandas as pd
 import pytest
 
-from qmtl.sdk import Runner, Strategy, StreamInput, Node
+from qmtl.runtime.sdk import Runner, Strategy, StreamInput, Node
 
 class DummyProvider:
     async def fetch(self, start, end, *, node_id, interval):

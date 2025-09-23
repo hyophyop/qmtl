@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.sdk import metrics as sdk_metrics
-from qmtl.sdk.node import StreamInput, ProcessingNode
-from qmtl.sdk.runner import Runner
+from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
+from qmtl.runtime.sdk.runner import Runner
 
 
 def test_node_metrics_increment():

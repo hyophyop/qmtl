@@ -1,5 +1,5 @@
 import pytest
-from qmtl.brokerage import IBKRFeeModel, OrderType
+from qmtl.runtime.brokerage import IBKRFeeModel, OrderType
 
 
 def test_ibkr_fee_tiers_and_liquidity_components():

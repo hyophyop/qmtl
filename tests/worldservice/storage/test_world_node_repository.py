@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.worldservice.storage.audit import AuditLogRepository
-from qmtl.worldservice.storage.nodes import WorldNodeRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.nodes import WorldNodeRepository
 
 
 @pytest.mark.parametrize("domain", ["BACKTEST", "Backtest", "backtest"])

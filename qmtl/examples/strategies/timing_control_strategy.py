@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from qmtl.sdk import Strategy, StreamInput
-from qmtl.sdk.timing_controls import TimingController, validate_backtest_timing
+from qmtl.runtime.sdk import Strategy, StreamInput
+from qmtl.runtime.sdk.timing_controls import TimingController, validate_backtest_timing
 
 
 class TimingControlStrategy(Strategy):

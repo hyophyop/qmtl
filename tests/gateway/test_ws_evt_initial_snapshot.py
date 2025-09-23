@@ -2,9 +2,9 @@ import time
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from qmtl.gateway.event_handlers import create_event_router
-from qmtl.gateway.event_descriptor import EventDescriptorConfig, sign_event_token
-from qmtl.gateway.ws import WebSocketHub
+from qmtl.services.gateway.event_handlers import create_event_router
+from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, sign_event_token
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 class StubWorldClient:

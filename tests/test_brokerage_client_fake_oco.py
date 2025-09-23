@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.sdk.brokerage_client import FakeBrokerageClient
-from qmtl.sdk.oco import OCOOrder
+from qmtl.runtime.sdk.brokerage_client import FakeBrokerageClient
+from qmtl.runtime.sdk.oco import OCOOrder
 
 
 def test_fake_client_oco_cancel_other_leg():

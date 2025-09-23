@@ -1,6 +1,6 @@
 import asyncio
 import pytest
-from qmtl.dagmanager.monitor import (
+from qmtl.services.dagmanager.monitor import (
     Monitor,
     MetricsBackend,
     Neo4jCluster,
@@ -8,7 +8,7 @@ from qmtl.dagmanager.monitor import (
     DiffStream,
     AckStatus,
 )
-from qmtl.dagmanager.alerts import AlertManager
+from qmtl.services.dagmanager.alerts import AlertManager
 
 
 class FakeMetrics:

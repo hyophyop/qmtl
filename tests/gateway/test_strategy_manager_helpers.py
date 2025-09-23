@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from qmtl.gateway import metrics
-from qmtl.gateway.database import MemoryDatabase
-from qmtl.gateway.degradation import DegradationLevel
-from qmtl.gateway.fsm import StrategyFSM
-from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.redis_client import InMemoryRedis
-from qmtl.gateway.strategy_manager import StrategyManager
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.database import MemoryDatabase
+from qmtl.services.gateway.degradation import DegradationLevel
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway.redis_client import InMemoryRedis
+from qmtl.services.gateway.strategy_manager import StrategyManager
 
 
 @pytest.fixture

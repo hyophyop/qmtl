@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from qmtl.sdk.runner import Runner
+from qmtl.runtime.sdk.runner import Runner
 from tests.sample_strategy import SampleStrategy
 
 

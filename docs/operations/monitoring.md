@@ -112,7 +112,7 @@ expose these by calling `metrics.start_metrics_server()`.
 Start the server as part of your application:
 
 ```python
-from qmtl.sdk import metrics
+from qmtl.runtime.sdk import metrics
 
 metrics.start_metrics_server(port=8000)
 ```

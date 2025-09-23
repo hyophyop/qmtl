@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from qmtl.dagmanager.diff_service import CrossContextTopicReuseError
+from qmtl.services.dagmanager.diff_service import CrossContextTopicReuseError
 
-from qmtl.dagmanager.diff_service import DiffRequest, DiffService, NodeRecord
-from qmtl.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.diff_service import DiffRequest, DiffService, NodeRecord
+from qmtl.services.dagmanager.topic import topic_name
 
 from .diff_fakes import FakeStream, TimeoutOnceStream
 from .diff_helpers import dag_node, make_diff_request, partition_with_context

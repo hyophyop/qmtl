@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService, MatchMode
-from qmtl.io import QuestDBRecorder
+from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService, MatchMode
+from qmtl.runtime.io import QuestDBRecorder
 
 
 class TagQueryAggregationStrategy(Strategy):

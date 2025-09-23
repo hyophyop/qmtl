@@ -1,9 +1,9 @@
 import asyncio
 import pytest
 
-from qmtl.dagmanager.grpc_server import _GrpcStream
-from qmtl.dagmanager.diff_service import DiffChunk
-from qmtl.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.grpc_server import _GrpcStream
+from qmtl.services.dagmanager.diff_service import DiffChunk
+from qmtl.services.dagmanager.monitor import AckStatus
 
 
 @pytest.mark.asyncio

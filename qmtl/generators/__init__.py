@@ -1,15 +1,8 @@
-"""Synthetic data generators for strategy testing."""
+from __future__ import annotations
 
-from .base import SyntheticInput
-from .garch import GarchInput
-from .heston import HestonInput
-from .rough_bergomi import RoughBergomiInput
-from .raw_market import RawMarketInput
+ALIAS = __name__
 
-__all__ = [
-    "SyntheticInput",
-    "GarchInput",
-    "HestonInput",
-    "RoughBergomiInput",
-    "RawMarketInput",
-]
+from .._compat import deprecated_module, mirror_module_globals
+
+_target = deprecated_module(ALIAS, "qmtl.runtime.generators")
+mirror_module_globals(_target, globals(), alias=ALIAS)

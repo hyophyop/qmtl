@@ -11,8 +11,8 @@ from __future__ import annotations
 import os
 import uvicorn
 
-from qmtl.gateway.api import create_app
-from qmtl.gateway.ws import WebSocketHub
+from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 def main() -> None:

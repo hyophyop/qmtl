@@ -7,8 +7,8 @@ from typing import Iterable
 
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput
-from qmtl.sdk.timing_controls import (
+from qmtl.runtime.sdk import Strategy, StreamInput
+from qmtl.runtime.sdk.timing_controls import (
     MarketHours,
     MarketSession,
     TimingController,

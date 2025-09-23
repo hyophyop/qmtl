@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from qmtl.worldservice.storage.activations import ActivationRepository
-from qmtl.worldservice.storage.audit import AuditLogRepository
+from qmtl.services.worldservice.storage.activations import ActivationRepository
+from qmtl.services.worldservice.storage.audit import AuditLogRepository
 
 
 def test_activation_repository_updates_state() -> None:

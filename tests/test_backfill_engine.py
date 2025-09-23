@@ -3,8 +3,8 @@ import logging
 import pandas as pd
 import pytest
 
-from qmtl.sdk.node import SourceNode, StreamInput
-from qmtl.sdk.backfill_engine import BackfillEngine
+from qmtl.runtime.sdk.node import SourceNode, StreamInput
+from qmtl.runtime.sdk.backfill_engine import BackfillEngine
 
 
 class DummySource:
@@ -76,7 +76,7 @@ async def test_retry_logic():
 
 @pytest.mark.asyncio
 async def test_metrics_and_logs(caplog):
-    from qmtl.sdk import metrics as sdk_metrics
+    from qmtl.runtime.sdk import metrics as sdk_metrics
     sdk_metrics.reset_metrics()
 
     node = SourceNode(interval="60s", period=1)
@@ -102,7 +102,7 @@ async def test_metrics_and_logs(caplog):
 
 @pytest.mark.asyncio
 async def test_failure_metrics_and_logs(caplog):
-    from qmtl.sdk import metrics as sdk_metrics
+    from qmtl.runtime.sdk import metrics as sdk_metrics
     sdk_metrics.reset_metrics()
 
     node = SourceNode(interval="60s", period=1)

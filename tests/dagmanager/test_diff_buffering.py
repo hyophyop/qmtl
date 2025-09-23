@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.dagmanager.diff_service import NodeRecord
-from qmtl.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.diff_service import NodeRecord
+from qmtl.services.dagmanager.topic import topic_name
 
 from .diff_helpers import dag_node, make_diff_request, partition_with_context
 

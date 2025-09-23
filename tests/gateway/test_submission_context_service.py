@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.common.compute_context import DowngradeReason
-from qmtl.gateway.models import StrategySubmit
-from qmtl.gateway.submission.context_service import (
+from qmtl.foundation.common.compute_context import DowngradeReason
+from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway.submission.context_service import (
     ComputeContextService,
     StrategyComputeContext,
 )

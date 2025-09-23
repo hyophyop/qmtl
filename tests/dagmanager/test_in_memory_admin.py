@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient, TopicExistsError
-from qmtl.dagmanager.diff_service import KafkaQueueManager
-from qmtl.dagmanager.topic import TopicConfig
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient, TopicExistsError
+from qmtl.services.dagmanager.diff_service import KafkaQueueManager
+from qmtl.services.dagmanager.topic import TopicConfig
 
 
 def test_in_memory_admin_create_and_list():

@@ -1,9 +1,9 @@
 import httpx
 import pytest
 
-from qmtl.common.hashutils import hash_bytes
-from qmtl.worldservice.api import create_app
-from qmtl.worldservice.storage import Storage, ValidationCacheEntry
+from qmtl.foundation.common.hashutils import hash_bytes
+from qmtl.services.worldservice.api import create_app
+from qmtl.services.worldservice.storage import Storage, ValidationCacheEntry
 
 
 @pytest.mark.asyncio

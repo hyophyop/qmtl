@@ -1,14 +1,8 @@
-"""Protocol buffer generated modules."""
+from __future__ import annotations
 
-from . import dagmanager_pb2
-import sys
+ALIAS = __name__
 
-sys.modules.setdefault("dagmanager_pb2", dagmanager_pb2)
+from .._compat import deprecated_module, mirror_module_globals
 
-from . import dagmanager_pb2_grpc
-sys.modules.setdefault("dagmanager_pb2_grpc", dagmanager_pb2_grpc)
-
-__all__ = [
-    "dagmanager_pb2",
-    "dagmanager_pb2_grpc",
-]
+_target = deprecated_module(ALIAS, "qmtl.foundation.proto")
+mirror_module_globals(_target, globals(), alias=ALIAS)

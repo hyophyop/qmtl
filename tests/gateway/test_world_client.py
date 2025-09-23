@@ -1,8 +1,8 @@
 import httpx
 import pytest
 
-from qmtl.gateway import metrics
-from qmtl.gateway.world_client import WorldServiceClient
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.world_client import WorldServiceClient
 
 
 @pytest.mark.asyncio

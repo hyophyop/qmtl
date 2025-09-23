@@ -1,6 +1,6 @@
 import math
 
-from qmtl.transforms.execution_velocity_hazard import (
+from qmtl.runtime.transforms.execution_velocity_hazard import (
     edvh_hazard,
     expected_jump,
     execution_velocity_hazard,

@@ -1,9 +1,9 @@
 import pytest
 
-from qmtl.dagmanager.completion import QueueCompletionMonitor
-from qmtl.dagmanager.diff_service import NodeRecord, NodeRepository
-from qmtl.dagmanager.kafka_admin import KafkaAdmin
-from qmtl.dagmanager.controlbus_producer import ControlBusProducer
+from qmtl.services.dagmanager.completion import QueueCompletionMonitor
+from qmtl.services.dagmanager.diff_service import NodeRecord, NodeRepository
+from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
+from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
 
 
 class DummyRepo(NodeRepository):

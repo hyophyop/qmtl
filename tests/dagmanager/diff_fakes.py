@@ -4,9 +4,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from qmtl.dagmanager.diff_service import NodeRepository, QueueManager, StreamSender
-from qmtl.dagmanager.monitor import AckStatus
-from qmtl.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.diff_service import NodeRepository, QueueManager, StreamSender
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.topic import topic_name
 
 
 class FakeRepo(NodeRepository):

@@ -1,10 +1,10 @@
 import types
 import pytest
 
-from qmtl.sdk.runner import Runner
-from qmtl.sdk.node import StreamInput
-from qmtl.sdk.strategy import Strategy
-from qmtl.sdk import snapshot as snap
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.node import StreamInput
+from qmtl.runtime.sdk.strategy import Strategy
+from qmtl.runtime.sdk import snapshot as snap
 
 
 class _S(Strategy):

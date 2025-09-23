@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.sdk import TagQueryNode, MatchMode
-from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_resolve_tags_normalizes_and_filters(monkeypatch):
 
             return Resp()
 
-    monkeypatch.setattr("qmtl.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
+    monkeypatch.setattr("qmtl.runtime.sdk.tagquery_manager.httpx.AsyncClient", DummyClient)
 
     node = TagQueryNode(["t1"], interval="60s", period=1, match_mode=MatchMode.ALL)
     mgr = TagQueryManager("http://gw", world_id="worldX")

@@ -2,9 +2,9 @@ import httpx
 import pytest
 from pathlib import Path
 
-from qmtl.worldservice.api import StorageHandle, create_app
-from qmtl.worldservice.controlbus_producer import ControlBusProducer
-from qmtl.worldservice.storage import PersistentStorage, Storage
+from qmtl.services.worldservice.api import StorageHandle, create_app
+from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.services.worldservice.storage import PersistentStorage, Storage
 
 
 class DummyBus(ControlBusProducer):

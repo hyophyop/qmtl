@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from qmtl.sdk import FakeLiveDataFeed
+from qmtl.runtime.sdk import FakeLiveDataFeed
 
 
 @pytest.mark.asyncio

@@ -30,7 +30,7 @@ WorldService gating flow.
      ```bash
      export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
      export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
-     uv run uvicorn qmtl.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+     uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
      ```
    - Gateway (optionally proxying WorldService):
      - In `qmtl/examples/qmtl.yml` set `gateway.worldservice_url: http://localhost:8080`

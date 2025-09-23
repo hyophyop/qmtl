@@ -1,4 +1,4 @@
-from qmtl.common import FourDimCache
+from qmtl.foundation.common import FourDimCache
 
 
 def test_get_set_and_default():

@@ -16,7 +16,7 @@ This document outlines the timing utilities available in QMTL for managing marke
 `MarketHours` describes the boundaries of each trading session. It accepts the start and end times for pre-market, regular, and post-market sessions.
 
 ```python
-from qmtl.sdk.timing_controls import MarketHours, MarketSession
+from qmtl.runtime.sdk.timing_controls import MarketHours, MarketSession
 from datetime import date, datetime, time, timezone
 
 hours = MarketHours(
@@ -50,7 +50,7 @@ for example hours across major markets.
 - `get_next_valid_execution_time(...)`: finds the next allowable time if the current timestamp is invalid.
 
 ```python
-from qmtl.sdk.timing_controls import TimingController
+from qmtl.runtime.sdk.timing_controls import TimingController
 
 controller = TimingController(allow_pre_post_market=False)
 valid, reason, session = controller.validate_timing(ts)
@@ -63,7 +63,7 @@ if not valid:
 `validate_backtest_timing` scans all `StreamInput` nodes in a strategy and reports timestamps that fall outside the configured trading sessions. Each issue includes the timestamp, reason, and the detected market session. Set `fail_on_invalid_timing=True` to raise an exception when invalid data is found.
 
 ```python
-from qmtl.sdk.timing_controls import validate_backtest_timing
+from qmtl.runtime.sdk.timing_controls import validate_backtest_timing
 
 issues = validate_backtest_timing(strategy)
 for node, node_issues in issues.items():

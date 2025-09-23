@@ -1,4 +1,4 @@
-from qmtl.transforms import impact, resiliency_alpha
+from qmtl.runtime.transforms import impact, resiliency_alpha
 import math
 
 

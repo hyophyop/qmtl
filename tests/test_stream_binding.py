@@ -1,5 +1,5 @@
 import pytest
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
+from qmtl.runtime.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
 
 
 def test_questdb_table_defaults_to_node_id():

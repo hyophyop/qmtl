@@ -28,10 +28,10 @@ graph LR
 Example code (CacheView indexing uses the upstream node and its interval):
 
 ```python
-from qmtl.sdk import Node, StreamInput
-from qmtl.transforms import alpha_history_node, TradeSignalGeneratorNode
-from qmtl.pipeline.execution_nodes import RouterNode
-from qmtl.pipeline.micro_batch import MicroBatchNode
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.transforms import alpha_history_node, TradeSignalGeneratorNode
+from qmtl.runtime.pipeline.execution_nodes import RouterNode
+from qmtl.runtime.pipeline.micro_batch import MicroBatchNode
 
 price = StreamInput(interval="60s", period=2)
 

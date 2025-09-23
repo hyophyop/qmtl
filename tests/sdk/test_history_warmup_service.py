@@ -4,8 +4,8 @@ import types
 
 import pytest
 
-from qmtl.sdk import Strategy, StreamInput
-from qmtl.sdk.history_warmup_service import HistoryWarmupService
+from qmtl.runtime.sdk import Strategy, StreamInput
+from qmtl.runtime.sdk.history_warmup_service import HistoryWarmupService
 
 
 class SimpleStrategy(Strategy):
@@ -64,7 +64,7 @@ async def test_history_service_with_provider_and_strict(monkeypatch):
 
     service = HistoryWarmupService()
     service.hydrate_snapshots = lambda s: None  # type: ignore[assignment]
-    monkeypatch.setattr("qmtl.sdk.runtime.FAIL_ON_HISTORY_GAP", True, raising=False)
+    monkeypatch.setattr("qmtl.runtime.sdk.runtime.FAIL_ON_HISTORY_GAP", True, raising=False)
 
     recorded: list[tuple[int | None, int | None, bool, bool]] = []
     replay_calls: list[tuple[int | None, int | None]] = []

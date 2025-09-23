@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.common.compute_key import ComputeContext
-from qmtl.gateway.models import StrategyAck
-from qmtl.sdk import StreamInput, Strategy
-from qmtl.sdk import strategy_bootstrapper as bootstrapper_module
-from qmtl.sdk.strategy_bootstrapper import StrategyBootstrapper
+from qmtl.foundation.common.compute_key import ComputeContext
+from qmtl.services.gateway.models import StrategyAck
+from qmtl.runtime.sdk import StreamInput, Strategy
+from qmtl.runtime.sdk import strategy_bootstrapper as bootstrapper_module
+from qmtl.runtime.sdk.strategy_bootstrapper import StrategyBootstrapper
 
 
 class SimpleStrategy(Strategy):

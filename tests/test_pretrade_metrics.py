@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import asyncio
 
-from qmtl.sdk import metrics as sdk_metrics
-from qmtl.sdk.pretrade import check_pretrade, Activation
-from qmtl.common.pretrade import RejectionReason
-from qmtl.brokerage import BrokerageModel, CashBuyingPowerModel
-from qmtl.brokerage.fees import PercentFeeModel
-from qmtl.brokerage.slippage import NullSlippageModel
-from qmtl.brokerage.fill_models import MarketFillModel
-from qmtl.brokerage.order import Account
-from qmtl.gateway import metrics as gw_metrics
-from qmtl.gateway.degradation import DegradationManager
-from qmtl.gateway.routes import create_api_router
+from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.pretrade import check_pretrade, Activation
+from qmtl.foundation.common.pretrade import RejectionReason
+from qmtl.runtime.brokerage import BrokerageModel, CashBuyingPowerModel
+from qmtl.runtime.brokerage.fees import PercentFeeModel
+from qmtl.runtime.brokerage.slippage import NullSlippageModel
+from qmtl.runtime.brokerage.fill_models import MarketFillModel
+from qmtl.runtime.brokerage.order import Account
+from qmtl.services.gateway import metrics as gw_metrics
+from qmtl.services.gateway.degradation import DegradationManager
+from qmtl.services.gateway.routes import create_api_router
 
 
 def test_sdk_pretrade_metrics_activation_reject():

@@ -11,7 +11,7 @@ Node Set은 내부 노드 구성을 감추는 블랙박스지만, 전략에서 N
 ## CCXT 예시
 
 ```python
-from qmtl.nodesets.adapters import CcxtSpotAdapter
+from qmtl.runtime.nodesets.adapters import CcxtSpotAdapter
 
 adapter = CcxtSpotAdapter(exchange_id="binance", sandbox=False)
 nodeset = adapter.build({"signal": signal_node}, world_id="demo")
@@ -26,8 +26,8 @@ strategy.add_nodes([price, nodeset])
 
 ```python
 from dataclasses import dataclass
-from qmtl.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
-from qmtl.nodesets.base import NodeSet
+from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
+from qmtl.runtime.nodesets.base import NodeSet
 
 
 class MyNodeSetAdapter(NodeSetAdapter):
@@ -43,9 +43,9 @@ class MyNodeSetAdapter(NodeSetAdapter):
         quotes = inputs.get("market_data")  # optional
 
         # 1) 선형으로 pretrade → sizing
-        from qmtl.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
-        from qmtl.sdk import Node
-        from qmtl.nodesets.base import NodeSet
+        from qmtl.runtime.nodesets.steps import pretrade, sizing, fills, portfolio, risk, timing
+        from qmtl.runtime.sdk import Node
+        from qmtl.runtime.nodesets.base import NodeSet
 
         pre = pretrade()(signal)
         siz = sizing()(pre)

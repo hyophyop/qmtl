@@ -1,7 +1,7 @@
 import pytest
 
-from qmtl.sdk import TagQueryNode, Runner
-from qmtl.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk import TagQueryNode, Runner
+from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
 @pytest.mark.asyncio

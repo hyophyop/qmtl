@@ -1,4 +1,4 @@
-from qmtl.reference_models import ActivationEnvelope, ActivationUpdated
+from qmtl.runtime.reference_models import ActivationEnvelope, ActivationUpdated
 
 
 def test_activation_models_validate_fields():

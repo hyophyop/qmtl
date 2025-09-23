@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from qmtl.sdk.node import Node
-from qmtl.sdk.runner import Runner
-from qmtl.nodesets.base import NodeSetBuilder
-from qmtl.nodesets.testkit import attach_minimal, fake_fill_webhook
+from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.testkit import attach_minimal, fake_fill_webhook
 
 
 def test_nodeset_testkit_attach():

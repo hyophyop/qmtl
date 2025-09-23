@@ -1,6 +1,6 @@
 import math
 
-from qmtl.transforms.impact import impact
+from qmtl.runtime.transforms.impact import impact
 
 
 def test_impact_computes_expected_value():

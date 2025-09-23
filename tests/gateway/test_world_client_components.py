@@ -4,11 +4,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from qmtl.common import AsyncCircuitBreaker
-from qmtl.common.compute_context import DowngradeReason
-from qmtl.gateway.caches import ActivationCache, TTLCache
-from qmtl.gateway.transport import BreakerRetryTransport
-from qmtl.gateway.world_payloads import augment_decision_payload
+from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.foundation.common.compute_context import DowngradeReason
+from qmtl.services.gateway.caches import ActivationCache, TTLCache
+from qmtl.services.gateway.transport import BreakerRetryTransport
+from qmtl.services.gateway.world_payloads import augment_decision_payload
 
 
 class StubAsyncClient:

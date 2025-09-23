@@ -6,7 +6,7 @@ linked take-profit and stop-loss exits as an `OCOOrder`.
 Example usage:
 
 ```python
-from qmtl.brokerage import BracketOrder, Order, OrderType, TimeInForce
+from qmtl.runtime.brokerage import BracketOrder, Order, OrderType, TimeInForce
 
 entry = Order(
     symbol="AAPL",

@@ -1,7 +1,7 @@
 # Prometheus metric helper
 
 The Gateway and SDK subsystems now share a small utility module,
-[`qmtl.common.metrics_factory`]({{ code_url('qmtl/common/metrics_factory.py') }}), which wraps
+[`qmtl.foundation.common.metrics_factory`]({{ code_url('qmtl/foundation/common/metrics_factory.py') }}), which wraps
 Prometheus registration and reset boilerplate.
 
 ## Creating metrics
@@ -13,7 +13,7 @@ imported multiple times (common in tests). The helpers also attach the `._vals`
 or `._val` attributes expected by tests:
 
 ```python
-from qmtl.common.metrics_factory import get_or_create_counter
+from qmtl.foundation.common.metrics_factory import get_or_create_counter
 
 orders_published_total = get_or_create_counter(
     "orders_published_total",

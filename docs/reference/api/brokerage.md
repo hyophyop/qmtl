@@ -11,7 +11,7 @@ last_modified: 2025-09-08
 
 This page describes QMTL’s brokerage layer: how orders are validated and executed with realistic constraints (ticks/lots, hours, shortability), and how slippage, fees, and settlement are applied. It complements the high-level design in architecture/lean_brokerage_model.md.
 
-Legacy shortcuts under `qmtl.brokerage.simple` have been removed. See [Migration: Removing Legacy Modes and Backward Compatibility](../../guides/migration_bc_removal.md) for upgrade steps.
+Legacy shortcuts under `qmtl.runtime.brokerage.simple` have been removed. See [Migration: Removing Legacy Modes and Backward Compatibility](../../guides/migration_bc_removal.md) for upgrade steps.
 
 ## Components
 
@@ -49,7 +49,7 @@ Activation in SDK:
 ## Quick Start
 
 ```python
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     BrokerageModel,
     CashBuyingPowerModel,
     MarketFillModel,
@@ -73,7 +73,7 @@ model = BrokerageModel(
 )
 
 # Optional: tiered IBKR-like fees
-from qmtl.brokerage import IBKRFeeModel
+from qmtl.runtime.brokerage import IBKRFeeModel
 fee = IBKRFeeModel(minimum=1.0, exchange_fee_remove=0.0008, exchange_fee_add=-0.0002, regulatory_fee_remove=0.0001)
 ```
 
@@ -97,7 +97,7 @@ fee = IBKRFeeModel(minimum=1.0, exchange_fee_remove=0.0008, exchange_fee_add=-0.
 ## Profiles
 
 ```python
-from qmtl.brokerage import ibkr_equities_like_profile
+from qmtl.runtime.brokerage import ibkr_equities_like_profile
 
 profile = ibkr_equities_like_profile()
 model = profile.build()
@@ -108,7 +108,7 @@ model = profile.build()
 Quickly spin up a crypto brokerage model by detecting maker/taker fees from CCXT. Falls back to conservative defaults when CCXT/network is unavailable.
 
 ```python
-from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
+from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
 
 # Detect fees from ccxt (symbol-specific when provided). Hours=None assumes 24/7.
 model = make_ccxt_brokerage(
@@ -141,7 +141,7 @@ be constants or tiered schedules.
 
 ```python
 from datetime import datetime, timezone
-from qmtl.brokerage import MarginInterestModel, Cashbook
+from qmtl.runtime.brokerage import MarginInterestModel, Cashbook
 
 # Flat rates
 m = MarginInterestModel(cash_rate=0.01, borrow_rate=0.10)
@@ -162,7 +162,7 @@ m = MarginInterestModel(
 overrides and an optional post-build hook.
 
 ```python
-from qmtl.brokerage import BrokerageProfile, SecurityInitializer,
+from qmtl.runtime.brokerage import BrokerageProfile, SecurityInitializer,
     CashBuyingPowerModel, PerShareFeeModel, SpreadBasedSlippageModel, ImmediateFillModel
 
 equities = ibkr_equities_like_profile()

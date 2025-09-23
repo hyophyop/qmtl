@@ -16,13 +16,13 @@ import os
 from dataclasses import asdict
 from typing import Any
 
-from qmtl.brokerage import (
+from qmtl.runtime.brokerage import (
     Account,
     Order,
     OrderType,
     TimeInForce,
 )
-from qmtl.brokerage.ccxt_profile import make_ccxt_brokerage
+from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
 
 
 def build_spot_model(

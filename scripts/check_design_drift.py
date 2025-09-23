@@ -48,9 +48,9 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
     # Late import to avoid import-time failures if qmtl isn't installed yet
     sys.path.insert(0, str(root))
     try:
-        from qmtl.spec import ARCH_SPEC_VERSIONS
+        from qmtl.foundation.spec import ARCH_SPEC_VERSIONS
     except Exception as exc:  # pragma: no cover - defensive
-        return 2, f"Failed to import qmtl.spec: {exc}"
+        return 2, f"Failed to import qmtl.foundation.spec: {exc}"
 
     arch_dir = root / "docs" / "architecture"
     if not arch_dir.exists():

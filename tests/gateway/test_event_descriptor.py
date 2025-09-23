@@ -4,8 +4,8 @@ import os
 os.environ["OTEL_SDK_DISABLED"] = "true"
 import pytest
 
-from qmtl.gateway.api import create_app, Database
-from qmtl.gateway.event_descriptor import (
+from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.event_descriptor import (
     EventDescriptorConfig,
     validate_event_token,
     get_token_header,

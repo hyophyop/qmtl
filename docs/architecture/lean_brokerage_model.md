@@ -225,16 +225,16 @@ If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬
 
 ### QMTL Module Mapping (Implementation Pointers)
 
-- Orders & TIF: `qmtl/brokerage/order.py` (`OrderType`, `TimeInForce`, extended `Order`)
-- Fill: `qmtl/brokerage/fill_models.py` (market/limit/stop/stop-limit + IOC/FOK)
-- Slippage: `qmtl/brokerage/slippage.py` (null/constant/spread/volume-share)
-- Fees: `qmtl/brokerage/fees.py` (percent/per-share/composite)
-- Symbol properties: `qmtl/brokerage/symbols.py` (tick/lot/min validation)
-- Exchange hours: `qmtl/brokerage/exchange_hours.py` (regular/pre/post; holiday support is incremental)
-- Shortable: `qmtl/brokerage/shortable.py` (default static provider)
-- Profiles/Initializer: `qmtl/brokerage/profile.py` (`ibkr_equities_like_profile()`)
-- Settlement & Interest: `qmtl/brokerage/settlement.py`, `qmtl/brokerage/interest.py` (skeletons)
-- SDK Gate: `qmtl/sdk/order_gate.py` (activation gate helper)
+- Orders & TIF: `qmtl/runtime/brokerage/order.py` (`OrderType`, `TimeInForce`, extended `Order`)
+- Fill: `qmtl/runtime/brokerage/fill_models.py` (market/limit/stop/stop-limit + IOC/FOK)
+- Slippage: `qmtl/runtime/brokerage/slippage.py` (null/constant/spread/volume-share)
+- Fees: `qmtl/runtime/brokerage/fees.py` (percent/per-share/composite)
+- Symbol properties: `qmtl/runtime/brokerage/symbols.py` (tick/lot/min validation)
+- Exchange hours: `qmtl/runtime/brokerage/exchange_hours.py` (regular/pre/post; holiday support is incremental)
+- Shortable: `qmtl/runtime/brokerage/shortable.py` (default static provider)
+- Profiles/Initializer: `qmtl/runtime/brokerage/profile.py` (`ibkr_equities_like_profile()`)
+- Settlement & Interest: `qmtl/runtime/brokerage/settlement.py`, `qmtl/runtime/brokerage/interest.py` (skeletons)
+- SDK Gate: `qmtl/runtime/sdk/order_gate.py` (activation gate helper)
 
 See also: Reference API at `docs/reference/api/brokerage.md`.
 

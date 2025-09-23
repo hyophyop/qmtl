@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.sdk.execution_modeling import MarketData, create_market_data_from_ohlcv
+from qmtl.runtime.sdk.execution_modeling import MarketData, create_market_data_from_ohlcv
 
 
 @pytest.mark.parametrize(

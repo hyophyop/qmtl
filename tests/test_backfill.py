@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from qmtl.sdk import (
+from qmtl.runtime.sdk import (
     QuestDBLoader,
     QuestDBRecorder,
     HistoryProvider,
@@ -33,7 +33,7 @@ async def dummy_connect(*_args, **_kwargs):
 
 @pytest.mark.asyncio
 async def test_questdb_fetch(monkeypatch):
-    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", dummy_connect)
+    monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", dummy_connect)
     src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     df = await src.fetch(1, 3, node_id="n1", interval=60)
@@ -61,7 +61,7 @@ async def test_questdb_coverage(monkeypatch):
     async def _connect(*_args, **_kwargs):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     ranges = await src.coverage(node_id="n", interval=60)
@@ -85,7 +85,7 @@ async def test_questdb_fill_missing_no_fetcher(monkeypatch):
     async def _connect(*_args, **_kwargs):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     with pytest.raises(RuntimeError):
@@ -107,7 +107,7 @@ async def test_fill_missing_without_fetcher_raises(monkeypatch):
     async def _connect(*_args, **_kwargs):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", _connect)
     loader = QuestDBLoader("db", table="node_data")
     assert isinstance(loader, HistoryProvider)
     with pytest.raises(RuntimeError):
@@ -132,7 +132,7 @@ async def test_questdb_fill_missing(monkeypatch):
     async def _connect(*_args, **_kwargs):
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.io.historyprovider.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", _connect)
     src = QuestDBLoader("db", table="node_data", fetcher=fetcher)
     assert isinstance(src, HistoryProvider)
     await src.fill_missing(60, 180, node_id="n", interval=60)
@@ -160,7 +160,7 @@ async def test_questdb_persist(monkeypatch):
         record["dsn"] = kwargs.get("dsn") or (args[0] if args else None)
         return DummyConn()
 
-    monkeypatch.setattr("qmtl.io.eventrecorder.asyncpg.connect", _connect)
+    monkeypatch.setattr("qmtl.runtime.io.eventrecorder.asyncpg.connect", _connect)
     recorder = QuestDBRecorder("db", table="t")
     assert isinstance(recorder, EventRecorder)
     await recorder.persist("n", 60, 1, {"v": 99})
@@ -172,7 +172,7 @@ async def test_questdb_persist(monkeypatch):
 
 
 def test_stream_input_records_on_feed():
-    from qmtl.sdk.node import StreamInput
+    from qmtl.runtime.sdk.node import StreamInput
 
     events = []
 

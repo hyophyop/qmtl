@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 import xarray as xr
 
-from qmtl.sdk import hash_utils as default_hash_utils
-from qmtl.sdk.cache_backfill import BackfillMerger
-from qmtl.sdk.cache_context import ContextSwitchStrategy
-from qmtl.sdk.cache_reader import CacheWindowReader
-from qmtl.sdk.cache_ring_buffer import RingBuffer
+from qmtl.runtime.sdk import hash_utils as default_hash_utils
+from qmtl.runtime.sdk.cache_backfill import BackfillMerger
+from qmtl.runtime.sdk.cache_context import ContextSwitchStrategy
+from qmtl.runtime.sdk.cache_reader import CacheWindowReader
+from qmtl.runtime.sdk.cache_ring_buffer import RingBuffer
 
 
 class _StubMetrics:

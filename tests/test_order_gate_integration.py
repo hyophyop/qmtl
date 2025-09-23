@@ -1,6 +1,6 @@
 import importlib
 
-import qmtl.sdk.runner as runner_module
+import qmtl.runtime.sdk.runner as runner_module
 
 
 class DummyActivationManager:
@@ -28,7 +28,7 @@ class FakeKafkaProducer:
 def test_runner_gates_orders_by_activation():
     # Reload runner module to reset class-level state
     importlib.reload(runner_module)
-    from qmtl.sdk.runner import Runner
+    from qmtl.runtime.sdk.runner import Runner
     producer = FakeKafkaProducer()
     Runner.set_kafka_producer(producer)
     Runner.set_trade_order_kafka_topic("orders")

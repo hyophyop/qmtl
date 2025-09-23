@@ -1,20 +1,20 @@
 import pytest
 
-from qmtl.transforms.hazard_utils import (
+from qmtl.runtime.transforms.hazard_utils import (
     hazard_probability,
     direction_signal,
     execution_cost,
 )
-from qmtl.transforms.order_book_clustering_collapse import (
+from qmtl.runtime.transforms.order_book_clustering_collapse import (
     hazard_probability as occ_hazard_probability,
     direction_gating as occ_direction_gating,
     execution_cost as occ_execution_cost,
 )
-from qmtl.transforms.tactical_liquidity_bifurcation import (
+from qmtl.runtime.transforms.tactical_liquidity_bifurcation import (
     bifurcation_hazard,
     direction_signal as tlb_direction_signal,
 )
-from qmtl.transforms.gap_amplification import hazard_probability as gap_hazard_probability
+from qmtl.runtime.transforms.gap_amplification import hazard_probability as gap_hazard_probability
 
 
 def test_hazard_probability_matches_occ():
