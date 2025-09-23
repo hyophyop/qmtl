@@ -33,7 +33,19 @@ def test_init_wheel(tmp_path: Path) -> None:
     dest = tmp_path / "proj"
     env = os.environ.copy()
     existing = env.get("PYTHONPATH")
-    extra_paths = [str(Path(path)) for path in sys.path if path]
+    extra_paths = []
+    for entry in sys.path:
+        if not entry:
+            continue
+        resolved = Path(entry).resolve()
+        if resolved == project_dir:
+            continue
+        if project_dir in resolved.parents and not {
+            "site-packages",
+            "dist-packages",
+        }.intersection(resolved.parts):
+            continue
+        extra_paths.append(str(resolved))
     if existing:
         extra_paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(extra_paths)
