@@ -37,7 +37,7 @@ async def test_post_gateway_propagates_trace(monkeypatch):
             class DummyResp:
                 status_code = 202
                 def json(self):
-                    return {"queue_map": {}}
+                    return {"strategy_id": "trace-strategy", "queue_map": {}}
             return DummyResp()
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **_: DummyClient())

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from qmtl.common.compute_key import ComputeContext
+from qmtl.gateway.models import StrategyAck
 from qmtl.sdk import StreamInput, Strategy
 from qmtl.sdk import strategy_bootstrapper as bootstrapper_module
 from qmtl.sdk.strategy_bootstrapper import StrategyBootstrapper
@@ -30,7 +31,7 @@ class NoExecuteStrategy(Strategy):
 
 
 class FakeGatewayClient:
-    def __init__(self, response: dict[str, object]) -> None:
+    def __init__(self, response: StrategyAck | dict[str, object]) -> None:
         self.response = response
         self.calls: list[dict[str, object]] = []
 
@@ -52,8 +53,11 @@ class FakeTagService:
         self.gateway_url = gateway_url
         self.applied: list[dict[str, object]] = []
         self.manager = FakeManager()
+        self.init_calls: list[dict[str, object | None]] = []
 
     def init(self, strategy: Strategy, world_id: str | None = None, strategy_id: str | None = None):
+        self.init_calls.append({"world_id": world_id, "strategy_id": strategy_id})
+        setattr(self.manager, "strategy_id", strategy_id)
         return self.manager
 
     def apply_queue_map(self, strategy: Strategy, queue_map: dict[str, object]) -> None:
@@ -72,7 +76,11 @@ class DummyPlane:
 async def test_strategy_bootstrapper_applies_queue_map(monkeypatch):
     strategy = SimpleStrategy()
     strategy.setup()
-    client = FakeGatewayClient({strategy.nodes[0].node_id: "queue"})
+    ack = StrategyAck(
+        strategy_id="strategy-123",
+        queue_map={strategy.nodes[0].node_id: "queue"},
+    )
+    client = FakeGatewayClient(ack)
     plane = DummyPlane()
     created_services: list[FakeTagService] = []
 
@@ -105,6 +113,10 @@ async def test_strategy_bootstrapper_applies_queue_map(monkeypatch):
     assert client.calls  # gateway invoked
     service = created_services[-1]
     assert service.applied == [{strategy.nodes[0].node_id: "queue"}]
+    assert service.init_calls[-1]["strategy_id"] == "strategy-123"
+    assert getattr(service.manager, "strategy_id") == "strategy-123"
+    assert getattr(strategy, "strategy_id") == "strategy-123"
+    assert result.strategy_id == "strategy-123"
     assert service.manager.offline_flags == [False]
 
 
@@ -133,3 +145,4 @@ async def test_strategy_bootstrapper_handles_no_executable_nodes(monkeypatch):
     assert result.completed is True
     assert strategy.finished is True
     assert fake_service.manager.offline_flags == []  # resolve_tags not called when completed
+    assert result.strategy_id is None

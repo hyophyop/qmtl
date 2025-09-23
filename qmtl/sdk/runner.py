@@ -415,7 +415,9 @@ class Runner:
             if gateway_url and not offline_mode:
                 try:
                     activation_manager = services.ensure_activation_manager(
-                        gateway_url=gateway_url, world_id=world_id
+                        gateway_url=gateway_url,
+                        world_id=world_id,
+                        strategy_id=bootstrap_result.strategy_id,
                     )
                     services.trade_dispatcher.set_activation_manager(
                         activation_manager

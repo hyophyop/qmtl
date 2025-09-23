@@ -2,6 +2,7 @@ import httpx
 import pytest
 
 from qmtl.common import AsyncCircuitBreaker
+from qmtl.gateway.models import StrategyAck
 from qmtl.sdk.gateway_client import GatewayClient
 from qmtl.dagmanager.kafka_admin import partition_key, compute_key
 
@@ -39,6 +40,7 @@ class FlakyClient:
         return httpx.Response(
             202,
             json={
+                "strategy_id": "s-123",
                 "queue_map": {
                     partition_key(
                         "n",
@@ -123,9 +125,11 @@ async def test_breaker_resets_on_success(monkeypatch):
         dag={},
         meta=None,
     )
-    assert second == {
+    assert isinstance(second, StrategyAck)
+    assert second.queue_map == {
         partition_key("n", None, None, compute_key=compute_key("n")): "t"
     }
+    assert second.strategy_id == "s-123"
     assert cb.reset_calls == 1
     assert cb.failures == 0
     assert not cb.is_open

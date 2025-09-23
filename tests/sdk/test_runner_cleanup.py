@@ -3,6 +3,7 @@ from types import MethodType
 
 import pytest
 
+from qmtl.gateway.models import StrategyAck
 from qmtl.sdk.runner import Runner
 from qmtl.sdk.tag_manager_service import TagManagerService
 from tests.sample_strategy import SampleStrategy
@@ -40,6 +41,7 @@ class DummyActivationManager:
     def __init__(self) -> None:
         self.start_calls = 0
         self.stop_calls = 0
+        self.strategy_id: str | None = None
 
     async def start(self) -> None:
         self.start_calls += 1
@@ -71,14 +73,15 @@ async def test_run_async_cleans_up_on_failure(monkeypatch):
         raise RuntimeError("snapshot failure")
 
     async def fake_post_strategy(*args, **kwargs):
-        return {}
+        return StrategyAck(strategy_id="strategy-cleanup", queue_map={})
 
     def fake_init(self, strategy, *, world_id=None, strategy_id=None):
         setattr(strategy, "tag_query_manager", manager)
         return manager
 
-    def fake_ensure_activation(self, *, gateway_url, world_id):
+    def fake_ensure_activation(self, *, gateway_url, world_id, strategy_id=None):
         self.set_activation_manager(activation_manager)
+        activation_manager.strategy_id = strategy_id
         return activation_manager
 
     monkeypatch.setattr(

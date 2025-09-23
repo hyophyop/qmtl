@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from qmtl.common.compute_key import ComputeContext
 from qmtl.dagmanager.topic import build_namespace, topic_namespace_enabled
+from qmtl.gateway.models import StrategyAck
 
 from .feature_store import FeatureArtifactPlane
 from .gateway_client import GatewayClient
@@ -24,6 +25,7 @@ class BootstrapResult:
     dataset_fingerprint: str | None
     tag_service: TagManagerService
     dag_meta: dict | None
+    strategy_id: str | None
 
 
 class StrategyBootstrapper:
@@ -57,11 +59,6 @@ class StrategyBootstrapper:
                 pass
 
         tag_service = TagManagerService(gateway_url)
-        try:
-            manager = tag_service.init(strategy, world_id=world_id)
-        except TypeError:
-            manager = tag_service.init(strategy)
-
         sdk_metrics.set_world_id(world_id)
         logger.info("[RUN] %s world=%s", strategy.__class__.__name__, world_id)
 
@@ -107,16 +104,38 @@ class StrategyBootstrapper:
 
         queue_map: dict[str, Any] | Any
         queue_map = {}
+        strategy_id: str | None = None
         if gateway_url and not skip_gateway_submission:
-            queue_map = await self._gateway_client.post_strategy(
+            ack = await self._gateway_client.post_strategy(
                 gateway_url=gateway_url,
                 dag=dag,
                 meta=meta_for_gateway,
                 context=dict(gateway_context) if gateway_context else None,
                 world_id=world_id,
             )
-            if isinstance(queue_map, dict) and "error" in queue_map:
-                raise RuntimeError(queue_map["error"])
+            if isinstance(ack, dict):
+                if "error" in ack:
+                    raise RuntimeError(ack["error"])
+                if isinstance(ack.get("strategy_id"), str):
+                    strategy_id = ack["strategy_id"]
+                queue_map = ack.get("queue_map", ack)
+            elif isinstance(ack, StrategyAck):
+                strategy_id = ack.strategy_id
+                queue_map = ack.queue_map
+            else:
+                queue_map = ack
+
+        try:
+            manager = tag_service.init(
+                strategy, world_id=world_id, strategy_id=strategy_id
+            )
+        except TypeError:
+            manager = tag_service.init(strategy, world_id=world_id)
+            if strategy_id is not None and hasattr(manager, "strategy_id"):
+                setattr(manager, "strategy_id", strategy_id)
+
+        if strategy_id is not None:
+            setattr(strategy, "strategy_id", strategy_id)
 
         tag_service.apply_queue_map(strategy, queue_map or {})
 
@@ -131,6 +150,7 @@ class StrategyBootstrapper:
                 dataset_fingerprint=dataset_fingerprint,
                 tag_service=tag_service,
                 dag_meta=dag_meta if isinstance(dag_meta, dict) else None,
+                strategy_id=strategy_id,
             )
 
         offline_mode = offline or not kafka_available or not gateway_url
@@ -158,6 +178,7 @@ class StrategyBootstrapper:
             dataset_fingerprint=dataset_fingerprint,
             tag_service=tag_service,
             dag_meta=dag_meta if isinstance(dag_meta, dict) else None,
+            strategy_id=strategy_id,
         )
 
 

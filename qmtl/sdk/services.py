@@ -108,14 +108,21 @@ class RunnerServices:
         self._trade_dispatcher.set_activation_manager(manager)
 
     def ensure_activation_manager(
-        self, *, gateway_url: str, world_id: str
+        self, *, gateway_url: str, world_id: str, strategy_id: str | None = None
     ) -> ActivationManager:
         manager = self._activation_manager
         if manager is None:
             manager = self._activation_manager_factory(
-                gateway_url=gateway_url, world_id=world_id, strategy_id=None
+                gateway_url=gateway_url,
+                world_id=world_id,
+                strategy_id=strategy_id,
             )
             self.set_activation_manager(manager)
+        else:
+            manager.gateway_url = gateway_url
+            manager.world_id = world_id
+            if strategy_id is not None:
+                manager.strategy_id = strategy_id
         return manager
 
     def set_feature_plane(self, plane: FeatureArtifactPlane | None) -> None:
