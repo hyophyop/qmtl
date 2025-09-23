@@ -1,379 +1,289 @@
-"""Tests for enhanced timing controls."""
+"""Concise tests for timing controls behaviour."""
+
+from __future__ import annotations
+
+from datetime import datetime, time, timezone
+from typing import Iterable
 
 import pytest
-from datetime import datetime, time, timezone, timedelta
+
+from qmtl.sdk import Strategy, StreamInput
 from qmtl.sdk.timing_controls import (
-    TimingController, MarketHours, MarketSession, validate_backtest_timing
+    MarketHours,
+    MarketSession,
+    TimingController,
+    validate_backtest_timing,
 )
 
 
-class TestMarketHours:
-    """Test MarketHours functionality."""
-    
-    def test_regular_market_session(self):
-        """Test identification of regular market hours."""
-        market_hours = MarketHours(
-            pre_market_start=time(4, 0),
-            regular_start=time(9, 30),
-            regular_end=time(16, 0),
-            post_market_end=time(20, 0)
-        )
-        
-        # Regular market hours (10:30 AM on a Wednesday)
-        timestamp = datetime(2024, 1, 3, 10, 30, tzinfo=timezone.utc)  # Wednesday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.REGULAR
-    
-    def test_pre_market_session(self):
-        """Test identification of pre-market hours."""
-        market_hours = MarketHours(
-            pre_market_start=time(4, 0),
-            regular_start=time(9, 30),
-            regular_end=time(16, 0),
-            post_market_end=time(20, 0)
-        )
-        
-        # Pre-market hours (8:00 AM on a Wednesday)
-        timestamp = datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc)  # Wednesday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.PRE_MARKET
-    
-    def test_post_market_session(self):
-        """Test identification of post-market hours."""
-        market_hours = MarketHours(
-            pre_market_start=time(4, 0),
-            regular_start=time(9, 30),
-            regular_end=time(16, 0),
-            post_market_end=time(20, 0)
-        )
-        
-        # Post-market hours (18:00 / 6:00 PM on a Wednesday)
-        timestamp = datetime(2024, 1, 3, 18, 0, tzinfo=timezone.utc)  # Wednesday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.POST_MARKET
-    
-    def test_closed_market_weekend(self):
-        """Test identification of closed market during weekend."""
-        market_hours = MarketHours(
-            pre_market_start=time(4, 0),
-            regular_start=time(9, 30),
-            regular_end=time(16, 0),
-            post_market_end=time(20, 0)
-        )
-        
-        # Saturday
-        timestamp = datetime(2024, 1, 6, 10, 0, tzinfo=timezone.utc)  # Saturday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.CLOSED
-        
-        # Sunday
-        timestamp = datetime(2024, 1, 7, 14, 0, tzinfo=timezone.utc)  # Sunday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.CLOSED
-    
-    def test_closed_market_hours(self):
-        """Test identification of closed market during off hours."""
-        market_hours = MarketHours(
-            pre_market_start=time(4, 0),
-            regular_start=time(9, 30),
-            regular_end=time(16, 0),
-            post_market_end=time(20, 0)
-        )
-        
-        # Very early morning (2:00 AM on a Wednesday)
-        timestamp = datetime(2024, 1, 3, 2, 0, tzinfo=timezone.utc)  # Wednesday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.CLOSED
-        
-        # Late night (22:00 / 10:00 PM on a Wednesday)
-        timestamp = datetime(2024, 1, 3, 22, 0, tzinfo=timezone.utc)  # Wednesday
-        session = market_hours.get_session(timestamp)
-        assert session == MarketSession.CLOSED
+UTC = timezone.utc
 
 
-class TestTimingController:
-    """Test TimingController functionality."""
-    
-    def test_default_initialization(self):
-        """Test default initialization of TimingController."""
-        controller = TimingController()
-        
-        assert controller.min_execution_delay_ms == 50
-        assert controller.max_execution_delay_ms == 500
-        assert not controller.allow_pre_post_market
-        assert not controller.require_regular_hours
-        assert controller.market_hours is not None
-    
-    def test_custom_initialization(self):
-        """Test custom initialization of TimingController."""
-        market_hours = MarketHours(
-            pre_market_start=time(5, 0),
-            regular_start=time(10, 0),
-            regular_end=time(15, 0),
-            post_market_end=time(19, 0)
-        )
-        
-        controller = TimingController(
-            market_hours=market_hours,
-            min_execution_delay_ms=100,
-            max_execution_delay_ms=1000,
-            allow_pre_post_market=True,
-            require_regular_hours=True
-        )
-        
-        assert controller.min_execution_delay_ms == 100
-        assert controller.max_execution_delay_ms == 1000
-        assert controller.allow_pre_post_market
-        assert controller.require_regular_hours
-        assert controller.market_hours == market_hours
-    
-    def test_validate_timing_regular_hours(self):
-        """Test timing validation during regular hours."""
-        controller = TimingController()
-        
-        # Regular market hours (Wednesday 10:30 AM)
-        timestamp = datetime(2024, 1, 3, 10, 30, tzinfo=timezone.utc)
-        is_valid, reason, session = controller.validate_timing(timestamp)
-        
-        assert is_valid
-        assert "Valid timing" in reason
-        assert session == MarketSession.REGULAR
-    
-    def test_validate_timing_closed_market(self):
-        """Test timing validation when market is closed."""
-        controller = TimingController()
-        
-        # Market closed (Saturday)
-        timestamp = datetime(2024, 1, 6, 10, 30, tzinfo=timezone.utc)
-        is_valid, reason, session = controller.validate_timing(timestamp)
-        
-        assert not is_valid
-        assert "Market is closed" in reason
-        assert session == MarketSession.CLOSED
-    
-    def test_validate_timing_require_regular_hours(self):
-        """Test timing validation with required regular hours."""
-        controller = TimingController(require_regular_hours=True)
-        
-        # Pre-market (Wednesday 8:00 AM)
-        timestamp = datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc)
-        is_valid, reason, session = controller.validate_timing(timestamp)
-        
-        assert not is_valid
-        assert "Regular market hours required" in reason
-        assert session == MarketSession.PRE_MARKET
-    
-    def test_validate_timing_allow_pre_post_market(self):
-        """Test timing validation with pre/post market allowed."""
-        controller = TimingController(allow_pre_post_market=True)
-        
-        # Pre-market (Wednesday 8:00 AM)
-        timestamp = datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc)
-        is_valid, reason, session = controller.validate_timing(timestamp)
-        
-        assert is_valid
-        assert "Valid timing" in reason
-        assert session == MarketSession.PRE_MARKET
-        
-        # Post-market (Wednesday 6:00 PM)
-        timestamp = datetime(2024, 1, 3, 18, 0, tzinfo=timezone.utc)
-        is_valid, reason, session = controller.validate_timing(timestamp)
-        
-        assert is_valid
-        assert "Valid timing" in reason
-        assert session == MarketSession.POST_MARKET
-    
-    def test_calculate_execution_delay_regular_hours(self):
-        """Test execution delay calculation during regular hours."""
-        controller = TimingController(
-            min_execution_delay_ms=50,
-            max_execution_delay_ms=500
-        )
-        
-        timestamp = datetime(2024, 1, 3, 10, 30, tzinfo=timezone.utc)
-        
-        # Small order
-        delay = controller.calculate_execution_delay(
-            timestamp, 100, MarketSession.REGULAR
-        )
-        assert 50 <= delay <= 150  # Base delay + small order
-        
-        # Large order
-        delay = controller.calculate_execution_delay(
-            timestamp, 20000, MarketSession.REGULAR
-        )
-        assert delay >= 250  # Base delay + large order penalty
-    
-    def test_calculate_execution_delay_pre_post_market(self):
-        """Test execution delay calculation in pre/post market."""
-        controller = TimingController()
-        
-        timestamp = datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc)
-        
-        # Pre-market should have higher delay
-        pre_delay = controller.calculate_execution_delay(
-            timestamp, 100, MarketSession.PRE_MARKET
-        )
-        
-        regular_delay = controller.calculate_execution_delay(
-            timestamp, 100, MarketSession.REGULAR
-        )
-        
-        assert pre_delay > regular_delay
-        
-        # Post-market should have even higher delay
-        post_delay = controller.calculate_execution_delay(
-            timestamp, 100, MarketSession.POST_MARKET
-        )
-        
-        assert post_delay > pre_delay
-    
-    def test_get_next_valid_execution_time(self):
-        """Test finding next valid execution time."""
-        controller = TimingController(require_regular_hours=True)
-        
-        # Saturday (market closed)
-        timestamp = datetime(2024, 1, 6, 10, 0, tzinfo=timezone.utc)  # Saturday
-        
-        next_valid = controller.get_next_valid_execution_time(timestamp, look_ahead_hours=72)  # Look 3 days ahead
-        
-        # Should find a valid time (likely Monday)
-        assert next_valid is not None
-        assert next_valid > timestamp
-        
-        # Validate that the returned time is actually valid
-        is_valid, _, _ = controller.validate_timing(next_valid)
-        assert is_valid
-    
-    def test_get_next_valid_execution_time_none_found(self):
-        """Test when no valid execution time is found."""
-        # Controller that never allows execution
-        controller = TimingController(require_regular_hours=True)
-        controller.market_hours = MarketHours(
-            pre_market_start=time(23, 59),  # Impossible hours
-            regular_start=time(23, 59),
-            regular_end=time(23, 59),
-            post_market_end=time(23, 59)
-        )
-        
-        timestamp = datetime(2024, 1, 3, 10, 0, tzinfo=timezone.utc)
-        
-        next_valid = controller.get_next_valid_execution_time(
-            timestamp, look_ahead_hours=1  # Short look-ahead
-        )
-        
-        assert next_valid is None
+def dt_utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    """Return an aware UTC datetime for convenience inside tests."""
+
+    return datetime(year, month, day, hour, minute, tzinfo=UTC)
 
 
-def test_validate_backtest_timing_integration():
-    """Test integration of timing validation with strategy."""
-    from qmtl.sdk import Strategy, StreamInput
-    
-    class TestStrategy(Strategy):
-        def setup(self):
-            stream = StreamInput(interval="3600s", period=10)  # 1 hour intervals
-            self.add_nodes([stream])
-    
-    strategy = TestStrategy()
-    strategy.setup()
-    
-    # Add test data with some weekend timestamps
-    for node in strategy.nodes:
-        if isinstance(node, StreamInput):
-            # Add weekday data (should be valid)
-            weekday_ts = int(datetime(2024, 1, 3, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            node.cache.append("test_queue", 3600, weekday_ts, {"close": 100.0})
-            
-            # Add weekend data (should be invalid)
-            weekend_ts = int(datetime(2024, 1, 6, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            node.cache.append("test_queue", 3600, weekend_ts, {"close": 101.0})
-    
-    # Test with default controller (should find issues)
-    issues = validate_backtest_timing(strategy)
-    
-    # Should have issues for weekend data
-    assert len(issues) >= 1
-    
-    for node_name, node_issues in issues.items():
-        assert len(node_issues) >= 1
-        assert any("Market is closed" in issue["reason"] for issue in node_issues)
+def to_millis(timestamp: datetime) -> int:
+    """Convert a timezone aware datetime into milliseconds since epoch."""
+
+    return int(timestamp.timestamp() * 1000)
 
 
-def test_validate_backtest_timing_fail_on_invalid():
-    """Test that validation raises exception when configured to fail."""
-    from qmtl.sdk import Strategy, StreamInput
-    
-    class TestStrategy(Strategy):
-        def setup(self):
-            stream = StreamInput(interval="3600s", period=10)
-            self.add_nodes([stream])
-    
-    strategy = TestStrategy()
-    strategy.setup()
-    
-    # Add weekend data (invalid timing)
-    for node in strategy.nodes:
-        if isinstance(node, StreamInput):
-            weekend_ts = int(datetime(2024, 1, 6, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            node.cache.append("test_queue", 3600, weekend_ts, {"close": 100.0})
-    
-    # Should raise ValueError with fail_on_invalid_timing=True
-    with pytest.raises(ValueError, match="Invalid timing found"):
-        validate_backtest_timing(strategy, fail_on_invalid_timing=True)
+@pytest.fixture
+def default_market_hours() -> MarketHours:
+    """Provide canonical U.S. equity market hours for tests."""
+
+    return MarketHours(
+        pre_market_start=time(4, 0),
+        regular_start=time(9, 30),
+        regular_end=time(16, 0),
+        post_market_end=time(20, 0),
+    )
 
 
-def test_validate_backtest_timing_clean_data():
-    """Test validation with clean weekday data."""
-    from qmtl.sdk import Strategy, StreamInput
-    
-    class TestStrategy(Strategy):
-        def setup(self):
-            stream = StreamInput(interval="3600s", period=10)
-            self.add_nodes([stream])
-    
-    strategy = TestStrategy()
-    strategy.setup()
-    
-    # Add only weekday data (should be valid)
-    for node in strategy.nodes:
-        if isinstance(node, StreamInput):
-            # Wednesday 10:00 AM
-            weekday_ts = int(datetime(2024, 1, 3, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            node.cache.append("test_queue", 3600, weekday_ts, {"close": 100.0})
-            
-            # Wednesday 11:00 AM
-            weekday_ts2 = int(datetime(2024, 1, 3, 11, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            node.cache.append("test_queue", 3600, weekday_ts2, {"close": 101.0})
-    
-    # Should have no issues
-    issues = validate_backtest_timing(strategy)
-    assert len(issues) == 0
+@pytest.fixture
+def timing_controller(default_market_hours: MarketHours) -> TimingController:
+    """Create a controller bound to the default market hours."""
+
+    return TimingController(market_hours=default_market_hours)
 
 
-def test_validate_backtest_timing_flags_pre_market():
-    """Ensure pre-market data is reported as invalid."""
-    from qmtl.sdk import Strategy, StreamInput
+@pytest.fixture
+def stream_strategy() -> Strategy:
+    """Strategy fixture with a single hourly stream input."""
 
-    class TestStrategy(Strategy):
-        def setup(self):
+    class SingleStreamStrategy(Strategy):
+        def setup(self) -> None:  # pragma: no cover - exercised via tests
             stream = StreamInput(interval="3600s", period=10)
             self.add_nodes([stream])
 
-    strategy = TestStrategy()
+    strategy = SingleStreamStrategy()
     strategy.setup()
+    return strategy
+
+
+def populate_stream(strategy: Strategy, timestamps: Iterable[datetime]) -> None:
+    """Append samples for the supplied timestamps into the stream cache."""
 
     for node in strategy.nodes:
         if isinstance(node, StreamInput):
-            pre_market_ts = int(
-                datetime(2024, 1, 3, 8, 0, tzinfo=timezone.utc).timestamp() * 1000
-            )
-            node.cache.append("test_queue", 3600, pre_market_ts, {"close": 100.0})
+            for idx, timestamp in enumerate(timestamps):
+                node.cache.append(
+                    "test_queue",
+                    3600,
+                    to_millis(timestamp),
+                    {"close": 100.0 + idx},
+                )
 
-    issues = validate_backtest_timing(strategy)
 
-    assert len(issues) >= 1
-    for node_name, node_issues in issues.items():
+@pytest.mark.parametrize(
+    ("timestamp", "expected_session"),
+    (
+        pytest.param(dt_utc(2024, 1, 3, 10, 30), MarketSession.REGULAR, id="regular"),
+        pytest.param(dt_utc(2024, 1, 3, 8, 0), MarketSession.PRE_MARKET, id="pre-market"),
+        pytest.param(dt_utc(2024, 1, 3, 18, 0), MarketSession.POST_MARKET, id="post-market"),
+        pytest.param(dt_utc(2024, 1, 3, 2, 0), MarketSession.CLOSED, id="overnight"),
+        pytest.param(dt_utc(2024, 1, 6, 10, 0), MarketSession.CLOSED, id="saturday"),
+        pytest.param(dt_utc(2024, 1, 7, 14, 0), MarketSession.CLOSED, id="sunday"),
+    ),
+)
+def test_market_session_identification(
+    default_market_hours: MarketHours, timestamp: datetime, expected_session: MarketSession
+) -> None:
+    """Market sessions are correctly classified for representative timestamps."""
+
+    assert default_market_hours.get_session(timestamp) == expected_session
+
+
+def test_timing_controller_defaults() -> None:
+    """TimingController exposes sensible defaults."""
+
+    controller = TimingController()
+
+    assert controller.min_execution_delay_ms == 50
+    assert controller.max_execution_delay_ms == 500
+    assert controller.allow_pre_post_market is False
+    assert controller.require_regular_hours is False
+    assert controller.market_hours is not None
+
+
+def test_timing_controller_customization(default_market_hours: MarketHours) -> None:
+    """Custom configuration is preserved on the controller."""
+
+    controller = TimingController(
+        market_hours=default_market_hours,
+        min_execution_delay_ms=100,
+        max_execution_delay_ms=1000,
+        allow_pre_post_market=True,
+        require_regular_hours=True,
+    )
+
+    assert controller.min_execution_delay_ms == 100
+    assert controller.max_execution_delay_ms == 1000
+    assert controller.allow_pre_post_market is True
+    assert controller.require_regular_hours is True
+    assert controller.market_hours is default_market_hours
+
+
+@pytest.mark.parametrize(
+    (
+        "controller_kwargs",
+        "timestamp",
+        "expected_valid",
+        "reason_fragment",
+        "expected_session",
+    ),
+    (
+        pytest.param({}, dt_utc(2024, 1, 3, 10, 30), True, "Valid timing", MarketSession.REGULAR, id="regular-valid"),
+        pytest.param({}, dt_utc(2024, 1, 6, 10, 30), False, "Market is closed", MarketSession.CLOSED, id="weekend-closed"),
+        pytest.param(
+            {"require_regular_hours": True},
+            dt_utc(2024, 1, 3, 8, 0),
+            False,
+            "Regular market hours required",
+            MarketSession.PRE_MARKET,
+            id="pre-market-rejected",
+        ),
+        pytest.param(
+            {"allow_pre_post_market": True},
+            dt_utc(2024, 1, 3, 8, 0),
+            True,
+            "Valid timing",
+            MarketSession.PRE_MARKET,
+            id="pre-market-allowed",
+        ),
+        pytest.param(
+            {"allow_pre_post_market": True},
+            dt_utc(2024, 1, 3, 18, 0),
+            True,
+            "Valid timing",
+            MarketSession.POST_MARKET,
+            id="post-market-allowed",
+        ),
+    ),
+)
+def test_validate_timing(
+    default_market_hours: MarketHours,
+    controller_kwargs: dict,
+    timestamp: datetime,
+    expected_valid: bool,
+    reason_fragment: str,
+    expected_session: MarketSession,
+) -> None:
+    """Validation outcomes align with controller configuration."""
+
+    controller = TimingController(market_hours=default_market_hours, **controller_kwargs)
+    is_valid, reason, session = controller.validate_timing(timestamp)
+
+    assert is_valid is expected_valid
+    assert reason_fragment in reason
+    assert session is expected_session
+
+
+@pytest.mark.parametrize(
+    ("quantity", "expected_min", "expected_max"),
+    (
+        pytest.param(100, 50, 150, id="small-order"),
+        pytest.param(20_000, 250, None, id="large-order"),
+    ),
+)
+def test_calculate_execution_delay_scaling(
+    timing_controller: TimingController, quantity: int, expected_min: int, expected_max: int | None
+) -> None:
+    """Execution delay scales with order size within configured bounds."""
+
+    timestamp = dt_utc(2024, 1, 3, 10, 30)
+    delay = timing_controller.calculate_execution_delay(timestamp, quantity, MarketSession.REGULAR)
+
+    assert delay >= expected_min
+    if expected_max is not None:
+        assert delay <= expected_max
+
+
+def test_calculate_execution_delay_session_ordering(timing_controller: TimingController) -> None:
+    """Session-specific delays respect the intended ordering."""
+
+    timestamp = dt_utc(2024, 1, 3, 10, 30)
+    regular_delay = timing_controller.calculate_execution_delay(timestamp, 100, MarketSession.REGULAR)
+    pre_market_delay = timing_controller.calculate_execution_delay(timestamp, 100, MarketSession.PRE_MARKET)
+    post_market_delay = timing_controller.calculate_execution_delay(timestamp, 100, MarketSession.POST_MARKET)
+
+    assert pre_market_delay > regular_delay
+    assert post_market_delay > pre_market_delay
+
+
+def test_get_next_valid_execution_time(default_market_hours: MarketHours) -> None:
+    """Controller locates the next permissible execution time."""
+
+    controller = TimingController(market_hours=default_market_hours, require_regular_hours=True)
+    timestamp = dt_utc(2024, 1, 6, 10, 0)
+
+    next_valid = controller.get_next_valid_execution_time(timestamp, look_ahead_hours=72)
+
+    assert next_valid is not None
+    assert next_valid > timestamp
+    is_valid, _, _ = controller.validate_timing(next_valid)
+    assert is_valid
+
+
+def test_get_next_valid_execution_time_none_found(default_market_hours: MarketHours) -> None:
+    """A controller with impossible hours yields no valid execution time."""
+
+    controller = TimingController(market_hours=default_market_hours, require_regular_hours=True)
+    controller.market_hours = MarketHours(
+        pre_market_start=time(23, 59),
+        regular_start=time(23, 59),
+        regular_end=time(23, 59),
+        post_market_end=time(23, 59),
+    )
+
+    timestamp = dt_utc(2024, 1, 3, 10, 0)
+    assert controller.get_next_valid_execution_time(timestamp, look_ahead_hours=1) is None
+
+
+@pytest.mark.parametrize(
+    ("samples", "expect_issues", "reason_fragment"),
+    (
+        pytest.param(
+            (dt_utc(2024, 1, 3, 10, 0), dt_utc(2024, 1, 6, 10, 0)),
+            True,
+            "Market is closed",
+            id="weekend-data",
+        ),
+        pytest.param(
+            (dt_utc(2024, 1, 3, 10, 0), dt_utc(2024, 1, 3, 11, 0)),
+            False,
+            None,
+            id="weekday-data",
+        ),
+        pytest.param((dt_utc(2024, 1, 3, 8, 0),), True, "Pre/post market trading not allowed", id="pre-market-data"),
+    ),
+)
+def test_validate_backtest_timing(stream_strategy: Strategy, samples: tuple[datetime, ...], expect_issues: bool, reason_fragment: str | None) -> None:
+    """Backtest timing validation surfaces issues for problematic data sets."""
+
+    populate_stream(stream_strategy, samples)
+    issues = validate_backtest_timing(stream_strategy)
+
+    if not expect_issues:
+        assert issues == {}
+    else:
+        assert issues
+        assert reason_fragment is not None
         assert any(
-            "Pre/post market trading not allowed" in issue["reason"]
+            reason_fragment in issue["reason"]
+            for node_issues in issues.values()
             for issue in node_issues
         )
+
+
+def test_validate_backtest_timing_fail_on_invalid(stream_strategy: Strategy) -> None:
+    """Validation raises when configured to fail on invalid samples."""
+
+    populate_stream(stream_strategy, (dt_utc(2024, 1, 6, 10, 0),))
+
+    with pytest.raises(ValueError, match="Invalid timing found"):
+        validate_backtest_timing(stream_strategy, fail_on_invalid_timing=True)
+
