@@ -35,7 +35,7 @@ uv pip install -e .[io]  # 데이터 IO 모듈
 ## 기본 구조
 
 
-SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다. `interval` 값은 정수 또는 `"1h"`, `"30m"`, `"45s"`처럼 단위 접미사를 가진 문자열로 지정할 수 있습니다. `period` 값은 **항상 양의 정수(바 개수)** 로 지정합니다. `TagQueryNode` 자체는 네트워크 요청을 수행하지 않고, Runner가 생성하는 **TagQueryManager**가 Gateway와 통신하여 큐 목록을 갱신합니다. 각 노드가 등록된 후 `TagQueryManager.resolve_tags()`를 호출하면 초기 큐 목록만 로드되며, WebSocket 구독에 필요한 이벤트 설명자(event descriptor)와 토큰(token)은 `TagQueryManager.start()`가 Gateway와의 핸드셰이크에서 내부적으로 확보합니다. 이후 업데이트는 확보된 설명자와 토큰을 사용해 WebSocket으로 처리됩니다. 태그 매칭 방식은 `match_mode` 옵션으로 지정하며 기본값은 OR 조건에 해당하는 `"any"` 입니다. 모든 태그가 일치해야 할 경우 `match_mode="all"`을 사용합니다.
+SDK를 사용하려면 `Strategy` 클래스를 상속하고 `setup()` 메서드만 구현하면 됩니다. 노드는 `StreamInput`, `TagQueryNode` 와 같은 **소스 노드**(`SourceNode`)와 다른 노드를 처리하는 **프로세싱 노드**(`ProcessingNode`)로 나뉩니다. `ProcessingNode`는 하나 이상의 업스트림을 반드시 가져야 합니다. `interval` 값은 정수 또는 `"1h"`, `"30m"`, `"45s"`처럼 단위 접미사를 가진 문자열로 지정할 수 있습니다. `period` 값은 **항상 양의 정수(바 개수)** 로 지정합니다. `TagQueryNode` 자체는 네트워크 요청을 수행하지 않고, Runner가 생성하는 **TagQueryManager**가 Gateway와 통신하여 큐 목록을 갱신합니다. 각 노드가 등록된 후 `TagQueryManager.resolve_tags()`를 호출하면 초기 큐 목록만 로드되며, WebSocket 구독에 필요한 이벤트 설명자(event descriptor)와 토큰(token)은 `TagQueryManager.start()`가 Gateway와의 핸드셰이크에서 내부적으로 확보합니다. 이후 업데이트는 확보된 설명자와 토큰을 사용해 WebSocket으로 처리됩니다. 태그 매칭 방식은 `match_mode` 옵션으로 지정하며 기본값은 OR 조건에 해당하는 `MatchMode.ANY` (문자열 "any"도 허용됨) 입니다. 모든 태그가 일치해야 할 경우 `MatchMode.ALL` 또는 문자열 "all"을 사용합니다.
 
 ### WebSocketClient
 
