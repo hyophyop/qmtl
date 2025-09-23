@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ def test_init_wheel(tmp_path: Path) -> None:
             "uv",
             "pip",
             "install",
+            "--no-deps",
             str(wheel),
             "--python",
             str(python),
@@ -29,9 +31,16 @@ def test_init_wheel(tmp_path: Path) -> None:
     )
     qmtl = env_dir / bin_dir / "qmtl"
     dest = tmp_path / "proj"
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    extra_paths = [str(Path(path)) for path in sys.path if path]
+    if existing:
+        extra_paths.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(extra_paths)
     subprocess.run(
         [str(qmtl), "init", "--with-sample-data", "--path", str(dest)],
         check=True,
+        env=env,
     )
     assert (dest / "data" / "sample_ohlcv.csv").is_file()
     assert (dest / "notebooks" / "strategy_analysis_example.ipynb").is_file()
