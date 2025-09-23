@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .activations import ActivationRepository
+from .auditable import AuditableRepository, AuditSink
 from .audit import AuditLogRepository
 from .bindings import BindingRepository
 from .decisions import DecisionRepository
@@ -15,6 +16,8 @@ from .worlds import WorldRepository
 
 __all__ = [
     "ActivationRepository",
+    "AuditableRepository",
+    "AuditSink",
     "AuditLogRepository",
     "BindingRepository",
     "DecisionRepository",
