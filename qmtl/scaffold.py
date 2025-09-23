@@ -117,6 +117,18 @@ def copy_pyproject(dest: Path) -> None:
         (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
 
 
+def copy_backend_templates(dest: Path) -> None:
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    examples = resources.files(_EXAMPLES_PKG)
+    templates_dest = dest / "templates"
+    templates_dest.mkdir(exist_ok=True)
+    for name in ("local_stack.example.yml", "backend_stack.example.yml"):
+        src = examples.joinpath("templates", name)
+        if src.is_file():
+            (templates_dest / name).write_bytes(src.read_bytes())
+
+
 def copy_base_files(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -142,6 +154,7 @@ def copy_base_files(dest: Path) -> None:
                 dst_file = tests_dest / file.relative_to(tests_src)
                 dst_file.parent.mkdir(parents=True, exist_ok=True)
                 dst_file.write_bytes(file.read_bytes())
+    copy_backend_templates(dest)
 
 
 def create_project(
@@ -184,6 +197,7 @@ __all__ = [
     "copy_sample_data",
     "copy_pyproject",
     "copy_base_files",
+    "copy_backend_templates",
     "TEMPLATES",
 ]
 

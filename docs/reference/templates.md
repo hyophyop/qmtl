@@ -102,6 +102,21 @@ state inside a strategy.
 qmtl init --path my_proj --strategy state_machine
 ```
 
+## Backend configuration templates
+
+When you scaffold a project with `qmtl init`, two backend configuration samples
+are included under the generated `templates/` directory:
+
+* `local_stack.example.yml` &mdash; lightweight backend stack that relies on
+  SQLite, optional Redis, and in-process fallbacks for Kafka and Neo4j. Useful
+  for local development or smoke tests without external dependencies.
+* `backend_stack.example.yml` &mdash; production-ready template covering Redis,
+  Postgres, Kafka, Neo4j, and observability services. Replace the placeholders
+  before deploying.
+
+Use these files as starting points when wiring up Gateway, DAG Manager, and
+WorldService for different environments.
+
 ## Tagging guidelines
 
 Modules can include a `TAGS` dictionary describing scope, family and other

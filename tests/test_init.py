@@ -5,6 +5,12 @@ import sys
 from qmtl.scaffold import create_project
 
 
+def _assert_backend_templates(dest: Path) -> None:
+    templates_dir = dest / "templates"
+    assert (templates_dir / "local_stack.example.yml").is_file()
+    assert (templates_dir / "backend_stack.example.yml").is_file()
+
+
 def test_create_project(tmp_path: Path):
     dest = tmp_path / "proj"
     create_project(dest)
@@ -17,6 +23,7 @@ def test_create_project(tmp_path: Path):
     dag = dest / "dags" / "example_strategy"
     assert (dag / "__init__.py").is_file()
     assert (dag / "config.yaml").is_file()
+    _assert_backend_templates(dest)
 
 
 def test_create_project_with_sample_data(tmp_path: Path):
@@ -28,6 +35,7 @@ def test_create_project_with_sample_data(tmp_path: Path):
     assert (dest / ".gitignore").is_file()
     assert (dest / "README.md").is_file()
     assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
+    _assert_backend_templates(dest)
 
 
 def test_create_project_with_optionals(tmp_path: Path):
@@ -36,6 +44,7 @@ def test_create_project_with_optionals(tmp_path: Path):
     assert (dest / "docs" / "README.md").is_file()
     assert (dest / "scripts" / "example.py").is_file()
     assert (dest / "pyproject.toml").is_file()
+    _assert_backend_templates(dest)
 
 
 def test_init_cli(tmp_path: Path):
@@ -58,6 +67,7 @@ def test_init_cli(tmp_path: Path):
     dag = dest / "dags" / "example_strategy"
     assert (dag / "__init__.py").is_file()
     assert (dag / "config.yaml").is_file()
+    _assert_backend_templates(dest)
 
 
 def test_init_cli_with_optionals(tmp_path: Path):
@@ -77,6 +87,7 @@ def test_init_cli_with_optionals(tmp_path: Path):
     assert (dest / "docs" / "README.md").is_file()
     assert (dest / "scripts" / "example.py").is_file()
     assert (dest / "pyproject.toml").is_file()
+    _assert_backend_templates(dest)
 
 
 def test_init_cli_with_sample_data(tmp_path: Path):
@@ -97,3 +108,4 @@ def test_init_cli_with_sample_data(tmp_path: Path):
     assert (dest / ".gitignore").is_file()
     assert (dest / "README.md").is_file()
     assert (dest / "tests" / "nodes" / "test_sequence_generator_node.py").is_file()
+    _assert_backend_templates(dest)
