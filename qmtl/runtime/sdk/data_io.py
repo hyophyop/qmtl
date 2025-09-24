@@ -84,6 +84,24 @@ class HistoryProvider(ABC):
         """Return timestamp ranges available for ``node_id`` and ``interval``."""
         ...
 
+    async def ensure_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        """Ensure history for ``[start, end]`` exists by delegating to ``fill_missing``.
+
+        Subclasses with specialised auto backfill behaviour may override this
+        helper.  The default implementation simply proxies to
+        :meth:`fill_missing`, preserving backwards compatibility for providers
+        that only implement gap filling.
+        """
+
+        await self.fill_missing(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
+
     @abstractmethod
     async def fill_missing(
         self, start: int, end: int, *, node_id: str, interval: int

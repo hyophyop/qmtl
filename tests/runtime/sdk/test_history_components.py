@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from qmtl.runtime.sdk.history_coverage import (
@@ -8,6 +9,41 @@ from qmtl.runtime.sdk.history_coverage import (
     ensure_strict_history,
 )
 from qmtl.runtime.sdk.history_warmup_polling import HistoryWarmupPoller, WarmupRequest
+from qmtl.runtime.sdk.data_io import HistoryProvider
+
+
+class ProxyHistoryProvider(HistoryProvider):
+    def __init__(self) -> None:
+        self.fill_calls: list[tuple[int, int, str, int]] = []
+
+    async def fetch(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:  # pragma: no cover - unused helper
+        return pd.DataFrame()
+
+    async def coverage(
+        self, *, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:  # pragma: no cover - unused helper
+        return []
+
+    async def fill_missing(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        self.fill_calls.append((start, end, node_id, interval))
+
+
+@pytest.mark.asyncio
+async def test_history_provider_default_ensure_range_proxies_fill_missing() -> None:
+    provider = ProxyHistoryProvider()
+
+    await provider.ensure_range(0, 60, node_id="n1", interval=60)
+
+    assert provider.fill_calls == [(0, 60, "n1", 60)]
 
 
 class DummyProvider:

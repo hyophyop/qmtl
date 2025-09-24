@@ -113,6 +113,12 @@ constructed with an :class:`AutoBackfillStrategy`, the facade exposes
 ``ensure_range`` which populates missing data before history is fetched.  The
 simplest strategy delegates to an existing :class:`DataFetcher`:
 
+!!! note
+    Every :class:`HistoryProvider` exposes an ``ensure_range`` helper. When a
+    provider does not override it, the default implementation simply proxies to
+    :meth:`fill_missing`, so adapters written before auto backfill support keep
+    working unchanged.
+
 ```python
 from qmtl.runtime.sdk import AugmentedHistoryProvider, FetcherBackfillStrategy
 from qmtl.runtime.io import QuestDBBackend
