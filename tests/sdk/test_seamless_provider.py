@@ -62,6 +62,18 @@ async def test_coverage_merges_adjacent_ranges_interval_aware() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seamless_fetch_deduplicates_boundary_bars() -> None:
+    cache = _StaticSource([(0, 100)], DataSourcePriority.CACHE)
+    storage = _StaticSource([(100, 200)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(cache_source=cache, storage_source=storage)
+
+    df = await provider.fetch(0, 200, node_id="n", interval=10)
+
+    expected = list(range(0, 201, 10))
+    assert df["ts"].tolist() == expected
+
+
+@pytest.mark.asyncio
 async def test_find_missing_ranges_uses_interval_math() -> None:
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     provider = _DummyProvider(storage_source=storage)
