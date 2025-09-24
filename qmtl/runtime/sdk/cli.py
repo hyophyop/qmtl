@@ -13,6 +13,18 @@ from . import runtime
 logger = logging.getLogger(__name__)
 
 
+def _parse_history_boundary(value: str | None, env_var: str) -> int | None:
+    """Return an integer history boundary or ``None`` when unset/invalid."""
+
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Ignoring non-integer value for %s: %s", env_var, value)
+        return None
+
+
 async def _main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="qmtl tools sdk", description="Run QMTL strategy")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -50,10 +62,12 @@ async def _main(argv: List[str] | None = None) -> int:
 
     if args.cmd == "run":
         # Internal hooks for deterministic history ranges via env vars only
-        h_start = os.getenv("QMTL_HISTORY_START")
-        h_end = os.getenv("QMTL_HISTORY_END")
-        if runtime.TEST_MODE and h_start is None and h_end is None:
-            h_start, h_end = "1", "2"
+        h_start_raw = os.getenv("QMTL_HISTORY_START")
+        h_end_raw = os.getenv("QMTL_HISTORY_END")
+        if runtime.TEST_MODE and h_start_raw is None and h_end_raw is None:
+            h_start_raw, h_end_raw = "1", "2"
+        h_start = _parse_history_boundary(h_start_raw, "QMTL_HISTORY_START")
+        h_end = _parse_history_boundary(h_end_raw, "QMTL_HISTORY_END")
         await Runner.run_async(
             strategy_cls,
             world_id=args.world_id,
