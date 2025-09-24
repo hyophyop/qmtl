@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from . import foundation, interfaces, runtime, services
-from ._compat import deprecated_module
 from .runtime.pipeline import Pipeline
 from .runtime.sdk import (
     CacheView,
@@ -54,40 +53,6 @@ try:  # pragma: no cover - best effort cleanup helper
     httpx.ASGITransport = _ClosingASGITransport
 except Exception:  # pragma: no cover - optional
     pass
-
-_DEPRECATED_ALIASES = {
-    "common": "qmtl.foundation.common",
-    "schema": "qmtl.foundation.schema",
-    "kafka": "qmtl.foundation.kafka",
-    "proto": "qmtl.foundation.proto",
-    "config": "qmtl.foundation.config",
-    "spec": "qmtl.foundation.spec",
-    "gateway": "qmtl.services.gateway",
-    "dagmanager": "qmtl.services.dagmanager",
-    "worldservice": "qmtl.services.worldservice",
-    "sdk": "qmtl.runtime.sdk",
-    "pipeline": "qmtl.runtime.pipeline",
-    "nodesets": "qmtl.runtime.nodesets",
-    "transforms": "qmtl.runtime.transforms",
-    "indicators": "qmtl.runtime.indicators",
-    "generators": "qmtl.runtime.generators",
-    "brokerage": "qmtl.runtime.brokerage",
-    "reference_models": "qmtl.runtime.reference_models",
-    "io": "qmtl.runtime.io",
-    "cli": "qmtl.interfaces.cli",
-    "tools": "qmtl.interfaces.tools",
-    "scripts": "qmtl.interfaces.scripts",
-    "scaffold": "qmtl.interfaces.scaffold",
-}
-
-
-def __getattr__(name: str):  # type: ignore[override]
-    if name in _DEPRECATED_ALIASES:
-        module = deprecated_module(f"{__name__}.{name}", _DEPRECATED_ALIASES[name])
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-
 
 __all__ = [
     "Pipeline",
