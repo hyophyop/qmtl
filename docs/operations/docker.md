@@ -42,7 +42,7 @@ Notes:
 
 - Purpose: Fast smoke test to ensure Docker and basic networking work in CI/local.
 - Services: `zookeeper`, `kafka` (pinned to `confluentinc` images), and a placeholder `gateway` using `python:3.11-slim` serving HTTP.
-- Used by: `tests/test_docker_compose.py` which brings the stack up and then down.
+- Used by: `tests/project/test_docker_compose.py` which brings the stack up and then down.
 - Example:
 
 ```bash
@@ -54,7 +54,7 @@ docker compose -f tests/docker-compose.yml down
 
 - Purpose: Runs the end-to-end test suite against real infra and QMTL services.
 - Services: `redis`, `postgres`, `neo4j`, `zookeeper`, `kafka`, plus QMTL `gateway` and `dagmanager` built from the repo `Dockerfile`.
-- Used by: E2E docs and tests (see below). Validated by `tests/test_docker_compose_e2e.py`.
+- Used by: E2E docs and tests (see below). Validated by `tests/project/test_docker_compose_e2e.py`.
 - Example:
 
 ```bash
@@ -104,8 +104,8 @@ docker build -t qmtl:dev .
   - `tests/docker-compose.yml`
   - `tests/docker-compose.e2e.yml`
 - Tests:
-  - `tests/test_docker_compose.py` (skips if `docker` not installed)
-  - `tests/test_docker_compose_e2e.py` (validates expected services present)
+  - `tests/project/test_docker_compose.py` (skips if `docker` not installed)
+  - `tests/project/test_docker_compose_e2e.py` (validates expected services present)
 - Docs and README:
   - `README.md` (E2E quickstart)
   - `docs/operations/e2e_testing.md`

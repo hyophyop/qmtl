@@ -186,7 +186,7 @@ eurusd_model = init.for_symbol("EURUSD")  # uses free_fee via asset-class
 
 ## Testing and Examples
 
-- See `tests/test_brokerage_orders_tif.py` for TIF and crossing logic.
-- See `tests/test_brokerage_extras.py` for shortable/profile usage.
+- See `tests/runtime/brokerage/test_brokerage_orders_tif.py` for TIF and crossing logic.
+- See `tests/runtime/brokerage/test_brokerage_extras.py` for shortable/profile usage.
 
 {{ nav_links() }}
