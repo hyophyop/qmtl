@@ -263,7 +263,9 @@ class SeamlessDataProvider(ABC):
                         
                         # Update remaining ranges
                         still_missing = self._subtract_ranges(
-                            [(range_start, range_end)], available_in_range
+                            [(range_start, range_end)],
+                            available_in_range,
+                            interval,
                         )
                         new_remaining.extend(still_missing)
                     else:
@@ -439,26 +441,58 @@ class SeamlessDataProvider(ABC):
         return self._merge_ranges(result)
     
     def _subtract_ranges(
-        self, from_ranges: list[tuple[int, int]], subtract_ranges: list[tuple[int, int]]
+        self,
+        from_ranges: list[tuple[int, int]],
+        subtract_ranges: list[tuple[int, int]],
+        interval: int,
     ) -> list[tuple[int, int]]:
-        """Subtract ranges from other ranges."""
-        result = list(from_ranges)
-        
-        for sub_start, sub_end in subtract_ranges:
-            new_result = []
+        """Subtract ranges from other ranges using interval-aware semantics."""
+        if not subtract_ranges:
+            return list(from_ranges)
+
+        if interval <= 0:
+            # Fallback to naive subtraction when interval metadata is unavailable
+            result = list(from_ranges)
+            for sub_start, sub_end in subtract_ranges:
+                new_result = []
+                for start, end in result:
+                    if sub_end <= start or sub_start >= end:
+                        new_result.append((start, end))
+                    else:
+                        if start < sub_start:
+                            new_result.append((start, sub_start))
+                        if end > sub_end:
+                            new_result.append((sub_end, end))
+                result = new_result
+            return result
+
+        # Convert inclusive ranges to half-open to avoid duplicate boundary bars
+        result: list[tuple[int, int]] = [
+            (start, end + interval) for start, end in from_ranges
+        ]
+        subtract_half_open = [
+            (sub_start, sub_end + interval) for sub_start, sub_end in subtract_ranges
+        ]
+
+        for sub_start, sub_end in subtract_half_open:
+            new_result: list[tuple[int, int]] = []
             for start, end in result:
                 if sub_end <= start or sub_start >= end:
-                    # No overlap
                     new_result.append((start, end))
                 else:
-                    # Overlap - split the range
                     if start < sub_start:
                         new_result.append((start, sub_start))
                     if end > sub_end:
                         new_result.append((sub_end, end))
             result = new_result
-        
-        return result
+
+        adjusted: list[tuple[int, int]] = []
+        for start, end in result:
+            inclusive_end = end - interval
+            if inclusive_end >= start:
+                adjusted.append((start, inclusive_end))
+
+        return self._merge_ranges(adjusted)
 
 
 __all__ = [
