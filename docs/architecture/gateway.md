@@ -335,4 +335,4 @@ See also: World API Reference (reference/api_world.md) and Schemas (reference/sc
   - Transactional commit‑log writer/consumer are implemented (`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`) with deduplication and metrics.
   - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`), and `owner_reassign_total` is recorded on handoff.
   - SDK/Gateway integration skips local execution when queues are globally owned (see `qmtl/services/gateway/worker.py`).
-  - Chaos/soak style dedup tests exist under `tests/gateway/test_commit_log_soak.py`.
+  - Chaos/soak style dedup tests exist under `tests/services/gateway/test_commit_log_soak.py`.

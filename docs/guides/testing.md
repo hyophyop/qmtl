@@ -66,12 +66,12 @@ Tips:
 ## Shared node factories
 
 Gateway and SDK tests rely on consistent node hashing. Reuse the helpers in
-`tests/factories/node.py` rather than hand-rolling node dictionaries. The
+`tests/runtime/sdk/factories/node.py` rather than hand-rolling node dictionaries. The
 factories canonicalise parameters, sort dependencies, and compute `node_id`
 values so hash-contract updates only need to change in one place.
 
 ```python
-from tests.factories import tag_query_node_payload, node_ids_crc32
+from tests.runtime.sdk.factories import tag_query_node_payload, node_ids_crc32
 
 node = tag_query_node_payload(tags=["t"], interval=60)
 checksum = node_ids_crc32([node])
