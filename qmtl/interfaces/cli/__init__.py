@@ -21,6 +21,7 @@ from typing import List
 
 
 PRIMARY_DISPATCH = {
+    "config": "qmtl.interfaces.cli.config",
     "service": "qmtl.interfaces.cli.service",
     "tools": "qmtl.interfaces.cli.tools",
     "project": "qmtl.interfaces.cli.project",
@@ -44,6 +45,7 @@ def _build_top_help_parser() -> argparse.ArgumentParser:
     description = textwrap.dedent(
         """
         Subcommands:
+          config    Validate gateway and DAG Manager configuration files.
           service   Manage long-running services such as Gateway and DAG Manager.
           tools     Developer tooling including SDK runners and linters.
           project   Project scaffolding and template helpers.
