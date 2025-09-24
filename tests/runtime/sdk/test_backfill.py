@@ -7,6 +7,7 @@ from qmtl.runtime.sdk import (
     HistoryProvider,
     EventRecorder,
     EventRecorderService,
+    FetcherBackfillStrategy,
 )
 from tests.dummy_fetcher import DummyDataFetcher
 
@@ -133,7 +134,12 @@ async def test_questdb_fill_missing(monkeypatch):
         return DummyConn()
 
     monkeypatch.setattr("qmtl.runtime.io.historyprovider.asyncpg.connect", _connect)
-    src = QuestDBHistoryProvider("db", table="node_data", fetcher=fetcher)
+    src = QuestDBHistoryProvider(
+        "db",
+        table="node_data",
+        fetcher=fetcher,
+        auto_backfill=FetcherBackfillStrategy(fetcher),
+    )
     assert isinstance(src, HistoryProvider)
     await src.fill_missing(60, 180, node_id="n", interval=60)
 

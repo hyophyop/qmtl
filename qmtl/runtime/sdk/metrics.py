@@ -123,6 +123,41 @@ backfill_retry_total = _counter(
     test_value_factory=dict,
 )
 
+# ---------------------------------------------------------------------------
+# History auto backfill metrics
+# ---------------------------------------------------------------------------
+history_auto_backfill_requests_total = _counter(
+    "history_auto_backfill_requests_total",
+    "Number of auto backfill ensure_range invocations",
+    ["strategy", "node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+history_auto_backfill_missing_ranges_total = _counter(
+    "history_auto_backfill_missing_ranges_total",
+    "Number of missing ranges detected by auto backfill",
+    ["strategy", "node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+history_auto_backfill_rows_total = _counter(
+    "history_auto_backfill_rows_total",
+    "Rows written by auto backfill strategies",
+    ["strategy", "node_id", "interval"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+history_auto_backfill_duration_ms = _histogram(
+    "history_auto_backfill_duration_ms",
+    "Duration of auto backfill ensure_range calls in milliseconds",
+    ["strategy"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 # Shared node cache metrics
 nodecache_resident_bytes = get_nodecache_resident_bytes()
 
