@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from qmtl.runtime.io import CcxtQuestDBProvider
+from qmtl.runtime.io.ccxt_fetcher import CcxtBackfillConfig, CcxtOHLCVFetcher
+
+
+class _InMemoryBackend:
+    def __init__(self) -> None:
+        self._rows: dict[tuple[str, int], dict[int, dict]] = {}
+
+    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        table = self._rows.get((node_id, interval), {})
+        data = []
+        for ts in sorted(table):
+            if start <= ts < end:
+                row = {"ts": ts}
+                row.update(table[ts])
+                data.append(row)
+        return pd.DataFrame(data)
+
+    async def write_rows(self, rows: pd.DataFrame, *, node_id: str, interval: int) -> None:
+        if rows is None or rows.empty:
+            return
+        table = self._rows.setdefault((node_id, interval), {})
+        for rec in rows.to_dict("records"):
+            ts = int(rec["ts"])
+            payload = {k: v for k, v in rec.items() if k != "ts"}
+            table[ts] = payload
+
+    async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
+        table = self._rows.get((node_id, interval), {})
+        timestamps = sorted(table)
+        if not timestamps:
+            return []
+        ranges: list[tuple[int, int]] = []
+        start = prev = timestamps[0]
+        for ts in timestamps[1:]:
+            if ts == prev + interval:
+                prev = ts
+            else:
+                ranges.append((start, prev))
+                start = prev = ts
+        ranges.append((start, prev))
+        return ranges
+
+
+class _StubExchange:
+    async def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None):
+        # Return a single aligned candle at 60s
+        return [[60_000, 1, 1, 1, 1, 1]]
+
+    async def close(self):  # pragma: no cover
+        pass
+
+
+@pytest.mark.asyncio
+async def test_ccxt_questdb_provider_wiring_and_backfill(monkeypatch):
+    # Build provider with injected fetcher
+    fetcher = CcxtOHLCVFetcher(CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+    ), exchange=_StubExchange())
+
+    provider = CcxtQuestDBProvider("db", table="node_data", fetcher=fetcher)
+    # Swap backend to in-memory for the test
+    backend = _InMemoryBackend()
+    provider.backend = backend  # type: ignore[attr-defined]
+
+    # Trigger backfill
+    await provider.fill_missing(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+
+    # Verify data materialized
+    df = await backend.read_range(0, 120, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    assert df["ts"].tolist() == [60]
+

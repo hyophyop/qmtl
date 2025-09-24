@@ -46,6 +46,8 @@ dev = [
 
 ray = ["ray"]
 io = ["pandas"]
+ccxt = ["ccxt"]
+questdb = ["asyncpg"]
 
 [project.scripts]
 qmtl = "qmtl.interfaces.cli:main"
