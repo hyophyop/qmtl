@@ -90,6 +90,39 @@ See `qmtl/examples/README.md` for additional strategies that can be executed
 in the same way. A more detailed walkthrough from project creation to
 testing is available in [docs/guides/strategy_workflow.md](docs/guides/strategy_workflow.md).
 
+## Quick Start (Validate → Export → Launch)
+
+Bring services up in three steps. This mirrors the detailed guidance in
+[Config CLI](docs/operations/config-cli.md) and [Backend Quickstart](docs/operations/backend_quickstart.md).
+
+1. **Validate configuration** – catch missing sections or offline resources
+   before booting services.
+
+   ```bash
+   uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
+   ```
+
+2. **Export and load environment variables** – persist overrides so Gateway
+   and DAG Manager pick them up without repeating `--config` flags.
+
+   ```bash
+   uv run qmtl config env export --config qmtl/examples/qmtl.yml > .env.qmtl
+   source .env.qmtl
+   export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
+   ```
+
+3. **Launch services** – with the environment in place you can start Gateway
+   and DAG Manager directly; each service falls back to `QMTL_CONFIG_FILE` if
+   no `--config` flag is provided.
+
+   ```bash
+   qmtl service gateway
+   qmtl service dagmanager server
+   ```
+
+If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with
+default settings, preventing silent misconfigurations.
+
 ## Trading Node Enhancements
 
 Recent releases introduce several nodes for building realistic trading pipelines:
