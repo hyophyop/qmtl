@@ -11,7 +11,13 @@ def test_no_pytest_plugins_in_nested_conftest() -> None:
     Pytest 8 disallows defining `pytest_plugins` in non-top-level conftests.
     This test guards against regressions by scanning all conftest.py files.
     """
-    repo_root = Path(__file__).resolve().parents[2]
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "pyproject.toml").exists():
+            repo_root = parent
+            break
+    else:
+        raise RuntimeError("Could not locate repository root from test path")
     assert (repo_root / "pytest.ini").exists(), "repo root discovery failed"
 
     confs = [p for p in repo_root.rglob("conftest.py")]
@@ -35,4 +41,3 @@ def test_no_pytest_plugins_in_nested_conftest() -> None:
         "Defining pytest_plugins in non-top-level conftest is not supported. "
         f"Move declarations to the repo root conftest.py. Offenders: {offenders}"
     )
-

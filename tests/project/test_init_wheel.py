@@ -4,9 +4,17 @@ import sys
 from pathlib import Path
 
 
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    raise RuntimeError("Could not locate repository root from test path")
+
+
 def test_init_wheel(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "dist"
-    project_dir = Path(__file__).resolve().parents[1]
+    project_dir = _repo_root()
     subprocess.run(
         ["uv", "build", "--wheel", str(project_dir), "-o", str(wheel_dir)],
         check=True,

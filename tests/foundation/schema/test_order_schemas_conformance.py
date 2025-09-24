@@ -4,7 +4,15 @@ from pathlib import Path
 import jsonschema
 
 
-SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "docs" / "reference" / "schemas"
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    raise RuntimeError("Could not locate repository root from test path")
+
+
+SCHEMAS_DIR = _repo_root() / "docs" / "reference" / "schemas"
 
 
 def _load_schema(name: str) -> dict:
@@ -73,4 +81,3 @@ def test_examples_conform_to_json_schemas():
     jsonschema.validate(order_ack, _load_schema("order_ack.schema.json"))
     jsonschema.validate(fill, _load_schema("execution_fill_event.schema.json"))
     jsonschema.validate(snapshot, _load_schema("portfolio_snapshot.schema.json"))
-
