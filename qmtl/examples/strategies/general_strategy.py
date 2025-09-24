@@ -1,6 +1,6 @@
 import argparse
 import pandas as pd
-from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
 
 class GeneralStrategy(Strategy):
@@ -9,7 +9,7 @@ class GeneralStrategy(Strategy):
 
     def setup(self):
         price_stream = StreamInput(
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
             event_service=EventRecorderService(

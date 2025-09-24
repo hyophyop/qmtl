@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import cast
 
 from qmtl.foundation.common.tagquery import MatchMode, normalize_match_mode
 
@@ -9,10 +9,8 @@ from .. import hash_utils as default_hash_utils
 from .. import node_validation as default_validator
 from ..event_service import EventRecorderService
 from ..exceptions import InvalidParameterError
+from ..data_io import HistoryBackend, HistoryProvider, EventRecorder
 from .base import Node
-
-if TYPE_CHECKING:  # pragma: no cover - type checking import
-    from qmtl.runtime.io import HistoryProvider, EventRecorder
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +41,7 @@ class StreamInput(SourceNode):
         interval: int | str | None = None,
         period: int | None = None,
         *,
-        history_provider: "HistoryProvider" | None = None,
+        history_provider: HistoryProvider | HistoryBackend | None = None,
         event_service: EventRecorderService | None = None,
         validator=default_validator,
         hash_utils=default_hash_utils,
@@ -63,14 +61,15 @@ class StreamInput(SourceNode):
             **node_kwargs,
         )
         self._allow_event_service_set = False
-        self._history_provider = history_provider
-        if history_provider and hasattr(history_provider, "bind_stream"):
-            history_provider.bind_stream(self)
+        provider = self._coerce_history_provider(history_provider)
+        self._history_provider = provider
+        if provider and hasattr(provider, "bind_stream"):
+            provider.bind_stream(self)
         if self.event_service and hasattr(self.event_service, "bind_stream"):
             self.event_service.bind_stream(self)
 
     @property
-    def history_provider(self) -> "HistoryProvider" | None:
+    def history_provider(self) -> HistoryProvider | None:
         return self._history_provider
 
     @history_provider.setter
@@ -107,6 +106,23 @@ class StreamInput(SourceNode):
         engine = BackfillEngine(self.history_provider)
         engine.submit(self, start, end)
         await engine.wait()
+
+    # ------------------------------------------------------------------
+    def _coerce_history_provider(
+        self,
+        provider: HistoryProvider | HistoryBackend | None,
+    ) -> HistoryProvider | None:
+        if provider is None:
+            return None
+        if isinstance(provider, HistoryProvider):
+            return provider
+        if isinstance(provider, HistoryBackend):
+            from qmtl.runtime.sdk.history_provider_facade import (
+                AugmentedHistoryProvider,
+            )
+
+            return AugmentedHistoryProvider(provider)
+        return cast(HistoryProvider, provider)
 
 
 class TagQueryNode(SourceNode):

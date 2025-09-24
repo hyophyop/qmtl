@@ -1,6 +1,11 @@
 import pytest
 import pytest_asyncio
-from fakeredis.aioredis import FakeRedis
+
+fakeredis_aioredis = pytest.importorskip(
+    "fakeredis.aioredis",
+    reason="fakeredis is required for Redis-backed runtime tests",
+)
+FakeRedis = fakeredis_aioredis.FakeRedis
 
 from qmtl.runtime.sdk.runner import Runner
 

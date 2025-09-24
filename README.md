@@ -318,31 +318,39 @@ and cannot be reassigned later. The same guide covers persisting data via
 Example injection:
 
 ```python
-from qmtl.runtime.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
+from qmtl.runtime.sdk import (
+    StreamInput,
+    QuestDBHistoryProvider,
+    QuestDBRecorder,
+    EventRecorderService,
+)
 
 stream = StreamInput(
     interval="60s",
-    history_provider=QuestDBLoader(dsn="postgresql://user:pass@localhost:8812/qdb"),
+    history_provider=QuestDBHistoryProvider(
+        dsn="postgresql://user:pass@localhost:8812/qdb"
+    ),
     event_service=EventRecorderService(
         QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb")
     ),
 )
 ```
 
-``QuestDBLoader`` and ``QuestDBRecorder`` will default to using
+``QuestDBHistoryProvider`` (also exported as ``QuestDBLoader`` for backwards
+compatibility) and ``QuestDBRecorder`` will default to using
 ``stream.node_id`` as the table name if ``table`` is not provided.
 
 [docs/operations/backfill.md](docs/operations/backfill.md).
 
-### QuestDBLoader with a custom fetcher
+### QuestDBHistoryProvider with a custom fetcher
 
-`QuestDBLoader` can pull missing rows from any async source. Implement a
+`QuestDBHistoryProvider` can pull missing rows from any async source. Implement a
 `DataFetcher` and pass it to the loader:
 
 ```python
 import httpx
 import pandas as pd
-from qmtl.runtime.sdk import DataFetcher, QuestDBLoader
+from qmtl.runtime.sdk import DataFetcher, QuestDBHistoryProvider
 
 class BinanceFetcher:
     async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
@@ -360,7 +368,7 @@ class BinanceFetcher:
         return pd.DataFrame(rows)
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
     fetcher=fetcher,
 )

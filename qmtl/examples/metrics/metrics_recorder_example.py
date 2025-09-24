@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics, EventRecorderService
-from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 
 
 class RecorderStrategy(Strategy):
@@ -11,7 +11,7 @@ class RecorderStrategy(Strategy):
         price = StreamInput(
             interval="60s",
             period=30,
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
             event_service=EventRecorderService(

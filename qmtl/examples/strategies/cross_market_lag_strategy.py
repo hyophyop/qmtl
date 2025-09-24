@@ -1,5 +1,5 @@
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
-from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import pandas as pd
 
 class CrossMarketLagStrategy(Strategy):
@@ -8,7 +8,7 @@ class CrossMarketLagStrategy(Strategy):
             tags=["BTC", "price", "binance"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
             event_service=EventRecorderService(
@@ -21,7 +21,7 @@ class CrossMarketLagStrategy(Strategy):
             tags=["MSTR", "price", "nasdaq"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
             event_service=EventRecorderService(
