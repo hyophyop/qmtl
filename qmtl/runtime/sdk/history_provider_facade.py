@@ -76,6 +76,24 @@ class AugmentedHistoryProvider(HistoryProvider):
             return list(self._coverage_cache[key])
 
     # ------------------------------------------------------------------
+    async def ensure_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        key = (node_id, interval)
+        lock = self._locks[key]
+        async with lock:
+            await self._prepare_backfill(
+                key,
+                AutoBackfillRequest(
+                    node_id=node_id,
+                    interval=interval,
+                    start=start,
+                    end=end,
+                ),
+                require_fetcher=False,
+            )
+
+    # ------------------------------------------------------------------
     async def fill_missing(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> None:
