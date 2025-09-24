@@ -104,7 +104,9 @@ class AugmentedHistoryProvider(HistoryProvider):
         if request.start > request.end:
             return
 
-        coverage = await self._ensure_coverage(key, request.node_id, request.interval)
+        coverage = await self._ensure_coverage(
+            key, request.node_id, request.interval, force_refresh=True
+        )
         missing = self._missing_windows(coverage, request)
         if not missing:
             return
@@ -115,6 +117,7 @@ class AugmentedHistoryProvider(HistoryProvider):
             return
 
         updated = coverage
+        refresh_post_write = False
         for window in missing:
             df = await self.fetcher.fetch(
                 window.start,
@@ -128,6 +131,22 @@ class AugmentedHistoryProvider(HistoryProvider):
             df = df[(df["ts"] >= window.start) & (df["ts"] <= window.end)]
             if df.empty:
                 continue
+
+            existing = await self.backend.read_range(
+                window.start,
+                window.end + window.interval,
+                node_id=window.node_id,
+                interval=window.interval,
+            )
+            if not existing.empty and "ts" in existing.columns:
+                existing_ts = set(int(ts) for ts in existing["ts"].tolist())
+                if existing_ts:
+                    before = len(df)
+                    df = df[~df["ts"].isin(existing_ts)]
+                    if len(df) < before:
+                        refresh_post_write = True
+            if df.empty:
+                continue
             await self.backend.write_rows(
                 df, node_id=window.node_id, interval=window.interval
             )
@@ -137,13 +156,24 @@ class AugmentedHistoryProvider(HistoryProvider):
                 window.interval,
             )
 
+        if refresh_post_write:
+            refreshed = await self.backend.coverage(
+                node_id=request.node_id, interval=request.interval
+            )
+            updated = self._normalize_ranges(refreshed, request.interval)
+
         self._coverage_cache[key] = updated
 
     # ------------------------------------------------------------------
     async def _ensure_coverage(
-        self, key: tuple[str, int], node_id: str, interval: int
+        self,
+        key: tuple[str, int],
+        node_id: str,
+        interval: int,
+        *,
+        force_refresh: bool = False,
     ) -> list[tuple[int, int]]:
-        if key not in self._coverage_cache:
+        if force_refresh or key not in self._coverage_cache:
             ranges = await self.backend.coverage(node_id=node_id, interval=interval)
             self._coverage_cache[key] = self._normalize_ranges(ranges, interval)
         return list(self._coverage_cache[key])
