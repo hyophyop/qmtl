@@ -1,7 +1,11 @@
 from __future__ import annotations
 import argparse
 import asyncio
+import json
+import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from qmtl.foundation.common import AsyncCircuitBreaker
@@ -10,7 +14,99 @@ import uvicorn
 
 from .grpc_server import serve
 from .config import DagManagerConfig
-from qmtl.foundation.config import load_config, find_config_file
+from qmtl.foundation.config import load_config, find_config_file, has_config_section
+
+
+def _log_config_source(
+    cfg_path: str | None,
+    *,
+    cli_override: str | None,
+    env_override: str | None,
+) -> None:
+    if cli_override:
+        logging.info("DAG Manager configuration loaded from %s (--config)", cli_override)
+        return
+
+    if env_override:
+        env_candidate = Path(env_override)
+        if not env_candidate.is_absolute():
+            env_candidate = Path.cwd() / env_candidate
+
+        if cfg_path and Path(cfg_path) == env_candidate:
+            logging.info(
+                "DAG Manager configuration loaded from %s (QMTL_CONFIG_FILE)",
+                cfg_path,
+            )
+            return
+
+        if cfg_path:
+            logging.warning(
+                "QMTL_CONFIG_FILE=%s was ignored because the file could not be read; "
+                "using %s instead",
+                env_override,
+                cfg_path,
+            )
+        else:
+            logging.error(
+                "QMTL_CONFIG_FILE=%s did not resolve to a readable file; using built-in defaults",
+                env_override,
+            )
+        return
+
+    if cfg_path:
+        logging.info("DAG Manager configuration loaded from %s", cfg_path)
+    else:
+        logging.info("DAG Manager configuration file not provided; using built-in defaults")
+
+
+def _warn_missing_section(section: str, cfg_path: str | None) -> None:
+    if not cfg_path:
+        return
+    if has_config_section(cfg_path, section):
+        return
+
+    meta_raw = os.getenv("QMTL_CONFIG_EXPORT")
+    source_hint = os.getenv("QMTL_CONFIG_SOURCE")
+
+    if meta_raw:
+        try:
+            metadata = json.loads(meta_raw)
+        except json.JSONDecodeError:
+            logging.warning(
+                "DAG Manager configuration file %s lacks the '%s' section; "
+                "QMTL_CONFIG_EXPORT metadata is not valid JSON (%s). Using default values.",
+                cfg_path,
+                section,
+                meta_raw,
+            )
+            return
+
+        generated = metadata.get("generated_at")
+        variables = metadata.get("variables")
+        details: list[str] = []
+        if generated:
+            details.append(f"generated at {generated}")
+        if variables is not None:
+            details.append(f"{variables} variables")
+        if source_hint:
+            details.append(f"source {source_hint}")
+        detail_str = ", ".join(details) if details else "export metadata available"
+
+        logging.warning(
+            "DAG Manager configuration file %s does not define the '%s' section. "
+            "QMTL_CONFIG_EXPORT (%s) suggests the export omitted it; the server will use default settings. "
+            "Re-run 'qmtl interfaces config env export' to regenerate a complete configuration.",
+            cfg_path,
+            section,
+            detail_str,
+        )
+        return
+
+    logging.warning(
+        "DAG Manager configuration file %s does not define the '%s' section; using default DAG Manager settings.",
+        cfg_path,
+        section,
+    )
 from .api import create_app
 from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
@@ -131,10 +227,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", help="Path to configuration file")
     args = parser.parse_args(argv)
 
+    env_override = os.getenv("QMTL_CONFIG_FILE")
     cfg_path = args.config or find_config_file()
+    _log_config_source(cfg_path, cli_override=args.config, env_override=env_override)
+
     cfg = DagManagerConfig()
     if cfg_path:
         cfg = load_config(cfg_path).dagmanager
+        _warn_missing_section("dagmanager", cfg_path)
 
     asyncio.run(_run(cfg))
 

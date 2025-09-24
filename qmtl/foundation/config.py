@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import logging
+import os
 import yaml
 
 from qmtl.services.gateway.config import GatewayConfig
@@ -20,14 +21,41 @@ class UnifiedConfig:
 
 
 def find_config_file(cwd: Path | None = None) -> str | None:
-    """Return path to ``qmtl.yml``/``qmtl.yaml`` in ``cwd`` if present."""
+    """Return configuration path preferring ``QMTL_CONFIG_FILE`` when set."""
 
     base = Path.cwd() if cwd is None else cwd
+
+    env_override = os.getenv("QMTL_CONFIG_FILE")
+    if env_override:
+        candidate = Path(env_override)
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        if candidate.is_file():
+            return str(candidate)
+        logger.warning("QMTL_CONFIG_FILE=%s does not point to a readable file", env_override)
+
     for name in ("qmtl.yml", "qmtl.yaml"):
         candidate = base / name
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+def has_config_section(path: str, section: str) -> bool:
+    """Return ``True`` if ``section`` exists in the configuration file."""
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            try:
+                data = yaml.safe_load(fh) or {}
+            except yaml.YAMLError:
+                return False
+    except (FileNotFoundError, OSError):
+        return False
+
+    if not isinstance(data, dict):
+        return False
+    return section in data
 
 
 def load_config(path: str) -> UnifiedConfig:
