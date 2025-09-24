@@ -74,6 +74,20 @@ async def test_seamless_fetch_deduplicates_boundary_bars() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seamless_fetch_preserves_off_grid_cache_bounds() -> None:
+    cache = _StaticSource([(95, 100)], DataSourcePriority.CACHE)
+    storage = _StaticSource([(0, 200)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(cache_source=cache, storage_source=storage)
+
+    df = await provider.fetch(0, 200, node_id="n", interval=10)
+
+    ts = df["ts"].tolist()
+    assert 90 in ts  # previously dropped due to misaligned subtraction
+    assert ts.count(90) == 1
+    assert ts.count(95) == 1
+
+
+@pytest.mark.asyncio
 async def test_find_missing_ranges_uses_interval_math() -> None:
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     provider = _DummyProvider(storage_source=storage)

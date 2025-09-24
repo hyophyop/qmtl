@@ -466,33 +466,55 @@ class SeamlessDataProvider(ABC):
                 result = new_result
             return result
 
-        # Convert inclusive ranges to half-open to avoid duplicate boundary bars
-        result: list[tuple[int, int]] = [
-            (start, end + interval) for start, end in from_ranges
-        ]
-        subtract_half_open = [
-            (sub_start, sub_end + interval) for sub_start, sub_end in subtract_ranges
-        ]
+        remaining: list[tuple[int, int]] = []
 
-        for sub_start, sub_end in subtract_half_open:
-            new_result: list[tuple[int, int]] = []
-            for start, end in result:
-                if sub_end <= start or sub_start >= end:
-                    new_result.append((start, end))
-                else:
-                    if start < sub_start:
-                        new_result.append((start, sub_start))
-                    if end > sub_end:
-                        new_result.append((sub_end, end))
-            result = new_result
+        for range_start, range_end in from_ranges:
+            segments: list[tuple[int, int]] = [(int(range_start), int(range_end))]
 
-        adjusted: list[tuple[int, int]] = []
-        for start, end in result:
-            inclusive_end = end - interval
-            if inclusive_end >= start:
-                adjusted.append((start, inclusive_end))
+            for sub_start_raw, sub_end_raw in subtract_ranges:
+                sub_start = int(sub_start_raw)
+                sub_end = int(sub_end_raw)
+                if sub_start > sub_end:
+                    continue
 
-        return self._merge_ranges(adjusted)
+                new_segments: list[tuple[int, int]] = []
+                for seg_start, seg_end in segments:
+                    if sub_end < seg_start or sub_start > seg_end:
+                        new_segments.append((seg_start, seg_end))
+                        continue
+
+                    # Only subtract bars that land on the same interval grid
+                    if (seg_start - sub_start) % interval != 0:
+                        new_segments.append((seg_start, seg_end))
+                        continue
+
+                    first = max(seg_start, sub_start)
+                    remainder = (first - seg_start) % interval
+                    if remainder:
+                        first += interval - remainder
+
+                    if first > seg_end or first > sub_end:
+                        new_segments.append((seg_start, seg_end))
+                        continue
+
+                    last = min(seg_end, sub_end)
+                    remainder = (last - seg_start) % interval
+                    last -= remainder
+
+                    if last < first:
+                        new_segments.append((seg_start, seg_end))
+                        continue
+
+                    if first > seg_start:
+                        new_segments.append((seg_start, first - interval))
+                    if last < seg_end:
+                        new_segments.append((last + interval, seg_end))
+
+                segments = new_segments
+
+            remaining.extend(segments)
+
+        return self._merge_ranges(sorted(remaining))
 
 
 __all__ = [
