@@ -2,11 +2,16 @@ from __future__ import annotations
 
 """QuestDB history backend and provider implementations."""
 
+from typing import TYPE_CHECKING
+
 import asyncpg
 import pandas as pd
 
 from qmtl.runtime.sdk.data_io import DataFetcher
 from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from qmtl.runtime.sdk.auto_backfill import AutoBackfillStrategy
 
 
 class QuestDBBackend:
@@ -126,9 +131,10 @@ class QuestDBHistoryProvider(AugmentedHistoryProvider):
         *,
         table: str | None = None,
         fetcher: DataFetcher | None = None,
+        auto_backfill: "AutoBackfillStrategy" | None = None,
     ) -> None:
         backend = QuestDBBackend(dsn, table=table)
-        super().__init__(backend, fetcher=fetcher)
+        super().__init__(backend, fetcher=fetcher, auto_backfill=auto_backfill)
         self.dsn = dsn
 
     # ------------------------------------------------------------------

@@ -12,6 +12,11 @@ from .node import (
 from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
 from .cache_view import CacheView
+from .auto_backfill import (
+    AutoBackfillStrategy,
+    FetcherBackfillStrategy,
+    LiveReplayBackfillStrategy,
+)
 from .strategy import Strategy, buy_signal
 from .runner import Runner
 from .tagquery_manager import TagQueryManager
@@ -86,6 +91,7 @@ __all__ = [
     "EventRecorder",
     "AutoBackfillRequest",
     "AugmentedHistoryProvider",
+    "AutoBackfillStrategy",
     "QuestDBBackend",
     "QuestDBHistoryProvider",
     "QuestDBLoader",
@@ -115,6 +121,8 @@ __all__ = [
     "CcxtExchange",
     "normalize_exchange_id",
     "ensure_ccxt_exchange",
+    "FetcherBackfillStrategy",
+    "LiveReplayBackfillStrategy",
     "QMTLValidationError",
     "NodeValidationError",
     "InvalidParameterError",
