@@ -163,6 +163,85 @@ def test_history_gap_fill(monkeypatch):
     assert fill_calls
 
 
+def test_history_gap_fill_with_auto_strategy(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={"strategy_id": "s"})
+
+    transport = httpx.MockTransport(handler)
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            self._client = httpx.Client(transport=transport)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._client.close()
+
+        async def post(self, url, json=None):
+            request = httpx.Request("POST", url, json=json)
+            return handler(request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
+
+    coverage_calls: list[tuple[str, int]] = []
+
+    class AutoProvider:
+        def __init__(self) -> None:
+            self.ensure_calls: list[tuple[int, int, str, int]] = []
+            self.fetch_calls: list[tuple[int, int, str, int]] = []
+            self._coverage: dict[tuple[str, int], list[tuple[int, int]]] = {}
+            self._rows: dict[tuple[str, int], dict[int, dict]] = {}
+
+        async def ensure_range(self, start, end, *, node_id, interval):
+            self.ensure_calls.append((start, end, node_id, interval))
+            table = self._rows.setdefault((node_id, interval), {})
+            ts = start
+            while ts <= end:
+                table.setdefault(ts, {"value": ts})
+                ts += interval
+            self._coverage[(node_id, interval)] = [(start, end)]
+
+        async def coverage(self, *, node_id, interval):
+            coverage_calls.append((node_id, interval))
+            return list(self._coverage.get((node_id, interval), []))
+
+        async def fetch(self, start, end, *, node_id, interval):
+            self.fetch_calls.append((start, end, node_id, interval))
+            table = self._rows.get((node_id, interval), {})
+            rows = []
+            for ts in sorted(table):
+                if start <= ts < end:
+                    payload = {"ts": ts}
+                    payload.update(table[ts])
+                    rows.append(payload)
+            return pd.DataFrame(rows)
+
+        async def fill_missing(self, start, end, *, node_id, interval):  # pragma: no cover
+            raise AssertionError("fill_missing should not be called when ensure_range exists")
+
+    provider = AutoProvider()
+
+    class Strat(SampleStrategy):
+        def setup(self):
+            src = StreamInput(interval="1s", period=3, history_provider=provider)
+            node = ProcessingNode(
+                input=src,
+                compute_fn=lambda df: df,
+                name="out",
+                interval="1s",
+                period=3,
+            )
+            self.add_nodes([src, node])
+
+    Runner.offline(Strat)
+
+    assert provider.ensure_calls
+    assert provider.fetch_calls
+    assert coverage_calls
+
+
 def test_history_gap_fill_stops_on_ready(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(202, json={"strategy_id": "s"})

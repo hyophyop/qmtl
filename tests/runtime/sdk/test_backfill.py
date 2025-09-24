@@ -8,6 +8,8 @@ from qmtl.runtime.sdk import (
     EventRecorder,
     EventRecorderService,
     FetcherBackfillStrategy,
+    StreamInput,
+    AugmentedHistoryProvider,
 )
 from tests.dummy_fetcher import DummyDataFetcher
 
@@ -190,3 +192,98 @@ def test_stream_input_records_on_feed():
 
     s.feed("s", 60, 1, {"v": 1})
     assert events == [(s.node_id, 60, 1, {"v": 1})]
+
+
+class _InMemoryBackend:
+    def __init__(self) -> None:
+        self._rows: dict[tuple[str, int], dict[int, dict]] = {}
+
+    async def read_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        table = self._rows.get((node_id, interval), {})
+        data = []
+        for ts in sorted(table):
+            if start <= ts < end:
+                row = {"ts": ts}
+                row.update(table[ts])
+                data.append(row)
+        return pd.DataFrame(data)
+
+    async def write_rows(
+        self, rows: pd.DataFrame, *, node_id: str, interval: int
+    ) -> None:
+        if rows.empty:
+            return
+        table = self._rows.setdefault((node_id, interval), {})
+        for record in rows.to_dict("records"):
+            ts = int(record["ts"])
+            payload = {k: v for k, v in record.items() if k != "ts"}
+            table[ts] = payload
+
+    async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
+        table = self._rows.get((node_id, interval), {})
+        timestamps = sorted(table)
+        if not timestamps:
+            return []
+        ranges: list[tuple[int, int]] = []
+        start = prev = timestamps[0]
+        for ts in timestamps[1:]:
+            if ts == prev + interval:
+                prev = ts
+            else:
+                ranges.append((start, prev))
+                start = prev = ts
+        ranges.append((start, prev))
+        return ranges
+
+
+class _RecordingFetcher:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, int, str, int]] = []
+
+    async def fetch(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        self.calls.append((start, end, node_id, interval))
+        rows = []
+        ts = start
+        while ts <= end:
+            rows.append({"ts": ts, "value": ts})
+            ts += interval
+        return pd.DataFrame(rows)
+
+
+@pytest.mark.asyncio
+async def test_augmented_provider_ensure_range_auto_backfills() -> None:
+    backend = _InMemoryBackend()
+    fetcher = _RecordingFetcher()
+    provider = AugmentedHistoryProvider(
+        backend, auto_backfill=FetcherBackfillStrategy(fetcher)
+    )
+
+    await provider.ensure_range(60, 180, node_id="node", interval=60)
+
+    assert fetcher.calls == [(60, 180, "node", 60)]
+    coverage = await provider.coverage(node_id="node", interval=60)
+    assert coverage == [(60, 180)]
+
+    frame = await provider.fetch(60, 240, node_id="node", interval=60)
+    assert list(frame["ts"]) == [60, 120, 180]
+
+
+@pytest.mark.asyncio
+async def test_stream_input_load_history_uses_auto_backfill() -> None:
+    backend = _InMemoryBackend()
+    fetcher = _RecordingFetcher()
+    provider = AugmentedHistoryProvider(
+        backend, auto_backfill=FetcherBackfillStrategy(fetcher)
+    )
+    stream = StreamInput(interval=60, period=3, history_provider=provider)
+
+    await stream.load_history(60, 240)
+
+    snapshot = stream.cache._snapshot()[stream.node_id][60]
+    timestamps = [ts for ts, _ in snapshot]
+    assert timestamps == [60, 120, 180]
+    assert fetcher.calls == [(60, 180, stream.node_id, 60)]

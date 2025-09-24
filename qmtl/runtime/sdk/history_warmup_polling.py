@@ -61,6 +61,21 @@ class HistoryWarmupPoller:
         missing = compute_missing_ranges(coverage_list, request.window)
         timed_out = False
 
+        ensure_range = getattr(self._provider, "ensure_range", None)
+        if callable(ensure_range) and missing and not is_ready():
+            await ensure_range(
+                request.window.start,
+                request.window.end,
+                node_id=request.node_id,
+                interval=request.interval,
+            )
+            coverage_list = list(
+                await self._provider.coverage(
+                    node_id=request.node_id, interval=request.interval
+                )
+            )
+            missing = compute_missing_ranges(coverage_list, request.window)
+
         while not is_ready() and missing:
             for gap in missing:
                 await self._provider.fill_missing(

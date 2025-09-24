@@ -15,6 +15,43 @@ class SimpleStrategy(Strategy):
 
 
 @pytest.mark.asyncio
+async def test_history_service_prefers_auto_backfill(monkeypatch):
+    class AutoProvider:
+        def __init__(self) -> None:
+            self.ensure_calls: list[tuple[int, int, str, int]] = []
+            self.coverage_calls: list[tuple[str, int]] = []
+            self._coverage: dict[tuple[str, int], list[tuple[int, int]]] = {}
+
+        async def coverage(self, *, node_id, interval):
+            self.coverage_calls.append((node_id, interval))
+            return list(self._coverage.get((node_id, interval), []))
+
+        async def ensure_range(self, start, end, *, node_id, interval):
+            self.ensure_calls.append((start, end, node_id, interval))
+            self._coverage[(node_id, interval)] = [(start, end)]
+
+        async def fill_missing(self, start, end, *, node_id, interval):  # pragma: no cover
+            raise AssertionError("fill_missing should not be invoked when ensure_range exists")
+
+    provider = AutoProvider()
+    node = StreamInput(interval=60, period=3, history_provider=provider)
+    service = HistoryWarmupService()
+
+    load_calls: list[tuple[int, int]] = []
+
+    async def fake_load(self, start, end):
+        load_calls.append((start, end))
+
+    monkeypatch.setattr(node, "load_history", types.MethodType(fake_load, node))
+
+    await service.ensure_node_history(node, 60, 180)
+
+    assert provider.ensure_calls == [(60, 180, node.node_id, 60)]
+    assert provider.coverage_calls
+    assert load_calls == [(60, 180)]
+
+
+@pytest.mark.asyncio
 async def test_history_service_offline_defaults(monkeypatch):
     strategy = SimpleStrategy()
     strategy.setup()

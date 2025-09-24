@@ -26,6 +26,9 @@ optionally expose asynchronous helpers:
   asynchronous coroutine.
 - `fill_missing(start, end, node_id, interval)` instructing the provider to
   populate gaps within the given range and is also a coroutine.
+- `ensure_range(start, end, *, node_id, interval)` which performs any automatic
+  backfill the provider supports. When present the runtime will prefer this
+  helper over manual coverage checks.
 
 `coverage()` should return contiguous, inclusive ranges that already exist in
 the storage backend. When `fill_missing()` is implemented the provider is
@@ -102,6 +105,36 @@ signatures and return ``pandas.DataFrame`` objects with a ``ts`` column.
 Subclasses are optional—any object adhering to the protocol works with the
 SDK.
 
+## Auto Backfill Strategies
+
+The SDK ships with :class:`AugmentedHistoryProvider`, a facade that wraps a
+`HistoryBackend` and coordinates optional auto backfill helpers. When
+constructed with an :class:`AutoBackfillStrategy`, the facade exposes
+``ensure_range`` which populates missing data before history is fetched.  The
+simplest strategy delegates to an existing :class:`DataFetcher`:
+
+```python
+from qmtl.runtime.sdk import AugmentedHistoryProvider, FetcherBackfillStrategy
+from qmtl.runtime.io import QuestDBBackend
+
+backend = QuestDBBackend(dsn="postgresql://user:pass@localhost:8812/qdb")
+provider = AugmentedHistoryProvider(
+    backend,
+    fetcher=my_fetcher,
+    auto_backfill=FetcherBackfillStrategy(my_fetcher),
+)
+
+# ensure the warmup window is covered before loading
+await provider.ensure_range(1700000000, 1700001800, node_id="BTC", interval=60)
+frame = await provider.fetch(1700000000, 1700001860, node_id="BTC", interval=60)
+```
+
+``FetcherBackfillStrategy`` computes coverage gaps, delegates each gap to the
+fetcher, writes the normalized rows back to the backend and refreshes cached
+coverage metadata. Other strategies such as
+``LiveReplayBackfillStrategy`` can ingest live buffers instead of hitting an
+external API.
+
 ### Injecting into `StreamInput`
 
 Historical data and event recording can be supplied when creating a `StreamInput`:
@@ -141,8 +174,15 @@ then treats them as read-only. Attempting to modify ``history_provider`` or
 
 When executing a strategy, the SDK ensures each `StreamInput` has enough history
 to satisfy its `period × interval` warmup window. For providers that implement
-`coverage()` and `fill_missing()`, the SDK uses them to backfill missing ranges
-prior to loading history. This primes caches before computation continues.
+`ensure_range()`, auto backfill occurs before any gaps are inspected. Providers
+without that helper fall back to the `coverage()` plus `fill_missing()` loop so
+existing adapters continue to work.
+
+Both :func:`Runner.run` and :func:`Runner.offline` execute the same warmup
+pipeline: ranges are reconciled via the provider, the `BackfillEngine` fetches
+rows into the node caches and the runtime replays those events through the
+strategy graph. This guarantees that local dry runs exercise the identical
+bootstrap logic used in production.
 
 Integrated run (world‑driven):
 
