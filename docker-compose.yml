@@ -1,0 +1,83 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: qmtl
+      POSTGRES_PASSWORD: qmtl
+      POSTGRES_USER: qmtl
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  neo4j:
+    image: neo4j:5.22.0
+    environment:
+      NEO4J_AUTH: neo4j/test
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    volumes:
+      - neo4j_data:/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.10
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.10
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  dagmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["qmtl", "service", "dagmanager", "server"]
+    depends_on:
+      - kafka
+      - neo4j
+      - postgres
+    environment:
+      QMTL__DAGMANAGER__NEO4J_DSN: bolt://neo4j:7687
+      QMTL__DAGMANAGER__KAFKA_DSN: kafka:9092
+      QMTL__DAGMANAGER__DATABASE_DSN: postgresql://qmtl:qmtl@postgres:5432/qmtl
+    volumes:
+      - .:/app
+    ports:
+      - "50051:50051"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["qmtl", "service", "gateway"]
+    depends_on:
+      - dagmanager
+      - redis
+    environment:
+      QMTL__GATEWAY__REDIS_DSN: redis://redis:6379/0
+      QMTL__GATEWAY__DAGMANAGER_DSN: dagmanager:50051
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
+  neo4j_data:

@@ -73,6 +73,7 @@ last_pytest_output.txt
 
 # Docker
 **/docker-compose.yml
+!docker-compose.yml
 
 # Local config
 *.local
