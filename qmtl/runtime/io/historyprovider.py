@@ -1,36 +1,40 @@
 from __future__ import annotations
 
-"""QuestDB-backed :class:`~qmtl.runtime.sdk.data_io.HistoryProvider` implementation."""
+"""QuestDB history backend and provider implementations."""
 
-import pandas as pd
 import asyncpg
+import pandas as pd
 
-from qmtl.runtime.sdk.data_io import HistoryProvider, DataFetcher
+from qmtl.runtime.sdk.data_io import DataFetcher
+from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
 
 
-class QuestDBLoader(HistoryProvider):
-    """HistoryProvider implementation backed by QuestDB."""
+class QuestDBBackend:
+    """QuestDB-backed implementation of :class:`HistoryBackend`."""
 
     def __init__(
         self,
         dsn: str,
         *,
         table: str | None = None,
-        fetcher: DataFetcher | None = None,
     ) -> None:
         self.dsn = dsn
         self._table = table
-        self.fetcher = fetcher
 
+    # ------------------------------------------------------------------
+    def bind_stream(self, stream) -> None:
+        self._stream_id = stream.node_id
+
+    # ------------------------------------------------------------------
     @property
     def table(self) -> str:
-        tbl = self._table or getattr(self, "_stream_id", None)
-        if tbl is None:
+        table = self._table or getattr(self, "_stream_id", None)
+        if table is None:
             raise RuntimeError("table not specified and stream not bound")
-        return tbl
+        return table
 
-
-    async def fetch(
+    # ------------------------------------------------------------------
+    async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
         conn = await asyncpg.connect(dsn=self.dsn)
@@ -46,10 +50,40 @@ class QuestDBLoader(HistoryProvider):
 
         return pd.DataFrame([dict(r) for r in rows])
 
+    # ------------------------------------------------------------------
+    async def write_rows(
+        self, rows: pd.DataFrame, *, node_id: str, interval: int
+    ) -> None:
+        if rows is None or rows.empty:
+            return
+
+        conn = await asyncpg.connect(dsn=self.dsn)
+        try:
+            payload_columns = [c for c in rows.columns if c != "ts"]
+            for _, row in rows.iterrows():
+                if "ts" not in row.index:
+                    raise KeyError("row missing 'ts' column")
+                ts = int(row["ts"])
+                values = [self._normalize_value(row[c]) for c in payload_columns]
+                columns_sql = ", ".join(payload_columns)
+                placeholders = ", ".join(
+                    f"${i}" for i in range(4, 4 + len(payload_columns))
+                )
+                sql = (
+                    f"INSERT INTO {self.table}(node_id, interval, ts"
+                    + (f", {columns_sql}" if columns_sql else "")
+                    + ") VALUES($1, $2, $3"
+                    + (f", {placeholders}" if placeholders else "")
+                    + ")"
+                )
+                await conn.execute(sql, node_id, interval, ts, *values)
+        finally:
+            await conn.close()
+
+    # ------------------------------------------------------------------
     async def coverage(
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
-        """Return contiguous timestamp ranges available for ``node_id``."""
         conn = await asyncpg.connect(dsn=self.dsn)
         try:
             sql = (
@@ -60,63 +94,52 @@ class QuestDBLoader(HistoryProvider):
         finally:
             await conn.close()
 
-        ts_values = [int(r["ts"]) for r in rows]
-        if not ts_values:
+        timestamps = [int(r["ts"]) for r in rows]
+        if not timestamps:
             return []
+
         ranges: list[tuple[int, int]] = []
-        start = ts_values[0]
-        prev = start
-        for ts in ts_values[1:]:
+        start = prev = timestamps[0]
+        for ts in timestamps[1:]:
             if ts == prev + interval:
                 prev = ts
             else:
                 ranges.append((start, prev))
-                start = ts
-                prev = ts
+                start = prev = ts
         ranges.append((start, prev))
         return ranges
 
-    async def fill_missing(
-        self, start: int, end: int, *, node_id: str, interval: int
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_value(value):
+        if hasattr(value, "item"):
+            return value.item()
+        return value
+
+
+class QuestDBHistoryProvider(AugmentedHistoryProvider):
+    """QuestDB-backed history provider using :class:`AugmentedHistoryProvider`."""
+
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        table: str | None = None,
+        fetcher: DataFetcher | None = None,
     ) -> None:
-        """Insert real rows for any missing timestamps."""
+        backend = QuestDBBackend(dsn, table=table)
+        super().__init__(backend, fetcher=fetcher)
+        self.dsn = dsn
 
-        if self.fetcher is None:
-            raise RuntimeError("DataFetcher not configured")
+    # ------------------------------------------------------------------
+    @property
+    def table(self) -> str:
+        return self.backend.table  # type: ignore[return-value]
 
-        conn = await asyncpg.connect(dsn=self.dsn)
-        try:
-            sql_fetch = (
-                f"SELECT ts FROM {self.table} "
-                "WHERE node_id=$1 AND interval=$2 AND ts >= $3 AND ts <= $4"
-            )
-            rows = await conn.fetch(sql_fetch, node_id, interval, start, end)
-            existing = {int(r["ts"]) for r in rows}
 
-            df = await self.fetcher.fetch(
-                start, end, node_id=node_id, interval=interval
-            )
+# Backwards compatibility -------------------------------------------------
+QuestDBLoader = QuestDBHistoryProvider
 
-            for _, row in df.iterrows():
-                ts = int(row.get("ts", 0))
-                if ts in existing:
-                    continue
-                payload = {k: row[k] for k in row.index if k != "ts"}
-                columns = ", ".join(payload.keys())
-                values = payload.values()
-                placeholders = ", ".join(
-                    f"${i}" for i in range(4, 4 + len(payload))
-                )
-                sql_ins = (
-                    f"INSERT INTO {self.table}(node_id, interval, ts"
-                    + (f", {columns}" if columns else "")
-                    + f") VALUES($1, $2, $3"
-                    + (f", {placeholders}" if placeholders else "")
-                    + ")"
-                )
-                await conn.execute(
-                    sql_ins, node_id, interval, ts, *values
-                )
-        finally:
-            await conn.close()
+
+__all__ = ["QuestDBBackend", "QuestDBHistoryProvider", "QuestDBLoader"]
 

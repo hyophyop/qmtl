@@ -2,13 +2,15 @@
 
 from .datafetcher import DataFetcher
 from qmtl.runtime.sdk.data_io import HistoryProvider, EventRecorder
-from .historyprovider import QuestDBLoader
+from .historyprovider import QuestDBBackend, QuestDBHistoryProvider, QuestDBLoader
 from .eventrecorder import QuestDBRecorder
 from .binance_fetcher import BinanceFetcher
 
 __all__ = [
     "DataFetcher",
     "HistoryProvider",
+    "QuestDBBackend",
+    "QuestDBHistoryProvider",
     "QuestDBLoader",
     "EventRecorder",
     "QuestDBRecorder",

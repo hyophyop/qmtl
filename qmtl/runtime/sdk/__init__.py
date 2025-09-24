@@ -19,11 +19,19 @@ from .cli import main as _cli
 from .ws_client import WebSocketClient
 from . import arrow_cache
 from qmtl.runtime.sdk.data_io import (
+    AutoBackfillRequest,
     DataFetcher,
-    HistoryProvider,
     EventRecorder,
+    HistoryBackend,
+    HistoryProvider,
 )
-from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
+from qmtl.runtime.io import (
+    QuestDBBackend,
+    QuestDBHistoryProvider,
+    QuestDBLoader,
+    QuestDBRecorder,
+)
 from .backfill_engine import BackfillEngine
 from .util import parse_interval, parse_period, validate_tag, validate_name
 from .exceptions import (
@@ -73,8 +81,13 @@ __all__ = [
     "TagQueryManager",
     "WebSocketClient",
     "HistoryProvider",
+    "HistoryBackend",
     "DataFetcher",
     "EventRecorder",
+    "AutoBackfillRequest",
+    "AugmentedHistoryProvider",
+    "QuestDBBackend",
+    "QuestDBHistoryProvider",
     "QuestDBLoader",
     "QuestDBRecorder",
     "BackfillEngine",

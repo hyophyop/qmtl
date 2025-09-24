@@ -39,18 +39,18 @@ retrieve missing rows.  A ``DataFetcher`` exposes a single **asynchronous**
 structure.  When a provider is created without a fetcher, calling
 ``fill_missing`` will raise a ``RuntimeError``.
 
-The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
+The SDK ships with `QuestDBHistoryProvider` which reads from a QuestDB instance:
 
 ```python
-from qmtl.runtime.sdk import QuestDBLoader
+from qmtl.runtime.sdk import QuestDBHistoryProvider
 
-source = QuestDBLoader(
+source = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
 )
 
 # with an external fetcher supplying missing rows
 # fetcher = MyFetcher()
-# source = QuestDBLoader(
+# source = QuestDBHistoryProvider(
 #     dsn="postgresql://user:pass@localhost:8812/qdb",
 #     fetcher=fetcher,
 # )
@@ -83,7 +83,7 @@ class BinanceFetcher:
         )
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
     fetcher=fetcher,
 )
@@ -107,11 +107,16 @@ SDK.
 Historical data and event recording can be supplied when creating a `StreamInput`:
 
 ```python
-from qmtl.runtime.sdk import StreamInput, QuestDBLoader, QuestDBRecorder, EventRecorderService
+from qmtl.runtime.sdk import (
+    StreamInput,
+    QuestDBHistoryProvider,
+    QuestDBRecorder,
+    EventRecorderService,
+)
 
 stream = StreamInput(
     interval="60s",
-    history_provider=QuestDBLoader(
+    history_provider=QuestDBHistoryProvider(
         dsn="postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,
     ),
@@ -123,7 +128,8 @@ stream = StreamInput(
 )
 ```
 
-When the QuestDB loader or recorder is created without a ``table`` argument it
+When the QuestDB history provider (also exported as ``QuestDBLoader`` for
+backwards compatibility) or recorder is created without a ``table`` argument it
 automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
 explicitly to override this behaviour.
 

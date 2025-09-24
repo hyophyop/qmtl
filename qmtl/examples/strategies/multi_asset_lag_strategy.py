@@ -1,5 +1,5 @@
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
-from qmtl.runtime.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import pandas as pd
 
 class MultiAssetLagStrategy(Strategy):
@@ -8,14 +8,14 @@ class MultiAssetLagStrategy(Strategy):
             tags=["BTC", "price", "binance"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
+            history_provider=QuestDBHistoryProvider("postgresql://localhost:8812/qdb"),
             event_service=EventRecorderService(QuestDBRecorder("postgresql://localhost:8812/qdb")),
         )
         mstr_price = StreamInput(
             tags=["MSTR", "price", "nasdaq"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
+            history_provider=QuestDBHistoryProvider("postgresql://localhost:8812/qdb"),
             event_service=EventRecorderService(QuestDBRecorder("postgresql://localhost:8812/qdb")),
         )
         def lagged_corr(view):

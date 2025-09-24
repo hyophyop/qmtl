@@ -6,8 +6,9 @@ This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import Protocol, Any, TYPE_CHECKING
+from typing import Protocol, Any, TYPE_CHECKING, runtime_checkable
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import pandas as pd
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints
@@ -21,6 +22,39 @@ class DataFetcher(Protocol):
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
         ...
+
+
+@runtime_checkable
+class HistoryBackend(Protocol):
+    """Low-level storage backend used by :class:`HistoryProvider`."""
+
+    async def read_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        """Return rows for ``[start, end)``."""
+        ...
+
+    async def write_rows(
+        self, rows: pd.DataFrame, *, node_id: str, interval: int
+    ) -> None:
+        """Persist ``rows`` for ``(node_id, interval)``."""
+        ...
+
+    async def coverage(
+        self, *, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:
+        """Return inclusive timestamp ranges already stored."""
+        ...
+
+
+@dataclass(slots=True)
+class AutoBackfillRequest:
+    """Represents a pending backfill window for a ``(node_id, interval)`` pair."""
+
+    node_id: str
+    interval: int
+    start: int
+    end: int
 
 
 class HistoryProvider(ABC):
@@ -80,6 +114,8 @@ class EventRecorder(ABC):
 
 __all__ = [
     "DataFetcher",
+    "HistoryBackend",
+    "AutoBackfillRequest",
     "HistoryProvider",
     "EventRecorder",
 ]

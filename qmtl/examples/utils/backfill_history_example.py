@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.runtime.io import QuestDBLoader, BinanceFetcher
+from qmtl.runtime.io import QuestDBHistoryProvider, BinanceFetcher
 
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://localhost:8812/qdb",
     fetcher=fetcher,
 )
