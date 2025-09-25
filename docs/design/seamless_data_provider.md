@@ -2,15 +2,16 @@
 
 ## 개요
 
-QMTL의 새로운 **Seamless Data Provider** 시스템은 auto backfill 기능을 통해 투명한 데이터 접근을 제공하는 아키텍처입니다. 이 시스템은 기존의 `HistoryProvider`, `EventRecorder`, `DataFetcher` 컴포넌트들을 확장하여 마치 모든 데이터가 항상 사용 가능한 것처럼 동작하게 합니다.
+QMTL의 **Seamless Data Provider v2** 시스템은 auto backfill 기능에 더해 **정합성 파이프라인**, **분산 백필 코디네이터**, **SLA 정책 집행**, **스키마 레지스트리 거버넌스**를 통합한 아키텍처입니다. 기존의 `HistoryProvider`, `EventRecorder`, `DataFetcher` 컴포넌트들을 확장하여 마치 모든 데이터가 항상 사용 가능한 것처럼 동작할 뿐 아니라, 제공되는 데이터가 최신 스키마와 서비스 목표를 충족하는지를 보장합니다.
 
 ## 설계 목표
 
 1. **투명성**: 노드에서 데이터를 요청할 때 데이터의 소스나 가용성을 고민할 필요 없음
 2. **자동 백필**: 누락된 데이터를 자동으로 외부 소스에서 가져와 저장소에 채움
 3. **seamless transition**: 이력 데이터와 실시간 데이터 간의 매끄러운 전환
-4. **전략적 유연성**: 다양한 데이터 가용성 전략 지원
-5. **하위 호환성**: 기존 코드와의 호환성 유지
+4. **정합성 보증**: 스키마/시간 롤업과 리포트를 통해 데이터 품질을 시각화하고 차단
+5. **전략적 유연성**: 다양한 데이터 가용성 전략 지원
+6. **하위 호환성**: 기존 코드와의 호환성 유지
 
 ## 아키텍처 개요
 
@@ -22,12 +23,20 @@ graph TB
     
     subgraph "Seamless Data Provider Layer"
         SDP[SeamlessDataProvider]
+        SDP --> CP[ConformancePipeline]
+        CP --> FLAGS[Quality Flags / Reports]
+        FLAGS --> SLA[SLAPolicy Enforcement]
+        SLA --> DS
         subgraph "Data Sources (우선순위 순)"
             DS1[1. Cache Source<br/>메모리/로컬 캐시]
             DS2[2. Storage Source<br/>히스토리 저장소]
-            DS3[3. Auto Backfiller<br/>외부 API 백필]
+            DS3[3. Distributed Backfill Coordinator]
             DS4[4. Live Data Feed<br/>실시간 데이터]
         end
+        SLA --> DS1
+        SLA --> DS2
+        SLA --> DS3
+        SLA --> DS4
     end
     
     subgraph "Infrastructure Layer"
@@ -46,7 +55,16 @@ graph TB
 
 ## 핵심 컴포넌트
 
-### 1. DataAvailabilityStrategy (열거형)
+### 1. ConformancePipeline (컴포넌트)
+정합성 파이프라인은 `SchemaRollupStage`, `TemporalRollupStage`, `RegressionReportStage` 로 구성되며, 각 스테이지는 실패 시 요청을 차단하거나(기본값) `partial_ok=True` 옵션으로 허용할 수 있습니다. 생성된 리포트는 `qmtl://observability/seamless/<node>` 경로에 업로드되어 대시보드와 후속 감사 절차에 사용됩니다.
+
+### 2. SLAPolicy (구성)
+`SLAPolicy`는 지연(latency)과 신선도(freshness) 제한을 정의하며, `SeamlessDataProvider`는 각 요청의 단계별 소요 시간과 커버리지 정보를 추적하여 `seamless_sla_deadline_seconds` 히스토그램과 트레이스를 발행합니다. 위반 시 `SeamlessSLAExceeded` 예외가 발생하고, 경보는 `alert_rules.yml`의 `seamless-*` 규칙으로 전달됩니다.
+
+### 3. DistributedBackfillCoordinator (서비스)
+기존의 인메모리 스텁 대신 Raft 기반 코디네이터가 도입되었습니다. 이 서비스는 정렬된 리스(lease), 스테일 클레임 감지, 부분 완료율 추적을 수행하며 `backfill_completion_ratio` 메트릭을 노출합니다. 코디네이터는 `scripts/lease_recover.py`를 통해 수동 개입이 가능하도록 설계되어 있습니다.
+
+### 4. DataAvailabilityStrategy (열거형)
 데이터 가용성 처리 전략을 정의합니다:
 
 - **FAIL_FAST**: 데이터 없으면 즉시 예외 발생
@@ -54,7 +72,7 @@ graph TB
 - **PARTIAL_FILL**: 사용 가능한 데이터 즉시 반환, 백그라운드에서 백필
 - **SEAMLESS**: 모든 소스를 조합하여 투명한 데이터 제공
 
-### 2. DataSource (프로토콜)
+### 5. DataSource (프로토콜)
 모든 데이터 소스가 구현해야 하는 인터페이스:
 
 ```python
@@ -66,7 +84,7 @@ class DataSource(Protocol):
     async def coverage(...) -> list[tuple[int, int]]
 ```
 
-### 3. AutoBackfiller (프로토콜)
+### 6. AutoBackfiller (프로토콜)
 자동 백필 기능을 제공하는 인터페이스:
 
 ```python
@@ -76,11 +94,13 @@ class AutoBackfiller(Protocol):
     async def backfill_async(...) -> AsyncIterator[pd.DataFrame]
 ```
 
-### 4. SeamlessDataProvider (추상 클래스)
+### 7. SeamlessDataProvider (추상 클래스)
 핵심 로직을 구현하는 기본 클래스:
 
+- 정합성 파이프라인 실행 및 실패 시 요청 차단
 - 다중 데이터 소스 조정
 - 우선순위 기반 데이터 검색
+- SLA 정책 예산 계산 및 메트릭 발행
 - 자동 백필 트리거
 - 범위 병합 및 갭 감지
 
