@@ -13,6 +13,9 @@ from .history_coverage import (
     WarmupWindow,
 )
 from . import metrics as sdk_metrics
+from .conformance import ConformancePipeline
+from .backfill_coordinator import BackfillCoordinator, InMemoryBackfillCoordinator, Lease
+from .sla import SLAPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +126,9 @@ class SeamlessDataProvider(ABC):
         live_feed: Optional[LiveDataFeed] = None,
         max_backfill_chunk_size: int = 1000,
         enable_background_backfill: bool = True,
+        conformance: Optional[ConformancePipeline] = None,
+        coordinator: Optional[BackfillCoordinator] = None,
+        sla: Optional[SLAPolicy] = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -131,6 +137,9 @@ class SeamlessDataProvider(ABC):
         self.live_feed = live_feed
         self.max_backfill_chunk_size = max_backfill_chunk_size
         self.enable_background_backfill = enable_background_backfill
+        self._conformance = conformance
+        self._coordinator = coordinator or InMemoryBackfillCoordinator()
+        self._sla = sla
         
         # Internal state
         self._active_backfills: dict[str, bool] = {}
@@ -298,6 +307,12 @@ class SeamlessDataProvider(ABC):
             combined = pd.concat(result_frames, ignore_index=True)
             if 'ts' in combined.columns:
                 combined = combined.sort_values('ts')
+            # Run through conformance pipeline if provided (no-op otherwise)
+            try:
+                if self._conformance:
+                    combined, _report = self._conformance.normalize(combined, schema=None, interval=interval)
+            except Exception:  # pragma: no cover - defensive, keep behavior intact
+                pass
             return combined
         
         return pd.DataFrame()
@@ -343,7 +358,20 @@ class SeamlessDataProvider(ABC):
         key = f"{node_id}:{interval}:{start}:{end}"
         if self._active_backfills.get(key):
             return
+        # Process-local single-flight
         self._active_backfills[key] = True
+        # Coordinator claim (best-effort, works with in-memory stub)
+        lease: Lease | None = None
+        try:
+            if self._coordinator:
+                lease = await self._coordinator.claim(key, lease_ms=60_000)
+                if lease is None:
+                    # Claimed elsewhere; skip
+                    self._active_backfills.pop(key, None)
+                    return
+        except Exception:
+            # Coordinator unavailable, proceed with local guard only
+            lease = None
 
         async def _run() -> None:
             try:
@@ -370,6 +398,11 @@ class SeamlessDataProvider(ABC):
                     },
                 )
             finally:
+                try:
+                    if lease and self._coordinator:
+                        await self._coordinator.complete(lease)
+                except Exception:
+                    pass
                 self._active_backfills.pop(key, None)
 
         try:
