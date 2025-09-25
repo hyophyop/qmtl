@@ -307,6 +307,22 @@ class SeamlessDataProvider(ABC):
                             interval=interval,
                         )
                     else:
+                        lease: Lease | None = None
+                        skip_due_to_conflict = False
+                        if self._coordinator:
+                            try:
+                                lease = await self._coordinator.claim(
+                                    f"{node_id}:{interval}:{missing_start}:{missing_end}",
+                                    lease_ms=60_000,
+                                )
+                            except Exception:
+                                lease = None
+                            else:
+                                if lease is None:
+                                    skip_due_to_conflict = True
+                        if skip_due_to_conflict:
+                            continue
+
                         try:
                             sdk_metrics.observe_backfill_start(node_id, interval)
                             backfill_coro = self.backfiller.backfill(
@@ -327,8 +343,21 @@ class SeamlessDataProvider(ABC):
                             sdk_metrics.observe_backfill_complete(
                                 node_id, interval, missing_end
                             )
-                        except Exception:
+                            if lease and self._coordinator:
+                                try:
+                                    await self._coordinator.complete(lease)
+                                except Exception:
+                                    pass
+                        except Exception as exc:
                             sdk_metrics.observe_backfill_failure(node_id, interval)
+                            if lease and self._coordinator:
+                                try:
+                                    await self._coordinator.fail(
+                                        lease,
+                                        f"synchronous_backfill_failed: {exc}",
+                                    )
+                                except Exception:
+                                    pass
                             raise
         
         # Re-check availability
@@ -579,8 +608,11 @@ class SeamlessDataProvider(ABC):
             lease = None
 
         async def _run() -> None:
+            success = False
+            failure_reason: str | None = None
             try:
                 if not self.backfiller:
+                    failure_reason = "no_backfiller"
                     return
                 sdk_metrics.observe_backfill_start(node_id, interval)
                 await self.backfiller.backfill(
@@ -591,7 +623,9 @@ class SeamlessDataProvider(ABC):
                     target_storage=self.storage_source,
                 )
                 sdk_metrics.observe_backfill_complete(node_id, interval, end)
-            except Exception:
+                success = True
+            except Exception as exc:
+                failure_reason = f"background_backfill_failed: {exc}"
                 sdk_metrics.observe_backfill_failure(node_id, interval)
                 logger.exception(
                     "seamless.backfill.background_failed",
@@ -603,11 +637,16 @@ class SeamlessDataProvider(ABC):
                     },
                 )
             finally:
-                try:
-                    if lease and self._coordinator:
-                        await self._coordinator.complete(lease)
-                except Exception:
-                    pass
+                if lease and self._coordinator:
+                    try:
+                        if success:
+                            await self._coordinator.complete(lease)
+                        else:
+                            await self._coordinator.fail(
+                                lease, failure_reason or "background_backfill_failed"
+                            )
+                    except Exception:
+                        pass
                 self._active_backfills.pop(key, None)
 
         try:

@@ -21,6 +21,7 @@ from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
+from qmtl.runtime.sdk.backfill_coordinator import Lease
 
 
 class _StaticSource:
@@ -151,6 +152,44 @@ class _CountingBackfiller:
     async def backfill_async(self, *args, **kwargs):  # pragma: no cover - not used here
         yield pd.DataFrame()
 
+
+class _FailingBackfiller:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error or RuntimeError("boom")
+
+    async def can_backfill(self, *args, **kwargs) -> bool:
+        return True
+
+    async def backfill(self, *args, **kwargs):
+        raise self.error
+
+    async def backfill_async(self, *args, **kwargs):  # pragma: no cover - not used
+        yield pd.DataFrame()
+
+
+class _RecordingCoordinator:
+    def __init__(self) -> None:
+        self.claims: list[tuple[str, int]] = []
+        self.completes: list[Lease] = []
+        self.fails: list[tuple[Lease, str]] = []
+        self.return_none_next = False
+        self.raise_on_claim = False
+
+    async def claim(self, key: str, lease_ms: int) -> Lease | None:
+        self.claims.append((key, lease_ms))
+        if self.raise_on_claim:
+            self.raise_on_claim = False
+            raise RuntimeError("claim failure")
+        if self.return_none_next:
+            self.return_none_next = False
+            return None
+        return Lease(key=key, token=f"token-{len(self.claims)}", lease_until_ms=lease_ms)
+
+    async def complete(self, lease: Lease) -> None:
+        self.completes.append(lease)
+
+    async def fail(self, lease: Lease, reason: str) -> None:
+        self.fails.append((lease, reason))
 
 @pytest.mark.asyncio
 async def test_background_backfill_single_flight_dedup() -> None:
@@ -359,3 +398,60 @@ async def test_sla_sync_gap_limit_enforced() -> None:
         await provider.ensure_data_available(0, 100, node_id="node", interval=10)
 
     assert exc.value.phase == "sync_gap"
+
+
+@pytest.mark.asyncio
+async def test_background_backfill_failure_marks_lease_failed() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _FailingBackfiller(RuntimeError("background exploded"))
+    coordinator = _RecordingCoordinator()
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        coordinator=coordinator,
+    )
+
+    ok = await provider.ensure_data_available(0, 100, node_id="node", interval=10)
+    assert ok is False
+
+    # Allow background task to run
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    assert len(coordinator.claims) == 1
+    assert not coordinator.completes
+    assert len(coordinator.fails) == 1
+    lease, reason = coordinator.fails[0]
+    assert lease.key == "node:10:0:100"
+    assert "background_backfill_failed" in reason
+    key = ("node", "10")
+    assert sdk_metrics.backfill_failure_total._vals[key] == 1  # type: ignore[attr-defined]
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_sync_backfill_claims_and_completes_lease() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _CountingBackfiller(storage)
+    coordinator = _RecordingCoordinator()
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        coordinator=coordinator,
+        enable_background_backfill=False,
+    )
+
+    ok = await provider.ensure_data_available(0, 100, node_id="node", interval=10)
+    assert ok is True
+    assert len(backfiller.calls) == 1
+    assert len(coordinator.claims) == 1
+    assert len(coordinator.completes) == 1
+    assert not coordinator.fails
+    lease = coordinator.completes[0]
+    assert lease.key == "node:10:0:100"
+    assert lease.token.startswith("token-")
+    key = ("node", "10")
+    assert sdk_metrics.backfill_last_timestamp._vals[key] == 100  # type: ignore[attr-defined]
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
