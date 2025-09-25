@@ -1,23 +1,23 @@
 # Seamless Migration to Data Provider v2
 
-> **Status:** Migration guidance is provisional. The runtime continues to expose
-> the v1 behaviour by default, and many of the v2 capabilities referenced below
-> are still being implemented. Treat the checklist as preparation work for when
-> issues #1148–#1152 land rather than an immediately actionable runbook.
+> **Status:** Migration guidance is now actionable. The distributed backfill
+> coordinator, SLA engine, and supporting metrics ship with the default runtime.
+> Use this checklist to move strategies onto the v2 stack and retire v1
+> fallbacks.
 
-The Seamless Data Provider v2 rollout will eventually introduce mandatory
-conformance checks, SLA enforcement, and upgraded governance. Until the
-underlying services ship, this document focuses on the steps teams can take to
-stay aligned with the roadmap and avoid premature configuration changes.
+The Seamless Data Provider v2 rollout introduces mandatory SLA enforcement,
+distributed backfill coordination, and upgraded observability. Schema registry
+governance remains optional, but teams should begin adopting it as the final v2
+milestone.
 
 ## Prerequisites
 
-- Track the release that introduces the distributed coordinator and SLA engine.
-  The current package exports only the in-memory coordinator stub.
-- Hold off on any Helm deployments for `seamless-backfill-coordinator`; the
-  charts will be published alongside the implementation work.
-- Skip the observability bundle for now. The referenced Jsonnet manifests do not
-  exist yet and will be added when metrics become available.
+- Ensure the `seamless-backfill-coordinator` service is deployed and reachable;
+  set `QMTL_SEAMLESS_COORDINATOR_URL` in runtime environments.
+- Roll out the observability bundle from `operations/monitoring/seamless_v2.jsonnet`
+  so `backfill_completion_ratio` and `seamless_sla_deadline_seconds` surface in
+  Grafana.
+- Capture SLA targets in configuration. Policies are now enforced at runtime.
 
 ## Migration Stages
 
@@ -31,22 +31,21 @@ stay aligned with the roadmap and avoid premature configuration changes.
 3. Document schema assumptions so promotion to strict mode can happen quickly
    once the registry support lands.
 
-### 2. Prepare for the Distributed Backfill Coordinator
+### 2. Adopt the Distributed Backfill Coordinator
 
-1. Keep using `InMemoryBackfillCoordinator` until the Raft implementation is
-   merged. Attempting to switch today will raise import errors.
-2. Inventory which strategies will require coordinated leases so you can test
-   with the new service once available.
-3. Plan integration tests around the future `backfill_completion_ratio` metric
-   even though it is not emitted yet.
+1. Configure strategies to rely on the default coordinator. When the URL is set
+   the SDK instantiates `DistributedBackfillCoordinator` automatically.
+2. Validate `backfill_completion_ratio` in staging to ensure leases converge and
+   shards are not duplicated.
+3. Document recovery procedures (`scripts/lease_recover.py`) for on-call use.
 
-### 3. Draft SLAPolicy Expectations
+### 3. Enforce SLAPolicy Budgets
 
-1. Capture target deadlines in documentation or configuration comments. The
-   `SLAPolicy` dataclass currently records intent only.
-2. Mock incident walkthroughs to validate escalation paths before alerts exist.
-3. Contribute to the SLA runbook template so it is ready for the enforcement
-   launch.
+1. Wire concrete deadlines into `SLAPolicy` instances for each Seamless consumer.
+2. Verify that breaches raise `SeamlessSLAExceeded` in staging and that alerts
+   fire via the `seamless-sla-*` rules.
+3. Update runbooks with the new troubleshooting flow described in the SLA
+   dashboards guide.
 
 ### 4. Plan Schema Validation Rollout
 
@@ -58,12 +57,11 @@ stay aligned with the roadmap and avoid premature configuration changes.
 
 ### 5. Expand Test Coverage
 
-- Keep the existing Seamless validation suite in CI so regressions surface even
-  before v2 lands.
-- Add property-based tests with Hypothesis for critical node paths to build
-  confidence ahead of the rollout.
-- Experiment with the `seamless_fault_injection` fixture locally; the retry
-  semantics will evolve alongside the SLA implementation.
+- Keep the existing Seamless validation suite in CI so regressions surface early.
+- Add property-based tests with Hypothesis for critical node paths to cover the
+  distributed coordinator edge cases.
+- Exercise the `seamless_fault_injection` fixture to validate retry semantics
+  against SLA deadlines.
 
 ## Rollback Plan
 
@@ -80,11 +78,12 @@ tracker so lessons flow back into the runbooks.
 
 ## Definition of Done
 
-Do not mark migrations complete until the supporting features are live. When the
-implementation is available, use the following criteria:
+Mark migrations complete when the following criteria hold:
 
 - Conformance pipeline runs in blocking mode with no open regressions.
 - Backfill coordinator leases and SLA dashboards show healthy baselines.
-- Schema validation is strict and documented.
+- Schema validation is strict and documented (or an approved exception is
+  recorded while registry work finishes).
 - Tests cover regressions, failure injection, and observability guards.
-- The strategy runbooks no longer mention the provisional v1 behaviour.
+- Strategy runbooks reference the distributed coordinator and SLA dashboards
+  instead of the provisional v1 behaviour.

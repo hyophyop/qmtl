@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Protocol, AsyncIterator, Optional, Callable
+from typing import Protocol, AsyncIterator, Optional, Callable, Awaitable, TypeVar
 from abc import ABC
 import pandas as pd
 from enum import Enum
 import asyncio
 import logging
+import os
+import time
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -14,12 +16,20 @@ from .history_coverage import (
 )
 from . import metrics as sdk_metrics
 from .conformance import ConformancePipeline, ConformanceReport
-from .backfill_coordinator import BackfillCoordinator, InMemoryBackfillCoordinator, Lease
+from .backfill_coordinator import (
+    BackfillCoordinator,
+    DistributedBackfillCoordinator,
+    InMemoryBackfillCoordinator,
+    Lease,
+)
 from .sla import SLAPolicy
+from .exceptions import SeamlessSLAExceeded
 
 logger = logging.getLogger(__name__)
 
 """Seamless Data Provider interfaces for transparent data access with auto-backfill."""
+
+T = TypeVar("T")
 
 
 class DataAvailabilityStrategy(Enum):
@@ -153,7 +163,7 @@ class SeamlessDataProvider(ABC):
         self.max_backfill_chunk_size = max_backfill_chunk_size
         self.enable_background_backfill = enable_background_backfill
         self._conformance = conformance
-        self._coordinator = coordinator or InMemoryBackfillCoordinator()
+        self._coordinator = coordinator or self._create_default_coordinator()
         self._sla = sla
         self._partial_ok = bool(partial_ok)
         self._last_conformance_report: Optional[ConformanceReport] = None
@@ -166,7 +176,21 @@ class SeamlessDataProvider(ABC):
         """Return the most recent conformance report emitted by ``fetch``."""
 
         return self._last_conformance_report
-    
+
+    def _create_default_coordinator(self) -> BackfillCoordinator:
+        url = os.getenv("QMTL_SEAMLESS_COORDINATOR_URL", "").strip()
+        if url:
+            try:
+                return DistributedBackfillCoordinator(url)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("seamless.coordinator.init_failed", exc_info=exc)
+        return InMemoryBackfillCoordinator()
+
+    def _build_sla_tracker(self, node_id: str) -> "_SLATracker | None":
+        if not self._sla:
+            return None
+        return _SLATracker(self._sla, node_id=node_id)
+
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
@@ -175,14 +199,28 @@ class SeamlessDataProvider(ABC):
         
         Implementation follows the priority order and strategy configuration.
         """
+        tracker = self._build_sla_tracker(node_id)
+
         if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
-            return await self._fetch_fail_fast(start, end, node_id=node_id, interval=interval)
+            result = await self._fetch_fail_fast(
+                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+            )
         elif self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
-            return await self._fetch_auto_backfill(start, end, node_id=node_id, interval=interval)
+            result = await self._fetch_auto_backfill(
+                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+            )
         elif self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
-            return await self._fetch_partial_fill(start, end, node_id=node_id, interval=interval)
+            result = await self._fetch_partial_fill(
+                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+            )
         else:  # SEAMLESS
-            return await self._fetch_seamless(start, end, node_id=node_id, interval=interval)
+            result = await self._fetch_seamless(
+                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+            )
+
+        if tracker:
+            tracker.observe_total()
+        return result
     
     async def coverage(
         self, *, node_id: str, interval: int
@@ -195,7 +233,9 @@ class SeamlessDataProvider(ABC):
             try:
                 ranges = await source.coverage(node_id=node_id, interval=interval)
                 all_ranges.extend(ranges)
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, SeamlessSLAExceeded):
+                    raise
                 continue  # Skip failed sources
         
         # Merge overlapping ranges with interval-aware semantics
@@ -207,7 +247,13 @@ class SeamlessDataProvider(ABC):
             return self._merge_ranges(all_ranges)
     
     async def ensure_data_available(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        sla_tracker: "_SLATracker | None" = None,
     ) -> bool:
         """
         Ensure data is available for the given range.
@@ -216,9 +262,33 @@ class SeamlessDataProvider(ABC):
         Returns True if data will be available after this call.
         """
         # Check current availability
-        available_ranges = await self.coverage(node_id=node_id, interval=interval)
+        if sla_tracker:
+            available_ranges = await sla_tracker.observe_async(
+                "storage_wait",
+                sla_tracker.policy.max_wait_storage_ms,
+                self.coverage(node_id=node_id, interval=interval),
+            )
+        else:
+            available_ranges = await self.coverage(node_id=node_id, interval=interval)
         missing_ranges = self._find_missing_ranges(start, end, available_ranges, interval)
-        
+
+        if self._sla and self._sla.max_sync_gap_bars is not None and missing_ranges:
+            missing_bars = 0
+            for gap_start, gap_end in missing_ranges:
+                if interval <= 0:
+                    continue
+                missing_bars += max(0, int((gap_end - gap_start) / interval))
+            if missing_bars > self._sla.max_sync_gap_bars:
+                interval_ms = max(interval, 0) * 1000
+                elapsed_ms = missing_bars * interval_ms
+                budget_ms = self._sla.max_sync_gap_bars * interval_ms
+                raise SeamlessSLAExceeded(
+                    "sync_gap",
+                    node_id=node_id,
+                    elapsed_ms=float(elapsed_ms),
+                    budget_ms=int(budget_ms) if interval_ms else None,
+                )
+
         if not missing_ranges:
             return True
         
@@ -231,16 +301,29 @@ class SeamlessDataProvider(ABC):
                 if can_backfill:
                     if self.enable_background_backfill:
                         await self._start_background_backfill(
-                            missing_start, missing_end, node_id=node_id, interval=interval
+                            missing_start,
+                            missing_end,
+                            node_id=node_id,
+                            interval=interval,
                         )
                     else:
                         try:
                             sdk_metrics.observe_backfill_start(node_id, interval)
-                            await self.backfiller.backfill(
-                                missing_start, missing_end,
-                                node_id=node_id, interval=interval,
+                            backfill_coro = self.backfiller.backfill(
+                                missing_start,
+                                missing_end,
+                                node_id=node_id,
+                                interval=interval,
                                 target_storage=self.storage_source,
                             )
+                            if sla_tracker:
+                                await sla_tracker.observe_async(
+                                    "backfill_wait",
+                                    sla_tracker.policy.max_wait_backfill_ms,
+                                    backfill_coro,
+                                )
+                            else:
+                                await backfill_coro
                             sdk_metrics.observe_backfill_complete(
                                 node_id, interval, missing_end
                             )
@@ -249,9 +332,16 @@ class SeamlessDataProvider(ABC):
                             raise
         
         # Re-check availability
-        updated_ranges = await self.coverage(node_id=node_id, interval=interval)
+        if sla_tracker:
+            updated_ranges = await sla_tracker.observe_async(
+                "storage_wait",
+                sla_tracker.policy.max_wait_storage_ms,
+                self.coverage(node_id=node_id, interval=interval),
+            )
+        else:
+            updated_ranges = await self.coverage(node_id=node_id, interval=interval)
         final_missing = self._find_missing_ranges(start, end, updated_ranges, interval)
-        
+
         return len(final_missing) == 0
     
     def _get_ordered_sources(self) -> list[DataSource]:
@@ -264,7 +354,13 @@ class SeamlessDataProvider(ABC):
         return sorted(sources, key=lambda s: s.priority.value)
     
     async def _fetch_seamless(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        sla_tracker: "_SLATracker | None" = None,
     ) -> pd.DataFrame:
         """Implement seamless fetching strategy."""
         # Try each source in priority order
@@ -282,7 +378,15 @@ class SeamlessDataProvider(ABC):
             for range_start, range_end in remaining_ranges:
                 try:
                     # Check what this source can provide
-                    source_coverage = await source.coverage(node_id=node_id, interval=interval)
+                    coverage_coro = source.coverage(node_id=node_id, interval=interval)
+                    if sla_tracker and source.priority == DataSourcePriority.STORAGE:
+                        source_coverage = await sla_tracker.observe_async(
+                            "storage_wait",
+                            sla_tracker.policy.max_wait_storage_ms,
+                            coverage_coro,
+                        )
+                    else:
+                        source_coverage = await coverage_coro
                     available_in_range = self._intersect_ranges(
                         [(range_start, range_end)], source_coverage
                     )
@@ -290,9 +394,17 @@ class SeamlessDataProvider(ABC):
                     if available_in_range:
                         # Fetch available data from this source
                         for avail_start, avail_end in available_in_range:
-                            frame = await source.fetch(
+                            fetch_coro = source.fetch(
                                 avail_start, avail_end, node_id=node_id, interval=interval
                             )
+                            if sla_tracker and source.priority == DataSourcePriority.STORAGE:
+                                frame = await sla_tracker.observe_async(
+                                    "storage_wait",
+                                    sla_tracker.policy.max_wait_storage_ms,
+                                    fetch_coro,
+                                )
+                            else:
+                                frame = await fetch_coro
                             if not frame.empty:
                                 result_frames.append(frame)
                         
@@ -305,7 +417,9 @@ class SeamlessDataProvider(ABC):
                         new_remaining.extend(still_missing)
                     else:
                         new_remaining.append((range_start, range_end))
-                except Exception:
+                except Exception as exc:
+                    if isinstance(exc, SeamlessSLAExceeded):
+                        raise
                     # If source fails, keep the range for other sources
                     new_remaining.append((range_start, range_end))
             
@@ -316,15 +430,27 @@ class SeamlessDataProvider(ABC):
             for range_start, range_end in remaining_ranges:
                 try:
                     sdk_metrics.observe_backfill_start(node_id, interval)
-                    backfilled = await self.backfiller.backfill(
-                        range_start, range_end,
-                        node_id=node_id, interval=interval,
-                        target_storage=self.storage_source
+                    backfill_coro = self.backfiller.backfill(
+                        range_start,
+                        range_end,
+                        node_id=node_id,
+                        interval=interval,
+                        target_storage=self.storage_source,
                     )
+                    if sla_tracker:
+                        backfilled = await sla_tracker.observe_async(
+                            "backfill_wait",
+                            sla_tracker.policy.max_wait_backfill_ms,
+                            backfill_coro,
+                        )
+                    else:
+                        backfilled = await backfill_coro
                     if not backfilled.empty:
                         result_frames.append(backfilled)
                     sdk_metrics.observe_backfill_complete(node_id, interval, range_end)
-                except Exception:
+                except Exception as exc:
+                    if isinstance(exc, SeamlessSLAExceeded):
+                        raise
                     sdk_metrics.observe_backfill_failure(node_id, interval)
                     continue
         
@@ -353,7 +479,13 @@ class SeamlessDataProvider(ABC):
         return pd.DataFrame()
     
     async def _fetch_fail_fast(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        sla_tracker: "_SLATracker | None" = None,
     ) -> pd.DataFrame:
         """Fail fast strategy - only use existing data."""
         for source in self._get_ordered_sources():
@@ -362,29 +494,62 @@ class SeamlessDataProvider(ABC):
                     start, end, node_id=node_id, interval=interval
                 )
                 if available:
-                    return await source.fetch(start, end, node_id=node_id, interval=interval)
-            except Exception:
+                    fetch_coro = source.fetch(start, end, node_id=node_id, interval=interval)
+                    if sla_tracker and source.priority == DataSourcePriority.STORAGE:
+                        return await sla_tracker.observe_async(
+                            "storage_wait",
+                            sla_tracker.policy.max_wait_storage_ms,
+                            fetch_coro,
+                        )
+                    return await fetch_coro
+            except Exception as exc:
+                if isinstance(exc, SeamlessSLAExceeded):
+                    raise
                 continue
         
         raise RuntimeError(f"No data available for range [{start}, {end}] in fail-fast mode")
     
     async def _fetch_auto_backfill(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        sla_tracker: "_SLATracker | None" = None,
     ) -> pd.DataFrame:
         """Auto-backfill strategy - ensure data is backfilled before returning."""
-        await self.ensure_data_available(start, end, node_id=node_id, interval=interval)
-        return await self._fetch_seamless(start, end, node_id=node_id, interval=interval)
+        await self.ensure_data_available(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            sla_tracker=sla_tracker,
+        )
+        return await self._fetch_seamless(
+            start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
+        )
     
     async def _fetch_partial_fill(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        sla_tracker: "_SLATracker | None" = None,
     ) -> pd.DataFrame:
         """Partial fill strategy - return what's available, backfill in background."""
         # Start background backfill but don't wait
         if self.backfiller:
-            await self._start_background_backfill(start, end, node_id=node_id, interval=interval)
-        
+            await self._start_background_backfill(
+                start, end, node_id=node_id, interval=interval
+            )
+
         # Return what's currently available
-        return await self._fetch_seamless(start, end, node_id=node_id, interval=interval)
+        return await self._fetch_seamless(
+            start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
+        )
     
     async def _start_background_backfill(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -583,6 +748,55 @@ class SeamlessDataProvider(ABC):
             remaining.extend(segments)
 
         return self._merge_ranges(sorted(remaining))
+
+
+class _SLATracker:
+    def __init__(self, policy: SLAPolicy, *, node_id: str) -> None:
+        self.policy = policy
+        self.node_id = node_id
+        self._request_start = time.monotonic()
+
+    async def observe_async(
+        self, phase: str, budget_ms: int | None, awaitable: Awaitable[T]
+    ) -> T:
+        start = time.monotonic()
+        try:
+            result = await awaitable
+        except Exception:
+            elapsed_ms = (time.monotonic() - start) * 1000.0
+            self._record_phase(phase, elapsed_ms, budget_ms)
+            raise
+        else:
+            elapsed_ms = (time.monotonic() - start) * 1000.0
+            self._record_phase(phase, elapsed_ms, budget_ms)
+            return result
+
+    def observe_total(self) -> None:
+        elapsed_ms = (time.monotonic() - self._request_start) * 1000.0
+        self._record_phase("total", elapsed_ms, self.policy.total_deadline_ms)
+
+    def _record_phase(self, phase: str, elapsed_ms: float, budget_ms: int | None) -> None:
+        sdk_metrics.observe_sla_phase_duration(
+            node_id=self.node_id,
+            phase=phase,
+            duration_seconds=elapsed_ms / 1000.0,
+        )
+        if budget_ms is not None and elapsed_ms > budget_ms:
+            logger.error(
+                "seamless.sla.violation",
+                extra={
+                    "node_id": self.node_id,
+                    "phase": phase,
+                    "elapsed_ms": elapsed_ms,
+                    "budget_ms": budget_ms,
+                },
+            )
+            raise SeamlessSLAExceeded(
+                phase,
+                node_id=self.node_id,
+                elapsed_ms=elapsed_ms,
+                budget_ms=budget_ms,
+            )
 
 
 __all__ = [
