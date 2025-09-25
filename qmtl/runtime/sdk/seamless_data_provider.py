@@ -307,6 +307,22 @@ class SeamlessDataProvider(ABC):
                             interval=interval,
                         )
                     else:
+                        lease: Lease | None = None
+                        skip_due_to_conflict = False
+                        if self._coordinator:
+                            try:
+                                lease = await self._coordinator.claim(
+                                    f"{node_id}:{interval}:{missing_start}:{missing_end}",
+                                    lease_ms=60_000,
+                                )
+                            except Exception:
+                                lease = None
+                            else:
+                                if lease is None:
+                                    skip_due_to_conflict = True
+                        if skip_due_to_conflict:
+                            continue
+
                         try:
                             sdk_metrics.observe_backfill_start(node_id, interval)
                             backfill_coro = self.backfiller.backfill(
@@ -327,8 +343,21 @@ class SeamlessDataProvider(ABC):
                             sdk_metrics.observe_backfill_complete(
                                 node_id, interval, missing_end
                             )
-                        except Exception:
+                            if lease and self._coordinator:
+                                try:
+                                    await self._coordinator.complete(lease)
+                                except Exception:
+                                    pass
+                        except Exception as exc:
                             sdk_metrics.observe_backfill_failure(node_id, interval)
+                            if lease and self._coordinator:
+                                try:
+                                    await self._coordinator.fail(
+                                        lease,
+                                        f"synchronous_backfill_failed: {exc}",
+                                    )
+                                except Exception:
+                                    pass
                             raise
         
         # Re-check availability
@@ -583,7 +612,7 @@ class SeamlessDataProvider(ABC):
             failure_reason: str | None = None
             try:
                 if not self.backfiller:
-                    success = True
+                    failure_reason = "no_backfiller"
                     return
                 sdk_metrics.observe_backfill_start(node_id, interval)
                 await self.backfiller.backfill(
@@ -596,6 +625,9 @@ class SeamlessDataProvider(ABC):
                 sdk_metrics.observe_backfill_complete(node_id, interval, end)
                 success = True
             except Exception as exc:
+                failure_reason = (
+                    f"background_backfill_failed ({exc.__class__.__name__}): {exc}"
+                )
                 sdk_metrics.observe_backfill_failure(node_id, interval)
                 logger.exception(
                     "seamless.backfill.background_failed",
@@ -606,18 +638,17 @@ class SeamlessDataProvider(ABC):
                         "end": end,
                     },
                 )
-                failure_reason = f"{exc.__class__.__name__}: {exc}"
             finally:
-                try:
-                    if lease and self._coordinator:
+                if lease and self._coordinator:
+                    try:
                         if success:
                             await self._coordinator.complete(lease)
                         else:
                             await self._coordinator.fail(
-                                lease, reason=failure_reason or "Unknown error"
+                                lease, failure_reason or "background_backfill_failed"
                             )
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
                 self._active_backfills.pop(key, None)
 
         try:
