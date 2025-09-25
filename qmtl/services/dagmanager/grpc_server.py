@@ -34,6 +34,8 @@ class _GrpcStream(StreamSender):
         self._ack = threading.Event()
         self._last_ack = AckStatus.OK
         self._pending: deque[DiffChunk] = deque()
+        self._ack_lock = threading.Lock()
+        self._pending_ack = 0
 
     def send(self, chunk: DiffChunk) -> None:
         self._pending.append(chunk)
@@ -49,19 +51,26 @@ class _GrpcStream(StreamSender):
 
         start = time.monotonic()
         while True:
-            if self._ack.is_set():
-                self._ack.clear()
-                return self._last_ack
+            if self._ack.wait(timeout=0.05):
+                with self._ack_lock:
+                    if self._pending_ack > 0:
+                        self._pending_ack -= 1
+                        if self._pending_ack == 0:
+                            self._ack.clear()
+                        return self._last_ack
+                    self._ack.clear()
             if time.monotonic() - start > 1.0:
-                self._last_ack = AckStatus.TIMEOUT
+                with self._ack_lock:
+                    self._last_ack = AckStatus.TIMEOUT
                 return self._last_ack
-            time.sleep(0.05)
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:
         if self._pending:
             self._pending.popleft()
-        self._last_ack = status
-        self._ack.set()
+        with self._ack_lock:
+            self._last_ack = status
+            self._pending_ack += 1
+            self._ack.set()
 
     def ack_status(self) -> AckStatus:
         return self._last_ack
