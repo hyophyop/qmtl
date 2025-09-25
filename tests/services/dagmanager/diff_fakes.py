@@ -7,6 +7,7 @@ from typing import Any
 from qmtl.services.dagmanager.diff_service import NodeRepository, QueueManager, StreamSender
 from qmtl.services.dagmanager.monitor import AckStatus
 from qmtl.services.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.kafka_admin import TopicExistsError
 
 
 class FakeRepo(NodeRepository):
@@ -156,7 +157,14 @@ class FakeAdmin:
         return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
+        if name in self.topics:
+            raise TopicExistsError
         self.created.append((name, num_partitions, replication_factor, config))
+        self.topics[name] = {
+            "config": dict(config or {}),
+            "num_partitions": num_partitions,
+            "replication_factor": replication_factor,
+        }
 
 
 __all__ = [
