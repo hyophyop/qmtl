@@ -21,7 +21,7 @@ implementation tracked in issue #1148.
 ## Dashboard Bundle
 
 Import `operations/monitoring/seamless_v2.jsonnet` (or the rendered JSON) into
-Grafana to provision the three core dashboards:
+Grafana to provision the three core dashboards shipped with the repository:
 
 1. **Seamless SLA Overview** – shows `seamless_sla_deadline_seconds`
    histograms, per-domain latency percentiles, and an error budget gauge.
@@ -43,11 +43,46 @@ The runtime now emits the following metrics:
 - `backfill_completion_ratio` – gauge reporting per-lease completion as
   observed by the distributed coordinator.
 - `seamless_conformance_flag_total` – counter populated by
-  `ConformancePipeline` when normalisation warnings occur.
+  `ConformancePipeline` when normalisation warnings occur. Individual flag
+  types appear in the dashboard's "Flag Breakdown" table, while aggregate
+  warnings increment `seamless_conformance_warning_total`.
 
-Alert rules under the `seamless-*` prefix have been added to `alert_rules.yml`.
+Alert rules under the `seamless-*` prefix have been added to `alert_rules.yml`:
+
+- `SeamlessSla99thDegraded` raises a warning when the 99th percentile of
+  `seamless_sla_deadline_seconds` climbs above budget for five consecutive
+  minutes.
+- `SeamlessBackfillStuckLease` pages when `backfill_completion_ratio` stays
+  below 50% for any lease.
+- `SeamlessConformanceFlagSpike` notifies when a surge of conformance flags is
+  observed over a 15-minute window.
+
 Ensure PagerDuty and Slack routes are configured in environments where these
-alerts should page.
+alerts should page. The alert annotations link back to this runbook.
+
+## Validation Tooling
+
+Two operational scripts now ship alongside the dashboards:
+
+- `scripts/inject_sla_violation.py` emits synthetic SLA metrics, optionally
+  writing the Prometheus exposition text to disk or serving it temporarily via
+  HTTP. Use it to validate Grafana panels and alert rules without waiting for a
+  live incident:
+
+  ```bash
+  uv run scripts/inject_sla_violation.py seam-node-1 --duration 240 --repetitions 5 --write-to /tmp/seamless.metrics
+  ```
+
+- `scripts/lease_recover.py` releases stuck coordinator leases by failing or
+  completing them explicitly. Provide `KEY:TOKEN` pairs exported from the
+  coordinator's inspection endpoint. Example:
+
+  ```bash
+  uv run scripts/lease_recover.py --coordinator-url https://coordinator/v1 lease-A:deadbeef lease-B:feedface
+  ```
+
+Both scripts include `--dry-run` or `--serve` modes to simplify verification in
+non-production environments.
 
 ## Tracing and Logging
 
