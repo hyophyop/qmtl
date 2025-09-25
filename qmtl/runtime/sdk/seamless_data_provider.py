@@ -579,8 +579,11 @@ class SeamlessDataProvider(ABC):
             lease = None
 
         async def _run() -> None:
+            success = False
+            failure_reason: str | None = None
             try:
                 if not self.backfiller:
+                    success = True
                     return
                 sdk_metrics.observe_backfill_start(node_id, interval)
                 await self.backfiller.backfill(
@@ -591,7 +594,8 @@ class SeamlessDataProvider(ABC):
                     target_storage=self.storage_source,
                 )
                 sdk_metrics.observe_backfill_complete(node_id, interval, end)
-            except Exception:
+                success = True
+            except Exception as exc:
                 sdk_metrics.observe_backfill_failure(node_id, interval)
                 logger.exception(
                     "seamless.backfill.background_failed",
@@ -602,10 +606,16 @@ class SeamlessDataProvider(ABC):
                         "end": end,
                     },
                 )
+                failure_reason = f"{exc.__class__.__name__}: {exc}"
             finally:
                 try:
                     if lease and self._coordinator:
-                        await self._coordinator.complete(lease)
+                        if success:
+                            await self._coordinator.complete(lease)
+                        else:
+                            await self._coordinator.fail(
+                                lease, reason=failure_reason or "Unknown error"
+                            )
                 except Exception:
                     pass
                 self._active_backfills.pop(key, None)
