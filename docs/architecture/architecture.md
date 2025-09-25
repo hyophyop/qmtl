@@ -419,6 +419,18 @@ class GeneralStrategy(Strategy):
 
         self.add_nodes([price_stream, signal_node])
 
+---
+
+## Seamless Data Provider (SDK)
+
+Seamless DP는 히스토리 데이터의 단일 진입점이며, 캐시/스토리지/백필/라이브 소스를 우선순위에 따라 결합해 투명한 읽기를 제공합니다. 구현은 `qmtl/runtime/sdk/seamless_data_provider.py`에 있으며, 다음 보강 모듈과 연계됩니다.
+
+- 정합성(Conformance): `qmtl/runtime/sdk/conformance.py` — 스키마/타임라인 정규화 인터페이스(초기 no‑op)
+- 단일 비행(Coordinator): `qmtl/runtime/sdk/backfill_coordinator.py` — in‑memory 스텁(분산형으로 대체 가능)
+- SLA: `qmtl/runtime/sdk/sla.py` — 전략/요청 레벨 제한(옵션)
+
+기본 동작은 변경하지 않으며, 보강 모듈은 옵셔널로 주입됩니다. `history_coverage` 유틸리티는 여전히 커버리지 SSOT로 사용되어 누락 구간 탐지와 병합을 담당합니다.
+
 # 실행 예시 (월드 주도)
 if __name__ == "__main__":
     Runner.run(
