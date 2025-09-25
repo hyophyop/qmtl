@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Iterable, List, TYPE_CHECKING
+from typing import Dict, Iterable, List, MutableMapping, TYPE_CHECKING
 import math
 from queue import Empty, Queue
 
@@ -68,6 +68,12 @@ class _SentinelWeightEvent:
     weight: float
     sentinel_version: str
     world_id: str | None
+
+
+@dataclass
+class _SentinelWeightCacheEntry:
+    weight: float
+    version_label: str
 
 
 class CrossContextTopicReuseError(RuntimeError):
@@ -158,13 +164,20 @@ class DiffService:
         queue_manager: QueueManager,
         stream_sender: StreamSender,
         *,
-        sentinel_weights: dict[tuple[str, str], float] | None = None,
+        sentinel_weights: MutableMapping[
+            tuple[str, str], _SentinelWeightCacheEntry | float
+        ]
+        | None = None,
     ) -> None:
         self.node_repo = node_repo
         self.queue_manager = queue_manager
         self.stream_sender = stream_sender
         self._bindings: Dict[str, Dict[str, _CachedBinding]] = {}
-        self._sentinel_weights = sentinel_weights if sentinel_weights is not None else {}
+        self._sentinel_weights: MutableMapping[
+            tuple[str, str], _SentinelWeightCacheEntry | float
+        ] = (
+            sentinel_weights if sentinel_weights is not None else {}
+        )
         self._weight_events: Queue[_SentinelWeightEvent] = Queue()
 
     @staticmethod
@@ -214,11 +227,25 @@ class DiffService:
         set_active_version_weight(version_label, normalized)
 
         cache_key = (world_id or "", sentinel_id)
-        prev = self._sentinel_weights.get(cache_key)
-        if prev is not None and math.isclose(prev, normalized, rel_tol=1e-6, abs_tol=1e-6):
+        prev_entry = self._sentinel_weights.get(cache_key)
+        prev_weight: float | None = None
+        prev_version: str | None = None
+        if isinstance(prev_entry, _SentinelWeightCacheEntry):
+            prev_weight = prev_entry.weight
+            prev_version = prev_entry.version_label
+        elif isinstance(prev_entry, (int, float)):
+            prev_weight = float(prev_entry)
+        if (
+            prev_weight is not None
+            and math.isclose(prev_weight, normalized, rel_tol=1e-6, abs_tol=1e-6)
+            and prev_version == version_label
+        ):
             return
 
-        self._sentinel_weights[cache_key] = normalized
+        self._sentinel_weights[cache_key] = _SentinelWeightCacheEntry(
+            weight=normalized,
+            version_label=version_label,
+        )
         self._weight_events.put(
             _SentinelWeightEvent(
                 sentinel_id=sentinel_id,
