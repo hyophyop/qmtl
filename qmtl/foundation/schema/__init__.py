@@ -1,4 +1,11 @@
-from .registry import SchemaRegistryClient, Schema
+from .registry import (
+    Schema,
+    SchemaRegistryClient,
+    SchemaRegistryError,
+    SchemaValidationError,
+    SchemaValidationMode,
+    SchemaValidationReport,
+)
 from .validator import SCHEMAS, validate_schema
 from .order_events import (
     OrderAck,
@@ -11,6 +18,10 @@ from .order_events import (
 __all__ = [
     "SchemaRegistryClient",
     "Schema",
+    "SchemaValidationMode",
+    "SchemaValidationReport",
+    "SchemaValidationError",
+    "SchemaRegistryError",
     "SCHEMAS",
     "validate_schema",
     "OrderPayload",
