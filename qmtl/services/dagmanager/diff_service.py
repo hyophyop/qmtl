@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Iterable, List, TYPE_CHECKING
+from typing import Dict, Iterable, List, MutableMapping, TYPE_CHECKING
+import math
+from queue import Empty, Queue
 
 try:  # optional high performance json
     import orjson as _json
@@ -20,6 +22,7 @@ from .metrics import (
     diff_requests_total,
     diff_failures_total,
     cross_context_cache_violation_total,
+    set_active_version_weight,
 )
 from .models import (
     BufferInstruction,
@@ -57,6 +60,20 @@ class _CachedBinding:
     code_hash: str
     schema_hash: str
     context: ComputeContext
+
+
+@dataclass
+class _SentinelWeightEvent:
+    sentinel_id: str
+    weight: float
+    sentinel_version: str
+    world_id: str | None
+
+
+@dataclass
+class _SentinelWeightCacheEntry:
+    weight: float
+    version_label: str
 
 
 class CrossContextTopicReuseError(RuntimeError):
@@ -146,16 +163,102 @@ class DiffService:
         node_repo: NodeRepository,
         queue_manager: QueueManager,
         stream_sender: StreamSender,
+        *,
+        sentinel_weights: MutableMapping[
+            tuple[str, str], _SentinelWeightCacheEntry | float
+        ]
+        | None = None,
     ) -> None:
         self.node_repo = node_repo
         self.queue_manager = queue_manager
         self.stream_sender = stream_sender
         self._bindings: Dict[str, Dict[str, _CachedBinding]] = {}
+        self._sentinel_weights: MutableMapping[
+            tuple[str, str], _SentinelWeightCacheEntry | float
+        ] = (
+            sentinel_weights if sentinel_weights is not None else {}
+        )
+        self._weight_events: Queue[_SentinelWeightEvent] = Queue()
+
+    @staticmethod
+    def _coerce_weight(raw: object) -> float | None:
+        """Convert ``raw`` to a bounded float in ``[0, 1]``."""
+
+        if raw is None:
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(value) or math.isinf(value):
+            return None
+        if value < 0.0:
+            value = 0.0
+        elif value > 1.0:
+            value = 1.0
+        return value
+
+    def consume_weight_events(self) -> list[_SentinelWeightEvent]:
+        """Return sentinel weight events recorded during the last diff."""
+
+        events: list[_SentinelWeightEvent] = []
+        while True:
+            try:
+                events.append(self._weight_events.get_nowait())
+            except Empty:
+                break
+        return events
+
+    def _record_sentinel_weight(
+        self,
+        sentinel_id: str,
+        sentinel_version: str,
+        weight: float | None,
+        *,
+        world_id: str | None,
+    ) -> None:
+        """Store sentinel weight change and emit metrics when updated."""
+
+        normalized = self._coerce_weight(weight)
+        if normalized is None:
+            return
+
+        version_label = sentinel_version or sentinel_id
+        set_active_version_weight(version_label, normalized)
+
+        cache_key = (world_id or "", sentinel_id)
+        prev_entry = self._sentinel_weights.get(cache_key)
+        prev_weight: float | None = None
+        prev_version: str | None = None
+        if isinstance(prev_entry, _SentinelWeightCacheEntry):
+            prev_weight = prev_entry.weight
+            prev_version = prev_entry.version_label
+        elif isinstance(prev_entry, (int, float)):
+            prev_weight = float(prev_entry)
+        if (
+            prev_weight is not None
+            and math.isclose(prev_weight, normalized, rel_tol=1e-6, abs_tol=1e-6)
+            and prev_version == version_label
+        ):
+            return
+
+        self._sentinel_weights[cache_key] = _SentinelWeightCacheEntry(
+            weight=normalized,
+            version_label=version_label,
+        )
+        self._weight_events.put(
+            _SentinelWeightEvent(
+                sentinel_id=sentinel_id,
+                weight=normalized,
+                sentinel_version=version_label,
+                world_id=world_id,
+            )
+        )
 
     # Step 1 ---------------------------------------------------------------
     def _pre_scan(
         self, dag_json: str
-    ) -> tuple[List[NodeInfo], str, ComputeContext, str | None]:
+    ) -> tuple[List[NodeInfo], str, ComputeContext, str | None, float | None]:
         """Parse DAG JSON and return nodes, version, compute context, namespace."""
         data = _json_loads(dag_json)
 
@@ -163,6 +266,7 @@ class DiffService:
         meta_obj = data.get("meta")
         meta = meta_obj if isinstance(meta_obj, dict) else {}
         sentinel_version: str | None = None
+        sentinel_weight: float | None = None
         filtered_nodes: list[dict] = []
         context = self._extract_compute_context(data)
         namespace: str | None = None
@@ -193,6 +297,12 @@ class DiffService:
                                 break
                     if not sentinel_version:
                         sentinel_version = normalize_version(entry.get("node_id"))
+                if sentinel_weight is None:
+                    for key in ("traffic_weight", "sentinel_weight", "weight"):
+                        if key in entry:
+                            sentinel_weight = self._coerce_weight(entry.get(key))
+                            if sentinel_weight is not None:
+                                break
                 continue
             filtered_nodes.append(entry)
 
@@ -248,7 +358,13 @@ class DiffService:
                 or meta.get("strategy_version")
                 or meta.get("build_version")
             )
-        return nodes, version, context, namespace
+        if sentinel_weight is None:
+            for key in ("traffic_weight", "sentinel_weight", "weight"):
+                if key in meta:
+                    sentinel_weight = self._coerce_weight(meta.get(key))
+                    if sentinel_weight is not None:
+                        break
+        return nodes, version, context, namespace, sentinel_weight
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
@@ -491,7 +607,7 @@ class DiffService:
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
-            nodes, version, inferred_context, namespace = self._pre_scan(
+            nodes, version, inferred_context, namespace, sentinel_weight = self._pre_scan(
                 request.dag_json
             )
             merged_context = replace(
@@ -521,6 +637,12 @@ class DiffService:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
             crc32 = crc32_of_list(n.node_id for n in nodes)
+            self._record_sentinel_weight(
+                sentinel_id,
+                version,
+                sentinel_weight,
+                world_id=merged_context.world_id or None,
+            )
             self._stream_send(
                 queue_map,
                 sentinel_id,

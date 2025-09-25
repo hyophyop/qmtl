@@ -84,6 +84,11 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         self._service = service
         self._bus = bus
         self._streams: Dict[str, _GrpcStream] = {}
+        sentinel_weights = getattr(service, "_sentinel_weights", None)
+        if sentinel_weights is None:
+            sentinel_weights = {}
+            setattr(service, "_sentinel_weights", sentinel_weights)
+        self._sentinel_weights = sentinel_weights
 
     async def Diff(
         self,
@@ -93,7 +98,12 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         sentinel_id = f"{request.strategy_id}-sentinel"
         stream = _GrpcStream(asyncio.get_running_loop())
         self._streams[sentinel_id] = stream
-        svc = DiffService(self._service.node_repo, self._service.queue_manager, stream)
+        svc = DiffService(
+            self._service.node_repo,
+            self._service.queue_manager,
+            stream,
+            sentinel_weights=self._sentinel_weights,
+        )
         fut = asyncio.create_task(
             svc.diff_async(
                 DiffRequest(
@@ -113,6 +123,15 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                 chunk = await stream.queue.get()
                 if chunk is None:
                     break
+                events = svc.consume_weight_events()
+                if self._bus:
+                    for event in events:
+                        await self._bus.publish_sentinel_weight(
+                            event.sentinel_id,
+                            event.weight,
+                            sentinel_version=event.sentinel_version,
+                            world_id=event.world_id,
+                        )
                 pb = dagmanager_pb2.DiffChunk(
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
@@ -154,6 +173,15 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         finally:
             fut.cancel()
             await fut
+            events = svc.consume_weight_events()
+            if self._bus:
+                for event in events:
+                    await self._bus.publish_sentinel_weight(
+                        event.sentinel_id,
+                        event.weight,
+                        sentinel_version=event.sentinel_version,
+                        world_id=event.world_id,
+                    )
             self._streams.pop(sentinel_id, None)
 
     async def AckChunk(
