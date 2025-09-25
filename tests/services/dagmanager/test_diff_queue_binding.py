@@ -4,10 +4,16 @@ import json
 
 import pytest
 
-from qmtl.services.dagmanager.diff_service import CrossContextTopicReuseError
-
-from qmtl.services.dagmanager.diff_service import DiffRequest, DiffService, NodeRecord
+from qmtl.services.dagmanager.diff_service import (
+    CrossContextTopicReuseError,
+    DiffRequest,
+    DiffService,
+    NodeInfo,
+    NodeRecord,
+    StreamSender,
+)
 from qmtl.services.dagmanager.topic import topic_name
+from qmtl.services.dagmanager.monitor import AckStatus
 
 from .diff_fakes import FakeStream, TimeoutOnceStream
 from .diff_helpers import dag_node, make_diff_request, partition_with_context
@@ -160,6 +166,101 @@ def test_stream_chunking_and_ack(fake_repo, fake_queue):
 
     assert len(stream.chunks) == 3
     assert stream.waits == 3
+
+
+def test_stream_ack_window_allows_pipelining(fake_repo, fake_queue):
+    class WindowProbeStream(StreamSender):
+        def __init__(self) -> None:
+            self.chunks_sent = 0
+            self.waits = 0
+            self.first_wait_at: int | None = None
+
+        def send(self, chunk) -> None:  # type: ignore[override]
+            self.chunks_sent += 1
+
+        def wait_for_ack(self) -> AckStatus:  # type: ignore[override]
+            if self.first_wait_at is None:
+                self.first_wait_at = self.chunks_sent
+            self.waits += 1
+            return AckStatus.OK
+
+        def ack(self, status: AckStatus = AckStatus.OK) -> None:  # type: ignore[override]
+            pass
+
+    stream = WindowProbeStream()
+    service = DiffService(fake_repo, fake_queue, stream)
+
+    new_nodes = [
+        NodeInfo(
+            node_id=f"node-{i}",
+            node_type="N",
+            code_hash="code",
+            schema_hash="schema",
+            schema_id="schema-id",
+            interval=None,
+            period=None,
+            tags=[],
+        )
+        for i in range(1100)
+    ]
+
+    service._stream_send({}, "sentinel", "v1", new_nodes, [], crc32=0)
+
+    assert stream.chunks_sent == 11
+    assert stream.waits == 11
+    assert stream.first_wait_at == 10
+
+
+def test_stream_ack_window_handles_slow_ack(fake_repo, fake_queue):
+    class SlowAckStream(StreamSender):
+        def __init__(self) -> None:
+            self.chunks_sent = 0
+            self.first_wait_at: int | None = None
+            self.wait_points: list[int] = []
+            self.timeout_calls = 0
+            self.resume_calls = 0
+
+        def send(self, chunk) -> None:  # type: ignore[override]
+            self.chunks_sent += 1
+
+        def wait_for_ack(self) -> AckStatus:  # type: ignore[override]
+            if self.first_wait_at is None:
+                self.first_wait_at = self.chunks_sent
+            self.wait_points.append(self.chunks_sent)
+            if self.timeout_calls < 2:
+                self.timeout_calls += 1
+                return AckStatus.TIMEOUT
+            return AckStatus.OK
+
+        def ack(self, status: AckStatus = AckStatus.OK) -> None:  # type: ignore[override]
+            pass
+
+        def resume_from_last_offset(self) -> None:
+            self.resume_calls += 1
+
+    stream = SlowAckStream()
+    service = DiffService(fake_repo, fake_queue, stream)
+
+    new_nodes = [
+        NodeInfo(
+            node_id=f"node-{i}",
+            node_type="N",
+            code_hash="code",
+            schema_hash="schema",
+            schema_id="schema-id",
+            interval=None,
+            period=None,
+            tags=[],
+        )
+        for i in range(1500)
+    ]
+
+    service._stream_send({}, "sentinel", "v1", new_nodes, [], crc32=0)
+
+    assert stream.chunks_sent == 15
+    assert stream.first_wait_at == 10
+    assert stream.resume_calls == 2
+    assert len(stream.wait_points) == stream.chunks_sent + stream.timeout_calls
 
 
 def test_sentinel_gap_metric_increment(diff_service, fake_repo, diff_metrics):

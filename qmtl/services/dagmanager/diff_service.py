@@ -561,17 +561,27 @@ class DiffService:
         crc32: int,
     ) -> None:
         CHUNK_SIZE = 100
+        ACK_WINDOW = 10
         total = max(len(new_nodes), len(buffering_nodes))
 
         def await_ack() -> None:
             MAX_RETRY = 3
-            for _ in range(MAX_RETRY):
+            DEADLINE_SECONDS = 30
+            deadline = time.monotonic() + DEADLINE_SECONDS
+            attempts = 0
+            while True:
                 status = self.stream_sender.wait_for_ack()
                 if status is AckStatus.OK:
                     return
                 resume = getattr(self.stream_sender, "resume_from_last_offset", None)
                 if callable(resume):
                     resume()
+                attempts += 1
+                if attempts < MAX_RETRY:
+                    continue
+                if time.monotonic() >= deadline:
+                    break
+                attempts = 0
             raise TimeoutError("Client did not acknowledge diff chunk")
 
         if total == 0:
@@ -589,6 +599,7 @@ class DiffService:
             await_ack()
             return
 
+        outstanding = 0
         for i in range(0, total, CHUNK_SIZE):
             chunk_new = new_nodes[i:i+CHUNK_SIZE]
             chunk_buf = buffering_nodes[i:i+CHUNK_SIZE]
@@ -602,7 +613,14 @@ class DiffService:
                     buffering_nodes=chunk_buf,
                 )
             )
+            outstanding += 1
+            if outstanding >= ACK_WINDOW:
+                await_ack()
+                outstanding -= 1
+
+        while outstanding:
             await_ack()
+            outstanding -= 1
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
