@@ -129,7 +129,7 @@ class ConformancePipeline:
         warnings: list[str],
     ) -> None:
         ts = df[self._TS_COLUMN]
-        if not np.issubdtype(ts.dtype, np.integer):
+        if not pd.api.types.is_integer_dtype(ts.dtype):
             try:
                 df[self._TS_COLUMN] = pd.to_datetime(ts).astype("int64") // 10**6
                 flags["ts_casts"] = flags.get("ts_casts", 0) + len(df)
