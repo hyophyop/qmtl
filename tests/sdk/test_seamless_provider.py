@@ -21,6 +21,7 @@ from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
+from qmtl.runtime.sdk.backfill_coordinator import Lease
 
 
 class _StaticSource:
@@ -152,6 +153,73 @@ class _CountingBackfiller:
         yield pd.DataFrame()
 
 
+class _RecordingBackfiller:
+    """Minimal backfiller capturing invocations for background tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, int, str, int]] = []
+
+    async def can_backfill(self, start: int, end: int, *, node_id: str, interval: int) -> bool:
+        return True
+
+    async def backfill(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: Optional[DataSource] = None,
+    ) -> pd.DataFrame:
+        self.calls.append((start, end, node_id, interval))
+        return pd.DataFrame([{"ts": start}, {"ts": end}])
+
+    async def backfill_async(self, *args, **kwargs):  # pragma: no cover - not used
+        yield pd.DataFrame()
+
+
+class _FailingBackfiller(_RecordingBackfiller):
+    """Backfiller that raises to exercise failure instrumentation."""
+
+    def __init__(self, *, exc: Exception | None = None) -> None:
+        super().__init__()
+        self._exc = exc or RuntimeError("boom")
+
+    async def backfill(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: Optional[DataSource] = None,
+    ) -> pd.DataFrame:
+        await super().backfill(start, end, node_id=node_id, interval=interval, target_storage=target_storage)
+        raise self._exc
+
+
+class _FlakyCoordinator:
+    def __init__(self, *, raise_on_claim: bool = False, raise_on_complete: bool = False) -> None:
+        self.raise_on_claim = raise_on_claim
+        self.raise_on_complete = raise_on_complete
+        self.claim_calls = 0
+        self.complete_calls = 0
+
+    async def claim(self, key: str, lease_ms: int):
+        self.claim_calls += 1
+        if self.raise_on_claim:
+            raise RuntimeError("coordinator unavailable")
+        return Lease(key=key, token="lease", lease_until_ms=lease_ms)
+
+    async def complete(self, lease):
+        self.complete_calls += 1
+        if self.raise_on_complete:
+            raise RuntimeError("lease lost")
+
+    async def fail(self, lease, reason: str):  # pragma: no cover - unused
+        self.complete_calls += 1
+
+
 @pytest.mark.asyncio
 async def test_background_backfill_single_flight_dedup() -> None:
     sdk_metrics.reset_metrics()
@@ -174,6 +242,48 @@ async def test_background_backfill_single_flight_dedup() -> None:
     # Metrics recorded: last ts and jobs back to zero
     key = ("n", "10")
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_background_backfill_recovers_from_coordinator_claim_failure() -> None:
+    sdk_metrics.reset_metrics()
+    backfiller = _RecordingBackfiller()
+    coordinator = _FlakyCoordinator(raise_on_claim=True)
+    provider = _DummyProvider(
+        storage_source=_StaticSource([], DataSourcePriority.STORAGE),
+        backfiller=backfiller,
+        coordinator=coordinator,
+    )
+
+    await provider._start_background_backfill(0, 50, node_id="node", interval=5)
+    for _ in range(4):
+        await asyncio.sleep(0)
+
+    assert backfiller.calls == [(0, 50, "node", 5)]
+    assert provider._active_backfills == {}
+    assert coordinator.claim_calls == 1
+    assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_background_backfill_handles_lease_completion_errors() -> None:
+    sdk_metrics.reset_metrics()
+    backfiller = _RecordingBackfiller()
+    coordinator = _FlakyCoordinator(raise_on_complete=True)
+    provider = _DummyProvider(
+        storage_source=_StaticSource([], DataSourcePriority.STORAGE),
+        backfiller=backfiller,
+        coordinator=coordinator,
+    )
+
+    await provider._start_background_backfill(0, 10, node_id="node", interval=5)
+    for _ in range(4):
+        await asyncio.sleep(0)
+
+    assert backfiller.calls == [(0, 10, "node", 5)]
+    assert provider._active_backfills == {}
+    assert coordinator.complete_calls == 1
     assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
 
 
@@ -297,6 +407,22 @@ async def test_conformance_pipeline_respects_partial_ok() -> None:
     assert report.flags_counts.get("duplicate_bars") == 1
 
 
+@pytest.mark.asyncio
+async def test_schema_validation_error_blocks_response() -> None:
+    schema = {"ts": "int64", "price": "float64"}
+    provider = _DummyProvider(
+        storage_source=_SchemaViolatingSource([(0, 10)], DataSourcePriority.STORAGE),
+        conformance=_SchemaAwareConformance(schema),
+    )
+
+    with pytest.raises(ConformancePipelineError) as exc:
+        await provider.fetch(0, 10, node_id="node", interval=5)
+
+    report = exc.value.report
+    assert any("dtype mismatch" in warning for warning in report.warnings)
+    assert provider.last_conformance_report is report
+
+
 class _DelayedSource(_StaticSource):
     def __init__(self, coverage, priority, clock: _FakeClock, delay: float) -> None:
         super().__init__(coverage, priority)
@@ -310,6 +436,25 @@ class _DelayedSource(_StaticSource):
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self._clock.advance(self._delay)
         return await super().fetch(start, end, node_id=node_id, interval=interval)
+
+
+class _SchemaAwareConformance(ConformancePipeline):
+    def __init__(self, schema: dict[str, str]) -> None:
+        super().__init__()
+        self._schema = schema
+
+    def normalize(self, df, schema=None, interval=None):  # type: ignore[override]
+        return super().normalize(df, schema=self._schema, interval=interval)
+
+
+class _SchemaViolatingSource(_StaticSource):
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "ts": [start, end],
+                "price": ["oops", "nope"],
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -359,3 +504,53 @@ async def test_sla_sync_gap_limit_enforced() -> None:
         await provider.ensure_data_available(0, 100, node_id="node", interval=10)
 
     assert exc.value.phase == "sync_gap"
+
+
+@pytest.mark.asyncio
+async def test_sla_total_deadline_breach_raises(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    clock = _FakeClock()
+    monkeypatch.setattr(seamless_module.time, "monotonic", clock.monotonic)
+    storage = _DelayedSource([(0, 20)], DataSourcePriority.STORAGE, clock, delay=0.04)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(max_wait_storage_ms=80, total_deadline_ms=50),
+    )
+
+    with pytest.raises(SeamlessSLAExceeded) as exc:
+        await provider.fetch(0, 20, node_id="node", interval=10)
+
+    assert exc.value.phase == "total"
+
+
+@pytest.mark.asyncio
+async def test_observability_snapshot_captures_backfill_failure(caplog) -> None:
+    sdk_metrics.reset_metrics()
+    backfiller = _FailingBackfiller()
+    provider = _DummyProvider(
+        storage_source=_StaticSource([], DataSourcePriority.STORAGE),
+        backfiller=backfiller,
+    )
+
+    with caplog.at_level("ERROR", logger="qmtl.runtime.sdk.seamless_data_provider"):
+        await provider._start_background_backfill(0, 20, node_id="node", interval=5)
+        for _ in range(4):
+            await asyncio.sleep(0)
+
+    key = ("node", "5")
+    assert sdk_metrics.backfill_failure_total._vals[key] == 1  # type: ignore[attr-defined]
+    snapshot = sdk_metrics.collect_metrics()
+    assert "backfill_failure_total" in snapshot
+    assert 'node_id="node"' in snapshot
+
+    failure_records = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("seamless.backfill.background_failed")
+    ]
+    assert failure_records, "expected structured failure log"
+    record = failure_records[0]
+    assert getattr(record, "node_id", None) == "node"
+    assert getattr(record, "interval", None) == 5
+    assert getattr(record, "start", None) == 0
+    assert getattr(record, "end", None) == 20
