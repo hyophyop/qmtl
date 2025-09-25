@@ -32,9 +32,17 @@ async def test_queue_push_pop_order():
     await queue.push("a")
     await queue.push("b")
 
-    assert await queue.pop() == "a"
-    assert await queue.pop() == "b"
-    assert await queue.pop() is None
+    worker = "worker-1"
+
+    item = await queue.pop(worker)
+    assert item == "a"
+    await queue.release(item, worker)
+
+    item = await queue.pop(worker)
+    assert item == "b"
+    await queue.release(item, worker)
+
+    assert await queue.pop(worker) is None
 
 
 @pytest.mark.asyncio

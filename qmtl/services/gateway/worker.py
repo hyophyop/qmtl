@@ -151,17 +151,22 @@ class StrategyWorker:
 
     async def run_once(self) -> Optional[str]:
         """Pop and process a single strategy."""
-        strategy_id = await self.queue.pop()
+        strategy_id = await self.queue.pop(owner=self.worker_id)
         if strategy_id is None:
             return None
-        processed = await self._process(strategy_id)
-        if not processed:
-            # If acquisition failed we push the strategy back onto the queue so
-            # it can be retried later. This allows a worker to take over a
-            # strategy once the previous owner releases its lock.
-            await self.queue.push(strategy_id)
+        processed = False
+        try:
+            processed = await self._process(strategy_id)
+            if processed:
+                return strategy_id
             return None
-        return strategy_id
+        finally:
+            await self.queue.release(strategy_id, owner=self.worker_id)
+            if not processed:
+                # If acquisition failed we push the strategy back onto the queue so
+                # it can be retried later. This allows a worker to take over a
+                # strategy once the previous owner releases its lock.
+                await self.queue.push(strategy_id)
 
     async def close(self) -> None:
         """Close resources associated with this worker."""

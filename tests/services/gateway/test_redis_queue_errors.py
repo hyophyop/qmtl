@@ -10,7 +10,7 @@ class _FailPushRedis:
 
 
 class _FailPopRedis:
-    async def lpop(self, name: str) -> None:  # pragma: no cover - behaviour is tested
+    async def lindex(self, name: str, index: int) -> None:  # pragma: no cover - behaviour is tested
         raise RuntimeError("fail-pop")
 
 
@@ -26,5 +26,5 @@ async def test_push_failure_logs_and_returns_false(caplog):
 async def test_pop_failure_logs_and_returns_none(caplog):
     queue = RedisTaskQueue(_FailPopRedis(), "q")
     caplog.set_level(logging.ERROR)
-    assert await queue.pop() is None
+    assert await queue.pop(owner="worker") is None
     assert any("q" in r.message and "fail-pop" in r.message for r in caplog.records)
