@@ -53,9 +53,11 @@ pass an explicit `ConformancePipeline` instance. The planned stages are:
 3. **Quality flags and reports** generate regression digests that are published
    to `qmtl://observability/seamless/<node>` and archived for audit.
 
-In the current implementation, normalization warnings are surfaced via the
-returned report only; reads continue even when issues are detected. Blocking
-behaviour is planned once the default runtime enables the pipeline globally.
+As of the September 2025 runtime update the pipeline is enabled by default via
+`EnhancedQuestDBProvider`. Any warnings or flags emitted by the pipeline raise a
+`ConformancePipelineError` unless the provider is instantiated with
+`partial_ok=True`. In partial-ok mode the normalized frame is returned while the
+report remains accessible through `SeamlessDataProvider.last_conformance_report`.
 
 ## Distributed Backfill Coordinator
 

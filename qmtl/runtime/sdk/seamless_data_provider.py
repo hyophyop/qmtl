@@ -13,7 +13,7 @@ from .history_coverage import (
     WarmupWindow,
 )
 from . import metrics as sdk_metrics
-from .conformance import ConformancePipeline
+from .conformance import ConformancePipeline, ConformanceReport
 from .backfill_coordinator import BackfillCoordinator, InMemoryBackfillCoordinator, Lease
 from .sla import SLAPolicy
 
@@ -103,6 +103,20 @@ class LiveDataFeed(Protocol):
         ...
 
 
+class ConformancePipelineError(RuntimeError):
+    """Raised when the conformance pipeline blocks a response."""
+
+    def __init__(self, report: ConformanceReport) -> None:
+        self.report = report
+        warning_count = len(report.warnings)
+        flag_count = sum(report.flags_counts.values())
+        message = (
+            "conformance pipeline blocked response"
+            f" (warnings={warning_count}, flags={flag_count})"
+        )
+        super().__init__(message)
+
+
 class SeamlessDataProvider(ABC):
     """
     Provides transparent data access across multiple sources.
@@ -129,6 +143,7 @@ class SeamlessDataProvider(ABC):
         conformance: Optional[ConformancePipeline] = None,
         coordinator: Optional[BackfillCoordinator] = None,
         sla: Optional[SLAPolicy] = None,
+        partial_ok: bool = False,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -140,9 +155,17 @@ class SeamlessDataProvider(ABC):
         self._conformance = conformance
         self._coordinator = coordinator or InMemoryBackfillCoordinator()
         self._sla = sla
-        
+        self._partial_ok = bool(partial_ok)
+        self._last_conformance_report: Optional[ConformanceReport] = None
+
         # Internal state
         self._active_backfills: dict[str, bool] = {}
+
+    @property
+    def last_conformance_report(self) -> Optional[ConformanceReport]:
+        """Return the most recent conformance report emitted by ``fetch``."""
+
+        return self._last_conformance_report
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -247,6 +270,9 @@ class SeamlessDataProvider(ABC):
         # Try each source in priority order
         result_frames = []
         remaining_ranges = [(start, end)]
+
+        # Reset report tracking for this request
+        self._last_conformance_report = None
         
         for source in self._get_ordered_sources():
             if not remaining_ranges:
@@ -310,11 +336,20 @@ class SeamlessDataProvider(ABC):
             # Run through conformance pipeline if provided (no-op otherwise)
             try:
                 if self._conformance:
-                    combined, _report = self._conformance.normalize(combined, schema=None, interval=interval)
+                    combined, report = self._conformance.normalize(
+                        combined,
+                        schema=None,
+                        interval=interval,
+                    )
+                    self._last_conformance_report = report
+                    if (report.warnings or report.flags_counts) and not self._partial_ok:
+                        raise ConformancePipelineError(report)
+            except ConformancePipelineError:
+                raise
             except Exception:  # pragma: no cover - defensive, keep behavior intact
                 pass
             return combined
-        
+
         return pd.DataFrame()
     
     async def _fetch_fail_fast(
@@ -552,9 +587,10 @@ class SeamlessDataProvider(ABC):
 
 __all__ = [
     "DataAvailabilityStrategy",
-    "DataSourcePriority", 
+    "DataSourcePriority",
     "DataSource",
     "AutoBackfiller",
     "LiveDataFeed",
+    "ConformancePipelineError",
     "SeamlessDataProvider",
 ]

@@ -10,12 +10,14 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
     DataSource,
     DataSourcePriority,
+    ConformancePipelineError,
 )
 from qmtl.runtime.io.seamless_provider import (
     StorageDataSource,
     DataFetcherAutoBackfiller,
 )
 from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.conformance import ConformancePipeline
 
 
 class _StaticSource:
@@ -42,6 +44,17 @@ class _StaticSource:
     # Helper to mutate coverage in tests
     def add_range(self, start: int, end: int) -> None:
         self._coverage.append((start, end))
+
+
+class _DuplicateSource(_StaticSource):
+    """Data source that deliberately emits duplicate timestamps."""
+
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        # two identical rows trigger duplicate detection in the conformance pipeline
+        return pd.DataFrame([
+            {"ts": start},
+            {"ts": start},
+        ])
 
 
 class _DummyProvider(SeamlessDataProvider):
@@ -236,3 +249,35 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     assert isinstance(df, pd.DataFrame)
     key = ("n", "10")
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_conformance_pipeline_blocks_by_default() -> None:
+    provider = _DummyProvider(
+        storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
+        conformance=ConformancePipeline(),
+    )
+
+    with pytest.raises(ConformancePipelineError) as exc:
+        await provider.fetch(0, 10, node_id="n", interval=10)
+
+    report = exc.value.report
+    assert report.warnings and "duplicate" in report.warnings[0]
+    assert "duplicate_bars" in report.flags_counts
+    assert provider.last_conformance_report is report
+
+
+@pytest.mark.asyncio
+async def test_conformance_pipeline_respects_partial_ok() -> None:
+    provider = _DummyProvider(
+        storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
+        conformance=ConformancePipeline(),
+        partial_ok=True,
+    )
+
+    df = await provider.fetch(0, 10, node_id="n", interval=10)
+    assert df["ts"].tolist() == [0]
+
+    report = provider.last_conformance_report
+    assert report is not None
+    assert report.flags_counts.get("duplicate_bars") == 1

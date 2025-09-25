@@ -7,11 +7,12 @@ import logging
 
 from qmtl.runtime.sdk.data_io import HistoryProvider, DataFetcher
 from qmtl.runtime.sdk.seamless_data_provider import (
-    SeamlessDataProvider, 
-    DataSource, 
+    SeamlessDataProvider,
+    DataSource,
     DataSourcePriority,
     DataAvailabilityStrategy
 )
+from qmtl.runtime.sdk.conformance import ConformancePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         live_fetcher: DataFetcher | None = None,
         cache_provider: HistoryProvider | None = None,
         strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.SEAMLESS,
+        conformance: ConformancePipeline | None = None,
+        partial_ok: bool = False,
         **kwargs
     ):
         # Import here to avoid circular imports
@@ -261,6 +264,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
             storage_source=storage_source,
             backfiller=backfiller,
             live_feed=live_feed,
+            conformance=conformance or ConformancePipeline(),
+            partial_ok=partial_ok,
             **kwargs
         )
     

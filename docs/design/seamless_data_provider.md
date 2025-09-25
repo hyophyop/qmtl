@@ -56,7 +56,7 @@ graph TB
 ## 핵심 컴포넌트
 
 ### 1. ConformancePipeline (컴포넌트)
-정합성 파이프라인은 `SchemaRollupStage`, `TemporalRollupStage`, `RegressionReportStage` 로 구성되며, 각 스테이지는 실패 시 요청을 차단하거나(기본값) `partial_ok=True` 옵션으로 허용할 수 있습니다. 생성된 리포트는 `qmtl://observability/seamless/<node>` 경로에 업로드되어 대시보드와 후속 감사 절차에 사용됩니다.
+정합성 파이프라인은 `SchemaRollupStage`, `TemporalRollupStage`, `RegressionReportStage` 로 구성되며, 각 스테이지는 실패 시 요청을 차단하거나(기본값) `partial_ok=True` 옵션으로 허용할 수 있습니다. 2025.09 릴리스부터 `EnhancedQuestDBProvider` 는 기본적으로 `ConformancePipeline` 을 주입하고, 경고나 플래그가 감지되면 `ConformancePipelineError` 를 발생시켜 응답을 막습니다. `partial_ok=True` 로 생성하면 동일한 리포트가 `SeamlessDataProvider.last_conformance_report` 에서 확인 가능하지만 응답은 통과합니다. 생성된 리포트는 `qmtl://observability/seamless/<node>` 경로에 업로드되어 대시보드와 후속 감사 절차에 사용됩니다.
 
 ### 2. SLAPolicy (구성)
 `SLAPolicy`는 지연(latency)과 신선도(freshness) 제한을 정의하며, `SeamlessDataProvider`는 각 요청의 단계별 소요 시간과 커버리지 정보를 추적하여 `seamless_sla_deadline_seconds` 히스토그램과 트레이스를 발행합니다. 위반 시 `SeamlessSLAExceeded` 예외가 발생하고, 경보는 `alert_rules.yml`의 `seamless-*` 규칙으로 전달됩니다.
