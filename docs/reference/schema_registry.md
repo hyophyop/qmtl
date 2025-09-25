@@ -24,6 +24,39 @@ assert sch2.version == 2
 
 `get_by_id(id: int)` looks up schemas by global id when available.
 
+### Validation Modes
+
+Schema governance is controlled through validation modes:
+
+- `canary` (default) records compatibility failures but allows the schema to
+  register.
+- `strict` blocks registrations that drop or mutate previously observed fields
+  and raises `SchemaValidationError`.
+
+Select the mode explicitly or via `QMTL_SCHEMA_VALIDATION_MODE`:
+
+```python
+from qmtl.foundation.schema import (
+    SchemaRegistryClient,
+    SchemaValidationError,
+    SchemaValidationMode,
+)
+
+reg = SchemaRegistryClient(validation_mode=SchemaValidationMode.STRICT)
+reg.register("prices", '{"a": 1, "b": 2}')
+
+try:
+    reg.register("prices", '{"a": 1}')
+except SchemaValidationError as exc:
+    print("strict mode blocked change", exc)
+```
+
+Every call to `register` produces a `SchemaValidationReport` accessible via
+`client.last_validation(subject)` or by calling `client.validate(...)` directly.
+When incompatibilities are detected the Prometheus counter
+`seamless_schema_validation_failures_total{subject,mode}` increments so
+dashboards can track regressions.
+
 ## Remote Client
 
 Set `QMTL_SCHEMA_REGISTRY_URL` to enable a minimal HTTP client:
@@ -47,8 +80,9 @@ The expected JSON API is similar to common registry endpoints:
 - `GET /subjects/{subject}/versions/latest` → `{ "id": <int>, "schema": <str>, "version": <int> }`
 - `GET /schemas/ids/{id}` → `{ "schema": <str> }`
 
-Network errors raise `RuntimeError`. Future versions may introduce a dedicated
-exception type.
+Network errors raise `SchemaRegistryError`. A `404` is translated to `None`
+when fetching a missing schema so callers can distinguish between "not found"
+and fatal failures.
 
 ## Kafka Integration
 

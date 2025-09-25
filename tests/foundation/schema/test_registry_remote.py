@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.error
 
 import pytest
 
@@ -49,7 +50,7 @@ async def test_remote_registry_register_latest_get_by_id_and_from_env(monkeypatc
             subject = path.split("/", 2)[1]
             versions = state.get(subject) or []
             if not versions:
-                return _Resp({"id": 0, "schema": "{}", "version": 0})
+                raise urllib.error.HTTPError(url, 404, "not found", hdrs=None, fp=None)
             sid, sch = versions[-1]
             return _Resp({"id": sid, "schema": sch, "version": len(versions)})
         if method == "GET" and path.startswith("schemas/ids/"):
@@ -69,6 +70,7 @@ async def test_remote_registry_register_latest_get_by_id_and_from_env(monkeypatc
 
     # Create client from env and exercise endpoints
     client = SchemaRegistryClient.from_env()
+    assert client.latest("prices") is None
     # register -> returns id; latest -> reflects last
     s1 = client.register("prices", json.dumps({"a": 1}))
     assert s1.id >= 100 and s1.version >= 1
