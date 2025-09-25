@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Protocol, Mapping, Dict, Iterable
+from typing import Dict, Iterable, Mapping, Protocol
 
 from qmtl.foundation.common import AsyncCircuitBreaker, ComputeContext, compute_compute_key
 from . import metrics
@@ -118,6 +118,10 @@ class InMemoryAdminClient:
 class KafkaAdmin:
     client: AdminClient
     breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
+    max_attempts: int = 5
+    wait_initial: float = 0.5
+    wait_max: float = 4.0
+    backoff_multiplier: float = 2.0
 
     def __post_init__(self) -> None:
         """Attach metric callbacks without overriding existing hooks."""
@@ -130,24 +134,89 @@ class KafkaAdmin:
 
         self.breaker._on_open = _on_open
 
+    def _verify_topic(self, name: str, config: TopicConfig) -> bool:
+        """Return ``True`` if broker metadata confirms ``name`` exists."""
+
+        metadata = self.client.list_topics()
+        collisions = [
+            existing
+            for existing in metadata
+            if existing.lower() == name.lower() and existing != name
+        ]
+        if collisions:
+            raise TopicExistsError(f"name collision for topic '{name}'")
+
+        info = metadata.get(name)
+        if not isinstance(info, Mapping):
+            return False
+
+        partitions = info.get("num_partitions")
+        if partitions is not None and int(partitions) != config.partitions:
+            raise TopicExistsError(f"partition mismatch for topic '{name}'")
+
+        replication = info.get("replication_factor")
+        if replication is not None and int(replication) != config.replication_factor:
+            raise TopicExistsError(f"replication mismatch for topic '{name}'")
+
+        meta_config = info.get("config")
+        if isinstance(meta_config, Mapping):
+            retention = meta_config.get("retention.ms")
+            if retention is not None and int(retention) != int(config.retention_ms):
+                raise TopicExistsError(f"retention mismatch for topic '{name}'")
+        return True
+
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:
         """Create topic idempotently using a circuit breaker."""
 
+        attempts = max(1, int(self.max_attempts))
+
         @self.breaker
         async def _create() -> None:
-            try:
-                self.client.create_topic(
-                    name,
-                    num_partitions=config.partitions,
-                    replication_factor=config.replication_factor,
-                    config={"retention.ms": str(config.retention_ms)},
-                )
-            except TopicExistsError:
-                # Another admin may have created the topic concurrently.
-                return
+            delay = max(0.0, float(self.wait_initial))
+            backoff_cap = max(delay, float(self.wait_max))
+            last_error: Exception | None = None
+            skip_create = False
 
-        # ``AsyncCircuitBreaker`` expects an async callable. ``asyncio.run``
-        # executes the decorated coroutine in a fresh loop.
+            for attempt in range(1, attempts + 1):
+                if not skip_create:
+                    try:
+                        self.client.create_topic(
+                            name,
+                            num_partitions=config.partitions,
+                            replication_factor=config.replication_factor,
+                            config={"retention.ms": str(config.retention_ms)},
+                        )
+                        last_error = None
+                    except TopicExistsError as exc:
+                        skip_create = True
+                        last_error = exc
+                    except Exception as exc:  # pragma: no cover - defensive guard
+                        last_error = exc
+
+                try:
+                    if self._verify_topic(name, config):
+                        return
+                except TopicExistsError:
+                    raise
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    last_error = exc
+
+                if attempt >= attempts:
+                    break
+
+                await asyncio.sleep(delay)
+                if self.backoff_multiplier > 0:
+                    delay = min(
+                        backoff_cap,
+                        max(0.0, delay * float(self.backoff_multiplier)),
+                    )
+
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError(
+                f"failed to create topic '{name}' after {attempts} attempts"
+            )
+
         asyncio.run(_create())
 
     def get_topic_sizes(self) -> Dict[str, int]:

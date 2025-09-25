@@ -12,7 +12,7 @@ pytestmark = [
 import json
 
 from qmtl.services.dagmanager.diff_service import StreamSender
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.kafka_admin import TopicExistsError, partition_key, compute_key
 from qmtl.services.dagmanager.grpc_server import serve
 from qmtl.services.dagmanager.api import create_app
 from qmtl.services.dagmanager import metrics
@@ -55,7 +55,14 @@ class FakeAdmin:
         return self.topics
 
     def create_topic(self, name, *, num_partitions, replication_factor, config=None):
+        if name in self.topics:
+            raise TopicExistsError
         self.created.append((name, num_partitions, replication_factor, config))
+        self.topics[name] = {
+            "config": dict(config or {}),
+            "num_partitions": num_partitions,
+            "replication_factor": replication_factor,
+        }
 
 
 class FakeStream(StreamSender):

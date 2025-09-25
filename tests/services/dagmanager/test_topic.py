@@ -14,7 +14,11 @@ class FakeAdmin:
         if name in self.topics:
             raise TopicExistsError
         self.created.append((name, num_partitions, replication_factor, config))
-        self.topics[name] = config or {}
+        self.topics[name] = {
+            "config": dict(config or {}),
+            "num_partitions": num_partitions,
+            "replication_factor": replication_factor,
+        }
 
 
 def test_topic_name_generation():
@@ -58,7 +62,7 @@ def test_topic_config_values():
 
 def test_idempotent_topic_creation():
     admin = FakeAdmin({"exists": {}})
-    wrapper = KafkaAdmin(admin)
+    wrapper = KafkaAdmin(admin, wait_initial=0.0, wait_max=0.0)
 
     config = TopicConfig(1, 1, 1000)
     wrapper.create_topic_if_needed("exists", config)
