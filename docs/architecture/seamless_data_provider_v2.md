@@ -1,10 +1,16 @@
 # Seamless Data Provider v2 Architecture
 
-The Seamless Data Provider (SDP) has graduated from the prototype described in the
-earlier design document into a production system that enforces data quality,
-backfill SLAs, and schema safety from the moment a request arrives. This page
-summarises the v2 rollout so that architecture discussions and runbooks stop
-referencing the placeholder pipeline.
+> **Status:** The Seamless Data Provider v2 architecture outlined below is a
+> roadmap. The current codebase still ships the in-process coordinator stub,
+> optional conformance hooks, and no SLA policy enforcement. Use this document
+> to understand the intended target state while the implementation in
+> `qmtl/runtime/sdk` catches up.
+
+The Seamless Data Provider (SDP) remains on the path from the prototype described
+in the earlier design document toward a production system that enforces data
+quality, backfill SLAs, and schema safety from the moment a request arrives. The
+sections below call out where functionality is still forthcoming so that readers
+do not over-estimate the guarantees made by today's runtime.
 
 ## High-level Flow
 
@@ -35,7 +41,9 @@ systems can reason about the completeness of a response.
 
 ## Conformance Pipeline
 
-`ConformancePipeline` now runs three distinct stages:
+`ConformancePipeline` will ultimately run three distinct stages. Today the
+pipeline is opt-in and only performs best-effort normalization for callers that
+pass an explicit `ConformancePipeline` instance. The planned stages are:
 
 1. **Schema rollups** aggregate observations against the canonical
    registry schema, catching missing columns or invalid enumerations before the
@@ -45,13 +53,16 @@ systems can reason about the completeness of a response.
 3. **Quality flags and reports** generate regression digests that are published
    to `qmtl://observability/seamless/<node>` and archived for audit.
 
-A failing stage blocks reads by default unless the caller opts into
-`partial_ok=True`, ensuring we never silently deliver malformed payloads.
+In the current implementation, normalization warnings are surfaced via the
+returned report only; reads continue even when issues are detected. Blocking
+behaviour is planned once the default runtime enables the pipeline globally.
 
 ## Distributed Backfill Coordinator
 
-The stub `InMemoryBackfillCoordinator` has been replaced by a
-Raft-backed coordinator deployed per data domain. It handles:
+The distributed coordinator described here is still under active development.
+For now the runtime uses the stub `InMemoryBackfillCoordinator`, which only
+guards against duplicate backfills within a single process. The roadmap
+coordinator will introduce:
 
 - **Aligned leases** so that overlapping requests from different nodes do not
   duplicate work.
@@ -60,51 +71,46 @@ Raft-backed coordinator deployed per data domain. It handles:
   Prometheus metrics and structured logs to `seamless.backfill`.
 - **Recovery hooks** that re-queue unfinished shards after process restarts.
 
-Storage writers and the coordinator both publish events to the
-`seamless.backfill` topic so we can build dashboards that show live progress.
+Until the Raft coordinator lands, none of the above metrics or lease recovery
+hooks exist. Expect overlapping work when multiple processes issue backfills.
 
 ## SLA Enforcement
 
-`SLAPolicy` objects are now enforced end-to-end. Each policy specifies
-latency, freshness, and recovery expectations. The coordinator publishes
-`seamless_sla_deadline_seconds` histograms which are scraped by Prometheus and
-forwarded into the default Grafana deck. Violations raise `SeamlessSLAExceeded`
-alerts and emit OpenTelemetry traces with a `sla.phase` span attribute to make
-debugging straightforward.
+`SLAPolicy` objects are defined in the SDK but are not yet enforced. The fields
+act as placeholders for future scheduling and alerting logic. When the SLA
+engine is implemented it will:
 
-The policy configuration lives in `configs/seamless/sla/*.yml`; rolling out a
-new policy automatically registers alerts and runbooks (see the operations
-section below).
+- Publish `seamless_sla_deadline_seconds` histograms for Prometheus scraping.
+- Attach `sla.phase` span attributes to OpenTelemetry traces.
+- Raise `SeamlessSLAExceeded` alerts when thresholds are violated.
+
+Until then, wiring an `SLAPolicy` instance into `SeamlessDataProvider` has no
+observable effect beyond documentation intent, and no configuration files under
+`configs/seamless/sla/` exist.
 
 ## Schema Registry Governance
 
-Every read that passes through SDP now resolves its schema via the central
-registry. Two validation modes exist:
+Schema validation remains best-effort. The runtime exposes utilities for
+callers to supply schema definitions, but no central registry is consulted.
+The desired end state introduces two modes:
 
 - **Canary** validation mirrors requests and records compatibility diagnostics
   without blocking.
 - **Strict** validation stops any response whose payload deviates from the
   approved schema.
 
-Promotion from canary to strict requires double approval and an audit entry in
-`docs/operations/schema_registry_governance.md`. The rollout scripts also record
-SHA fingerprints of schema bundles so that drift detection jobs stay accurate.
+As of now, promotion between modes is manual and per-consumer. There is no audit
+trail, registry integration, or automation around schema bundle fingerprinting.
 
 ## Observability Surfaces
 
-The v2 rollout ships bundled dashboards:
-
-- **Seamless SLA Dashboard** charts SLA compliance, lease health, and backfill
-  throughput across clusters.
-- **Conformance Quality Dashboard** shows flag counts, regression digests, and
-  schema warnings over time.
-- **Trace Explorer Views** expose per-request spans (`seamless.pipeline`) to
-  correlate latency regressions with specific stages.
-
-Refer to the operations guides for alert wiring and escalation paths.
+Dashboards and traces for the features above are still on the roadmap. The
+observability bundle referenced by the operations guides has not yet been
+published. Expect placeholder metrics only (`seamless_conformance_flag_total`)
+until the coordinator, SLA engine, and schema registry integrations are ready.
 
 ## Next Steps
 
-Teams migrating to Seamless should pair this document with the migration guide
-(`Guides → Seamless Migration to v2`) and the updated monitoring runbooks. The
-older provisional references can now be deleted from strategy docs and runbooks.
+Treat this document as a forward-looking architecture reference. Teams planning
+migration work should continue to rely on the existing v1 behaviour and track
+progress in issues #1148–#1152 before updating their runbooks.
