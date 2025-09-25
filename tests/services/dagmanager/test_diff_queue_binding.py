@@ -183,3 +183,32 @@ def test_sentinel_gap_metric_increment(diff_service, fake_repo, diff_metrics):
     diff_service.diff(request)
 
     assert diff_metrics.sentinel_gap_count._value.get() == 1  # type: ignore[attr-defined]
+
+
+def test_sentinel_weight_event_emitted_when_version_changes(diff_service):
+    def run_diff(version: str):
+        request = make_diff_request(
+            nodes=[
+                dag_node("A", code_hash="c1", schema_hash="s1"),
+                {
+                    "node_id": "sentinel-node",
+                    "node_type": "VersionSentinel",
+                    "version": version,
+                    "weight": 0.42,
+                },
+            ]
+        )
+        diff_service.diff(request)
+        return diff_service.consume_weight_events()
+
+    initial_events = run_diff("v1")
+    assert [event.sentinel_version for event in initial_events] == ["v1"]
+    assert initial_events[0].sentinel_id == "s-sentinel"
+    assert initial_events[0].weight == pytest.approx(0.42)
+
+    repeat_events = run_diff("v1")
+    assert repeat_events == []
+
+    version_bump_events = run_diff("v2")
+    assert [event.sentinel_version for event in version_bump_events] == ["v2"]
+    assert version_bump_events[0].weight == pytest.approx(0.42)
