@@ -37,13 +37,16 @@ milestone.
    the SDK instantiates `DistributedBackfillCoordinator` automatically.
 2. Validate `backfill_completion_ratio` in staging to ensure leases converge and
    shards are not duplicated.
-3. Document recovery procedures (`scripts/lease_recover.py`) for on-call use.
+3. Document recovery procedures (`scripts/lease_recover.py`) for on-call use and
+   rehearse dry runs in staging before cutting production traffic.
 
 ### 3. Enforce SLAPolicy Budgets
 
 1. Wire concrete deadlines into `SLAPolicy` instances for each Seamless consumer.
 2. Verify that breaches raise `SeamlessSLAExceeded` in staging and that alerts
-   fire via the `seamless-sla-*` rules.
+   fire via the `seamless-sla-*` rules. The helper script
+   `scripts/inject_sla_violation.py` can inject synthetic histogram samples to
+   validate the pipeline before production traffic hits the new thresholds.
 3. Update runbooks with the new troubleshooting flow described in the SLA
    dashboards guide.
 

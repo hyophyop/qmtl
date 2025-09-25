@@ -3,7 +3,7 @@ from __future__ import annotations
 """Prometheus metrics for the SDK cache layer."""
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from prometheus_client import (
     generate_latest,
@@ -138,6 +138,25 @@ seamless_sla_deadline_seconds = _histogram(
     "seamless_sla_deadline_seconds",
     "Observed SLA phase durations for Seamless data requests",
     ["node_id", "phase"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+# ---------------------------------------------------------------------------
+# Conformance metrics
+# ---------------------------------------------------------------------------
+seamless_conformance_flag_total = _counter(
+    "seamless_conformance_flag_total",
+    "Total number of conformance flags emitted by Seamless normalization",
+    ["node_id", "flag_type"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_conformance_warning_total = _counter(
+    "seamless_conformance_warning_total",
+    "Total number of warnings recorded by the Seamless conformance pipeline",
+    ["node_id"],
     test_value_attr="_vals",
     test_value_factory=dict,
 )
@@ -440,6 +459,26 @@ def observe_sla_phase_duration(
     p = str(phase)
     seamless_sla_deadline_seconds.labels(node_id=n, phase=p).observe(duration_seconds)
     seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(duration_seconds)  # type: ignore[attr-defined]
+
+
+def observe_conformance_report(
+    *, node_id: str, flags: Mapping[str, int], warnings: Sequence[str]
+) -> None:
+    """Record counts derived from a Seamless conformance report."""
+
+    n = str(node_id)
+    for flag_type, count in flags.items():
+        ft = str(flag_type)
+        seamless_conformance_flag_total.labels(node_id=n, flag_type=ft).inc(count)
+        key = (n, ft)
+        seamless_conformance_flag_total._vals[key] = (  # type: ignore[attr-defined]
+            seamless_conformance_flag_total._vals.get(key, 0) + count
+        )
+    if warnings:
+        seamless_conformance_warning_total.labels(node_id=n).inc(len(warnings))
+        seamless_conformance_warning_total._vals[n] = (  # type: ignore[attr-defined]
+            seamless_conformance_warning_total._vals.get(n, 0) + len(warnings)
+        )
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:

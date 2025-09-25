@@ -468,6 +468,11 @@ class SeamlessDataProvider(ABC):
                         interval=interval,
                     )
                     self._last_conformance_report = report
+                    sdk_metrics.observe_conformance_report(
+                        node_id=node_id,
+                        flags=report.flags_counts,
+                        warnings=report.warnings,
+                    )
                     if (report.warnings or report.flags_counts) and not self._partial_ok:
                         raise ConformancePipelineError(report)
             except ConformancePipelineError:
