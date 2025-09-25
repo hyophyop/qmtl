@@ -20,6 +20,7 @@ from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueIn
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.services.dagmanager.monitor import AckStatus
 from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
+from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 
 
 class FakeSession:
@@ -362,3 +363,98 @@ async def test_grpc_diff_publishes_controlbus():
     assert topic == "queue"
     payload = json.loads(data.decode())
     assert payload["tags"] == ["x"]
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_emits_sentinel_weight_and_gateway_consumes():
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    producer = DummyProducer()
+    bus = ControlBusProducer(producer=producer, topic="queue")
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0, bus=bus)
+    await server.start()
+
+    sentinel_msgs: list[tuple[str, bytes, bytes | None]] = []
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+
+            async def run_diff(weight: float) -> None:
+                dag_json = json.dumps(
+                    {
+                        "nodes": [
+                            {
+                                "node_id": "n1",
+                                "node_type": "Compute",
+                                "code_hash": "c",
+                                "config_hash": "cfg",
+                                "schema_hash": "s",
+                                "schema_compat_id": "s-major",
+                                "params": {},
+                                "dependencies": [],
+                                "interval": 60,
+                                "tags": ["x"],
+                            },
+                            {
+                                "node_type": "VersionSentinel",
+                                "node_id": "s-sentinel",
+                                "traffic_weight": weight,
+                                "version": "v1",
+                            },
+                        ]
+                    }
+                )
+                request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+                async for chunk in stub.Diff(request):
+                    await stub.AckChunk(
+                        dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
+                    )
+
+            await run_diff(0.25)
+            sentinel_msgs = [entry for entry in producer.sent if entry[0] == "sentinel_weight"]
+            assert len(sentinel_msgs) == 1
+
+            await run_diff(0.25)
+            sentinel_msgs = [entry for entry in producer.sent if entry[0] == "sentinel_weight"]
+            assert len(sentinel_msgs) == 1
+
+            await run_diff(0.75)
+            sentinel_msgs = [entry for entry in producer.sent if entry[0] == "sentinel_weight"]
+            assert len(sentinel_msgs) == 2
+    finally:
+        await server.stop(None)
+
+    topic, data, key = sentinel_msgs[-1]
+    assert topic == "sentinel_weight"
+    assert key == b"s-sentinel"
+    payload = json.loads(data.decode())
+    assert payload["sentinel_id"] == "s-sentinel"
+    assert payload["weight"] == pytest.approx(0.75)
+    assert payload["version"] == 1
+    assert payload["etag"].startswith("sw:s-sentinel")
+    assert payload["ts"].endswith("Z")
+    assert payload.get("sentinel_version") == "v1"
+
+    class SentinelHub:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, float]] = []
+
+        async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
+            self.events.append((sentinel_id, weight))
+
+    hub = SentinelHub()
+    consumer = ControlBusConsumer(brokers=[], topics=["sentinel_weight"], group="g", ws_hub=hub)
+    message = ControlBusMessage(
+        topic="sentinel_weight",
+        key="s-sentinel",
+        etag=payload.get("etag", ""),
+        run_id="",
+        data=payload,
+        timestamp_ms=None,
+    )
+    await consumer._handle_message(message)
+    assert len(hub.events) == 1
+    sid, weight = hub.events[0]
+    assert sid == "s-sentinel"
+    assert weight == pytest.approx(0.75)
