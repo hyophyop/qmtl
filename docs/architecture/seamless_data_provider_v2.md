@@ -118,6 +118,32 @@ operations guide can be rendered directly from these metrics. Tracing spans will
 gain richer attributes once the schema registry work completes, but no further
 changes are required for the coordinator or SLA instrumentation.
 
+## Validation & Failure-Injection Suite
+
+Seamless v2 now ships with a comprehensive regression suite that backs the
+architecture promises in this document:
+
+- **Coverage algebra property tests** exercise `merge_coverage` and
+  `compute_missing_ranges` with Hypothesis-driven scenarios to ensure interval
+  boundaries and missing-range computations remain associative and lossless.
+- **Failure-injection tests** simulate coordinator lease loss, SLA deadline
+  breaches, and schema mismatches so the runtime surfaces the expected
+  `SeamlessSLAExceeded` or `ConformancePipelineError` exceptions.
+- **Observability snapshots** guard the Prometheus counters and structured log
+  fields (`node_id`, `interval`, `start`, `end`) emitted during background
+  backfills.
+
+Run the suite locally or in CI with:
+
+```
+uv run -m pytest -W error -n auto \
+  tests/runtime/sdk/test_history_coverage_property.py \
+  tests/sdk/test_seamless_provider.py
+```
+
+The command above is also the invocation wired into the CI Seamless job so new
+regressions surface before release promotion.
+
 ## Next Steps
 
 Teams can now migrate workloads to the distributed coordinator and wire SLA
