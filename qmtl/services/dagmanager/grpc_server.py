@@ -136,6 +136,7 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                     queue_map=chunk.queue_map,
                     sentinel_id=chunk.sentinel_id,
                     version=chunk.version,
+                    crc32=chunk.crc32,
                     buffer_nodes=[
                             dagmanager_pb2.BufferInstruction(
                                 node_id=n.node_id,

@@ -27,6 +27,10 @@ class _Validator:
 
     def validate(self, dag, crc):
         self.calls.append((dag, crc))
+        class _Report:
+            computed_checksum = 0
+
+        return _Report()
 
 
 class _ContextService:
@@ -80,6 +84,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
     assert prepared.dag == {"nodes": ["n"]}
     assert prepared.compute_context.execution_domain == "live"
     assert prepared.worlds == ["w1"]
+    assert prepared.node_ids_crc32 == 0
     assert validator.calls
 
     sentinel, queue_map = await pipeline.run_diff(
@@ -94,6 +99,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
     assert sentinel == "sentinel"
     assert queue_map == {"nid": [{"queue": "q", "global": False}]}
     assert diff_exec.calls
+    assert diff_exec.calls[0].get("expected_crc32") is None
 
     result = await pipeline.build_queue_map(prepared.dag, ["w1"], "w1", "live")
     assert result == {"nid": []}

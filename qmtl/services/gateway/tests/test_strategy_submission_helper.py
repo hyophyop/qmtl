@@ -45,10 +45,7 @@ class DummyDagManager:
         self.tag_queries: list[tuple] = []
         self.diff_calls: list[tuple] = []
         self.raise_diff: bool = False
-        self.diff_result = SimpleNamespace(
-            sentinel_id="diff-sentinel",
-            queue_map={"node123#0": "topic-A"},
-        )
+        self._queue_map = {"node123#0": "topic-A"}
 
     async def get_queues_by_tag(
         self, tags, interval, match_mode, world_id, execution_domain
@@ -69,7 +66,16 @@ class DummyDagManager:
         self.diff_calls.append((strategy_id, world_id, execution_domain, as_of, partition, dataset_fingerprint))
         if self.raise_diff:
             raise TimeoutError("diff timeout")
-        return self.diff_result
+        try:
+            decoded = json.loads(base64.b64decode(dag_json).decode())
+        except Exception:
+            decoded = json.loads(dag_json)
+        crc = crc32_of_list(n.get("node_id", "") for n in decoded.get("nodes", []))
+        return SimpleNamespace(
+            sentinel_id="diff-sentinel",
+            queue_map=dict(self._queue_map),
+            crc32=crc,
+        )
 
 
 class DummyDatabase:

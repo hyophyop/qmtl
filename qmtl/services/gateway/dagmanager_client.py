@@ -177,22 +177,49 @@ class DagManagerClient:
                     sentinel_id = ""
                     version = ""
                     buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
+                    crc32_value: int | None = None
+
+                    def _require_crc(message: dagmanager_pb2.DiffChunk) -> int:
+                        has_field = getattr(message, "HasField", None)
+                        if callable(has_field):
+                            if not message.HasField("crc32"):
+                                raise ValueError("diff chunk missing CRC32 handshake")
+                        crc = getattr(message, "crc32", None)
+                        if crc is None:
+                            raise ValueError("diff chunk missing CRC32 handshake")
+                        return int(crc)
+
                     async for chunk in self._diff_stub.Diff(request):
                         queue_map.update(dict(chunk.queue_map))
                         sentinel_id = chunk.sentinel_id
                         if getattr(chunk, "version", ""):
                             version = chunk.version
                         buffer_nodes.extend(chunk.buffer_nodes)
-                        await self._diff_stub.AckChunk(
-                            dagmanager_pb2.ChunkAck(
-                                sentinel_id=chunk.sentinel_id, chunk_id=0
+                        error: Exception | None = None
+                        chunk_crc: int | None = None
+                        try:
+                            chunk_crc = _require_crc(chunk)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            error = exc
+                        finally:
+                            await self._diff_stub.AckChunk(
+                                dagmanager_pb2.ChunkAck(
+                                    sentinel_id=chunk.sentinel_id, chunk_id=0
+                                )
                             )
-                        )
+                        if error is not None:
+                            raise error
+                        if chunk_crc is not None:
+                            if crc32_value is None:
+                                crc32_value = chunk_crc
+                            elif chunk_crc != crc32_value:
+                                raise ValueError("diff chunk CRC32 mismatch")
                     result_chunk = dagmanager_pb2.DiffChunk(
                         queue_map=queue_map,
                         sentinel_id=sentinel_id,
                         buffer_nodes=buffer_nodes,
                         version=version,
+                        crc32=crc32_value or 0,
                     )
                     if topic_namespace_enabled():
                         applied_namespace = namespace

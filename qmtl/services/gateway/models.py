@@ -25,6 +25,7 @@ class StrategyAck(BaseModel):
     queue_map: dict[str, object] = Field(default_factory=dict)
     # Include sentinel identifier for parity with dry-run/diff outputs
     sentinel_id: str | None = None
+    node_ids_crc32: int = 0
     downgraded: bool = False
     downgrade_reason: str | None = None
     safe_mode: bool = False

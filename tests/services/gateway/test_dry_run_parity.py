@@ -53,6 +53,8 @@ class DummyDagClient:
 
     async def diff(self, strategy_id: str, dag_json: str, *, world_id: str | None = None):
         # Return a single-chunk result mapping to topics used above
+        decoded = json.loads(base64.b64decode(dag_json).decode())
+        crc = node_ids_crc32(decoded.get("nodes", []))
         return dagmanager_pb2.DiffChunk(
             queue_map={
                 partition_key(
@@ -69,6 +71,7 @@ class DummyDagClient:
                 ): "q2",
             },
             sentinel_id="s-123",
+            crc32=crc,
         )
 
     async def close(self):

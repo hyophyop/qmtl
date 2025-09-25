@@ -56,5 +56,6 @@ class DiffChunk:
     queue_map: Dict[str, str]
     sentinel_id: str
     version: str
+    crc32: int
     buffering_nodes: List[BufferInstruction] = field(default_factory=list)
     new_nodes: List[NodeInfo] = field(default_factory=list)

@@ -186,6 +186,7 @@ async def test_grpc_redo_diff(monkeypatch):
                 },
                 sentinel_id=request.strategy_id + "-sentinel",
                 version="v1",
+                crc32=0,
             )
 
         async def diff_async(self, request: DiffRequest):
