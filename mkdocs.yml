@@ -49,6 +49,7 @@ nav:
       - Monitoring: operations/monitoring.md
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md
+      - Schema Registry Governance: operations/schema_registry_governance.md
       - Risk Management: operations/risk_management.md
       - Timing Controls: operations/timing_controls.md
       - Exchange Calendars: operations/exchange_calendars.md
