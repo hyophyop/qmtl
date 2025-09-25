@@ -7,7 +7,7 @@ asynchronous wrapper around ``ccxt.async_support`` to return DataFrames in the
 SDK's standard schema with a ``ts`` (seconds) column.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 import asyncio
 import time
@@ -49,7 +49,7 @@ class CcxtBackfillConfig:
     window_size: int = 1000  # max candles per request
     max_retries: int = 3
     retry_backoff_s: float = 0.5
-    rate_limiter: RateLimiterConfig = RateLimiterConfig()
+    rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
 
 
 def _try_parse_timeframe_s(timeframe: str) -> int:
@@ -287,7 +287,7 @@ class CcxtTradesConfig:
     window_size: int = 1000  # max trades per request
     max_retries: int = 3
     retry_backoff_s: float = 0.5
-    rate_limiter: RateLimiterConfig = RateLimiterConfig()
+    rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
 
 
 class CcxtTradesFetcher(DataFetcher):

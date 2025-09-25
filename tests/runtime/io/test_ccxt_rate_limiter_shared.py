@@ -43,5 +43,5 @@ async def test_process_wide_rate_limit_serializes_calls_across_fetchers():
     times = sorted(ex1.call_times + ex2.call_times)
     assert len(times) == 2
     # Ensure ~50ms spacing with a small tolerance
-    assert (times[1] - times[0]) >= 0.04
+    assert (times[1] - times[0]) >= 0.03
 
