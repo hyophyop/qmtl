@@ -22,6 +22,7 @@ class DiffExecutor:
         compute_ctx,
         timeout: float,
         prefer_queue_map: bool,
+        expected_crc32: int | None = None,
     ) -> tuple[str | None, dict[str, list[dict[str, Any]]] | None]:
         diff_kwargs = compute_ctx.diff_kwargs()
 
@@ -36,6 +37,19 @@ class DiffExecutor:
         sentinel_id: str | None = None
         queue_map: dict[str, list[dict[str, Any]]] | None = None
 
+        def _ensure_crc(chunk) -> None:
+            if expected_crc32 is None or chunk is None:
+                return
+            has_field = getattr(chunk, "HasField", None)
+            if callable(has_field):
+                if not chunk.HasField("crc32"):
+                    raise ValueError("diff chunk missing CRC32 handshake")
+            crc = getattr(chunk, "crc32", None)
+            if crc is None:
+                raise ValueError("diff chunk missing CRC32 handshake")
+            if int(crc) != expected_crc32:
+                raise ValueError("diff chunk CRC32 mismatch")
+
         if prefer_queue_map and len(worlds) > 1:
             tasks = [_invoke(world_id) for world_id in worlds]
             chunks = await asyncio.gather(*tasks, return_exceptions=True)
@@ -43,6 +57,7 @@ class DiffExecutor:
             for chunk in chunks:
                 if isinstance(chunk, Exception) or chunk is None:
                     continue
+                _ensure_crc(chunk)
                 if not sentinel_id:
                     sentinel_id = getattr(chunk, "sentinel_id", None)
                 for key, topic in dict(getattr(chunk, "queue_map", {})).items():
@@ -59,6 +74,7 @@ class DiffExecutor:
         chunk = await asyncio.wait_for(_invoke(world), timeout=timeout)
         if chunk is None:
             return sentinel_id, queue_map
+        _ensure_crc(chunk)
 
         sentinel_id = getattr(chunk, "sentinel_id", None)
         if prefer_queue_map:

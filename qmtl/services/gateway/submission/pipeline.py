@@ -19,6 +19,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing hints only
 class PreparedSubmission:
     dag: dict[str, Any]
     strategy_context: StrategyComputeContext
+    node_ids_crc32: int
 
     @property
     def compute_context(self) -> StrategyComputeContext:
@@ -59,11 +60,12 @@ class SubmissionPipeline:
     async def prepare(self, payload: "StrategySubmit") -> PreparedSubmission:
         loaded = self._dag_loader.load(payload.dag_json)
         dag = loaded.dag
-        self._node_validator.validate(dag, payload.node_ids_crc32)
+        report = self._node_validator.validate(dag, payload.node_ids_crc32)
         strategy_context = await self._context_service.build(payload)
         return PreparedSubmission(
             dag=dag,
             strategy_context=strategy_context,
+            node_ids_crc32=report.computed_checksum,
         )
 
     async def run_diff(
@@ -76,6 +78,7 @@ class SubmissionPipeline:
         compute_ctx: StrategyComputeContext,
         timeout: float,
         prefer_queue_map: bool,
+        expected_crc32: int | None = None,
     ) -> tuple[str | None, dict[str, list[dict[str, Any]]] | None]:
         return await self._diff_executor.run(
             strategy_id=strategy_id,
@@ -85,6 +88,7 @@ class SubmissionPipeline:
             compute_ctx=compute_ctx,
             timeout=timeout,
             prefer_queue_map=prefer_queue_map,
+            expected_crc32=expected_crc32,
         )
 
     async def build_queue_map(

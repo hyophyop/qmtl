@@ -26,7 +26,7 @@ def make_diff_stub(total_failures: int = 0):
     call_count = 0
 
     async def gen():
-        yield dagmanager_pb2.DiffChunk()
+        yield dagmanager_pb2.DiffChunk(sentinel_id="s", crc32=0)
 
     class Stub:
         def __init__(self, channel):

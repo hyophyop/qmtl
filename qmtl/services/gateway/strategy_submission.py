@@ -30,6 +30,7 @@ class StrategySubmissionResult:
     strategy_id: str
     queue_map: dict[str, list[dict[str, Any] | Any]]
     sentinel_id: str
+    node_ids_crc32: int
     downgraded: bool = False
     downgrade_reason: "DowngradeReason | str | None" = None
     safe_mode: bool = False
@@ -56,6 +57,7 @@ class StrategySubmissionHelper:
     ) -> StrategySubmissionResult:
         prepared = await self._pipeline.prepare(payload)
         dag = prepared.dag
+        node_crc32 = prepared.node_ids_crc32
         strategy_ctx = prepared.compute_context
         worlds = prepared.worlds
         downgraded = strategy_ctx.downgraded
@@ -106,6 +108,7 @@ class StrategySubmissionHelper:
                 compute_ctx=strategy_ctx,
                 timeout=config.diff_timeout,
                 prefer_queue_map=prefer_diff,
+                expected_crc32=node_crc32,
             )
             if not sentinel_id:
                 sentinel_id = sentinel_default
@@ -135,6 +138,7 @@ class StrategySubmissionHelper:
             strategy_id=strategy_id,
             queue_map=queue_map,
             sentinel_id=sentinel_id,
+            node_ids_crc32=node_crc32,
             downgraded=downgraded,
             downgrade_reason=downgrade_reason,
             safe_mode=safe_mode,

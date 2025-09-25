@@ -43,7 +43,7 @@ from .topic import (
     build_namespace,
     ensure_namespace,
 )
-from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.foundation.common import AsyncCircuitBreaker, crc32_of_list
 from qmtl.foundation.common.compute_context import ComputeContext, coerce_compute_context
 from qmtl.foundation.common.metrics_shared import observe_cross_context_cache_hit
 from .monitor import AckStatus
@@ -442,6 +442,7 @@ class DiffService:
         version: str,
         new_nodes: List[NodeInfo],
         buffering_nodes: List[BufferInstruction],
+        crc32: int,
     ) -> None:
         CHUNK_SIZE = 100
         total = max(len(new_nodes), len(buffering_nodes))
@@ -464,6 +465,7 @@ class DiffService:
                     queue_map=queue_map,
                     sentinel_id=sentinel_id,
                     version=version,
+                    crc32=crc32,
                     new_nodes=[],
                     buffering_nodes=[],
                 )
@@ -479,6 +481,7 @@ class DiffService:
                     queue_map=queue_map,
                     sentinel_id=sentinel_id,
                     version=version,
+                    crc32=crc32,
                     new_nodes=chunk_new,
                     buffering_nodes=chunk_buf,
                 )
@@ -517,13 +520,22 @@ class DiffService:
             if not new_nodes:
                 sentinel_gap_count.inc()
                 sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            self._stream_send(queue_map, sentinel_id, version, new_nodes, instructions)
+            crc32 = crc32_of_list(n.node_id for n in nodes)
+            self._stream_send(
+                queue_map,
+                sentinel_id,
+                version,
+                new_nodes,
+                instructions,
+                crc32,
+            )
             # success path accounted as processed request
             diff_requests_total.inc()
             return DiffChunk(
                 queue_map=queue_map,
                 sentinel_id=sentinel_id,
                 version=version,
+                crc32=crc32,
                 new_nodes=new_nodes,
                 buffering_nodes=instructions,
             )

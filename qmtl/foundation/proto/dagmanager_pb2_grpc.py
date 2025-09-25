@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import dagmanager_pb2 as dagmanager__pb2
+import dagmanager_pb2 as dagmanager__pb2
 
 GRPC_GENERATED_VERSION = '1.75.0'
 GRPC_VERSION = grpc.__version__

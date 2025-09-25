@@ -28,6 +28,7 @@ message DiffChunk {
   string sentinel_id = 2;
   repeated BufferInstruction buffer_nodes = 3;
   string version = 4;
+  optional uint32 crc32 = 5;
 }
 
 message ChunkAck {
