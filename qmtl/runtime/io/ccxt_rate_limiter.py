@@ -61,16 +61,21 @@ async def get_shared_limiter(
     First configuration applied for a ``key`` wins. Subsequent calls with
     different shapes are ignored to avoid runtime surprises.
     """
-    if key in _REGISTRY:
-        return _REGISTRY[key]
+    # Include shape in the registry key to avoid cross-test/process-wide
+    # collisions where an earlier configuration for the same logical key
+    # (e.g., exchange id) would dictate the shape for the entire process.
+    # This mirrors the cluster-scope cache behavior below.
+    reg_key = f"{key}|{int(max_concurrency)}|{float(min_interval_s)}"
+    if reg_key in _REGISTRY:
+        return _REGISTRY[reg_key]
     async with _REGISTRY_LOCK:
-        if key in _REGISTRY:
-            return _REGISTRY[key]
+        if reg_key in _REGISTRY:
+            return _REGISTRY[reg_key]
         limiter = _SharedLimiter(
             max_concurrency=max_concurrency, min_interval_s=min_interval_s
         )
-        _REGISTRY[key] = limiter
-        _SHAPES[key] = _LimiterShape(max_concurrency, min_interval_s)
+        _REGISTRY[reg_key] = limiter
+        _SHAPES[reg_key] = _LimiterShape(max_concurrency, min_interval_s)
         return limiter
 
 
