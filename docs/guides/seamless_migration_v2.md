@@ -1,69 +1,78 @@
 # Seamless Migration to Data Provider v2
 
-The Seamless Data Provider v2 rollout introduces mandatory conformance checks,
-SLA enforcement, and upgraded governance. This guide helps strategy and
-platform teams migrate from the provisional v1 behaviour to the production v2
-stack without disrupting live traffic.
+> **Status:** Migration guidance is provisional. The runtime continues to expose
+> the v1 behaviour by default, and many of the v2 capabilities referenced below
+> are still being implemented. Treat the checklist as preparation work for when
+> issues #1148–#1152 land rather than an immediately actionable runbook.
+
+The Seamless Data Provider v2 rollout will eventually introduce mandatory
+conformance checks, SLA enforcement, and upgraded governance. Until the
+underlying services ship, this document focuses on the steps teams can take to
+stay aligned with the roadmap and avoid premature configuration changes.
 
 ## Prerequisites
 
-- Upgrade to a build that includes `qmtl.runtime.sdk.seamless_data_provider`
-  version 2.0.0 or later.
-- Ensure the cluster has access to the distributed Backfill Coordinator service
-  (deployed via `helm/seamless-backfill-coordinator`).
-- Install the new observability bundle by applying
-  `operations/monitoring/seamless_v2.jsonnet` or importing the packaged Grafana
-  dashboard.
+- Track the release that introduces the distributed coordinator and SLA engine.
+  The current package exports only the in-memory coordinator stub.
+- Hold off on any Helm deployments for `seamless-backfill-coordinator`; the
+  charts will be published alongside the implementation work.
+- Skip the observability bundle for now. The referenced Jsonnet manifests do not
+  exist yet and will be added when metrics become available.
 
 ## Migration Stages
 
-### 1. Enable Conformance Pipeline in Shadow Mode
+### 1. Prototype the Conformance Pipeline
 
-1. Set `seamless.conformance.mode=shadow` in the environment configuration.
-2. Monitor the `seamless_conformance_flag_total` metric. Zero flags means the
-   dataset already complies.
-3. Review generated regression reports in the `qmtl://observability/seamless`
-   bucket and fix any detected schema drift or coverage gaps.
+1. Instantiate `ConformancePipeline` explicitly in integration tests to collect
+   normalization reports. Runtime wiring will remain opt-in until the defaults
+   switch to blocking mode.
+2. Capture `seamless_conformance_flag_total` locally (or in staging) to gauge
+   drift. Production scraping is not yet in place.
+3. Document schema assumptions so promotion to strict mode can happen quickly
+   once the registry support lands.
 
-### 2. Adopt the Distributed Backfill Coordinator
+### 2. Prepare for the Distributed Backfill Coordinator
 
-1. Disable the legacy `InMemoryBackfillCoordinator` by removing it from the
-   Seamless provider wiring.
-2. Point `seamless.backfill.endpoint` at the Raft cluster service address.
-3. Verify leases via the `Seamless SLA` Grafana dashboard. Any missing shards
-   will surface through the `backfill_completion_ratio` metric.
+1. Keep using `InMemoryBackfillCoordinator` until the Raft implementation is
+   merged. Attempting to switch today will raise import errors.
+2. Inventory which strategies will require coordinated leases so you can test
+   with the new service once available.
+3. Plan integration tests around the future `backfill_completion_ratio` metric
+   even though it is not emitted yet.
 
-### 3. Enforce SLAPolicy Deadlines
+### 3. Draft SLAPolicy Expectations
 
-1. Promote policies from `dry-run` to `enforced` in `configs/seamless/sla`.
-2. Confirm alert routing in PagerDuty/Slack with a staged violation using the
-   `scripts/inject_sla_violation.py` helper.
-3. Ensure each owning team has an escalation entry in the SLA runbook.
+1. Capture target deadlines in documentation or configuration comments. The
+   `SLAPolicy` dataclass currently records intent only.
+2. Mock incident walkthroughs to validate escalation paths before alerts exist.
+3. Contribute to the SLA runbook template so it is ready for the enforcement
+   launch.
 
-### 4. Switch Schema Validation to Strict
+### 4. Plan Schema Validation Rollout
 
-1. Update `schema_registry.validation_mode=strict` once canary metrics remain
-   clean for at least 48 hours.
-2. Document the promotion in `docs/operations/schema_registry_governance.md`
-   and link the audit entry to the change request ticket.
-3. Enable the `Schema Drift` alert so any regression triggers an on-call page.
+1. Use the `ConformancePipeline` reports to identify columns that fail
+   normalization today.
+2. Decide which datasets will adopt strict validation first once registry
+   support is wired in.
+3. Prepare alert definitions but leave them disabled until metrics are emitted.
 
 ### 5. Expand Test Coverage
 
-- Enable the Seamless validation suite by running
-  `uv run -m pytest tests/seamless -k "not slow"` in CI.
-- Add property-based tests with Hypothesis for critical node paths.
-- Wire failure-injection tests via the `seamless_fault_injection` fixture to
-  confirm retries and SLA budget handling.
+- Keep the existing Seamless validation suite in CI so regressions surface even
+  before v2 lands.
+- Add property-based tests with Hypothesis for critical node paths to build
+  confidence ahead of the rollout.
+- Experiment with the `seamless_fault_injection` fixture locally; the retry
+  semantics will evolve alongside the SLA implementation.
 
 ## Rollback Plan
 
-If issues appear after enabling strict mode or SLA enforcement:
+If issues appear once the new components roll out:
 
-1. Toggle `seamless.conformance.mode=shadow` to stop blocking reads.
-2. Set the SLA policy back to `dry-run`; this disables alerting but keeps
-   metrics active for diagnosis.
-3. Fallback to cached data by prioritising the storage source while the
+1. Toggle `seamless.conformance.mode=shadow` to stop blocking reads while
+   keeping visibility into normalization gaps.
+2. Revert any SLA configuration overrides until the enforcement layer stabilises.
+3. Fallback to cached data by prioritising the storage source while the new
    coordinator recovers.
 
 Always record the incident and remediation actions in the Seamless postmortem
@@ -71,7 +80,8 @@ tracker so lessons flow back into the runbooks.
 
 ## Definition of Done
 
-A migration is complete when:
+Do not mark migrations complete until the supporting features are live. When the
+implementation is available, use the following criteria:
 
 - Conformance pipeline runs in blocking mode with no open regressions.
 - Backfill coordinator leases and SLA dashboards show healthy baselines.
