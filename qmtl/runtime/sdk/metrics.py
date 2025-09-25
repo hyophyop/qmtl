@@ -123,6 +123,25 @@ backfill_retry_total = _counter(
     test_value_factory=dict,
 )
 
+backfill_completion_ratio = _gauge(
+    "backfill_completion_ratio",
+    "Completion ratio reported by the distributed backfill coordinator",
+    ["node_id", "interval", "lease_key"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+# ---------------------------------------------------------------------------
+# SLA metrics
+# ---------------------------------------------------------------------------
+seamless_sla_deadline_seconds = _histogram(
+    "seamless_sla_deadline_seconds",
+    "Observed SLA phase durations for Seamless data requests",
+    ["node_id", "phase"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 # ---------------------------------------------------------------------------
 # History auto backfill metrics
 # ---------------------------------------------------------------------------
@@ -402,6 +421,25 @@ def observe_backfill_failure(node_id: str, interval: int) -> None:
     backfill_failure_total._vals[(n, i)] = backfill_failure_total._vals.get((n, i), 0) + 1  # type: ignore[attr-defined]
     backfill_jobs_in_progress.dec()
     backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()  # type: ignore[attr-defined]
+
+
+def observe_backfill_completion_ratio(
+    *, node_id: str, interval: str | int, lease_key: str, ratio: float
+) -> None:
+    n = str(node_id)
+    i = str(interval)
+    k = str(lease_key)
+    backfill_completion_ratio.labels(node_id=n, interval=i, lease_key=k).set(ratio)
+    backfill_completion_ratio._vals[(n, i, k)] = ratio  # type: ignore[attr-defined]
+
+
+def observe_sla_phase_duration(
+    *, node_id: str, phase: str, duration_seconds: float
+) -> None:
+    n = str(node_id)
+    p = str(phase)
+    seamless_sla_deadline_seconds.labels(node_id=n, phase=p).observe(duration_seconds)
+    seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(duration_seconds)  # type: ignore[attr-defined]
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:

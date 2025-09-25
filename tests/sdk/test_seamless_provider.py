@@ -18,6 +18,9 @@ from qmtl.runtime.io.seamless_provider import (
 )
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.conformance import ConformancePipeline
+from qmtl.runtime.sdk import seamless_data_provider as seamless_module
+from qmtl.runtime.sdk.sla import SLAPolicy
+from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 
 
 class _StaticSource:
@@ -61,6 +64,17 @@ class _DummyProvider(SeamlessDataProvider):
     """Concrete instance of SeamlessDataProvider using injected sources/backfiller."""
 
     pass
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self._value = 0.0
+
+    def monotonic(self) -> float:
+        return self._value
+
+    def advance(self, seconds: float) -> None:
+        self._value += seconds
 
 
 @pytest.mark.asyncio
@@ -281,3 +295,67 @@ async def test_conformance_pipeline_respects_partial_ok() -> None:
     report = provider.last_conformance_report
     assert report is not None
     assert report.flags_counts.get("duplicate_bars") == 1
+
+
+class _DelayedSource(_StaticSource):
+    def __init__(self, coverage, priority, clock: _FakeClock, delay: float) -> None:
+        super().__init__(coverage, priority)
+        self._clock = clock
+        self._delay = delay
+
+    async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
+        self._clock.advance(self._delay)
+        return await super().coverage(node_id=node_id, interval=interval)
+
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        self._clock.advance(self._delay)
+        return await super().fetch(start, end, node_id=node_id, interval=interval)
+
+
+@pytest.mark.asyncio
+async def test_sla_storage_budget_exceeded(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    clock = _FakeClock()
+    monkeypatch.setattr(seamless_module.time, "monotonic", clock.monotonic)
+    storage = _DelayedSource([(0, 200)], DataSourcePriority.STORAGE, clock, delay=0.05)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(max_wait_storage_ms=10),
+    )
+
+    with pytest.raises(SeamlessSLAExceeded) as exc:
+        await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert exc.value.phase == "storage_wait"
+
+
+@pytest.mark.asyncio
+async def test_sla_total_metric_recorded(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    clock = _FakeClock()
+    monkeypatch.setattr(seamless_module.time, "monotonic", clock.monotonic)
+    storage = _DelayedSource([(0, 20)], DataSourcePriority.STORAGE, clock, delay=0.002)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(max_wait_storage_ms=50, total_deadline_ms=100),
+    )
+
+    df = await provider.fetch(0, 20, node_id="node", interval=10)
+    assert not df.empty
+    key = ("node", "total")
+    assert sdk_metrics.seamless_sla_deadline_seconds._vals[key]  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_sla_sync_gap_limit_enforced() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(max_sync_gap_bars=1),
+    )
+
+    with pytest.raises(SeamlessSLAExceeded) as exc:
+        await provider.ensure_data_available(0, 100, node_id="node", interval=10)
+
+    assert exc.value.phase == "sync_gap"

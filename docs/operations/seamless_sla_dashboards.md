@@ -9,20 +9,19 @@ last_modified: 2025-09-25
 
 # Seamless SLA Dashboards
 
-> **Status:** Dashboards and alert rules referenced in this runbook are
-> placeholders. The distributed coordinator and SLA metrics they rely on are not
-> yet available. Keep this document bookmarked for the v2 rollout but avoid
-> creating production wiring until the implementation lands.
+> **Status:** The dashboards and alert rules referenced in this runbook are now
+> backed by live metrics. Deploy the Jsonnet bundle and wire the alerts in
+> production environments; the distributed coordinator and SLA engine ship with
+> QMTL v2.
 
-This runbook captures the intended observability package that will ship with
-Seamless Data Provider v2. For now, treat it as design documentation and track
-progress in issues #1148–#1152.
+This runbook documents the observability package that accompanies Seamless Data
+Provider v2. Changes below supersede the provisional guidance that pre-dated the
+implementation tracked in issue #1148.
 
 ## Dashboard Bundle
 
 Import `operations/monitoring/seamless_v2.jsonnet` (or the rendered JSON) into
-Grafana once the file is published. The planned bundle will contain three core
-dashboards:
+Grafana to provision the three core dashboards:
 
 1. **Seamless SLA Overview** – shows `seamless_sla_deadline_seconds`
    histograms, per-domain latency percentiles, and an error budget gauge.
@@ -31,38 +30,37 @@ dashboards:
 3. **Conformance Quality** – highlights flag totals, schema warnings, and the
    outcome of regression report checks.
 
-These dashboards do not exist yet. Until they do, rely on existing storage and
-backfill monitoring to gauge health.
+Dashboards render successfully once Prometheus scrapes the Seamless runtime. The
+bundle depends on the coordinator and SLA metrics described below.
 
 ## Metrics and Alerts
 
-The metrics below are part of the planned rollout. At present only
-`seamless_conformance_flag_total` is emitted, and even that requires explicitly
-supplying a `ConformancePipeline` instance. Capture the remainder once the
-coordinator and SLA engine ship:
+The runtime now emits the following metrics:
 
-- `seamless_sla_deadline_seconds` (histogram) – exported by the Backfill
-  Coordinator. Alerts will fire when the 99th percentile exceeds policy.
-- `backfill_completion_ratio` – gauge reporting per-lease completion.
-- `seamless_schema_validation_failures_total` – counter for strict schema
-  violations.
+- `seamless_sla_deadline_seconds` (histogram) – exported by the Seamless data
+  provider with `phase` labels for `storage_wait`, `backfill_wait`, `live_wait`,
+  and `total`. Alert when the 99th percentile approaches budget.
+- `backfill_completion_ratio` – gauge reporting per-lease completion as
+  observed by the distributed coordinator.
+- `seamless_conformance_flag_total` – counter populated by
+  `ConformancePipeline` when normalisation warnings occur.
 
-Recommended alert rules will live in `alert_rules.yml` under the `seamless-*`
-prefix when they are added. Until then, refrain from wiring PagerDuty or Slack
-integrations for non-existent metrics.
+Alert rules under the `seamless-*` prefix have been added to `alert_rules.yml`.
+Ensure PagerDuty and Slack routes are configured in environments where these
+alerts should page.
 
 ## Tracing and Logging
 
-- **Tracing**: planned `seamless.pipeline` spans will eventually add
-  `sla.phase`, `backfill.lease_id`, and `schema.validation_mode` attributes. No
-  such spans are emitted today.
-- **Logging**: future coordinator releases will log to `seamless.backfill` and
-  `seamless.sla`. Current builds only emit local debug messages when backfills
-  start or complete.
+- **Tracing**: `seamless.pipeline` spans now include `sla.phase` attributes when
+  budgets are enforced. Future releases will expand the schema metadata carried
+  on these spans.
+- **Logging**: the coordinator and SLA layers log to `seamless.backfill` and
+  `seamless.sla` respectively. Use these structured logs to correlate alerts
+  with lease IDs and offending nodes.
 
 ## Runbooks
 
-When alerts are introduced:
+When an alert fires:
 
 1. Open the Seamless SLA Overview dashboard and inspect the affected domain.
 2. Use the Backfill Coordinator Health dashboard to confirm whether leases are
