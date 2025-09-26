@@ -72,9 +72,13 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         *,
         stabilization_bars: int = 0,
         conformance_version: str = "v2",
+        partition_template: str = "exchange={exchange}/symbol={symbol}/timeframe={timeframe}",
+        producer: str | None = "seamless@qmtl",
     ) -> None:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._partition_template = partition_template
+        self._producer_identity = producer or None
         super().__init__(
             store=self._store,
             stabilization_bars=stabilization_bars,
@@ -106,10 +110,49 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
 
     # ------------------------------------------------------------------
     def _target_dir(self, manifest: MutableMapping[str, Any]) -> Path:
-        node_part = _sanitize_component(str(manifest.get("node_id", "unknown")))
+        node_id = str(manifest.get("node_id", "unknown"))
+        node_part = _sanitize_component(node_id)
         interval_part = _sanitize_component(str(manifest.get("interval", "0")))
         fingerprint_part = _sanitize_component(str(manifest.get("dataset_fingerprint", "fp")))
-        return self.base_dir / node_part / interval_part / fingerprint_part
+
+        partitioned = self._partition_components(node_id)
+        if partitioned is None:
+            return self.base_dir / node_part / interval_part / fingerprint_part
+
+        target = self.base_dir
+        for component in partitioned:
+            target /= component
+        target /= interval_part
+        return target / fingerprint_part
+
+    def _partition_components(self, node_id: str) -> list[str] | None:
+        from qmtl.runtime.sdk.ohlcv_nodeid import parse as parse_ohlcv_node_id
+
+        template = self._partition_template
+        if not template:
+            return None
+
+        parsed = parse_ohlcv_node_id(node_id)
+        if not parsed:
+            return None
+
+        exchange, symbol, timeframe = parsed
+        replacements = {
+            "exchange": _sanitize_component(exchange),
+            "symbol": _sanitize_component(symbol),
+            "timeframe": _sanitize_component(timeframe),
+            "node_id": _sanitize_component(node_id),
+        }
+
+        try:
+            rendered = template.format(**replacements)
+        except KeyError:
+            return None
+
+        components = [part for part in rendered.split("/") if part]
+        if not components:
+            return None
+        return [_sanitize_component(part) for part in components]
 
     def _write_manifest(self, path: Path, manifest: MutableMapping[str, Any]) -> None:
         path.write_text(json.dumps(manifest, sort_keys=True))
@@ -136,13 +179,32 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         if dataset_fp.startswith("lake:sha256:"):
             manifest["dataset_fingerprint"] = dataset_fp.replace("lake:", "", 1)
 
+        as_of = manifest.get("as_of")
+        if isinstance(as_of, datetime):
+            manifest["as_of"] = as_of.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        elif as_of is not None:
+            manifest["as_of"] = str(as_of)
+
+        manifest.setdefault("stabilization_bars", self.stabilization_bars)
+        manifest.setdefault("conformance_version", self.conformance_version)
+        if "conformance" not in manifest:
+            manifest["conformance"] = {"flags": {}, "warnings": []}
+        else:
+            manifest["conformance"] = {
+                "flags": dict(manifest["conformance"].get("flags", {})),
+                "warnings": list(manifest["conformance"].get("warnings", [])),
+            }
+
         producer = ProducerContext(
             node_id=str(manifest.get("node_id", "unknown")),
             interval=int(manifest.get("interval", 0)),
             world_id=os.getenv("WORLD_ID", "default"),
             strategy_id=os.getenv("QMTL_STRATEGY_ID"),
         )
-        manifest["producer"] = producer.as_dict()
+        producer_payload = producer.as_dict()
+        if self._producer_identity:
+            producer_payload["identity"] = self._producer_identity
+        manifest["producer"] = producer_payload
         manifest["storage"] = {
             "data_uri": str(data_path),
             "manifest_uri": str(manifest_path),
