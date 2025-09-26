@@ -307,11 +307,16 @@ seamless_data_provider:
     distributed_lease_ttl_ms: 120000
     window_bars: 900
     max_concurrent_requests: 8
-    retry_max: 6
-    retry_base_backoff_ms: 500
-    retry_jitter: true
+    max_attempts: 6
+    retry_backoff_ms: 500
+    jitter_ratio: 0.25
   cache_ttl: 3600
 ```
+
+`jitter_ratio` is expressed as a percentage of the exponentially increasing
+retry delay. A value of `0.25` means each retry waits for the deterministic
+backoff plus a random component sampled between 0 and 25% of that delay,
+ensuring concurrent workers do not stampede the upstream API.
 
 ### 3. 장애 대응
 - 자동 폴백 메커니즘
