@@ -88,6 +88,30 @@ cache_last_read_timestamp = _gauge(
 
 cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
+seamless_cache_hit_total = _counter(
+    "seamless_cache_hit_total",
+    "Total number of Seamless in-memory cache hits",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_cache_miss_total = _counter(
+    "seamless_cache_miss_total",
+    "Total number of Seamless in-memory cache misses",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_cache_resident_bytes = _gauge(
+    "seamless_cache_resident_bytes",
+    "Resident bytes held by Seamless in-memory cache",
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+    reset=lambda g: g.set(0),
+)
+
 # ---------------------------------------------------------------------------
 # Backfill metrics
 # ---------------------------------------------------------------------------
@@ -664,6 +688,36 @@ def observe_coverage_ratio(*, node_id: str, interval: str | int, ratio: float | 
     world = _WORLD_ID
     coverage_ratio.labels(node_id=n, interval=i, world_id=world).set(ratio)
     coverage_ratio._vals[(n, i, world)] = ratio  # type: ignore[attr-defined]
+
+
+def observe_seamless_cache_hit(
+    *, node_id: str, interval: str | int, world_id: str | None
+) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = str(world_id) if world_id is not None else _WORLD_ID
+    seamless_cache_hit_total.labels(node_id=n, interval=i, world_id=world).inc()
+    seamless_cache_hit_total._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+        seamless_cache_hit_total._vals.get((n, i, world), 0) + 1
+    )
+
+
+def observe_seamless_cache_miss(
+    *, node_id: str, interval: str | int, world_id: str | None
+) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = str(world_id) if world_id is not None else _WORLD_ID
+    seamless_cache_miss_total.labels(node_id=n, interval=i, world_id=world).inc()
+    seamless_cache_miss_total._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+        seamless_cache_miss_total._vals.get((n, i, world), 0) + 1
+    )
+
+
+def observe_seamless_cache_resident_bytes(resident_bytes: int) -> None:
+    value = max(0, int(resident_bytes))
+    seamless_cache_resident_bytes.set(value)
+    seamless_cache_resident_bytes._val = value  # type: ignore[attr-defined]
 
 
 def observe_rate_limiter_tokens(*, limiter: str, tokens: float, capacity: float) -> None:

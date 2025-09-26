@@ -418,9 +418,10 @@ seamless:
     storage_wait_warn_ms: 300
     backfill_wait_warn_ms: 5000
 cache:
+  enable: true
   ttl_ms: 60000
   max_shards: 512
-  key_template: "{node_id}:{start}:{end}:{interval}:{conf_ver}:{world_id}:{as_of}"
+  key_template: "{node_id}:{start}:{end}:{interval}:{conformance_version}:{world_id}:{as_of}"
 domains:
   backtest:
     require_as_of: true
@@ -452,7 +453,7 @@ The blueprint aligns configuration knobs with existing runtime modules. Teams sh
 
 1. **Reuse existing providers** – compose `EnhancedQuestDBProvider`, `CcxtOHLCVFetcher`, `BackfillCoordinator`, and SLA policies rather than creating new wrappers.
 2. **Artifact publication** – adopt the `maybe_publish_artifact` workflow defined above. Always stabilize, conform, and fingerprint frames before emitting manifests, and store the returned fingerprint alongside coverage metadata for Gateway echoing.
-3. **World-aware caching** – extend cache layers to include `world_id` and `as_of` components; purge entries on domain switch. Cache hits must reference immutable artifacts or explicitly declare partial coverage.
+3. **World-aware caching** – enable the in-process TTL LRU (`cache.enable`) so Seamless can reuse frames keyed by `{world_id, as_of}` without risking cross-domain bleed. Purge entries on domain switch and surface cache hit/miss/resident metrics for observability. Cache hits must reference immutable artifacts or explicitly declare partial coverage.
 4. **Storage bifurcation** – route hot writes and reads through QuestDB while publishing immutable segments to object storage using the configured partition template. Promote artifacts only after `stabilization_bars` have elapsed.
 5. **Gateway contract** – ensure integration layers surface `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` when routing Seamless responses through Gateway/WorldService; use `SeamlessFetchMetadata` alongside the artifact workflow to capture the values emitted by the provider.
 6. **Observability** – emit the metrics catalogued below (`seamless_storage_wait_ms`, `backfill_completion_ratio`, `domain_gate_holds`, etc.) so operations dashboards can enforce alert thresholds without consulting legacy docs.
