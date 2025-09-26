@@ -133,8 +133,8 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
             manifest["coverage"] = {"start": int(start), "end": int(end)}
 
         dataset_fp = str(manifest.get("dataset_fingerprint", ""))
-        if dataset_fp and not dataset_fp.startswith("lake:sha256:"):
-            manifest["dataset_fingerprint"] = f"lake:sha256:{dataset_fp}"
+        if dataset_fp.startswith("lake:sha256:"):
+            manifest["dataset_fingerprint"] = dataset_fp.replace("lake:", "", 1)
 
         producer = ProducerContext(
             node_id=str(manifest.get("node_id", "unknown")),

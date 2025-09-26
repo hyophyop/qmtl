@@ -22,6 +22,7 @@ from qmtl.runtime.io.seamless_provider import (
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk.artifacts import ArtifactPublication, FileSystemArtifactRegistrar
+from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
@@ -150,7 +151,7 @@ async def test_fetch_response_includes_metadata() -> None:
     result = await provider.fetch(0, 100, node_id="node", interval=10)
 
     assert isinstance(result.metadata.dataset_fingerprint, str)
-    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert result.metadata.dataset_fingerprint.startswith("sha256:")
     assert result.metadata.coverage_bounds == (0, 90)
     assert isinstance(result.metadata.as_of, str)
     # Validate ISO-8601 format
@@ -330,12 +331,20 @@ class _RecordingRegistrar:
             record["flags"] = dict(conformance_report.flags_counts)
             record["warnings"] = tuple(conformance_report.warnings)
         self.calls.append(record)
+        fingerprint_metadata = {
+            "node_id": node_id,
+            "interval": int(interval),
+            "coverage_bounds": coverage_bounds,
+            "conformance_version": seamless_module.CONFORMANCE_VERSION,
+        }
+        fingerprint = compute_artifact_fingerprint(frame, fingerprint_metadata)
         manifest = {
             "node_id": node_id,
             "interval": int(interval),
             "range": [coverage_bounds[0], coverage_bounds[1]],
             "requested_range": list(requested_range or ()),
             "conformance_version": seamless_module.CONFORMANCE_VERSION,
+            "dataset_fingerprint": fingerprint,
             "conformance": {
                 "flags": dict(getattr(conformance_report, "flags_counts", {})),
                 "warnings": list(getattr(conformance_report, "warnings", ())),
@@ -348,7 +357,7 @@ class _RecordingRegistrar:
             "producer": {"node_id": node_id, "interval": int(interval)},
         }
         return ArtifactPublication(
-            dataset_fingerprint="stub-fingerprint",
+            dataset_fingerprint=fingerprint,
             as_of="2024-01-01T00:00:00Z",
             node_id=node_id,
             start=coverage_bounds[0],
