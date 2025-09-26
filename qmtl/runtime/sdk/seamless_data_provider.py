@@ -10,6 +10,7 @@ from typing import (
     Any,
     Sequence,
     Mapping,
+    Literal,
 )
 from abc import ABC
 from collections import defaultdict, deque
@@ -23,6 +24,9 @@ import logging
 import math
 import os
 import time
+import random
+from asyncio import TaskGroup
+from itertools import count
 
 from qmtl.foundation.common.compute_context import normalize_context_value
 
@@ -137,6 +141,20 @@ class _RequestContext:
 
     def key_components(self) -> tuple[str, str]:
         return self.world_id, self.requested_as_of or ""
+
+
+@dataclass(slots=True)
+class BackfillConfig:
+    """Configuration for coordinating backfill execution."""
+
+    mode: Literal["background", "sync"] = "background"
+    single_flight_ttl_ms: int = 60_000
+    distributed_lease_ttl_ms: int = 120_000
+    window_bars: int = 900
+    max_concurrent_requests: int = 8
+    retry_max: int = 6
+    retry_base_backoff_ms: int = 500
+    retry_jitter: bool = True
 
 
 class SeamlessDomainPolicyError(RuntimeError):
@@ -267,6 +285,7 @@ class SeamlessDataProvider(ABC):
         partial_ok: bool = False,
         registrar: ArtifactRegistrar | None = None,
         stabilization_bars: int = 2,
+        backfill_config: BackfillConfig | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -274,7 +293,15 @@ class SeamlessDataProvider(ABC):
         self.backfiller = backfiller
         self.live_feed = live_feed
         self.max_backfill_chunk_size = max_backfill_chunk_size
-        self.enable_background_backfill = enable_background_backfill
+        effective_config = self._normalize_backfill_config(
+            backfill_config
+            if backfill_config is not None
+            else BackfillConfig(window_bars=max_backfill_chunk_size)
+        )
+        self._backfill_config = effective_config
+        self.enable_background_backfill = bool(enable_background_backfill) and (
+            effective_config.mode == "background"
+        )
         self._conformance = conformance
         self._coordinator = coordinator or self._create_default_coordinator()
         self._sla = sla
@@ -286,7 +313,8 @@ class SeamlessDataProvider(ABC):
         self._last_fetch_metadata: Optional[SeamlessFetchMetadata] = None
 
         # Internal state
-        self._active_backfills: dict[str, bool] = {}
+        self._active_backfills: dict[str, tuple[float, int]] = {}
+        self._backfill_generation = count()
         self._fingerprint_window_limit = _FINGERPRINT_HISTORY_LIMIT
         self._fingerprint_index: dict[tuple[str, int, str, str], deque[str]] = defaultdict(
             self._create_fingerprint_window
@@ -332,6 +360,184 @@ class SeamlessDataProvider(ABC):
 
     def _create_fingerprint_window(self) -> deque[str]:
         return deque(maxlen=self._fingerprint_window_limit)
+
+    def _normalize_backfill_config(self, config: BackfillConfig) -> BackfillConfig:
+        mode = config.mode if config.mode in {"background", "sync"} else "background"
+        ttl = max(0, int(config.single_flight_ttl_ms))
+        lease_ttl = max(0, int(config.distributed_lease_ttl_ms))
+        window_bars = max(0, int(config.window_bars))
+        concurrent = max(1, int(config.max_concurrent_requests))
+        retry_max = max(1, int(config.retry_max))
+        retry_base = max(0, int(config.retry_base_backoff_ms))
+        retry_jitter = bool(config.retry_jitter)
+        return BackfillConfig(
+            mode=mode,
+            single_flight_ttl_ms=ttl,
+            distributed_lease_ttl_ms=lease_ttl,
+            window_bars=window_bars,
+            max_concurrent_requests=concurrent,
+            retry_max=retry_max,
+            retry_base_backoff_ms=retry_base,
+            retry_jitter=retry_jitter,
+        )
+
+    def _cleanup_expired_backfills(self, now: float | None = None) -> None:
+        if not self._active_backfills:
+            return
+        current_time = time.monotonic() if now is None else now
+        expired_keys = [
+            key
+            for key, (expires_at, _token) in self._active_backfills.items()
+            if expires_at <= current_time
+        ]
+        for key in expired_keys:
+            self._active_backfills.pop(key, None)
+
+    def _chunk_backfill_ranges(
+        self, start: int, end: int, interval: int
+    ) -> list[tuple[int, int]]:
+        if end <= start:
+            return [(start, end)]
+        bars = self._backfill_config.window_bars
+        if interval <= 0 or bars <= 0:
+            return [(start, end)]
+        chunk_span = int(interval) * int(bars)
+        if chunk_span <= 0:
+            return [(start, end)]
+        chunks: list[tuple[int, int]] = []
+        current = int(start)
+        final_end = int(end)
+        while current < final_end:
+            chunk_end = current + chunk_span
+            if chunk_end >= final_end:
+                chunks.append((current, final_end))
+                break
+            chunks.append((current, chunk_end))
+            if chunk_end == current:
+                break
+            current = chunk_end
+        if not chunks:
+            chunks.append((start, end))
+        return chunks
+
+    async def _run_backfill_chunks(
+        self,
+        chunks: Sequence[tuple[int, int]],
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: DataSource | None,
+        sla_tracker: "_SLATracker | None",
+        collect_results: bool,
+    ) -> list[pd.DataFrame]:
+        if not chunks:
+            return []
+
+        semaphore = asyncio.Semaphore(
+            max(1, int(self._backfill_config.max_concurrent_requests))
+        )
+        if sla_tracker is not None:
+            semaphore = asyncio.Semaphore(1)
+
+        base_delay = self._backfill_config.retry_base_backoff_ms / 1000.0
+        jitter_enabled = self._backfill_config.retry_jitter and base_delay > 0
+        max_attempts = max(1, int(self._backfill_config.retry_max))
+
+        results: dict[int, pd.DataFrame] | None = {} if collect_results else None
+
+        async def _chunk_worker(index: int, chunk_start: int, chunk_end: int) -> None:
+            attempt = 0
+            while True:
+                try:
+                    coro = self.backfiller.backfill(
+                        chunk_start,
+                        chunk_end,
+                        node_id=node_id,
+                        interval=interval,
+                        target_storage=target_storage,
+                    )
+                    if sla_tracker is not None:
+                        frame = await sla_tracker.observe_async(
+                            "backfill_wait",
+                            sla_tracker.policy.max_wait_backfill_ms,
+                            coro,
+                        )
+                    else:
+                        frame = await coro
+                    if collect_results and results is not None:
+                        results[index] = frame
+                    return
+                except Exception as exc:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        raise
+                    sdk_metrics.observe_backfill_retry(node_id, interval)
+                    logger.warning(
+                        "seamless.backfill.retry",
+                        extra={
+                            "node_id": node_id,
+                            "interval": interval,
+                            "start": chunk_start,
+                            "end": chunk_end,
+                            "attempt": attempt,
+                            "error": str(exc),
+                        },
+                    )
+                    delay = base_delay * (2 ** (attempt - 1))
+                    if jitter_enabled:
+                        delay += random.uniform(0, base_delay)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+
+        async def _guarded_worker(idx: int, chunk: tuple[int, int]) -> None:
+            async with semaphore:
+                await _chunk_worker(idx, chunk[0], chunk[1])
+
+        async with TaskGroup() as tg:
+            for idx, chunk in enumerate(chunks):
+                tg.create_task(_guarded_worker(idx, chunk))
+
+        if not collect_results or results is None:
+            return []
+        return [results.get(i, pd.DataFrame()) for i in range(len(chunks))]
+
+    async def _execute_backfill_range(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: DataSource | None,
+        sla_tracker: "_SLATracker | None" = None,
+        collect_results: bool = False,
+    ) -> list[pd.DataFrame]:
+        if not self.backfiller:
+            return []
+        chunks = self._chunk_backfill_ranges(start, end, interval)
+        sdk_metrics.observe_backfill_start(node_id, interval)
+        gap_started = time.monotonic()
+        try:
+            frames = await self._run_backfill_chunks(
+                chunks,
+                node_id=node_id,
+                interval=interval,
+                target_storage=target_storage,
+                sla_tracker=sla_tracker,
+                collect_results=collect_results,
+            )
+        except Exception:
+            sdk_metrics.observe_backfill_failure(node_id, interval)
+            raise
+        repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
+        sdk_metrics.observe_gap_repair_latency(
+            node_id=node_id,
+            interval=interval,
+            duration_ms=repair_duration_ms,
+        )
+        sdk_metrics.observe_backfill_complete(node_id, interval, end)
+        return frames
+
 
     # ------------------------------------------------------------------
     def _normalize_world_id(self, value: Any | None) -> str:
@@ -868,7 +1074,7 @@ class SeamlessDataProvider(ABC):
                                 )
                                 lease = await self._coordinator.claim(
                                     lease_key,
-                                    lease_ms=60_000,
+                                    lease_ms=self._backfill_config.distributed_lease_ttl_ms,
                                 )
                             except Exception:
                                 lease = None
@@ -879,31 +1085,13 @@ class SeamlessDataProvider(ABC):
                             continue
 
                         try:
-                            sdk_metrics.observe_backfill_start(node_id, interval)
-                            gap_started = time.monotonic()
-                            backfill_coro = self.backfiller.backfill(
+                            await self._execute_backfill_range(
                                 missing_start,
                                 missing_end,
                                 node_id=node_id,
                                 interval=interval,
                                 target_storage=self.storage_source,
-                            )
-                            if sla_tracker:
-                                await sla_tracker.observe_async(
-                                    "backfill_wait",
-                                    sla_tracker.policy.max_wait_backfill_ms,
-                                    backfill_coro,
-                                )
-                            else:
-                                await backfill_coro
-                            repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
-                            sdk_metrics.observe_gap_repair_latency(
-                                node_id=node_id,
-                                interval=interval,
-                                duration_ms=repair_duration_ms,
-                            )
-                            sdk_metrics.observe_backfill_complete(
-                                node_id, interval, missing_end
+                                sla_tracker=tracker,
                             )
                             if lease and self._coordinator:
                                 try:
@@ -911,7 +1099,6 @@ class SeamlessDataProvider(ABC):
                                 except Exception:
                                     pass
                         except Exception as exc:
-                            sdk_metrics.observe_backfill_failure(node_id, interval)
                             if lease and self._coordinator:
                                 try:
                                     await self._coordinator.fail(
@@ -1021,36 +1208,22 @@ class SeamlessDataProvider(ABC):
         if remaining_ranges and self.backfiller:
             for range_start, range_end in remaining_ranges:
                 try:
-                    sdk_metrics.observe_backfill_start(node_id, interval)
-                    gap_started = time.monotonic()
-                    backfill_coro = self.backfiller.backfill(
+                    frames = await self._execute_backfill_range(
                         range_start,
                         range_end,
                         node_id=node_id,
                         interval=interval,
                         target_storage=self.storage_source,
+                        sla_tracker=sla_tracker,
+                        collect_results=True,
                     )
-                    if sla_tracker:
-                        backfilled = await sla_tracker.observe_async(
-                            "backfill_wait",
-                            sla_tracker.policy.max_wait_backfill_ms,
-                            backfill_coro,
-                        )
-                    else:
-                        backfilled = await backfill_coro
-                    repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
-                    sdk_metrics.observe_gap_repair_latency(
-                        node_id=node_id,
-                        interval=interval,
-                        duration_ms=repair_duration_ms,
-                    )
-                    if not backfilled.empty:
+                    non_empty = [frame for frame in frames if not frame.empty]
+                    if non_empty:
+                        backfilled = pd.concat(non_empty, ignore_index=True)
                         result_frames.append(backfilled)
-                    sdk_metrics.observe_backfill_complete(node_id, interval, range_end)
                 except Exception as exc:
                     if isinstance(exc, SeamlessSLAExceeded):
                         raise
-                    sdk_metrics.observe_backfill_failure(node_id, interval)
                     continue
         
         # Combine all frames and sort by timestamp
@@ -1724,15 +1897,22 @@ class SeamlessDataProvider(ABC):
             end=end,
             context=request_context,
         )
-        if self._active_backfills.get(key):
+        self._cleanup_expired_backfills()
+        if key in self._active_backfills:
             return
         # Process-local single-flight
-        self._active_backfills[key] = True
+        ttl_seconds = self._backfill_config.single_flight_ttl_ms / 1000.0
+        now = time.monotonic()
+        expiry = now + ttl_seconds if ttl_seconds > 0 else now
+        token = next(self._backfill_generation)
+        self._active_backfills[key] = (expiry, token)
         # Coordinator claim (best-effort, works with in-memory stub)
         lease: Lease | None = None
         try:
             if self._coordinator:
-                lease = await self._coordinator.claim(key, lease_ms=60_000)
+                lease = await self._coordinator.claim(
+                    key, lease_ms=self._backfill_config.distributed_lease_ttl_ms
+                )
                 if lease is None:
                     # Claimed elsewhere; skip
                     self._active_backfills.pop(key, None)
@@ -1748,28 +1928,18 @@ class SeamlessDataProvider(ABC):
                 if not self.backfiller:
                     failure_reason = "no_backfiller"
                     return
-                sdk_metrics.observe_backfill_start(node_id, interval)
-                gap_started = time.monotonic()
-                await self.backfiller.backfill(
+                await self._execute_backfill_range(
                     start,
                     end,
                     node_id=node_id,
                     interval=interval,
                     target_storage=self.storage_source,
                 )
-                repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
-                sdk_metrics.observe_gap_repair_latency(
-                    node_id=node_id,
-                    interval=interval,
-                    duration_ms=repair_duration_ms,
-                )
-                sdk_metrics.observe_backfill_complete(node_id, interval, end)
                 success = True
             except Exception as exc:
                 failure_reason = (
                     f"background_backfill_failed ({exc.__class__.__name__}): {exc}"
                 )
-                sdk_metrics.observe_backfill_failure(node_id, interval)
                 logger.exception(
                     "seamless.backfill.background_failed",
                     extra={
@@ -1790,7 +1960,9 @@ class SeamlessDataProvider(ABC):
                             )
                     except Exception:
                         pass
-                self._active_backfills.pop(key, None)
+                current = self._active_backfills.get(key)
+                if current is not None and current[1] == token:
+                    self._active_backfills.pop(key, None)
 
         try:
             loop = asyncio.get_running_loop()
@@ -2010,6 +2182,7 @@ __all__ = [
     "AutoBackfiller",
     "LiveDataFeed",
     "ConformancePipelineError",
+    "BackfillConfig",
     "SeamlessDataProvider",
     "SeamlessFetchResult",
     "SeamlessFetchMetadata",

@@ -301,7 +301,15 @@ class QualityAwareBackfiller:
 seamless_data_provider:
   strategy: "seamless"
   enable_background_backfill: true
-  max_backfill_chunk_size: 1000
+  backfill_config:
+    mode: "background"
+    single_flight_ttl_ms: 60000
+    distributed_lease_ttl_ms: 120000
+    window_bars: 900
+    max_concurrent_requests: 8
+    retry_max: 6
+    retry_base_backoff_ms: 500
+    retry_jitter: true
   cache_ttl: 3600
 ```
 
