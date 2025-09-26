@@ -10,7 +10,8 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
     DataSource,
     DataSourcePriority,
-    DataAvailabilityStrategy
+    DataAvailabilityStrategy,
+    LiveDataFeed,
 )
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 
@@ -236,6 +237,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         table: str | None = None,
         fetcher: DataFetcher | None = None,
         live_fetcher: DataFetcher | None = None,
+        live_feed: LiveDataFeed | None = None,
         cache_provider: HistoryProvider | None = None,
         strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.SEAMLESS,
         conformance: ConformancePipeline | None = None,
@@ -255,15 +257,15 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         # Create backfiller if fetcher is available
         backfiller = DataFetcherAutoBackfiller(fetcher) if fetcher else None
         
-        # Create live feed if available
-        live_feed = LiveDataFeedImpl(live_fetcher) if live_fetcher else None
+        # Create live feed if available (prefer explicit LiveDataFeed)
+        live_feed_obj = live_feed or (LiveDataFeedImpl(live_fetcher) if live_fetcher else None)
         
         super().__init__(
             strategy=strategy,
             cache_source=cache_source,
             storage_source=storage_source,
             backfiller=backfiller,
-            live_feed=live_feed,
+            live_feed=live_feed_obj,
             conformance=conformance or ConformancePipeline(),
             partial_ok=partial_ok,
             **kwargs

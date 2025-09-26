@@ -14,6 +14,7 @@ from .ccxt_fetcher import (
 )
 from .ccxt_provider import CcxtQuestDBProvider
 from .seamless_provider import EnhancedQuestDBProvider
+from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
 
 __all__ = [
     "DataFetcher",
@@ -31,4 +32,6 @@ __all__ = [
     "CcxtTradesConfig",
     "CcxtTradesFetcher",
     "CcxtQuestDBProvider",
+    "CcxtProLiveFeed",
+    "CcxtProConfig",
 ]

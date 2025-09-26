@@ -6,6 +6,8 @@ nav:
       - Overview: architecture/README.md
       - Architecture & World ID Flow: architecture/architecture.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
+      - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
+      - CCXT × Seamless (GPT5-High): architecture/ccxt-seamless-gpt5high.md
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md
