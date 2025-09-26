@@ -137,6 +137,7 @@ async def test_find_missing_ranges_uses_interval_math() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_response_includes_metadata() -> None:
+    sdk_metrics.reset_metrics()
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     registrar = _RecordingRegistrar()
     provider = _DummyProvider(
@@ -154,10 +155,14 @@ async def test_fetch_response_includes_metadata() -> None:
     assert registrar.calls and registrar.calls[0]["rows"] == len(result.frame)
     assert result.frame.attrs["dataset_fingerprint"] == result.metadata.dataset_fingerprint
     assert result.metadata.manifest_uri == "mem://manifest"
+    ratio_key = ("node", "10", "default")
+    assert sdk_metrics.coverage_ratio._vals[ratio_key]  # type: ignore[attr-defined]
+    assert sdk_metrics.live_staleness_seconds._vals[ratio_key] >= 0  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
 async def test_fetch_fingerprint_stable_across_calls() -> None:
+    sdk_metrics.reset_metrics()
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     registrar = _RecordingRegistrar()
     provider = _DummyProvider(
@@ -171,10 +176,15 @@ async def test_fetch_fingerprint_stable_across_calls() -> None:
 
     assert first.metadata.dataset_fingerprint == second.metadata.dataset_fingerprint
     assert len(registrar.calls) == 2
+    collision_key = ("node", "10", "default")
+    assert (
+        sdk_metrics.fingerprint_collisions._vals[collision_key] == 1  # type: ignore[attr-defined]
+    )
 
 
 @pytest.mark.asyncio
 async def test_filesystem_registrar_writes_manifest(tmp_path) -> None:
+    sdk_metrics.reset_metrics()
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     registrar = FileSystemArtifactRegistrar(tmp_path)
     provider = _DummyProvider(
@@ -191,6 +201,11 @@ async def test_filesystem_registrar_writes_manifest(tmp_path) -> None:
     assert content["dataset_fingerprint"] == result.metadata.dataset_fingerprint
     data_path = manifest_path.parent / "data.parquet"
     assert data_path.exists()
+    latency_key = ("node", "10", "default")
+    assert sdk_metrics.artifact_publish_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
+    assert (
+        sdk_metrics.artifact_bytes_written._vals[latency_key] > 0  # type: ignore[attr-defined]
+    )
 
 
 class _CountingBackfiller:
@@ -496,6 +511,8 @@ async def test_ensure_data_available_sync_returns_true() -> None:
     assert len(backfiller.calls) == 1
     key = ("n", "10")
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    latency_key = ("n", "10", "default")
+    assert sdk_metrics.gap_repair_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -509,6 +526,8 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     assert isinstance(result.frame, pd.DataFrame)
     key = ("n", "10")
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    latency_key = ("n", "10", "default")
+    assert sdk_metrics.gap_repair_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -625,6 +644,9 @@ async def test_sla_total_metric_recorded(monkeypatch) -> None:
     assert not df.empty
     key = ("node", "total")
     assert sdk_metrics.seamless_sla_deadline_seconds._vals[key]  # type: ignore[attr-defined]
+    latency_key = ("node", "10", "default")
+    assert sdk_metrics.seamless_total_ms._vals[latency_key]  # type: ignore[attr-defined]
+    assert sdk_metrics.seamless_storage_wait_ms._vals[latency_key]  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -686,6 +708,10 @@ async def test_sla_violation_partial_fill_downgrades(monkeypatch, caplog) -> Non
     record = log_records[0]
     assert getattr(record, "dataset_fingerprint", None) == result.metadata.dataset_fingerprint
     assert getattr(record, "as_of", None) == result.metadata.as_of
+    metric_key = ("node", "10", "default", "sla_violation")
+    assert (
+        sdk_metrics.partial_fill_returns._vals[metric_key] == 1  # type: ignore[attr-defined]
+    )
 
 
 @pytest.mark.asyncio
@@ -707,6 +733,14 @@ async def test_sla_min_coverage_enforces_hold() -> None:
     assert result.metadata.downgrade_reason == "coverage_breach"
     assert result.metadata.coverage_ratio is not None
     assert result.metadata.coverage_ratio < 0.9
+    ratio_key = ("node", "10", "default")
+    assert (
+        sdk_metrics.coverage_ratio._vals[ratio_key] == result.metadata.coverage_ratio  # type: ignore[attr-defined]
+    )
+    hold_key = ("node", "10", "default", "coverage_breach")
+    assert (
+        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
+    )
 
 
 @pytest.mark.asyncio
@@ -730,6 +764,15 @@ async def test_sla_max_lag_enforces_hold(monkeypatch) -> None:
     assert result.metadata.downgrade_reason == "freshness_breach"
     assert result.metadata.staleness_ms is not None
     assert result.metadata.staleness_ms > 1_000
+    staleness_key = ("node", "10", "default")
+    assert (
+        sdk_metrics.live_staleness_seconds._vals[staleness_key]  # type: ignore[attr-defined]
+        >= result.metadata.staleness_ms / 1000.0
+    )
+    hold_key = ("node", "10", "default", "freshness_breach")
+    assert (
+        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
+    )
 
 
 @pytest.mark.asyncio

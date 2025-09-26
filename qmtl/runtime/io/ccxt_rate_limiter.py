@@ -12,6 +12,8 @@ import asyncio
 import time
 from typing import Dict, Any
 
+from qmtl.runtime.sdk import metrics as sdk_metrics
+
 try:  # Optional at runtime; required for cluster scope
     from redis import asyncio as aioredis  # type: ignore
 except Exception:  # pragma: no cover - import guarded for environments without redis
@@ -158,6 +160,13 @@ class _RedisTokenBucketLimiter:
         await self._redis.hset(self._key, mapping={"tokens": tokens, "ts": now_ms})
         # Set an expiry to avoid stale keys (10 minutes)
         await self._redis.expire(self._key, 600)
+        sdk_metrics.observe_rate_limiter_tokens(
+            limiter=self._key,
+            tokens=tokens,
+            capacity=self._cap,
+        )
+        if not allowed:
+            sdk_metrics.observe_rate_limiter_drop(limiter=self._key)
         return allowed
 
 

@@ -11,6 +11,8 @@ from qmtl.runtime.io.ccxt_fetcher import (
     CcxtOHLCVFetcher,
     RateLimiterConfig,
 )
+from qmtl.runtime.io.ccxt_rate_limiter import _RedisTokenBucketLimiter
+from qmtl.runtime.sdk import metrics as sdk_metrics
 
 
 class _TimedExchange:
@@ -75,4 +77,63 @@ async def test_cluster_rate_limit_spreads_calls_across_fetchers():
     times = sorted(ex1.call_times + ex2.call_times)
     assert len(times) == 2
     assert (times[1] - times[0]) >= 0.04
+
+
+class _StubPipeline:
+    def __init__(self, redis: "_StubRedis") -> None:
+        self._redis = redis
+        self._calls: list[tuple[str, str]] = []
+
+    def hget(self, key: str, field: str) -> None:
+        self._calls.append((key, field))
+
+    async def execute(self) -> tuple[float | None, float | None]:
+        return tuple(self._redis.hget(key, field) for key, field in self._calls)
+
+
+class _StubRedis:
+    def __init__(self, tokens: float) -> None:
+        self.store: dict[str, float] = {"tokens": tokens, "ts": 0.0}
+        self.expire_calls: list[tuple[str, int]] = []
+
+    async def time(self) -> tuple[int, int]:
+        return (0, 0)
+
+    def pipeline(self) -> _StubPipeline:
+        return _StubPipeline(self)
+
+    async def hset(self, key: str, mapping: dict[str, float]) -> None:
+        self.store.update(mapping)
+
+    async def expire(self, key: str, ttl: int) -> None:
+        self.expire_calls.append((key, ttl))
+
+    def hget(self, key: str, field: str) -> float | None:
+        return self.store.get(field)
+
+
+@pytest.mark.asyncio
+async def test_cluster_rate_limiter_records_metrics() -> None:
+    sdk_metrics.reset_metrics()
+    redis = _StubRedis(tokens=0.5)
+    limiter = _RedisTokenBucketLimiter(
+        redis=redis,
+        bucket_key="rl:test",
+        tokens_per_sec=1.0,
+        capacity=2,
+        local_concurrency=1,
+    )
+
+    allowed = await limiter._reserve_token()
+    assert allowed is False
+    metric_key = ("rl:test", "default")
+    assert (
+        sdk_metrics.seamless_rl_dropped_total._vals[metric_key] == 1  # type: ignore[attr-defined]
+    )
+    assert sdk_metrics.seamless_rl_tokens_available._vals[metric_key] == 0.5  # type: ignore[attr-defined]
+
+    redis.store["tokens"] = 1.5
+    allowed = await limiter._reserve_token()
+    assert allowed is True
+    assert pytest.approx(0.5) == sdk_metrics.seamless_rl_tokens_available._vals[metric_key]  # type: ignore[attr-defined]
 
