@@ -626,9 +626,7 @@ class SeamlessDataProvider(ABC):
                 )
             return decision
 
-        # Unknown domain: still track the most recent as_of per world
-        if context.requested_as_of:
-            self._live_as_of_state[(context.world_id, node_id)] = context.requested_as_of
+        # Unknown domain: do not advance live/shadow monotonic tracking
         return None
 
     async def fetch(
