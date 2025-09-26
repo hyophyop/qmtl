@@ -215,6 +215,61 @@ async def test_fetch_fingerprint_stable_across_calls() -> None:
 
 
 @pytest.mark.asyncio
+async def test_publish_fingerprint_toggle_disables_publication() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = _RecordingRegistrar()
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+        publish_fingerprint=False,
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert result.metadata.artifact is None
+    assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
+
+
+@pytest.mark.asyncio
+async def test_publish_toggle_respects_environment(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    monkeypatch.setenv("QMTL_SEAMLESS_PUBLISH_FP", "0")
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = _RecordingRegistrar()
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
+
+
+@pytest.mark.asyncio
+async def test_early_fingerprint_toggle_forwarded() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = _RecordingRegistrar()
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+        early_fingerprint=True,
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert result.metadata.dataset_fingerprint.startswith("sha256:")
+    assert registrar.calls and registrar.calls[0]["early_fingerprint"] is True
+
+
+@pytest.mark.asyncio
 async def test_in_memory_cache_hits_same_context() -> None:
     sdk_metrics.reset_metrics()
     storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
@@ -714,7 +769,9 @@ class _RecordingRegistrar:
         interval: int,
         conformance_report: Any | None = None,
         requested_range: tuple[int, int] | None = None,
-    ) -> ArtifactPublication:
+        publish_fingerprint: bool = True,
+        early_fingerprint: bool = False,
+    ) -> ArtifactPublication | None:
         coverage_bounds = (
             int(frame["ts"].min()),
             int(frame["ts"].max()),
@@ -725,11 +782,16 @@ class _RecordingRegistrar:
             "coverage_bounds": coverage_bounds,
             "requested_range": requested_range,
             "rows": len(frame),
+            "publish_fingerprint": publish_fingerprint,
+            "early_fingerprint": early_fingerprint,
         }
         if conformance_report is not None:
             record["flags"] = dict(conformance_report.flags_counts)
             record["warnings"] = tuple(conformance_report.warnings)
         self.calls.append(record)
+        if not publish_fingerprint:
+            # Mimic ingestion workers that skip publication when disabled.
+            return None
         fingerprint_metadata = {
             "node_id": node_id,
             "interval": int(interval),

@@ -279,6 +279,8 @@ Two configuration toggles control where the fingerprint is produced:
 - `early_fingerprint` – experimental mode that lets CCXT workers emit a provisional fingerprint at snapshot time.
 - `publish_fingerprint` – default path that waits for watermark stabilization (tail-bar drop) before sealing the manifest. Production environments must leave this enabled.
 
+Runtime deployments surface these switches through both configuration files and environment variables. `publish_fingerprint` maps to `QMTL_SEAMLESS_PUBLISH_FP` and `early_fingerprint` maps to `QMTL_SEAMLESS_EARLY_FP`, allowing operators to flip the behavior without editing YAML.
+
 #### Artifact Lifecycle
 
 | Step | Owner | Guarantee |

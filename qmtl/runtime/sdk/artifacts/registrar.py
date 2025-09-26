@@ -48,6 +48,8 @@ class ArtifactRegistrar(Protocol):
         interval: int,
         conformance_report: Any | None = None,
         requested_range: tuple[int, int] | None = None,
+        publish_fingerprint: bool = True,
+        early_fingerprint: bool = False,
     ) -> ArtifactPublication | None | Any:
         """Publish ``frame`` and return publication metadata.
 
