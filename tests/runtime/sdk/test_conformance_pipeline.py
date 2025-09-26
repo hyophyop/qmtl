@@ -132,3 +132,20 @@ def test_conformance_normalizes_millisecond_epoch_units():
     expected = [int(base.value // 10**9) + offset for offset in (0, 60, 120)]
     assert out["ts"].tolist() == expected
     assert report.flags_counts["ts_cast"] == 3
+
+
+def test_conformance_normalizes_microsecond_epochs_near_epoch_start():
+    base = pd.Timestamp("1971-01-01T00:00:00Z")
+    micro_values = [
+        base.value // 10**3,
+        base.value // 10**3 + 60 * 10**6,
+        base.value // 10**3 + 120 * 10**6,
+    ]
+    df = pd.DataFrame({"ts": micro_values, "price": [1.0, 2.0, 3.0]})
+
+    cp = ConformancePipeline()
+    out, report = cp.normalize(df, schema=None, interval=60)
+
+    expected = [int(base.value // 10**9) + offset for offset in (0, 60, 120)]
+    assert out["ts"].tolist() == expected
+    assert report.flags_counts["ts_cast"] == 3

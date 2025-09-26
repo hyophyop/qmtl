@@ -317,12 +317,23 @@ class ConformancePipeline:
         non_zero = values[values > 0]
         if not len(non_zero):
             return 1
+
+        unique_sorted = np.unique(non_zero)
+        if unique_sorted.size >= 2:
+            diffs = np.diff(unique_sorted)
+            positive_diffs = diffs[diffs > 0]
+            if positive_diffs.size:
+                min_diff = int(positive_diffs.min())
+                for divisor in (10**9, 10**6, 10**3):
+                    if min_diff % divisor == 0:
+                        return divisor
+
         max_value = int(non_zero.max())
-        if max_value >= 10**17:
+        if max_value >= 10**16:
             return 10**9
-        if max_value >= 10**14:
+        if max_value >= 10**13:
             return 10**6
-        if max_value >= 10**11:
+        if max_value >= 10**10:
             return 10**3
         return 1
 
