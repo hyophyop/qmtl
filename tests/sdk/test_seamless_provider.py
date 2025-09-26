@@ -1035,7 +1035,9 @@ async def test_backfill_config_enforces_concurrency_cap() -> None:
         storage_source=storage,
         backfiller=backfiller,
         enable_background_backfill=False,
-        backfill_config=BackfillConfig(window_bars=1, max_concurrent_requests=2, retry_max=1),
+        backfill_config=BackfillConfig(
+            window_bars=1, max_concurrent_requests=2, max_attempts=1
+        ),
     )
 
     ok = await provider.ensure_data_available(0, 100, node_id="n", interval=10)
@@ -1060,7 +1062,7 @@ def test_backfill_config_sync_mode_forces_sync_execution() -> None:
 
 
 @pytest.mark.asyncio
-async def test_backfill_retry_respects_jitter_toggle(monkeypatch) -> None:
+async def test_backfill_retry_respects_zero_jitter_ratio(monkeypatch) -> None:
     sdk_metrics.reset_metrics()
     storage = _StaticSource([], DataSourcePriority.STORAGE)
     backfiller = _FlakyBackfiller(storage, fail_times=1)
@@ -1070,9 +1072,9 @@ async def test_backfill_retry_respects_jitter_toggle(monkeypatch) -> None:
         enable_background_backfill=False,
         backfill_config=BackfillConfig(
             window_bars=1,
-            retry_max=2,
-            retry_base_backoff_ms=10,
-            retry_jitter=False,
+            max_attempts=2,
+            retry_backoff_ms=10,
+            jitter_ratio=0.0,
         ),
     )
 
@@ -1094,7 +1096,7 @@ async def test_backfill_retry_respects_jitter_toggle(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_backfill_retry_applies_jitter(monkeypatch) -> None:
+async def test_backfill_retry_applies_jitter_ratio(monkeypatch) -> None:
     sdk_metrics.reset_metrics()
     storage = _StaticSource([], DataSourcePriority.STORAGE)
     backfiller = _FlakyBackfiller(storage, fail_times=1)
@@ -1104,9 +1106,9 @@ async def test_backfill_retry_applies_jitter(monkeypatch) -> None:
         enable_background_backfill=False,
         backfill_config=BackfillConfig(
             window_bars=1,
-            retry_max=2,
-            retry_base_backoff_ms=10,
-            retry_jitter=True,
+            max_attempts=2,
+            retry_backoff_ms=10,
+            jitter_ratio=0.25,
         ),
     )
 
@@ -1130,6 +1132,8 @@ async def test_backfill_retry_applies_jitter(monkeypatch) -> None:
 
     assert ok is True
     assert jitter_calls, "expected jitter sampling to occur"
+    assert jitter_calls[0][0] == pytest.approx(0.0)
+    assert jitter_calls[0][1] == pytest.approx(0.01 * 0.25)
     assert sleep_durations, "expected retry backoff sleep"
     assert pytest.approx(sleep_durations[0], rel=0.05) == 0.01
 
@@ -1386,7 +1390,7 @@ async def test_observability_snapshot_captures_backfill_failure(caplog) -> None:
     provider = _DummyProvider(
         storage_source=_StaticSource([], DataSourcePriority.STORAGE),
         backfiller=backfiller,
-        backfill_config=BackfillConfig(retry_max=1, retry_base_backoff_ms=0),
+        backfill_config=BackfillConfig(max_attempts=1, retry_backoff_ms=0),
     )
 
     with caplog.at_level("ERROR", logger="qmtl.runtime.sdk.seamless_data_provider"):
@@ -1422,7 +1426,7 @@ async def test_background_backfill_failure_marks_lease_failed() -> None:
         storage_source=storage,
         backfiller=backfiller,
         coordinator=coordinator,
-        backfill_config=BackfillConfig(retry_max=1, retry_base_backoff_ms=0),
+        backfill_config=BackfillConfig(max_attempts=1, retry_backoff_ms=0),
     )
 
     ok = await provider.ensure_data_available(0, 100, node_id="node", interval=10)

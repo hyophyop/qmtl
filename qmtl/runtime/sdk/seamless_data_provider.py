@@ -161,9 +161,9 @@ class BackfillConfig:
     distributed_lease_ttl_ms: int = 120_000
     window_bars: int = 900
     max_concurrent_requests: int = 8
-    retry_max: int = 6
-    retry_base_backoff_ms: int = 500
-    retry_jitter: bool = True
+    max_attempts: int = 6
+    retry_backoff_ms: int = 500
+    jitter_ratio: float = 0.25
 
 
 class SeamlessDomainPolicyError(RuntimeError):
@@ -479,18 +479,25 @@ class SeamlessDataProvider(ABC):
         lease_ttl = max(0, int(config.distributed_lease_ttl_ms))
         window_bars = max(0, int(config.window_bars))
         concurrent = max(1, int(config.max_concurrent_requests))
-        retry_max = max(1, int(config.retry_max))
-        retry_base = max(0, int(config.retry_base_backoff_ms))
-        retry_jitter = bool(config.retry_jitter)
+        max_attempts = max(1, int(config.max_attempts))
+        retry_backoff = max(0, int(config.retry_backoff_ms))
+        jitter_raw = config.jitter_ratio
+        try:
+            jitter_ratio = float(jitter_raw)
+        except (TypeError, ValueError):
+            jitter_ratio = 0.0
+        if not math.isfinite(jitter_ratio):
+            jitter_ratio = 0.0
+        jitter_ratio = max(0.0, min(1.0, jitter_ratio))
         return BackfillConfig(
             mode=mode,
             single_flight_ttl_ms=ttl,
             distributed_lease_ttl_ms=lease_ttl,
             window_bars=window_bars,
             max_concurrent_requests=concurrent,
-            retry_max=retry_max,
-            retry_base_backoff_ms=retry_base,
-            retry_jitter=retry_jitter,
+            max_attempts=max_attempts,
+            retry_backoff_ms=retry_backoff,
+            jitter_ratio=jitter_ratio,
         )
 
     def _cleanup_expired_backfills(self, now: float | None = None) -> None:
@@ -551,9 +558,10 @@ class SeamlessDataProvider(ABC):
         if sla_tracker is not None:
             semaphore = asyncio.Semaphore(1)
 
-        base_delay = self._backfill_config.retry_base_backoff_ms / 1000.0
-        jitter_enabled = self._backfill_config.retry_jitter and base_delay > 0
-        max_attempts = max(1, int(self._backfill_config.retry_max))
+        base_delay = self._backfill_config.retry_backoff_ms / 1000.0
+        jitter_ratio = float(self._backfill_config.jitter_ratio)
+        jitter_enabled = base_delay > 0 and jitter_ratio > 0
+        max_attempts = max(1, int(self._backfill_config.max_attempts))
 
         results: dict[int, pd.DataFrame] | None = {} if collect_results else None
 
@@ -597,7 +605,7 @@ class SeamlessDataProvider(ABC):
                     )
                     delay = base_delay * (2 ** (attempt - 1))
                     if jitter_enabled:
-                        delay += random.uniform(0, base_delay)
+                        delay += random.uniform(0.0, delay * jitter_ratio)
                     if delay > 0:
                         await asyncio.sleep(delay)
 
