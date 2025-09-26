@@ -14,11 +14,13 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     DataSource,
     DataSourcePriority,
     ConformancePipelineError,
+    SeamlessDomainPolicyError,
 )
 from qmtl.runtime.io.seamless_provider import (
     StorageDataSource,
     DataFetcherAutoBackfiller,
 )
+from qmtl.foundation.common.compute_context import ComputeContext
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk.artifacts import ArtifactPublication, FileSystemArtifactRegistrar
@@ -192,6 +194,98 @@ async def test_fetch_fingerprint_stable_across_calls() -> None:
     assert (
         sdk_metrics.fingerprint_collisions._vals[collision_key] == 1  # type: ignore[attr-defined]
     )
+
+
+@pytest.mark.asyncio
+async def test_backtest_requires_as_of_context() -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage)
+
+    ctx = ComputeContext(world_id="world-a", execution_domain="backtest")
+    with pytest.raises(SeamlessDomainPolicyError):
+        await provider.fetch(0, 100, node_id="node", interval=10, compute_context=ctx)
+
+
+@pytest.mark.asyncio
+async def test_dryrun_requires_artifact_publication() -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage, registrar=None)
+
+    ctx = ComputeContext(
+        world_id="world-dry",
+        execution_domain="dryrun",
+        as_of="2025-01-01T00:00:00Z",
+    )
+
+    with pytest.raises(SeamlessDomainPolicyError):
+        await provider.fetch(0, 100, node_id="node", interval=10, compute_context=ctx)
+
+
+@pytest.mark.asyncio
+async def test_live_as_of_regression_triggers_hold_downgrade() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 120)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage)
+
+    ctx1 = ComputeContext(
+        world_id="world-live",
+        execution_domain="live",
+        as_of="2025-01-01T00:00:00Z",
+    )
+    await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx1)
+
+    ctx2 = ComputeContext(
+        world_id="world-live",
+        execution_domain="live",
+        as_of="2024-12-31T23:59:00Z",
+    )
+    result = await provider.fetch(
+        0, 120, node_id="node", interval=10, compute_context=ctx2
+    )
+
+    assert result.metadata.downgraded is True
+    assert result.metadata.downgrade_mode == SLAViolationMode.HOLD.value
+    assert result.metadata.downgrade_reason == "as_of_regression"
+    hold_key = ("node", "10", "default", "as_of_regression")
+    assert (
+        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
+    )
+
+
+@pytest.mark.asyncio
+async def test_cache_key_includes_world_and_as_of() -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage)
+
+    ctx1 = ComputeContext(
+        world_id="world-one",
+        execution_domain="live",
+        as_of="2025-01-01T00:00:00Z",
+    )
+    ctx2 = ComputeContext(
+        world_id="world-two",
+        execution_domain="live",
+        as_of="2025-01-01T01:00:00Z",
+    )
+
+    result_one = await provider.fetch(
+        0, 100, node_id="node", interval=10, compute_context=ctx1
+    )
+    result_two = await provider.fetch(
+        0, 100, node_id="node", interval=10, compute_context=ctx2
+    )
+
+    assert result_one.metadata.cache_key != result_two.metadata.cache_key
+    assert "world-one" in result_one.metadata.cache_key
+    assert "world-two" in result_two.metadata.cache_key
+    assert ctx1.as_of in result_one.metadata.cache_key  # type: ignore[arg-type]
+    assert ctx2.as_of in result_two.metadata.cache_key  # type: ignore[arg-type]
+
+    keys = set(provider._fingerprint_index.keys())  # type: ignore[attr-defined]
+    expected_one = ("node", 10, "world-one", ctx1.as_of or "")
+    expected_two = ("node", 10, "world-two", ctx2.as_of or "")
+    assert expected_one in keys
+    assert expected_two in keys
 
 
 @pytest.mark.asyncio
@@ -874,7 +968,7 @@ async def test_background_backfill_failure_marks_lease_failed() -> None:
     assert not coordinator.completes
     assert len(coordinator.fails) == 1
     lease, reason = coordinator.fails[0]
-    assert lease.key == "node:10:0:100"
+    assert lease.key == "node:10:0:100::"
     assert "background_backfill_failed" in reason
     key = ("node", "10")
     assert sdk_metrics.backfill_failure_total._vals[key] == 1  # type: ignore[attr-defined]
@@ -901,7 +995,7 @@ async def test_sync_backfill_claims_and_completes_lease() -> None:
     assert len(coordinator.completes) == 1
     assert not coordinator.fails
     lease = coordinator.completes[0]
-    assert lease.key == "node:10:0:100"
+    assert lease.key == "node:10:0:100::"
     assert lease.token.startswith("token-")
     key = ("node", "10")
     assert sdk_metrics.backfill_last_timestamp._vals[key] == 100  # type: ignore[attr-defined]

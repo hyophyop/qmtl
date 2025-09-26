@@ -9,6 +9,7 @@ from typing import (
     TypeVar,
     Any,
     Sequence,
+    Mapping,
 )
 from abc import ABC
 from collections import defaultdict, deque
@@ -22,6 +23,8 @@ import logging
 import math
 import os
 import time
+
+from qmtl.foundation.common.compute_context import normalize_context_value
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -82,6 +85,10 @@ class SeamlessFetchMetadata:
     sla_violation: dict[str, Any] | None = None
     coverage_ratio: float | None = None
     staleness_ms: float | None = None
+    world_id: str | None = None
+    execution_domain: str | None = None
+    requested_as_of: str | None = None
+    cache_key: str | None = None
 
 
 @dataclass(slots=True)
@@ -116,6 +123,24 @@ class _DowngradeDecision:
     violation: _SLAViolationDetail | None
     coverage_ratio: float | None
     staleness_ms: float | None
+
+
+@dataclass(slots=True)
+class _RequestContext:
+    """Normalized compute context associated with a fetch call."""
+
+    world_id: str
+    execution_domain: str
+    requested_as_of: str | None
+    min_coverage: float | None
+    max_lag_seconds: float | None
+
+    def key_components(self) -> tuple[str, str]:
+        return self.world_id, self.requested_as_of or ""
+
+
+class SeamlessDomainPolicyError(RuntimeError):
+    """Raised when domain gating policies reject a fetch."""
 
 
 class DataAvailabilityStrategy(Enum):
@@ -263,9 +288,10 @@ class SeamlessDataProvider(ABC):
         # Internal state
         self._active_backfills: dict[str, bool] = {}
         self._fingerprint_window_limit = _FINGERPRINT_HISTORY_LIMIT
-        self._fingerprint_index: dict[tuple[str, int], deque[str]] = defaultdict(
+        self._fingerprint_index: dict[tuple[str, int, str, str], deque[str]] = defaultdict(
             self._create_fingerprint_window
         )
+        self._live_as_of_state: dict[tuple[str, str], str] = {}
         mode_env = os.getenv(_FINGERPRINT_MODE_ENV, _FINGERPRINT_MODE_CANONICAL).strip().lower()
         if mode_env not in {_FINGERPRINT_MODE_CANONICAL, _FINGERPRINT_MODE_LEGACY}:
             mode_env = _FINGERPRINT_MODE_CANONICAL
@@ -307,34 +333,389 @@ class SeamlessDataProvider(ABC):
     def _create_fingerprint_window(self) -> deque[str]:
         return deque(maxlen=self._fingerprint_window_limit)
 
+    # ------------------------------------------------------------------
+    def _normalize_world_id(self, value: Any | None) -> str:
+        text = normalize_context_value(value)
+        return text or ""
+
+    def _normalize_domain(self, value: Any | None) -> str:
+        text = normalize_context_value(value)
+        if not text:
+            return ""
+        return text.lower()
+
+    def _normalize_as_of(self, value: Any | None) -> str | None:
+        text = normalize_context_value(value)
+        return text
+
+    def _normalize_float(self, value: Any | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _normalize_mapping_value(self, mapping: Mapping[str, Any], key: str) -> Any | None:
+        if key in mapping:
+            return mapping[key]
+        if key in {"world_id", "world"}:
+            for candidate in ("world_id", "world"):
+                if candidate in mapping:
+                    return mapping[candidate]
+        return None
+
+    def _extract_context(
+        self,
+        *,
+        compute_context: Any | None,
+        world_id: Any | None,
+        execution_domain: Any | None,
+        as_of: Any | None,
+        min_coverage: Any | None,
+        max_lag_seconds: Any | None,
+    ) -> _RequestContext:
+        source = compute_context
+        if source is not None and hasattr(source, "context"):
+            source = getattr(source, "context")
+
+        if isinstance(source, Mapping):
+            world_id = world_id or self._normalize_mapping_value(source, "world_id")
+            execution_domain = execution_domain or self._normalize_mapping_value(
+                source, "execution_domain"
+            )
+            as_of = as_of if as_of is not None else source.get("as_of")
+            min_coverage = (
+                min_coverage
+                if min_coverage is not None
+                else source.get("min_coverage")
+            )
+            max_lag_seconds = (
+                max_lag_seconds
+                if max_lag_seconds is not None
+                else source.get("max_lag")
+                or source.get("max_lag_seconds")
+            )
+        elif source is not None:
+            world_id = world_id or getattr(source, "world_id", None)
+            execution_domain = execution_domain or getattr(source, "execution_domain", None)
+            if as_of is None:
+                as_of = getattr(source, "as_of", None)
+            if min_coverage is None:
+                min_coverage = getattr(source, "min_coverage", None)
+            if max_lag_seconds is None:
+                max_lag_seconds = (
+                    getattr(source, "max_lag", None)
+                    if hasattr(source, "max_lag")
+                    else getattr(source, "max_lag_seconds", None)
+                )
+
+        normalized_world = self._normalize_world_id(world_id)
+        normalized_domain = self._normalize_domain(execution_domain)
+        normalized_as_of = self._normalize_as_of(as_of)
+        normalized_min_cov = self._normalize_float(min_coverage)
+        normalized_max_lag = self._normalize_float(max_lag_seconds)
+
+        return _RequestContext(
+            world_id=normalized_world,
+            execution_domain=normalized_domain,
+            requested_as_of=normalized_as_of,
+            min_coverage=normalized_min_cov,
+            max_lag_seconds=normalized_max_lag,
+        )
+
+    def _cache_key(
+        self,
+        *,
+        node_id: str,
+        start: int,
+        end: int,
+        interval: int,
+        context: _RequestContext,
+    ) -> str:
+        world, req_as_of = context.key_components()
+        return (
+            f"{node_id}:{int(start)}:{int(end)}:{int(interval)}:"
+            f"{CONFORMANCE_VERSION}:{world}:{req_as_of}"
+        )
+
+    def _backfill_key(
+        self,
+        *,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        context: _RequestContext | None = None,
+    ) -> str:
+        world = ""
+        requested_as_of = ""
+        if context is not None:
+            world, requested_as_of = context.key_components()
+        return (
+            f"{node_id}:{int(interval)}:{int(start)}:{int(end)}:"
+            f"{world}:{requested_as_of}"
+        )
+
+    def _parse_as_of_value(self, value: str) -> tuple[bool, Any]:
+        text = value.strip()
+        if not text:
+            return False, None
+        if text.isdigit():
+            try:
+                return True, int(text)
+            except ValueError:
+                try:
+                    return True, float(text)
+                except ValueError:
+                    return False, None
+        try:
+            normalized = text.replace("Z", "+00:00")
+            return True, datetime.fromisoformat(normalized)
+        except ValueError:
+            return False, None
+
+    def _compare_as_of(self, left: str, right: str) -> int:
+        success_left, parsed_left = self._parse_as_of_value(left)
+        success_right, parsed_right = self._parse_as_of_value(right)
+        if success_left and success_right:
+            if parsed_left < parsed_right:
+                return -1
+            if parsed_left > parsed_right:
+                return 1
+            return 0
+        if left < right:
+            return -1
+        if left > right:
+            return 1
+        return 0
+
+    def _merge_decisions(
+        self,
+        base: _DowngradeDecision | None,
+        new: _DowngradeDecision | None,
+    ) -> _DowngradeDecision | None:
+        if new is None:
+            return base
+        if base is None:
+            return new
+        severity = {SLAViolationMode.PARTIAL_FILL: 0, SLAViolationMode.HOLD: 1}
+        base_severity = severity.get(base.mode, 0)
+        new_severity = severity.get(new.mode, 0)
+        if new_severity > base_severity:
+            return new
+        if new_severity < base_severity:
+            return base
+        # Prefer the most recent reason but keep richer metrics if present
+        coverage = new.coverage_ratio if new.coverage_ratio is not None else base.coverage_ratio
+        staleness = new.staleness_ms if new.staleness_ms is not None else base.staleness_ms
+        violation = base.violation or new.violation
+        return _DowngradeDecision(
+            mode=base.mode,
+            reason=new.reason or base.reason,
+            violation=violation,
+            coverage_ratio=coverage,
+            staleness_ms=staleness,
+        )
+
+    def _domain_gate(
+        self,
+        context: _RequestContext,
+        metadata: SeamlessFetchMetadata,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> _DowngradeDecision | None:
+        domain = context.execution_domain
+        if domain in {"backtest", "dryrun"}:
+            if context.requested_as_of is None:
+                logger.error(
+                    "seamless.domain_gate.missing_as_of",
+                    extra={
+                        "node_id": node_id,
+                        "interval": interval,
+                        "execution_domain": domain,
+                        "world_id": context.world_id,
+                    },
+                )
+                raise SeamlessDomainPolicyError("as_of is required for backtest/dryrun domains")
+            if metadata.artifact is None and metadata.manifest_uri is None:
+                logger.error(
+                    "seamless.domain_gate.missing_artifact",
+                    extra={
+                        "node_id": node_id,
+                        "interval": interval,
+                        "execution_domain": domain,
+                        "world_id": context.world_id,
+                    },
+                )
+                raise SeamlessDomainPolicyError(
+                    "artifact-backed data is required for backtest/dryrun domains"
+                )
+            return None
+
+        if domain in {"live", "shadow"}:
+            coverage_ratio = metadata.coverage_ratio
+            if coverage_ratio is None:
+                coverage_ratio = self._compute_coverage_ratio(metadata)
+            staleness_ms = metadata.staleness_ms
+            if staleness_ms is None:
+                staleness_ms = self._compute_staleness_ms(metadata)
+
+            decision: _DowngradeDecision | None = None
+            key = (context.world_id, node_id)
+            requested_as_of = context.requested_as_of
+            if requested_as_of:
+                previous = self._live_as_of_state.get(key)
+                if previous is not None and self._compare_as_of(requested_as_of, previous) < 0:
+                    decision = self._merge_decisions(
+                        decision,
+                        _DowngradeDecision(
+                            mode=SLAViolationMode.HOLD,
+                            reason="as_of_regression",
+                            violation=None,
+                            coverage_ratio=coverage_ratio,
+                            staleness_ms=staleness_ms,
+                        ),
+                    )
+                else:
+                    self._live_as_of_state[key] = requested_as_of
+
+            if (
+                context.min_coverage is not None
+                and coverage_ratio is not None
+                and coverage_ratio < context.min_coverage
+            ):
+                decision = self._merge_decisions(
+                    decision,
+                    _DowngradeDecision(
+                        mode=SLAViolationMode.HOLD,
+                        reason="coverage_breach",
+                        violation=None,
+                        coverage_ratio=coverage_ratio,
+                        staleness_ms=staleness_ms,
+                    ),
+                )
+
+            if (
+                context.max_lag_seconds is not None
+                and staleness_ms is not None
+                and staleness_ms > context.max_lag_seconds * 1000
+            ):
+                decision = self._merge_decisions(
+                    decision,
+                    _DowngradeDecision(
+                        mode=SLAViolationMode.HOLD,
+                        reason="freshness_breach",
+                        violation=None,
+                        coverage_ratio=coverage_ratio,
+                        staleness_ms=staleness_ms,
+                    ),
+                )
+
+            if decision is not None:
+                logger.warning(
+                    "seamless.domain_gate.downgrade",
+                    extra={
+                        "node_id": node_id,
+                        "interval": interval,
+                        "world_id": context.world_id,
+                        "execution_domain": domain,
+                        "reason": decision.reason,
+                    },
+                )
+            return decision
+
+        # Unknown domain: still track the most recent as_of per world
+        if context.requested_as_of:
+            self._live_as_of_state[(context.world_id, node_id)] = context.requested_as_of
+        return None
+
     async def fetch(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        compute_context: Any | None = None,
+        world_id: Any | None = None,
+        execution_domain: Any | None = None,
+        as_of: Any | None = None,
+        min_coverage: Any | None = None,
+        max_lag_seconds: Any | None = None,
     ) -> pd.DataFrame:
         """
-        Fetch data transparently from available sources.
-
-        Implementation follows the priority order and strategy configuration.
+        Fetch data transparently from available sources while enforcing domain policies.
         """
+
         self._validate_node_id(node_id)
         self._last_conformance_report = None
         self._last_fetch_metadata = None
+
+        context = self._extract_context(
+            compute_context=compute_context,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            as_of=as_of,
+            min_coverage=min_coverage,
+            max_lag_seconds=max_lag_seconds,
+        )
+        cache_key = self._cache_key(
+            node_id=node_id, start=start, end=end, interval=interval, context=context
+        )
+
+        if context.execution_domain in {"backtest", "dryrun"} and context.requested_as_of is None:
+            logger.error(
+                "seamless.domain_gate.missing_as_of",
+                extra={
+                    "node_id": node_id,
+                    "interval": interval,
+                    "execution_domain": context.execution_domain,
+                    "world_id": context.world_id,
+                },
+            )
+            raise SeamlessDomainPolicyError(
+                "as_of is required for backtest/dryrun domains"
+            )
+
         tracker = self._build_sla_tracker(node_id, interval)
 
         if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
             result = await self._fetch_fail_fast(
-                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
             )
         elif self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
             result = await self._fetch_auto_backfill(
-                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
             )
         elif self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
             result = await self._fetch_partial_fill(
-                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
             )
         else:  # SEAMLESS
             result = await self._fetch_seamless(
-                start, end, node_id=node_id, interval=interval, sla_tracker=tracker
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
             )
 
         response = await self._finalize_response(
@@ -343,12 +724,22 @@ class SeamlessDataProvider(ABC):
             end=end,
             node_id=node_id,
             interval=interval,
+            request_context=context,
+            cache_key=cache_key,
         )
 
         downgrade: _DowngradeDecision | None = None
         if tracker:
             tracker.observe_total()
             downgrade = self._resolve_downgrade(tracker, response.metadata)
+
+        domain_decision = self._domain_gate(
+            context,
+            response.metadata,
+            node_id=node_id,
+            interval=interval,
+        )
+        downgrade = self._merge_decisions(downgrade, domain_decision)
 
         if downgrade:
             self._apply_downgrade(
@@ -357,6 +748,13 @@ class SeamlessDataProvider(ABC):
                 node_id=node_id,
                 interval=interval,
             )
+
+        self._record_fingerprint(
+            node_id,
+            interval,
+            response.metadata.dataset_fingerprint,
+            context,
+        )
 
         return response
     
@@ -393,6 +791,7 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
+        request_context: _RequestContext | None = None,
     ) -> bool:
         """
         Ensure data is available for the given range.
@@ -455,14 +854,22 @@ class SeamlessDataProvider(ABC):
                             missing_end,
                             node_id=node_id,
                             interval=interval,
+                            request_context=request_context,
                         )
                     else:
                         lease: Lease | None = None
                         skip_due_to_conflict = False
                         if self._coordinator:
                             try:
+                                lease_key = self._backfill_key(
+                                    node_id=node_id,
+                                    interval=interval,
+                                    start=missing_start,
+                                    end=missing_end,
+                                    context=request_context,
+                                )
                                 lease = await self._coordinator.claim(
-                                    f"{node_id}:{interval}:{missing_start}:{missing_end}",
+                                    lease_key,
                                     lease_ms=60_000,
                                 )
                             except Exception:
@@ -547,6 +954,7 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
+        request_context: _RequestContext | None = None,
     ) -> pd.DataFrame:
         """Implement seamless fetching strategy."""
         # Try each source in priority order
@@ -664,6 +1072,7 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
+        request_context: _RequestContext | None = None,
     ) -> pd.DataFrame:
         """Fail fast strategy - only use existing data."""
         for source in self._get_ordered_sources():
@@ -695,6 +1104,7 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
+        request_context: _RequestContext | None = None,
     ) -> pd.DataFrame:
         """Auto-backfill strategy - ensure data is backfilled before returning."""
         await self.ensure_data_available(
@@ -703,9 +1113,15 @@ class SeamlessDataProvider(ABC):
             node_id=node_id,
             interval=interval,
             sla_tracker=sla_tracker,
+            request_context=request_context,
         )
         return await self._fetch_seamless(
-            start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            sla_tracker=sla_tracker,
+            request_context=request_context,
         )
     
     async def _fetch_partial_fill(
@@ -716,17 +1132,27 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
+        request_context: _RequestContext | None = None,
     ) -> pd.DataFrame:
         """Partial fill strategy - return what's available, backfill in background."""
         # Start background backfill but don't wait
         if self.backfiller:
             await self._start_background_backfill(
-                start, end, node_id=node_id, interval=interval
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                request_context=request_context,
             )
 
         # Return what's currently available
         return await self._fetch_seamless(
-            start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            sla_tracker=sla_tracker,
+            request_context=request_context,
         )
 
     # ------------------------------------------------------------------
@@ -738,9 +1164,19 @@ class SeamlessDataProvider(ABC):
         end: int,
         node_id: str,
         interval: int,
+        request_context: _RequestContext | None = None,
+        cache_key: str | None = None,
     ) -> SeamlessFetchResult:
         if not isinstance(frame, pd.DataFrame):
             frame = pd.DataFrame()
+
+        world_id: str | None = None
+        execution_domain: str | None = None
+        requested_as_of: str | None = None
+        if request_context is not None:
+            world_id = request_context.world_id or None
+            execution_domain = request_context.execution_domain or None
+            requested_as_of = request_context.requested_as_of
 
         if frame.empty:
             metadata = SeamlessFetchMetadata(
@@ -756,6 +1192,10 @@ class SeamlessDataProvider(ABC):
                 as_of=None,
                 manifest_uri=None,
                 artifact=None,
+                world_id=world_id,
+                execution_domain=execution_domain,
+                requested_as_of=requested_as_of,
+                cache_key=cache_key,
             )
             self._last_conformance_report = None
             self._sync_metadata_attrs(frame, metadata)
@@ -813,6 +1253,10 @@ class SeamlessDataProvider(ABC):
                 as_of=None,
                 manifest_uri=None,
                 artifact=None,
+                world_id=world_id,
+                execution_domain=execution_domain,
+                requested_as_of=requested_as_of,
+                cache_key=cache_key,
             )
             self._sync_metadata_attrs(stabilized, metadata)
             return SeamlessFetchResult(stabilized, metadata)
@@ -1005,6 +1449,10 @@ class SeamlessDataProvider(ABC):
             as_of=as_of,
             manifest_uri=manifest_uri,
             artifact=publication,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            requested_as_of=requested_as_of,
+            cache_key=cache_key,
         )
 
         metadata.coverage_ratio = self._compute_coverage_ratio(metadata)
@@ -1022,8 +1470,6 @@ class SeamlessDataProvider(ABC):
             interval=interval,
             staleness_seconds=staleness_seconds,
         )
-        self._record_fingerprint(node_id, interval, metadata.dataset_fingerprint)
-
         self._sync_metadata_attrs(stabilized, metadata)
 
         # expose last fetch metadata for callers
@@ -1051,6 +1497,10 @@ class SeamlessDataProvider(ABC):
                 "sla_violation": metadata.sla_violation,
                 "coverage_ratio": metadata.coverage_ratio,
                 "staleness_ms": metadata.staleness_ms,
+                "world_id": metadata.world_id,
+                "execution_domain": metadata.execution_domain,
+                "requested_as_of": metadata.requested_as_of,
+                "cache_key": metadata.cache_key,
             }
         )
         frame.attrs = attrs
@@ -1236,11 +1686,19 @@ class SeamlessDataProvider(ABC):
         return compute_artifact_fingerprint(frame, canonical_metadata)
 
     def _record_fingerprint(
-        self, node_id: str, interval: int, fingerprint: str | None
+        self,
+        node_id: str,
+        interval: int,
+        fingerprint: str | None,
+        context: _RequestContext | None = None,
     ) -> None:
         if not fingerprint:
             return
-        key = (str(node_id), int(interval))
+        world = ""
+        requested_as_of = ""
+        if context is not None:
+            world, requested_as_of = context.key_components()
+        key = (str(node_id), int(interval), world, requested_as_of)
         seen = self._fingerprint_index[key]
         if fingerprint in seen:
             sdk_metrics.observe_fingerprint_collision(node_id=node_id, interval=interval)
@@ -1252,10 +1710,22 @@ class SeamlessDataProvider(ABC):
         seen.append(fingerprint)
 
     async def _start_background_backfill(
-        self, start: int, end: int, *, node_id: str, interval: int
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        request_context: _RequestContext | None = None,
     ) -> None:
         """Start background backfill task with single-flight de-duplication."""
-        key = f"{node_id}:{interval}:{start}:{end}"
+        key = self._backfill_key(
+            node_id=node_id,
+            interval=interval,
+            start=start,
+            end=end,
+            context=request_context,
+        )
         if self._active_backfills.get(key):
             return
         # Process-local single-flight
