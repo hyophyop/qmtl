@@ -16,6 +16,7 @@ import pandas as pd
 from enum import Enum
 import asyncio
 import logging
+import math
 import os
 import time
 import hashlib
@@ -850,16 +851,29 @@ class SeamlessDataProvider(ABC):
         requested_span = max(0, end - start)
         if requested_span <= 0:
             return 1.0 if metadata.rows > 0 else 0.0
+        row_ratio: float | None = None
+        if metadata.interval > 0:
+            if metadata.rows <= 0:
+                row_ratio = 0.0
+            else:
+                expected_rows = math.floor(requested_span / metadata.interval) + 1
+                expected_rows = max(expected_rows, 1)
+                row_ratio = min(1.0, metadata.rows / expected_rows)
         bounds = metadata.coverage_bounds
-        if bounds is None:
+        bounds_ratio: float | None = None
+        if bounds is not None:
+            cov_start, cov_end = bounds
+            overlap_start = max(start, cov_start)
+            overlap_end = min(end, cov_end)
+            if overlap_end > overlap_start:
+                coverage_span = max(0, overlap_end - overlap_start)
+                bounds_ratio = max(0.0, min(1.0, coverage_span / requested_span))
+            else:
+                bounds_ratio = 0.0
+        ratios = [ratio for ratio in (row_ratio, bounds_ratio) if ratio is not None]
+        if not ratios:
             return 0.0
-        cov_start, cov_end = bounds
-        overlap_start = max(start, cov_start)
-        overlap_end = min(end, cov_end)
-        if overlap_end <= overlap_start:
-            return 0.0
-        coverage_span = max(0, overlap_end - overlap_start)
-        return max(0.0, min(1.0, coverage_span / requested_span))
+        return min(ratios)
 
     def _compute_staleness_ms(
         self, metadata: SeamlessFetchMetadata
