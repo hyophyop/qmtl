@@ -22,8 +22,6 @@ import logging
 import math
 import os
 import time
-import hashlib
-import json
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -41,6 +39,10 @@ from .backfill_coordinator import (
 from .sla import SLAPolicy, SLAViolationMode
 from .exceptions import SeamlessSLAExceeded
 from .artifacts import ArtifactRegistrar, ArtifactPublication
+from .artifacts.fingerprint import (
+    compute_artifact_fingerprint,
+    compute_legacy_artifact_fingerprint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,11 @@ CONFORMANCE_VERSION = "v2"
 
 
 _FINGERPRINT_HISTORY_LIMIT = 32
+
+_FINGERPRINT_MODE_ENV = "QMTL_SEAMLESS_FP_MODE"
+_FINGERPRINT_PREVIEW_ENV = "QMTL_SEAMLESS_PREVIEW_FP"
+_FINGERPRINT_MODE_CANONICAL = "canonical"
+_FINGERPRINT_MODE_LEGACY = "legacy"
 
 
 @dataclass(slots=True)
@@ -259,6 +266,12 @@ class SeamlessDataProvider(ABC):
         self._fingerprint_index: dict[tuple[str, int], deque[str]] = defaultdict(
             self._create_fingerprint_window
         )
+        mode_env = os.getenv(_FINGERPRINT_MODE_ENV, _FINGERPRINT_MODE_CANONICAL).strip().lower()
+        if mode_env not in {_FINGERPRINT_MODE_CANONICAL, _FINGERPRINT_MODE_LEGACY}:
+            mode_env = _FINGERPRINT_MODE_CANONICAL
+        self._fingerprint_mode = mode_env
+        preview_env = os.getenv(_FINGERPRINT_PREVIEW_ENV, "").strip().lower()
+        self._preview_fingerprint = preview_env in {"1", "true", "yes", "on"}
 
     def _validate_node_id(self, node_id: str) -> None:
         """Hook for subclasses to validate node identifiers."""
@@ -805,14 +818,35 @@ class SeamlessDataProvider(ABC):
             return SeamlessFetchResult(stabilized, metadata)
 
         coverage_bounds = self._coverage_bounds(stabilized)
-        metadata_payload = {
+        canonical_metadata = {
             "node_id": node_id,
             "interval": int(interval),
             "coverage_bounds": coverage_bounds,
-            "requested_bounds": (int(start), int(end)),
             "conformance_version": CONFORMANCE_VERSION,
         }
-        fingerprint = self._compute_dataset_fingerprint(stabilized, metadata_payload)
+        legacy_metadata = {
+            **canonical_metadata,
+            "requested_bounds": (int(start), int(end)),
+        }
+        fingerprint: str | None = None
+        preview_fingerprint: str | None = None
+        if (
+            self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY
+            or self._registrar is None
+        ):
+            fingerprint = self._compute_fingerprint_value(
+                stabilized,
+                canonical_metadata=canonical_metadata,
+                legacy_metadata=legacy_metadata,
+                mode=self._fingerprint_mode,
+            )
+        elif self._preview_fingerprint:
+            preview_fingerprint = self._compute_fingerprint_value(
+                stabilized,
+                canonical_metadata=canonical_metadata,
+                legacy_metadata=legacy_metadata,
+                mode=_FINGERPRINT_MODE_CANONICAL,
+            )
         as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         manifest_uri: str | None = None
 
@@ -832,6 +866,13 @@ class SeamlessDataProvider(ABC):
             except TypeError:
                 if coverage_bounds is not None:
                     try:
+                        if fingerprint is None:
+                            fingerprint = self._compute_fingerprint_value(
+                                stabilized,
+                                canonical_metadata=canonical_metadata,
+                                legacy_metadata=legacy_metadata,
+                                mode=self._fingerprint_mode,
+                            )
                         publish_call = self._registrar.publish(  # type: ignore[misc]
                             stabilized,
                             node_id=node_id,
@@ -867,10 +908,16 @@ class SeamlessDataProvider(ABC):
         if publication:
             pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
             if isinstance(pub_fingerprint, str):
-                if pub_fingerprint.startswith("lake:sha256:"):
-                    fingerprint = pub_fingerprint
-                else:
-                    fingerprint = f"lake:sha256:{pub_fingerprint}"
+                normalized_fp = pub_fingerprint
+                if normalized_fp.startswith("lake:sha256:"):
+                    normalized_fp = normalized_fp.replace("lake:", "", 1)
+                elif (
+                    not normalized_fp.startswith("sha256:")
+                    and len(normalized_fp) == 64
+                    and all(ch in "0123456789abcdefABCDEF" for ch in normalized_fp)
+                ):
+                    normalized_fp = f"sha256:{normalized_fp.lower()}"
+                fingerprint = normalized_fp
                 try:
                     publication.dataset_fingerprint = fingerprint  # type: ignore[misc]
                 except Exception:  # pragma: no cover - defensive guard
@@ -878,6 +925,16 @@ class SeamlessDataProvider(ABC):
                 manifest_obj = getattr(publication, "manifest", None)
                 if isinstance(manifest_obj, dict):
                     manifest_obj["dataset_fingerprint"] = fingerprint
+                if (
+                    preview_fingerprint
+                    and fingerprint
+                    and fingerprint != preview_fingerprint
+                ):
+                    logger.warning(
+                        "seamless.fingerprint.preview_mismatch",
+                        canonical=fingerprint,
+                        preview=preview_fingerprint,
+                    )
             pub_as_of = getattr(publication, "as_of", None)
             if isinstance(pub_as_of, str):
                 as_of = pub_as_of
@@ -901,6 +958,14 @@ class SeamlessDataProvider(ABC):
                     interval=interval,
                     bytes_written=bytes_written,
                 )
+
+        if fingerprint is None:
+            fingerprint = self._compute_fingerprint_value(
+                stabilized,
+                canonical_metadata=canonical_metadata,
+                legacy_metadata=legacy_metadata,
+                mode=self._fingerprint_mode,
+            )
 
         metadata = SeamlessFetchMetadata(
             node_id=node_id,
@@ -1133,57 +1198,17 @@ class SeamlessDataProvider(ABC):
         end = int(frame["ts"].iloc[-1])
         return (start, end)
 
-    def _canonicalize_value(self, value: Any) -> Any:
-        if isinstance(value, (int, float, str, bool)):
-            return value
-        if pd.isna(value):
-            return None
-        if isinstance(value, pd.Timestamp):
-            return int(value.value // 10**9)
-        if isinstance(value, pd.Timedelta):
-            return int(value.value // 10**9)
-        if hasattr(value, "item"):
-            try:
-                return value.item()
-            except Exception:  # pragma: no cover - fallback to string
-                pass
-        return str(value)
-
-    def _canonicalize_frame(self, frame: pd.DataFrame) -> list[dict[str, Any]]:
-        columns = list(frame.columns)
-        if "ts" in columns:
-            columns = ["ts"] + [col for col in columns if col != "ts"]
-        else:
-            columns.sort()
-        records: list[dict[str, Any]] = []
-        for _, row in frame[columns].iterrows():
-            record = {col: self._canonicalize_value(row[col]) for col in columns}
-            records.append(record)
-        return records
-
-    def _normalize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        normalized: dict[str, Any] = {}
-        for key, value in metadata.items():
-            if isinstance(value, dict):
-                normalized[key] = self._normalize_metadata(value)
-            elif isinstance(value, (list, tuple)):
-                normalized[key] = [self._canonicalize_value(v) for v in value]
-            else:
-                normalized[key] = self._canonicalize_value(value)
-        return normalized
-
-    def _compute_dataset_fingerprint(
-        self, frame: pd.DataFrame, metadata: dict[str, Any]
+    def _compute_fingerprint_value(
+        self,
+        frame: pd.DataFrame,
+        *,
+        canonical_metadata: dict[str, Any],
+        legacy_metadata: dict[str, Any],
+        mode: str,
     ) -> str:
-        payload = {
-            "frame": self._canonicalize_frame(frame),
-            "metadata": self._normalize_metadata(metadata),
-        }
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-        digest = hashlib.sha256(serialized).hexdigest()
-        return f"lake:sha256:{digest}"
+        if mode == _FINGERPRINT_MODE_LEGACY:
+            return compute_legacy_artifact_fingerprint(frame, legacy_metadata)
+        return compute_artifact_fingerprint(frame, canonical_metadata)
 
     def _record_fingerprint(
         self, node_id: str, interval: int, fingerprint: str | None

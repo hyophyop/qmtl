@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import hashlib
 import inspect
-import io
 import logging
 from typing import Any, Awaitable, Callable, MutableMapping, Sequence
 
 import pandas as pd
 
 from qmtl.runtime.sdk.conformance import ConformanceReport
+from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +89,13 @@ class ArtifactRegistrar:
         end = int(stabilized["ts"].max())
         rows = int(stabilized.shape[0])
         as_of = self._now_iso()
-        fingerprint = self._compute_fingerprint(stabilized)
+        fingerprint_metadata = {
+            "node_id": node_id,
+            "interval": int(interval),
+            "coverage_bounds": (start, end),
+            "conformance_version": self._conformance_version,
+        }
+        fingerprint = compute_artifact_fingerprint(stabilized, fingerprint_metadata)
 
         manifest: dict[str, Any] = {
             "node_id": node_id,
@@ -161,12 +166,6 @@ class ArtifactRegistrar:
         if total <= self._stabilization_bars:
             return frame.iloc[0:0].copy(deep=True)
         return frame.iloc[: total - self._stabilization_bars].copy(deep=True)
-
-    def _compute_fingerprint(self, frame: pd.DataFrame) -> str:
-        buffer = io.StringIO()
-        frame.to_csv(buffer, index=False, header=True, float_format=self._float_format)
-        data = buffer.getvalue().encode("utf-8")
-        return hashlib.sha256(data).hexdigest()
 
     @staticmethod
     def _now_iso() -> str:
