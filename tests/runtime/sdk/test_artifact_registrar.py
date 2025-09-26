@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
 
 
@@ -103,3 +104,31 @@ async def test_filesystem_registrar_falls_back_for_unknown_node(tmp_path) -> Non
     fingerprint_component = manifest_path.parent.name
     assert ":" not in fingerprint_component
     assert publication.dataset_fingerprint.replace(":", "-") == fingerprint_component
+
+
+@pytest.mark.asyncio
+async def test_io_registrar_includes_provenance_metadata() -> None:
+    frame = pd.DataFrame(
+        {
+            "ts": [0, 60, 120],
+            "open": [1.0, 1.1, 1.2],
+            "high": [1.0, 1.2, 1.3],
+            "low": [0.9, 1.0, 1.1],
+            "close": [1.0, 1.1, 1.2],
+            "volume": [5, 6, 7],
+        }
+    )
+
+    registrar = IOArtifactRegistrar(stabilization_bars=1)
+    publication = await registrar.publish(
+        frame,
+        node_id="custom-node",
+        interval=60,
+    )
+
+    assert publication is not None
+    manifest = publication.manifest
+    assert manifest["producer"]["identity"] == "seamless@qmtl"
+    assert manifest["producer"]["node_id"] == "custom-node"
+    assert manifest["producer"]["interval"] == 60
+    assert manifest["publication_watermark"].endswith("Z")

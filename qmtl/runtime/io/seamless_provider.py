@@ -377,7 +377,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         if registrar_obj is None:
             registrar_obj = FileSystemArtifactRegistrar.from_env()
         if registrar_obj is None:
-            registrar_obj = IOArtifactRegistrar(stabilization_bars=0)
+            registrar_obj = IOArtifactRegistrar(stabilization_bars=2)
 
         fmt = node_id_format.strip() if node_id_format else None
         self._node_id_format = fmt
