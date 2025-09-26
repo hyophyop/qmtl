@@ -50,12 +50,17 @@ CONFORMANCE_VERSION = "v1"
 
 @dataclass(slots=True)
 class SeamlessFetchMetadata:
-    dataset_fingerprint: str | None
-    as_of: int | None
+    node_id: str
+    interval: int
+    requested_range: tuple[int, int]
+    rows: int
     coverage_bounds: tuple[int, int] | None
     conformance_flags: dict[str, int]
     conformance_warnings: tuple[str, ...]
+    dataset_fingerprint: str | None = None
+    as_of: int | str | None = None
     manifest_uri: str | None = None
+    artifact: ArtifactPublication | None = None
 
 
 @dataclass(slots=True)
@@ -646,12 +651,17 @@ class SeamlessDataProvider(ABC):
 
         if frame.empty:
             metadata = SeamlessFetchMetadata(
-                dataset_fingerprint=None,
-                as_of=None,
+                node_id=node_id,
+                interval=int(interval),
+                requested_range=(int(start), int(end)),
+                rows=0,
                 coverage_bounds=None,
                 conformance_flags={},
                 conformance_warnings=(),
+                dataset_fingerprint=None,
+                as_of=None,
                 manifest_uri=None,
+                artifact=None,
             )
             self._last_conformance_report = None
             frame.attrs = {
@@ -661,6 +671,8 @@ class SeamlessDataProvider(ABC):
                 "conformance_flags": {},
                 "conformance_warnings": (),
                 "manifest_uri": None,
+                "requested_range": metadata.requested_range,
+                "rows": metadata.rows,
             }
             return SeamlessFetchResult(frame, metadata)
 
@@ -703,12 +715,17 @@ class SeamlessDataProvider(ABC):
 
         if stabilized.empty:
             metadata = SeamlessFetchMetadata(
-                dataset_fingerprint=None,
-                as_of=None,
+                node_id=node_id,
+                interval=int(interval),
+                requested_range=(int(start), int(end)),
+                rows=0,
                 coverage_bounds=None,
                 conformance_flags=dict(report.flags_counts),
                 conformance_warnings=report.warnings,
+                dataset_fingerprint=None,
+                as_of=None,
                 manifest_uri=None,
+                artifact=None,
             )
             stabilized.attrs = {
                 "dataset_fingerprint": None,
@@ -717,6 +734,8 @@ class SeamlessDataProvider(ABC):
                 "conformance_flags": dict(report.flags_counts),
                 "conformance_warnings": report.warnings,
                 "manifest_uri": None,
+                "requested_range": metadata.requested_range,
+                "rows": metadata.rows,
             }
             return SeamlessFetchResult(stabilized, metadata)
 
@@ -756,12 +775,17 @@ class SeamlessDataProvider(ABC):
             manifest_uri = publication.manifest_uri
 
         metadata = SeamlessFetchMetadata(
-            dataset_fingerprint=fingerprint,
-            as_of=as_of,
+            node_id=node_id,
+            interval=int(interval),
+            requested_range=(int(start), int(end)),
+            rows=int(len(stabilized)),
             coverage_bounds=coverage_bounds,
             conformance_flags=dict(report.flags_counts),
             conformance_warnings=report.warnings,
+            dataset_fingerprint=fingerprint,
+            as_of=as_of,
             manifest_uri=manifest_uri,
+            artifact=publication,
         )
 
         attrs = dict(stabilized.attrs)
@@ -773,6 +797,8 @@ class SeamlessDataProvider(ABC):
                 "conformance_flags": metadata.conformance_flags,
                 "conformance_warnings": metadata.conformance_warnings,
                 "manifest_uri": metadata.manifest_uri,
+                "requested_range": metadata.requested_range,
+                "rows": metadata.rows,
             }
         )
         stabilized.attrs = attrs
