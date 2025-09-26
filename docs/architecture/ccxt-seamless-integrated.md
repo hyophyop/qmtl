@@ -5,9 +5,9 @@
 - [DAG Manager](dag-manager.md)
 - [Gateway](gateway.md)
 - [CCXT × QuestDB IO Recipe](../io/ccxt-questdb.md)
-- [CCXT × Seamless (GPT5-High)](ccxt-seamless-gpt5high.md)
 - [CCXT × Seamless (GPT5-Codex)](ccxt-seamless-gpt5codex.md)
 - [CCXT × Seamless Hybrid Summary](ccxt-seamless-hybrid.md)
+- Archived runtime notes previously published as `ccxt-seamless-gpt5high.md` now resolve to this integrated blueprint.
 
 ## Scope and Status
 
@@ -70,6 +70,34 @@ The overview retains the Hybrid document's dual-plane split: the Seamless data p
 
 ## Data Plane (GPT5-High Lineage)
 
+### Runtime Composition Overview
+
+```mermaid
+flowchart LR
+    subgraph Strategy/Nodes
+      S[Strategy] -->|fetch/coverage| P((Seamless Provider))
+    end
+
+    P --> C[Cache Source]
+    P --> ST[Storage Source (QuestDB)]
+    P --> BF[Auto Backfiller (CCXT)]
+    P --> LV[Live Feed (poll/WS)]
+
+    BF --> RL[Rate Limiter]
+    BF --> CCXT[CCXT async_support]
+    ST --> QDB[(QuestDB)]
+
+    subgraph Control
+      SLA[SLA Policy]
+      CO[Backfill Coordinator]
+      CONF[Conformance Pipeline]
+    end
+
+    P --- SLA
+    P --- CO
+    P --- CONF
+```
+
 ### Seamless Core
 - Implementation: `EnhancedQuestDBProvider` (`qmtl/runtime/io/seamless_provider.py`).
 - Exposed strategies: `FAIL_FAST`, `AUTO_BACKFILL`, `PARTIAL_FILL`, `SEAMLESS`.
@@ -80,19 +108,93 @@ The overview retains the Hybrid document's dual-plane split: the Seamless data p
 - Node identity convention: `ohlcv:{exchange_id}:{symbol}:{timeframe}` (e.g. `ohlcv:binance:BTC/USDT:1m`).
 - Interval-aware merges ensure every delivered frame is aligned to timeframe boundaries.
 
-### Backfill & Rate Limiting
+#### Coverage Math Quick Reference
+
+| Step | Responsibility | Notes |
+| --- | --- | --- |
+| Coverage fetch | `QuestDBHistoryProvider.coverage` | Returns contiguous segments with `start`, `end`, and `interval_seconds` metadata. |
+| Gap derivation | `HistoryCoverage.compute_missing_ranges` | Produces inclusive/exclusive window tuples respecting timeframe cadence (no partial bars). |
+| Merge | `HistoryCoverage.merge_ranges` | Coalesces storage + freshly backfilled spans before readback. |
+| Validation | `ConformancePipeline` | Drops duplicates, enforces monotonic timestamps, and flags remaining coverage deltas. |
+
+### Data Model & Interval Semantics
+- Canonical OHLCV schema: `ts`, `open`, `high`, `low`, `close`, `volume`.
+- `ts` values are stored in nanoseconds; coverage math converts the configured timeframe to seconds to guarantee integer multiples.
+- Node identities should include exchange, symbol, and CCXT timeframe. When downstream resampling is required, publish a new node identifier rather than mutating the base cadence.
+
+### Backfill Orchestration
 - Backfills driven by `CcxtOHLCVFetcher` and `CcxtBackfillConfig` (`qmtl/runtime/io/ccxt_fetcher.py`).
-- Process-level throttles plus Redis-backed cluster token bucket via `qmtl/runtime/io/ccxt_rate_limiter.py`.
-- Distributed single-flight coordination using `BackfillCoordinator` and the `QMTL_SEAMLESS_COORDINATOR_URL` endpoint.
+- Background fills are preferred; synchronous `ensure_coverage` remains available when strategies need deterministic completion.
+- Distributed single-flight coordination using `BackfillCoordinator` (process scope) plus the `QMTL_SEAMLESS_COORDINATOR_URL` HTTP endpoint for cross-worker leases.
+- Each backfill batch records attempt/complete/fail events to structured logs so operations dashboards can expose fill throughput.
+
+### Rate Limiting
+- Process-level throttles rely on asyncio semaphores and minimum-interval guards to prevent CCXT burst bans.
+- Cluster-level budgets are enforced via Redis token buckets (`qmtl/runtime/io/ccxt_rate_limiter.py`). Keys should partition on `exchange_id` and optional account suffix.
+
+| Parameter | Purpose | Default Source |
+| --- | --- | --- |
+| `QMTL_CCXT_RATE_LIMITER_REDIS` | Connection string for cluster token bucket state | Environment variable |
+| `tokens_per_interval` | Allowance per rolling window | Provider configuration |
+| `interval_ms` | Shared window duration | Provider configuration |
+| `burst_tokens` | Extra headroom before throttling | Provider configuration |
+| `local_semaphore` | Concurrency cap inside a single process | Provider configuration |
+
+### Provider Recipes
+
+```python
+from qmtl.runtime.io import EnhancedQuestDBProvider
+from qmtl.runtime.io import CcxtOHLCVFetcher, CcxtBackfillConfig
+from qmtl.runtime.sdk.sla import SLAPolicy
+
+fetcher = CcxtOHLCVFetcher(CcxtBackfillConfig(
+    exchange_id="binance",
+    symbols=["BTC/USDT"],
+    timeframe="1m",
+))
+
+provider = EnhancedQuestDBProvider(
+    dsn="postgresql://localhost:8812/qdb",
+    fetcher=fetcher,
+    strategy="SEAMLESS",
+    conformance=None,
+    partial_ok=True,
+)
+
+provider_with_sla = EnhancedQuestDBProvider(
+    dsn="postgresql://localhost:8812/qdb",
+    fetcher=fetcher,
+    sla=SLAPolicy(
+        max_wait_storage_ms=300,
+        max_wait_backfill_ms=5000,
+        total_deadline_ms=1500,
+        max_sync_gap_bars=2,
+    ),
+)
+```
+
+When scaling to multi-symbol or multi-timeframe coverage, prefer `CcxtQuestDBProvider.from_config_multi(...)` for scaffolding while retaining the enhanced provider for SLA orchestration.
 
 ### Live Data Integration
-- Default polling `LiveDataFeedImpl` with bar-boundary scheduling.
-- Optional ccxt.pro wrapper (WebSocket) retained as a future extension; enable only when ccxt.pro is present.
+- Default polling `LiveDataFeedImpl` with bar-boundary scheduling that respects timeframe cadence and waits for bar completion before publishing.
+- Optional ccxt.pro wrapper (WebSocket) retained as a future extension; enable only when ccxt.pro is present and conformance hooks can deduplicate late frames.
+- Live extensions should emit the same coverage metadata as historical reads so Gateway can enforce lag windows.
 
 ### SLA & Conformance
 - SLA budgets sourced from `qmtl/runtime/sdk/sla.py`; phases include storage_wait, backfill_wait, live_wait, total.
 - Conformance pipeline (`qmtl/runtime/sdk/conformance.py`) enforces dtype normalization, timestamp sorting, duplicate drop, and gap flag emission.
 - Violations raise `SeamlessSLAExceeded` or return partial fills according to strategy settings.
+
+#### SLA Budget Reference
+
+| Phase | Description | Typical Budget |
+| --- | --- | --- |
+| `storage_wait` | Time spent waiting on QuestDB responses (read + coverage) | ≤ 300 ms |
+| `backfill_wait` | CCXT fetch latency plus stabilization writes | ≤ 5000 ms |
+| `live_wait` | Optional live feed wait for most recent bar | ≤ 800 ms |
+| `total_deadline` | Aggregate ceiling across phases | ≤ 1500 ms |
+
+Budgets should be tuned per exchange; exceeding any threshold flips the provider into fail-fast or partial modes depending on the selected strategy. Persist SLA outcomes to metrics for alerting.
 
 ## Governance Plane (GPT5-Codex Lineage)
 
@@ -135,7 +237,7 @@ sequenceDiagram
       Fetch-->>Seam: frames
       Seam->>Seam: conform & flag
       Seam->>Store: write rows
-      Seam->>Reg: publish stable segments
+  Seam->>Reg: publish stable segments
     end
   end
   Seam->>Store: read_range(start,end)
@@ -143,6 +245,8 @@ sequenceDiagram
   Seam->>WS: report freshness, fingerprint, as_of, flags
   Seam-->>Strat: normalized dataframe + metadata
 ```
+
+This sequence combines the original GPT5-High runtime flow with governance notifications so readers no longer need to consult legacy diagrams.
 
 ## Configuration Blueprint
 
@@ -211,14 +315,21 @@ The blueprint aligns configuration knobs with existing runtime modules. Teams sh
 2. **Artifact publication** – adopt the `maybe_publish_artifact` pattern from the Hybrid doc; Parquet segments must be stabilized (tail bars dropped) before fingerprinting.
 3. **World-aware caching** – extend cache layers to include `world_id` and `as_of` components; purge entries on domain switch.
 4. **Gateway contract** – ensure each fetch response surfaces `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` for Gateway logging and enforcement.
-5. **Testing** – follow the documented preflight hang scan, then execute `uv run -m pytest -W error -n auto` with recorded ccxt fixtures or sandbox exchanges.
+5. **Testing** – follow the documented preflight hang scan, then execute `uv run -m pytest -W error -n auto` with recorded ccxt fixtures or sandbox exchanges. Long-running end-to-end scenarios should be marked `slow` and excluded from the preflight run.
 
 ## Operational Practices
 
-- **Metrics**: export `seamless_sla_deadline_seconds`, `seamless_conformance_flag_total`, `seamless_conformance_warning_total`, and custom rate-limit gauges.
+- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases and `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles.
+- **Metrics**: export `seamless_sla_deadline_seconds`, `seamless_conformance_flag_total`, `seamless_conformance_warning_total`, rate-limit gauges, and coverage counters such as `seamless_backfill_rows_total`.
 - **Alerting**: trigger warnings for SLA breaches, persistent coverage gaps, or Redis rate-limit saturation.
 - **Backfill visibility**: monitor coordinator claim/complete/fail events via structured logs; integrate into dashboards already defined in `operations/seamless_sla_dashboards.md`.
 - **Runbooks**: reference `operations/backfill.md` for manual remediation and `operations/monitoring.md` for Prometheus setup.
+
+## Testing Guidance
+
+- Run the hang-preflight documented in `guides/testing.md` before the full suite to surface import hangs.
+- Prefer recorded CCXT responses or sandbox exchanges to keep tests deterministic and classify network-backed tests as `slow`.
+- Validate coverage merges with representative gap fixtures (missing first bar, trailing partials, discontinuous mid-range) before enabling Seamless in production.
 
 ## Risk Considerations
 
@@ -229,3 +340,9 @@ The blueprint aligns configuration knobs with existing runtime modules. Teams sh
 ---
 
 Adhering to this integrated design guarantees a single, reusable CCXT + Seamless implementation that satisfies runtime performance targets and reproducibility requirements without resuscitating the deprecated Sonnet architecture.
+
+## Extensions
+
+- Implement a ccxt.pro-based `LiveDataFeed` that mirrors polling semantics while leveraging WebSockets for tighter SLAs.
+- Explore cross-exchange synthetic series (for example, weighted midprice aggregations) as separate nodes that continue to honor coverage guarantees.
+- Evaluate trades-to-bar repair workflows when upstream OHLCV feeds exhibit persistent gaps, emitting provenance metadata for downstream audits.
