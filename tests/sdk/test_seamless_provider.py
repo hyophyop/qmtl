@@ -160,6 +160,12 @@ async def test_fetch_response_includes_metadata() -> None:
     assert result.metadata.manifest_uri == "mem://manifest"
     assert result.metadata.artifact is not None
     assert result.metadata.artifact.manifest["producer"]["node_id"] == "node"
+    assert result.metadata.conformance_version == seamless_module.CONFORMANCE_VERSION
+    assert result.frame.attrs["conformance_version"] == seamless_module.CONFORMANCE_VERSION
+    assert (
+        result.metadata.artifact.manifest.get("conformance_version")
+        == seamless_module.CONFORMANCE_VERSION
+    )
     ratio_key = ("node", "10", "default")
     assert sdk_metrics.coverage_ratio._vals[ratio_key]  # type: ignore[attr-defined]
     assert sdk_metrics.live_staleness_seconds._vals[ratio_key] >= 0  # type: ignore[attr-defined]
@@ -329,6 +335,7 @@ class _RecordingRegistrar:
             "interval": int(interval),
             "range": [coverage_bounds[0], coverage_bounds[1]],
             "requested_range": list(requested_range or ()),
+            "conformance_version": seamless_module.CONFORMANCE_VERSION,
             "conformance": {
                 "flags": dict(getattr(conformance_report, "flags_counts", {})),
                 "warnings": list(getattr(conformance_report, "warnings", ())),
@@ -570,7 +577,7 @@ async def test_conformance_pipeline_blocks_by_default() -> None:
 
     report = exc.value.report
     assert report.warnings and "duplicate" in report.warnings[0]
-    assert "duplicate_bars" in report.flags_counts
+    assert "duplicate_ts" in report.flags_counts
     assert provider.last_conformance_report is report
 
 
@@ -587,7 +594,7 @@ async def test_conformance_pipeline_respects_partial_ok() -> None:
 
     report = provider.last_conformance_report
     assert report is not None
-    assert report.flags_counts.get("duplicate_bars") == 1
+    assert report.flags_counts.get("duplicate_ts") == 1
 
 
 @pytest.mark.asyncio

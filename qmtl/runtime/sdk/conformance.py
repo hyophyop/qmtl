@@ -6,6 +6,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
+from .exceptions import NodeValidationError
 from .schema_validation import validate_schema
 
 
@@ -21,6 +22,16 @@ class ConformancePipeline:
     """Normalize Seamless provider frames and surface data quality findings."""
 
     _TS_COLUMN = "ts"
+
+    _FLAG_DUPLICATE_TS = "duplicate_ts"
+    _FLAG_GAP = "gap"
+    _FLAG_MISSING_COLUMN = "missing_column"
+    _FLAG_DTYPE_CAST = "dtype_cast"
+    _FLAG_DTYPE_MISMATCH = "dtype_mismatch"
+    _FLAG_TS_CAST = "ts_cast"
+    _FLAG_TS_TIMEZONE = "ts_timezone_normalized"
+    _FLAG_NON_FINITE = "non_finite"
+    _FLAG_INVALID_TS = "invalid_timestamp"
 
     def normalize(
         self,
@@ -60,6 +71,8 @@ class ConformancePipeline:
         if expected_schema:
             self._enforce_schema(working, expected_schema, flags, warnings)
 
+        self._normalize_non_finite_values(working, flags, warnings)
+
         if self._TS_COLUMN in working.columns:
             self._normalize_timestamps(working, interval, flags, warnings)
         else:
@@ -95,28 +108,75 @@ class ConformancePipeline:
         flags: dict[str, int],
         warnings: list[str],
     ) -> None:
+        missing_columns = [col for col in expected_schema if col not in df.columns]
+        if missing_columns:
+            flags[self._FLAG_MISSING_COLUMN] = (
+                flags.get(self._FLAG_MISSING_COLUMN, 0) + len(missing_columns)
+            )
+            warnings.append(
+                "missing columns detected: " + ", ".join(sorted(missing_columns))
+            )
+
         try:
             validate_schema(df, expected_schema)
-        except Exception as exc:  # pragma: no cover - validation already tested
+        except NodeValidationError as exc:
             warnings.append(str(exc))
-            # Attempt best-effort casts for known columns so downstream logic
-            # can still operate on normalized dtypes.
-        casts = 0
+        except Exception as exc:  # pragma: no cover - defensive guard
+            warnings.append(str(exc))
+
         for column, dtype in expected_schema.items():
             if column not in df.columns:
                 continue
-            current = str(df[column].dtype)
-            if current == dtype:
+            current_dtype = str(df[column].dtype)
+            if current_dtype == dtype:
                 continue
             try:
                 df[column] = df[column].astype(dtype)
-                casts += 1
-            except Exception:  # pragma: no cover - dtype conversion failures
-                warnings.append(
-                    f"failed to cast column '{column}' to {dtype}; observed {current}"
+                flags[self._FLAG_DTYPE_CAST] = (
+                    flags.get(self._FLAG_DTYPE_CAST, 0) + 1
                 )
-        if casts:
-            flags["dtype_casts"] = casts
+                warnings.append(
+                    f"cast column '{column}' from {current_dtype} to {dtype}"
+                )
+            except Exception:
+                flags[self._FLAG_DTYPE_MISMATCH] = (
+                    flags.get(self._FLAG_DTYPE_MISMATCH, 0) + 1
+                )
+                warnings.append(
+                    f"failed to normalize column '{column}' to {dtype}; observed {current_dtype}"
+                )
+
+    def _normalize_non_finite_values(
+        self,
+        df: pd.DataFrame,
+        flags: dict[str, int],
+        warnings: list[str],
+    ) -> None:
+        replacements = 0
+        observed_nan = 0
+        for column in df.columns:
+            series = df[column]
+            if not pd.api.types.is_numeric_dtype(series):
+                continue
+            if series.empty:
+                continue
+            nan_count = int(pd.isna(series).sum())
+            values = series.to_numpy(copy=False)
+            mask_inf = np.isinf(values)
+            inf_count = int(mask_inf.sum())
+            if inf_count:
+                series = series.astype("float64")
+                series.iloc[np.where(mask_inf)[0]] = np.nan
+                df[column] = series
+                replacements += inf_count
+            observed_nan += nan_count
+        total = replacements + observed_nan
+        if replacements:
+            warnings.append(
+                f"replaced {replacements} +/-inf values with NaN for numeric columns"
+            )
+        if total:
+            flags[self._FLAG_NON_FINITE] = flags.get(self._FLAG_NON_FINITE, 0) + total
 
     # ------------------------------------------------------------------
     # temporal normalization helpers
@@ -129,44 +189,88 @@ class ConformancePipeline:
         warnings: list[str],
     ) -> None:
         ts = df[self._TS_COLUMN]
-        if not pd.api.types.is_integer_dtype(ts.dtype):
-            try:
-                df[self._TS_COLUMN] = pd.to_datetime(ts).astype("int64") // 10**6
-                flags["ts_casts"] = flags.get("ts_casts", 0) + len(df)
-            except Exception:  # pragma: no cover - cast failures are unexpected
-                warnings.append("failed to convert ts column to int64 timestamps")
-                return
+        dtype = ts.dtype
+
+        timezone_adjusted = 0
+        cast_rows = 0
+
+        if isinstance(dtype, pd.DatetimeTZDtype):
+            timezone_adjusted = len(ts)
+            converted = ts.dt.tz_convert("UTC")
+            df[self._TS_COLUMN] = converted.astype("int64") // 10**6
+            cast_rows = len(df)
+        elif pd.api.types.is_datetime64_dtype(dtype):
+            df[self._TS_COLUMN] = ts.astype("int64") // 10**6
+            cast_rows = len(df)
+        elif not pd.api.types.is_integer_dtype(dtype):
+            converted = pd.to_datetime(ts, utc=True, errors="coerce")
+            invalid_mask = converted.isna()
+            if invalid_mask.any():
+                invalid_count = int(invalid_mask.sum())
+                warnings.append(
+                    f"dropped {invalid_count} rows with invalid timestamps"
+                )
+                flags[self._FLAG_INVALID_TS] = (
+                    flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
+                )
+                df.drop(index=df.index[invalid_mask], inplace=True)
+                df.reset_index(drop=True, inplace=True)
+                converted = converted[~invalid_mask]
+            df[self._TS_COLUMN] = converted.astype("int64") // 10**6
+            cast_rows = len(df)
+            if isinstance(dtype, pd.DatetimeTZDtype) or getattr(dtype, "tz", None) is not None:
+                timezone_adjusted = len(df)
+
+        if cast_rows:
+            flags[self._FLAG_TS_CAST] = flags.get(self._FLAG_TS_CAST, 0) + cast_rows
+        if timezone_adjusted:
+            flags[self._FLAG_TS_TIMEZONE] = (
+                flags.get(self._FLAG_TS_TIMEZONE, 0) + timezone_adjusted
+            )
+
+        if df.empty:
+            return
 
         df.sort_values(self._TS_COLUMN, inplace=True)
         df.reset_index(drop=True, inplace=True)
 
-        if interval is not None and interval > 0:
-            arr = df[self._TS_COLUMN].to_numpy()
-            if arr.size:
-                deltas = np.diff(arr)
-                duplicates = int(np.sum(deltas == 0))
-                if duplicates:
-                    flags["duplicate_bars"] = duplicates
-                    warnings.append(f"dropped {duplicates} duplicate bars")
-                    df.drop_duplicates(subset=[self._TS_COLUMN], keep="last", inplace=True)
-                    df.reset_index(drop=True, inplace=True)
-                    arr = df[self._TS_COLUMN].to_numpy()
-                    deltas = np.diff(arr)
+        duplicates_mask = df.duplicated(subset=[self._TS_COLUMN], keep="last")
+        duplicates = int(duplicates_mask.sum())
+        if duplicates:
+            df.drop(index=df.index[duplicates_mask], inplace=True)
+            df.reset_index(drop=True, inplace=True)
+            flags[self._FLAG_DUPLICATE_TS] = (
+                flags.get(self._FLAG_DUPLICATE_TS, 0) + duplicates
+            )
+            warnings.append(f"dropped {duplicates} duplicate bars")
 
-                missing = int(np.sum(np.maximum(deltas // interval - 1, 0)))
-                if missing:
-                    flags["missing_bars"] = missing
-                    warnings.append(
-                        f"detected {missing} interval gaps for interval={interval}"
-                    )
-        else:
-            # Still drop duplicate bars even without interval metadata.
-            duplicates = int(df.duplicated(subset=[self._TS_COLUMN], keep="last").sum())
-            if duplicates:
-                flags["duplicate_bars"] = duplicates
-                warnings.append(f"dropped {duplicates} duplicate bars (interval unknown)")
-                df.drop_duplicates(subset=[self._TS_COLUMN], keep="last", inplace=True)
-                df.reset_index(drop=True, inplace=True)
+        if interval is None or interval <= 0 or len(df) < 2:
+            return
+
+        arr = df[self._TS_COLUMN].to_numpy(copy=False)
+        deltas = np.diff(arr)
+        if not len(deltas):
+            return
+
+        gap_bars = 0
+        misaligned = 0
+        for delta in deltas:
+            if delta <= 0:
+                continue
+            if delta > interval:
+                gap_bars += int((delta - interval) // interval)
+                if (delta - interval) % interval:
+                    misaligned += 1
+
+        if gap_bars:
+            flags[self._FLAG_GAP] = flags.get(self._FLAG_GAP, 0) + gap_bars
+            warnings.append(
+                f"detected {gap_bars} missing bars for interval={interval}"
+            )
+        if misaligned:
+            warnings.append(
+                f"detected {misaligned} gaps with misaligned boundaries for interval={interval}"
+            )
 
 
 __all__ = ["ConformancePipeline", "ConformanceReport"]

@@ -181,7 +181,7 @@ async def test_metadata_publish(monkeypatch):
         requested_range=(60, 120),
         rows=2,
         coverage_bounds=(60, 120),
-        conformance_flags={"missing_bars": 1},
+        conformance_flags={"gap": 1},
         conformance_warnings=("gap",),
         dataset_fingerprint="fp123",
         as_of="2024-10-10T00:00:00Z",
