@@ -200,11 +200,12 @@ Budgets should be tuned per exchange; exceeding any threshold flips the provider
 
 ### Feature Artifact Plane
 
-The governance plane preserves deterministic reproducibility by anchoring every exchange snapshot in the Feature Artifact Plane. The plane treats artifacts as immutable, world-agnostic records that can be replayed or inspected without rehydrating live dependencies.
+The governance plane preserves deterministic reproducibility by anchoring every exchange snapshot in the Feature Artifact Plane. The plane treats artifacts as immutable, world-agnostic records that can be replayed or inspected without rehydrating live dependencies. Guardrails inherited from the Codex draft remain mandatory:
 
-- **Immutable artifacts** – every stabilized Parquet segment is published with a manifest and never mutated in place.
-- **Read-only cross-domain access** – artifacts are shared read-only across Worlds; mutation requires producing a fresh artifact.
-- **Explicit provenance** – manifests must encode producer identity, upstream exchange, and Seamless policy decisions so auditors can reconstruct lineage.
+- **Immutable artifacts** – every stabilized Parquet segment is published with a manifest and never mutated in place. Reprocessing always emits a brand-new fingerprint/as_of pair.
+- **Read-only cross-domain access** – artifacts are shared read-only across Worlds; mutation requires producing a fresh artifact. Cache layers may only materialize copies that reference the canonical manifest key.
+- **Explicit provenance** – manifests must encode producer identity, upstream exchange, Seamless policy decisions, and the publication watermark so auditors can reconstruct lineage without consulting ad-hoc dashboards.
+- **Reproducibility contract** – Gateway and WorldService must treat `{dataset_fingerprint, as_of}` as content-addressed identifiers; any attempt to reuse mutable QuestDB rows without an accompanying artifact reference is rejected.
 
 ```mermaid
 flowchart LR
@@ -232,8 +233,43 @@ flowchart LR
 #### Dataset Identity
 - **Runtime key**: `node_id` as defined above.
 - **Version key**: `dataset_fingerprint` (SHA-256 over canonicalized frame + metadata) and `as_of` (snapshot or commit instant).
-- Artifact manifests record `{fingerprint, as_of, node_id, range, conformance_version, producer}` and live alongside Parquet data in object storage.
-- Fingerprints must be calculated after tail-bar stabilization and dtype normalization to guarantee idempotent replay.
+- Artifact manifests record `{fingerprint, as_of, node_id, range, conformance_version, producer, publication_watermark}` and live alongside Parquet data in object storage.
+- Fingerprints must be calculated after tail-bar stabilization and dtype normalization to guarantee idempotent replay. Workers may compute a "preview" fingerprint for debugging, but only the post-stabilization value is authoritative.
+
+#### Publication Workflow
+
+Ingestion workers are responsible for promoting stabilized frames into the artifact plane. The following pseudo-code captures the canonical sequence and replaces the disparate snippets that previously lived in the hybrid draft:
+
+```python
+def conform_frame(df, interval_s) -> pd.DataFrame:
+    df = df.sort_values("ts")
+    df["ts"] = (df["ts"] // interval_s) * interval_s
+    df = df.drop_duplicates(subset=["ts"], keep="last")
+    # Additional dtype validation and gap flagging here...
+    return df
+
+def compute_fingerprint(df, meta: dict) -> str:
+    payload = serialize_canonical(df, meta)
+    return sha256(payload).hexdigest()
+
+def maybe_publish_artifact(df, node_id, start, end, conf_ver, as_of, store):
+    stable_df = drop_tail(df, bars=2)
+    if stable_df.empty:
+        return None
+    meta = {
+        "node_id": node_id,
+        "range": [start, end],
+        "conformance": conf_ver,
+    }
+    fp = compute_fingerprint(stable_df, meta)
+    write_parquet_with_manifest(stable_df, fp, as_of, meta, store)
+    return fp
+```
+
+Two configuration toggles control where the fingerprint is produced:
+
+- `early_fingerprint` – experimental mode that lets CCXT workers emit a provisional fingerprint at snapshot time.
+- `publish_fingerprint` – default path that waits for watermark stabilization (tail-bar drop) before sealing the manifest. Production environments must leave this enabled.
 
 #### Artifact Lifecycle
 
@@ -243,6 +279,15 @@ flowchart LR
 | Fingerprint emission | Artifact Registrar | Computes SHA-256 over frame bytes + manifest metadata. |
 | Manifest publish | Artifact Registrar | Writes `{fingerprint, as_of, coverage, producer}` to object storage. |
 | Domain import | Gateway / WorldService | Validates fingerprint + `as_of` prior to admitting data into a session. |
+
+#### Storage Policy
+
+Hot and cold storage responsibilities are intentionally bifurcated:
+
+- **Hot (QuestDB)** retains mutable bars for fast coverage math and background fills. TTLs should match SLA recovery expectations.
+- **Cold (Artifact Store)** persists immutable Parquet segments with manifests. Backfilled segments are versioned rather than overwritten; downstream consumers always select by fingerprint.
+- **Watermark promotion** occurs once `stabilization_bars` have elapsed. The registrar publishes both the artifact and a manifest delta so catalogs can advance `as_of` monotonically.
+- **Rollback & auditability** rely on manifest snapshots. Operators debug incidents by replaying the exact fingerprint/as_of pair referenced in Gateway logs rather than re-running CCXT pulls.
 
 ### Domain Isolation & Execution Gating
 
@@ -339,6 +384,9 @@ seamless:
     window_bars: 900
     single_flight_ttl_ms: 60000
     distributed_lease_ttl_ms: 120000
+    max_attempts: 5
+    retry_backoff_ms: 500
+    jitter_ratio: 0.25
   rate_limit:
     redis_dsn: "redis://redis.service.local:6379/0"
     key_template: "ccxt:{exchange}:{account?}"
@@ -351,6 +399,14 @@ seamless:
     format: parquet
     compression: zstd
     stabilization_bars: 2
+    partition_template: "exchange={exchange}/symbol={symbol}/timeframe={timeframe}"
+    publish_fingerprint: true
+    early_fingerprint: false
+  observability:
+    coverage_ratio_threshold: 0.98
+    backfill_completion_ratio_min: 0.95
+    storage_wait_warn_ms: 300
+    backfill_wait_warn_ms: 5000
 cache:
   ttl_ms: 60000
   max_shards: 512
@@ -375,6 +431,10 @@ exchanges:
     sandbox: true
     symbols: ["BTC/USDT"]
     rate_limit_rps: 10
+environment:
+  coordinator_url: ${QMTL_SEAMLESS_COORDINATOR_URL}
+  rate_limiter_redis: ${QMTL_CCXT_RATE_LIMITER_REDIS}
+  world_context_source: ${QMTL_WORLD_CONTEXT_SOURCE}
 ```
 
 The blueprint aligns configuration knobs with existing runtime modules. Teams should implement validation that cross-checks domain policies, rate-limit settings, and artifact destinations during startup.
@@ -382,24 +442,86 @@ The blueprint aligns configuration knobs with existing runtime modules. Teams sh
 ## Implementation Guidance
 
 1. **Reuse existing providers** – compose `EnhancedQuestDBProvider`, `CcxtOHLCVFetcher`, `BackfillCoordinator`, and SLA policies rather than creating new wrappers.
-2. **Artifact publication** – adopt the `maybe_publish_artifact` pattern from the Hybrid doc; Parquet segments must be stabilized (tail bars dropped) before fingerprinting.
-3. **World-aware caching** – extend cache layers to include `world_id` and `as_of` components; purge entries on domain switch.
-4. **Gateway contract** – ensure each fetch response surfaces `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` for Gateway logging and enforcement.
-5. **Testing** – follow the documented preflight hang scan, then execute `uv run -m pytest -W error -n auto` with recorded ccxt fixtures or sandbox exchanges. Long-running end-to-end scenarios should be marked `slow` and excluded from the preflight run.
+2. **Artifact publication** – adopt the `maybe_publish_artifact` workflow defined above. Always stabilize, conform, and fingerprint frames before emitting manifests, and store the returned fingerprint alongside coverage metadata for Gateway echoing.
+3. **World-aware caching** – extend cache layers to include `world_id` and `as_of` components; purge entries on domain switch. Cache hits must reference immutable artifacts or explicitly declare partial coverage.
+4. **Storage bifurcation** – route hot writes and reads through QuestDB while publishing immutable segments to object storage using the configured partition template. Promote artifacts only after `stabilization_bars` have elapsed.
+5. **Gateway contract** – ensure each fetch response surfaces `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` for Gateway logging and enforcement.
+6. **Observability** – emit the metrics catalogued below (`seamless_storage_wait_ms`, `backfill_completion_ratio`, `domain_gate_holds`, etc.) so operations dashboards can enforce alert thresholds without consulting legacy docs.
+7. **Testing** – follow the documented preflight hang scan, then execute `uv run -m pytest -W error -n auto` with recorded ccxt fixtures or sandbox exchanges. Long-running end-to-end scenarios should be marked `slow` and excluded from the preflight run.
+
+## Storage Strategy & Stabilization Workflow
+
+Seamless promotes CCXT data through two storage planes:
+
+1. **QuestDB (hot path)** retains mutable writes for recent coverage math, intra-day diagnostics, and in-flight gap repairs. TTLs should align with SLA recovery windows so stale frames are evicted automatically.
+2. **Artifact store (cold path)** receives immutable Parquet segments partitioned by exchange, symbol, and timeframe. Only manifests produced by `maybe_publish_artifact` may advance a dataset’s `as_of` pointer.
+
+Stabilization proceeds as follows:
+
+1. Backfills land in QuestDB via the enhanced provider while conformance flags track dtype fixes.
+2. Workers drop tail bars according to `stabilization_bars` and compute fingerprints against canonicalized payloads.
+3. The Artifact Registrar publishes `{fingerprint, as_of}` manifests and Parquet payloads to object storage and notifies catalog subscribers.
+4. WorldService advances eligible sessions once the manifest echo confirms monotonic `as_of` progression; rollbacks require pinning a prior fingerprint.
+
+This workflow keeps hot storage responsive without sacrificing the reproducibility guarantees demanded by governance.
 
 ## Operational Practices
 
-- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases and `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles.
-- **Metrics**: export `seamless_sla_deadline_seconds`, `seamless_conformance_flag_total`, `seamless_conformance_warning_total`, rate-limit gauges, and coverage counters such as `seamless_backfill_rows_total`.
-- **Alerting**: trigger warnings for SLA breaches, persistent coverage gaps, or Redis rate-limit saturation.
+- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases, `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles, and `QMTL_WORLD_CONTEXT_SOURCE` for Gateway/World metadata injection.
+- **Metrics**: emit the full catalog below, including SLA phase timers, coverage quality, artifact throughput, and gating outcomes.
+- **Alerting**: trigger warnings for SLA breaches, persistent coverage gaps, Redis rate-limit saturation, or fingerprint collisions. Suggested thresholds are listed alongside each metric.
 - **Backfill visibility**: monitor coordinator claim/complete/fail events via structured logs; integrate into dashboards already defined in `operations/seamless_sla_dashboards.md`.
 - **Runbooks**: reference `operations/backfill.md` for manual remediation and `operations/monitoring.md` for Prometheus setup.
+
+### Metrics Catalog
+
+| Metric | Description | Suggested Alert |
+| --- | --- | --- |
+| `seamless_storage_wait_ms` | Storage wait duration per request | Warn > 300 ms p95 for 5 min |
+| `seamless_backfill_wait_ms` | CCXT fetch and stabilization latency | Warn > 5000 ms p95 for 5 min |
+| `seamless_live_wait_ms` | Live feed wait duration | Warn > 800 ms p95 for 5 min |
+| `seamless_total_ms` | Aggregate SLA duration | Critical if `total_deadline_ms` exceeded |
+| `seamless_sla_deadline_seconds` | Histogram of configured deadlines | Track distribution for regressions |
+| `seamless_conformance_flag_total` / `_warning_total` | Conformance corrections applied | Alert on spikes vs baseline |
+| `backfill_completion_ratio` | Completed backfill windows ÷ scheduled | Warn < 0.95 for 10 min |
+| `coverage_ratio` | Delivered vs requested bars | Warn < 0.98 for 5 min |
+| `gap_repair_latency_ms` | Time to close detected gaps | Investigate if > 2× historical median |
+| `seamless_rl_tokens_available` | Remaining Redis tokens | Warn on sustained < 10 % headroom |
+| `seamless_rl_dropped_total` | Requests dropped by rate limiter | Critical if non-zero in steady state |
+| `artifact_publish_latency_ms` | Time from stabilization to manifest publish | Warn > 120 s |
+| `artifact_bytes_written` | Volume of artifact storage writes | Capacity planning |
+| `fingerprint_collisions` | Count of duplicate fingerprints | Critical if > 0 |
+| `domain_gate_holds` | Number of HOLD downgrades | Warn on upward trend |
+| `partial_fill_returns` | Frequency of PARTIAL_FILL outcomes | Correlate with SLA breaches |
+| `live_staleness_seconds` | Live data freshness gap | Warn if exceeds domain `max_lag` |
 
 ## Testing Guidance
 
 - Run the hang-preflight documented in `guides/testing.md` before the full suite to surface import hangs.
 - Prefer recorded CCXT responses or sandbox exchanges to keep tests deterministic and classify network-backed tests as `slow`.
 - Validate coverage merges with representative gap fixtures (missing first bar, trailing partials, discontinuous mid-range) before enabling Seamless in production.
+
+## Migration Path
+
+Execute the following phases (low risk → high impact) when rolling the integrated architecture into production:
+
+1. **Standardize node IDs** on `ohlcv:{exchange}:{symbol}:{timeframe}` across ingestion, cache, and artifact layers.
+2. **Adopt Conformance v2** to guarantee ordering, dtype normalization, gap flags, and deterministic coverage math.
+3. **Deploy SLA policies** with explicit `PARTIAL_FILL`/`FAIL_FAST` behavior and alerting tied to the metrics catalog.
+4. **Introduce Redis-backed rate limiting** alongside local semaphores so burst protection extends across workers.
+5. **Install the Artifact Registrar** to compute fingerprints/as_of pairs and publish manifests via the workflow above.
+6. **Wire Gateway/World domain gating** so every fetch echoes `{dataset_fingerprint, as_of}` and honors monotonic progress.
+7. **Enable live freshness gates** that downgrade sessions (HOLD/PARTIAL) when `live_staleness_seconds` exceeds the configured `max_lag`.
+
+## Validation Benchmarks
+
+Release readiness requires the following acceptance checks:
+
+- Re-running the same `world_id`/`as_of` session yields byte-identical artifacts and metadata.
+- `as_of` never regresses within a live session; monotonic advancement is enforced by Gateway and cache layers.
+- Coverage ratios remain ≥ 0.98 for 1 m/5 m cadences, with automatic recovery inside ten minutes after an exchange incident.
+- SLA violations emit metrics and respect configured strategies (`PARTIAL_FILL` or `FAIL_FAST`) without silent degradation.
+- Fetching the same node range at different times returns the artifact selected by fingerprint, guaranteeing reproducible replay.
 
 ## Risk Considerations
 
