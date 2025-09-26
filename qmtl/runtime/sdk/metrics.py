@@ -260,7 +260,7 @@ live_staleness_seconds = _gauge(
 seamless_conformance_flag_total = _counter(
     "seamless_conformance_flag_total",
     "Total number of conformance flags emitted by Seamless normalization",
-    ["node_id", "flag_type"],
+    ["node_id", "interval", "world_id", "flag_type"],
     test_value_attr="_vals",
     test_value_factory=dict,
 )
@@ -268,7 +268,7 @@ seamless_conformance_flag_total = _counter(
 seamless_conformance_warning_total = _counter(
     "seamless_conformance_warning_total",
     "Total number of warnings recorded by the Seamless conformance pipeline",
-    ["node_id"],
+    ["node_id", "interval", "world_id"],
     test_value_attr="_vals",
     test_value_factory=dict,
 )
@@ -590,22 +590,35 @@ def observe_sla_phase_duration(
 
 
 def observe_conformance_report(
-    *, node_id: str, flags: Mapping[str, int], warnings: Sequence[str]
+    *,
+    node_id: str,
+    interval: str | int | None,
+    flags: Mapping[str, int],
+    warnings: Sequence[str],
+    world_id: str | None = None,
 ) -> None:
     """Record counts derived from a Seamless conformance report."""
 
     n = str(node_id)
+    i = str(interval) if interval is not None else "unknown"
+    w = str(world_id) if world_id is not None else _WORLD_ID
+
     for flag_type, count in flags.items():
         ft = str(flag_type)
-        seamless_conformance_flag_total.labels(node_id=n, flag_type=ft).inc(count)
-        key = (n, ft)
+        seamless_conformance_flag_total.labels(
+            node_id=n, interval=i, world_id=w, flag_type=ft
+        ).inc(count)
+        key = (n, i, w, ft)
         seamless_conformance_flag_total._vals[key] = (  # type: ignore[attr-defined]
             seamless_conformance_flag_total._vals.get(key, 0) + count
         )
     if warnings:
-        seamless_conformance_warning_total.labels(node_id=n).inc(len(warnings))
-        seamless_conformance_warning_total._vals[n] = (  # type: ignore[attr-defined]
-            seamless_conformance_warning_total._vals.get(n, 0) + len(warnings)
+        seamless_conformance_warning_total.labels(
+            node_id=n, interval=i, world_id=w
+        ).inc(len(warnings))
+        key = (n, i, w)
+        seamless_conformance_warning_total._vals[key] = (  # type: ignore[attr-defined]
+            seamless_conformance_warning_total._vals.get(key, 0) + len(warnings)
         )
 
 

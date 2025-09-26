@@ -28,7 +28,9 @@ milestone.
    switch to blocking mode.
 2. Capture `seamless_conformance_flag_total` locally (or in staging) to gauge
    drift. Production scraping is not yet in place.
-3. Document schema assumptions so promotion to strict mode can happen quickly
+3. Update dashboards and alert queries to include the new `interval` and
+   `world_id` labels emitted by `seamless_conformance_flag_total`/`_warning_total`.
+4. Document schema assumptions so promotion to strict mode can happen quickly
    once the registry support lands.
 
 ### 2. Adopt the Distributed Backfill Coordinator

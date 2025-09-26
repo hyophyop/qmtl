@@ -504,6 +504,27 @@ This workflow keeps hot storage responsive without sacrificing the reproducibili
 | `partial_fill_returns` | Frequency of PARTIAL_FILL outcomes | Correlate with SLA breaches |
 | `live_staleness_seconds` | Live data freshness gap | Warn if exceeds domain `max_lag` |
 
+Conformance counters now include granular labels: `seamless_conformance_flag_total{node_id,interval,world_id,flag_type}` and
+`seamless_conformance_warning_total{node_id,interval,world_id}`. Dashboards should pivot on the interval and world identifiers to
+trace partial degradations back to specific domains.
+
+### Conformance v2 Flag Taxonomy
+
+The blocking v2 pipeline emits the following canonical flag keys. Downstream systems (Gateway, governance tooling, dashboards)
+should treat the keys as stable contract identifiers.
+
+| Flag | Meaning |
+| --- | --- |
+| `duplicate_ts` | Duplicate timestamps were detected and the most recent row was retained. |
+| `gap` | One or more interval-sized gaps were detected between consecutive rows. The count records the missing bar total. |
+| `missing_column` | Required schema fields were absent from the payload. |
+| `dtype_cast` | Columns required dtype coercion to satisfy the declared schema. |
+| `dtype_mismatch` | Columns failed dtype normalization and remain incompatible with the schema. |
+| `ts_cast` | Timestamp fields were coerced to epoch microseconds. |
+| `ts_timezone_normalized` | Timezone-aware timestamps were normalized to UTC before casting. |
+| `non_finite` | NaN or +/-inf values were detected in numeric columns (inf values are replaced with NaN). |
+| `invalid_timestamp` | Rows were dropped because timestamps could not be parsed or normalized. |
+
 ## Testing Guidance
 
 - Run the hang-preflight documented in `guides/testing.md` before the full suite to surface import hangs.

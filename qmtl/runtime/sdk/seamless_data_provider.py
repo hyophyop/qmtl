@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-CONFORMANCE_VERSION = "v1"
+CONFORMANCE_VERSION = "v2"
 
 
 _FINGERPRINT_HISTORY_LIMIT = 32
@@ -64,6 +64,7 @@ class SeamlessFetchMetadata:
     coverage_bounds: tuple[int, int] | None
     conformance_flags: dict[str, int]
     conformance_warnings: tuple[str, ...]
+    conformance_version: str = CONFORMANCE_VERSION
     dataset_fingerprint: str | None = None
     as_of: int | str | None = None
     manifest_uri: str | None = None
@@ -729,6 +730,7 @@ class SeamlessDataProvider(ABC):
                 coverage_bounds=None,
                 conformance_flags={},
                 conformance_warnings=(),
+                conformance_version=CONFORMANCE_VERSION,
                 dataset_fingerprint=None,
                 as_of=None,
                 manifest_uri=None,
@@ -764,6 +766,7 @@ class SeamlessDataProvider(ABC):
             try:
                 sdk_metrics.observe_conformance_report(
                     node_id=node_id,
+                    interval=interval,
                     flags=report.flags_counts,
                     warnings=report.warnings,
                 )
@@ -784,6 +787,7 @@ class SeamlessDataProvider(ABC):
                 coverage_bounds=None,
                 conformance_flags=dict(report.flags_counts),
                 conformance_warnings=report.warnings,
+                conformance_version=CONFORMANCE_VERSION,
                 dataset_fingerprint=None,
                 as_of=None,
                 manifest_uri=None,
@@ -895,6 +899,7 @@ class SeamlessDataProvider(ABC):
             coverage_bounds=coverage_bounds,
             conformance_flags=dict(report.flags_counts),
             conformance_warnings=report.warnings,
+            conformance_version=CONFORMANCE_VERSION,
             dataset_fingerprint=fingerprint,
             as_of=as_of,
             manifest_uri=manifest_uri,
@@ -935,6 +940,7 @@ class SeamlessDataProvider(ABC):
                 "coverage_bounds": metadata.coverage_bounds,
                 "conformance_flags": metadata.conformance_flags,
                 "conformance_warnings": metadata.conformance_warnings,
+                "conformance_version": metadata.conformance_version,
                 "manifest_uri": metadata.manifest_uri,
                 "requested_range": metadata.requested_range,
                 "rows": metadata.rows,
