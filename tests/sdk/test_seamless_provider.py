@@ -428,6 +428,45 @@ async def test_live_as_of_regression_triggers_hold_downgrade() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_as_of_advancement_metric_tracks_progression() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 120)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage)
+
+    ctx_initial = ComputeContext(
+        world_id="world-live",
+        execution_domain="live",
+        as_of="2025-01-01T00:00:00Z",
+    )
+    await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_initial)
+
+    metric_key = ("node", "world-live")
+    assert (
+        sdk_metrics.as_of_advancement_events._vals[metric_key] == 1  # type: ignore[attr-defined]
+    )
+
+    ctx_same = ComputeContext(
+        world_id="world-live",
+        execution_domain="live",
+        as_of="2025-01-01T00:00:00Z",
+    )
+    await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_same)
+    assert (
+        sdk_metrics.as_of_advancement_events._vals[metric_key] == 1  # type: ignore[attr-defined]
+    )
+
+    ctx_later = ComputeContext(
+        world_id="world-live",
+        execution_domain="live",
+        as_of="2025-01-01T00:30:00Z",
+    )
+    await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_later)
+    assert (
+        sdk_metrics.as_of_advancement_events._vals[metric_key] == 2  # type: ignore[attr-defined]
+    )
+
+
+@pytest.mark.asyncio
 async def test_cache_key_includes_world_and_as_of() -> None:
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     provider = _DummyProvider(storage_source=storage)
