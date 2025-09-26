@@ -450,7 +450,7 @@ provider = EnhancedQuestDBProvider(
 
 ### C. 기존 문서 대비 변경점 맵
 
-* `ccxt-seamless-gpt5high.md`의 SLA/coverage/backfill/RL/Conformance를 **핵심 데이터 평면**으로 채택.
+* [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md)의 SLA/coverage/backfill/RL/Conformance 지침을 **핵심 데이터 평면**으로 채택.
 * `ccxt-seamless-gpt5codex.md`의 `dataset_fingerprint/as_of`, World/Execution 도메인, Gateway 컨텍스트를 **거버넌스 평면**으로 채택.
 * `ccxt-seamless-sonnet4` 설계는 폐기됨(Deprecated/Removed). 관련 편의 API가 필요할 경우에도 본 하이브리드 설계의 NodeID 규약·클러스터 RL·도메인 게이팅·아티팩트 규칙을 따라야 한다.
 

@@ -10,12 +10,12 @@ The following tables list sections, diagrams, or code samples that have no equiv
 
 | Legacy section | Migration status | Notes |
 | --- | --- | --- |
-| **Data Model** (`ts, open, high, low, close, volume` schema + interval semantics) | Not yet represented | The integrated doc reiterates node ID norms but omits the canonical OHLCV column contract and the interval-normalization rules that gap math expects. |
-| **Control Planes → Rate Limiting** (Redis/process split description) | Partially captured | High-level throttling is mentioned, but details such as Redis key partitioning and cluster semantics are only present in the legacy text. |
-| **Configuration & Recipes** (Python example using `EnhancedQuestDBProvider`) | Missing | The integrated YAML blueprint lacks a minimal Python snippet; port the sample to aid readers wiring providers in code. |
-| **Operational Guidance** (env vars, metrics, monitoring references) | Partially captured | `QMTL_SEAMLESS_COORDINATOR_URL`, `QMTL_CCXT_RATE_LIMITER_REDIS`, and the referenced operations runbooks are absent from the integrated document. |
-| **Testing** (mark `slow`, prefer recorded responses) | Missing | Implementation guidance calls for running pytest but does not carry over the advice about slow-test markers or recorded exchange fixtures. |
-| **Extensions** (future ccxt.pro live feed, synthetic series, trades→bars repair) | Missing | Capture these roadmap ideas in an "Extensions" or "Future Work" section if they remain relevant. |
+| **Data Model** (`ts, open, high, low, close, volume` schema + interval semantics) | ✅ Migrated | Documented under “Data Model & Interval Semantics” in `ccxt-seamless-integrated.md`. |
+| **Control Planes → Rate Limiting** (Redis/process split description) | ✅ Migrated | Expanded rate-limiter reference table and environment variable guidance now live in the integrated doc. |
+| **Configuration & Recipes** (Python example using `EnhancedQuestDBProvider`) | ✅ Migrated | Example provider wiring added to the Data Plane section of the integrated blueprint. |
+| **Operational Guidance** (env vars, metrics, monitoring references) | ✅ Migrated | Operational Practices now enumerate coordinator and Redis env vars plus enriched metrics. |
+| **Testing** (mark `slow`, prefer recorded responses) | ✅ Migrated | Implementation and Testing Guidance sections call out pytest preflight, recorded fixtures, and `slow` marks. |
+| **Extensions** (future ccxt.pro live feed, synthetic series, trades→bars repair) | ✅ Migrated | Captured in the new “Extensions” section appended to the integrated document. |
 
 ### `ccxt-seamless-gpt5codex.md`
 
@@ -38,9 +38,9 @@ The following tables list sections, diagrams, or code samples that have no equiv
 | **Migration pathway & acceptance criteria** | Missing | The actionable seven-step migration plan and validation criteria need a new “Migration Path” section in the integrated blueprint. |
 
 ## External Links that Depend on the Legacy Docs
-- `mkdocs.yml` navigation still lists **CCXT × Seamless (GPT5-High)**; readers can reach the deprecated file directly from the sidebar.
-- [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) references all three legacy files inside its “Related Documents” list, reinforcing the split-source workflow.
-- [`ccxt-seamless-hybrid.md`](ccxt-seamless-hybrid.md) back-links to both GPT5-High and GPT5-Codex documents to describe its lineage.
+- ✅ `mkdocs.yml` navigation now routes readers directly to the integrated blueprint (the GPT5-High entry was removed).
+- ✅ [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) inlines the former GPT5-High material and no longer links out to the archived file.
+- [`ccxt-seamless-hybrid.md`](ccxt-seamless-hybrid.md) now references the integrated blueprint for its data-plane lineage; future cleanup can drop the parenthetical entirely once the Codex content is migrated.
 
 ## Recommended Follow-Up
 1. Incorporate the missing sections listed above into `ccxt-seamless-integrated.md`, preserving diagrams (Mermaid) where appropriate.
