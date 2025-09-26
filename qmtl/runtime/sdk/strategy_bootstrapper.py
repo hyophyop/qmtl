@@ -136,6 +136,19 @@ class StrategyBootstrapper:
 
         if strategy_id is not None:
             setattr(strategy, "strategy_id", strategy_id)
+            for node in strategy.nodes:
+                try:
+                    setattr(node, "strategy_id", strategy_id)
+                except Exception:
+                    pass
+
+        if gateway_url:
+            setattr(strategy, "gateway_url", gateway_url)
+            for node in strategy.nodes:
+                try:
+                    setattr(node, "gateway_url", gateway_url)
+                except Exception:
+                    pass
 
         tag_service.apply_queue_map(strategy, queue_map or {})
 

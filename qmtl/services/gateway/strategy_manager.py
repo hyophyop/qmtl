@@ -4,6 +4,7 @@ import base64
 import copy
 import hashlib
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -21,8 +22,10 @@ from .fsm import StrategyFSM
 from .models import StrategySubmit
 from .strategy_persistence import StrategyQueue, StrategyStorage
 from .submission import ComputeContextService, StrategyComputeContext
+from .world_client import WorldServiceClient
 
 tracer = trace.get_tracer(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,6 +48,7 @@ class StrategyManager:
     storage: StrategyStorage | None = None
     queue: StrategyQueue | None = None
     context_service: ComputeContextService | None = None
+    world_client: WorldServiceClient | None = None
 
     def __post_init__(self) -> None:
         if self.storage is None:
@@ -269,6 +273,73 @@ class StrategyManager:
             text = str(value).strip()
             return text or None
         return None
+
+    async def update_history_metadata(self, strategy_id: str, report: Any) -> None:
+        storage_key = f"strategy:{strategy_id}"
+        exists = await self.redis.exists(storage_key)
+        if not exists:
+            raise KeyError(strategy_id)
+
+        artifact = getattr(report, "artifact", None)
+        dataset_fp = getattr(report, "dataset_fingerprint", None)
+        if dataset_fp is None and artifact is not None:
+            dataset_fp = getattr(artifact, "dataset_fingerprint", None)
+        as_of_value = getattr(report, "as_of", None)
+        if as_of_value is None and artifact is not None:
+            as_of_value = getattr(artifact, "as_of", None)
+
+        mapping: dict[str, str] = {}
+        world_id = getattr(report, "world_id", None)
+        if world_id:
+            mapping["compute_world_id"] = str(world_id)
+        execution_domain = getattr(report, "execution_domain", None)
+        if execution_domain:
+            mapping["compute_execution_domain"] = str(execution_domain)
+        if as_of_value:
+            mapping["compute_as_of"] = str(as_of_value)
+        if dataset_fp:
+            mapping["compute_dataset_fingerprint"] = str(dataset_fp)
+        if mapping:
+            await self.redis.hset(storage_key, mapping=mapping)
+
+        meta_payload = {
+            "node_id": report.node_id,
+            "interval": int(report.interval),
+            "rows": getattr(report, "rows", None),
+            "coverage_bounds": list(report.coverage_bounds) if report.coverage_bounds else None,
+            "conformance_flags": report.conformance_flags or {},
+            "conformance_warnings": report.conformance_warnings or [],
+            "artifact": artifact.model_dump() if getattr(artifact, "model_dump", None) else (artifact.__dict__ if artifact else None),
+            "dataset_fingerprint": dataset_fp,
+            "as_of": as_of_value,
+            "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        if world_id:
+            meta_payload["world_id"] = str(world_id)
+        if execution_domain:
+            meta_payload["execution_domain"] = str(execution_domain)
+        await self.redis.hset(
+            storage_key,
+            mapping={f"seamless:{report.node_id}": json.dumps(meta_payload)},
+        )
+
+        if self.world_client is not None and world_id:
+            try:
+                world_payload = dict(meta_payload)
+                world_payload["strategy_id"] = strategy_id
+                await self.world_client.post_history_metadata(
+                    world_id=str(world_id),
+                    payload=world_payload,
+                )
+            except Exception:
+                logger.exception(
+                    "failed to forward seamless metadata to worldservice",
+                    extra={
+                        "strategy_id": strategy_id,
+                        "world_id": world_id,
+                        "node_id": report.node_id,
+                    },
+                )
 
     async def _build_compute_context(
         self, payload: StrategySubmit

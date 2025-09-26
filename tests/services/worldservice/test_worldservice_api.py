@@ -198,6 +198,53 @@ async def test_apply_rejects_invalid_gating_policy():
 
 
 @pytest.mark.asyncio
+async def test_history_metadata_in_decision_envelope():
+    app = create_app()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wx"})
+            history_payload = {
+                "strategy_id": "strat-1",
+                "node_id": "node-x",
+                "interval": 60,
+                "rows": 5,
+                "coverage_bounds": [10, 70],
+                "dataset_fingerprint": "fp-history",
+                "as_of": "2025-03-15T12:00:00Z",
+                "execution_domain": "live",
+                "conformance_flags": {"gap": 1},
+                "conformance_warnings": ["late"],
+                "artifact": {
+                    "dataset_fingerprint": "fp-history",
+                    "as_of": "2025-03-15T12:00:00Z",
+                    "rows": 5,
+                    "uri": "local://artifact",
+                },
+            }
+            resp = await client.post(
+                "/worlds/wx/history",
+                json=history_payload,
+            )
+            assert resp.status_code == 204
+
+            history_resp = await client.get("/worlds/wx/history")
+            history_body = history_resp.json()
+            assert history_body["latest"]["dataset_fingerprint"] == "fp-history"
+            assert history_body["entries"][0]["node_id"] == "node-x"
+            assert history_body["entries"][0]["strategy_id"] == "strat-1"
+
+            decide = await client.get("/worlds/wx/decide")
+            decide_body = decide.json()
+            assert decide_body["dataset_fingerprint"] == "fp-history"
+            assert decide_body["as_of"] == "2025-03-15T12:00:00Z"
+            assert decide_body["coverage_bounds"] == [10, 70]
+            assert decide_body["conformance_flags"] == {"gap": 1}
+            assert decide_body["conformance_warnings"] == ["late"]
+            assert decide_body["rows"] == 5
+            assert decide_body["artifact"]["uri"] == "local://artifact"
+
+
+@pytest.mark.asyncio
 async def test_edge_overrides_upsert_and_reason_preservation():
     app = create_app()
     async with httpx.ASGITransport(app=app) as asgi:

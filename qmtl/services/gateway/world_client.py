@@ -320,6 +320,23 @@ class WorldServiceClient:
             json=payload,
         )
 
+    async def post_history_metadata(
+        self,
+        world_id: str,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        resp = await self._request(
+            "POST",
+            self._build_url(f"/worlds/{world_id}/history"),
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return None
+        return resp.json()
+
     async def put_activation(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "PUT",

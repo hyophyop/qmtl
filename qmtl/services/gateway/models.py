@@ -85,3 +85,24 @@ class ExecutionFillEvent(BaseModel):
     else:  # pragma: no cover - legacy fallback
         class Config:  # type: ignore
             extra = 'ignore'
+
+
+class SeamlessArtifactPayload(BaseModel):
+    dataset_fingerprint: StrictStr
+    as_of: StrictStr
+    rows: StrictInt
+    uri: StrictStr | None = None
+
+
+class SeamlessHistoryReport(BaseModel):
+    node_id: StrictStr
+    interval: StrictInt
+    rows: StrictInt | None = None
+    coverage_bounds: tuple[int, int] | None = None
+    conformance_flags: dict[str, int] | None = None
+    conformance_warnings: list[str] | None = None
+    dataset_fingerprint: StrictStr | None = None
+    as_of: StrictStr | None = None
+    world_id: StrictStr | None = None
+    execution_domain: StrictStr | None = None
+    artifact: SeamlessArtifactPayload | None = None
