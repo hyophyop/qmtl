@@ -69,6 +69,8 @@ class ArtifactRegistrar:
         interval: int,
         conformance_report: ConformanceReport | None = None,
         requested_range: tuple[int, int] | None = None,
+        publish_fingerprint: bool = True,
+        early_fingerprint: bool = False,
     ) -> ArtifactPublication | None:
         """Stabilize ``frame`` and return publication metadata.
 
@@ -76,6 +78,9 @@ class ArtifactRegistrar:
         manifest metadata are handed to it. Failures during persistence are
         logged and do not raise.
         """
+
+        if not publish_fingerprint:
+            return None
 
         if not isinstance(frame, pd.DataFrame) or frame.empty or "ts" not in frame.columns:
             return None

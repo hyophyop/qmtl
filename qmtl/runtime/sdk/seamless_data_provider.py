@@ -66,8 +66,28 @@ _FINGERPRINT_HISTORY_LIMIT = 32
 
 _FINGERPRINT_MODE_ENV = "QMTL_SEAMLESS_FP_MODE"
 _FINGERPRINT_PREVIEW_ENV = "QMTL_SEAMLESS_PREVIEW_FP"
+_FINGERPRINT_PUBLISH_ENV = "QMTL_SEAMLESS_PUBLISH_FP"
+_FINGERPRINT_EARLY_ENV = "QMTL_SEAMLESS_EARLY_FP"
 _FINGERPRINT_MODE_CANONICAL = "canonical"
 _FINGERPRINT_MODE_LEGACY = "legacy"
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _coerce_bool(value: object | None, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_VALUES:
+            return True
+        if normalized in _FALSE_VALUES:
+            return False
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
 
 
 @dataclass(slots=True)
@@ -296,6 +316,8 @@ class SeamlessDataProvider(ABC):
         stabilization_bars: int = 2,
         backfill_config: BackfillConfig | None = None,
         cache: Mapping[str, Any] | None = None,
+        publish_fingerprint: bool | None = None,
+        early_fingerprint: bool | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -330,12 +352,36 @@ class SeamlessDataProvider(ABC):
             self._create_fingerprint_window
         )
         self._live_as_of_state: dict[tuple[str, str], str] = {}
-        mode_env = os.getenv(_FINGERPRINT_MODE_ENV, _FINGERPRINT_MODE_CANONICAL).strip().lower()
-        if mode_env not in {_FINGERPRINT_MODE_CANONICAL, _FINGERPRINT_MODE_LEGACY}:
-            mode_env = _FINGERPRINT_MODE_CANONICAL
-        self._fingerprint_mode = mode_env
+        mode_env = os.getenv(_FINGERPRINT_MODE_ENV, "").strip().lower()
+        legacy_requested = mode_env == _FINGERPRINT_MODE_LEGACY
+        canonical_requested = mode_env == _FINGERPRINT_MODE_CANONICAL
+
+        publish_env = os.getenv(_FINGERPRINT_PUBLISH_ENV)
+        publish_default = not legacy_requested
+        publish_flag = _coerce_bool(publish_env, default=publish_default)
+        self._publish_fingerprint = _coerce_bool(
+            publish_fingerprint,
+            default=publish_flag,
+        )
+
+        early_env = os.getenv(_FINGERPRINT_EARLY_ENV)
+        early_flag = _coerce_bool(early_env, default=False)
+        self._early_fingerprint = _coerce_bool(
+            early_fingerprint,
+            default=early_flag,
+        )
+
+        if canonical_requested or legacy_requested:
+            self._fingerprint_mode = mode_env
+        else:
+            self._fingerprint_mode = (
+                _FINGERPRINT_MODE_CANONICAL
+                if self._publish_fingerprint
+                else _FINGERPRINT_MODE_LEGACY
+            )
         preview_env = os.getenv(_FINGERPRINT_PREVIEW_ENV, "").strip().lower()
-        self._preview_fingerprint = preview_env in {"1", "true", "yes", "on"}
+        preview_flag = preview_env in _TRUE_VALUES
+        self._preview_fingerprint = preview_flag or self._early_fingerprint
 
         cache_config = cache or {}
         template_default = "{node_id}:{start}:{end}:{interval}:{conformance_version}:{world_id}:{as_of}"
@@ -1615,10 +1661,11 @@ class SeamlessDataProvider(ABC):
         }
         fingerprint: str | None = None
         preview_fingerprint: str | None = None
-        if (
-            self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY
+        should_compute_immediate = (
+            not self._publish_fingerprint
             or self._registrar is None
-        ):
+        )
+        if should_compute_immediate:
             fingerprint = self._compute_fingerprint_value(
                 stabilized,
                 canonical_metadata=canonical_metadata,
@@ -1647,6 +1694,8 @@ class SeamlessDataProvider(ABC):
                     interval=interval,
                     conformance_report=report,
                     requested_range=(int(start), int(end)),
+                    publish_fingerprint=self._publish_fingerprint,
+                    early_fingerprint=self._early_fingerprint,
                 )
             except TypeError:
                 if coverage_bounds is not None:
@@ -1668,6 +1717,8 @@ class SeamlessDataProvider(ABC):
                             conformance_flags=report.flags_counts,
                             conformance_warnings=report.warnings,
                             request_window=(int(start), int(end)),
+                            publish_fingerprint=self._publish_fingerprint,
+                            early_fingerprint=self._early_fingerprint,
                         )
                     except Exception:  # pragma: no cover - publication failures shouldn't crash
                         publish_call = None
@@ -1683,14 +1734,15 @@ class SeamlessDataProvider(ABC):
                 except Exception:  # pragma: no cover - publication failures shouldn't crash
                     publication = None
                 else:
-                    publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
-                    sdk_metrics.observe_artifact_publish_latency(
-                        node_id=node_id,
-                        interval=interval,
-                        duration_ms=publish_elapsed_ms,
-                    )
+                    if self._publish_fingerprint:
+                        publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
+                        sdk_metrics.observe_artifact_publish_latency(
+                            node_id=node_id,
+                            interval=interval,
+                            duration_ms=publish_elapsed_ms,
+                        )
 
-        if publication:
+        if publication and self._publish_fingerprint:
             pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
             if isinstance(pub_fingerprint, str):
                 normalized_fp = pub_fingerprint
