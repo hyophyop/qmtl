@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 import pandas as pd
 import asyncio
 import logging
 
 from qmtl.runtime.sdk.data_io import HistoryProvider, DataFetcher
+from qmtl.runtime.sdk.ohlcv_nodeid import validate as _validate_ohlcv_node_id
 from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
     DataSource,
@@ -245,6 +246,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         conformance: ConformancePipeline | None = None,
         partial_ok: bool = False,
         registrar: ArtifactRegistrar | None = None,
+        node_id_format: str | None = None,
         **kwargs
     ):
         # Import here to avoid circular imports
@@ -269,6 +271,18 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         if registrar_obj is None:
             registrar_obj = IOArtifactRegistrar(stabilization_bars=0)
 
+        fmt = node_id_format.strip() if node_id_format else None
+        self._node_id_format = fmt
+        self._node_id_validator: Callable[[str], None] | None = None
+        if fmt:
+            if fmt == "ohlcv:{exchange}:{symbol}:{timeframe}":
+                self._node_id_validator = _validate_ohlcv_node_id
+            else:
+                logger.warning(
+                    "enhanced_provider.node_id_validation.unsupported_format",
+                    extra={"format": fmt},
+                )
+
         super().__init__(
             strategy=strategy,
             cache_source=cache_source,
@@ -280,14 +294,27 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
             registrar=registrar_obj,
             **kwargs
         )
-    
+
     def bind_stream(self, stream) -> None:
         """Bind to a stream like the original HistoryProvider."""
         self.storage_provider.bind_stream(stream)
-        
+
         # Also bind cache if available
         if self.cache_source and hasattr(self.cache_source.cache_provider, 'bind_stream'):
             self.cache_source.cache_provider.bind_stream(stream)
+
+    def _validate_node_id(self, node_id: str) -> None:
+        super()._validate_node_id(node_id)
+        validator = self._node_id_validator
+        if not validator:
+            return
+        try:
+            validator(node_id)
+        except (TypeError, ValueError) as exc:
+            fmt = self._node_id_format or "unknown"
+            raise ValueError(
+                f"Node ID '{node_id}' does not match configured format '{fmt}': {exc}"
+            ) from exc
     
     async def fill_missing(
         self, start: int, end: int, *, node_id: str, interval: int

@@ -15,6 +15,10 @@ import time
 import pandas as pd
 
 from qmtl.runtime.sdk.data_io import DataFetcher
+from qmtl.runtime.sdk.ohlcv_nodeid import (
+    TIMEFRAME_SECONDS as _OHLCV_TIMEFRAME_SECONDS,
+    parse as _parse_ohlcv_node_id,
+)
 
 
 @dataclass(slots=True)
@@ -66,46 +70,10 @@ def _try_parse_timeframe_s(timeframe: str) -> int:
     except Exception:
         pass
 
-    table = {
-        "1s": 1,
-        "5s": 5,
-        "10s": 10,
-        "15s": 15,
-        "30s": 30,
-        "1m": 60,
-        "3m": 180,
-        "5m": 300,
-        "15m": 900,
-        "30m": 1800,
-        "1h": 3600,
-        "2h": 7200,
-        "4h": 14400,
-        "6h": 21600,
-        "8h": 28800,
-        "12h": 43200,
-        "1d": 86400,
-        "3d": 259200,
-        "1w": 604800,
-    }
+    table = _OHLCV_TIMEFRAME_SECONDS
     if timeframe not in table:
         raise ValueError(f"Unsupported timeframe: {timeframe}")
     return table[timeframe]
-
-
-def _parse_symbol_from_node_id(node_id: str) -> tuple[str | None, str | None]:
-    """Extract ``(symbol, timeframe)`` from a conventional node_id if present.
-
-    Expected patterns (best-effort):
-      - "ohlcv:{exchange}:{symbol}:{timeframe}"
-      - "{symbol}:{timeframe}"
-    Returns (None, None) when not parseable.
-    """
-    parts = node_id.split(":")
-    if len(parts) >= 4 and parts[0] == "ohlcv":
-        return parts[2], parts[3]
-    if len(parts) >= 2:
-        return parts[-2], parts[-1]
-    return None, None
 
 
 from .ccxt_rate_limiter import get_limiter
@@ -135,7 +103,9 @@ class CcxtOHLCVFetcher(DataFetcher):
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
-        symbol, tf_from_node = _parse_symbol_from_node_id(node_id)
+        parsed = _parse_ohlcv_node_id(node_id)
+        symbol = parsed[1] if parsed else None
+        tf_from_node = parsed[2] if parsed else None
         symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
         timeframe = tf_from_node or self.config.timeframe
         if not symbol:
@@ -312,7 +282,8 @@ class CcxtTradesFetcher(DataFetcher):
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
-        symbol, _ = _parse_symbol_from_node_id(node_id)
+        parsed = _parse_ohlcv_node_id(node_id)
+        symbol = parsed[1] if parsed else None
         symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
         if not symbol:
             raise ValueError("symbol not provided in config and not parseable from node_id")

@@ -22,8 +22,9 @@ import time
 
 import pandas as pd
 
+from qmtl.runtime.sdk.ohlcv_nodeid import parse as _parse_ohlcv_node_id
 from qmtl.runtime.sdk.seamless_data_provider import LiveDataFeed
-from .ccxt_fetcher import _try_parse_timeframe_s as _tf_to_seconds, _parse_symbol_from_node_id
+from .ccxt_fetcher import _try_parse_timeframe_s as _tf_to_seconds
 
 
 log = logging.getLogger(__name__)
@@ -69,7 +70,9 @@ class CcxtProLiveFeed(LiveDataFeed):
         return hasattr(ex, "watch_trades")
 
     async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pd.DataFrame]]:  # type: ignore[override]
-        symbol, tf = _parse_symbol_from_node_id(node_id)
+        parsed = _parse_ohlcv_node_id(node_id)
+        symbol = parsed[1] if parsed else None
+        tf = parsed[2] if parsed else None
         mode = self._mode_for_node(node_id)
         symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
         if not symbol:

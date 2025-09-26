@@ -260,6 +260,11 @@ class SeamlessDataProvider(ABC):
             self._create_fingerprint_window
         )
 
+    def _validate_node_id(self, node_id: str) -> None:
+        """Hook for subclasses to validate node identifiers."""
+
+        return None
+
     @property
     def last_conformance_report(self) -> Optional[ConformanceReport]:
         """Return the most recent conformance report emitted by ``fetch``."""
@@ -294,9 +299,10 @@ class SeamlessDataProvider(ABC):
     ) -> pd.DataFrame:
         """
         Fetch data transparently from available sources.
-        
+
         Implementation follows the priority order and strategy configuration.
         """
+        self._validate_node_id(node_id)
         self._last_conformance_report = None
         self._last_fetch_metadata = None
         tracker = self._build_sla_tracker(node_id, interval)
@@ -345,6 +351,7 @@ class SeamlessDataProvider(ABC):
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
         """Return combined coverage from all sources."""
+        self._validate_node_id(node_id)
         all_ranges: list[tuple[int, int]] = []
         
         # Collect coverage from all available sources
@@ -376,10 +383,11 @@ class SeamlessDataProvider(ABC):
     ) -> bool:
         """
         Ensure data is available for the given range.
-        
+
         If data is missing and auto-backfill is enabled, trigger backfill.
         Returns True if data will be available after this call.
         """
+        self._validate_node_id(node_id)
         tracker = sla_tracker or self._build_sla_tracker(node_id, interval)
 
         # Check current availability
