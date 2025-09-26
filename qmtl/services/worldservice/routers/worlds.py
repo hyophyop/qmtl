@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Response
@@ -7,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Response
 from ..schemas import (
     EdgeOverrideResponse,
     EdgeOverrideUpsertRequest,
+    SeamlessHistoryRequest,
     World,
     WorldNodeRef,
     WorldNodeUpsertRequest,
@@ -136,5 +138,34 @@ def create_worlds_router(service: WorldService) -> APIRouter:
     async def get_audit(world_id: str) -> List[Dict]:
         store = service.store
         return await store.get_audit(world_id)
+
+    @router.post('/worlds/{world_id}/history', status_code=204)
+    async def post_world_history(world_id: str, payload: SeamlessHistoryRequest) -> Response:
+        store = service.store
+        record = payload.model_dump(exclude_unset=True)
+        record.pop('strategy_id', None)
+        coverage = record.get('coverage_bounds')
+        if isinstance(coverage, tuple):
+            record['coverage_bounds'] = list(coverage)
+        artifact = record.get('artifact')
+        if hasattr(artifact, 'model_dump'):
+            record['artifact'] = artifact.model_dump(exclude_unset=True)
+        updated = record.get('updated_at')
+        if not updated:
+            record['updated_at'] = (
+                datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace('+00:00', 'Z')
+            )
+        await store.upsert_history_metadata(world_id, payload.strategy_id, record)
+        return Response(status_code=204)
+
+    @router.get('/worlds/{world_id}/history')
+    async def get_world_history(world_id: str) -> Dict[str, Any]:
+        store = service.store
+        entries = await store.list_history_metadata(world_id)
+        latest = await store.latest_history_metadata(world_id)
+        return {'entries': entries, 'latest': latest}
 
     return router

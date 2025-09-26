@@ -349,6 +349,9 @@ def fetch_with_domain_policy(req, domain_ctx, provider):
     return df, meta  # meta: dataset_fingerprint, as_of, coverage, flags
 ```
 
+_구현 참고_: 기본 `EnhancedQuestDBProvider` 는 데이터프레임만 반환한다. Gateway/WorldService 에 전달하기 전에 위 `maybe_publish_artifact` 경로로 `{dataset_fingerprint, as_of}` 메타데이터를 계산해 응답 메타에 포함시켜야 한다.
+SDK 측에서는 `SeamlessFetchMetadata` (`qmtl/runtime/sdk/seamless_data_provider.py`) 로 커버리지, 컨포먼스 플래그, 발행된 fingerprint를 한 번에 조회할 수 있으므로, Gateway 연동 시 이 객체를 사용해 메타를 전달한다.
+
 ---
 
 ## 10) 운영·관찰성(필수 메트릭 & 알림)
@@ -363,7 +366,7 @@ ENV 키(운영 런북 연계):
 
 - `QMTL_SEAMLESS_COORDINATOR_URL` — 분산 백필 코디네이터 엔드포인트
 - `QMTL_CCXT_RATE_LIMITER_REDIS` — 클러스터 레이트리밋 Redis DSN
-- `QMTL_WORLD_CONTEXT_SOURCE` — Gateway/World 컨텍스트 주입 소스
+- Gateway/World 컨텍스트는 `StrategyComputeContext` (`qmtl/foundation/common/compute_context.py`)가 주입하므로 추가 ENV 토글이 필요하지 않음
 
 > **알림 예시**
 >
@@ -426,7 +429,8 @@ provider = EnhancedQuestDBProvider(
     strategy=...,
     sla=SLAPolicy(...),
 )
-# ArtifactRegistrar를 provider에 주입하여 안정화된 프레임을 Parquet로 게시.
+# ArtifactRegistrar(또는 위 maybe_publish_artifact 경로)를 통해 안정화된 프레임을 게시하고
+# Gateway 응답에 `{dataset_fingerprint, as_of}` 메타를 첨부한다.
 ```
 
 ### B. Manifest JSON 스키마(요약)

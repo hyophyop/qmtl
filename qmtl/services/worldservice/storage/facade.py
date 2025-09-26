@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .models import ValidationCacheEntry, WorldActivation, WorldAuditLog
 from .repositories import (
@@ -43,6 +43,7 @@ class Storage:
         )
         self.world_nodes = self._world_nodes.nodes
         self.apply_runs: Dict[str, Dict[str, Any]] = {}
+        self._history_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     async def create_world(self, world: Dict[str, Any]) -> None:
         record = self._worlds.create(world)
@@ -68,6 +69,7 @@ class Storage:
         self._world_nodes.clear(world_id)
         self._validation_cache.clear(world_id)
         self._edge_overrides.clear(world_id)
+        self._history_metadata.pop(world_id, None)
 
     async def add_policy(self, world_id: str, policy: Policy) -> int:
         record = self._policies.add(world_id, policy)
@@ -225,6 +227,44 @@ class Storage:
             execution_domain=execution_domain,
         )
 
+    async def upsert_history_metadata(
+        self,
+        world_id: str,
+        strategy_id: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        bucket = self._history_metadata.setdefault(world_id, {})
+        record = dict(payload)
+        record["strategy_id"] = strategy_id
+        bucket[strategy_id] = record
+        self._audit.append(
+            world_id,
+            {
+                "event": "history_metadata_upserted",
+                "strategy_id": strategy_id,
+                "dataset_fingerprint": record.get("dataset_fingerprint"),
+                "as_of": record.get("as_of"),
+                "updated_at": record.get("updated_at"),
+            },
+        )
+
+    async def list_history_metadata(self, world_id: str) -> List[Dict[str, Any]]:
+        bucket = self._history_metadata.get(world_id, {})
+        return [dict(value) for _, value in sorted(bucket.items())]
+
+    async def latest_history_metadata(self, world_id: str) -> Optional[Dict[str, Any]]:
+        bucket = self._history_metadata.get(world_id)
+        if not bucket:
+            return None
+        best_entry: Dict[str, Any] | None = None
+        best_rank: Tuple[datetime, datetime] | None = None
+        for value in bucket.values():
+            rank = _metadata_rank(value)
+            if best_rank is None or rank > best_rank:
+                best_rank = rank
+                best_entry = value
+        return dict(best_entry) if best_entry else None
+
     async def upsert_world_node(
         self,
         world_id: str,
@@ -302,6 +342,24 @@ def datetime_now() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
+
+def _metadata_rank(payload: Dict[str, Any]) -> Tuple[datetime, datetime]:
+    as_of = _parse_iso(payload.get("as_of")) or datetime.min.replace(tzinfo=timezone.utc)
+    updated = _parse_iso(payload.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc)
+    return as_of, updated
+
+
+def _parse_iso(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        text = str(value)
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
 
 
 __all__ = ["Storage"]

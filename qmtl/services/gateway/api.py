@@ -90,6 +90,7 @@ def create_app(
         insert_sentinel=insert_sentinel,
         commit_log_writer=commit_log_writer_local,
         context_service=shared_context_service,
+        world_client=world_client_local,
     )
     ws_hub_local = ws_hub
     controlbus_consumer_local = controlbus_consumer

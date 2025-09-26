@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.models import (
     QueuesByTagResponse,
+    SeamlessHistoryReport,
     StatusResponse,
     StrategyAck,
     StrategySubmit,
@@ -114,6 +115,22 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             tag_list, interval, mode, world_id or None
         )
         return {"queues": queues}
+
+    @router.post(
+        "/strategies/{strategy_id}/history",
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_model=None,
+    )
+    async def post_strategy_history(
+        strategy_id: str,
+        payload: SeamlessHistoryReport,
+        manager: StrategyManager = Depends(deps.provide_manager),
+    ) -> Response:
+        try:
+            await manager.update_history_metadata(strategy_id, payload)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="strategy not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
 

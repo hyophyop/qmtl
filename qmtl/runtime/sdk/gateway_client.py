@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from opentelemetry.propagate import inject
@@ -78,3 +78,42 @@ class GatewayClient:
         if resp.status_code == 422:
             return {"error": "invalid strategy payload"}
         return {"error": f"gateway error {resp.status_code}"}
+
+    async def post_history_metadata(
+        self,
+        *,
+        gateway_url: str,
+        strategy_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Publish Seamless history metadata to Gateway."""
+
+        url = gateway_url.rstrip("/") + f"/strategies/{strategy_id}/history"
+        headers: dict[str, str] = {}
+        inject(headers)
+        try:
+            client = httpx.AsyncClient(headers=headers, timeout=runtime.HTTP_TIMEOUT_SECONDS)
+        except TypeError:
+            client = httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS)
+        try:
+            client.headers.update(headers)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+        async with client:
+            post_fn = client.post
+            if self._circuit_breaker is not None:
+                post_fn = self._circuit_breaker(post_fn)
+            try:
+                resp = await post_fn(url, json=payload)
+            except Exception as exc:  # pragma: no cover - network errors
+                return {"error": str(exc)}
+
+        if resp.status_code >= 400:
+            return {"error": f"gateway error {resp.status_code}"}
+        if resp.content:
+            try:
+                return resp.json()
+            except Exception:  # pragma: no cover - non-JSON payloads
+                return None
+        return None

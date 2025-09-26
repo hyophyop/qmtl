@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, AsyncIterator, Optional, Callable, Awaitable, TypeVar
+from dataclasses import dataclass
+from typing import Protocol, AsyncIterator, Optional, Callable, Awaitable, TypeVar, Any
 from abc import ABC
 import pandas as pd
 from enum import Enum
@@ -24,12 +25,27 @@ from .backfill_coordinator import (
 )
 from .sla import SLAPolicy
 from .exceptions import SeamlessSLAExceeded
+from qmtl.runtime.io.artifact import ArtifactRegistrar, ArtifactPublication
 
 logger = logging.getLogger(__name__)
 
 """Seamless Data Provider interfaces for transparent data access with auto-backfill."""
 
 T = TypeVar("T")
+
+
+@dataclass(slots=True)
+class SeamlessFetchMetadata:
+    """Metadata describing the outcome of a Seamless fetch request."""
+
+    node_id: str
+    interval: int
+    requested_range: tuple[int, int]
+    rows: int
+    coverage_bounds: tuple[int, int] | None
+    conformance_flags: dict[str, int]
+    conformance_warnings: tuple[str, ...]
+    artifact: ArtifactPublication | None = None
 
 
 class DataAvailabilityStrategy(Enum):
@@ -154,6 +170,7 @@ class SeamlessDataProvider(ABC):
         coordinator: Optional[BackfillCoordinator] = None,
         sla: Optional[SLAPolicy] = None,
         partial_ok: bool = False,
+        artifact_registrar: ArtifactRegistrar | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -167,6 +184,8 @@ class SeamlessDataProvider(ABC):
         self._sla = sla
         self._partial_ok = bool(partial_ok)
         self._last_conformance_report: Optional[ConformanceReport] = None
+        self._artifact_registrar = artifact_registrar
+        self._last_fetch_metadata: Optional[SeamlessFetchMetadata] = None
 
         # Internal state
         self._active_backfills: dict[str, bool] = {}
@@ -176,6 +195,12 @@ class SeamlessDataProvider(ABC):
         """Return the most recent conformance report emitted by ``fetch``."""
 
         return self._last_conformance_report
+
+    @property
+    def last_fetch_metadata(self) -> Optional[SeamlessFetchMetadata]:
+        """Return metadata describing the last call to :meth:`fetch`."""
+
+        return self._last_fetch_metadata
 
     def _create_default_coordinator(self) -> BackfillCoordinator:
         url = os.getenv("QMTL_SEAMLESS_COORDINATOR_URL", "").strip()
@@ -199,6 +224,8 @@ class SeamlessDataProvider(ABC):
         
         Implementation follows the priority order and strategy configuration.
         """
+        self._last_conformance_report = None
+        self._last_fetch_metadata = None
         tracker = self._build_sla_tracker(node_id)
 
         if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
@@ -220,6 +247,13 @@ class SeamlessDataProvider(ABC):
 
         if tracker:
             tracker.observe_total()
+        await self._finalize_fetch(
+            frame=result,
+            node_id=node_id,
+            interval=interval,
+            requested_start=start,
+            requested_end=end,
+        )
         return result
     
     async def coverage(
@@ -584,7 +618,77 @@ class SeamlessDataProvider(ABC):
         return await self._fetch_seamless(
             start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
         )
-    
+
+    async def _finalize_fetch(
+        self,
+        *,
+        frame: Any,
+        node_id: str,
+        interval: int,
+        requested_start: int,
+        requested_end: int,
+    ) -> None:
+        coverage: tuple[int, int] | None = None
+        rows = 0
+        artifact: ArtifactPublication | None = None
+
+        if isinstance(frame, pd.DataFrame):
+            rows = int(frame.shape[0])
+            if not frame.empty and "ts" in frame.columns:
+                try:
+                    coverage = (int(frame["ts"].min()), int(frame["ts"].max()))
+                except Exception:
+                    coverage = None
+                artifact = await self._publish_artifact(
+                    frame,
+                    node_id=node_id,
+                    interval=interval,
+                    requested_start=requested_start,
+                    requested_end=requested_end,
+                )
+
+        report = self._last_conformance_report
+        flags = dict(report.flags_counts) if report else {}
+        warnings = tuple(report.warnings) if report else ()
+
+        self._last_fetch_metadata = SeamlessFetchMetadata(
+            node_id=node_id,
+            interval=interval,
+            requested_range=(requested_start, requested_end),
+            rows=rows,
+            coverage_bounds=coverage,
+            conformance_flags=flags,
+            conformance_warnings=warnings,
+            artifact=artifact,
+        )
+
+    async def _publish_artifact(
+        self,
+        frame: pd.DataFrame,
+        *,
+        node_id: str,
+        interval: int,
+        requested_start: int,
+        requested_end: int,
+    ) -> ArtifactPublication | None:
+        if (
+            self._artifact_registrar is None
+            or frame.empty
+            or "ts" not in frame.columns
+        ):
+            return None
+        try:
+            return await self._artifact_registrar.publish(
+                frame,
+                node_id=node_id,
+                interval=interval,
+                conformance_report=self._last_conformance_report,
+                requested_range=(requested_start, requested_end),
+            )
+        except Exception:  # pragma: no cover - defensive logging only
+            logger.exception("artifact publication failed for node %s", node_id)
+            return None
+
     async def _start_background_backfill(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> None:
@@ -853,4 +957,5 @@ __all__ = [
     "LiveDataFeed",
     "ConformancePipelineError",
     "SeamlessDataProvider",
+    "SeamlessFetchMetadata",
 ]

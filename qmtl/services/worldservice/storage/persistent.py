@@ -262,6 +262,18 @@ class PersistentStorage:
             )
             """
         )
+        await self._driver.execute(
+            """
+            CREATE TABLE IF NOT EXISTS history_metadata (
+                world_id TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                as_of TEXT,
+                updated_at TEXT NOT NULL,
+                payload JSON NOT NULL,
+                PRIMARY KEY (world_id, strategy_id)
+            )
+            """
+        )
 
     # ------------------------------------------------------------------
     # World lifecycle
@@ -312,6 +324,7 @@ class PersistentStorage:
         await self._driver.execute("DELETE FROM edge_overrides WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM validation_cache WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM world_nodes WHERE world_id = ?", world_id)
+        await self._driver.execute("DELETE FROM history_metadata WHERE world_id = ?", world_id)
         await self._redis.delete(self._activation_key(world_id))
 
     # ------------------------------------------------------------------
@@ -763,6 +776,53 @@ class PersistentStorage:
         if execution_domain is not None:
             event["execution_domain"] = _normalize_execution_domain(execution_domain)
         await self._append_audit(world_id, event)
+
+    async def upsert_history_metadata(
+        self,
+        world_id: str,
+        strategy_id: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        record = dict(payload)
+        record["strategy_id"] = strategy_id
+        updated = record.get("updated_at") or _utc_now()
+        record["updated_at"] = updated
+        as_of = record.get("as_of")
+        await self._driver.execute(
+            "INSERT INTO history_metadata(world_id, strategy_id, as_of, updated_at, payload) VALUES(?, ?, ?, ?, ?)\n"
+            "ON CONFLICT(world_id, strategy_id) DO UPDATE SET as_of=excluded.as_of, updated_at=excluded.updated_at, payload=excluded.payload",
+            world_id,
+            strategy_id,
+            as_of,
+            updated,
+            json.dumps(record),
+        )
+        await self._append_audit(
+            world_id,
+            {
+                "event": "history_metadata_upserted",
+                "strategy_id": strategy_id,
+                "dataset_fingerprint": record.get("dataset_fingerprint"),
+                "as_of": record.get("as_of"),
+                "updated_at": updated,
+            },
+        )
+
+    async def list_history_metadata(self, world_id: str) -> List[Dict[str, Any]]:
+        rows = await self._driver.fetchall(
+            "SELECT payload FROM history_metadata WHERE world_id = ? ORDER BY strategy_id",
+            world_id,
+        )
+        return [json.loads(row[0]) for row in rows]
+
+    async def latest_history_metadata(self, world_id: str) -> Optional[Dict[str, Any]]:
+        row = await self._driver.fetchone(
+            "SELECT payload FROM history_metadata WHERE world_id = ? ORDER BY (as_of IS NULL), as_of DESC, updated_at DESC LIMIT 1",
+            world_id,
+        )
+        if not row:
+            return None
+        return json.loads(row[0])
 
     def _compute_eval_key(
         self,

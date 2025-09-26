@@ -99,9 +99,9 @@ flowchart LR
 ```
 
 ### Seamless Core
-- Implementation: `EnhancedQuestDBProvider` (`qmtl/runtime/io/seamless_provider.py`).
+- Implementation: `EnhancedQuestDBProvider` (`qmtl/runtime/io/seamless_provider.py`) paired with `ArtifactRegistrar` (`qmtl/runtime/io/artifact.py`).
 - Exposed strategies: `FAIL_FAST`, `AUTO_BACKFILL`, `PARTIAL_FILL`, `SEAMLESS`.
-- Coordinates cache, storage reads, backfills, and optional live feeds behind a `HistoryProvider` facade.
+- Coordinates cache, storage reads, backfills, and optional live feeds behind a `HistoryProvider` facade while delegating stabilized artifact publication to `ArtifactRegistrar`.
 
 ### Coverage & Gap Accounting
 - Deterministic gap detection powered by `qmtl/runtime/sdk/history_coverage.py`.
@@ -310,8 +310,13 @@ Domain policies govern which runtime surfaces are permitted to read mutable sour
 Gateway is the source of truth for execution context. Every fetch call must include the complete compute context, and Seamless must echo the relevant governance metadata so downstream services can persist reproducibility evidence.
 
 - Gateway supplies `world_id`, `execution_domain`, `as_of`, `max_lag`, `min_coverage`, SLA policy selection, and optional feature toggles per session.
-- Seamless responses return coverage metadata, conformance flags, and the `{dataset_fingerprint, as_of}` pair so WorldService can log freshness and gate execution modes.
+- Seamless responses must echo coverage metadata and conformance flags; attach the `{dataset_fingerprint, as_of}` pair via the Artifact Registrar layer before handing results to WorldService so audit trails stay reproducible.
 - Cache entries must key on `(node_id, interval, start, end, conformance_version, world_id, as_of)` to prevent cross-domain leakage.
+
+_Implementation note_: The base `EnhancedQuestDBProvider` still returns data frames only; pair it with the `maybe_publish_artifact` workflow above to populate `{dataset_fingerprint, as_of}` before echoing metadata to Gateway/WorldService.
+Seamless SDKs now expose `last_fetch_metadata` and `SeamlessFetchMetadata` (see `qmtl/runtime/sdk/seamless_data_provider.py`) so integrations can forward coverage bounds, conformance flags, and artifact fingerprints without re-inspecting the payload.
+
+The canonical compute-context contract lives in `qmtl/foundation/common/compute_context.py`. Gateway's `StrategyComputeContext` populates these fields today, so the Seamless stack does not require an additional `QMTL_WORLD_CONTEXT_SOURCE` toggle.
 
 #### Context Contract Checklist
 
@@ -434,7 +439,6 @@ exchanges:
 environment:
   coordinator_url: ${QMTL_SEAMLESS_COORDINATOR_URL}
   rate_limiter_redis: ${QMTL_CCXT_RATE_LIMITER_REDIS}
-  world_context_source: ${QMTL_WORLD_CONTEXT_SOURCE}
 ```
 
 The blueprint aligns configuration knobs with existing runtime modules. Teams should implement validation that cross-checks domain policies, rate-limit settings, and artifact destinations during startup.
@@ -445,7 +449,7 @@ The blueprint aligns configuration knobs with existing runtime modules. Teams sh
 2. **Artifact publication** – adopt the `maybe_publish_artifact` workflow defined above. Always stabilize, conform, and fingerprint frames before emitting manifests, and store the returned fingerprint alongside coverage metadata for Gateway echoing.
 3. **World-aware caching** – extend cache layers to include `world_id` and `as_of` components; purge entries on domain switch. Cache hits must reference immutable artifacts or explicitly declare partial coverage.
 4. **Storage bifurcation** – route hot writes and reads through QuestDB while publishing immutable segments to object storage using the configured partition template. Promote artifacts only after `stabilization_bars` have elapsed.
-5. **Gateway contract** – ensure each fetch response surfaces `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` for Gateway logging and enforcement.
+5. **Gateway contract** – ensure integration layers surface `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags}` when routing Seamless responses through Gateway/WorldService; use `SeamlessFetchMetadata` alongside the artifact workflow to capture the values emitted by the provider.
 6. **Observability** – emit the metrics catalogued below (`seamless_storage_wait_ms`, `backfill_completion_ratio`, `domain_gate_holds`, etc.) so operations dashboards can enforce alert thresholds without consulting legacy docs.
 7. **Testing** – follow the documented preflight hang scan, then execute `uv run -m pytest -W error -n auto` with recorded ccxt fixtures or sandbox exchanges. Long-running end-to-end scenarios should be marked `slow` and excluded from the preflight run.
 
@@ -467,7 +471,7 @@ This workflow keeps hot storage responsive without sacrificing the reproducibili
 
 ## Operational Practices
 
-- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases, `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles, and `QMTL_WORLD_CONTEXT_SOURCE` for Gateway/World metadata injection.
+- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases and `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles; Gateway supplies world context via `StrategyComputeContext`.
 - **Metrics**: emit the full catalog below, including SLA phase timers, coverage quality, artifact throughput, and gating outcomes.
 - **Alerting**: trigger warnings for SLA breaches, persistent coverage gaps, Redis rate-limit saturation, or fingerprint collisions. Suggested thresholds are listed alongside each metric.
 - **Backfill visibility**: monitor coordinator claim/complete/fail events via structured logs; integrate into dashboards already defined in `operations/seamless_sla_dashboards.md`.

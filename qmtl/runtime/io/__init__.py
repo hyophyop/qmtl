@@ -14,6 +14,7 @@ from .ccxt_fetcher import (
 )
 from .ccxt_provider import CcxtQuestDBProvider
 from .seamless_provider import EnhancedQuestDBProvider
+from .artifact import ArtifactRegistrar, ArtifactPublication
 from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
 
 __all__ = [
@@ -34,4 +35,6 @@ __all__ = [
     "CcxtQuestDBProvider",
     "CcxtProLiveFeed",
     "CcxtProConfig",
+    "ArtifactRegistrar",
+    "ArtifactPublication",
 ]

@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from typing import Any
+
 import pandas as pd
 import pytest
 
@@ -8,7 +10,13 @@ from qmtl.runtime.sdk.backfill_engine import BackfillEngine
 
 
 class DummySource:
-    def __init__(self, df: pd.DataFrame, delay: float = 0.05, fail: int = 0) -> None:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        delay: float = 0.05,
+        fail: int = 0,
+        metadata: Any | None = None,
+    ) -> None:
         self.df = df
         self.delay = delay
         self.fail = fail
@@ -16,6 +24,8 @@ class DummySource:
         self.ready_calls = 0
         # Event used by tests to detect when ``fetch`` has been invoked.
         self.started = asyncio.Event()
+        self.metadata = metadata
+        self.last_fetch_metadata = None
 
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
         self.calls += 1
@@ -26,6 +36,7 @@ class DummySource:
         fut = loop.create_future()
         loop.call_later(self.delay, fut.set_result, None)
         await fut
+        self.last_fetch_metadata = self.metadata
         return self.df
 
     async def ready(self) -> bool:
@@ -141,3 +152,77 @@ async def test_streaminput_load_history():
         (60, {"ts": 60, "v": 1}),
         (120, {"ts": 120, "v": 2}),
     ]
+
+
+@pytest.mark.asyncio
+async def test_metadata_publish(monkeypatch):
+    from qmtl.runtime.io.artifact import ArtifactPublication
+    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
+    from qmtl.runtime.sdk.runner import Runner
+
+    node = StreamInput(interval="60s", period=2)
+    node.strategy_id = "strategy-1"
+    node.gateway_url = "http://gateway"
+    node.world_id = "world-123"
+    node.execution_domain = "live"
+
+    artifact = ArtifactPublication(
+        dataset_fingerprint="fp123",
+        as_of="2024-10-10T00:00:00Z",
+        node_id=node.node_id,
+        start=60,
+        end=120,
+        rows=2,
+        uri="local://artifact",
+    )
+    metadata = SeamlessFetchMetadata(
+        node_id=node.node_id,
+        interval=60,
+        requested_range=(60, 120),
+        rows=2,
+        coverage_bounds=(60, 120),
+        conformance_flags={"missing_bars": 1},
+        conformance_warnings=("gap",),
+        artifact=artifact,
+    )
+
+    df = pd.DataFrame([
+        {"ts": 60, "v": 1},
+        {"ts": 120, "v": 2},
+    ])
+    src = DummySource(df, delay=0.0, metadata=metadata)
+    engine = BackfillEngine(src)
+
+    calls: list[dict[str, Any]] = []
+
+    async def fake_post_history_metadata(self, *, gateway_url, strategy_id, payload):
+        calls.append({
+            "gateway_url": gateway_url,
+            "strategy_id": strategy_id,
+            "payload": payload,
+        })
+
+    monkeypatch.setattr(
+        Runner.services().gateway_client,
+        "post_history_metadata",
+        fake_post_history_metadata.__get__(
+            Runner.services().gateway_client,
+            Runner.services().gateway_client.__class__
+        ),
+    )
+
+    engine.submit(node, 60, 120)
+    await engine.wait()
+
+    assert node.dataset_fingerprint == "fp123"
+    assert node.compute_context.dataset_fingerprint == "fp123"
+    assert node.last_fetch_metadata is metadata
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["gateway_url"] == "http://gateway"
+    assert call["strategy_id"] == "strategy-1"
+    payload = call["payload"]
+    assert payload["dataset_fingerprint"] == "fp123"
+    assert payload["as_of"] == "2024-10-10T00:00:00Z"
+    assert payload["coverage_bounds"] == [60, 120]
+    assert payload["artifact"]["rows"] == 2

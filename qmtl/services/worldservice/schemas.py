@@ -132,6 +132,13 @@ class DecisionEnvelope(BaseModel):
     as_of: str
     ttl: str
     etag: str
+    dataset_fingerprint: str | None = None
+    coverage_bounds: List[int] | None = None
+    conformance_flags: Dict[str, int] | None = None
+    conformance_warnings: List[str] | None = None
+    history_updated_at: str | None = None
+    rows: int | None = None
+    artifact: SeamlessArtifactPayload | None = None
 
 
 class ActivationEnvelope(BaseModel):
@@ -175,6 +182,28 @@ class ValidationCacheResponse(BaseModel):
     timestamp: str | None = None
 
 
+class SeamlessArtifactPayload(BaseModel):
+    dataset_fingerprint: str | None = None
+    as_of: str | None = None
+    rows: int | None = None
+    uri: str | None = None
+
+
+class SeamlessHistoryRequest(BaseModel):
+    strategy_id: str
+    node_id: str
+    interval: int
+    rows: int | None = None
+    coverage_bounds: tuple[int, int] | None = None
+    conformance_flags: Dict[str, int] | None = None
+    conformance_warnings: List[str] | None = None
+    dataset_fingerprint: str | None = None
+    as_of: str | None = None
+    execution_domain: str | None = None
+    updated_at: str | None = None
+    artifact: SeamlessArtifactPayload | None = None
+
+
 __all__ = [
     'ActivationEnvelope',
     'ActivationRequest',
@@ -196,6 +225,8 @@ __all__ = [
     'ValidationCacheLookupRequest',
     'ValidationCacheResponse',
     'ValidationCacheStoreRequest',
+    'SeamlessArtifactPayload',
+    'SeamlessHistoryRequest',
     'World',
     'WorldNodeRef',
     'WorldNodeStatusEnum',

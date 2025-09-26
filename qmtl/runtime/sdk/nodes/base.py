@@ -13,6 +13,9 @@ from .config import NodeConfig
 from .mixins import ComputeContextMixin, NodeFeedMixin
 
 
+_UNSET = object()
+
+
 class Node(ComputeContextMixin, NodeFeedMixin):
     """Represents a processing node in a strategy DAG."""
 
@@ -84,6 +87,7 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         self._last_watermark: int | None = None
         self._late_events: list[tuple[str, int, Any]] = []
         self._dataset_fingerprint: str | None = None
+        self._last_fetch_metadata: Any | None = None
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -159,7 +163,43 @@ class Node(ComputeContextMixin, NodeFeedMixin):
 
     @dataset_fingerprint.setter
     def dataset_fingerprint(self, value: str | None) -> None:
-        self._dataset_fingerprint = value or None
+        self.update_compute_context(dataset_fingerprint=value)
+
+    @property
+    def last_fetch_metadata(self) -> Any | None:
+        return self._last_fetch_metadata
+
+    @last_fetch_metadata.setter
+    def last_fetch_metadata(self, value: Any | None) -> None:
+        self._last_fetch_metadata = value
+
+    def update_compute_context(
+        self,
+        *,
+        execution_domain: Any = _UNSET,
+        as_of: Any = _UNSET,
+        partition: Any = _UNSET,
+        dataset_fingerprint: Any = _UNSET,
+    ) -> None:
+        overrides: dict[str, Any] = {}
+        if execution_domain is not _UNSET:
+            overrides["execution_domain"] = execution_domain
+        if as_of is not _UNSET:
+            overrides["as_of"] = as_of
+        if partition is not _UNSET:
+            overrides["partition"] = partition
+        if dataset_fingerprint is not _UNSET:
+            overrides["dataset_fingerprint"] = dataset_fingerprint
+        if not overrides:
+            return
+
+        new_context = self._compute_context.with_overrides(**overrides)
+        if new_context != self._compute_context:
+            self._compute_context = new_context
+            self._activate_cache_key()
+
+        if dataset_fingerprint is not _UNSET:
+            self._dataset_fingerprint = dataset_fingerprint or None
 
     def watermark(self) -> int | None:
         return self._last_watermark
@@ -172,4 +212,3 @@ class Node(ComputeContextMixin, NodeFeedMixin):
 
 
 __all__ = ["Node"]
-
