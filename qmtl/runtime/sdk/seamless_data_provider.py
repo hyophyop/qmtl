@@ -526,7 +526,7 @@ class SeamlessDataProvider(ABC):
                 sla_tracker=sla_tracker,
                 collect_results=collect_results,
             )
-        except Exception:
+        except (Exception, ExceptionGroup):
             sdk_metrics.observe_backfill_failure(node_id, interval)
             raise
         repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
