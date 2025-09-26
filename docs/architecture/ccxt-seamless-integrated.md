@@ -7,7 +7,7 @@
 - [CCXT × QuestDB IO Recipe](../io/ccxt-questdb.md)
 - Historical governance notes formerly published as `ccxt-seamless-gpt5codex.md` were retired after their guidance landed in this blueprint.
 - Historical runtime notes previously published as `ccxt-seamless-gpt5high.md` were retired after their coverage guidance landed in this blueprint.
-- [CCXT × Seamless Legacy Audit](ccxt-seamless-legacy-audit.md) captures the migration record and external link inventory.
+- [CCXT × Seamless Legacy Audit](../archive/ccxt-seamless-legacy-audit.md) captures the migration record and external link inventory.
 
 ## Scope and Status
 
