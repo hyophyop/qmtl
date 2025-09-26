@@ -5,9 +5,9 @@
 - [DAG Manager](dag-manager.md)
 - [Gateway](gateway.md)
 - [CCXT × QuestDB IO Recipe](../io/ccxt-questdb.md)
-- Archived governance notes formerly published as `ccxt-seamless-gpt5codex.md` now resolve to this integrated blueprint.
-- [CCXT × Seamless Hybrid Summary](ccxt-seamless-hybrid.md)
-- Archived runtime notes previously published as `ccxt-seamless-gpt5high.md` now resolve to this integrated blueprint.
+- Historical governance notes formerly published as `ccxt-seamless-gpt5codex.md` were retired after their guidance landed in this blueprint.
+- Historical runtime notes previously published as `ccxt-seamless-gpt5high.md` were retired after their coverage guidance landed in this blueprint.
+- [CCXT × Seamless Legacy Audit](ccxt-seamless-legacy-audit.md) captures the migration record and external link inventory.
 
 ## Scope and Status
 
@@ -144,6 +144,8 @@ flowchart LR
 | `interval_ms` | Shared window duration | Provider configuration |
 | `burst_tokens` | Extra headroom before throttling | Provider configuration |
 | `local_semaphore` | Concurrency cap inside a single process | Provider configuration |
+| `min_interval_ms` | Hard lower-bound between CCXT requests per worker | Provider configuration |
+| `penalty_backoff_ms` | Cooldown applied after hitting exchange-side 429s | Provider configuration |
 
 ### Provider Recipes
 
@@ -183,6 +185,7 @@ When scaling to multi-symbol or multi-timeframe coverage, prefer `CcxtQuestDBPro
 ### Live Data Integration
 - Default polling `LiveDataFeedImpl` with bar-boundary scheduling that respects timeframe cadence and waits for bar completion before publishing.
 - Optional ccxt.pro wrapper (WebSocket) retained as a future extension; enable only when ccxt.pro is present and conformance hooks can deduplicate late frames.
+- WebSocket adapters expose `reconnect_backoff_ms` ladders and `dedupe_by` keys (`ts` by default) to remain idempotent across reconnects; disable `emit_building_candle` unless downstream consumers are prepared for in-progress bars.
 - Live extensions should emit the same coverage metadata as historical reads so Gateway can enforce lag windows.
 
 ### SLA & Conformance
@@ -307,6 +310,7 @@ Domain policies govern which runtime surfaces are permitted to read mutable sour
 | Domain | Allowed Sources | `as_of` Handling | Gating Outcome |
 | --- | --- | --- | --- |
 | Backtest | Artifact store only | Fixed per run; immutable | Hard fail on missing artifact |
+| Research / Lab | Artifact store only | Fixed per run; immutable | Hard fail on missing artifact |
 | Dry-run | Artifact store → immediate publish of fresh reads | Fixed per run; immutable | Reject reuse until artifact exists |
 | Live | Storage, backfill, optional live feed | Monotonic per session; non-decreasing | HOLD or PARTIAL_FILL on SLA or lag breach |
 
@@ -391,6 +395,7 @@ seamless:
     on_violation: PARTIAL_FILL
   backfill:
     mode: background
+    max_concurrent_requests: 8
     window_bars: 900
     single_flight_ttl_ms: 60000
     distributed_lease_ttl_ms: 120000
@@ -404,6 +409,14 @@ seamless:
     interval_ms: 60000
     burst_tokens: 200
     local_semaphore: 10
+    min_interval_ms: 25
+    penalty_backoff_ms: 5000
+  live:
+    ws:
+      enabled: false
+      reconnect_backoff_ms: [500, 1000, 2000, 5000]
+      dedupe_by: ts
+      emit_building_candle: false
   artifact:
     object_store_uri: "s3://qmtl-artifacts"
     format: parquet
@@ -412,6 +425,10 @@ seamless:
     partition_template: "exchange={exchange}/symbol={symbol}/timeframe={timeframe}"
     publish_fingerprint: true
     early_fingerprint: false
+    fingerprint:
+      algo: sha256
+      include_columns: [ts, open, high, low, close, volume]
+      normalize_nan: zero
   observability:
     coverage_ratio_threshold: 0.98
     backfill_completion_ratio_min: 0.95
@@ -501,6 +518,7 @@ This workflow keeps hot storage responsive without sacrificing the reproducibili
 | `artifact_publish_latency_ms` | Time from stabilization to manifest publish | Warn > 120 s |
 | `artifact_bytes_written` | Volume of artifact storage writes | Capacity planning |
 | `fingerprint_collisions` | Count of duplicate fingerprints | Critical if > 0 |
+| `as_of_advancement_events` | Count of monotonic `as_of` promotions | Alert if progression stalls or regresses |
 | `domain_gate_holds` | Number of HOLD downgrades | Warn on upward trend |
 | `partial_fill_returns` | Frequency of PARTIAL_FILL outcomes | Correlate with SLA breaches |
 | `live_staleness_seconds` | Live data freshness gap | Warn if exceeds domain `max_lag` |

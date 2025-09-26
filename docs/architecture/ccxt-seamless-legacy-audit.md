@@ -1,7 +1,7 @@
 # CCXT × Seamless Legacy Audit
 
 ## Summary
-This inventory supports the migration tracked in [#1162](https://github.com/hyophyop/qmtl/issues/1162) by cataloging the remaining content inside the legacy CCXT × Seamless design notes. The audit compares each document against the consolidated [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) blueprint and highlights external links that still point at the deprecated files.
+This inventory supports the migration tracked in [#1162](https://github.com/hyophyop/qmtl/issues/1162) by cataloging the remaining content inside the legacy CCXT × Seamless design notes. The audit compares each document against the consolidated [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) blueprint and highlights external links that still point at the deprecated files. With the legacy drafts now removed from the repository, the tables below remain as a historical record of what was merged where.
 
 ## Outstanding Content by Source Document
 The following tables list sections, diagrams, or code samples that have no equivalent in the integrated specification. Each row includes migration guidance so that the legacy files can be retired once their content is ported.
@@ -40,9 +40,9 @@ The following tables list sections, diagrams, or code samples that have no equiv
 ## External Links that Depend on the Legacy Docs
 - ✅ `mkdocs.yml` navigation now routes readers directly to the integrated blueprint (the GPT5-High entry was removed).
 - ✅ [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) inlines the former GPT5-High material and no longer links out to the archived file.
-- [`ccxt-seamless-hybrid.md`](ccxt-seamless-hybrid.md) now references the integrated blueprint for its data-plane lineage; future cleanup can drop the parenthetical entirely once the Codex content is migrated.
+- Historical `ccxt-seamless-hybrid.md` references have been excised from the tree; consumers should link directly to the integrated blueprint going forward.
 
 ## Recommended Follow-Up
-1. Confirm the integrated blueprint remains the single source and archive or delete the redundant legacy drafts.
-2. Keep navigation entries pointing at the integrated document and remove residual references to the archived files across the docset.
-3. Post migration notes in [#1162](https://github.com/hyophyop/qmtl/issues/1162) summarizing the consolidation status (Fixes #1163).
+1. Confirm the integrated blueprint remains the single source of truth when future updates land; avoid re-introducing split narratives.
+2. Keep navigation entries pointing at the integrated document and remove residual references to the archived files across the docset if new links surface.
+3. Post migration notes in [#1162](https://github.com/hyophyop/qmtl/issues/1162) summarizing consolidation status for any future follow-on work (Fixes #1163).
