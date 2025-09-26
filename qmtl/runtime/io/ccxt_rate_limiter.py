@@ -180,8 +180,10 @@ async def get_limiter(
     min_interval_s: float,
     scope: str,
     redis_dsn: str | None = None,
-    tokens_per_sec: float | None = None,
-    burst: int | None = None,
+    tokens_per_interval: float | None = None,
+    interval_ms: int | None = None,
+    burst_tokens: int | None = None,
+    local_semaphore: int | None = None,
     key_suffix: str | None = None,
 ) -> _SharedLimiter | _RedisTokenBucketLimiter:
     if scope == "local":
@@ -197,12 +199,40 @@ async def get_limiter(
         bucket_key = f"rl:{key}"
         if key_suffix:
             bucket_key = f"{bucket_key}:{key_suffix}"
-        # Determine rate from tokens_per_sec or min_interval
-        rate = float(tokens_per_sec if tokens_per_sec else (1.0 / max(0.000001, min_interval_s)))
-        capacity = int(burst if burst else 1)
+        interval_ms_val = int(interval_ms) if interval_ms is not None else None
+        if interval_ms_val is not None:
+            interval_ms_val = max(1, interval_ms_val)
+        rate: float
+        capacity: int
+        if tokens_per_interval is not None and interval_ms_val is not None:
+            window_s = interval_ms_val / 1000.0
+            rate = float(tokens_per_interval) / max(0.001, window_s)
+            capacity = int(
+                max(
+                    1,
+                    int(burst_tokens)
+                    if burst_tokens is not None
+                    else int(tokens_per_interval),
+                )
+            )
+        else:
+            rate = float(
+                tokens_per_interval
+                if tokens_per_interval is not None
+                else (1.0 / max(0.000001, min_interval_s))
+            )
+            capacity = int(
+                max(1, int(burst_tokens) if burst_tokens is not None else 1)
+            )
+        local_limit = int(
+            max(
+                1,
+                int(local_semaphore) if local_semaphore is not None else max_concurrency,
+            )
+        )
 
         # Cache a limiter per (bucket_key, rate, capacity, concurrency)
-        cache_key = f"{bucket_key}|{rate}|{capacity}|{max_concurrency}"
+        cache_key = f"{bucket_key}|{rate}|{capacity}|{local_limit}"
         if cache_key in _CLUSTER_CACHE:
             return _CLUSTER_CACHE[cache_key]
 
@@ -216,7 +246,7 @@ async def get_limiter(
             bucket_key=bucket_key,
             tokens_per_sec=rate,
             capacity=capacity,
-            local_concurrency=max_concurrency,
+            local_concurrency=local_limit,
         )
         _CLUSTER_CACHE[cache_key] = limiter
         return limiter

@@ -85,6 +85,34 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
         rate_limiter = RateLimiterConfig(
             max_concurrency=int(rl_cfg.get("max_concurrency", 1)),
             min_interval_s=float(rl_cfg.get("min_interval_s", 0.0)),
+            scope=str(rl_cfg.get("scope", "process")),
+            redis_dsn=rl_cfg.get("redis_dsn"),
+            tokens_per_interval=(
+                float(rl_cfg["tokens_per_interval"])
+                if rl_cfg.get("tokens_per_interval") is not None
+                else None
+            ),
+            interval_ms=(
+                int(rl_cfg["interval_ms"])
+                if rl_cfg.get("interval_ms") is not None
+                else None
+            ),
+            burst_tokens=(
+                int(rl_cfg["burst_tokens"])
+                if rl_cfg.get("burst_tokens") is not None
+                else None
+            ),
+            local_semaphore=(
+                int(rl_cfg["local_semaphore"])
+                if rl_cfg.get("local_semaphore") is not None
+                else None
+            ),
+            key_suffix=rl_cfg.get("key_suffix"),
+            penalty_backoff_ms=(
+                int(rl_cfg["penalty_backoff_ms"])
+                if rl_cfg.get("penalty_backoff_ms") is not None
+                else None
+            ),
         )
 
         fetcher: CcxtOHLCVFetcher | CcxtTradesFetcher

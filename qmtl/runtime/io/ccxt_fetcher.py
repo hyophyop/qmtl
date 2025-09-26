@@ -23,14 +23,25 @@ from qmtl.runtime.sdk.ohlcv_nodeid import (
 
 @dataclass(slots=True)
 class RateLimiterConfig:
-    """Simple rate limiter configuration.
+    """Rate limiter configuration shared by CCXT fetchers.
 
     Attributes
     ----------
     max_concurrency:
-        Maximum number of in-flight CCXT requests.
+        Maximum number of in-flight CCXT requests for process/local scope.
     min_interval_s:
         Minimum seconds between consecutive requests (best-effort).
+    tokens_per_interval:
+        Cluster token bucket allowance within ``interval_ms``. When omitted,
+        ``min_interval_s`` is used to derive an equivalent rate.
+    interval_ms:
+        Duration of the shared token bucket window.
+    burst_tokens:
+        Maximum burst tokens permitted in the cluster bucket.
+    local_semaphore:
+        Per-process concurrency guard when using cluster scope.
+    penalty_backoff_ms:
+        Cooldown applied after receiving HTTP 429 responses.
     """
 
     max_concurrency: int = 1
@@ -38,11 +49,14 @@ class RateLimiterConfig:
     # scope: "local" → per-fetcher only; "process" → share across fetchers in-process;
     # "cluster" → Redis-backed shared limiter across processes
     scope: str = "process"
-    # Cluster options (when scope="cluster"): if not provided, sensible defaults are derived
+    # Cluster options (when scope="cluster"): exposed for Redis token bucket wiring
     redis_dsn: str | None = None
-    tokens_per_sec: float | None = None  # if None, 1/min_interval_s
-    burst: int | None = None  # capacity; default=1
+    tokens_per_interval: float | None = None
+    interval_ms: int | None = None
+    burst_tokens: int | None = None
+    local_semaphore: int | None = None
     key_suffix: str | None = None  # e.g., account id
+    penalty_backoff_ms: int | None = None
 
 
 @dataclass(slots=True)
@@ -98,6 +112,8 @@ class CcxtOHLCVFetcher(DataFetcher):
         self.config = config
         self._exchange = exchange
         self._limiter = None  # created lazily
+        penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
+        self._penalty_backoff_s = max(0.0, (float(penalty_ms) / 1000.0) if penalty_ms else 0.0)
 
     # ------------------------------------------------------------------
     async def fetch(
@@ -169,11 +185,14 @@ class CcxtOHLCVFetcher(DataFetcher):
                         symbol, timeframe, since=since_ms, limit=limit
                     )
                     return data or []
-            except Exception:  # pragma: no cover - error path exercised in tests via stub
+            except Exception as exc:  # pragma: no cover - error path exercised in tests via stub
                 if attempt >= max(1, self.config.max_retries):
                     raise
-                await asyncio.sleep(backoff)
-                backoff *= 2.0
+                wait_s = backoff
+                if _looks_like_rate_limit(exc) and self._penalty_backoff_s > 0:
+                    wait_s = max(wait_s, self._penalty_backoff_s)
+                await asyncio.sleep(wait_s)
+                backoff = max(backoff, wait_s) * 2.0
 
     async def _ensure_limiter(self):
         if self._limiter is not None:
@@ -186,8 +205,10 @@ class CcxtOHLCVFetcher(DataFetcher):
             min_interval_s=rl.min_interval_s,
             scope=str(getattr(rl, "scope", "process")),
             redis_dsn=getattr(rl, "redis_dsn", None),
-            tokens_per_sec=getattr(rl, "tokens_per_sec", None),
-            burst=getattr(rl, "burst", None),
+            tokens_per_interval=getattr(rl, "tokens_per_interval", None),
+            interval_ms=getattr(rl, "interval_ms", None),
+            burst_tokens=getattr(rl, "burst_tokens", None),
+            local_semaphore=getattr(rl, "local_semaphore", None),
             key_suffix=getattr(rl, "key_suffix", None),
         )
         return self._limiter
@@ -278,6 +299,8 @@ class CcxtTradesFetcher(DataFetcher):
         self.config = config
         self._exchange = exchange
         self._limiter = None
+        penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
+        self._penalty_backoff_s = max(0.0, (float(penalty_ms) / 1000.0) if penalty_ms else 0.0)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -329,11 +352,14 @@ class CcxtTradesFetcher(DataFetcher):
                         symbol, since=since_ms, limit=limit
                     )
                     return list(data or [])
-            except Exception:  # pragma: no cover - error path in stub tests
+            except Exception as exc:  # pragma: no cover - error path in stub tests
                 if attempt >= max(1, self.config.max_retries):
                     raise
-                await asyncio.sleep(backoff)
-                backoff *= 2.0
+                wait_s = backoff
+                if _looks_like_rate_limit(exc) and self._penalty_backoff_s > 0:
+                    wait_s = max(wait_s, self._penalty_backoff_s)
+                await asyncio.sleep(wait_s)
+                backoff = max(backoff, wait_s) * 2.0
 
     async def _ensure_limiter(self):
         if self._limiter is not None:
@@ -346,8 +372,10 @@ class CcxtTradesFetcher(DataFetcher):
             min_interval_s=rl.min_interval_s,
             scope=str(getattr(rl, "scope", "process")),
             redis_dsn=getattr(rl, "redis_dsn", None),
-            tokens_per_sec=getattr(rl, "tokens_per_sec", None),
-            burst=getattr(rl, "burst", None),
+            tokens_per_interval=getattr(rl, "tokens_per_interval", None),
+            interval_ms=getattr(rl, "interval_ms", None),
+            burst_tokens=getattr(rl, "burst_tokens", None),
+            local_semaphore=getattr(rl, "local_semaphore", None),
             key_suffix=getattr(rl, "key_suffix", None),
         )
         return self._limiter
@@ -410,3 +438,18 @@ __all__ = [
     "CcxtTradesConfig",
     "CcxtTradesFetcher",
 ]
+
+
+def _looks_like_rate_limit(exc: Exception) -> bool:
+    """Heuristically determine if ``exc`` signals an exchange-side rate limit."""
+
+    status = None
+    for attr in ("status", "status_code", "code", "http_status"):
+        status = getattr(exc, attr, None)
+        if isinstance(status, int):
+            break
+        status = None
+    if status == 429:
+        return True
+    text = str(exc).lower()
+    return "rate limit" in text or "too many requests" in text

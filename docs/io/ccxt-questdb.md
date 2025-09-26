@@ -81,11 +81,14 @@ sequenceDiagram
 - `questdb`: `dsn`(권장) 또는 `host/port/database`와 `table`(테이블명) 또는 `table_prefix` (예: `crypto` → `crypto_ohlcv`/`crypto_trades`)
 - 레이트리밋(옵션): `rate_limiter = {max_concurrency, min_interval_s, scope}`
   - `scope`: `local`(페처별), `process`(프로세스 전역, 기본), `cluster`(분산)
-  - `cluster` 추가 옵션: `redis_dsn`, `tokens_per_sec`, `burst`, `key_suffix`
+  - `cluster` 추가 옵션: `redis_dsn`, `tokens_per_interval`, `interval_ms`, `burst_tokens`, `local_semaphore`, `key_suffix`
     - `redis_dsn`: Redis DSN (미설정 시 `QMTL_CCXT_RATE_LIMITER_REDIS` → 기본값)
-    - `tokens_per_sec`: 초당 허용 호출 수(미설정 시 `1 / min_interval_s`)
-    - `burst`: 순간 버스트 허용량(기본 1)
+    - `tokens_per_interval`: 윈도우(`interval_ms`)당 허용 토큰 수
+    - `interval_ms`: 토큰 버킷 윈도우 크기(ms)
+    - `burst_tokens`: 버스트 허용량(미설정 시 `tokens_per_interval`)
+    - `local_semaphore`: 프로세스 로컬 동시성 제한(미설정 시 `max_concurrency`)
     - `key_suffix`: 버킷 분리용 서픽스(계정/엔드포인트별 분리)
+  - `penalty_backoff_ms`: 429(Too Many Requests) 응답 이후 강제 쿨다운 시간
 - 재시도(옵션): `max_retries`, `retry_backoff_s`
 
 ## 테스트 & 검증
