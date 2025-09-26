@@ -63,7 +63,10 @@ async def test_cluster_rate_limit_spreads_calls_across_fetchers():
         min_interval_s=0.05,
         scope="cluster",
         redis_dsn=redis_url,
-        burst=1,
+        tokens_per_interval=2,
+        interval_ms=1000,
+        burst_tokens=1,
+        local_semaphore=1,
         key_suffix=suffix,
     )
     cfg = CcxtBackfillConfig(exchange_id="binance", symbols=["BTC/USDT"], timeframe="1m", rate_limiter=rl)

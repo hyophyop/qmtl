@@ -30,6 +30,21 @@ class _StubExchange:
         await asyncio.sleep(0)
 
 
+class _RateLimitOnceExchange(_StubExchange):
+    def __init__(self, batches, *, status_code: int = 429):
+        super().__init__(batches)
+        self._status_code = status_code
+        self._fail = True
+
+    async def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None):
+        if self._fail:
+            self._fail = False
+            exc = RuntimeError("too many requests")
+            setattr(exc, "status_code", self._status_code)
+            raise exc
+        return await super().fetch_ohlcv(symbol, timeframe, since, limit)
+
+
 @pytest.mark.asyncio
 async def test_ccxt_fetcher_normalizes_rows_and_filters_range():
     # Frames across 60..180 seconds; include an out-of-range row (30s) and duplicate
@@ -97,4 +112,32 @@ async def test_ccxt_fetcher_retries_on_error_then_succeeds():
     fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     assert df["ts"].tolist() == [60]
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_penalty_backoff_on_429(monkeypatch):
+    orig_sleep = asyncio.sleep
+    delays: list[float] = []
+
+    async def _fake_sleep(duration, *args, **kwargs):
+        delays.append(duration)
+        await orig_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
+
+    rows = [[[60_000, 1, 1, 1, 1, 1]]]
+    ex = _RateLimitOnceExchange(rows)
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        max_retries=2,
+        retry_backoff_s=0.1,
+        rate_limiter=RateLimiterConfig(penalty_backoff_ms=500),
+    )
+    fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
+
+    df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    assert df["ts"].tolist() == [60]
+    assert any(pytest.approx(0.5, rel=0.1) == d for d in delays)
 
