@@ -819,17 +819,20 @@ class SeamlessDataProvider(ABC):
                 )
             except TypeError:
                 if coverage_bounds is not None:
-                    publish_call = self._registrar.publish(  # type: ignore[misc]
-                        stabilized,
-                        node_id=node_id,
-                        interval=interval,
-                        coverage_bounds=coverage_bounds,
-                        fingerprint=fingerprint,
-                        as_of=as_of,
-                        conformance_flags=report.flags_counts,
-                        conformance_warnings=report.warnings,
-                        request_window=(int(start), int(end)),
-                    )
+                    try:
+                        publish_call = self._registrar.publish(  # type: ignore[misc]
+                            stabilized,
+                            node_id=node_id,
+                            interval=interval,
+                            coverage_bounds=coverage_bounds,
+                            fingerprint=fingerprint,
+                            as_of=as_of,
+                            conformance_flags=report.flags_counts,
+                            conformance_warnings=report.warnings,
+                            request_window=(int(start), int(end)),
+                        )
+                    except Exception:  # pragma: no cover - publication failures shouldn't crash
+                        publish_call = None
             except Exception:  # pragma: no cover - publication failures shouldn't crash
                 publish_call = None
 
