@@ -14,7 +14,7 @@ from typing import (
 )
 from abc import ABC
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import inspect
 import pandas as pd
@@ -36,6 +36,7 @@ from .history_coverage import (
     WarmupWindow,
 )
 from . import metrics as sdk_metrics
+from .cache_lru import LRUCache
 from .conformance import ConformancePipeline, ConformanceReport
 from .backfill_coordinator import (
     BackfillCoordinator,
@@ -127,6 +128,14 @@ class _DowngradeDecision:
     violation: _SLAViolationDetail | None
     coverage_ratio: float | None
     staleness_ms: float | None
+
+
+@dataclass(slots=True)
+class _CacheEntry:
+    result: "SeamlessFetchResult"
+    report: ConformanceReport | None
+    resident_bytes: int
+    world_id: str | None
 
 
 @dataclass(slots=True)
@@ -286,6 +295,7 @@ class SeamlessDataProvider(ABC):
         registrar: ArtifactRegistrar | None = None,
         stabilization_bars: int = 2,
         backfill_config: BackfillConfig | None = None,
+        cache: Mapping[str, Any] | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -327,6 +337,23 @@ class SeamlessDataProvider(ABC):
         preview_env = os.getenv(_FINGERPRINT_PREVIEW_ENV, "").strip().lower()
         self._preview_fingerprint = preview_env in {"1", "true", "yes", "on"}
 
+        cache_config = cache or {}
+        template_default = "{node_id}:{start}:{end}:{interval}:{conformance_version}:{world_id}:{as_of}"
+        self._cache_key_template = str(cache_config.get("key_template", template_default))
+        self._cache_clock: Callable[[], float] = time.monotonic
+        self._cache_enabled = bool(cache_config.get("enable"))
+        self._cache: LRUCache[str, _CacheEntry] | None = None
+        if self._cache_enabled:
+            ttl_ms = max(0, int(cache_config.get("ttl_ms", 60_000)))
+            max_shards = max(1, int(cache_config.get("max_shards", 256)))
+            self._cache = LRUCache(
+                max_entries=max_shards,
+                ttl_ms=ttl_ms,
+                clock=self._cache_now,
+            )
+        else:
+            sdk_metrics.observe_seamless_cache_resident_bytes(0)
+
     def _validate_node_id(self, node_id: str) -> None:
         """Hook for subclasses to validate node identifiers."""
 
@@ -353,6 +380,10 @@ class SeamlessDataProvider(ABC):
                 logger.warning("seamless.coordinator.init_failed", exc_info=exc)
         return InMemoryBackfillCoordinator()
 
+    def _cache_now(self) -> float:
+        clock = self._cache_clock
+        return float(clock())
+
     def _build_sla_tracker(self, node_id: str, interval: int) -> "_SLATracker | None":
         if not self._sla:
             return None
@@ -360,6 +391,79 @@ class SeamlessDataProvider(ABC):
 
     def _create_fingerprint_window(self) -> deque[str]:
         return deque(maxlen=self._fingerprint_window_limit)
+
+    def _cache_available(self) -> bool:
+        return self._cache is not None
+
+    def _cache_lookup(
+        self,
+        key: str,
+        *,
+        node_id: str,
+        interval: int,
+        world_id: str | None,
+    ) -> _CacheEntry | None:
+        if self._cache is None:
+            return None
+        entry = self._cache.get(key)
+        if entry is None:
+            sdk_metrics.observe_seamless_cache_miss(
+                node_id=node_id, interval=interval, world_id=world_id
+            )
+            self._update_cache_resident_bytes()
+            return None
+        sdk_metrics.observe_seamless_cache_hit(
+            node_id=node_id, interval=interval, world_id=world_id
+        )
+        return entry
+
+    def _update_cache_resident_bytes(self) -> None:
+        if self._cache is None:
+            sdk_metrics.observe_seamless_cache_resident_bytes(0)
+            return
+        self._cache.prune()
+        sdk_metrics.observe_seamless_cache_resident_bytes(self._cache.resident_bytes)
+
+    def _cache_store(
+        self,
+        key: str,
+        entry: _CacheEntry,
+    ) -> None:
+        if self._cache is None:
+            return
+        self._cache.set(key, entry, weight=entry.resident_bytes)
+        self._update_cache_resident_bytes()
+
+    def _cache_snapshot(
+        self,
+        key: str,
+        response: SeamlessFetchResult,
+        *,
+        world_id: str | None,
+    ) -> None:
+        if self._cache is None:
+            return
+        stored_frame = response.frame.copy(deep=True)
+        stored_metadata = replace(response.metadata)
+        self._sync_metadata_attrs(stored_frame, stored_metadata)
+        stored_result = SeamlessFetchResult(stored_frame, stored_metadata)
+        resident_bytes = int(stored_frame.memory_usage(deep=True).sum()) if not stored_frame.empty else 0
+        entry = _CacheEntry(
+            result=stored_result,
+            report=self._last_conformance_report,
+            resident_bytes=resident_bytes,
+            world_id=world_id,
+        )
+        self._cache_store(key, entry)
+
+    def _materialize_cached_result(self, entry: _CacheEntry) -> SeamlessFetchResult:
+        frame_copy = entry.result.frame.copy(deep=True)
+        metadata_copy = replace(entry.result.metadata)
+        self._sync_metadata_attrs(frame_copy, metadata_copy)
+        result = SeamlessFetchResult(frame_copy, metadata_copy)
+        self._last_conformance_report = entry.report
+        self._last_fetch_metadata = metadata_copy
+        return result
 
     def _normalize_backfill_config(self, config: BackfillConfig) -> BackfillConfig:
         mode = config.mode if config.mode in {"background", "sync"} else "background"
@@ -640,10 +744,23 @@ class SeamlessDataProvider(ABC):
         context: _RequestContext,
     ) -> str:
         world, req_as_of = context.key_components()
-        return (
-            f"{node_id}:{int(start)}:{int(end)}:{int(interval)}:"
-            f"{CONFORMANCE_VERSION}:{world}:{req_as_of}"
-        )
+        values = {
+            "node_id": node_id,
+            "start": int(start),
+            "end": int(end),
+            "interval": int(interval),
+            "conformance_version": CONFORMANCE_VERSION,
+            "world_id": world,
+            "as_of": req_as_of,
+            "execution_domain": context.execution_domain,
+        }
+        try:
+            return self._cache_key_template.format(**values)
+        except Exception:
+            return (
+                f"{node_id}:{int(start)}:{int(end)}:{int(interval)}:"
+                f"{CONFORMANCE_VERSION}:{world}:{req_as_of}"
+            )
 
     def _backfill_key(
         self,
@@ -885,52 +1002,68 @@ class SeamlessDataProvider(ABC):
 
         tracker = self._build_sla_tracker(node_id, interval)
 
-        if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
-            result = await self._fetch_fail_fast(
-                start,
-                end,
+        response: SeamlessFetchResult | None = None
+        cache_hit = False
+        if self._cache_available():
+            cached_entry = self._cache_lookup(
+                cache_key,
                 node_id=node_id,
-                interval=interval,
-                sla_tracker=tracker,
-                request_context=context,
+                interval=int(interval),
+                world_id=context.world_id or None,
             )
-        elif self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
-            result = await self._fetch_auto_backfill(
-                start,
-                end,
+            if cached_entry is not None:
+                response = self._materialize_cached_result(cached_entry)
+                cache_hit = True
+
+        if response is None:
+            if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
+                result = await self._fetch_fail_fast(
+                    start,
+                    end,
+                    node_id=node_id,
+                    interval=interval,
+                    sla_tracker=tracker,
+                    request_context=context,
+                )
+            elif self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
+                result = await self._fetch_auto_backfill(
+                    start,
+                    end,
+                    node_id=node_id,
+                    interval=interval,
+                    sla_tracker=tracker,
+                    request_context=context,
+                )
+            elif self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
+                result = await self._fetch_partial_fill(
+                    start,
+                    end,
+                    node_id=node_id,
+                    interval=interval,
+                    sla_tracker=tracker,
+                    request_context=context,
+                )
+            else:  # SEAMLESS
+                result = await self._fetch_seamless(
+                    start,
+                    end,
+                    node_id=node_id,
+                    interval=interval,
+                    sla_tracker=tracker,
+                    request_context=context,
+                )
+
+            response = await self._finalize_response(
+                result,
+                start=start,
+                end=end,
                 node_id=node_id,
                 interval=interval,
-                sla_tracker=tracker,
                 request_context=context,
-            )
-        elif self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
-            result = await self._fetch_partial_fill(
-                start,
-                end,
-                node_id=node_id,
-                interval=interval,
-                sla_tracker=tracker,
-                request_context=context,
-            )
-        else:  # SEAMLESS
-            result = await self._fetch_seamless(
-                start,
-                end,
-                node_id=node_id,
-                interval=interval,
-                sla_tracker=tracker,
-                request_context=context,
+                cache_key=cache_key,
             )
 
-        response = await self._finalize_response(
-            result,
-            start=start,
-            end=end,
-            node_id=node_id,
-            interval=interval,
-            request_context=context,
-            cache_key=cache_key,
-        )
+        should_store_cache = self._cache_available() and not cache_hit
 
         downgrade: _DowngradeDecision | None = None
         if tracker:
@@ -959,6 +1092,13 @@ class SeamlessDataProvider(ABC):
             response.metadata.dataset_fingerprint,
             context,
         )
+
+        if should_store_cache:
+            self._cache_snapshot(
+                cache_key,
+                response,
+                world_id=context.world_id or None,
+            )
 
         return response
     

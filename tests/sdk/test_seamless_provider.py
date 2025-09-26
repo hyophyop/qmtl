@@ -71,6 +71,18 @@ class _DuplicateSource(_StaticSource):
         ])
 
 
+class _CountingSource(_StaticSource):
+    """Static source that tracks fetch calls for cache assertions."""
+
+    def __init__(self, coverage: list[tuple[int, int]], priority: DataSourcePriority) -> None:
+        super().__init__(coverage, priority)
+        self.fetch_calls = 0
+
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        self.fetch_calls += 1
+        return await super().fetch(start, end, node_id=node_id, interval=interval)
+
+
 class _DummyProvider(SeamlessDataProvider):
     """Concrete instance of SeamlessDataProvider using injected sources/backfiller."""
 
@@ -197,6 +209,118 @@ async def test_fetch_fingerprint_stable_across_calls() -> None:
     assert (
         sdk_metrics.fingerprint_collisions._vals[collision_key] == 1  # type: ignore[attr-defined]
     )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_cache_hits_same_context() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        cache={"enable": True, "ttl_ms": 60_000, "max_shards": 8},
+    )
+
+    first = await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+    second = await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+
+    assert storage.fetch_calls == 1
+    assert first.metadata.cache_key == second.metadata.cache_key
+    miss_key = ("node", "10", "world-a")
+    hit_key = miss_key
+    assert (
+        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 1  # type: ignore[attr-defined]
+    )
+    assert (
+        sdk_metrics.seamless_cache_hit_total._vals[hit_key] == 1  # type: ignore[attr-defined]
+    )
+    assert sdk_metrics.seamless_cache_resident_bytes._val > 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_in_memory_cache_includes_as_of_in_key() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        cache={"enable": True, "ttl_ms": 60_000, "max_shards": 8},
+    )
+
+    await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+    await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-02T00:00:00Z",
+    )
+
+    assert storage.fetch_calls == 2
+    miss_key = ("node", "10", "world-a")
+    assert (
+        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 2  # type: ignore[attr-defined]
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_cache_ttl_expiry() -> None:
+    sdk_metrics.reset_metrics()
+    fake_clock = _FakeClock()
+    storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        cache={"enable": True, "ttl_ms": 1_000, "max_shards": 8},
+    )
+    provider._cache_clock = fake_clock.monotonic  # type: ignore[attr-defined]
+
+    await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+    fake_clock.advance(2.0)
+    await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+
+    assert storage.fetch_calls == 2
+    miss_key = ("node", "10", "world-a")
+    assert (
+        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 2  # type: ignore[attr-defined]
+    )
+    assert (
+        sdk_metrics.seamless_cache_hit_total._vals.get(miss_key, 0) == 0  # type: ignore[attr-defined]
+    )
+    assert sdk_metrics.seamless_cache_resident_bytes._val > 0  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
