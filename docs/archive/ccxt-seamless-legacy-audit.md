@@ -1,7 +1,7 @@
 # CCXT × Seamless Legacy Audit
 
 ## Summary
-This inventory supports the migration tracked in [#1162](https://github.com/hyophyop/qmtl/issues/1162) by cataloging the remaining content inside the legacy CCXT × Seamless design notes. The audit compares each document against the consolidated [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) blueprint and highlights external links that still point at the deprecated files. With the legacy drafts now removed from the repository, the tables below remain as a historical record of what was merged where.
+This inventory supports the migration tracked in [#1162](https://github.com/hyophyop/qmtl/issues/1162) by cataloging the remaining content inside the legacy CCXT × Seamless design notes. The audit compares each document against the consolidated [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md) blueprint and highlights external links that still point at the deprecated files. With the legacy drafts now removed from the repository, the tables below remain as a historical record of what was merged where.
 
 ## Outstanding Content by Source Document
 The following tables list sections, diagrams, or code samples that have no equivalent in the integrated specification. Each row includes migration guidance so that the legacy files can be retired once their content is ported.
@@ -39,7 +39,7 @@ The following tables list sections, diagrams, or code samples that have no equiv
 
 ## External Links that Depend on the Legacy Docs
 - ✅ `mkdocs.yml` navigation now routes readers directly to the integrated blueprint (the GPT5-High entry was removed).
-- ✅ [`ccxt-seamless-integrated.md`](ccxt-seamless-integrated.md) inlines the former GPT5-High material and no longer links out to the archived file.
+- ✅ [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md) inlines the former GPT5-High material and no longer links out to the archived file.
 - Historical `ccxt-seamless-hybrid.md` references have been excised from the tree; consumers should link directly to the integrated blueprint going forward.
 
 ## Recommended Follow-Up
