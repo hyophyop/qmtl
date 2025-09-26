@@ -1446,6 +1446,43 @@ async def test_sla_max_lag_enforces_hold(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_domain_gate_downgrade_includes_snapshot_metadata(caplog) -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 40)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(storage_source=storage)
+
+    compute_context = {
+        "world_id": "world-live",
+        "execution_domain": "live",
+        "min_coverage": 0.95,
+    }
+
+    with caplog.at_level("WARNING", logger="qmtl.runtime.sdk.seamless_data_provider"):
+        result = await provider.fetch(
+            0,
+            100,
+            node_id="node",
+            interval=10,
+            compute_context=compute_context,
+        )
+
+    assert result.metadata.downgraded is True
+    assert result.metadata.downgrade_reason == "coverage_breach"
+    assert result.metadata.dataset_fingerprint is not None
+    assert result.metadata.as_of is not None
+
+    log_records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "seamless.domain_gate.downgrade"
+    ]
+    assert log_records, "expected domain gate downgrade log"
+    record = log_records[0]
+    assert getattr(record, "dataset_fingerprint", None) == result.metadata.dataset_fingerprint
+    assert getattr(record, "as_of", None) == result.metadata.as_of
+
+
+@pytest.mark.asyncio
 async def test_observability_snapshot_captures_backfill_failure(caplog) -> None:
     sdk_metrics.reset_metrics()
     backfiller = _FailingBackfiller()

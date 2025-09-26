@@ -111,7 +111,9 @@ non-production environments.
   on these spans.
 - **Logging**: the coordinator and SLA layers log to `seamless.backfill` and
   `seamless.sla` respectively. Use these structured logs to correlate alerts
-  with lease IDs and offending nodes.
+  with lease IDs and offending nodes. Domain gate downgrade events emit the
+  `seamless.domain_gate.downgrade` log with `dataset_fingerprint` and `as_of`
+  fields so audit trails can confirm which snapshot was served during a HOLD.
 
 ## Runbooks
 

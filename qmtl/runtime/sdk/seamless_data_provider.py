@@ -1013,6 +1013,14 @@ class SeamlessDataProvider(ABC):
                 )
 
             if decision is not None:
+                fingerprint = metadata.dataset_fingerprint
+                if fingerprint is None and metadata.artifact is not None:
+                    fingerprint = getattr(metadata.artifact, "dataset_fingerprint", None)
+
+                as_of_value: Any | None = metadata.as_of
+                if as_of_value is None:
+                    as_of_value = metadata.requested_as_of or context.requested_as_of
+
                 logger.warning(
                     "seamless.domain_gate.downgrade",
                     extra={
@@ -1021,6 +1029,8 @@ class SeamlessDataProvider(ABC):
                         "world_id": context.world_id,
                         "execution_domain": domain,
                         "reason": decision.reason,
+                        "dataset_fingerprint": fingerprint,
+                        "as_of": as_of_value,
                     },
                 )
             return decision
