@@ -79,9 +79,10 @@ def test_conformance_normalizes_timezone_and_flags_casts():
     )
 
     cp = ConformancePipeline()
-    out, report = cp.normalize(df, schema=None, interval=60_000)
+    out, report = cp.normalize(df, schema=None, interval=60)
 
     assert pd.api.types.is_integer_dtype(out["ts"].dtype)
+    assert out["ts"].tolist() == [1735682400, 1735682460]
     assert report.flags_counts["ts_cast"] == 2
     assert report.flags_counts["ts_timezone_normalized"] == 2
 
@@ -101,3 +102,33 @@ def test_conformance_normalizes_non_finite_values():
     assert pd.isna(out.loc[2, "price"])
     assert report.flags_counts["non_finite"] == 2
     assert any("inf" in warning for warning in report.warnings)
+
+
+def test_conformance_normalizes_integer_epoch_units():
+    base = pd.Timestamp("2025-01-01T00:00:00Z")
+    ns_values = [base.value, base.value + 60 * 10**9, base.value + 120 * 10**9]
+    df = pd.DataFrame({"ts": ns_values, "price": [1.0, 2.0, 3.0]})
+
+    cp = ConformancePipeline()
+    out, report = cp.normalize(df, schema=None, interval=60)
+
+    expected = [int(base.value // 10**9) + offset for offset in (0, 60, 120)]
+    assert out["ts"].tolist() == expected
+    assert report.flags_counts["ts_cast"] == 3
+
+
+def test_conformance_normalizes_millisecond_epoch_units():
+    base = pd.Timestamp("2025-01-01T00:00:00Z")
+    ms_values = [
+        base.value // 10**6,
+        base.value // 10**6 + 60 * 1000,
+        base.value // 10**6 + 120 * 1000,
+    ]
+    df = pd.DataFrame({"ts": ms_values, "price": [1.0, 2.0, 3.0]})
+
+    cp = ConformancePipeline()
+    out, report = cp.normalize(df, schema=None, interval=60)
+
+    expected = [int(base.value // 10**9) + offset for offset in (0, 60, 120)]
+    assert out["ts"].tolist() == expected
+    assert report.flags_counts["ts_cast"] == 3

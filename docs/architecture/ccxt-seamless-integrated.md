@@ -124,7 +124,7 @@ flowchart LR
 
 ### Data Model & Interval Semantics
 - Canonical OHLCV schema: `ts`, `open`, `high`, `low`, `close`, `volume`.
-- `ts` values are stored in nanoseconds; coverage math converts the configured timeframe to seconds to guarantee integer multiples.
+- `ts` values are normalized to epoch **seconds**; coverage math expects the declared `interval` to use the same unit so cadence math stays integer aligned.
 - Node identities should include exchange, symbol, and CCXT timeframe. When downstream resampling is required, publish a new node identifier rather than mutating the base cadence.
 
 ### Backfill Orchestration
@@ -520,7 +520,7 @@ should treat the keys as stable contract identifiers.
 | `missing_column` | Required schema fields were absent from the payload. |
 | `dtype_cast` | Columns required dtype coercion to satisfy the declared schema. |
 | `dtype_mismatch` | Columns failed dtype normalization and remain incompatible with the schema. |
-| `ts_cast` | Timestamp fields were coerced to epoch microseconds. |
+| `ts_cast` | Timestamp fields were coerced to epoch seconds. |
 | `ts_timezone_normalized` | Timezone-aware timestamps were normalized to UTC before casting. |
 | `non_finite` | NaN or +/-inf values were detected in numeric columns (inf values are replaced with NaN). |
 | `invalid_timestamp` | Rows were dropped because timestamps could not be parsed or normalized. |

@@ -122,6 +122,8 @@ flowchart LR
 
 ## 5) 데이터 & 메타데이터 모델
 
+> **단위 규칙**: Seamless 파이프라인은 모든 `ts` 컬럼을 epoch 초(second)로 정규화하고 coverage/gap/interval 계산도 동일 단위를 기대한다.
+
 ### 5.1 요청(런타임) 식별자
 
 * **NodeID(표준)**: `ohlcv:{exchange_id}:{symbol}:{timeframe}`
