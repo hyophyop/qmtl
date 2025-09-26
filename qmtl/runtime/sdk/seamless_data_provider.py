@@ -898,19 +898,33 @@ class SeamlessDataProvider(ABC):
             requested_as_of = context.requested_as_of
             if requested_as_of:
                 previous = self._live_as_of_state.get(key)
-                if previous is not None and self._compare_as_of(requested_as_of, previous) < 0:
-                    decision = self._merge_decisions(
-                        decision,
-                        _DowngradeDecision(
-                            mode=SLAViolationMode.HOLD,
-                            reason="as_of_regression",
-                            violation=None,
-                            coverage_ratio=coverage_ratio,
-                            staleness_ms=staleness_ms,
-                        ),
-                    )
+                world_label = context.world_id or ""
+                if previous is not None:
+                    comparison = self._compare_as_of(requested_as_of, previous)
+                    if comparison < 0:
+                        decision = self._merge_decisions(
+                            decision,
+                            _DowngradeDecision(
+                                mode=SLAViolationMode.HOLD,
+                                reason="as_of_regression",
+                                violation=None,
+                                coverage_ratio=coverage_ratio,
+                                staleness_ms=staleness_ms,
+                            ),
+                        )
+                    else:
+                        self._live_as_of_state[key] = requested_as_of
+                        if comparison > 0:
+                            sdk_metrics.observe_as_of_advancement_event(
+                                node_id=node_id,
+                                world_id=world_label,
+                            )
                 else:
                     self._live_as_of_state[key] = requested_as_of
+                    sdk_metrics.observe_as_of_advancement_event(
+                        node_id=node_id,
+                        world_id=world_label,
+                    )
 
             if (
                 context.min_coverage is not None

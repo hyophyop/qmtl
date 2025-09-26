@@ -270,6 +270,14 @@ partial_fill_returns = _counter(
     test_value_factory=dict,
 )
 
+as_of_advancement_events = _counter(
+    "as_of_advancement_events",
+    "Count of monotonic as_of promotions",
+    ["node_id", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 live_staleness_seconds = _gauge(
     "live_staleness_seconds",
     "Observed live data staleness for Seamless responses (seconds)",
@@ -787,6 +795,15 @@ def observe_partial_fill(*, node_id: str, interval: str | int, reason: str) -> N
     partial_fill_returns.labels(node_id=n, interval=i, world_id=world, reason=r).inc()
     partial_fill_returns._vals[(n, i, world, r)] = (  # type: ignore[attr-defined]
         partial_fill_returns._vals.get((n, i, world, r), 0) + 1
+    )
+
+
+def observe_as_of_advancement_event(*, node_id: str, world_id: str | None) -> None:
+    n = str(node_id)
+    world = str(world_id) if world_id is not None else ""
+    as_of_advancement_events.labels(node_id=n, world_id=world).inc()
+    as_of_advancement_events._vals[(n, world)] = (  # type: ignore[attr-defined]
+        as_of_advancement_events._vals.get((n, world), 0) + 1
     )
 
 

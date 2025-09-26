@@ -518,7 +518,7 @@ This workflow keeps hot storage responsive without sacrificing the reproducibili
 | `artifact_publish_latency_ms` | Time from stabilization to manifest publish | Warn > 120 s |
 | `artifact_bytes_written` | Volume of artifact storage writes | Capacity planning |
 | `fingerprint_collisions` | Count of duplicate fingerprints | Critical if > 0 |
-| `as_of_advancement_events` | Count of monotonic `as_of` promotions | Alert if progression stalls or regresses |
+| `as_of_advancement_events` | Count of monotonic `as_of` promotions (labels: `node_id`, `world_id`) | Alert if progression stalls or regresses |
 | `domain_gate_holds` | Number of HOLD downgrades | Warn on upward trend |
 | `partial_fill_returns` | Frequency of PARTIAL_FILL outcomes | Correlate with SLA breaches |
 | `live_staleness_seconds` | Live data freshness gap | Warn if exceeds domain `max_lag` |
