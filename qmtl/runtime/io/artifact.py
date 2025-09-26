@@ -30,6 +30,7 @@ class ArtifactPublication:
     end: int
     rows: int
     uri: str | None = None
+    manifest_uri: str | None = None
     manifest: dict[str, Any] = field(default_factory=dict)
 
 
@@ -128,6 +129,7 @@ class ArtifactRegistrar:
             end=end,
             rows=rows,
             uri=uri,
+            manifest_uri=manifest.get("manifest_uri"),
             manifest=manifest,
         )
 
