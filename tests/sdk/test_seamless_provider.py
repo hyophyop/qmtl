@@ -5,6 +5,8 @@ from typing import Optional, Any
 
 import pandas as pd
 import pytest
+import json
+from pathlib import Path
 
 from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
@@ -18,11 +20,11 @@ from qmtl.runtime.io.seamless_provider import (
 )
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.conformance import ConformancePipeline
+from qmtl.runtime.sdk.artifacts import ArtifactPublication, FileSystemArtifactRegistrar
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import Lease
-from qmtl.runtime.io.artifact import ArtifactRegistrar
 
 
 class _StaticSource:
@@ -65,7 +67,9 @@ class _DuplicateSource(_StaticSource):
 class _DummyProvider(SeamlessDataProvider):
     """Concrete instance of SeamlessDataProvider using injected sources/backfiller."""
 
-    pass
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("stabilization_bars", 0)
+        super().__init__(*args, **kwargs)
 
 
 class _FakeClock:
@@ -117,48 +121,6 @@ async def test_seamless_fetch_preserves_off_grid_cache_bounds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_metadata_records_coverage_and_rows() -> None:
-    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
-    provider = _DummyProvider(storage_source=storage)
-
-    df = await provider.fetch(0, 100, node_id="n", interval=10)
-
-    metadata = provider.last_fetch_metadata
-    assert metadata is not None
-    assert metadata.node_id == "n"
-    assert metadata.interval == 10
-    assert metadata.coverage_bounds == (0, 100)
-    assert metadata.rows == len(df)
-    assert metadata.artifact is None
-
-
-@pytest.mark.asyncio
-async def test_metadata_includes_artifact_publication() -> None:
-    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
-    calls: list[tuple[pd.DataFrame, dict[str, Any]]] = []
-
-    def store(df: pd.DataFrame, manifest: dict[str, Any]) -> str:
-        calls.append((df.copy(), dict(manifest)))
-        return "local://artifact"
-
-    registrar = ArtifactRegistrar(store=store, stabilization_bars=1)
-    provider = _DummyProvider(storage_source=storage, artifact_registrar=registrar)
-
-    df = await provider.fetch(0, 100, node_id="n", interval=10)
-
-    metadata = provider.last_fetch_metadata
-    assert metadata is not None
-    assert metadata.artifact is not None
-    artifact = metadata.artifact
-    assert artifact.uri == "local://artifact"
-    assert artifact.node_id == "n"
-    assert artifact.rows == len(df) - 1  # one bar dropped for stabilization
-    assert artifact.dataset_fingerprint
-    assert artifact.manifest["conformance_version"] == registrar.conformance_version
-    assert calls, "artifact store should have been invoked"
-
-
-@pytest.mark.asyncio
 async def test_find_missing_ranges_uses_interval_math() -> None:
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     provider = _DummyProvider(storage_source=storage)
@@ -171,6 +133,64 @@ async def test_find_missing_ranges_uses_interval_math() -> None:
     # Validate helper behavior directly
     gaps = provider._find_missing_ranges(0, 200, available, 10)  # type: ignore[attr-defined]
     assert gaps == [(110, 200)]
+
+
+@pytest.mark.asyncio
+async def test_fetch_response_includes_metadata() -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = _RecordingRegistrar()
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert isinstance(result.metadata.dataset_fingerprint, str)
+    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert result.metadata.coverage_bounds == (0, 90)
+    assert isinstance(result.metadata.as_of, int)
+    assert registrar.calls and registrar.calls[0]["rows"] == len(result.frame)
+    assert result.frame.attrs["dataset_fingerprint"] == result.metadata.dataset_fingerprint
+    assert result.metadata.manifest_uri == "mem://manifest"
+
+
+@pytest.mark.asyncio
+async def test_fetch_fingerprint_stable_across_calls() -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = _RecordingRegistrar()
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+    )
+
+    first = await provider.fetch(0, 100, node_id="node", interval=10)
+    second = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert first.metadata.dataset_fingerprint == second.metadata.dataset_fingerprint
+    assert len(registrar.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_filesystem_registrar_writes_manifest(tmp_path) -> None:
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    registrar = FileSystemArtifactRegistrar(tmp_path)
+    provider = _DummyProvider(
+        storage_source=storage,
+        registrar=registrar,
+        stabilization_bars=1,
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    manifest_path = Path(result.metadata.manifest_uri)
+    assert manifest_path.exists()
+    content = json.loads(manifest_path.read_text())
+    assert content["dataset_fingerprint"] == result.metadata.dataset_fingerprint
+    data_path = manifest_path.parent / "data.parquet"
+    assert data_path.exists()
 
 
 class _CountingBackfiller:
@@ -250,6 +270,44 @@ class _FailingBackfiller(_RecordingBackfiller):
             target_storage=target_storage,
         )
         raise self._error
+
+
+class _RecordingRegistrar:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def publish(
+        self,
+        frame: pd.DataFrame,
+        *,
+        node_id: str,
+        interval: int,
+        coverage_bounds: tuple[int, int],
+        fingerprint: str,
+        as_of: int,
+        conformance_flags: dict[str, int] | None = None,
+        conformance_warnings: tuple[str, ...] | list[str] | None = None,
+        request_window: tuple[int, int] | None = None,
+    ) -> ArtifactPublication:
+        record = {
+            "node_id": node_id,
+            "interval": interval,
+            "coverage_bounds": coverage_bounds,
+            "fingerprint": fingerprint,
+            "as_of": as_of,
+            "conformance_flags": dict(conformance_flags or {}),
+            "conformance_warnings": tuple(conformance_warnings or ()),
+            "request_window": request_window,
+            "rows": len(frame),
+        }
+        self.calls.append(record)
+        return ArtifactPublication(
+            dataset_fingerprint=fingerprint,
+            as_of=as_of,
+            coverage_bounds=coverage_bounds,
+            manifest_uri="mem://manifest",
+            data_uri="mem://data",
+        )
 
 
 class _FlakyCoordinator:
@@ -447,8 +505,8 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     backfiller = _CountingBackfiller(storage)
     provider = _DummyProvider(storage_source=storage, backfiller=backfiller)
 
-    df = await provider.fetch(0, 100, node_id="n", interval=10)
-    assert isinstance(df, pd.DataFrame)
+    result = await provider.fetch(0, 100, node_id="n", interval=10)
+    assert isinstance(result.frame, pd.DataFrame)
     key = ("n", "10")
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
 

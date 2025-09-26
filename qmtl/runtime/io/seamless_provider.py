@@ -14,7 +14,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     LiveDataFeed,
 )
 from qmtl.runtime.sdk.conformance import ConformancePipeline
-from qmtl.runtime.io.artifact import ArtifactRegistrar
+from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +243,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.SEAMLESS,
         conformance: ConformancePipeline | None = None,
         partial_ok: bool = False,
-        artifact_registrar: ArtifactRegistrar | None = None,
+        registrar: ArtifactRegistrar | None = None,
         **kwargs
     ):
         # Import here to avoid circular imports
@@ -262,6 +262,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         # Create live feed if available (prefer explicit LiveDataFeed)
         live_feed_obj = live_feed or (LiveDataFeedImpl(live_fetcher) if live_fetcher else None)
         
+        registrar_obj = registrar if registrar is not None else FileSystemArtifactRegistrar.from_env()
+
         super().__init__(
             strategy=strategy,
             cache_source=cache_source,
@@ -270,7 +272,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
             live_feed=live_feed_obj,
             conformance=conformance or ConformancePipeline(),
             partial_ok=partial_ok,
-            artifact_registrar=artifact_registrar,
+            registrar=registrar_obj,
             **kwargs
         )
     
