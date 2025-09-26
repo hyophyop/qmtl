@@ -241,7 +241,7 @@ flowchart LR
 #### Dataset Identity
 - **Runtime key**: `node_id` as defined above.
 - **Version key**: `dataset_fingerprint` (SHA-256 over canonicalized frame + metadata) and `as_of` (snapshot or commit instant).
-- Artifact manifests record `{fingerprint, as_of, node_id, range, conformance_version, producer, publication_watermark}` and live alongside Parquet data in object storage.
+- Artifact manifests record `{fingerprint, as_of, node_id, range, conformance_version, producer, publication_watermark}` and live alongside Parquet data in object storage. The default registrar stamps manifests with a `producer.identity` of `seamless@qmtl`, the originating `node_id`/`interval`, and a UTC `publication_watermark` indicating when the stabilized dataset was sealed.
 - Fingerprints must be calculated after tail-bar stabilization and dtype normalization to guarantee idempotent replay. Workers may compute a "preview" fingerprint for debugging, but only the post-stabilization value is authoritative.
 
 #### Publication Workflow

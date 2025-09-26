@@ -45,6 +45,7 @@ class ArtifactRegistrar:
         stabilization_bars: int = 2,
         conformance_version: str = "v2",
         float_format: str = "%.10f",
+        producer_identity: str | None = "seamless@qmtl",
     ) -> None:
         if stabilization_bars < 0:
             raise ValueError("stabilization_bars must be >= 0")
@@ -52,6 +53,8 @@ class ArtifactRegistrar:
         self._stabilization_bars = int(stabilization_bars)
         self._conformance_version = str(conformance_version)
         self._float_format = float_format
+        identity = (producer_identity or "").strip()
+        self._producer_identity = identity or "seamless@qmtl"
 
     @property
     def stabilization_bars(self) -> int:
@@ -111,6 +114,12 @@ class ArtifactRegistrar:
             "as_of": as_of,
             "conformance_version": self._conformance_version,
             "stabilization_bars": self._stabilization_bars,
+        }
+        manifest["publication_watermark"] = self._now_iso()
+        manifest["producer"] = {
+            "identity": self._producer_identity,
+            "node_id": node_id,
+            "interval": int(interval),
         }
         if requested_range is not None:
             manifest["requested_range"] = [int(requested_range[0]), int(requested_range[1])]

@@ -85,6 +85,7 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
             store=self._store,
             stabilization_bars=stabilization_bars,
             conformance_version=conformance_version,
+            producer_identity=producer,
         )
 
     @classmethod

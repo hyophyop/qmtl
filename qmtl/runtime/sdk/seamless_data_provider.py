@@ -611,20 +611,51 @@ class SeamlessDataProvider(ABC):
 
         results: dict[int, pd.DataFrame] | None = {} if collect_results else None
 
+        def _prepare_backfill_kwargs(attempt: int, batch_id: str) -> dict[str, Any]:
+            """Prepare kwargs for backfiller.backfill respecting its signature.
+
+            Some backfiller implementations (e.g., DataFetcherAutoBackfiller) accept
+            additional optional keywords like `attempt` and `batch_id` for structured
+            logging. Test stubs and other minimal implementations may not. To avoid
+            TypeError from unexpected kwargs, inspect the callable and pass only
+            supported parameters (or all if it accepts **kwargs).
+            """
+            func = getattr(self.backfiller, "backfill")  # type: ignore[union-attr]
+            try:
+                sig = inspect.signature(func)
+                params = sig.parameters
+                has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+            except (TypeError, ValueError):  # pragma: no cover - extremely defensive
+                # If inspection fails, fall back to the minimal set guaranteed by Protocol
+                params = {}
+                has_var_kw = False
+
+            def _supports(name: str) -> bool:
+                return has_var_kw or name in params
+
+            kwargs: dict[str, Any] = {
+                "node_id": node_id,
+                "interval": interval,
+            }
+            if _supports("target_storage"):
+                kwargs["target_storage"] = target_storage
+            if _supports("attempt"):
+                kwargs["attempt"] = attempt
+            if _supports("batch_id"):
+                kwargs["batch_id"] = batch_id
+            return kwargs
+
         async def _chunk_worker(index: int, chunk_start: int, chunk_end: int) -> None:
             attempt = 0
             batch_id = f"{node_id}:{interval}:{chunk_start}:{chunk_end}"
             while True:
                 current_attempt = attempt + 1
                 try:
-                    coro = self.backfiller.backfill(
+                    kwargs = _prepare_backfill_kwargs(current_attempt, batch_id)
+                    coro = self.backfiller.backfill(  # type: ignore[union-attr]
                         chunk_start,
                         chunk_end,
-                        node_id=node_id,
-                        interval=interval,
-                        target_storage=target_storage,
-                        attempt=current_attempt,
-                        batch_id=batch_id,
+                        **kwargs,
                     )
                     if sla_tracker is not None:
                         frame = await sla_tracker.observe_async(
