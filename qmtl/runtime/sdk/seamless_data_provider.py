@@ -11,7 +11,7 @@ from typing import (
     Sequence,
 )
 from abc import ABC
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 import pandas as pd
 from enum import Enum
@@ -47,6 +47,9 @@ T = TypeVar("T")
 
 
 CONFORMANCE_VERSION = "v1"
+
+
+_FINGERPRINT_HISTORY_LIMIT = 32
 
 
 @dataclass(slots=True)
@@ -248,7 +251,10 @@ class SeamlessDataProvider(ABC):
 
         # Internal state
         self._active_backfills: dict[str, bool] = {}
-        self._fingerprint_index: dict[tuple[str, int], set[str]] = defaultdict(set)
+        self._fingerprint_window_limit = _FINGERPRINT_HISTORY_LIMIT
+        self._fingerprint_index: dict[tuple[str, int], deque[str]] = defaultdict(
+            self._create_fingerprint_window
+        )
 
     @property
     def last_conformance_report(self) -> Optional[ConformanceReport]:
@@ -275,6 +281,9 @@ class SeamlessDataProvider(ABC):
         if not self._sla:
             return None
         return _SLATracker(self._sla, node_id=node_id, interval=int(interval))
+
+    def _create_fingerprint_window(self) -> deque[str]:
+        return deque(maxlen=self._fingerprint_window_limit)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -1111,8 +1120,12 @@ class SeamlessDataProvider(ABC):
         seen = self._fingerprint_index[key]
         if fingerprint in seen:
             sdk_metrics.observe_fingerprint_collision(node_id=node_id, interval=interval)
-        else:
-            seen.add(fingerprint)
+            # Refresh recency so that duplicate fingerprints remain in the window.
+            try:
+                seen.remove(fingerprint)
+            except ValueError:  # pragma: no cover - defensive guard
+                pass
+        seen.append(fingerprint)
 
     async def _start_background_backfill(
         self, start: int, end: int, *, node_id: str, interval: int
