@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 import pytest
@@ -85,3 +86,68 @@ async def test_distributed_coordinator_gracefully_handles_conflict() -> None:
     lease = await coordinator.claim("nodeA:60:0:600", 60_000)
     assert lease is None
     assert len(factory.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_distributed_coordinator_emits_success_logs(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sdk_metrics.reset_metrics()
+    caplog.set_level(logging.INFO, logger="qmtl.runtime.sdk.backfill_coordinator")
+    monkeypatch.setenv("QMTL_WORKER_ID", "worker-42")
+
+    claim_response = _make_response(
+        200,
+        {
+            "lease": {"token": "abc", "lease_until_ms": 2000},
+            "completion_ratio": 0.5,
+        },
+    )
+    complete_response = _make_response(200, {"completion_ratio": 1.0})
+    fail_response = _make_response(200, {"completion_ratio": 0.0})
+    factory = _ClientFactory([claim_response, complete_response, fail_response])
+
+    coordinator = DistributedBackfillCoordinator(
+        "http://coordinator.local", client_factory=factory
+    )
+
+    key = "nodeA:60:1700:1760:world-1:2024-01-01T00:00:00Z"
+    lease = await coordinator.claim(key, 60_000)
+    assert lease is not None
+
+    await coordinator.complete(lease)
+    await coordinator.fail(lease, "synthetic_failure")
+
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "qmtl.runtime.sdk.backfill_coordinator"
+    ]
+    messages = [record.getMessage() for record in records]
+    assert messages == [
+        "seamless.backfill.coordinator_claimed",
+        "seamless.backfill.coordinator_completed",
+        "seamless.backfill.coordinator_failed",
+    ]
+
+    claim_record = records[0]
+    assert claim_record.coordinator_id == "coordinator.local"
+    assert claim_record.worker == "worker-42"
+    assert claim_record.lease_key == key
+    assert claim_record.lease_token == "abc"
+    assert claim_record.lease_until_ms == 2000
+    assert claim_record.batch_start == 1700
+    assert claim_record.batch_end == 1760
+    assert claim_record.world == "world-1"
+    assert claim_record.requested_as_of == "2024-01-01T00:00:00Z"
+    assert claim_record.completion_ratio == pytest.approx(0.5)
+
+    complete_record = records[1]
+    assert complete_record.completion_ratio == pytest.approx(1.0)
+    assert not hasattr(complete_record, "reason")
+
+    fail_record = records[2]
+    assert fail_record.completion_ratio == pytest.approx(0.0)
+    assert fail_record.reason == "synthetic_failure"
+
+    assert len(factory.calls) == 3

@@ -176,6 +176,38 @@ explicitly to override this behaviour.
 then treats them as read-only. Attempting to modify ``history_provider`` or
 ``event_service`` after creation will raise an ``AttributeError``.
 
+## Distributed Coordinator Observability
+
+Backfill workers that rely on the distributed coordinator should monitor the
+structured lifecycle logs emitted by the SDK. Each successful transition now
+produces a log entry under the `seamless.backfill` namespace:
+
+```text
+seamless.backfill.coordinator_claimed {"coordinator_id": "coordinator.local", "lease_key": "nodeA:60:1700:1760:world-1:2024-01-01T00:00:00Z", "node_id": "nodeA", "interval": 60, "batch_start": 1700, "batch_end": 1760, "world": "world-1", "requested_as_of": "2024-01-01T00:00:00Z", "worker": "worker-42", "lease_token": "abc", "lease_until_ms": 2000, "completion_ratio": 0.5}
+```
+
+Three events are emitted:
+
+- `seamless.backfill.coordinator_claimed` – a worker successfully acquired a lease.
+- `seamless.backfill.coordinator_completed` – a backfill window finished and the lease was released cleanly.
+- `seamless.backfill.coordinator_failed` – a lease was failed intentionally (for example when a backfill attempt raises).
+
+All events carry the fields called out in the operations checklist:
+
+- **`coordinator_id`** – derived from the distributed coordinator URL host.
+- **`lease_key`** – the canonical lease identifier (`node:interval:start:end:world:requested_as_of`).
+- **`node_id`**, **`interval`**, **`batch_start`**, **`batch_end`** – partition identifiers that drive dashboards.
+- **`world`** and **`requested_as_of`** – present when the request context supplies world governance metadata.
+- **`worker`** – populated from `QMTL_SEAMLESS_WORKER`, `QMTL_WORKER_ID`, or the container hostname; configure one of the environment variables in production to keep dashboards consistent.
+- **`lease_token`** and **`lease_until_ms`** – useful when recovering stuck leases via `scripts/lease_recover.py`.
+- **`completion_ratio`** – mirrors the gauge recorded in Prometheus to track progress per lease.
+- **`reason`** – included on the failed event to annotate why the lease was abandoned.
+
+Dashboards in `operations/monitoring/seamless_v2.jsonnet` already chart
+`backfill_completion_ratio`. Combine those panels with the lifecycle logs above
+to understand which worker handled a batch and whether the lease progressed or
+required manual recovery.
+
 ## Priming History for Warmup
 
 When executing a strategy, the SDK ensures each `StreamInput` has enough history

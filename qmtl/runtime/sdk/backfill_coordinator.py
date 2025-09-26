@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 import os
 import time
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
@@ -14,6 +15,82 @@ from . import runtime
 logger = logging.getLogger(__name__)
 
 _DEFAULT_COORDINATOR_URL_ENV = "QMTL_SEAMLESS_COORDINATOR_URL"
+_WORKER_ID_ENV_VARS: tuple[str, ...] = (
+    "QMTL_SEAMLESS_WORKER",
+    "QMTL_WORKER_ID",
+    "HOSTNAME",
+)
+
+
+def _maybe_int(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _maybe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_worker_id() -> str | None:
+    for env in _WORKER_ID_ENV_VARS:
+        candidate = os.getenv(env, "").strip()
+        if candidate:
+            return candidate
+    return None
+
+
+def _build_log_extra(
+    key: str,
+    *,
+    lease: Lease | None,
+    coordinator_id: str,
+    worker_id: str | None,
+    completion_ratio: Any = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    parts = key.split(":", 5)
+    node_id = parts[0] if parts and parts[0] else "unknown"
+    interval = parts[1] if len(parts) > 1 and parts[1] else None
+    batch_start = parts[2] if len(parts) > 2 else None
+    batch_end = parts[3] if len(parts) > 3 else None
+    world = parts[4] if len(parts) > 4 and parts[4] else None
+    requested_as_of = parts[5] if len(parts) > 5 and parts[5] else None
+
+    extra: dict[str, Any] = {
+        "coordinator_id": coordinator_id,
+        "lease_key": key,
+        "node_id": node_id,
+        "interval": _maybe_int(interval) if interval and interval.isdigit() else interval,
+        "batch_start": _maybe_int(batch_start),
+        "batch_end": _maybe_int(batch_end),
+        "world": world,
+        "requested_as_of": requested_as_of,
+    }
+
+    if worker_id:
+        extra["worker"] = worker_id
+
+    if lease is not None:
+        extra["lease_token"] = lease.token
+        extra["lease_until_ms"] = lease.lease_until_ms
+
+    ratio = _maybe_float(completion_ratio)
+    if ratio is not None:
+        extra["completion_ratio"] = ratio
+
+    if reason is not None:
+        extra["reason"] = reason
+
+    return extra
 
 
 @dataclass
@@ -79,6 +156,10 @@ class DistributedBackfillCoordinator:
         if not url:
             raise ValueError("DistributedBackfillCoordinator requires a base URL")
         self._base_url = url.rstrip("/")
+        parsed = urlparse(self._base_url)
+        coordinator_id = parsed.netloc or parsed.path or self._base_url
+        self._coordinator_id = coordinator_id
+        self._worker_id = _resolve_worker_id()
         self._client_factory = client_factory or self._default_client_factory
 
     def _default_client_factory(self) -> httpx.AsyncClient:
@@ -126,6 +207,16 @@ class DistributedBackfillCoordinator:
 
         lease = Lease(key=key, token=str(token), lease_until_ms=int(lease_until))
         self._record_completion(key, data.get("completion_ratio"))
+        logger.info(
+            "seamless.backfill.coordinator_claimed",
+            extra=_build_log_extra(
+                key,
+                lease=lease,
+                coordinator_id=self._coordinator_id,
+                worker_id=self._worker_id,
+                completion_ratio=data.get("completion_ratio"),
+            ),
+        )
         return lease
 
     async def complete(self, lease: Lease) -> None:
@@ -148,7 +239,19 @@ class DistributedBackfillCoordinator:
         except Exception:  # pragma: no cover - defensive
             data = {}
 
-        self._record_completion(lease.key, data.get("completion_ratio", 1.0))
+        completion_ratio = data.get("completion_ratio", 1.0)
+        self._record_completion(lease.key, completion_ratio)
+        if response.status_code < 400:
+            logger.info(
+                "seamless.backfill.coordinator_completed",
+                extra=_build_log_extra(
+                    lease.key,
+                    lease=lease,
+                    coordinator_id=self._coordinator_id,
+                    worker_id=self._worker_id,
+                    completion_ratio=completion_ratio,
+                ),
+            )
 
     async def fail(self, lease: Lease, reason: str) -> None:
         payload = {"key": lease.key, "token": lease.token, "reason": reason}
@@ -170,7 +273,20 @@ class DistributedBackfillCoordinator:
         except Exception:  # pragma: no cover - defensive
             data = {}
 
-        self._record_completion(lease.key, data.get("completion_ratio", 0.0))
+        completion_ratio = data.get("completion_ratio", 0.0)
+        self._record_completion(lease.key, completion_ratio)
+        if response.status_code < 400:
+            logger.info(
+                "seamless.backfill.coordinator_failed",
+                extra=_build_log_extra(
+                    lease.key,
+                    lease=lease,
+                    coordinator_id=self._coordinator_id,
+                    worker_id=self._worker_id,
+                    completion_ratio=completion_ratio,
+                    reason=reason,
+                ),
+            )
 
 
 __all__ = [
