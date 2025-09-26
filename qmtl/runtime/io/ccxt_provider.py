@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from qmtl.runtime.sdk.auto_backfill import FetcherBackfillStrategy
+from qmtl.runtime.sdk.ohlcv_nodeid import build as _build_ohlcv_node_id
 from qmtl.runtime.io.historyprovider import QuestDBHistoryProvider
 from .ccxt_fetcher import (
     CcxtBackfillConfig,
@@ -135,7 +136,7 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
         if mode == "trades":
             return f"trades:{exchange_id}:{symbol}"
         tf = timeframe or "1m"
-        return f"ohlcv:{exchange_id}:{symbol}:{tf}"
+        return _build_ohlcv_node_id(exchange_id, symbol, tf)
 
     # ------------------------------------------------------------------
     @classmethod
