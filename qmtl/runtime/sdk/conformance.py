@@ -318,6 +318,13 @@ class ConformancePipeline:
         if not len(non_zero):
             return 1
 
+        max_value = int(non_zero.max())
+        # Treat small magnitudes as already being in the desired resolution (seconds).
+        # This prevents arbitrary integers such as [1_000, 4_000, ...] from being
+        # interpreted as millisecond epochs and down-casted unexpectedly.
+        if max_value < 10**10:
+            return 1
+
         unique_sorted = np.unique(non_zero)
         if unique_sorted.size >= 2:
             diffs = np.diff(unique_sorted)
@@ -328,7 +335,6 @@ class ConformancePipeline:
                     if min_diff % divisor == 0:
                         return divisor
 
-        max_value = int(non_zero.max())
         if max_value >= 10**16:
             return 10**9
         if max_value >= 10**13:
@@ -339,4 +345,3 @@ class ConformancePipeline:
 
 
 __all__ = ["ConformancePipeline", "ConformanceReport"]
-
