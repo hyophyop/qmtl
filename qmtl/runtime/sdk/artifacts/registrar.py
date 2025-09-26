@@ -57,15 +57,25 @@ class FileSystemArtifactRegistrar:
 
     @classmethod
     def from_env(cls) -> "FileSystemArtifactRegistrar | None":
-        disabled = str(os.getenv("QMTL_SEAMLESS_ARTIFACTS", "")).strip().lower() in {
-            "0",
-            "false",
-            "off",
-            "no",
-        }
-        if disabled:
+        """Create a registrar from environment configuration.
+
+        Registrars are opt-in so that optional parquet dependencies are not
+        required for every seamless fetch. A registrar will only be created
+        when ``QMTL_SEAMLESS_ARTIFACTS`` is explicitly enabled or when a
+        custom artifact directory is provided.
+        """
+
+        flag = os.getenv("QMTL_SEAMLESS_ARTIFACTS")
+        dir_override = os.getenv("QMTL_SEAMLESS_ARTIFACT_DIR")
+
+        if flag is None and not dir_override:
             return None
-        base = os.getenv("QMTL_SEAMLESS_ARTIFACT_DIR", ".qmtl_seamless_artifacts")
+
+        normalized = str(flag or "").strip().lower()
+        if normalized in {"0", "false", "off", "no"}:
+            return None
+
+        base = dir_override or ".qmtl_seamless_artifacts"
         return cls(base)
 
     def _target_dir(self, node_id: str, interval: int, fingerprint: str) -> Path:
