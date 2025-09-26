@@ -1,14 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol, AsyncIterator, Optional, Callable, Awaitable, TypeVar, Any
+from typing import (
+    Protocol,
+    AsyncIterator,
+    Optional,
+    Callable,
+    Awaitable,
+    TypeVar,
+    Any,
+    Sequence,
+)
 from abc import ABC
+from dataclasses import dataclass
 import pandas as pd
 from enum import Enum
 import asyncio
 import logging
 import os
 import time
+import hashlib
+import json
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -25,7 +36,7 @@ from .backfill_coordinator import (
 )
 from .sla import SLAPolicy
 from .exceptions import SeamlessSLAExceeded
-from qmtl.runtime.io.artifact import ArtifactRegistrar, ArtifactPublication
+from .artifacts import ArtifactRegistrar, ArtifactPublication
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +45,35 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+CONFORMANCE_VERSION = "v1"
+
+
 @dataclass(slots=True)
 class SeamlessFetchMetadata:
-    """Metadata describing the outcome of a Seamless fetch request."""
-
-    node_id: str
-    interval: int
-    requested_range: tuple[int, int]
-    rows: int
+    dataset_fingerprint: str | None
+    as_of: int | None
     coverage_bounds: tuple[int, int] | None
     conformance_flags: dict[str, int]
     conformance_warnings: tuple[str, ...]
-    artifact: ArtifactPublication | None = None
+    manifest_uri: str | None = None
+
+
+@dataclass(slots=True)
+class SeamlessFetchResult:
+    frame: pd.DataFrame
+    metadata: SeamlessFetchMetadata
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self.frame, item)
+
+    def __getitem__(self, key: Any) -> Any:
+        return self.frame.__getitem__(key)
+
+    def __iter__(self):
+        return iter(self.frame)
+
+    def __len__(self) -> int:
+        return len(self.frame)
 
 
 class DataAvailabilityStrategy(Enum):
@@ -170,7 +198,8 @@ class SeamlessDataProvider(ABC):
         coordinator: Optional[BackfillCoordinator] = None,
         sla: Optional[SLAPolicy] = None,
         partial_ok: bool = False,
-        artifact_registrar: ArtifactRegistrar | None = None,
+        registrar: ArtifactRegistrar | None = None,
+        stabilization_bars: int = 2,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -184,7 +213,9 @@ class SeamlessDataProvider(ABC):
         self._sla = sla
         self._partial_ok = bool(partial_ok)
         self._last_conformance_report: Optional[ConformanceReport] = None
-        self._artifact_registrar = artifact_registrar
+        self._registrar = registrar
+        self._stabilization_bars = max(0, int(stabilization_bars))
+        # Preserve last fetch metadata for introspection
         self._last_fetch_metadata: Optional[SeamlessFetchMetadata] = None
 
         # Internal state
@@ -245,16 +276,17 @@ class SeamlessDataProvider(ABC):
                 start, end, node_id=node_id, interval=interval, sla_tracker=tracker
             )
 
-        if tracker:
-            tracker.observe_total()
-        await self._finalize_fetch(
-            frame=result,
+        response = self._finalize_response(
+            result,
+            start=start,
+            end=end,
             node_id=node_id,
             interval=interval,
-            requested_start=start,
-            requested_end=end,
         )
-        return result
+
+        if tracker:
+            tracker.observe_total()
+        return response
     
     async def coverage(
         self, *, node_id: str, interval: int
@@ -520,28 +552,8 @@ class SeamlessDataProvider(ABC):
         # Combine all frames and sort by timestamp
         if result_frames:
             combined = pd.concat(result_frames, ignore_index=True)
-            if 'ts' in combined.columns:
-                combined = combined.sort_values('ts')
-            # Run through conformance pipeline if provided (no-op otherwise)
-            try:
-                if self._conformance:
-                    combined, report = self._conformance.normalize(
-                        combined,
-                        schema=None,
-                        interval=interval,
-                    )
-                    self._last_conformance_report = report
-                    sdk_metrics.observe_conformance_report(
-                        node_id=node_id,
-                        flags=report.flags_counts,
-                        warnings=report.warnings,
-                    )
-                    if (report.warnings or report.flags_counts) and not self._partial_ok:
-                        raise ConformancePipelineError(report)
-            except ConformancePipelineError:
-                raise
-            except Exception:  # pragma: no cover - defensive, keep behavior intact
-                pass
+            if "ts" in combined.columns:
+                combined = combined.sort_values("ts").reset_index(drop=True)
             return combined
 
         return pd.DataFrame()
@@ -619,75 +631,223 @@ class SeamlessDataProvider(ABC):
             start, end, node_id=node_id, interval=interval, sla_tracker=sla_tracker
         )
 
-    async def _finalize_fetch(
-        self,
-        *,
-        frame: Any,
-        node_id: str,
-        interval: int,
-        requested_start: int,
-        requested_end: int,
-    ) -> None:
-        coverage: tuple[int, int] | None = None
-        rows = 0
-        artifact: ArtifactPublication | None = None
-
-        if isinstance(frame, pd.DataFrame):
-            rows = int(frame.shape[0])
-            if not frame.empty and "ts" in frame.columns:
-                try:
-                    coverage = (int(frame["ts"].min()), int(frame["ts"].max()))
-                except Exception:
-                    coverage = None
-                artifact = await self._publish_artifact(
-                    frame,
-                    node_id=node_id,
-                    interval=interval,
-                    requested_start=requested_start,
-                    requested_end=requested_end,
-                )
-
-        report = self._last_conformance_report
-        flags = dict(report.flags_counts) if report else {}
-        warnings = tuple(report.warnings) if report else ()
-
-        self._last_fetch_metadata = SeamlessFetchMetadata(
-            node_id=node_id,
-            interval=interval,
-            requested_range=(requested_start, requested_end),
-            rows=rows,
-            coverage_bounds=coverage,
-            conformance_flags=flags,
-            conformance_warnings=warnings,
-            artifact=artifact,
-        )
-
-    async def _publish_artifact(
+    # ------------------------------------------------------------------
+    def _finalize_response(
         self,
         frame: pd.DataFrame,
         *,
+        start: int,
+        end: int,
         node_id: str,
         interval: int,
-        requested_start: int,
-        requested_end: int,
-    ) -> ArtifactPublication | None:
-        if (
-            self._artifact_registrar is None
-            or frame.empty
-            or "ts" not in frame.columns
-        ):
-            return None
-        try:
-            return await self._artifact_registrar.publish(
-                frame,
-                node_id=node_id,
-                interval=interval,
-                conformance_report=self._last_conformance_report,
-                requested_range=(requested_start, requested_end),
+    ) -> SeamlessFetchResult:
+        if not isinstance(frame, pd.DataFrame):
+            frame = pd.DataFrame()
+
+        if frame.empty:
+            metadata = SeamlessFetchMetadata(
+                dataset_fingerprint=None,
+                as_of=None,
+                coverage_bounds=None,
+                conformance_flags={},
+                conformance_warnings=(),
+                manifest_uri=None,
             )
-        except Exception:  # pragma: no cover - defensive logging only
-            logger.exception("artifact publication failed for node %s", node_id)
+            self._last_conformance_report = None
+            frame.attrs = {
+                "dataset_fingerprint": None,
+                "as_of": None,
+                "coverage_bounds": None,
+                "conformance_flags": {},
+                "conformance_warnings": (),
+                "manifest_uri": None,
+            }
+            return SeamlessFetchResult(frame, metadata)
+
+        normalized = frame
+        report: ConformanceReport | None = None
+        if self._conformance:
+            try:
+                normalized, report = self._conformance.normalize(
+                    frame,
+                    schema=None,
+                    interval=interval,
+                )
+            except ConformancePipelineError:
+                raise
+            except Exception:  # pragma: no cover - defensive guard
+                report = ConformanceReport()
+                normalized = frame.copy()
+        else:
+            normalized = frame.copy()
+            report = None
+
+        if report is None:
+            report = ConformanceReport()
+        self._last_conformance_report = report
+
+        if self._conformance:
+            try:
+                sdk_metrics.observe_conformance_report(
+                    node_id=node_id,
+                    flags=report.flags_counts,
+                    warnings=report.warnings,
+                )
+            except Exception:  # pragma: no cover - best effort metrics
+                pass
+
+        if (report.warnings or report.flags_counts) and not self._partial_ok:
+            raise ConformancePipelineError(report)
+
+        stabilized = self._stabilize_frame(normalized)
+
+        if stabilized.empty:
+            metadata = SeamlessFetchMetadata(
+                dataset_fingerprint=None,
+                as_of=None,
+                coverage_bounds=None,
+                conformance_flags=dict(report.flags_counts),
+                conformance_warnings=report.warnings,
+                manifest_uri=None,
+            )
+            stabilized.attrs = {
+                "dataset_fingerprint": None,
+                "as_of": None,
+                "coverage_bounds": None,
+                "conformance_flags": dict(report.flags_counts),
+                "conformance_warnings": report.warnings,
+                "manifest_uri": None,
+            }
+            return SeamlessFetchResult(stabilized, metadata)
+
+        coverage_bounds = self._coverage_bounds(stabilized)
+        metadata_payload = {
+            "node_id": node_id,
+            "interval": int(interval),
+            "coverage_bounds": coverage_bounds,
+            "requested_bounds": (int(start), int(end)),
+            "conformance_version": CONFORMANCE_VERSION,
+        }
+        fingerprint = self._compute_dataset_fingerprint(stabilized, metadata_payload)
+        as_of = int(time.time())
+        manifest_uri: str | None = None
+
+        publication: ArtifactPublication | None = None
+        if self._registrar and coverage_bounds is not None:
+            try:
+                publication = self._registrar.publish(
+                    stabilized,
+                    node_id=node_id,
+                    interval=interval,
+                    coverage_bounds=coverage_bounds,
+                    fingerprint=fingerprint,
+                    as_of=as_of,
+                    conformance_flags=report.flags_counts,
+                    conformance_warnings=report.warnings,
+                    request_window=(int(start), int(end)),
+                )
+            except Exception:  # pragma: no cover - publication failures shouldn't crash
+                publication = None
+
+        if publication:
+            fingerprint = publication.dataset_fingerprint
+            as_of = publication.as_of
+            coverage_bounds = publication.coverage_bounds
+            manifest_uri = publication.manifest_uri
+
+        metadata = SeamlessFetchMetadata(
+            dataset_fingerprint=fingerprint,
+            as_of=as_of,
+            coverage_bounds=coverage_bounds,
+            conformance_flags=dict(report.flags_counts),
+            conformance_warnings=report.warnings,
+            manifest_uri=manifest_uri,
+        )
+
+        attrs = dict(stabilized.attrs)
+        attrs.update(
+            {
+                "dataset_fingerprint": metadata.dataset_fingerprint,
+                "as_of": metadata.as_of,
+                "coverage_bounds": metadata.coverage_bounds,
+                "conformance_flags": metadata.conformance_flags,
+                "conformance_warnings": metadata.conformance_warnings,
+                "manifest_uri": metadata.manifest_uri,
+            }
+        )
+        stabilized.attrs = attrs
+
+        # expose last fetch metadata for callers
+        self._last_fetch_metadata = metadata
+        return SeamlessFetchResult(stabilized, metadata)
+
+    def _stabilize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+        if self._stabilization_bars <= 0:
+            return frame.reset_index(drop=True)
+        if len(frame) <= self._stabilization_bars:
+            return frame.iloc[0:0].copy()
+        stabilized = frame.iloc[:-self._stabilization_bars].copy()
+        stabilized.reset_index(drop=True, inplace=True)
+        return stabilized
+
+    def _coverage_bounds(self, frame: pd.DataFrame) -> tuple[int, int] | None:
+        if frame.empty or "ts" not in frame.columns:
             return None
+        start = int(frame["ts"].iloc[0])
+        end = int(frame["ts"].iloc[-1])
+        return (start, end)
+
+    def _canonicalize_value(self, value: Any) -> Any:
+        if isinstance(value, (int, float, str, bool)):
+            return value
+        if pd.isna(value):
+            return None
+        if isinstance(value, (pd.Timestamp, pd.Timedelta)):
+            return int(value.value)
+        if hasattr(value, "item"):
+            try:
+                return value.item()
+            except Exception:  # pragma: no cover - fallback to string
+                pass
+        return str(value)
+
+    def _canonicalize_frame(self, frame: pd.DataFrame) -> list[dict[str, Any]]:
+        columns = list(frame.columns)
+        if "ts" in columns:
+            columns = ["ts"] + [col for col in columns if col != "ts"]
+        else:
+            columns.sort()
+        records: list[dict[str, Any]] = []
+        for _, row in frame[columns].iterrows():
+            record = {col: self._canonicalize_value(row[col]) for col in columns}
+            records.append(record)
+        return records
+
+    def _normalize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        normalized: dict[str, Any] = {}
+        for key, value in metadata.items():
+            if isinstance(value, dict):
+                normalized[key] = self._normalize_metadata(value)
+            elif isinstance(value, (list, tuple)):
+                normalized[key] = [self._canonicalize_value(v) for v in value]
+            else:
+                normalized[key] = self._canonicalize_value(value)
+        return normalized
+
+    def _compute_dataset_fingerprint(
+        self, frame: pd.DataFrame, metadata: dict[str, Any]
+    ) -> str:
+        payload = {
+            "frame": self._canonicalize_frame(frame),
+            "metadata": self._normalize_metadata(metadata),
+        }
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+        digest = hashlib.sha256(serialized).hexdigest()
+        return f"lake:sha256:{digest}"
 
     async def _start_background_backfill(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -957,5 +1117,6 @@ __all__ = [
     "LiveDataFeed",
     "ConformancePipelineError",
     "SeamlessDataProvider",
+    "SeamlessFetchResult",
     "SeamlessFetchMetadata",
 ]
