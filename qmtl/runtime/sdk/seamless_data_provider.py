@@ -1130,8 +1130,10 @@ class SeamlessDataProvider(ABC):
             return value
         if pd.isna(value):
             return None
-        if isinstance(value, (pd.Timestamp, pd.Timedelta)):
-            return int(value.value)
+        if isinstance(value, pd.Timestamp):
+            return int(value.value // 10**9)
+        if isinstance(value, pd.Timedelta):
+            return int(value.value // 10**9)
         if hasattr(value, "item"):
             try:
                 return value.item()

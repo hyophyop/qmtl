@@ -22,6 +22,7 @@ class ConformancePipeline:
     """Normalize Seamless provider frames and surface data quality findings."""
 
     _TS_COLUMN = "ts"
+    _NS_PER_SECOND = 10**9
 
     _FLAG_DUPLICATE_TS = "duplicate_ts"
     _FLAG_GAP = "gap"
@@ -197,12 +198,14 @@ class ConformancePipeline:
         if isinstance(dtype, pd.DatetimeTZDtype):
             timezone_adjusted = len(ts)
             converted = ts.dt.tz_convert("UTC")
-            df[self._TS_COLUMN] = converted.astype("int64") // 10**6
+            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
             cast_rows = len(df)
         elif pd.api.types.is_datetime64_dtype(dtype):
-            df[self._TS_COLUMN] = ts.astype("int64") // 10**6
+            df[self._TS_COLUMN] = self._timestamps_to_seconds(ts)
             cast_rows = len(df)
-        elif not pd.api.types.is_integer_dtype(dtype):
+        elif pd.api.types.is_integer_dtype(dtype):
+            cast_rows = self._normalize_integer_epoch(df, flags, warnings)
+        else:
             converted = pd.to_datetime(ts, utc=True, errors="coerce")
             invalid_mask = converted.isna()
             if invalid_mask.any():
@@ -216,7 +219,7 @@ class ConformancePipeline:
                 df.drop(index=df.index[invalid_mask], inplace=True)
                 df.reset_index(drop=True, inplace=True)
                 converted = converted[~invalid_mask]
-            df[self._TS_COLUMN] = converted.astype("int64") // 10**6
+            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
             cast_rows = len(df)
             if isinstance(dtype, pd.DatetimeTZDtype) or getattr(dtype, "tz", None) is not None:
                 timezone_adjusted = len(df)
@@ -271,6 +274,57 @@ class ConformancePipeline:
             warnings.append(
                 f"detected {misaligned} gaps with misaligned boundaries for interval={interval}"
             )
+
+    def _timestamps_to_seconds(self, series: pd.Series) -> pd.Series:
+        as_int = series.astype("int64", copy=False)
+        return (as_int // self._NS_PER_SECOND).astype("int64", copy=False)
+
+    def _normalize_integer_epoch(
+        self,
+        df: pd.DataFrame,
+        flags: dict[str, int],
+        warnings: list[str],
+    ) -> int:
+        ts = df[self._TS_COLUMN]
+        invalid_mask = pd.isna(ts)
+        if invalid_mask.any():
+            invalid_count = int(invalid_mask.sum())
+            warnings.append(f"dropped {invalid_count} rows with invalid timestamps")
+            flags[self._FLAG_INVALID_TS] = (
+                flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
+            )
+            df.drop(index=df.index[invalid_mask], inplace=True)
+            df.reset_index(drop=True, inplace=True)
+            if df.empty:
+                return 0
+            ts = df[self._TS_COLUMN]
+
+        normalized = ts.astype("int64", copy=False)
+        divisor = self._infer_epoch_divisor(normalized)
+        cast_rows = 0
+        if divisor != 1:
+            normalized = normalized // divisor
+            cast_rows = len(df)
+        df[self._TS_COLUMN] = normalized
+        return cast_rows
+
+    def _infer_epoch_divisor(self, series: pd.Series) -> int:
+        if series.empty:
+            return 1
+        values = np.abs(series.to_numpy(copy=False))
+        if not len(values):
+            return 1
+        non_zero = values[values > 0]
+        if not len(non_zero):
+            return 1
+        max_value = int(non_zero.max())
+        if max_value >= 10**17:
+            return 10**9
+        if max_value >= 10**14:
+            return 10**6
+        if max_value >= 10**11:
+            return 10**3
+        return 1
 
 
 __all__ = ["ConformancePipeline", "ConformanceReport"]
