@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 import time
 from typing import Optional, Any
+import logging
 from types import MethodType
 
 import pandas as pd
@@ -1052,6 +1053,89 @@ async def test_storage_backfill_materializes_and_reads_back() -> None:
     assert storage_provider.fetched == [(0, 100, "n", 10)]
     assert fetcher.calls == 0
     assert not df.empty and set(df["ts"]) == {0, 100}
+
+
+@pytest.mark.asyncio
+async def test_data_fetcher_backfiller_logs_structured_success(caplog) -> None:
+    storage_provider = _FakeStorageProvider()
+
+    class _StorageDS(StorageDataSource):
+        def __init__(self, sp):
+            self.storage_provider = sp
+            self.priority = DataSourcePriority.STORAGE
+
+        async def is_available(self, *args, **kwargs):  # pragma: no cover
+            return False
+
+        async def fetch(self, *args, **kwargs):  # pragma: no cover
+            return pd.DataFrame()
+
+        async def coverage(self, *args, **kwargs):  # pragma: no cover
+            return []
+
+    storage_ds = _StorageDS(storage_provider)
+    fetcher = _FakeFetcher()
+    backfiller = DataFetcherAutoBackfiller(fetcher)
+
+    caplog.set_level(logging.INFO, logger="qmtl.runtime.io.seamless_provider")
+
+    await backfiller.backfill(0, 100, node_id="n", interval=10, target_storage=storage_ds)
+
+    attempt_logs = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "seamless.backfill.attempt"
+    ]
+    success_logs = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "seamless.backfill.succeeded"
+    ]
+
+    assert len(attempt_logs) == 1
+    assert len(success_logs) == 1
+
+    attempt_record = attempt_logs[0]
+    success_record = success_logs[0]
+    expected_batch_id = "n:10:0:100"
+
+    assert attempt_record.batch_id == expected_batch_id
+    assert attempt_record.attempt == 1
+    assert attempt_record.source == "storage"
+
+    assert success_record.batch_id == expected_batch_id
+    assert success_record.attempt == 1
+    assert success_record.source == "storage"
+
+
+class _FailingFetcher(_FakeFetcher):
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        raise RuntimeError("boom")
+
+
+@pytest.mark.asyncio
+async def test_data_fetcher_backfiller_logs_failure(caplog) -> None:
+    fetcher = _FailingFetcher()
+    backfiller = DataFetcherAutoBackfiller(fetcher)
+
+    caplog.set_level(logging.INFO, logger="qmtl.runtime.io.seamless_provider")
+
+    with pytest.raises(RuntimeError):
+        await backfiller.backfill(0, 10, node_id="n", interval=5)
+
+    failure_logs = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "seamless.backfill.failed"
+    ]
+
+    assert len(failure_logs) == 1
+    failure_record = failure_logs[0]
+
+    assert failure_record.batch_id == "n:5:0:10"
+    assert failure_record.attempt == 1
+    assert failure_record.source == "fetcher"
+    assert failure_record.error == "boom"
 
 
 @pytest.mark.asyncio

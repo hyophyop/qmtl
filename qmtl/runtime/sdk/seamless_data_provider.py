@@ -613,7 +613,9 @@ class SeamlessDataProvider(ABC):
 
         async def _chunk_worker(index: int, chunk_start: int, chunk_end: int) -> None:
             attempt = 0
+            batch_id = f"{node_id}:{interval}:{chunk_start}:{chunk_end}"
             while True:
+                current_attempt = attempt + 1
                 try:
                     coro = self.backfiller.backfill(
                         chunk_start,
@@ -621,6 +623,8 @@ class SeamlessDataProvider(ABC):
                         node_id=node_id,
                         interval=interval,
                         target_storage=target_storage,
+                        attempt=current_attempt,
+                        batch_id=batch_id,
                     )
                     if sla_tracker is not None:
                         frame = await sla_tracker.observe_async(
@@ -634,9 +638,9 @@ class SeamlessDataProvider(ABC):
                         results[index] = frame
                     return
                 except Exception as exc:
-                    attempt += 1
-                    if attempt >= max_attempts:
+                    if current_attempt >= max_attempts:
                         raise
+                    attempt = current_attempt
                     sdk_metrics.observe_backfill_retry(node_id, interval)
                     logger.warning(
                         "seamless.backfill.retry",
@@ -645,7 +649,8 @@ class SeamlessDataProvider(ABC):
                             "interval": interval,
                             "start": chunk_start,
                             "end": chunk_end,
-                            "attempt": attempt,
+                            "batch_id": batch_id,
+                            "attempt": current_attempt,
                             "error": str(exc),
                         },
                     )

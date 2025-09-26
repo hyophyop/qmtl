@@ -208,6 +208,32 @@ Dashboards in `operations/monitoring/seamless_v2.jsonnet` already chart
 to understand which worker handled a batch and whether the lease progressed or
 required manual recovery.
 
+## Auto Backfill Batch Lifecycle Logs
+
+When `DataFetcherAutoBackfiller` repairs gaps without a coordinator, the
+runtime records a structured lifecycle for each batch. These events surface in
+the same namespace so dashboards can correlate coordinator-driven and direct
+repairs:
+
+```text
+seamless.backfill.attempt {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 1, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "storage"}
+seamless.backfill.succeeded {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 1, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "storage"}
+seamless.backfill.failed {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 2, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "fetcher", "error": "timeout"}
+```
+
+- **`batch_id`** – canonical identifier `node_id:interval:start:end` generated
+  by the SDK so retries can be grouped.
+- **`attempt`** – the attempt counter supplied by the retry engine. A value of
+  `1` indicates the first try; additional attempts increment monotonically.
+- **`source`** – `storage` when the batch was materialized through
+  `fill_missing`/`fetch`, or `fetcher` when data was pulled directly from the
+  external provider.
+- **`error`** – present on failure events with the string representation of the
+  raised exception.
+
+Dashboards can aggregate on `batch_id` and `attempt` to expose retry rates while
+keeping coordinator-driven telemetry untouched.
+
 ## Priming History for Warmup
 
 When executing a strategy, the SDK ensures each `StreamInput` has enough history
