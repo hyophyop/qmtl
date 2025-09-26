@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import time
 from typing import Optional, Any
+from types import MethodType
 
 import pandas as pd
 import pytest
@@ -15,6 +17,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     DataSourcePriority,
     ConformancePipelineError,
     SeamlessDomainPolicyError,
+    BackfillConfig,
 )
 from qmtl.runtime.io.seamless_provider import (
     StorageDataSource,
@@ -341,6 +344,39 @@ class _CountingBackfiller:
         yield pd.DataFrame()
 
 
+class _ConcurrentBackfiller(_CountingBackfiller):
+    """Backfiller that tracks the peak number of concurrent executions."""
+
+    def __init__(self, storage_source: _StaticSource) -> None:
+        super().__init__(storage_source)
+        self.max_parallel = 0
+        self._inflight = 0
+
+    async def backfill(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: Optional[DataSource] = None,
+    ) -> pd.DataFrame:
+        self._inflight += 1
+        try:
+            self.max_parallel = max(self.max_parallel, self._inflight)
+            return await super().backfill(
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                target_storage=target_storage,
+            )
+        finally:
+            # Yield to allow other tasks to run before marking completion
+            await asyncio.sleep(0.01)
+            self._inflight -= 1
+
+
 class _RecordingBackfiller:
     """Minimal backfiller capturing invocations for background tests."""
 
@@ -395,6 +431,64 @@ class _FailingBackfiller(_RecordingBackfiller):
             target_storage=target_storage,
         )
         raise self._error
+
+
+class _BlockingBackfiller(_RecordingBackfiller):
+    """Backfiller that waits on an external event before completing."""
+
+    def __init__(self, gate: asyncio.Event) -> None:
+        super().__init__()
+        self._gate = gate
+
+    async def backfill(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: Optional[DataSource] = None,
+    ) -> pd.DataFrame:
+        await super().backfill(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            target_storage=target_storage,
+        )
+        await self._gate.wait()
+        return pd.DataFrame([{"ts": start}, {"ts": end}])
+
+
+class _FlakyBackfiller(_RecordingBackfiller):
+    """Backfiller that fails a fixed number of times before succeeding."""
+
+    def __init__(self, storage: _StaticSource, fail_times: int) -> None:
+        super().__init__()
+        self._storage = storage
+        self._fail_times = fail_times
+
+    async def backfill(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: Optional[DataSource] = None,
+    ) -> pd.DataFrame:
+        await super().backfill(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            target_storage=target_storage,
+        )
+        self._storage.add_range(start, end)
+        if self._fail_times > 0:
+            self._fail_times -= 1
+            raise RuntimeError("transient_backfill_failure")
+        return pd.DataFrame([{"ts": start}, {"ts": end}])
 
 
 class _RecordingRegistrar:
@@ -576,6 +670,59 @@ async def test_background_backfill_handles_lease_completion_errors() -> None:
     assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
 
 
+@pytest.mark.asyncio
+async def test_backfill_single_flight_ttl_expiration_allows_new_claim(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    gate = asyncio.Event()
+    calls = 0
+    backfiller = _RecordingBackfiller()
+    config = BackfillConfig(single_flight_ttl_ms=60_000, distributed_lease_ttl_ms=60_000)
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        enable_background_backfill=True,
+        backfill_config=config,
+    )
+    provider._coordinator = None  # type: ignore[attr-defined]
+
+    async def _stub_execute(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        target_storage: DataSource | None,
+        sla_tracker: "_SLATracker | None" = None,
+        collect_results: bool = False,
+    ) -> list[pd.DataFrame]:
+        nonlocal calls
+        calls += 1
+        await gate.wait()
+        return []
+
+    provider._execute_backfill_range = MethodType(_stub_execute, provider)  # type: ignore[attr-defined]
+
+    await provider._start_background_backfill(0, 100, node_id="n", interval=10)
+    await asyncio.sleep(0)
+    assert calls == 1
+
+    # TTL not yet expired → second invocation dedups while first still running
+    await provider._start_background_backfill(0, 100, node_id="n", interval=10)
+    await asyncio.sleep(0)
+    assert calls == 1
+
+    expiry_time = time.monotonic() + (config.single_flight_ttl_ms / 1000.0) + 0.05
+    provider._cleanup_expired_backfills(now=expiry_time)  # type: ignore[attr-defined]
+
+    await provider._start_background_backfill(0, 100, node_id="n", interval=10)
+    await asyncio.sleep(0)
+    assert calls == 2
+
+    gate.set()
+
+
 class _FakeFetcher:
     def __init__(self):
         self.calls = 0
@@ -666,6 +813,114 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
     latency_key = ("n", "10", "default")
     assert sdk_metrics.gap_repair_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_backfill_config_enforces_concurrency_cap() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _ConcurrentBackfiller(storage)
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        enable_background_backfill=False,
+        backfill_config=BackfillConfig(window_bars=1, max_concurrent_requests=2, retry_max=1),
+    )
+
+    ok = await provider.ensure_data_available(0, 100, node_id="n", interval=10)
+
+    assert ok is True
+    # With window_bars=1 and interval=10 we expect 10 chunks
+    assert len(backfiller.calls) == 10
+    assert backfiller.max_parallel <= 2
+
+
+def test_backfill_config_sync_mode_forces_sync_execution() -> None:
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _RecordingBackfiller()
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        enable_background_backfill=True,
+        backfill_config=BackfillConfig(mode="sync"),
+    )
+
+    assert provider.enable_background_backfill is False
+
+
+@pytest.mark.asyncio
+async def test_backfill_retry_respects_jitter_toggle(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _FlakyBackfiller(storage, fail_times=1)
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        enable_background_backfill=False,
+        backfill_config=BackfillConfig(
+            window_bars=1,
+            retry_max=2,
+            retry_base_backoff_ms=10,
+            retry_jitter=False,
+        ),
+    )
+
+    called = False
+
+    def _flag_uniform(*args: float, **kwargs: float) -> float:
+        nonlocal called
+        called = True
+        return 0.0
+
+    monkeypatch.setattr(seamless_module.random, "uniform", _flag_uniform)
+
+    ok = await provider.ensure_data_available(0, 20, node_id="n", interval=10)
+
+    assert ok is True
+    assert called is False
+    retry_key = ("n", "10")
+    assert sdk_metrics.backfill_retry_total._vals[retry_key] == 1  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_backfill_retry_applies_jitter(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([], DataSourcePriority.STORAGE)
+    backfiller = _FlakyBackfiller(storage, fail_times=1)
+    provider = _DummyProvider(
+        storage_source=storage,
+        backfiller=backfiller,
+        enable_background_backfill=False,
+        backfill_config=BackfillConfig(
+            window_bars=1,
+            retry_max=2,
+            retry_base_backoff_ms=10,
+            retry_jitter=True,
+        ),
+    )
+
+    jitter_calls: list[tuple[float, float]] = []
+    monkeypatch.setattr(
+        seamless_module.random,
+        "uniform",
+        lambda a, b: jitter_calls.append((a, b)) or 0.0,
+    )
+
+    original_sleep = seamless_module.asyncio.sleep
+    sleep_durations: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleep_durations.append(delay)
+        await original_sleep(0)
+
+    monkeypatch.setattr(seamless_module.asyncio, "sleep", _fake_sleep)
+
+    ok = await provider.ensure_data_available(0, 20, node_id="n", interval=10)
+
+    assert ok is True
+    assert jitter_calls, "expected jitter sampling to occur"
+    assert sleep_durations, "expected retry backoff sleep"
+    assert pytest.approx(sleep_durations[0], rel=0.05) == 0.01
 
 
 @pytest.mark.asyncio
@@ -920,6 +1175,7 @@ async def test_observability_snapshot_captures_backfill_failure(caplog) -> None:
     provider = _DummyProvider(
         storage_source=_StaticSource([], DataSourcePriority.STORAGE),
         backfiller=backfiller,
+        backfill_config=BackfillConfig(retry_max=1, retry_base_backoff_ms=0),
     )
 
     with caplog.at_level("ERROR", logger="qmtl.runtime.sdk.seamless_data_provider"):
@@ -955,6 +1211,7 @@ async def test_background_backfill_failure_marks_lease_failed() -> None:
         storage_source=storage,
         backfiller=backfiller,
         coordinator=coordinator,
+        backfill_config=BackfillConfig(retry_max=1, retry_base_backoff_ms=0),
     )
 
     ok = await provider.ensure_data_available(0, 100, node_id="node", interval=10)
@@ -963,6 +1220,7 @@ async def test_background_backfill_failure_marks_lease_failed() -> None:
     # Allow background task to run
     for _ in range(3):
         await asyncio.sleep(0)
+    await asyncio.sleep(0.01)
 
     assert len(coordinator.claims) == 1
     assert not coordinator.completes
