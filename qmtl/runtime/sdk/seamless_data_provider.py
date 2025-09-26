@@ -11,6 +11,7 @@ from typing import (
     Sequence,
 )
 from abc import ABC
+from collections import defaultdict, deque
 from dataclasses import dataclass
 import pandas as pd
 from enum import Enum
@@ -47,6 +48,9 @@ T = TypeVar("T")
 
 
 CONFORMANCE_VERSION = "v1"
+
+
+_FINGERPRINT_HISTORY_LIMIT = 32
 
 
 @dataclass(slots=True)
@@ -248,6 +252,10 @@ class SeamlessDataProvider(ABC):
 
         # Internal state
         self._active_backfills: dict[str, bool] = {}
+        self._fingerprint_window_limit = _FINGERPRINT_HISTORY_LIMIT
+        self._fingerprint_index: dict[tuple[str, int], deque[str]] = defaultdict(
+            self._create_fingerprint_window
+        )
 
     @property
     def last_conformance_report(self) -> Optional[ConformanceReport]:
@@ -270,10 +278,13 @@ class SeamlessDataProvider(ABC):
                 logger.warning("seamless.coordinator.init_failed", exc_info=exc)
         return InMemoryBackfillCoordinator()
 
-    def _build_sla_tracker(self, node_id: str) -> "_SLATracker | None":
+    def _build_sla_tracker(self, node_id: str, interval: int) -> "_SLATracker | None":
         if not self._sla:
             return None
-        return _SLATracker(self._sla, node_id=node_id)
+        return _SLATracker(self._sla, node_id=node_id, interval=int(interval))
+
+    def _create_fingerprint_window(self) -> deque[str]:
+        return deque(maxlen=self._fingerprint_window_limit)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -285,7 +296,7 @@ class SeamlessDataProvider(ABC):
         """
         self._last_conformance_report = None
         self._last_fetch_metadata = None
-        tracker = self._build_sla_tracker(node_id)
+        tracker = self._build_sla_tracker(node_id, interval)
 
         if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
             result = await self._fetch_fail_fast(
@@ -366,7 +377,7 @@ class SeamlessDataProvider(ABC):
         If data is missing and auto-backfill is enabled, trigger backfill.
         Returns True if data will be available after this call.
         """
-        tracker = sla_tracker or self._build_sla_tracker(node_id)
+        tracker = sla_tracker or self._build_sla_tracker(node_id, interval)
 
         # Check current availability
         if tracker:
@@ -440,6 +451,7 @@ class SeamlessDataProvider(ABC):
 
                         try:
                             sdk_metrics.observe_backfill_start(node_id, interval)
+                            gap_started = time.monotonic()
                             backfill_coro = self.backfiller.backfill(
                                 missing_start,
                                 missing_end,
@@ -455,6 +467,12 @@ class SeamlessDataProvider(ABC):
                                 )
                             else:
                                 await backfill_coro
+                            repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
+                            sdk_metrics.observe_gap_repair_latency(
+                                node_id=node_id,
+                                interval=interval,
+                                duration_ms=repair_duration_ms,
+                            )
                             sdk_metrics.observe_backfill_complete(
                                 node_id, interval, missing_end
                             )
@@ -574,6 +592,7 @@ class SeamlessDataProvider(ABC):
             for range_start, range_end in remaining_ranges:
                 try:
                     sdk_metrics.observe_backfill_start(node_id, interval)
+                    gap_started = time.monotonic()
                     backfill_coro = self.backfiller.backfill(
                         range_start,
                         range_end,
@@ -589,6 +608,12 @@ class SeamlessDataProvider(ABC):
                         )
                     else:
                         backfilled = await backfill_coro
+                    repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
+                    sdk_metrics.observe_gap_repair_latency(
+                        node_id=node_id,
+                        interval=interval,
+                        duration_ms=repair_duration_ms,
+                    )
                     if not backfilled.empty:
                         result_frames.append(backfilled)
                     sdk_metrics.observe_backfill_complete(node_id, interval, range_end)
@@ -777,9 +802,11 @@ class SeamlessDataProvider(ABC):
         as_of = int(time.time())
         manifest_uri: str | None = None
 
+        approx_bytes = int(stabilized.memory_usage(deep=True).sum()) if not stabilized.empty else 0
         publication: ArtifactPublication | None = None
         if self._registrar and coverage_bounds is not None:
             try:
+                publish_started = time.monotonic()
                 publication = self._registrar.publish(
                     stabilized,
                     node_id=node_id,
@@ -791,6 +818,12 @@ class SeamlessDataProvider(ABC):
                     conformance_warnings=report.warnings,
                     request_window=(int(start), int(end)),
                 )
+                publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
+                sdk_metrics.observe_artifact_publish_latency(
+                    node_id=node_id,
+                    interval=interval,
+                    duration_ms=publish_elapsed_ms,
+                )
             except Exception:  # pragma: no cover - publication failures shouldn't crash
                 publication = None
 
@@ -799,6 +832,19 @@ class SeamlessDataProvider(ABC):
             as_of = publication.as_of
             coverage_bounds = publication.coverage_bounds
             manifest_uri = publication.manifest_uri
+            bytes_written = approx_bytes
+            data_uri = publication.data_uri
+            if data_uri:
+                try:
+                    bytes_written = max(bytes_written, int(os.path.getsize(data_uri)))
+                except OSError:
+                    pass
+            if bytes_written > 0:
+                sdk_metrics.observe_artifact_bytes_written(
+                    node_id=node_id,
+                    interval=interval,
+                    bytes_written=bytes_written,
+                )
 
         metadata = SeamlessFetchMetadata(
             node_id=node_id,
@@ -813,6 +859,23 @@ class SeamlessDataProvider(ABC):
             manifest_uri=manifest_uri,
             artifact=publication,
         )
+
+        metadata.coverage_ratio = self._compute_coverage_ratio(metadata)
+        metadata.staleness_ms = self._compute_staleness_ms(metadata)
+        sdk_metrics.observe_coverage_ratio(
+            node_id=node_id,
+            interval=interval,
+            ratio=metadata.coverage_ratio,
+        )
+        staleness_seconds = (
+            metadata.staleness_ms / 1000.0 if metadata.staleness_ms is not None else None
+        )
+        sdk_metrics.observe_live_staleness(
+            node_id=node_id,
+            interval=interval,
+            staleness_seconds=staleness_seconds,
+        )
+        self._record_fingerprint(node_id, interval, metadata.dataset_fingerprint)
 
         self._sync_metadata_attrs(stabilized, metadata)
 
@@ -892,8 +955,14 @@ class SeamlessDataProvider(ABC):
         if not self._sla:
             return None
 
-        coverage_ratio = self._compute_coverage_ratio(metadata)
-        staleness_ms = self._compute_staleness_ms(metadata)
+        coverage_ratio = metadata.coverage_ratio
+        if coverage_ratio is None:
+            coverage_ratio = self._compute_coverage_ratio(metadata)
+            metadata.coverage_ratio = coverage_ratio
+        staleness_ms = metadata.staleness_ms
+        if staleness_ms is None:
+            staleness_ms = self._compute_staleness_ms(metadata)
+            metadata.staleness_ms = staleness_ms
         violation = tracker.violation
 
         mode: SLAViolationMode | None = None
@@ -974,6 +1043,20 @@ class SeamlessDataProvider(ABC):
             },
         )
 
+        reason = metadata.downgrade_reason or "unknown"
+        if decision.mode is SLAViolationMode.HOLD:
+            sdk_metrics.observe_domain_hold(
+                node_id=node_id,
+                interval=interval,
+                reason=reason,
+            )
+        elif decision.mode is SLAViolationMode.PARTIAL_FILL:
+            sdk_metrics.observe_partial_fill(
+                node_id=node_id,
+                interval=interval,
+                reason=reason,
+            )
+
     def _stabilize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
             return frame
@@ -1042,6 +1125,22 @@ class SeamlessDataProvider(ABC):
         digest = hashlib.sha256(serialized).hexdigest()
         return f"lake:sha256:{digest}"
 
+    def _record_fingerprint(
+        self, node_id: str, interval: int, fingerprint: str | None
+    ) -> None:
+        if not fingerprint:
+            return
+        key = (str(node_id), int(interval))
+        seen = self._fingerprint_index[key]
+        if fingerprint in seen:
+            sdk_metrics.observe_fingerprint_collision(node_id=node_id, interval=interval)
+            # Refresh recency so that duplicate fingerprints remain in the window.
+            try:
+                seen.remove(fingerprint)
+            except ValueError:  # pragma: no cover - defensive guard
+                pass
+        seen.append(fingerprint)
+
     async def _start_background_backfill(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> None:
@@ -1072,12 +1171,19 @@ class SeamlessDataProvider(ABC):
                     failure_reason = "no_backfiller"
                     return
                 sdk_metrics.observe_backfill_start(node_id, interval)
+                gap_started = time.monotonic()
                 await self.backfiller.backfill(
                     start,
                     end,
                     node_id=node_id,
                     interval=interval,
                     target_storage=self.storage_source,
+                )
+                repair_duration_ms = (time.monotonic() - gap_started) * 1000.0
+                sdk_metrics.observe_gap_repair_latency(
+                    node_id=node_id,
+                    interval=interval,
+                    duration_ms=repair_duration_ms,
                 )
                 sdk_metrics.observe_backfill_complete(node_id, interval, end)
                 success = True
@@ -1254,9 +1360,10 @@ class SeamlessDataProvider(ABC):
 
 
 class _SLATracker:
-    def __init__(self, policy: SLAPolicy, *, node_id: str) -> None:
+    def __init__(self, policy: SLAPolicy, *, node_id: str, interval: int) -> None:
         self.policy = policy
         self.node_id = node_id
+        self.interval = int(interval)
         self._request_start = time.monotonic()
         self._violation: _SLAViolationDetail | None = None
 
@@ -1310,8 +1417,9 @@ class _SLATracker:
     def _record_phase(self, phase: str, elapsed_ms: float, budget_ms: int | None) -> None:
         sdk_metrics.observe_sla_phase_duration(
             node_id=self.node_id,
+            interval=self.interval,
             phase=phase,
-            duration_seconds=elapsed_ms / 1000.0,
+            duration_ms=elapsed_ms,
         )
         if budget_ms is not None and elapsed_ms > budget_ms:
             self.handle_violation(phase, elapsed_ms=elapsed_ms, budget_ms=budget_ms)

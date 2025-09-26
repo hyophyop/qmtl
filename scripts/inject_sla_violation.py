@@ -29,6 +29,7 @@ def inject_samples(
     phases: Sequence[str] = _DEFAULT_PHASES,
     duration_seconds: float = 180.0,
     repetitions: int = 10,
+    interval: int = 60,
     output_path: Path | None = None,
 ) -> str:
     """Populate the SDK metrics registry with synthetic SLA samples."""
@@ -38,8 +39,9 @@ def inject_samples(
         for phase in phases:
             sdk_metrics.observe_sla_phase_duration(
                 node_id=node_id,
+                interval=interval,
                 phase=phase,
-                duration_seconds=duration_seconds,
+                duration_ms=duration_seconds * 1000.0,
             )
     rendered = sdk_metrics.collect_metrics()
     if output_path:
@@ -67,6 +69,12 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="phases",
         action="append",
         help="Specific phases to record. Can be specified multiple times. Defaults to all phases.",
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=60,
+        help="Interval label applied to synthetic samples. Default: 60 seconds.",
     )
     parser.add_argument(
         "--write-to",
@@ -98,6 +106,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         phases=phases,
         duration_seconds=args.duration,
         repetitions=args.repetitions,
+        interval=args.interval,
         output_path=args.write_to,
     )
 

@@ -46,6 +46,26 @@ The runtime now emits the following metrics:
   `ConformancePipeline` when normalisation warnings occur. Individual flag
   types appear in the dashboard's "Flag Breakdown" table, while aggregate
   warnings increment `seamless_conformance_warning_total`.
+- Phase-specific latency histograms: `seamless_storage_wait_ms`,
+  `seamless_backfill_wait_ms`, `seamless_live_wait_ms`, and
+  `seamless_total_ms`. All four carry `{node_id, interval, world_id}` labels
+  so that latency heatmaps can be filtered per domain.
+- Coverage and freshness gauges: `coverage_ratio` and
+  `live_staleness_seconds` expose the served vs requested range and the gap to
+  the most recent bar. They share the `{node_id, interval, world_id}` label set
+  and backstop the domain gate HOLD automation.
+- Gap repair and coordinator health: `gap_repair_latency_ms` tracks the wall
+  clock time to heal a missing window. `backfill_completion_ratio` remains the
+  primary coordinator health gauge, now complemented by
+  `seamless_rl_tokens_available` and `seamless_rl_dropped_total` for Redis
+  token bucket headroom.
+- Artifact observability: `artifact_publish_latency_ms`,
+  `artifact_bytes_written`, and `fingerprint_collisions` make it trivial to
+  wire burn-down panels for publishing lag, storage throughput, and duplicate
+  fingerprints.
+- Domain downgrade counters: `domain_gate_holds` and `partial_fill_returns`
+  emit a reason-labelled counter every time the SLA policy downgrades a
+  response. Use these to correlate alert storms with HOLD/PARTIAL_FILL surges.
 
 Alert rules under the `seamless-*` prefix have been added to `alert_rules.yml`:
 

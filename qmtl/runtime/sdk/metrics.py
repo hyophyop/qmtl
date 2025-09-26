@@ -134,10 +134,122 @@ backfill_completion_ratio = _gauge(
 # ---------------------------------------------------------------------------
 # SLA metrics
 # ---------------------------------------------------------------------------
+seamless_storage_wait_ms = _histogram(
+    "seamless_storage_wait_ms",
+    "Latency spent waiting on Seamless storage reads (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_backfill_wait_ms = _histogram(
+    "seamless_backfill_wait_ms",
+    "Latency spent waiting on Seamless backfill completion (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_live_wait_ms = _histogram(
+    "seamless_live_wait_ms",
+    "Latency spent waiting on Seamless live data feeds (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_total_ms = _histogram(
+    "seamless_total_ms",
+    "Total Seamless end-to-end request latency (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 seamless_sla_deadline_seconds = _histogram(
     "seamless_sla_deadline_seconds",
     "Observed SLA phase durations for Seamless data requests",
     ["node_id", "phase"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+coverage_ratio = _gauge(
+    "coverage_ratio",
+    "Ratio of bars delivered vs requested for Seamless responses",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+gap_repair_latency_ms = _histogram(
+    "gap_repair_latency_ms",
+    "Latency to repair detected Seamless gaps (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_rl_tokens_available = _gauge(
+    "seamless_rl_tokens_available",
+    "Remaining Redis token bucket headroom for Seamless rate limiting",
+    ["limiter", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+seamless_rl_dropped_total = _counter(
+    "seamless_rl_dropped_total",
+    "Count of Seamless rate limited requests that exhausted token headroom",
+    ["limiter", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+artifact_publish_latency_ms = _histogram(
+    "artifact_publish_latency_ms",
+    "Latency from stabilization to artifact manifest publication (milliseconds)",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+artifact_bytes_written = _counter(
+    "artifact_bytes_written",
+    "Total bytes written by Seamless artifact publications",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+fingerprint_collisions = _counter(
+    "fingerprint_collisions",
+    "Count of duplicate dataset fingerprints observed during Seamless publication",
+    ["node_id", "interval", "world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+domain_gate_holds = _counter(
+    "domain_gate_holds",
+    "Number of Seamless responses downgraded to HOLD by domain gates",
+    ["node_id", "interval", "world_id", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+partial_fill_returns = _counter(
+    "partial_fill_returns",
+    "Number of Seamless responses downgraded to PARTIAL_FILL",
+    ["node_id", "interval", "world_id", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+live_staleness_seconds = _gauge(
+    "live_staleness_seconds",
+    "Observed live data staleness for Seamless responses (seconds)",
+    ["node_id", "interval", "world_id"],
     test_value_attr="_vals",
     test_value_factory=dict,
 )
@@ -453,12 +565,28 @@ def observe_backfill_completion_ratio(
 
 
 def observe_sla_phase_duration(
-    *, node_id: str, phase: str, duration_seconds: float
+    *, node_id: str, interval: str | int, phase: str, duration_ms: float
 ) -> None:
     n = str(node_id)
+    i = str(interval)
     p = str(phase)
-    seamless_sla_deadline_seconds.labels(node_id=n, phase=p).observe(duration_seconds)
-    seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(duration_seconds)  # type: ignore[attr-defined]
+    seconds = duration_ms / 1000.0
+    seamless_sla_deadline_seconds.labels(node_id=n, phase=p).observe(seconds)
+    seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(seconds)  # type: ignore[attr-defined]
+
+    world = _WORLD_ID
+    if p == "storage_wait":
+        seamless_storage_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+        seamless_storage_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+    elif p == "backfill_wait":
+        seamless_backfill_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+        seamless_backfill_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+    elif p == "live_wait":
+        seamless_live_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+        seamless_live_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+    elif p == "total":
+        seamless_total_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+        seamless_total_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
 
 
 def observe_conformance_report(
@@ -507,6 +635,106 @@ def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
     warmup_ready_duration_ms.labels(node_id=n).observe(duration_ms)
 
 
+def observe_gap_repair_latency(*, node_id: str, interval: str | int, duration_ms: float) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    gap_repair_latency_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+    gap_repair_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+
+
+def observe_coverage_ratio(*, node_id: str, interval: str | int, ratio: float | None) -> None:
+    if ratio is None:
+        return
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    coverage_ratio.labels(node_id=n, interval=i, world_id=world).set(ratio)
+    coverage_ratio._vals[(n, i, world)] = ratio  # type: ignore[attr-defined]
+
+
+def observe_rate_limiter_tokens(*, limiter: str, tokens: float, capacity: float) -> None:
+    key = str(limiter)
+    world = _WORLD_ID
+    seamless_rl_tokens_available.labels(limiter=key, world_id=world).set(tokens)
+    seamless_rl_tokens_available._vals[(key, world)] = tokens  # type: ignore[attr-defined]
+
+
+def observe_rate_limiter_drop(*, limiter: str) -> None:
+    key = str(limiter)
+    world = _WORLD_ID
+    seamless_rl_dropped_total.labels(limiter=key, world_id=world).inc()
+    seamless_rl_dropped_total._vals[(key, world)] = (  # type: ignore[attr-defined]
+        seamless_rl_dropped_total._vals.get((key, world), 0) + 1
+    )
+
+
+def observe_artifact_publish_latency(
+    *, node_id: str, interval: str | int, duration_ms: float
+) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    artifact_publish_latency_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
+    artifact_publish_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+
+
+def observe_artifact_bytes_written(
+    *, node_id: str, interval: str | int, bytes_written: int
+) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    artifact_bytes_written.labels(node_id=n, interval=i, world_id=world).inc(bytes_written)
+    artifact_bytes_written._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+        artifact_bytes_written._vals.get((n, i, world), 0) + bytes_written
+    )
+
+
+def observe_fingerprint_collision(*, node_id: str, interval: str | int) -> None:
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    fingerprint_collisions.labels(node_id=n, interval=i, world_id=world).inc()
+    fingerprint_collisions._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+        fingerprint_collisions._vals.get((n, i, world), 0) + 1
+    )
+
+
+def observe_domain_hold(*, node_id: str, interval: str | int, reason: str) -> None:
+    n = str(node_id)
+    i = str(interval)
+    r = str(reason)
+    world = _WORLD_ID
+    domain_gate_holds.labels(node_id=n, interval=i, world_id=world, reason=r).inc()
+    domain_gate_holds._vals[(n, i, world, r)] = (  # type: ignore[attr-defined]
+        domain_gate_holds._vals.get((n, i, world, r), 0) + 1
+    )
+
+
+def observe_partial_fill(*, node_id: str, interval: str | int, reason: str) -> None:
+    n = str(node_id)
+    i = str(interval)
+    r = str(reason)
+    world = _WORLD_ID
+    partial_fill_returns.labels(node_id=n, interval=i, world_id=world, reason=r).inc()
+    partial_fill_returns._vals[(n, i, world, r)] = (  # type: ignore[attr-defined]
+        partial_fill_returns._vals.get((n, i, world, r), 0) + 1
+    )
+
+
+def observe_live_staleness(
+    *, node_id: str, interval: str | int, staleness_seconds: float | None
+) -> None:
+    if staleness_seconds is None:
+        return
+    n = str(node_id)
+    i = str(interval)
+    world = _WORLD_ID
+    live_staleness_seconds.labels(node_id=n, interval=i, world_id=world).set(staleness_seconds)
+    live_staleness_seconds._vals[(n, i, world)] = staleness_seconds  # type: ignore[attr-defined]
+
+
 def start_metrics_server(port: int = 8000) -> None:
     """Expose metrics via an HTTP server."""
     start_http_server(port, registry=global_registry)
@@ -519,6 +747,8 @@ def collect_metrics() -> str:
 
 def reset_metrics() -> None:
     """Reset metric values for tests."""
+    global _WORLD_ID
+    _WORLD_ID = "default"
     reset_registered_metrics(_REGISTERED_METRICS)
     _clear_nodecache_resident_bytes()
     _clear_cross_context_cache_hits()
