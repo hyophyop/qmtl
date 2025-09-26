@@ -1,17 +1,15 @@
 import pytest
 import pytest_asyncio
 
-fakeredis_aioredis = pytest.importorskip(
-    "fakeredis.aioredis",
-    reason="fakeredis is required for Redis-backed runtime tests",
-)
-FakeRedis = fakeredis_aioredis.FakeRedis
-
 from qmtl.runtime.sdk.runner import Runner
 
 @pytest_asyncio.fixture
 async def fake_redis():
-    redis = FakeRedis(decode_responses=True)
+    fakeredis_aioredis = pytest.importorskip(
+        "fakeredis.aioredis",
+        reason="fakeredis is required for Redis-backed runtime tests",
+    )
+    redis = fakeredis_aioredis.FakeRedis(decode_responses=True)
     try:
         yield redis
     finally:
