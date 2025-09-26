@@ -747,6 +747,8 @@ def collect_metrics() -> str:
 
 def reset_metrics() -> None:
     """Reset metric values for tests."""
+    global _WORLD_ID
+    _WORLD_ID = "default"
     reset_registered_metrics(_REGISTERED_METRICS)
     _clear_nodecache_resident_bytes()
     _clear_cross_context_cache_hits()
