@@ -22,7 +22,7 @@ from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk.artifacts import ArtifactPublication, FileSystemArtifactRegistrar
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
-from qmtl.runtime.sdk.sla import SLAPolicy
+from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import Lease
 
@@ -657,6 +657,79 @@ async def test_sla_total_deadline_breach_raises(monkeypatch) -> None:
         await provider.fetch(0, 20, node_id="node", interval=10)
 
     assert exc.value.phase == "total"
+
+
+@pytest.mark.asyncio
+async def test_sla_violation_partial_fill_downgrades(monkeypatch, caplog) -> None:
+    sdk_metrics.reset_metrics()
+    clock = _FakeClock()
+    monkeypatch.setattr(seamless_module.time, "monotonic", clock.monotonic)
+    storage = _DelayedSource([(0, 40)], DataSourcePriority.STORAGE, clock, delay=0.02)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(
+            max_wait_storage_ms=5,
+            on_violation=SLAViolationMode.PARTIAL_FILL,
+        ),
+    )
+
+    with caplog.at_level("WARNING", logger="qmtl.runtime.sdk.seamless_data_provider"):
+        result = await provider.fetch(0, 40, node_id="node", interval=10)
+
+    assert result.metadata.downgraded is True
+    assert result.metadata.downgrade_mode == SLAViolationMode.PARTIAL_FILL.value
+    assert result.metadata.downgrade_reason == "sla_violation"
+    violation = result.metadata.sla_violation
+    assert violation is not None and violation["phase"] == "storage_wait"
+    log_records = [r for r in caplog.records if r.getMessage() == "seamless.sla.downgrade"]
+    assert log_records, "expected downgrade log"
+    record = log_records[0]
+    assert getattr(record, "dataset_fingerprint", None) == result.metadata.dataset_fingerprint
+    assert getattr(record, "as_of", None) == result.metadata.as_of
+
+
+@pytest.mark.asyncio
+async def test_sla_min_coverage_enforces_hold() -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 40)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(
+            on_violation=SLAViolationMode.PARTIAL_FILL,
+            min_coverage=0.9,
+        ),
+    )
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert result.metadata.downgraded is True
+    assert result.metadata.downgrade_mode == SLAViolationMode.HOLD.value
+    assert result.metadata.downgrade_reason == "coverage_breach"
+    assert result.metadata.coverage_ratio is not None
+    assert result.metadata.coverage_ratio < 0.9
+
+
+@pytest.mark.asyncio
+async def test_sla_max_lag_enforces_hold(monkeypatch) -> None:
+    sdk_metrics.reset_metrics()
+    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        sla=SLAPolicy(
+            on_violation=SLAViolationMode.PARTIAL_FILL,
+            max_lag_seconds=1,
+        ),
+    )
+
+    monkeypatch.setattr(seamless_module.time, "time", lambda: 10_000.0)
+
+    result = await provider.fetch(0, 100, node_id="node", interval=10)
+
+    assert result.metadata.downgraded is True
+    assert result.metadata.downgrade_mode == SLAViolationMode.HOLD.value
+    assert result.metadata.downgrade_reason == "freshness_breach"
+    assert result.metadata.staleness_ms is not None
+    assert result.metadata.staleness_ms > 1_000
 
 
 @pytest.mark.asyncio

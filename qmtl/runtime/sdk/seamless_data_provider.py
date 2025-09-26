@@ -34,7 +34,7 @@ from .backfill_coordinator import (
     InMemoryBackfillCoordinator,
     Lease,
 )
-from .sla import SLAPolicy
+from .sla import SLAPolicy, SLAViolationMode
 from .exceptions import SeamlessSLAExceeded
 from .artifacts import ArtifactRegistrar, ArtifactPublication
 
@@ -61,6 +61,12 @@ class SeamlessFetchMetadata:
     as_of: int | str | None = None
     manifest_uri: str | None = None
     artifact: ArtifactPublication | None = None
+    downgraded: bool = False
+    downgrade_mode: str | None = None
+    downgrade_reason: str | None = None
+    sla_violation: dict[str, Any] | None = None
+    coverage_ratio: float | None = None
+    staleness_ms: float | None = None
 
 
 @dataclass(slots=True)
@@ -79,6 +85,22 @@ class SeamlessFetchResult:
 
     def __len__(self) -> int:
         return len(self.frame)
+
+
+@dataclass(slots=True)
+class _SLAViolationDetail:
+    phase: str
+    elapsed_ms: float
+    budget_ms: int | None
+
+
+@dataclass(slots=True)
+class _DowngradeDecision:
+    mode: SLAViolationMode
+    reason: str
+    violation: _SLAViolationDetail | None
+    coverage_ratio: float | None
+    staleness_ms: float | None
 
 
 class DataAvailabilityStrategy(Enum):
@@ -289,8 +311,19 @@ class SeamlessDataProvider(ABC):
             interval=interval,
         )
 
+        downgrade: _DowngradeDecision | None = None
         if tracker:
             tracker.observe_total()
+            downgrade = self._resolve_downgrade(tracker, response.metadata)
+
+        if downgrade:
+            self._apply_downgrade(
+                response,
+                downgrade,
+                node_id=node_id,
+                interval=interval,
+            )
+
         return response
     
     async def coverage(
@@ -332,11 +365,13 @@ class SeamlessDataProvider(ABC):
         If data is missing and auto-backfill is enabled, trigger backfill.
         Returns True if data will be available after this call.
         """
+        tracker = sla_tracker or self._build_sla_tracker(node_id)
+
         # Check current availability
-        if sla_tracker:
-            available_ranges = await sla_tracker.observe_async(
+        if tracker:
+            available_ranges = await tracker.observe_async(
                 "storage_wait",
-                sla_tracker.policy.max_wait_storage_ms,
+                tracker.policy.max_wait_storage_ms,
                 self.coverage(node_id=node_id, interval=interval),
             )
         else:
@@ -353,12 +388,20 @@ class SeamlessDataProvider(ABC):
                 interval_ms = max(interval, 0) * 1000
                 elapsed_ms = missing_bars * interval_ms
                 budget_ms = self._sla.max_sync_gap_bars * interval_ms
-                raise SeamlessSLAExceeded(
-                    "sync_gap",
-                    node_id=node_id,
-                    elapsed_ms=float(elapsed_ms),
-                    budget_ms=int(budget_ms) if interval_ms else None,
-                )
+                if tracker:
+                    tracker.handle_violation(
+                        "sync_gap",
+                        elapsed_ms=float(elapsed_ms),
+                        budget_ms=int(budget_ms) if interval_ms else None,
+                    )
+                else:
+                    raise SeamlessSLAExceeded(
+                        "sync_gap",
+                        node_id=node_id,
+                        elapsed_ms=float(elapsed_ms),
+                        budget_ms=int(budget_ms) if interval_ms else None,
+                    )
+                return False
 
         if not missing_ranges:
             return True
@@ -432,10 +475,10 @@ class SeamlessDataProvider(ABC):
                             raise
         
         # Re-check availability
-        if sla_tracker:
-            updated_ranges = await sla_tracker.observe_async(
+        if tracker:
+            updated_ranges = await tracker.observe_async(
                 "storage_wait",
-                sla_tracker.policy.max_wait_storage_ms,
+                tracker.policy.max_wait_storage_ms,
                 self.coverage(node_id=node_id, interval=interval),
             )
         else:
@@ -664,16 +707,7 @@ class SeamlessDataProvider(ABC):
                 artifact=None,
             )
             self._last_conformance_report = None
-            frame.attrs = {
-                "dataset_fingerprint": None,
-                "as_of": None,
-                "coverage_bounds": None,
-                "conformance_flags": {},
-                "conformance_warnings": (),
-                "manifest_uri": None,
-                "requested_range": metadata.requested_range,
-                "rows": metadata.rows,
-            }
+            self._sync_metadata_attrs(frame, metadata)
             return SeamlessFetchResult(frame, metadata)
 
         normalized = frame
@@ -727,16 +761,7 @@ class SeamlessDataProvider(ABC):
                 manifest_uri=None,
                 artifact=None,
             )
-            stabilized.attrs = {
-                "dataset_fingerprint": None,
-                "as_of": None,
-                "coverage_bounds": None,
-                "conformance_flags": dict(report.flags_counts),
-                "conformance_warnings": report.warnings,
-                "manifest_uri": None,
-                "requested_range": metadata.requested_range,
-                "rows": metadata.rows,
-            }
+            self._sync_metadata_attrs(stabilized, metadata)
             return SeamlessFetchResult(stabilized, metadata)
 
         coverage_bounds = self._coverage_bounds(stabilized)
@@ -788,7 +813,16 @@ class SeamlessDataProvider(ABC):
             artifact=publication,
         )
 
-        attrs = dict(stabilized.attrs)
+        self._sync_metadata_attrs(stabilized, metadata)
+
+        # expose last fetch metadata for callers
+        self._last_fetch_metadata = metadata
+        return SeamlessFetchResult(stabilized, metadata)
+
+    def _sync_metadata_attrs(
+        self, frame: pd.DataFrame, metadata: SeamlessFetchMetadata
+    ) -> None:
+        attrs = dict(frame.attrs)
         attrs.update(
             {
                 "dataset_fingerprint": metadata.dataset_fingerprint,
@@ -799,13 +833,132 @@ class SeamlessDataProvider(ABC):
                 "manifest_uri": metadata.manifest_uri,
                 "requested_range": metadata.requested_range,
                 "rows": metadata.rows,
+                "downgraded": metadata.downgraded,
+                "downgrade_mode": metadata.downgrade_mode,
+                "downgrade_reason": metadata.downgrade_reason,
+                "sla_violation": metadata.sla_violation,
+                "coverage_ratio": metadata.coverage_ratio,
+                "staleness_ms": metadata.staleness_ms,
             }
         )
-        stabilized.attrs = attrs
+        frame.attrs = attrs
 
-        # expose last fetch metadata for callers
-        self._last_fetch_metadata = metadata
-        return SeamlessFetchResult(stabilized, metadata)
+    def _compute_coverage_ratio(
+        self, metadata: SeamlessFetchMetadata
+    ) -> float | None:
+        start, end = metadata.requested_range
+        requested_span = max(0, end - start)
+        if requested_span <= 0:
+            return 1.0 if metadata.rows > 0 else 0.0
+        bounds = metadata.coverage_bounds
+        if bounds is None:
+            return 0.0
+        cov_start, cov_end = bounds
+        overlap_start = max(start, cov_start)
+        overlap_end = min(end, cov_end)
+        if overlap_end <= overlap_start:
+            return 0.0
+        coverage_span = max(0, overlap_end - overlap_start)
+        return max(0.0, min(1.0, coverage_span / requested_span))
+
+    def _compute_staleness_ms(
+        self, metadata: SeamlessFetchMetadata
+    ) -> float | None:
+        bounds = metadata.coverage_bounds
+        if bounds is None:
+            return None
+        _, cov_end = bounds
+        now_ms = time.time() * 1000.0
+        staleness = now_ms - (cov_end * 1000.0)
+        return max(staleness, 0.0)
+
+    def _resolve_downgrade(
+        self, tracker: _SLATracker, metadata: SeamlessFetchMetadata
+    ) -> _DowngradeDecision | None:
+        if not self._sla:
+            return None
+
+        coverage_ratio = self._compute_coverage_ratio(metadata)
+        staleness_ms = self._compute_staleness_ms(metadata)
+        violation = tracker.violation
+
+        mode: SLAViolationMode | None = None
+        reason: str | None = None
+
+        if violation:
+            mode = self._sla.on_violation
+            reason = "sla_violation"
+
+        if (
+            self._sla.min_coverage is not None
+            and coverage_ratio is not None
+            and coverage_ratio < self._sla.min_coverage
+        ):
+            mode = SLAViolationMode.HOLD
+            reason = "coverage_breach"
+
+        if (
+            self._sla.max_lag_seconds is not None
+            and staleness_ms is not None
+            and staleness_ms > self._sla.max_lag_seconds * 1000
+        ):
+            mode = SLAViolationMode.HOLD
+            reason = "freshness_breach"
+
+        if mode is None or reason is None:
+            return None
+
+        return _DowngradeDecision(
+            mode=mode,
+            reason=reason,
+            violation=violation,
+            coverage_ratio=coverage_ratio,
+            staleness_ms=staleness_ms,
+        )
+
+    def _apply_downgrade(
+        self,
+        result: SeamlessFetchResult,
+        decision: _DowngradeDecision,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        metadata = result.metadata
+        metadata.downgraded = True
+        metadata.downgrade_mode = decision.mode.value
+        metadata.downgrade_reason = decision.reason
+        metadata.coverage_ratio = decision.coverage_ratio
+        metadata.staleness_ms = decision.staleness_ms
+
+        if decision.violation:
+            metadata.sla_violation = {
+                "phase": decision.violation.phase,
+                "elapsed_ms": decision.violation.elapsed_ms,
+                "budget_ms": decision.violation.budget_ms,
+            }
+        else:
+            metadata.sla_violation = None
+
+        self._sync_metadata_attrs(result.frame, metadata)
+
+        violation_payload = metadata.sla_violation or {}
+        logger.warning(
+            "seamless.sla.downgrade",
+            extra={
+                "node_id": node_id,
+                "interval": interval,
+                "mode": metadata.downgrade_mode,
+                "reason": metadata.downgrade_reason,
+                "coverage_ratio": metadata.coverage_ratio,
+                "staleness_ms": metadata.staleness_ms,
+                "phase": violation_payload.get("phase"),
+                "elapsed_ms": violation_payload.get("elapsed_ms"),
+                "budget_ms": violation_payload.get("budget_ms"),
+                "dataset_fingerprint": metadata.dataset_fingerprint,
+                "as_of": metadata.as_of,
+            },
+        )
 
     def _stabilize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
@@ -1091,6 +1244,7 @@ class _SLATracker:
         self.policy = policy
         self.node_id = node_id
         self._request_start = time.monotonic()
+        self._violation: _SLAViolationDetail | None = None
 
     async def observe_async(
         self, phase: str, budget_ms: int | None, awaitable: Awaitable[T]
@@ -1111,6 +1265,34 @@ class _SLATracker:
         elapsed_ms = (time.monotonic() - self._request_start) * 1000.0
         self._record_phase("total", elapsed_ms, self.policy.total_deadline_ms)
 
+    @property
+    def violation(self) -> _SLAViolationDetail | None:
+        return self._violation
+
+    def handle_violation(
+        self, phase: str, *, elapsed_ms: float, budget_ms: int | None
+    ) -> None:
+        detail = _SLAViolationDetail(phase=phase, elapsed_ms=elapsed_ms, budget_ms=budget_ms)
+        if self._violation is None:
+            self._violation = detail
+        logger.warning(
+            "seamless.sla.phase_exceeded",
+            extra={
+                "node_id": self.node_id,
+                "phase": phase,
+                "elapsed_ms": elapsed_ms,
+                "budget_ms": budget_ms,
+                "mode": self.policy.on_violation.value,
+            },
+        )
+        if self.policy.on_violation is SLAViolationMode.FAIL_FAST:
+            raise SeamlessSLAExceeded(
+                phase,
+                node_id=self.node_id,
+                elapsed_ms=elapsed_ms,
+                budget_ms=budget_ms,
+            )
+
     def _record_phase(self, phase: str, elapsed_ms: float, budget_ms: int | None) -> None:
         sdk_metrics.observe_sla_phase_duration(
             node_id=self.node_id,
@@ -1118,21 +1300,7 @@ class _SLATracker:
             duration_seconds=elapsed_ms / 1000.0,
         )
         if budget_ms is not None and elapsed_ms > budget_ms:
-            logger.error(
-                "seamless.sla.violation",
-                extra={
-                    "node_id": self.node_id,
-                    "phase": phase,
-                    "elapsed_ms": elapsed_ms,
-                    "budget_ms": budget_ms,
-                },
-            )
-            raise SeamlessSLAExceeded(
-                phase,
-                node_id=self.node_id,
-                elapsed_ms=elapsed_ms,
-                budget_ms=budget_ms,
-            )
+            self.handle_violation(phase, elapsed_ms=elapsed_ms, budget_ms=budget_ms)
 
 
 __all__ = [
