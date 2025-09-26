@@ -98,6 +98,9 @@ class _FakeClock:
     def monotonic(self) -> float:
         return self._value
 
+    def time(self) -> float:
+        return self._value
+
     def advance(self, seconds: float) -> None:
         self._value += seconds
 
@@ -248,6 +251,51 @@ async def test_in_memory_cache_hits_same_context() -> None:
         sdk_metrics.seamless_cache_hit_total._vals[hit_key] == 1  # type: ignore[attr-defined]
     )
     assert sdk_metrics.seamless_cache_resident_bytes._val > 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_in_memory_cache_recomputes_staleness(monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk_metrics.reset_metrics()
+    fake_clock = _FakeClock()
+    fake_clock.advance(120.0)
+    monkeypatch.setattr(seamless_module.time, "time", fake_clock.time)
+    monkeypatch.setattr(seamless_module.time, "monotonic", fake_clock.monotonic)
+
+    storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
+    provider = _DummyProvider(
+        storage_source=storage,
+        cache={"enable": True, "ttl_ms": 10_000_000, "max_shards": 8},
+    )
+    provider._cache_clock = fake_clock.monotonic  # type: ignore[attr-defined]
+
+    first = await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+
+    initial_staleness = first.metadata.staleness_ms
+    assert storage.fetch_calls == 1
+    assert initial_staleness is not None
+
+    fake_clock.advance(30.0)
+
+    second = await provider.fetch(
+        0,
+        100,
+        node_id="node",
+        interval=10,
+        world_id="world-a",
+        as_of="2024-01-01T00:00:00Z",
+    )
+
+    assert storage.fetch_calls == 1
+    assert second.metadata.staleness_ms is not None
+    assert second.metadata.staleness_ms == pytest.approx(initial_staleness + 30_000, rel=0, abs=1)
+    assert second.metadata.downgraded is False
 
 
 @pytest.mark.asyncio

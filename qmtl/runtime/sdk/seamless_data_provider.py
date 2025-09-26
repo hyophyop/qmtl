@@ -459,6 +459,14 @@ class SeamlessDataProvider(ABC):
     def _materialize_cached_result(self, entry: _CacheEntry) -> SeamlessFetchResult:
         frame_copy = entry.result.frame.copy(deep=True)
         metadata_copy = replace(entry.result.metadata)
+        metadata_copy.downgraded = False
+        metadata_copy.downgrade_mode = None
+        metadata_copy.downgrade_reason = None
+        metadata_copy.sla_violation = None
+        if metadata_copy.coverage_bounds is not None:
+            metadata_copy.staleness_ms = self._compute_staleness_ms(metadata_copy)
+        else:
+            metadata_copy.staleness_ms = None
         self._sync_metadata_attrs(frame_copy, metadata_copy)
         result = SeamlessFetchResult(frame_copy, metadata_copy)
         self._last_conformance_report = entry.report
