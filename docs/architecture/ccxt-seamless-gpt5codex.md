@@ -1,1 +1,0 @@
-> **Status:** This governance draft has been superseded by the consolidated [CCXT × Seamless Integrated Architecture (High + Codex)](ccxt-seamless-integrated.md). The content below is retained for historical auditing only.
