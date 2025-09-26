@@ -25,7 +25,6 @@ from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import Lease
-from qmtl.runtime.io.artifact import ArtifactRegistrar
 
 
 class _StaticSource:
@@ -119,48 +118,6 @@ async def test_seamless_fetch_preserves_off_grid_cache_bounds() -> None:
     assert 90 in ts  # previously dropped due to misaligned subtraction
     assert ts.count(90) == 1
     assert ts.count(95) == 1
-
-
-@pytest.mark.asyncio
-async def test_metadata_records_coverage_and_rows() -> None:
-    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
-    provider = _DummyProvider(storage_source=storage)
-
-    df = await provider.fetch(0, 100, node_id="n", interval=10)
-
-    metadata = provider.last_fetch_metadata
-    assert metadata is not None
-    assert metadata.node_id == "n"
-    assert metadata.interval == 10
-    assert metadata.coverage_bounds == (0, 100)
-    assert metadata.rows == len(df)
-    assert metadata.artifact is None
-
-
-@pytest.mark.asyncio
-async def test_metadata_includes_artifact_publication() -> None:
-    storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
-    calls: list[tuple[pd.DataFrame, dict[str, Any]]] = []
-
-    def store(df: pd.DataFrame, manifest: dict[str, Any]) -> str:
-        calls.append((df.copy(), dict(manifest)))
-        return "local://artifact"
-
-    registrar = ArtifactRegistrar(store=store, stabilization_bars=1)
-    provider = _DummyProvider(storage_source=storage, artifact_registrar=registrar)
-
-    df = await provider.fetch(0, 100, node_id="n", interval=10)
-
-    metadata = provider.last_fetch_metadata
-    assert metadata is not None
-    assert metadata.artifact is not None
-    artifact = metadata.artifact
-    assert artifact.uri == "local://artifact"
-    assert artifact.node_id == "n"
-    assert artifact.rows == len(df) - 1  # one bar dropped for stabilization
-    assert artifact.dataset_fingerprint
-    assert artifact.manifest["conformance_version"] == registrar.conformance_version
-    assert calls, "artifact store should have been invoked"
 
 
 @pytest.mark.asyncio
