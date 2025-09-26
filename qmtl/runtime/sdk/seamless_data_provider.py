@@ -354,6 +354,7 @@ class SeamlessDataProvider(ABC):
         self._live_as_of_state: dict[tuple[str, str], str] = {}
         mode_env = os.getenv(_FINGERPRINT_MODE_ENV, "").strip().lower()
         legacy_requested = mode_env == _FINGERPRINT_MODE_LEGACY
+        canonical_requested = mode_env == _FINGERPRINT_MODE_CANONICAL
 
         publish_env = os.getenv(_FINGERPRINT_PUBLISH_ENV)
         publish_default = not legacy_requested
@@ -370,11 +371,14 @@ class SeamlessDataProvider(ABC):
             default=early_flag,
         )
 
-        self._fingerprint_mode = (
-            _FINGERPRINT_MODE_CANONICAL
-            if self._publish_fingerprint
-            else _FINGERPRINT_MODE_LEGACY
-        )
+        if canonical_requested or legacy_requested:
+            self._fingerprint_mode = mode_env
+        else:
+            self._fingerprint_mode = (
+                _FINGERPRINT_MODE_CANONICAL
+                if self._publish_fingerprint
+                else _FINGERPRINT_MODE_LEGACY
+            )
         preview_env = os.getenv(_FINGERPRINT_PREVIEW_ENV, "").strip().lower()
         preview_flag = preview_env in _TRUE_VALUES
         self._preview_fingerprint = preview_flag or self._early_fingerprint
