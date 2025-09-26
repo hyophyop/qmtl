@@ -265,6 +265,7 @@ seamless:
       enabled: false           # true to enable ccxt.pro wrapper
       reconnect_backoff_ms: [500, 1000, 2000, 5000]
       dedupe_by: "ts"          # or ts+symbol
+      emit_building_candle: false  # emit closed bars by default
 
   metrics:
     prometheus:
@@ -302,6 +303,9 @@ exchanges:
 ```
 
 > **분리 원칙**: 교환소, SLA, 백필, 레이트리밋, 아티팩트, 도메인 정책을 **완전히 독립 파라미터**로 분리해 튜닝 가능성을 극대화한다.
+
+`emit_building_candle`가 `false`이면 라이브 피드는 완전히 마감된 캔들만 발행한다. 실시간(빌딩) 캔들이 필요할 때만 `true`로
+전환하고, 기본값은 안정적인 신호와 백필 일관성을 위해 유지한다.
 
 ---
 

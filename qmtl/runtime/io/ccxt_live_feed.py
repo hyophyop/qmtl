@@ -16,7 +16,7 @@ Scope
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Literal, Optional
 import logging
 import time
 
@@ -37,9 +37,11 @@ class CcxtProConfig:
     timeframe: str | None = None  # required for OHLCV mode
     mode: str = "ohlcv"  # or "trades"
     sandbox: bool = False
+    reconnect_backoff_ms: list[int] | None = None
     reconnect_backoff_s: float = 1.0
     max_backoff_s: float = 30.0
     dedupe: bool = True  # drop duplicate candles/trades by ts
+    dedupe_by: Literal["ts", "ts+symbol"] = "ts"
     emit_building_candle: bool = False  # if False, emit only fully closed bars
 
 
@@ -57,7 +59,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         self.config = config
         self._exchange = exchange  # optionally injected (tests)
         self._subs: dict[str, bool] = {}
-        self._last_emitted_ts: dict[str, int] = {}
+        self._last_emitted_token: dict[str, int | tuple[int, str]] = {}
 
     async def is_live_available(self, *, node_id: str, interval: int) -> bool:  # type: ignore[override]
         try:
@@ -83,8 +85,10 @@ class CcxtProLiveFeed(LiveDataFeed):
         key = f"{node_id}:{symbol}:{timeframe or ''}:{mode}:{int(interval)}"
         self._subs[key] = True
 
+        schedule = self._build_backoff_schedule()
         backoff = max(0.1, float(self.config.reconnect_backoff_s))
         max_backoff = max(backoff, float(self.config.max_backoff_s))
+        schedule_index = 0
 
         while self._subs.get(key, False):
             ex = None
@@ -110,8 +114,15 @@ class CcxtProLiveFeed(LiveDataFeed):
                     "mode": mode,
                     "error": str(exc),
                 })
-                await asyncio.sleep(backoff)
-                backoff = min(max_backoff, backoff * 2.0)
+                delay = None
+                if schedule:
+                    idx = min(schedule_index, len(schedule) - 1)
+                    delay = schedule[idx]
+                    schedule_index += 1
+                else:
+                    delay = backoff
+                    backoff = min(max_backoff, backoff * 2.0)
+                await asyncio.sleep(delay)
             finally:
                 # no explicit close; ccxt.pro manages WS per instance; users may call .close()
                 pass
@@ -127,7 +138,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         interval: int,
         key: str,
     ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
-        last = self._last_emitted_ts.get(key, -1)
+        last_token = self._last_emitted_token.get(key)
         interval_s = int(interval if interval > 0 else _tf_to_seconds(timeframe))
         # resolve method name once
         watch = getattr(exchange, "watch_ohlcv", None) or getattr(exchange, "watchOHLCV", None)
@@ -143,30 +154,43 @@ class CcxtProLiveFeed(LiveDataFeed):
                     ts = int(r[0]) // 1000
                 except Exception:
                     continue
-                if self.config.dedupe and ts <= last:
+                token = self._dedupe_token(ts, symbol)
+                if self.config.dedupe and not self._should_emit(last_token, token):
                     continue
                 if not self.config.emit_building_candle:
                     # Only emit when we are past the close boundary of the bar
                     if ts + interval_s > now_s:
                         continue
-                ready_records.append({
+                rec = {
                     "ts": ts,
                     "open": float(r[1]),
                     "high": float(r[2]),
                     "low": float(r[3]),
                     "close": float(r[4]),
                     "volume": float(r[5]),
-                })
+                }
+                if self._uses_symbol_dedupe():
+                    rec["symbol"] = symbol
+                ready_records.append(rec)
+                if self.config.dedupe:
+                    last_token = token
 
             if not ready_records:
                 # yield nothing; let outer loop iterate again
                 await asyncio.sleep(0)
                 continue
 
-            df = pd.DataFrame.from_records(ready_records).drop_duplicates(subset=["ts"]).sort_values("ts")
-            last = int(df["ts"].iloc[-1])
-            self._last_emitted_ts[key] = last
-            yield last, df
+            df = pd.DataFrame.from_records(ready_records)
+            df = df.drop_duplicates(subset=self._dedupe_subset())
+            df = df.sort_values("ts")
+            last_ts = int(df["ts"].iloc[-1])
+            if self._uses_symbol_dedupe():
+                symbol_value = str(df.iloc[-1]["symbol"])
+                last_token = (last_ts, symbol_value)
+            else:
+                last_token = last_ts
+            self._last_emitted_token[key] = last_token
+            yield last_ts, df
 
     async def _stream_trades(
         self,
@@ -175,7 +199,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         interval: int,
         key: str,
     ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
-        last = self._last_emitted_ts.get(key, -1)
+        last_token = self._last_emitted_token.get(key)
         watch = getattr(exchange, "watch_trades", None) or getattr(exchange, "watchTrades", None)
         if watch is None:
             raise RuntimeError("exchange does not support watch_trades/watchTrades")
@@ -190,7 +214,8 @@ class CcxtProLiveFeed(LiveDataFeed):
                     ts = int(t.get("timestamp")) // 1000
                 except Exception:
                     continue
-                if self.config.dedupe and ts <= last:
+                token = self._dedupe_token(ts, symbol)
+                if self.config.dedupe and not self._should_emit(last_token, token):
                     continue
                 rec = {"ts": ts}
                 if "price" in t:
@@ -199,16 +224,27 @@ class CcxtProLiveFeed(LiveDataFeed):
                     rec["amount"] = float(t["amount"])  # type: ignore[arg-type]
                 if "side" in t:
                     rec["side"] = t["side"]
+                if self._uses_symbol_dedupe():
+                    rec["symbol"] = symbol
                 records.append(rec)
+                if self.config.dedupe:
+                    last_token = token
 
             if not records:
                 await asyncio.sleep(0)
                 continue
 
-            df = pd.DataFrame.from_records(records).drop_duplicates(subset=["ts"]).sort_values("ts")
-            last = int(df["ts"].iloc[-1])
-            self._last_emitted_ts[key] = last
-            yield last, df
+            df = pd.DataFrame.from_records(records)
+            df = df.drop_duplicates(subset=self._dedupe_subset())
+            df = df.sort_values("ts")
+            last_ts = int(df["ts"].iloc[-1])
+            if self._uses_symbol_dedupe():
+                symbol_value = str(df.iloc[-1]["symbol"])
+                last_token = (last_ts, symbol_value)
+            else:
+                last_token = last_ts
+            self._last_emitted_token[key] = last_token
+            yield last_ts, df
 
     def _mode_for_node(self, node_id: str) -> str:
         if node_id.startswith("ohlcv:"):
@@ -255,6 +291,50 @@ class CcxtProLiveFeed(LiveDataFeed):
             pass
         self._exchange = ex
         return ex
+
+    def _build_backoff_schedule(self) -> list[float]:
+        values = self.config.reconnect_backoff_ms or []
+        schedule: list[float] = []
+        for raw in values:
+            try:
+                delay = max(0.0, float(raw) / 1000.0)
+            except (TypeError, ValueError):
+                continue
+            schedule.append(delay)
+        return schedule
+
+    def _dedupe_mode(self) -> str:
+        return (self.config.dedupe_by or "ts").lower()
+
+    def _uses_symbol_dedupe(self) -> bool:
+        return self._dedupe_mode() == "ts+symbol"
+
+    def _dedupe_subset(self) -> list[str]:
+        if self._uses_symbol_dedupe():
+            return ["ts", "symbol"]
+        return ["ts"]
+
+    def _dedupe_token(self, ts: int, symbol: str | None) -> int | tuple[int, str]:
+        if self._uses_symbol_dedupe():
+            return ts, symbol or ""
+        return ts
+
+    @staticmethod
+    def _should_emit(
+        last_token: int | tuple[int, str] | None,
+        current_token: int | tuple[int, str],
+    ) -> bool:
+        if last_token is None:
+            return True
+        last_ts = last_token[0] if isinstance(last_token, tuple) else last_token
+        current_ts = current_token[0] if isinstance(current_token, tuple) else current_token
+        if current_ts < last_ts:
+            return False
+        if current_ts > last_ts:
+            return True
+        if isinstance(last_token, tuple) and isinstance(current_token, tuple):
+            return (current_token[1] or "") != (last_token[1] or "")
+        return False
 
     async def close(self) -> None:
         ex = self._exchange
