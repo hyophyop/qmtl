@@ -909,30 +909,55 @@ class SeamlessDataProvider(ABC):
             pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
             if isinstance(pub_fingerprint, str):
                 normalized_fp = pub_fingerprint
+                canonical_normalized: str | None = None
                 if normalized_fp.startswith("lake:sha256:"):
-                    normalized_fp = normalized_fp.replace("lake:", "", 1)
+                    canonical_normalized = normalized_fp.replace("lake:", "", 1)
+                elif normalized_fp.startswith("sha256:"):
+                    canonical_normalized = normalized_fp.lower()
                 elif (
-                    not normalized_fp.startswith("sha256:")
-                    and len(normalized_fp) == 64
+                    len(normalized_fp) == 64
                     and all(ch in "0123456789abcdefABCDEF" for ch in normalized_fp)
                 ):
-                    normalized_fp = f"sha256:{normalized_fp.lower()}"
-                fingerprint = normalized_fp
+                    canonical_normalized = f"sha256:{normalized_fp.lower()}"
+
+                if self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
+                    if fingerprint is None:
+                        fingerprint = self._compute_fingerprint_value(
+                            stabilized,
+                            canonical_metadata=canonical_metadata,
+                            legacy_metadata=legacy_metadata,
+                            mode=_FINGERPRINT_MODE_LEGACY,
+                        )
+                    normalized_fp = fingerprint
+                else:
+                    if canonical_normalized:
+                        normalized_fp = canonical_normalized
+                    fingerprint = normalized_fp
+
+                canonical_for_preview = canonical_normalized
+                if canonical_for_preview is None and self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
+                    canonical_for_preview = self._compute_fingerprint_value(
+                        stabilized,
+                        canonical_metadata=canonical_metadata,
+                        legacy_metadata=legacy_metadata,
+                        mode=_FINGERPRINT_MODE_CANONICAL,
+                    )
+
                 try:
-                    publication.dataset_fingerprint = fingerprint  # type: ignore[misc]
+                    publication.dataset_fingerprint = normalized_fp  # type: ignore[misc]
                 except Exception:  # pragma: no cover - defensive guard
                     pass
                 manifest_obj = getattr(publication, "manifest", None)
                 if isinstance(manifest_obj, dict):
-                    manifest_obj["dataset_fingerprint"] = fingerprint
+                    manifest_obj["dataset_fingerprint"] = normalized_fp
                 if (
                     preview_fingerprint
-                    and fingerprint
-                    and fingerprint != preview_fingerprint
+                    and canonical_for_preview
+                    and canonical_for_preview != preview_fingerprint
                 ):
                     logger.warning(
                         "seamless.fingerprint.preview_mismatch",
-                        canonical=fingerprint,
+                        canonical=canonical_for_preview,
                         preview=preview_fingerprint,
                     )
             pub_as_of = getattr(publication, "as_of", None)
