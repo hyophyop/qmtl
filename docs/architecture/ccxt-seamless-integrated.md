@@ -5,7 +5,7 @@
 - [DAG Manager](dag-manager.md)
 - [Gateway](gateway.md)
 - [CCXT × QuestDB IO Recipe](../io/ccxt-questdb.md)
-- [CCXT × Seamless (GPT5-Codex)](ccxt-seamless-gpt5codex.md)
+- Archived governance notes formerly published as `ccxt-seamless-gpt5codex.md` now resolve to this integrated blueprint.
 - [CCXT × Seamless Hybrid Summary](ccxt-seamless-hybrid.md)
 - Archived runtime notes previously published as `ccxt-seamless-gpt5high.md` now resolve to this integrated blueprint.
 
@@ -198,20 +198,90 @@ Budgets should be tuned per exchange; exceeding any threshold flips the provider
 
 ## Governance Plane (GPT5-Codex Lineage)
 
-### Dataset Identity
+### Feature Artifact Plane
+
+The governance plane preserves deterministic reproducibility by anchoring every exchange snapshot in the Feature Artifact Plane. The plane treats artifacts as immutable, world-agnostic records that can be replayed or inspected without rehydrating live dependencies.
+
+- **Immutable artifacts** – every stabilized Parquet segment is published with a manifest and never mutated in place.
+- **Read-only cross-domain access** – artifacts are shared read-only across Worlds; mutation requires producing a fresh artifact.
+- **Explicit provenance** – manifests must encode producer identity, upstream exchange, and Seamless policy decisions so auditors can reconstruct lineage.
+
+```mermaid
+flowchart LR
+  subgraph Feature Artifact Plane
+    MAN[(Manifest)]
+    PAR[(Parquet Segment)]
+  end
+
+  subgraph Runtime Domains
+    BT[Backtest]
+    DR[Dry-run]
+    LV[Live]
+  end
+
+  Fetcher[[Seamless Provider]] -->|publish| MAN
+  Fetcher -->|publish| PAR
+  MAN -->|fingerprint, as_of| BT
+  MAN --> DR
+  MAN --> LV
+  PAR --> BT
+  PAR --> DR
+  PAR --> LV
+```
+
+#### Dataset Identity
 - **Runtime key**: `node_id` as defined above.
 - **Version key**: `dataset_fingerprint` (SHA-256 over canonicalized frame + metadata) and `as_of` (snapshot or commit instant).
 - Artifact manifests record `{fingerprint, as_of, node_id, range, conformance_version, producer}` and live alongside Parquet data in object storage.
+- Fingerprints must be calculated after tail-bar stabilization and dtype normalization to guarantee idempotent replay.
 
-### Domain Isolation Rules
-- **Backtest**: `as_of` required; data must originate from artifacts only. Absence of artifacts is a hard failure.
-- **Dry-run**: `as_of` required; storage reads must be artifactized immediately before reuse.
-- **Live**: `as_of` fixed at session start (monotonic non-decreasing). Source stack may use storage, backfill, and live feeds provided `now - data_end ≤ max_lag`. Breaches trigger HOLD/compute-only or PARTIAL_FILL pathways.
+#### Artifact Lifecycle
 
-### Gateway & WorldService Integration
-- Gateway supplies `world_id`, `execution_domain`, `as_of`, `max_lag`, `min_coverage`, and Seamless policy selection per session.
+| Step | Owner | Guarantee |
+| --- | --- | --- |
+| Snapshot stabilization | Seamless Provider | Drops incomplete tail bars, enforces schema parity. |
+| Fingerprint emission | Artifact Registrar | Computes SHA-256 over frame bytes + manifest metadata. |
+| Manifest publish | Artifact Registrar | Writes `{fingerprint, as_of, coverage, producer}` to object storage. |
+| Domain import | Gateway / WorldService | Validates fingerprint + `as_of` prior to admitting data into a session. |
+
+### Domain Isolation & Execution Gating
+
+Domain policies govern which runtime surfaces are permitted to read mutable sources and how `as_of` progresses within a session. World and Execution Domain boundaries must never reuse cache entries produced under a different `as_of` or fingerprint.
+
+- **Backtest** – `as_of` must be specified up front and map to a published artifact; gap fills that have not been artifactized are rejected.
+- **Dry-run** – accepts storage reads, but every response must be immediately artifactized and replayed from the manifest before reuse.
+- **Live** – binds `as_of` at session start. Seamless may combine storage, backfill, and live feeds provided `now - data_end ≤ max_lag`; violations downgrade the session to HOLD or compute-only modes.
+
+#### Domain Policy Matrix
+
+| Domain | Allowed Sources | `as_of` Handling | Gating Outcome |
+| --- | --- | --- | --- |
+| Backtest | Artifact store only | Fixed per run; immutable | Hard fail on missing artifact |
+| Dry-run | Artifact store → immediate publish of fresh reads | Fixed per run; immutable | Reject reuse until artifact exists |
+| Live | Storage, backfill, optional live feed | Monotonic per session; non-decreasing | HOLD or PARTIAL_FILL on SLA or lag breach |
+
+### Gateway Compute Context
+
+Gateway is the source of truth for execution context. Every fetch call must include the complete compute context, and Seamless must echo the relevant governance metadata so downstream services can persist reproducibility evidence.
+
+- Gateway supplies `world_id`, `execution_domain`, `as_of`, `max_lag`, `min_coverage`, SLA policy selection, and optional feature toggles per session.
 - Seamless responses return coverage metadata, conformance flags, and the `{dataset_fingerprint, as_of}` pair so WorldService can log freshness and gate execution modes.
 - Cache entries must key on `(node_id, interval, start, end, conformance_version, world_id, as_of)` to prevent cross-domain leakage.
+
+#### Context Contract Checklist
+
+| Field | Source | Guarantee |
+| --- | --- | --- |
+| `world_id` | Gateway | Segregates cache + metrics per world. |
+| `execution_domain` | Gateway | Distinguishes live, dry-run, backtest orchestration. |
+| `as_of` | Gateway (input) / Seamless (echo) | Provides immutable snapshot boundary. |
+| `dataset_fingerprint` | Seamless | Identifies the exact artifact or stabilized live blend. |
+| `coverage_bounds` | Seamless | Captures `[start, end]` delivered for audit trails. |
+| `conformance_flags` | Seamless | Signals dtype/ordering fixes applied during delivery. |
+
+### World & Execution Domain Coordination
+
+WorldService consumes the echoed governance metadata to decide whether a strategy remains eligible for execution. If coverage gaps, SLA breaches, or fingerprint drift are detected, WorldService issues a downgrade that Gateway must honor before the next fetch. Producers must surface structured logs linking every downgrade to the governing fingerprint/as_of pair so audits can reconstruct decisions without consulting non-canonical documents.
 
 ## Request Lifecycle
 
