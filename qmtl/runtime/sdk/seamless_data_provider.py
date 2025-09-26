@@ -13,6 +13,8 @@ from typing import (
 from abc import ABC
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import inspect
 import pandas as pd
 from enum import Enum
 import asyncio
@@ -315,7 +317,7 @@ class SeamlessDataProvider(ABC):
                 start, end, node_id=node_id, interval=interval, sla_tracker=tracker
             )
 
-        response = self._finalize_response(
+        response = await self._finalize_response(
             result,
             start=start,
             end=end,
@@ -706,7 +708,7 @@ class SeamlessDataProvider(ABC):
         )
 
     # ------------------------------------------------------------------
-    def _finalize_response(
+    async def _finalize_response(
         self,
         frame: pd.DataFrame,
         *,
@@ -799,41 +801,80 @@ class SeamlessDataProvider(ABC):
             "conformance_version": CONFORMANCE_VERSION,
         }
         fingerprint = self._compute_dataset_fingerprint(stabilized, metadata_payload)
-        as_of = int(time.time())
+        as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         manifest_uri: str | None = None
 
         approx_bytes = int(stabilized.memory_usage(deep=True).sum()) if not stabilized.empty else 0
         publication: ArtifactPublication | None = None
-        if self._registrar and coverage_bounds is not None:
+        if self._registrar:
+            publish_call: Any | None = None
+            publish_started = time.monotonic()
             try:
-                publish_started = time.monotonic()
-                publication = self._registrar.publish(
+                publish_call = self._registrar.publish(
                     stabilized,
                     node_id=node_id,
                     interval=interval,
-                    coverage_bounds=coverage_bounds,
-                    fingerprint=fingerprint,
-                    as_of=as_of,
-                    conformance_flags=report.flags_counts,
-                    conformance_warnings=report.warnings,
-                    request_window=(int(start), int(end)),
+                    conformance_report=report,
+                    requested_range=(int(start), int(end)),
                 )
-                publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
-                sdk_metrics.observe_artifact_publish_latency(
-                    node_id=node_id,
-                    interval=interval,
-                    duration_ms=publish_elapsed_ms,
-                )
+            except TypeError:
+                if coverage_bounds is not None:
+                    publish_call = self._registrar.publish(  # type: ignore[misc]
+                        stabilized,
+                        node_id=node_id,
+                        interval=interval,
+                        coverage_bounds=coverage_bounds,
+                        fingerprint=fingerprint,
+                        as_of=as_of,
+                        conformance_flags=report.flags_counts,
+                        conformance_warnings=report.warnings,
+                        request_window=(int(start), int(end)),
+                    )
             except Exception:  # pragma: no cover - publication failures shouldn't crash
-                publication = None
+                publish_call = None
+
+            if publish_call is not None:
+                try:
+                    if inspect.isawaitable(publish_call):
+                        publication = await publish_call
+                    else:
+                        publication = publish_call
+                except Exception:  # pragma: no cover - publication failures shouldn't crash
+                    publication = None
+                else:
+                    publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
+                    sdk_metrics.observe_artifact_publish_latency(
+                        node_id=node_id,
+                        interval=interval,
+                        duration_ms=publish_elapsed_ms,
+                    )
 
         if publication:
-            fingerprint = publication.dataset_fingerprint
-            as_of = publication.as_of
-            coverage_bounds = publication.coverage_bounds
-            manifest_uri = publication.manifest_uri
+            pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
+            if isinstance(pub_fingerprint, str):
+                if pub_fingerprint.startswith("lake:sha256:"):
+                    fingerprint = pub_fingerprint
+                else:
+                    fingerprint = f"lake:sha256:{pub_fingerprint}"
+                try:
+                    publication.dataset_fingerprint = fingerprint  # type: ignore[misc]
+                except Exception:  # pragma: no cover - defensive guard
+                    pass
+                manifest_obj = getattr(publication, "manifest", None)
+                if isinstance(manifest_obj, dict):
+                    manifest_obj["dataset_fingerprint"] = fingerprint
+            pub_as_of = getattr(publication, "as_of", None)
+            if isinstance(pub_as_of, str):
+                as_of = pub_as_of
+            if hasattr(publication, "start") and hasattr(publication, "end"):
+                coverage_bounds = (int(getattr(publication, "start")), int(getattr(publication, "end")))
+            elif hasattr(publication, "coverage_bounds"):
+                bounds = getattr(publication, "coverage_bounds")
+                if isinstance(bounds, tuple) and len(bounds) == 2:
+                    coverage_bounds = (int(bounds[0]), int(bounds[1]))
+            manifest_uri = getattr(publication, "manifest_uri", None)
+            data_uri = getattr(publication, "uri", None) or getattr(publication, "data_uri", None)
             bytes_written = approx_bytes
-            data_uri = publication.data_uri
             if data_uri:
                 try:
                     bytes_written = max(bytes_written, int(os.path.getsize(data_uri)))

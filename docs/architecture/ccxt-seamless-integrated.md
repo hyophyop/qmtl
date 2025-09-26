@@ -100,6 +100,11 @@ flowchart LR
 
 ### Seamless Core
 - Implementation: `EnhancedQuestDBProvider` (`qmtl/runtime/io/seamless_provider.py`) paired with `ArtifactRegistrar` (`qmtl/runtime/io/artifact.py`).
+  The provider now wires the IO-layer registrar by default so every fetch emits ISO-8601
+  `as_of` values, provenance metadata, and manifest URIs even in development mode. Set
+  `QMTL_SEAMLESS_ARTIFACTS=1` (optionally combine with `QMTL_SEAMLESS_ARTIFACT_DIR`) to
+  mirror the filesystem store used in integration tests, or point `registrar=` at a custom
+  implementation when publishing to cloud storage.
 - Exposed strategies: `FAIL_FAST`, `AUTO_BACKFILL`, `PARTIAL_FILL`, `SEAMLESS`.
 - Coordinates cache, storage reads, backfills, and optional live feeds behind a `HistoryProvider` facade while delegating stabilized artifact publication to `ArtifactRegistrar`.
 

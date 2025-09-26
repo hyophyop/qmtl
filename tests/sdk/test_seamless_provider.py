@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Optional, Any
 
 import pandas as pd
@@ -151,10 +152,14 @@ async def test_fetch_response_includes_metadata() -> None:
     assert isinstance(result.metadata.dataset_fingerprint, str)
     assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
     assert result.metadata.coverage_bounds == (0, 90)
-    assert isinstance(result.metadata.as_of, int)
+    assert isinstance(result.metadata.as_of, str)
+    # Validate ISO-8601 format
+    datetime.fromisoformat(result.metadata.as_of.replace("Z", "+00:00"))
     assert registrar.calls and registrar.calls[0]["rows"] == len(result.frame)
     assert result.frame.attrs["dataset_fingerprint"] == result.metadata.dataset_fingerprint
     assert result.metadata.manifest_uri == "mem://manifest"
+    assert result.metadata.artifact is not None
+    assert result.metadata.artifact.manifest["producer"]["node_id"] == "node"
     ratio_key = ("node", "10", "default")
     assert sdk_metrics.coverage_ratio._vals[ratio_key]  # type: ignore[attr-defined]
     assert sdk_metrics.live_staleness_seconds._vals[ratio_key] >= 0  # type: ignore[attr-defined]
@@ -199,7 +204,11 @@ async def test_filesystem_registrar_writes_manifest(tmp_path) -> None:
     assert manifest_path.exists()
     content = json.loads(manifest_path.read_text())
     assert content["dataset_fingerprint"] == result.metadata.dataset_fingerprint
-    data_path = manifest_path.parent / "data.parquet"
+    assert content["producer"]["node_id"] == "node"
+    assert content["publication_watermark"].endswith("Z")
+    data_uri = content["storage"]["data_uri"]
+    assert data_uri.endswith("data.parquet") or data_uri.endswith("data.json")
+    data_path = Path(data_uri)
     assert data_path.exists()
     latency_key = ("node", "10", "default")
     assert sdk_metrics.artifact_publish_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
@@ -297,31 +306,50 @@ class _RecordingRegistrar:
         *,
         node_id: str,
         interval: int,
-        coverage_bounds: tuple[int, int],
-        fingerprint: str,
-        as_of: int,
-        conformance_flags: dict[str, int] | None = None,
-        conformance_warnings: tuple[str, ...] | list[str] | None = None,
-        request_window: tuple[int, int] | None = None,
+        conformance_report: Any | None = None,
+        requested_range: tuple[int, int] | None = None,
     ) -> ArtifactPublication:
+        coverage_bounds = (
+            int(frame["ts"].min()),
+            int(frame["ts"].max()),
+        )
         record = {
             "node_id": node_id,
             "interval": interval,
             "coverage_bounds": coverage_bounds,
-            "fingerprint": fingerprint,
-            "as_of": as_of,
-            "conformance_flags": dict(conformance_flags or {}),
-            "conformance_warnings": tuple(conformance_warnings or ()),
-            "request_window": request_window,
+            "requested_range": requested_range,
             "rows": len(frame),
         }
+        if conformance_report is not None:
+            record["flags"] = dict(conformance_report.flags_counts)
+            record["warnings"] = tuple(conformance_report.warnings)
         self.calls.append(record)
+        manifest = {
+            "node_id": node_id,
+            "interval": int(interval),
+            "range": [coverage_bounds[0], coverage_bounds[1]],
+            "requested_range": list(requested_range or ()),
+            "conformance": {
+                "flags": dict(getattr(conformance_report, "flags_counts", {})),
+                "warnings": list(getattr(conformance_report, "warnings", ())),
+            },
+            "manifest_uri": "mem://manifest",
+            "storage": {
+                "data_uri": "mem://data",
+                "manifest_uri": "mem://manifest",
+            },
+            "producer": {"node_id": node_id, "interval": int(interval)},
+        }
         return ArtifactPublication(
-            dataset_fingerprint=fingerprint,
-            as_of=as_of,
-            coverage_bounds=coverage_bounds,
+            dataset_fingerprint="stub-fingerprint",
+            as_of="2024-01-01T00:00:00Z",
+            node_id=node_id,
+            start=coverage_bounds[0],
+            end=coverage_bounds[1],
+            rows=len(frame),
+            uri="mem://data",
             manifest_uri="mem://manifest",
-            data_uri="mem://data",
+            manifest=manifest,
         )
 
 
