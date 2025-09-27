@@ -90,3 +90,21 @@
 4. **대시보드 패키징** – Jsonnet 번들을 Helm Chart 또는 Terraform 모듈로 패키징해 Prometheus/Grafana 구성이 자동화되도록 하면 운영 복잡도를 줄일 수 있습니다.【F:qmtl/operations/monitoring/seamless_v2.jsonnet†L1-L123】
 
 위 개선안을 적용하면 초기 설정 시간을 단축하고 운영 중 발생할 수 있는 오류를 더 쉽게 탐지할 수 있습니다.
+
+## 5. 개선안 적용 작업 목록
+
+1. **구성 템플릿 제공**
+   - `operations/` 아래에 Seamless 구성용 새 하위 디렉터리를 만들고 예시 `.env` 파일, SLA/정합성 프리셋, Compose 스택을 정의합니다.
+   - 템플릿에서 사용되는 서비스/변수 정의를 README로 문서화하고, `mkdocs.yml` 내 운영 가이드 네비게이션을 업데이트합니다.
+
+2. **자동 검증 스크립트 작성**
+   - `scripts/` 디렉터리에 환경 변수 확인, 코디네이터 헬스 체크, Prometheus 지표 존재 여부를 점검하는 CLI 스크립트를 추가합니다.
+   - 스크립트 실행 예시와 의존성을 문서화하고, CI 파이프라인에 선택적 건강 검증 단계를 배치합니다.
+
+3. **모듈형 설정 객체 도입**
+   - `EnhancedQuestDBProvider` 초기화 인자를 캡슐화하는 dataclass 또는 설정 객체를 설계하고, 기존 호출부의 마이그레이션 계획을 수립합니다.
+   - 설정 객체에 전략, SLA, 정합성, 지문 정책 필드를 정의하고 관련 테스트 케이스를 추가합니다.
+
+4. **대시보드 패키징 자동화**
+   - `operations/monitoring/`의 Jsonnet 번들을 Helm Chart 또는 Terraform 모듈로 변환하는 패키징 파이프라인을 마련합니다.
+   - 배포 자동화를 위해 샘플 values/variables 파일을 제공하고, Grafana/Prometheus 연동 절차를 운영 문서에 반영합니다.
