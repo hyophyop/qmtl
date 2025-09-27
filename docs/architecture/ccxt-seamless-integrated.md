@@ -147,6 +147,10 @@ flowchart LR
 | `min_interval_ms` | Hard lower-bound between CCXT requests per worker | Provider configuration |
 | `penalty_backoff_ms` | Cooldown applied after hitting exchange-side 429s | Provider configuration |
 
+`CcxtQuestDBProvider.from_config(...)` also accepts `min_interval_s`. When both
+fields are present they must describe the same cadence; the millisecond value is
+converted to seconds for the underlying limiter configuration.
+
 ### Provider Recipes
 
 ```python

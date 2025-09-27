@@ -82,9 +82,24 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
         exchange_id = str(cfg.get("exchange") or cfg.get("exchange_id") or "binance")
         symbols = list(cfg.get("symbols") or []) or None
         rl_cfg = cfg.get("rate_limiter") or {}
+        min_interval_s_cfg = rl_cfg.get("min_interval_s")
+        min_interval_ms_cfg = rl_cfg.get("min_interval_ms")
+        min_interval_value: float | None = None
+        if min_interval_s_cfg is not None:
+            min_interval_value = float(min_interval_s_cfg)
+        if min_interval_ms_cfg is not None:
+            min_interval_from_ms = float(min_interval_ms_cfg) / 1000.0
+            if min_interval_value is not None:
+                if abs(min_interval_value - min_interval_from_ms) > 1e-9:
+                    raise ValueError(
+                        "rate_limiter.min_interval_s and rate_limiter.min_interval_ms "
+                        "conflict; provide matching values or only one option"
+                    )
+            min_interval_value = min_interval_from_ms
+        effective_min_interval_s = float(min_interval_value or 0.0)
         rate_limiter = RateLimiterConfig(
             max_concurrency=int(rl_cfg.get("max_concurrency", 1)),
-            min_interval_s=float(rl_cfg.get("min_interval_s", 0.0)),
+            min_interval_s=effective_min_interval_s,
             scope=str(rl_cfg.get("scope", "process")),
             redis_dsn=rl_cfg.get("redis_dsn"),
             tokens_per_interval=(
