@@ -1,0 +1,18 @@
+fullnameOverride: seamless_v2_observability-prod
+commonLabels:
+  team: monitoring
+  component: seamless
+grafanaDashboards:
+  enabled: true
+  folder: Seamless
+  dashboards:
+  - uid: seamless-sla-overview
+    title: Seamless SLA Overview
+  - uid: seamless-backfill-health
+    title: Backfill Coordinator Health
+  - uid: seamless-conformance-quality
+    title: Conformance Quality
+prometheusRule:
+  enabled: true
+  namespace: monitoring
+  name: seamless_v2_observability-recording-rules

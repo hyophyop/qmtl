@@ -38,6 +38,55 @@ The following alerts are available for inspiration when extending `alert_rules.y
 
 Example Grafana dashboards are provided in `dashboards/`. Import the JSON file into Grafana to visualise queue counts and garbage collector activity. The dashboard uses the `orphan_queue_total` metric exposed by the DAG Manager.
 
+## Jsonnet packaging automation
+
+The `seamless_v2_observability` Jsonnet bundle in `operations/monitoring/seamless_v2.jsonnet` can now be packaged automatically into Helm and Terraform artefacts. Run the generator whenever the bundle changes:
+
+```bash
+python scripts/package_monitoring_bundle.py
+```
+
+The command writes the results to `operations/monitoring/dist/` and exports reusable sample overrides to `operations/monitoring/samples/`:
+
+- `dist/helm/seamless_v2_observability/` contains a fully rendered Helm chart, including a `values.yaml` seeded with the dashboards and recording rules plus a CI-friendly `values-sample.yaml` override file.
+- `dist/terraform/seamless_v2_observability/` contains a Terraform module that exposes the dashboards and recording rules through the Kubernetes provider alongside a `terraform.tfvars.example` file for automation.
+- `samples/` includes ready-to-commit snippets (`*.helm-values.yaml` and `*.terraform.tfvars`) that CI pipelines can mount directly without re-running the generator.
+
+### Deploying with Helm
+
+1. Provide Grafana connectivity by ensuring your Grafana release watches ConfigMaps with the `grafana_dashboard: "1"` label.
+2. Install the chart with custom values (the sample file sets sane defaults for our production namespace):
+
+   ```bash
+   helm upgrade --install seamless-observability \
+     operations/monitoring/dist/helm/seamless_v2_observability \
+     -f operations/monitoring/dist/helm/seamless_v2_observability/values-sample.yaml
+   ```
+3. Prometheus Operator users should verify that the namespace in `values-sample.yaml` matches their deployment; adjust `prometheusRule.namespace` if necessary.
+
+### Deploying with Terraform
+
+1. Add the module to your Terraform workspace:
+
+   ```hcl
+   module "seamless_monitoring" {
+     source = "../../operations/monitoring/dist/terraform/seamless_v2_observability"
+   }
+   ```
+2. Copy `terraform.tfvars.example` and adjust the namespace, labels, and feature toggles:
+
+   ```bash
+   cp operations/monitoring/dist/terraform/seamless_v2_observability/terraform.tfvars.example terraform.tfvars
+   ```
+3. Apply the plan once the Kubernetes provider is configured:
+
+   ```bash
+   terraform init
+   terraform apply
+   ```
+
+Both deployment methods create the same ConfigMap data for Grafana and an optional PrometheusRule that materialises the recording rules defined in the Jsonnet bundle.
+
 ## QuestDB Recorder Demo
 
 The script `qmtl/examples/questdb_parallel_example.py` runs two moving-average strategies in parallel while persisting every `StreamInput` payload to QuestDB. It starts the metrics server on port `8000` and prints aggregated Prometheus metrics when finished. Execute it as follows:
