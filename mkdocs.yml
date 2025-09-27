@@ -23,6 +23,7 @@ nav:
       - Overview: guides/README.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Seamless Data Provider Setup: guides/seamless_data_provider_setup.md
       - Seamless Migration to v2: guides/seamless_migration_v2.md
       - Strategy Callbacks: guides/strategy_callbacks.md
       - Build NodeSet (SDK): guides/build_nodeset_sdk.md
