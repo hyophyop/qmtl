@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 import pandas as pd
 import asyncio
@@ -17,8 +18,56 @@ from qmtl.runtime.sdk.seamless_data_provider import (
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
+from qmtl.runtime.sdk.sla import SLAPolicy
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class FingerprintPolicy:
+    """Fingerprint publication policy for Seamless providers."""
+
+    publish: bool | None = None
+    early: bool | None = None
+
+    def to_kwargs(self) -> dict[str, bool | None]:
+        """Return keyword arguments understood by :class:`SeamlessDataProvider`."""
+
+        payload: dict[str, bool | None] = {}
+        if self.publish is not None:
+            payload["publish_fingerprint"] = self.publish
+        if self.early is not None:
+            payload["early_fingerprint"] = self.early
+        return payload
+
+
+@dataclass(slots=True)
+class EnhancedQuestDBProviderSettings:
+    """Encapsulate optional knobs for :class:`EnhancedQuestDBProvider`.
+
+    The settings object provides a single place to aggregate strategy, SLA,
+    conformance and fingerprint configuration while keeping backwards
+    compatibility with legacy keyword arguments. Call sites can migrate in two
+    phases:
+
+    1. Instantiate :class:`EnhancedQuestDBProviderSettings` with the
+       configuration currently supplied through keyword arguments.
+    2. Pass the instance via the ``settings`` parameter. Once all call sites
+       adopt the object we can deprecate the legacy keyword arguments.
+    """
+
+    table: str | None = None
+    fetcher: DataFetcher | None = None
+    live_fetcher: DataFetcher | None = None
+    live_feed: LiveDataFeed | None = None
+    cache_provider: HistoryProvider | None = None
+    strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.SEAMLESS
+    conformance: ConformancePipeline | None = None
+    partial_ok: bool = False
+    registrar: ArtifactRegistrar | None = None
+    node_id_format: str | None = None
+    sla: SLAPolicy | None = None
+    fingerprint: FingerprintPolicy = field(default_factory=FingerprintPolicy)
 
 
 class CacheDataSource:
@@ -345,41 +394,89 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         self,
         dsn: str,
         *,
+        settings: EnhancedQuestDBProviderSettings | None = None,
         table: str | None = None,
         fetcher: DataFetcher | None = None,
         live_fetcher: DataFetcher | None = None,
         live_feed: LiveDataFeed | None = None,
         cache_provider: HistoryProvider | None = None,
-        strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.SEAMLESS,
+        strategy: DataAvailabilityStrategy | None = None,
         conformance: ConformancePipeline | None = None,
-        partial_ok: bool = False,
+        partial_ok: bool | None = None,
         registrar: ArtifactRegistrar | None = None,
         node_id_format: str | None = None,
         **kwargs
     ):
         # Import here to avoid circular imports
         from qmtl.runtime.io.historyprovider import QuestDBLoader
-        
+
+        config = settings or EnhancedQuestDBProviderSettings()
+
+        resolved_table = table if table is not None else config.table
+        resolved_fetcher = fetcher if fetcher is not None else config.fetcher
+        resolved_live_fetcher = (
+            live_fetcher if live_fetcher is not None else config.live_fetcher
+        )
+        resolved_live_feed = live_feed if live_feed is not None else config.live_feed
+        resolved_cache_provider = (
+            cache_provider if cache_provider is not None else config.cache_provider
+        )
+        resolved_strategy = strategy if strategy is not None else config.strategy
+        resolved_conformance = (
+            conformance if conformance is not None else config.conformance
+        )
+        resolved_partial_ok = (
+            partial_ok if partial_ok is not None else config.partial_ok
+        )
+        resolved_registrar = (
+            registrar if registrar is not None else config.registrar
+        )
+        resolved_node_id_format = (
+            node_id_format if node_id_format is not None else config.node_id_format
+        )
+
+        if config.sla is not None and "sla" not in kwargs:
+            kwargs["sla"] = config.sla
+
+        for key, value in config.fingerprint.to_kwargs().items():
+            kwargs.setdefault(key, value)
+
+        strategy_value = resolved_strategy or DataAvailabilityStrategy.SEAMLESS
+
         # Create the underlying storage provider
-        self.storage_provider = QuestDBLoader(dsn, table=table, fetcher=fetcher)
-        
+        self.storage_provider = QuestDBLoader(
+            dsn, table=resolved_table, fetcher=resolved_fetcher
+        )
+
         # Create data sources
         storage_source = StorageDataSource(self.storage_provider)
-        cache_source = CacheDataSource(cache_provider) if cache_provider else None
-        
+        cache_source = (
+            CacheDataSource(resolved_cache_provider)
+            if resolved_cache_provider
+            else None
+        )
+
         # Create backfiller if fetcher is available
-        backfiller = DataFetcherAutoBackfiller(fetcher) if fetcher else None
-        
+        backfiller = (
+            DataFetcherAutoBackfiller(resolved_fetcher)
+            if resolved_fetcher
+            else None
+        )
+
         # Create live feed if available (prefer explicit LiveDataFeed)
-        live_feed_obj = live_feed or (LiveDataFeedImpl(live_fetcher) if live_fetcher else None)
-        
-        registrar_obj: ArtifactRegistrar | None = registrar
+        live_feed_obj = resolved_live_feed or (
+            LiveDataFeedImpl(resolved_live_fetcher)
+            if resolved_live_fetcher
+            else None
+        )
+
+        registrar_obj: ArtifactRegistrar | None = resolved_registrar
         if registrar_obj is None:
             registrar_obj = FileSystemArtifactRegistrar.from_env()
         if registrar_obj is None:
             registrar_obj = IOArtifactRegistrar(stabilization_bars=2)
 
-        fmt = node_id_format.strip() if node_id_format else None
+        fmt = resolved_node_id_format.strip() if resolved_node_id_format else None
         self._node_id_format = fmt
         self._node_id_validator: Callable[[str], None] | None = None
         if fmt:
@@ -392,13 +489,13 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
                 )
 
         super().__init__(
-            strategy=strategy,
+            strategy=strategy_value,
             cache_source=cache_source,
             storage_source=storage_source,
             backfiller=backfiller,
             live_feed=live_feed_obj,
-            conformance=conformance or ConformancePipeline(),
-            partial_ok=partial_ok,
+            conformance=resolved_conformance or ConformancePipeline(),
+            partial_ok=bool(resolved_partial_ok),
             registrar=registrar_obj,
             **kwargs
         )
@@ -434,8 +531,10 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
 __all__ = [
     "CacheDataSource",
-    "StorageDataSource", 
+    "StorageDataSource",
     "DataFetcherAutoBackfiller",
     "LiveDataFeedImpl",
+    "FingerprintPolicy",
+    "EnhancedQuestDBProviderSettings",
     "EnhancedQuestDBProvider",
 ]
