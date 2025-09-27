@@ -25,6 +25,7 @@ nav:
       - Strategy Workflow: guides/strategy_workflow.md
       - Seamless Data Provider Setup: guides/seamless_data_provider_setup.md
       - Seamless Migration to v2: guides/seamless_migration_v2.md
+      - CCXT Seamless Data Provider: guides/ccxt_seamless_usage.md
       - Strategy Callbacks: guides/strategy_callbacks.md
       - Build NodeSet (SDK): guides/build_nodeset_sdk.md
       - CCXT Spot Recipe: guides/ccxt_spot_recipe.md
