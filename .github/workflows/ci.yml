@@ -41,6 +41,16 @@ jobs:
       - name: Lint DSN keys (canonical *_dsn)
         run: uv run python scripts/lint_dsn_keys.py
 
+      - name: Seamless runtime health verification
+        if: ${{ vars.RUN_SEAMLESS_HEALTH_CHECK == '1' }}
+        env:
+          QMTL_SEAMLESS_COORDINATOR_URL: ${{ secrets.QMTL_SEAMLESS_COORDINATOR_URL }}
+          QMTL_PROMETHEUS_URL: ${{ secrets.QMTL_PROMETHEUS_URL }}
+        run: |
+          uv run python scripts/seamless_health_check.py \
+            --prometheus-metric backfill_completion_ratio \
+            --prometheus-metric seamless_sla_deadline_seconds
+
       - name: Preflight – import/collection
         run: uv run -m pytest --collect-only -q
 
