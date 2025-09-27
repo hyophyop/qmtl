@@ -123,6 +123,7 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
                 else None
             ),
             key_suffix=rl_cfg.get("key_suffix"),
+            key_template=rl_cfg.get("key_template"),
             penalty_backoff_ms=(
                 int(rl_cfg["penalty_backoff_ms"])
                 if rl_cfg.get("penalty_backoff_ms") is not None

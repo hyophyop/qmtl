@@ -111,3 +111,16 @@ def test_from_config_rejects_conflicting_min_interval_fields():
     with pytest.raises(ValueError):
         CcxtQuestDBProvider.from_config(cfg)
 
+
+def test_from_config_propagates_key_template():
+    cfg = _base_provider_config(
+        key_suffix="acct42",
+        key_template="ccxt:{exchange}:{suffix}",
+    )
+    provider = CcxtQuestDBProvider.from_config(cfg)
+    fetcher = provider.fetcher
+    assert fetcher is not None
+    rl = fetcher.config.rate_limiter  # type: ignore[union-attr]
+    assert rl.key_template == "ccxt:{exchange}:{suffix}"
+    assert rl.key_suffix == "acct42"
+
