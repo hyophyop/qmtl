@@ -141,6 +141,7 @@ def build_helm(bundle: Bundle, output_dir: Path) -> None:
                 {
                     "uid": d.get("uid"),
                     "title": d.get("title"),
+                    "json": LiteralStr(json.dumps(d, indent=2)),
                 }
                 for d in bundle.dashboards
             ],
