@@ -82,7 +82,7 @@ alerts should page. The alert annotations link back to this runbook.
 
 ## Validation Tooling
 
-Two operational scripts now ship alongside the dashboards:
+Three operational scripts now ship alongside the dashboards:
 
 - `scripts/inject_sla_violation.py` emits synthetic SLA metrics, optionally
   writing the Prometheus exposition text to disk or serving it temporarily via
@@ -101,8 +101,24 @@ Two operational scripts now ship alongside the dashboards:
   uv run scripts/lease_recover.py --coordinator-url https://coordinator/v1 lease-A:deadbeef lease-B:feedface
   ```
 
-Both scripts include `--dry-run` or `--serve` modes to simplify verification in
-non-production environments.
+- `scripts/seamless_health_check.py` validates production roll-outs by checking
+  environment variables, probing the distributed coordinator, and asserting that
+  Prometheus exposes coordinator and SLA metrics. The CLI depends on
+  [`httpx`](https://www.python-httpx.org/) (already included in the dev extras)
+  and reads the `QMTL_SEAMLESS_COORDINATOR_URL` / `QMTL_PROMETHEUS_URL`
+  environment variables by default. Example:
+
+  ```bash
+  uv run python scripts/seamless_health_check.py \
+    --prometheus-metric backfill_completion_ratio \
+    --prometheus-metric seamless_sla_deadline_seconds
+  ```
+
+Override the Prometheus or coordinator endpoints by passing the
+`--prometheus-url` and `--coordinator-url` flags (or by exporting the
+environment variables before invoking the script). Combine the health check's
+`--timeout` flag with the existing `--dry-run` modes on the other scripts when
+testing in non-production environments.
 
 ## Tracing and Logging
 
