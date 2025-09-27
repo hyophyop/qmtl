@@ -77,3 +77,37 @@ async def test_ccxt_questdb_provider_wiring_and_backfill(monkeypatch):
     df = await backend.read_range(0, 120, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     assert df["ts"].tolist() == [60]
 
+
+def _base_provider_config(**rate_limiter: object) -> dict[str, object]:
+    return {
+        "exchange": "binance",
+        "symbols": ["BTC/USDT"],
+        "timeframe": "1m",
+        "questdb": {
+            "dsn": "postgresql://localhost:8812/qdb",
+            "table": "crypto_ohlcv",
+        },
+        "rate_limiter": rate_limiter,
+    }
+
+
+def test_from_config_accepts_min_interval_ms():
+    cfg = _base_provider_config(min_interval_ms=25)
+    provider = CcxtQuestDBProvider.from_config(cfg)
+    assert provider.fetcher is not None  # sanity check
+    limiter = provider.fetcher.config.rate_limiter  # type: ignore[union-attr]
+    assert limiter.min_interval_s == pytest.approx(0.025)
+
+
+def test_from_config_allows_matching_min_interval_fields():
+    cfg = _base_provider_config(min_interval_ms=250, min_interval_s=0.25)
+    provider = CcxtQuestDBProvider.from_config(cfg)
+    limiter = provider.fetcher.config.rate_limiter  # type: ignore[union-attr]
+    assert limiter.min_interval_s == pytest.approx(0.25)
+
+
+def test_from_config_rejects_conflicting_min_interval_fields():
+    cfg = _base_provider_config(min_interval_ms=300, min_interval_s=0.1)
+    with pytest.raises(ValueError):
+        CcxtQuestDBProvider.from_config(cfg)
+
