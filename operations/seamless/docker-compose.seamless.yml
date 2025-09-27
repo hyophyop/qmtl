@@ -1,0 +1,80 @@
+services:
+  seamless-coordinator:
+    image: ghcr.io/qmtl/seamless-coordinator:0.5.2
+    container_name: seamless-coordinator
+    env_file:
+      - .env
+    environment:
+      COORDINATOR_ID: ${SEAMLESS_COORDINATOR_ID:-local-dev}
+      BIND_ADDR: ${SEAMLESS_COORDINATOR_BIND:-0.0.0.0:8080}
+      PROMETHEUS_PORT: ${SEAMLESS_COORDINATOR_PROMETHEUS_PORT:-9102}
+      REDIS_DSN: ${SEAMLESS_COORDINATOR_REDIS_DSN:-redis://redis:6379/3}
+      QUESTDB_DSN: ${SEAMLESS_COORDINATOR_QUESTDB_DSN:-postgresql://qmtl:qmtl@questdb:8812/qdb}
+      ARTIFACT_ENDPOINT: http://minio:9000
+      ARTIFACT_BUCKET: ${MINIO_BUCKET:-seamless-artifacts}
+      ARTIFACT_ACCESS_KEY: ${MINIO_ROOT_USER:-seamless}
+      ARTIFACT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-seamless123}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports:
+      - "8080:8080"
+      - "${SEAMLESS_COORDINATOR_PROMETHEUS_PORT:-9102}:9102"
+    depends_on:
+      - redis
+      - questdb
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  questdb:
+    image: questdb/questdb:7.3.2
+    container_name: questdb
+    environment:
+      QDB_PG_USER: ${QUESTDB_POSTGRES_USER:-qmtl}
+      QDB_PG_PASSWORD: ${QUESTDB_POSTGRES_PASSWORD:-qmtl}
+      QDB_PG_DATABASE: ${QUESTDB_POSTGRES_DB:-qdb}
+    ports:
+      - "8812:8812"
+      - "9000:9000"
+    volumes:
+      - questdb_data:/var/lib/questdb
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T02-41-44Z
+    container_name: minio
+    env_file:
+      - .env
+    command: ["server", "/data", "--console-address", ":${MINIO_CONSOLE_PORT:-9001}"]
+    ports:
+      - "9000:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_CONSOLE_PORT:-9001}/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  questdb_data:
+  minio_data:
