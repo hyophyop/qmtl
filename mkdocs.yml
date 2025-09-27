@@ -53,6 +53,7 @@ nav:
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
       - Seamless SLA Dashboards: operations/seamless_sla_dashboards.md
+      - Seamless Stack Templates: operations/seamless_stack.md
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md
       - Schema Registry Governance: operations/schema_registry_governance.md
