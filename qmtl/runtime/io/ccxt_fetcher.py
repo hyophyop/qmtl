@@ -8,9 +8,10 @@ SDK's standard schema with a ``ts`` (seconds) column.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Sequence, Mapping
 import asyncio
 import time
+import re
 
 import pandas as pd
 
@@ -56,6 +57,7 @@ class RateLimiterConfig:
     burst_tokens: int | None = None
     local_semaphore: int | None = None
     key_suffix: str | None = None  # e.g., account id
+    key_template: str | None = None
     penalty_backoff_ms: int | None = None
 
 
@@ -88,6 +90,63 @@ def _try_parse_timeframe_s(timeframe: str) -> int:
     if timeframe not in table:
         raise ValueError(f"Unsupported timeframe: {timeframe}")
     return table[timeframe]
+
+
+_OPTIONAL_SECTION = re.compile(r"(?P<prefix>[^{}\w]?)\{(?P<name>\w+)\?\}")
+
+
+def _render_optional_sections(template: str, values: Mapping[str, Any]) -> str:
+    """Expand optional placeholders of the form ``{name?}``.
+
+    When ``values[name]`` is truthy (or zero), the placeholder is replaced by the
+    value prefixed by the captured punctuation (``:``, ``-`` …). If the value is
+    missing or an empty string, both the placeholder and the prefix are removed.
+    """
+
+    def _replace(match: "re.Match[str]") -> str:
+        prefix = match.group("prefix") or ""
+        name = match.group("name")
+        value = values.get(name)
+        if value is None:
+            return ""
+        if isinstance(value, str) and value == "":
+            return ""
+        return f"{prefix}{value}"
+
+    return _OPTIONAL_SECTION.sub(_replace, template)
+
+
+def _build_rate_limit_key(
+    exchange_id: str, rl: RateLimiterConfig
+) -> tuple[str, bool]:
+    """Return limiter key and whether to append ``key_suffix`` automatically."""
+
+    default_key = f"ccxt:{exchange_id.lower()}"
+    template = getattr(rl, "key_template", None)
+    if not template:
+        return default_key, True
+
+    suffix = getattr(rl, "key_suffix", None)
+    context: dict[str, Any] = {
+        "exchange": exchange_id.lower(),
+        "exchange_id": exchange_id,
+        "exchange_upper": exchange_id.upper(),
+        "suffix": suffix,
+        "key_suffix": suffix,
+        "account": suffix,
+        "account_id": suffix,
+    }
+
+    try:
+        staged = _render_optional_sections(str(template), context)
+        rendered = staged.format(**context)
+    except Exception:
+        return default_key, True
+
+    rendered = rendered.strip()
+    if not rendered:
+        return default_key, True
+    return rendered, False
 
 
 from .ccxt_rate_limiter import get_limiter
@@ -197,7 +256,9 @@ class CcxtOHLCVFetcher(DataFetcher):
     async def _ensure_limiter(self):
         if self._limiter is not None:
             return self._limiter
-        key = f"ccxt:{self.config.exchange_id.lower()}"
+        key, allow_suffix = _build_rate_limit_key(
+            self.config.exchange_id, self.config.rate_limiter
+        )
         rl = self.config.rate_limiter
         self._limiter = await get_limiter(
             key,
@@ -209,7 +270,7 @@ class CcxtOHLCVFetcher(DataFetcher):
             interval_ms=getattr(rl, "interval_ms", None),
             burst_tokens=getattr(rl, "burst_tokens", None),
             local_semaphore=getattr(rl, "local_semaphore", None),
-            key_suffix=getattr(rl, "key_suffix", None),
+            key_suffix=(getattr(rl, "key_suffix", None) if allow_suffix else None),
         )
         return self._limiter
 
@@ -364,7 +425,9 @@ class CcxtTradesFetcher(DataFetcher):
     async def _ensure_limiter(self):
         if self._limiter is not None:
             return self._limiter
-        key = f"ccxt:{self.config.exchange_id.lower()}"
+        key, allow_suffix = _build_rate_limit_key(
+            self.config.exchange_id, self.config.rate_limiter
+        )
         rl = self.config.rate_limiter
         self._limiter = await get_limiter(
             key,
@@ -376,7 +439,7 @@ class CcxtTradesFetcher(DataFetcher):
             interval_ms=getattr(rl, "interval_ms", None),
             burst_tokens=getattr(rl, "burst_tokens", None),
             local_semaphore=getattr(rl, "local_semaphore", None),
-            key_suffix=getattr(rl, "key_suffix", None),
+            key_suffix=(getattr(rl, "key_suffix", None) if allow_suffix else None),
         )
         return self._limiter
 

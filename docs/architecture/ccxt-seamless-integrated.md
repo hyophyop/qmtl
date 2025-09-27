@@ -448,6 +448,14 @@ cache:
 domains:
   backtest:
     require_as_of: true
+
+The runtime honours ``rate_limit.key_template`` when wiring CCXT fetchers. The
+template supports ``{exchange}`` (lower-case), ``{exchange_id}`` (original
+case), and aliases for the optional suffix value (``{suffix}``, ``{key_suffix}``,
+``{account}``). Sections written as ``:{account?}`` are removed entirely when the
+value is missing, matching the configuration blueprint. When a template is
+provided the legacy ``key_suffix`` is not appended automatically; include the
+suffix inside the template if it should participate in the limiter key.
     source: artifact_only
   dryrun:
     require_as_of: true

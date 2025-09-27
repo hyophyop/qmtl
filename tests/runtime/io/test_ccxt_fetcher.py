@@ -141,3 +141,104 @@ async def test_ccxt_fetcher_penalty_backoff_on_429(monkeypatch):
     assert df["ts"].tolist() == [60]
     assert any(pytest.approx(0.5, rel=0.1) == d for d in delays)
 
+
+class _DummyLimiter:
+    async def __aenter__(self):  # pragma: no cover - trivial context
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):  # pragma: no cover - trivial context
+        return False
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_key_template_overrides_suffix(monkeypatch):
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def _fake_get_limiter(key: str, **kwargs):
+        calls.append((key, kwargs))
+        return _DummyLimiter()
+
+    monkeypatch.setattr(
+        "qmtl.runtime.io.ccxt_fetcher.get_limiter", _fake_get_limiter
+    )
+
+    rl = RateLimiterConfig(
+        key_suffix="acct42",
+        key_template="ccxt:{exchange}:{account?}",
+    )
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        rate_limiter=rl,
+    )
+    fetcher = CcxtOHLCVFetcher(cfg, exchange=_StubExchange([[[60_000, 1, 1, 1, 1, 1]]]))
+
+    df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    assert df["ts"].tolist() == [60]
+    assert calls, "expected limiter to be requested"
+    key, kwargs = calls[0]
+    assert key == "ccxt:binance:acct42"
+    assert kwargs.get("key_suffix") is None
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_key_template_falls_back_on_error(monkeypatch):
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def _fake_get_limiter(key: str, **kwargs):
+        calls.append((key, kwargs))
+        return _DummyLimiter()
+
+    monkeypatch.setattr(
+        "qmtl.runtime.io.ccxt_fetcher.get_limiter", _fake_get_limiter
+    )
+
+    rl = RateLimiterConfig(
+        key_suffix="acct42",
+        key_template="ccxt:{missing}",
+    )
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        rate_limiter=rl,
+    )
+    fetcher = CcxtOHLCVFetcher(cfg, exchange=_StubExchange([[[60_000, 1, 1, 1, 1, 1]]]))
+
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    assert calls, "expected limiter to be requested"
+    key, kwargs = calls[0]
+    assert key == "ccxt:binance"
+    assert kwargs.get("key_suffix") == "acct42"
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_key_template_optional_section(monkeypatch):
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def _fake_get_limiter(key: str, **kwargs):
+        calls.append((key, kwargs))
+        return _DummyLimiter()
+
+    monkeypatch.setattr(
+        "qmtl.runtime.io.ccxt_fetcher.get_limiter", _fake_get_limiter
+    )
+
+    rl = RateLimiterConfig(
+        key_template="ccxt:{exchange}:{account?}",
+    )
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        rate_limiter=rl,
+    )
+    fetcher = CcxtOHLCVFetcher(cfg, exchange=_StubExchange([[[60_000, 1, 1, 1, 1, 1]]]))
+
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    assert calls, "expected limiter to be requested"
+    key, kwargs = calls[0]
+    assert key == "ccxt:binance"
+    assert kwargs.get("key_suffix") is None
+
