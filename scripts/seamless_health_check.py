@@ -87,7 +87,7 @@ def check_coordinator_health(
             message=f"Request failed: {exc}",
         )
 
-    if response.status_code >= 400:
+    if not 200 <= response.status_code < 300:
         return CheckResult(
             name="Coordinator health",
             success=False,
@@ -151,7 +151,7 @@ def check_prometheus_metrics(
                 message=f"Request failed for metric '{metric}': {exc}",
             )
 
-        if response.status_code >= 400:
+        if not 200 <= response.status_code < 300:
             return CheckResult(
                 name="Prometheus metrics",
                 success=False,

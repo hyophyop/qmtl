@@ -42,6 +42,17 @@ def test_check_coordinator_health_reports_status_from_payload() -> None:
     assert result.success
 
 
+def test_check_coordinator_health_fails_on_redirect() -> None:
+    def fake_get(url: str, params: dict[str, str] | None, timeout: float) -> _DummyResponse:
+        return _DummyResponse(302)
+
+    result = health.check_coordinator_health(
+        "https://coordinator",
+        http_get=fake_get,
+    )
+    assert not result.success
+
+
 @pytest.mark.parametrize(
     "status_payload",
     [
@@ -90,3 +101,15 @@ def test_check_prometheus_metrics_succeeds_with_active_series() -> None:
         http_get=fake_get,
     )
     assert result.success
+
+
+def test_check_prometheus_metrics_fails_on_redirect() -> None:
+    def fake_get(url: str, params: dict[str, str] | None, timeout: float) -> _DummyResponse:
+        return _DummyResponse(301)
+
+    result = health.check_prometheus_metrics(
+        "https://prometheus:9090",
+        ["backfill_completion_ratio"],
+        http_get=fake_get,
+    )
+    assert not result.success
