@@ -1,8 +1,14 @@
 import pandas as pd
 import pytest
 
-from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
+from qmtl.runtime.io.seamless_provider import (
+    EnhancedQuestDBProvider,
+    EnhancedQuestDBProviderSettings,
+    FingerprintPolicy,
+)
+from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
+from qmtl.runtime.sdk.sla import SLAPolicy
 
 
 class _QuestDBLoaderStub:
@@ -33,12 +39,13 @@ async def test_enhanced_provider_validates_node_ids(monkeypatch):
         _QuestDBLoaderStub,
     )
 
-    provider = EnhancedQuestDBProvider(
-        "memory://",
+    settings = EnhancedQuestDBProviderSettings(
         registrar=_RegistrarStub(),
         node_id_format="ohlcv:{exchange}:{symbol}:{timeframe}",
         strategy=DataAvailabilityStrategy.FAIL_FAST,
     )
+
+    provider = EnhancedQuestDBProvider("memory://", settings=settings)
 
     # Invalid OHLCV identifier should fail fast before hitting storage.
     with pytest.raises(ValueError):
@@ -47,3 +54,39 @@ async def test_enhanced_provider_validates_node_ids(monkeypatch):
     # Well-formed identifier is accepted.
     df = await provider.fetch(0, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     assert df.empty or "ts" in df.columns
+
+
+@pytest.mark.asyncio
+async def test_enhanced_provider_settings_apply_policies(monkeypatch):
+    monkeypatch.setattr(
+        "qmtl.runtime.io.historyprovider.QuestDBLoader",
+        _QuestDBLoaderStub,
+    )
+
+    custom_conformance = ConformancePipeline()
+    custom_sla = SLAPolicy(total_deadline_ms=5000)
+
+    settings = EnhancedQuestDBProviderSettings(
+        registrar=_RegistrarStub(),
+        conformance=custom_conformance,
+        sla=custom_sla,
+        fingerprint=FingerprintPolicy(publish=True, early=False),
+    )
+
+    provider = EnhancedQuestDBProvider("memory://", settings=settings)
+
+    assert provider.strategy == settings.strategy
+    assert provider._conformance is custom_conformance
+    assert provider._sla is custom_sla
+    assert provider._publish_fingerprint is True
+    assert provider._early_fingerprint is False
+
+    provider_override = EnhancedQuestDBProvider(
+        "memory://",
+        settings=settings,
+        publish_fingerprint=False,
+        early_fingerprint=True,
+    )
+
+    assert provider_override._publish_fingerprint is False
+    assert provider_override._early_fingerprint is True

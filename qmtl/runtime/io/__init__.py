@@ -13,7 +13,11 @@ from .ccxt_fetcher import (
     CcxtTradesFetcher,
 )
 from .ccxt_provider import CcxtQuestDBProvider
-from .seamless_provider import EnhancedQuestDBProvider
+from .seamless_provider import (
+    EnhancedQuestDBProvider,
+    EnhancedQuestDBProviderSettings,
+    FingerprintPolicy,
+)
 from .artifact import ArtifactRegistrar, ArtifactPublication
 from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
 
@@ -27,6 +31,8 @@ __all__ = [
     "QuestDBRecorder",
     "BinanceFetcher",
     "EnhancedQuestDBProvider",
+    "EnhancedQuestDBProviderSettings",
+    "FingerprintPolicy",
     "CcxtBackfillConfig",
     "RateLimiterConfig",
     "CcxtOHLCVFetcher",
