@@ -220,6 +220,47 @@ assembly = build_seamless_assembly(config)
 # setups that already instantiate EnhancedQuestDBProvider directly.
 ```
 
+#### Preset Catalog
+
+- `ccxt.questdb.ohlcv`
+  - Purpose: QuestDB storage + CCXT OHLCV backfill
+  - Options: `exchange_id`, `symbols`, `timeframe`, `questdb: {dsn, table}`, `rate_limiter`, `window_size`, `max_retries`, `retry_backoff_s`
+
+- `ccxt.questdb.trades`
+  - Purpose: QuestDB storage + CCXT Trades backfill
+  - Options: `exchange_id`, `symbols`, `questdb: {dsn, table}`, `rate_limiter`, `window_size`, `max_retries`, `retry_backoff_s`
+
+- `ccxt.live.pro`
+  - Purpose: ccxt.pro-based LiveDataFeed (websocket) for OHLCV or trades
+  - Options: `exchange_id`, `symbols`, `timeframe`, `mode` ("ohlcv"|"trades"), `sandbox`, `reconnect_backoff_ms`, `dedupe_by`, `emit_building_candle`
+  - Note: ccxt.pro optional dependency; factories are created lazily and only resolve on subscribe().
+
+- `seamless.registrar.filesystem`
+  - Purpose: File-system artifact registrar using env configuration
+  - Options: none (honors `QMTL_SEAMLESS_ARTIFACTS=1`, `QMTL_SEAMLESS_ARTIFACT_DIR`); `stabilization_bars` override supported.
+
+- `ccxt.bundle.ohlcv_live`
+  - Purpose: Convenience bundle that applies `ccxt.questdb.ohlcv` and `ccxt.live.pro` together
+  - Options: union of both presets; typical: `exchange_id`, `symbols`, `timeframe`, `questdb`, and live options like `reconnect_backoff_ms`
+
+- `ccxt.bundle.trades_live`
+  - Purpose: Convenience bundle that applies `ccxt.questdb.trades` and `ccxt.live.pro` together
+  - Options: union of both presets; typical: `exchange_id`, `symbols`, `questdb`, plus live options
+
+Example chaining:
+
+```python
+config = {
+  "presets": [
+    {"name": "ccxt.questdb.ohlcv", "options": {"exchange_id": "binance", "symbols": ["BTC/USDT"], "timeframe": "1m", "questdb": {"dsn": "postgresql://localhost:8812/qdb", "table": "ohlcv"}}},
+    {"name": "ccxt.live.pro", "options": {"exchange_id": "binance", "symbols": ["BTC/USDT"], "timeframe": "1m", "mode": "ohlcv"}},
+    {"name": "seamless.registrar.filesystem"}
+  ]
+}
+
+assembly = build_seamless_assembly(config)
+```
+
 When scaling to multi-symbol or multi-timeframe coverage, prefer `CcxtQuestDBProvider.from_config_multi(...)` for scaffolding while retaining the enhanced provider for SLA orchestration. The config snippet above can also be layered in `presets: [...]` lists when chaining multiple adapters.
 
 ### Live Data Integration
