@@ -335,6 +335,29 @@ async def example_custom_backfiller():
     print("This would be integrated into a custom SeamlessDataProvider implementation")
 
 
+async def example_ohlcv_live_bundle():
+    """Example 7: Use the convenience bundle preset for OHLCV + Live."""
+    print("\n=== Example 7: OHLCV + Live bundle preset ===")
+
+    config = {
+        "preset": "ccxt.bundle.ohlcv_live",
+        "options": {
+            "exchange_id": "binance",
+            "symbols": ["BTC/USDT"],
+            "timeframe": "1m",
+            "questdb": {
+                "dsn": "postgresql://localhost:8812/qmtl",
+                "table": "crypto_ohlcv",
+            },
+            "reconnect_backoff_ms": [1000, 2000, 5000],
+        },
+    }
+
+    assembly = build_seamless_assembly(config)
+    print("Bundle Storage:", type(assembly.storage_source).__name__ if assembly.storage_source else None)
+    print("Bundle Live:", type(assembly.live_feed).__name__ if assembly.live_feed else None)
+
+
 async def main():
     """Run all examples."""
     print("QMTL Seamless Data Provider Examples")
@@ -347,13 +370,14 @@ async def main():
     await example_stream_input_integration()
     await example_preset_config_usage()
     await example_custom_backfiller()
+    await example_ohlcv_live_bundle()
     
     print("\n=== Summary ===")
     print("The Seamless Data Provider system provides:")
     print("1. Transparent auto-backfill of missing historical data")
     print("2. Seamless integration of live and historical data")
     print("3. Multiple strategies for handling data availability")
-    print("4. Preset-driven configuration for rapid assembly")
+    print("4. Preset-driven configuration for rapid assembly (including bundles)")
     print("5. Background processing capabilities")
     print("6. Full compatibility with existing QMTL components")
     print("\nUsers can migrate gradually and customize behavior as needed.")

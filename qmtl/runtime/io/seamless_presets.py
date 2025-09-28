@@ -273,4 +273,71 @@ def _register_filesystem_registrar_preset() -> None:
 _register_filesystem_registrar_preset()
 
 
+def _register_ccxt_bundle_presets() -> None:
+    """High-level convenience bundles that compose existing presets."""
+
+    def _apply_ohlcv_live(builder, config: Mapping[str, Any]):
+        # Apply OHLCV storage/backfill and then live feed
+        core_opts = {
+            "exchange_id": config.get("exchange_id") or config.get("exchange"),
+            "symbols": config.get("symbols"),
+            "timeframe": config.get("timeframe", "1m"),
+            "questdb": _as_mapping(config.get("questdb"), "questdb"),
+            "rate_limiter": _as_mapping(config.get("rate_limiter"), "rate_limiter"),
+            "window_size": config.get("window_size"),
+            "max_retries": config.get("max_retries"),
+            "retry_backoff_s": config.get("retry_backoff_s"),
+        }
+        builder = SeamlessPresetRegistry.apply(
+            "ccxt.questdb.ohlcv", builder=builder, config=core_opts
+        )
+
+        live_opts = {
+            "exchange_id": core_opts["exchange_id"],
+            "symbols": core_opts["symbols"],
+            "timeframe": core_opts["timeframe"],
+            "mode": "ohlcv",
+            "sandbox": config.get("sandbox", False),
+            "reconnect_backoff_ms": config.get("reconnect_backoff_ms", []),
+            "dedupe_by": config.get("dedupe_by", "ts"),
+            "emit_building_candle": config.get("emit_building_candle", False),
+        }
+        builder = SeamlessPresetRegistry.apply(
+            "ccxt.live.pro", builder=builder, config=live_opts
+        )
+        return builder
+
+    def _apply_trades_live(builder, config: Mapping[str, Any]):
+        core_opts = {
+            "exchange_id": config.get("exchange_id") or config.get("exchange"),
+            "symbols": config.get("symbols"),
+            "questdb": _as_mapping(config.get("questdb"), "questdb"),
+            "rate_limiter": _as_mapping(config.get("rate_limiter"), "rate_limiter"),
+            "window_size": config.get("window_size"),
+            "max_retries": config.get("max_retries"),
+            "retry_backoff_s": config.get("retry_backoff_s"),
+        }
+        builder = SeamlessPresetRegistry.apply(
+            "ccxt.questdb.trades", builder=builder, config=core_opts
+        )
+        live_opts = {
+            "exchange_id": core_opts["exchange_id"],
+            "symbols": core_opts["symbols"],
+            "mode": "trades",
+            "sandbox": config.get("sandbox", False),
+            "reconnect_backoff_ms": config.get("reconnect_backoff_ms", []),
+            "dedupe_by": config.get("dedupe_by", "ts"),
+        }
+        builder = SeamlessPresetRegistry.apply(
+            "ccxt.live.pro", builder=builder, config=live_opts
+        )
+        return builder
+
+    SeamlessPresetRegistry.register("ccxt.bundle.ohlcv_live", _apply_ohlcv_live)
+    SeamlessPresetRegistry.register("ccxt.bundle.trades_live", _apply_trades_live)
+
+
+_register_ccxt_bundle_presets()
+
+
 __all__ = ["_register_ccxt_questdb_preset"]
