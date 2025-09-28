@@ -15,6 +15,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     DataAvailabilityStrategy,
     LiveDataFeed,
 )
+from qmtl.runtime.sdk.seamless import SeamlessBuilder
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
@@ -448,7 +449,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
             dsn, table=resolved_table, fetcher=resolved_fetcher
         )
 
-        # Create data sources
+        # Create data sources via builder to support future adapter swaps
         storage_source = StorageDataSource(self.storage_provider)
         cache_source = (
             CacheDataSource(resolved_cache_provider)
@@ -488,15 +489,23 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
                     extra={"format": fmt},
                 )
 
+        builder = SeamlessBuilder()
+        builder.with_storage(storage_source)
+        builder.with_cache(cache_source)
+        builder.with_backfill(backfiller)
+        builder.with_live(live_feed_obj)
+        builder.with_registrar(registrar_obj)
+        assembly = builder.build()
+
         super().__init__(
             strategy=strategy_value,
-            cache_source=cache_source,
-            storage_source=storage_source,
-            backfiller=backfiller,
-            live_feed=live_feed_obj,
+            cache_source=assembly.cache_source,
+            storage_source=assembly.storage_source,
+            backfiller=assembly.backfiller,
+            live_feed=assembly.live_feed,
             conformance=resolved_conformance or ConformancePipeline(),
             partial_ok=bool(resolved_partial_ok),
-            registrar=registrar_obj,
+            registrar=assembly.registrar,
             **kwargs
         )
 

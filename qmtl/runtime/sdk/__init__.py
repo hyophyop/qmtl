@@ -68,6 +68,13 @@ from .portfolio import (
     order_value,
 )
 from .exchanges import CcxtExchange, normalize_exchange_id, ensure_ccxt_exchange
+from .seamless import (
+    SeamlessAssembly,
+    SeamlessBuilder,
+    SeamlessPresetRegistry,
+    hydrate_builder,
+    build_assembly as build_seamless_assembly,
+)
 
 __all__ = [
     "Node",
@@ -131,4 +138,9 @@ __all__ = [
     "InvalidPeriodError",
     "InvalidNameError",
     "_cli",
+    "SeamlessBuilder",
+    "SeamlessAssembly",
+    "SeamlessPresetRegistry",
+    "hydrate_builder",
+    "build_seamless_assembly",
 ]
