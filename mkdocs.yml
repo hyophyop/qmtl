@@ -41,6 +41,7 @@ nav:
       - Testing & Pytest: guides/testing.md
       - Prometheus Metric Helper: guides/prometheus_metrics_helper.md
       - HTTPX Usage: guides/httpx_usage.md
+      - HTTP Health Checks: guides/http_health_checks.md
   - Operations:
       - Overview: operations/README.md
       - Backend Quickstart: operations/backend_quickstart.md
