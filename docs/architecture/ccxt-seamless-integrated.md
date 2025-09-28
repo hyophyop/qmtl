@@ -184,7 +184,43 @@ provider_with_sla = EnhancedQuestDBProvider(
 )
 ```
 
-When scaling to multi-symbol or multi-timeframe coverage, prefer `CcxtQuestDBProvider.from_config_multi(...)` for scaffolding while retaining the enhanced provider for SLA orchestration.
+### Seamless Builder Scaffolding
+
+`EnhancedQuestDBProvider` now composes its sources through the reusable
+`SeamlessBuilder` (`qmtl.runtime.sdk.seamless.SeamlessBuilder`). The builder accepts
+storage/cache/backfill/live/registrar components (either concrete instances or
+factories) and materialises them into a `SeamlessAssembly`. Future presets will be
+registered via `SeamlessPresetRegistry` to deliver opinionated CCXT or equities
+defaults without cloning provider code.
+
+```python
+from qmtl.runtime.sdk import build_seamless_assembly, hydrate_builder
+
+config = {
+    "preset": "ccxt.questdb.ohlcv",
+    "options": {
+        "exchange_id": "binance",
+        "symbols": ["BTC/USDT"],
+        "timeframe": "1m",
+        "questdb": {"dsn": "postgresql://localhost:8812/qdb", "table": "crypto_ohlcv"},
+    },
+}
+
+# Either materialize the builder for further customisation…
+builder = hydrate_builder(config)
+assembly = builder.build()
+
+# …or produce an assembly in one call:
+assembly = build_seamless_assembly(config)
+
+# The resulting assembly exposes cache/storage/backfill/live components ready for
+# SeamlessDataProvider subclasses (e.g., EnhancedQuestDBProvider).
+# Existing providers can adopt the assembly by either wiring the pieces during
+# initialisation or by assigning them post-construction when migrating legacy
+# setups that already instantiate EnhancedQuestDBProvider directly.
+```
+
+When scaling to multi-symbol or multi-timeframe coverage, prefer `CcxtQuestDBProvider.from_config_multi(...)` for scaffolding while retaining the enhanced provider for SLA orchestration. The config snippet above can also be layered in `presets: [...]` lists when chaining multiple adapters.
 
 ### Live Data Integration
 - Default polling `LiveDataFeedImpl` with bar-boundary scheduling that respects timeframe cadence and waits for bar completion before publishing.

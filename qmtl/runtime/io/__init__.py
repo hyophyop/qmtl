@@ -20,6 +20,7 @@ from .seamless_provider import (
 )
 from .artifact import ArtifactRegistrar, ArtifactPublication
 from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
+from . import seamless_presets as _seamless_presets  # noqa: F401 - ensure preset registration
 
 __all__ = [
     "DataFetcher",

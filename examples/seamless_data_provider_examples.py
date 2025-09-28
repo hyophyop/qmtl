@@ -10,6 +10,7 @@ import pandas as pd
 
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
+from qmtl.runtime.sdk import build_seamless_assembly
 
 
 # Example DataFetcher implementation for demonstration
@@ -227,9 +228,36 @@ async def example_stream_input_integration():
     # and will transparently handle all data requirements
 
 
+async def example_preset_config_usage():
+    """Example 5: Build components via preset-driven config."""
+    print("\n=== Example 5: Preset Config Usage ===")
+
+    config = {
+        "preset": "ccxt.questdb.ohlcv",
+        "options": {
+            "exchange_id": "binance",
+            "symbols": ["BTC/USDT"],
+            "timeframe": "1m",
+            "questdb": {
+                "dsn": "postgresql://localhost:8812/qmtl",
+                "table": "crypto_ohlcv",
+            },
+        },
+    }
+
+    assembly = build_seamless_assembly(config)
+
+    print("Storage source:", type(assembly.storage_source).__name__ if assembly.storage_source else None)
+    print("Backfiller:", type(assembly.backfiller).__name__ if assembly.backfiller else None)
+    print("Cache source:", assembly.cache_source)
+    print("Live feed:", assembly.live_feed)
+
+    print("The assembly can now be passed into Seamless providers (e.g., EnhancedQuestDBProvider)")
+
+
 async def example_custom_backfiller():
-    """Example 5: Custom backfiller implementation."""
-    print("\n=== Example 5: Custom Backfiller ===")
+    """Example 6: Custom backfiller implementation."""
+    print("\n=== Example 6: Custom Backfiller ===")
     
     class CustomMarketDataBackfiller:
         """Custom backfiller with specific business logic."""
@@ -317,6 +345,7 @@ async def main():
     await example_strategy_comparison()
     await example_migration_from_existing()
     await example_stream_input_integration()
+    await example_preset_config_usage()
     await example_custom_backfiller()
     
     print("\n=== Summary ===")
@@ -324,8 +353,9 @@ async def main():
     print("1. Transparent auto-backfill of missing historical data")
     print("2. Seamless integration of live and historical data")
     print("3. Multiple strategies for handling data availability")
-    print("4. Background processing capabilities")
-    print("5. Full compatibility with existing QMTL components")
+    print("4. Preset-driven configuration for rapid assembly")
+    print("5. Background processing capabilities")
+    print("6. Full compatibility with existing QMTL components")
     print("\nUsers can migrate gradually and customize behavior as needed.")
 
 
