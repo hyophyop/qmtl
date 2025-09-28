@@ -111,4 +111,6 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
     assert ok2 is True
 
     df = await provider.fetch(start, end + interval, node_id=node_id, interval=interval)
-    assert not df.empty and df["ts"].tolist()[-1] == 300
+    # Storage coverage treats the right bound as inclusive; Seamless fetch calls
+    # storage with [start, end) semantics, so last materialized bar is end - interval.
+    assert not df.empty and df["ts"].tolist()[-1] == end - interval
