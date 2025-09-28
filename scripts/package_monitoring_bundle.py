@@ -99,6 +99,7 @@ def build_helm(bundle: Bundle, output_dir: Path) -> None:
             "enabled": bool(bundle.dashboards),
             "folder": bundle.name.replace("_", " ").title(),
             "dashboards": [],
+            "extraDashboards": [],
         },
         "prometheusRule": {
             "enabled": bool(bundle.recording_rules),
@@ -137,14 +138,7 @@ def build_helm(bundle: Bundle, output_dir: Path) -> None:
         "grafanaDashboards": {
             "enabled": True,
             "folder": "Seamless",
-            "dashboards": [
-                {
-                    "uid": d.get("uid"),
-                    "title": d.get("title"),
-                    "json": LiteralStr(json.dumps(d, indent=2)),
-                }
-                for d in bundle.dashboards
-            ],
+            "extraDashboards": [],
         },
         "prometheusRule": {
             "enabled": bool(bundle.recording_rules),
@@ -153,12 +147,28 @@ def build_helm(bundle: Bundle, output_dir: Path) -> None:
         },
     }
     sample_yaml = yaml.safe_dump(sample_values, sort_keys=False)
+    sample_yaml = sample_yaml.replace(
+        "extraDashboards: []",
+        "extraDashboards: []\n"
+        "  # Use extraDashboards to append additional Grafana dashboards without overriding\n"
+        "  # the defaults defined in values.yaml. Provide the full dashboard JSON payload\n"
+        "  # in the `json` field so Helm can render it into the ConfigMap.\n"
+        "  #\n"
+        "  # extraDashboards:\n"
+        "  #   - uid: custom-dashboard\n"
+        "  #     title: Custom Dashboard\n"
+        "  #     json: |\n"
+        "  #       {\"annotations\": [], \"panels\": []}\n",
+    )
     (chart_dir / "values-sample.yaml").write_text(sample_yaml)
     (samples_dir / f"{bundle.name}.helm-values.yaml").write_text(sample_yaml)
 
     dashboards_template = textwrap.dedent(
         """
-        {{- if and .Values.grafanaDashboards.enabled (gt (len .Values.grafanaDashboards.dashboards) 0) }}
+        {{- $base := .Values.grafanaDashboards.dashboards | default (list) -}}
+        {{- $extra := .Values.grafanaDashboards.extraDashboards | default (list) -}}
+        {{- $all := concat $base $extra -}}
+        {{- if and .Values.grafanaDashboards.enabled (gt (len $all) 0) }}
         apiVersion: v1
         kind: ConfigMap
         metadata:
@@ -167,7 +177,7 @@ def build_helm(bundle: Bundle, output_dir: Path) -> None:
             {{- include "%s.labels" . | nindent 4 }}
             grafana_dashboard: "1"
         data:
-        {{- range $dashboard := .Values.grafanaDashboards.dashboards }}
+        {{- range $dashboard := $all }}
           {{ $dashboard.uid }}.json: |
         {{ $dashboard.json | indent 4 }}
         {{- end }}

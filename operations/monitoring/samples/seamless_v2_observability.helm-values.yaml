@@ -5,13 +5,16 @@ commonLabels:
 grafanaDashboards:
   enabled: true
   folder: Seamless
-  dashboards:
-  - uid: seamless-sla-overview
-    title: Seamless SLA Overview
-  - uid: seamless-backfill-health
-    title: Backfill Coordinator Health
-  - uid: seamless-conformance-quality
-    title: Conformance Quality
+  extraDashboards: []
+  # Use extraDashboards to append additional Grafana dashboards without overriding
+  # the defaults defined in values.yaml. Provide the full dashboard JSON payload
+  # in the `json` field so Helm can render it into the ConfigMap.
+  #
+  # extraDashboards:
+  #   - uid: custom-dashboard
+  #     title: Custom Dashboard
+  #     json: |
+  #       {"annotations": [], "panels": []}
 prometheusRule:
   enabled: true
   namespace: monitoring

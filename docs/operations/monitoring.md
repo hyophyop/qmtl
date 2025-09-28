@@ -52,6 +52,8 @@ The command writes the results to `operations/monitoring/dist/` and exports reus
 - `dist/terraform/seamless_v2_observability/` contains a Terraform module that exposes the dashboards and recording rules through the Kubernetes provider alongside a `terraform.tfvars.example` file for automation.
 - `samples/` includes ready-to-commit snippets (`*.helm-values.yaml` and `*.terraform.tfvars`) that CI pipelines can mount directly without re-running the generator.
 
+The Helm chart exposes `grafanaDashboards.extraDashboards` so you can append additional dashboards without overriding the defaults baked into `values.yaml`. Only set `grafanaDashboards.dashboards` if you intend to replace the upstream list entirely.
+
 ### Deploying with Helm
 
 1. Provide Grafana connectivity by ensuring your Grafana release watches ConfigMaps with the `grafana_dashboard: "1"` label.
@@ -63,6 +65,7 @@ The command writes the results to `operations/monitoring/dist/` and exports reus
      -f operations/monitoring/dist/helm/seamless_v2_observability/values-sample.yaml
    ```
 3. Prometheus Operator users should verify that the namespace in `values-sample.yaml` matches their deployment; adjust `prometheusRule.namespace` if necessary.
+4. When adding custom dashboards, populate `grafanaDashboards.extraDashboards` in your override file so Helm merges the defaults with your additions during rendering.
 
 ### Deploying with Terraform
 
