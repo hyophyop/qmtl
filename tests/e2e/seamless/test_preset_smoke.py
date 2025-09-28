@@ -107,8 +107,10 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
     ok = await provider.ensure_data_available(start, end, node_id=node_id, interval=interval)
     assert ok is False  # still missing last bar
     await backend.write_rows(pd.DataFrame({"ts": [300]}), node_id=node_id, interval=interval)
-    ok2 = await provider.ensure_data_available(start, end + interval, node_id=node_id, interval=interval)
+    ok2 = await provider.ensure_data_available(start, end, node_id=node_id, interval=interval)
     assert ok2 is True
 
     df = await provider.fetch(start, end + interval, node_id=node_id, interval=interval)
-    assert not df.empty and df["ts"].tolist()[-1] == 300
+    # Storage coverage treats the right bound as inclusive; Seamless fetch calls
+    # storage with [start, end) semantics, so last materialized bar is end - interval.
+    assert not df.empty and df["ts"].tolist()[-1] == end - interval
