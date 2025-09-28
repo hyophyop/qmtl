@@ -8,6 +8,7 @@ from typing import Dict, Mapping, Sequence
 import aiosqlite
 import asyncpg
 import redis.asyncio as redis
+import httpx  # test compatibility: referenced via monkeypatch in tests
 
 from qmtl.foundation.common.health import probe_http_async
 from qmtl.services.dagmanager.config import DagManagerConfig
@@ -172,6 +173,14 @@ async def validate_gateway_config(
             f"Offline mode: skipped WorldService health check for {config.worldservice_url}",
         )
     else:
+        async def _http_request(method: str, url: str, **kwargs):
+            # Use GET for compatibility with tests that stub AsyncClient.get
+            timeout = kwargs.get("timeout")
+            async with httpx.AsyncClient() as client:
+                if method.upper() == "GET":
+                    return await client.get(url, timeout=timeout)
+                return await client.request(method, url, **kwargs)
+
         health_url = config.worldservice_url.rstrip("/") + "/health"
         timeout = max(config.worldservice_timeout, 0.1)
         result = await probe_http_async(
@@ -179,6 +188,7 @@ async def validate_gateway_config(
             service="worldservice",
             endpoint="/health",
             timeout=timeout,
+            request=_http_request,
         )
         if result.ok:
             issues["worldservice"] = ValidationIssue(
