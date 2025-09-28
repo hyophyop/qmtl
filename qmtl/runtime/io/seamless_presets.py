@@ -16,7 +16,11 @@ from qmtl.runtime.io.ccxt_fetcher import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
     RateLimiterConfig,
+    CcxtTradesConfig,
+    CcxtTradesFetcher,
 )
+from qmtl.runtime.io.ccxt_live_feed import CcxtProConfig, CcxtProLiveFeed
+from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
 
 
 def _ensure_str(value: Any, *, field: str) -> str:
@@ -168,6 +172,105 @@ def _register_ccxt_questdb_preset() -> None:
 
 
 _register_ccxt_questdb_preset()
+
+
+def _register_ccxt_trades_preset() -> None:
+    def _apply(builder, config: Mapping[str, Any]):
+        dsn, table = _pull_questdb_config(config)
+        exchange_id = _ensure_str(
+            config.get("exchange_id") or config.get("exchange"),
+            field="exchange_id",
+        )
+        symbols = _normalize_symbols(config.get("symbols"))
+        window_size = _ensure_int(config.get("window_size"), 1000)
+        max_retries = _ensure_int(config.get("max_retries"), 3)
+        retry_backoff_s = _ensure_float(config.get("retry_backoff_s"), 0.5)
+        rate_limiter = _pull_rate_limiter(config)
+
+        def make_fetcher() -> CcxtTradesFetcher:
+            backfill_cfg = CcxtTradesConfig(
+                exchange_id=exchange_id,
+                symbols=symbols,
+                window_size=window_size,
+                max_retries=max_retries,
+                retry_backoff_s=retry_backoff_s,
+                rate_limiter=rate_limiter,
+            )
+            return CcxtTradesFetcher(backfill_cfg)
+
+        registrar_factory = _resolve_callable(config.get("registrar"))
+
+        def storage_factory():
+            fetcher = make_fetcher()
+            provider = QuestDBLoader(dsn, table=table, fetcher=fetcher)
+            return StorageDataSource(provider)
+
+        builder.with_storage(storage_factory)
+        builder.with_backfill(lambda: DataFetcherAutoBackfiller(make_fetcher()))
+        if registrar_factory is not None:
+            builder.with_registrar(registrar_factory)
+        return builder
+
+    SeamlessPresetRegistry.register("ccxt.questdb.trades", _apply)
+
+
+_register_ccxt_trades_preset()
+
+
+def _register_ccxt_live_pro_preset() -> None:
+    def _apply(builder, config: Mapping[str, Any]):
+        exchange_id = _ensure_str(
+            config.get("exchange_id") or config.get("exchange"),
+            field="exchange_id",
+        )
+        symbols = _normalize_symbols(config.get("symbols"))
+        timeframe = str(config.get("timeframe") or "1m")
+        mode = str(config.get("mode") or "ohlcv").lower()
+        sandbox = bool(config.get("sandbox", False))
+        backoff_ms = list(config.get("reconnect_backoff_ms", []) or [])
+        dedupe_by = str(config.get("dedupe_by") or "ts").lower()
+        emit_building = bool(config.get("emit_building_candle", False))
+
+        def live_factory():
+            cfg = CcxtProConfig(
+                exchange_id=exchange_id,
+                symbols=symbols,
+                timeframe=timeframe,
+                mode=mode,
+                sandbox=sandbox,
+                reconnect_backoff_ms=backoff_ms,
+                dedupe_by=dedupe_by,  # type: ignore[arg-type]
+                emit_building_candle=emit_building,
+            )
+            return CcxtProLiveFeed(cfg)
+
+        builder.with_live(live_factory)
+        return builder
+
+    SeamlessPresetRegistry.register("ccxt.live.pro", _apply)
+
+
+_register_ccxt_live_pro_preset()
+
+
+def _register_filesystem_registrar_preset() -> None:
+    def _apply(builder, config: Mapping[str, Any]):
+        def registrar_factory():
+            reg = FileSystemArtifactRegistrar.from_env()
+            if reg is None:
+                # fall back to IO registrar with default path
+                from qmtl.runtime.io.artifact import ArtifactRegistrar as IORegistrar
+
+                return IORegistrar(stabilization_bars=int(config.get("stabilization_bars", 2)))
+            return reg
+
+        builder.with_registrar(registrar_factory)
+        return builder
+
+    SeamlessPresetRegistry.register("seamless.registrar.filesystem", _apply)
+
+
+_register_filesystem_registrar_preset()
 
 
 __all__ = ["_register_ccxt_questdb_preset"]
