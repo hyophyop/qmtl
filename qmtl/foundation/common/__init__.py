@@ -16,6 +16,7 @@ from .node_validation import (
     enforce_node_identity,
     validate_node_identity,
 )
+from .health import CheckResult, Code, classify_result, probe_http, probe_http_async
 
 __all__ = [
     "crc32_of_list",
@@ -37,4 +38,9 @@ __all__ = [
     "REQUIRED_NODE_FIELDS",
     "enforce_node_identity",
     "validate_node_identity",
+    "CheckResult",
+    "Code",
+    "classify_result",
+    "probe_http",
+    "probe_http_async",
 ]

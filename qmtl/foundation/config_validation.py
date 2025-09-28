@@ -7,9 +7,9 @@ from typing import Dict, Mapping, Sequence
 
 import aiosqlite
 import asyncpg
-import httpx
 import redis.asyncio as redis
 
+from qmtl.foundation.common.health import probe_http_async
 from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
 from qmtl.services.gateway.config import GatewayConfig
@@ -174,23 +174,29 @@ async def validate_gateway_config(
     else:
         health_url = config.worldservice_url.rstrip("/") + "/health"
         timeout = max(config.worldservice_timeout, 0.1)
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(health_url, timeout=timeout)
-        except Exception as exc:
+        result = await probe_http_async(
+            health_url,
+            service="worldservice",
+            endpoint="/health",
+            timeout=timeout,
+        )
+        if result.ok:
             issues["worldservice"] = ValidationIssue(
-                "error", f"WorldService request failed: {exc}"
+                "ok", f"WorldService healthy at {config.worldservice_url}"
             )
         else:
-            if resp.status_code == 200:
-                issues["worldservice"] = ValidationIssue(
-                    "ok", f"WorldService healthy at {config.worldservice_url}"
-                )
-            else:
-                issues["worldservice"] = ValidationIssue(
-                    "error",
-                    f"WorldService health returned HTTP {resp.status_code}",
-                )
+            details: list[str] = []
+            if result.status is not None:
+                details.append(f"status={result.status}")
+            if result.err:
+                details.append(f"error={result.err}")
+            if result.latency_ms is not None:
+                details.append(f"latency_ms={result.latency_ms:.1f}")
+            suffix = ", ".join(details) if details else "no additional detail"
+            issues["worldservice"] = ValidationIssue(
+                "error",
+                f"WorldService probe failed ({result.code}): {suffix}",
+            )
 
     return issues
 
