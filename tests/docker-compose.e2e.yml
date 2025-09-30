@@ -44,7 +44,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ..:/app
-    command: ["qmtl", "dagmanager-server"]
+    command: ["qmtl", "service", "dagmanager", "server"]
     depends_on:
       - kafka
       - neo4j
@@ -57,7 +57,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ..:/app
-    command: ["qmtl", "gw"]
+    command: ["qmtl", "service", "gateway"]
     depends_on:
       - dagmanager
       - redis

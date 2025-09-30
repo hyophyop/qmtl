@@ -29,11 +29,14 @@ last_modified: 2025-08-21
 | `max_gap_tolerance_sec` | Largest allowed timestamp gap in seconds |
 | `required_fields` | Fields that must be present in each record |
 
-Use `validate_backtest_data(strategy, fail_on_quality_threshold=0.8)` to enforce a minimum quality score. Runner’s `backtest` method exposes the same parameters via `validate_data=True` and `validation_config`.
+Use `validate_backtest_data(strategy, fail_on_quality_threshold=0.8)` to enforce a minimum quality score.
+
+Runner integration:
+- For local runs, use `Runner.offline(MyStrategy)` and invoke validation in your setup or pre-run checks.
+- For WS-first runs, use `Runner.run(MyStrategy, world_id=..., gateway_url=...)` and keep validation as a separate preflight step if needed.
 
 ## Example
 
-The script at `qmtl/examples/backtest_validation_example.py` shows how to enable validation before running a backtest. A sample CSV with deliberate gaps is provided at `qmtl/examples/data/backtest_validation_sample.csv` for experimentation.
+The script at `qmtl/examples/backtest_validation_example.py` shows how to enable validation before running offline or under WS. A sample CSV with deliberate gaps is provided at `qmtl/examples/data/backtest_validation_sample.csv` for experimentation.
 
 {{ nav_links() }}
-

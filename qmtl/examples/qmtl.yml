@@ -1,3 +1,6 @@
+# Topic namespaces are enabled by default to scope Kafka topics by world and domain.
+# For local experimentation without prefixes, export ``QMTL_ENABLE_TOPIC_NAMESPACE=0``
+# before starting services.
 gateway:
   host: 0.0.0.0
   port: 8000
@@ -8,6 +11,16 @@ gateway:
   database_dsn: ./qmtl.db
   # Insert a VersionSentinel node for each DAG; set to false to disable
   insert_sentinel: true
+  # ControlBus (optional): list brokers and topics to subscribe for control events
+  # controlbus_brokers: ["localhost:9092"]
+  # controlbus_topics: ["activation", "policy", "queue"]
+  # controlbus_group: gateway
+  # WorldService proxy (optional): enable proxying /worlds/* via Gateway
+  # worldservice_url: http://localhost:8080
+  # worldservice_timeout: 0.3
+  # worldservice_retries: 2
+  # enable_worldservice_proxy: true
+  # enforce_live_guard: true
   # To use Postgres in a production cluster uncomment below
   # database_backend: postgres
   # database_dsn: postgresql://user:pass@db/qmtl
@@ -22,4 +35,4 @@ dagmanager:
   grpc_host: 0.0.0.0
   grpc_port: 50051
   http_host: 0.0.0.0
-  http_port: 8000
+  http_port: 8001

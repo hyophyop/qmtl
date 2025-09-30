@@ -3,6 +3,7 @@ title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
+spec_version: v1.1
 ---
 
 {{ nav_links() }}
@@ -16,6 +17,10 @@ last_modified: 2025-08-21
 - [QMTL Architecture](architecture.md)
 - [Gateway](gateway.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
+
+추가 참고
+- 레퍼런스: [Commit‑Log 설계](../reference/commit_log.md), [TagQuery 사양](../reference/tagquery.md)
+- 운영 가이드: [타이밍 컨트롤](../operations/timing_controls.md)
 
 ---
 
@@ -34,13 +39,33 @@ last_modified: 2025-08-21
 
 ---
 
+## 0-A. Ownership & Commit-Log Design
+
+- **Ownership** — DAG Manager는 ComputeNode와 Queue 메타데이터의 단일 소스로서 토픽 생성·버전 롤아웃·GC를 전담한다. Gateway는 제출 파이프라인을 조정하지만 그래프 상태를 소유하지 않으며, WorldService는 월드·결정 상태를 유지한다.
+- **Commit Log** — 모든 큐는 Redpanda/Kafka의 append-only 토픽으로 구현되며, DAG Manager는 `QueueUpdated` 등 제어 이벤트를 ControlBus 토픽에 발행한다. 토픽 생성·삭제 이력도 관리 로그에 기록되어 장애 시점 복원과 감사(audit)을 지원한다.
+
+> Terminology / SSOT boundary: Global Strategy Graph(GSG, 전역 DAG)의 SSOT는 DAG Manager이며 불변(append‑only)이다. 월드‑로컬 객체(World View Graph=WVG: WorldNodeRef, Validation, DecisionEvent)는 WorldService의 SSOT이며 DAG Manager는 저장하지 않는다(읽기/쓰기 금지). 용어 정의는 Architecture Glossary(architecture/glossary.md) 참고.
+
+### 0-A.1 Commit-Log Message Keys and Partitioning
+
+- Partitioning key derives from `partition_key(node_id, interval, bucket_ts)`; the full Kafka message key used by Gateway is:
+
+  `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"`
+
+  This allows log compaction across all input windows for the same execution key while keeping per‑window uniqueness.
+
+- Consumers must deduplicate based on `(node_id, bucket_ts, input_window_hash)`.
+
+
+---
+
 ## 1. 데이터 모델 (Neo4j Property Graph)
 
 ### 1.1 노드·관계 스키마
 
 | Label             | 필수 속성                                                           | 선택 속성                                   | 설명                      |
 | ----------------- | --------------------------------------------------------------- | --------------------------------------- | ----------------------- |
-| `ComputeNode`     | `node_id`(pk), `interval`, `period`, `code_hash`, `schema_hash` | `created_at`, `tags[]`, `owner`         | DAG 연산 노드 (지표·전처리·매매 등) |
+| `ComputeNode`     | `node_id`(pk), `node_type`, `interval`, `period`, `code_hash`, `schema_compat_id`, `params_canon` | `created_at`, `tags[]`, `owner`, `schema_hash`         | DAG 연산 노드 (지표·전처리·매매 등) |
 | `Queue`           | `topic`, `created_at`, `ttl`, `retention_ms`                    | `brokers`, `tag`, `lag_alert_threshold` | Kafka/Redpanda 토픽       |
 | `VersionSentinel` | `version`, `commit_hash`, `created_at`                          | `release_tag`, `traffic_weight`         | 버전 경계 · 롤백 포인트          |
 | `Artifact`        | `path`, `checksum`, `size`                                      | `framework`, `dtype`                    | 모델·파라미터 파일 등 binary     |
@@ -55,15 +80,61 @@ last_modified: 2025-08-21
 
 ### 1.2 인덱스 & 제약 조건
 
+아래 제약/인덱스는 초기화시 항상 idempotent(재실행 안전)하도록 `IF NOT EXISTS`를 사용합니다. 운영 환경에서 재배포/재시작 시에도 스키마 초기화 커맨드를 반복 호출할 수 있습니다.
+
 ```cypher
-CREATE CONSTRAINT compute_pk IF NOT EXISTS
-ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
+// 기본 제약/인덱스
+CREATE CONSTRAINT compute_pk IF NOT EXISTS ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE;
 CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
+
+// 성능 최적화 인덱스 (태그 조회, 주기 필터, 버퍼 스캔)
+CREATE INDEX compute_tags IF NOT EXISTS FOR (c:ComputeNode) ON (c.tags);
+CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval);
+CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since);
+```
+
+CLI 사용법:
+
+```
+# 스키마 초기화 (idempotent)
+qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+
+# 현재 스키마 내보내기
+qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 ### 1.3 NodeID Generation
-- NodeID = SHA-256 hash of `(node_type, code_hash, config_hash, schema_hash)`.
-- On collision detection the hash upgrades to SHA-3.
-- Uniqueness enforced via `compute_pk` constraint.
+- NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
+- Non-deterministic fields (timestamps, RNG seeds, environment variables) are **excluded** from the input. All separable parameters must be split into individual fields and serialized in canonical JSON with sorted keys and fixed numeric precision.
+- NodeID MUST NOT include `world_id`. World-local isolation belongs to the World View Graph (WVG) and queue namespaces (e.g., world `topic_prefix`).
+- TagQueryNode canonicalization:
+  - Do not include the runtime-resolved upstream queue set in `dependencies`.
+  - Include the query spec in `params_canon` instead (normalized `query_tags` sorted, `match_mode`, and `interval`).
+  - Dynamic queue discovery/expansion is handled via ControlBus events and does not affect NodeID.
+- `schema_compat_id` is used (not raw `schema_hash`) so that minor schema changes can be buffered without forcing a brand-new NodeID; full schema incompatibility still produces a new ID.
+- Presentation-only metadata (display `name`, classification `tags`) are not part of NodeID. Only functional parameters belong in `params_canon`.
+- Use BLAKE3; on collision-hardening use **BLAKE3 XOF** (longer output) with domain separation. All IDs must carry the `blake3:` prefix.
+- Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
+- **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
+
+### 1.4 Domain‑Scoped ComputeKey (new)
+
+- Rationale: NodeID is global and world‑agnostic by design. To prevent accidental cross‑world/domain reuse in caches and runtime de‑duplication, a separate ComputeKey is used for execution/caching.
+- Definition:
+
+  `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`
+
+  - `NodeHash` is the canonical hash used by NodeID (§1.3).
+  - `world_id` scopes execution to a world; `execution_domain ∈ {backtest,dryrun,live,shadow}` ensures backtest/live separation.
+  - `as_of` binds backtests to a dataset snapshot/commit; required for deterministic replay.
+  - `partition` optionally scopes multi‑tenant or strategy/portfolio partitions.
+- Usage:
+  - NodeCache and any compute de‑duplication MUST key on `ComputeKey` (not solely on `node_id`).
+  - Cross‑context cache hits (same `node_id`, different `(world_id|execution_domain|as_of|partition)`) MUST be treated as violations and reported via a metric `cross_context_cache_hit_total` and blocked by policy (SLO: 0).
+  - Queue topics and NodeID remain unchanged; ComputeKey does not alter topic naming. Operators MAY additionally deploy namespace prefixes `{world_id}.{execution_domain}.<topic>` at the broker level for operational isolation (see WorldService doc).
+  - Instrumentation: DAG Manager and SDK MUST emit `cross_context_cache_hit_total` and alert when >0 (critical). Promotion workflows must halt until cleared.
+  - Completeness: `as_of` MUST be non-empty for backtests/dryruns; Gateway supplies the value. When absent, ComputeKey falls back to sentinel `live` context and no reuse is permitted.
+
+Note: This design preserves NodeID stability while providing strong execution isolation across worlds and domains.
 
 ---
 
@@ -71,8 +142,8 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 ### 2.1 입력·출력 정의
 
-* **Input:** `DiffReq{strategy_id, dag_json}` (\~10‑500 KiB)
-* **Output:** stream `DiffChunk{queue_map[], sentinel_id}`
+* **Input:** `DiffReq{strategy_id, dag_json, world_id?, execution_domain?, as_of?, partition?, dataset_fingerprint?}` (\~10‑500 KiB)
+* **Output:** stream `DiffChunk{queue_map[], sentinel_id, version}`
 
 ### 2.2 단계별 상세 로직
 
@@ -80,13 +151,13 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
    * 파이썬 `orjson` → DAG dict → topo sort → node\_id list.
 2. **DB Fetch** Batch `MATCH (c:ComputeNode WHERE c.node_id IN $list)` → 기존 노드 맵.
-3. **Hash Compare**
+3. **Hash Compare**
 
-   | 케이스                             | 처리               | 큐 정책                                             |
-   | ------------------------------- | ---------------- | ------------------------------------------------ |
-   | code\_hash & schema\_hash 완전 동일 | **재사용**          | 기존 Queue join                                    |
-   | Back‑compat 스키마 변경              | **재사용 + 버퍼링 모드** | 큐 lag = history size, 7일 이후 자동 full‑recompute |
-   | Breaking 스키마 or code 변경         | **신규 노드·큐**      | `topic_suffix=_v{n}`, TTL inherit                |
+   | 케이스                 | 처리               | 큐 정책                                             |
+   | -------------------- | ---------------- | ------------------------------------------------ |
+   | `node_id` 동일          | **재사용**          | 기존 Queue join                                    |
+   | Back‑compat 스키마 변경    | **재사용 + 버퍼링 모드** | 큐 lag = history size, 7일 이후 자동 full‑recompute |
+   | `node_id` 상이           | **신규 노드·큐**      | `topic_suffix=_v{n}`, TTL inherit                |
 4. **Sentinel 삽입** `CREATE (:VersionSentinel{...})‑[:HAS]->(new_nodes)` (옵션)
 5. **Queue Upsert**
 
@@ -109,18 +180,18 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
 | G→D | gRPC  | `DiffService.DiffRequest`     | DAG             | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 토픽 매핑      |
-| D→G | HTTP  | `/callbacks/dag-event`        | queue\_added/gc | 202                | backoff 1→8 s ×3   | 큐 이벤트            |
 | G→D | gRPC  | `AdminService.Cleanup`        | strategy\_id    | Ack                | 1 retry            | ref‑count decref |
 | G→D | gRPC  | `AdminService.GetQueueStats`  | filter          | Stats              | 300 ms             | 모니터링             |
 | G→D | gRPC  | `HealthCheck.Ping`            | –               | Pong               | 30 s interval      | Liveness         |
 | G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
 | G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
-| D→G | HTTP  | `/callbacks/sentinel-traffic` | version, weight | 202                | 3×                 | 카나리아 비율 변경       |
+| D→G | CB    | `queue` topic                 | queue_update/gc | at-least-once      | –                  | 큐 이벤트         |
 |     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](../operations/canary_rollout.md) 참조 |
 
-### 2-B. Sentinel Traffic API
+### 2-B. Sentinel Traffic
 
-`/callbacks/sentinel-traffic`는 특정 `VersionSentinel`의 트래픽 가중치를 업데이트한다. 요청 본문은 `{"version": "v1.2.0", "weight": 0.25}` 형식이다. 수신 시 메모리 맵과 Neo4j 노드의 `traffic_weight` 속성에 값을 저장하고, 변경 사실을 `sentinel_weight` CloudEvent로 Gateway에 전달한다. 현재 적용된 값은 Prometheus 게이지 `dagmanager_active_version_weight{version="<id>"}`로 노출된다.
+Sentinel weight updates are published as `sentinel_weight` events on the ControlBus. See the [Canary Rollout Guide](../operations/canary_rollout.md) for details.
+
 ---
 
 ## 3. 토픽 생성 & 명명 규칙 (확장)
@@ -128,12 +199,12 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 ### 3.1 토픽 이름 컨벤션
 
 ```
-{asset}_{node_type}_{short_hash}_{version}{_dry_run?}
+{asset}_{node_type}_{short_hash}_{version}
 ```
 
-* **dry_run** 플래그가 붙으면 `*_sim` 접미사.
-* `short_hash = first 6 code_hash` → 충돌 시 길이+2.
+* `short_hash = first 8 of node_id digest` → 충돌 시 길이+2.
 * 기본 토픽 설정은 코드의 ``_TOPIC_CONFIG`` 에서 관리되며 ``get_config(topic_type)`` 으로 조회한다.
+* `{version}` 값은 `VersionSentinel.version` 혹은 전략 메타데이터(`meta.version`, `meta.strategy_version`)에서 파생되며, 제공되지 않으면 `v1`로 디폴트된다.
 
 ### 3.2 QoS & 레플리카 설정
 
@@ -151,21 +222,44 @@ CREATE INDEX kafka_topic IF NOT EXISTS FOR (q:Queue) ON (q.topic);
 
 | # | 시나리오                       | 요약                                                                                     |
 | - | -------------------------- | -------------------------------------------------------------------------------------- |
-| 4 | **Sentinel Traffic Shift** | Ops → `/callbacks/sentinel-traffic` (weight=10→50). DAG Manager 업데이트 & Gateway 라우팅 테이블 변경. |
 | 5 | **RedoDiff for Hotfix**    | 버그 수정 코드 빠르게 패치 → `RedoDiff` gRPC 요청 → 새 토픽 vX.Y.Z‑hotfix 생성 후 스왑                       |
 
 ---
+
+### 3‑B. Control Events (QueueUpdated) (New)
+
+DAG Manager publishes control‑plane updates about queue availability and tag resolution so that Gateways can update SDKs in real time without polling.
+
+- Publisher: DAG Manager → ControlBus (internal)
+- Event: ``QueueUpdated`` with schema
+
+```json
+{
+  "type": "QueueUpdated",
+  "tags": ["BTC", "price"],
+  "interval": 60,
+  "queues": ["q1", "q2"],
+  "etag": "q:BTC.price:60:77",
+  "ts": "2025-08-28T09:00:00Z"
+}
+```
+
+Semantics
+- Partition key: ``hash(tags, interval)``; ordering within partition only
+- At‑least‑once delivery; consumers must deduplicate by ``etag``
+- Gateways subscribe and rebroadcast via WS to SDK; SDK TagQueryManager heals via periodic HTTP reconcile on divergence
 
 ```mermaid
 sequenceDiagram
     participant G as Gateway
     participant D as DAG Manager
     Note over G,D: Canary traffic 10% → 50%
-    G->>D: /callbacks/sentinel-traffic weight=0.5
-    D-->>G: 202 OK
+        D-->>G: 202 OK
 ```
 
 ---
+
+Note: Control updates (e.g., queue/tag changes, traffic weights) are published to the internal ControlBus. Gateways relay these updates to SDKs via WebSocket; no callback interface is supported.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
@@ -190,8 +284,7 @@ sequenceDiagram
 | --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
 | Neo4j leader down     | Diff 거절         | `raft_leader_is_null`         | Automat. leader election               | PagerDuty  |
 | Kafka ZK session loss | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
-| Diff Stream stall     | Gateway timeout | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie   |
-
+| Diff Stream stall     | Gateway status polling failure | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie |
 ---
 
 각 행은 Runbook 마크다운 파일과 대응되는 ID를 가지며, Grafana Dashboard URL과
@@ -227,7 +320,7 @@ add Kafka brokers to sustain ingest throughput.
 | 취약점                  | 레벨     | 설명                           | 완화                                       |
 | -------------------- | ------ | ---------------------------- | ---------------------------------------- |
 | Graph Bloat          | Medium | 수천 version 누적                | Sentinel TTL·archive, offline compaction |
-| Hash Collision       | Low    | SHA256 collision improb.     | SHA‑3 512 fallback + audit log           |
+| Hash Collision       | Low    | BLAKE3 collision improbable  | Strengthen via **BLAKE3 XOF** (longer digest) + domain separation + audit log |
 | Queue Name collision | Low    | broker lower-case uniqueness | Append `_v{n}` suffix                    |
 | Stats Flood          | Medium | GetQueueStats abuse          | rate‑limit (5/s), authz scope            |
 
@@ -256,14 +349,14 @@ add Kafka brokers to sustain ingest throughput.
 ## 11. Admin CLI Snippets (예)
 
 ```shell
-# diff dry_run
-qmtl dagmanager diff --file dag.json --dry_run
+# Diff example (non-destructive read)
+qmtl service dagmanager diff --file dag.json
 # queue stats
-qmtl dagmanager queue-stats --tag indicator --interval 1h
+qmtl service dagmanager queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
-qmtl dagmanager gc --sentinel v1.2.3
+qmtl service dagmanager gc --sentinel v1.2.3
 # export schema DDL
-qmtl dagmanager export-schema --out schema.cypher
+qmtl service dagmanager export-schema --out schema.cypher
 ```
 
 For canary deployment steps see
@@ -271,7 +364,7 @@ For canary deployment steps see
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl dagmanager-server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
+`qmtl service dagmanager server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
 아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
 
 예시:
@@ -283,16 +376,16 @@ neo4j_password: secret
 kafka_dsn: localhost:9092
 ```
 
-The sample file installed by ``qmtl init`` instead defaults to in-memory
+The sample file installed by ``qmtl project init`` instead defaults to in-memory
 repositories and queues for local development. Uncommenting the DSN lines above
 enables Neo4j and Kafka integrations respectively.
 
 ```
 # 기본값으로 실행
-qmtl dagmanager-server
+qmtl service dagmanager server
 
 # YAML 설정 파일로 실행
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
@@ -304,4 +397,3 @@ Available flags:
 - ``--config`` – optional path to configuration file.
 
 {{ nav_links() }}
-

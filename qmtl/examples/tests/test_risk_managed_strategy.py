@@ -1,5 +1,5 @@
 from qmtl.examples.strategies.risk_managed_strategy import enforce_position_limit
-from qmtl.sdk.risk_management import RiskViolationType
+from qmtl.runtime.sdk.risk_management import RiskViolationType
 
 
 def test_violation_detected_when_exceeding_limit() -> None:

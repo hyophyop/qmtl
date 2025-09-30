@@ -1,0 +1,23 @@
+services:
+  worldservice:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/world_smoke/Dockerfile.ws
+    command: ["python", "tests/e2e/world_smoke/servers/worldservice_stub.py"]
+    # Bind to a random ephemeral host port on localhost for 18080
+    ports:
+      - "127.0.0.1::18080"
+
+  gateway:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/world_smoke/Dockerfile.ws
+    environment:
+      WORLDS_BASE_URL: http://worldservice:18080
+      GATEWAY_PORT: "8000"
+    command: ["python", "tests/e2e/world_smoke/servers/run_gateway.py"]
+    depends_on:
+      - worldservice
+    # Bind to a random ephemeral host port on localhost for 8000
+    ports:
+      - "127.0.0.1::8000"

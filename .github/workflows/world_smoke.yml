@@ -1,0 +1,74 @@
+name: WorldService Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway_url:
+        description: "Gateway base URL (service mode)"
+        required: false
+        default: ""
+      worlds_base_url:
+        description: "WorldService base URL (service mode)"
+        required: false
+        default: ""
+      metrics_url:
+        description: "Prometheus metrics URL (optional)"
+        required: false
+        default: ""
+
+jobs:
+  sdk-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Create uv venv
+        run: uv venv
+
+      - name: Install dependencies (dev)
+        run: uv pip install -e .[dev]
+
+      - name: Run SDK-mode world smoke
+        env:
+          WS_MODE: sdk
+        run: |
+          uv run -m pytest -q tests/e2e/world_smoke/test_world_service_smoke.py
+
+  service-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Create uv venv
+        run: uv venv
+
+      - name: Install dependencies (dev)
+        run: uv pip install -e .[dev]
+
+      - name: Run Service-mode world smoke (skips if endpoints absent)
+        env:
+          WS_MODE: service
+          GATEWAY_URL: ${{ github.event.inputs.gateway_url }}
+          WORLDS_BASE_URL: ${{ github.event.inputs.worlds_base_url }}
+          QMTL_METRICS_URL: ${{ github.event.inputs.metrics_url }}
+        run: |
+          uv run -m pytest -q tests/e2e/world_smoke -q
+

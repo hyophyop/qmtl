@@ -1,0 +1,10 @@
+      # Preflight stages to catch hangs before full run (disabled placeholder)
+      - name: Preflight – import/collection
+        if: ${{ false }}
+        run: uv run -m pytest --collect-only -q
+      - name: Preflight – hang detection
+        if: ${{ false }}
+        run: |
+          PYTHONFAULTHANDLER=1 \
+          uv run --with pytest-timeout -m pytest -q \
+            --timeout=60 --timeout-method=thread --maxfail=1

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner, metrics
-from qmtl.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics, EventRecorderService
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 
 
 class RecorderStrategy(Strategy):
@@ -11,8 +11,8 @@ class RecorderStrategy(Strategy):
         price = StreamInput(
             interval="60s",
             period=30,
-            history_provider=QuestDBLoader("postgresql://localhost:8812/qdb"),
-            event_recorder=QuestDBRecorder("postgresql://localhost:8812/qdb"),
+            history_provider=QuestDBHistoryProvider("postgresql://localhost:8812/qdb"),
+            event_service=EventRecorderService(QuestDBRecorder("postgresql://localhost:8812/qdb")),
         )
 
         def momentum(view) -> pd.DataFrame:
@@ -26,4 +26,4 @@ class RecorderStrategy(Strategy):
 
 if __name__ == "__main__":
     metrics.start_metrics_server(port=8000)
-    Runner.dryrun(RecorderStrategy, gateway_url="http://localhost:8000")
+    Runner.run(RecorderStrategy, world_id="recorder_demo", gateway_url="http://localhost:8000")

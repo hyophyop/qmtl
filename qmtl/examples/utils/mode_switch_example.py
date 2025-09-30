@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 
 
 class ModeSwitchStrategy(Strategy):
-    """Run the same strategy in multiple modes."""
+    """Run the same strategy across multiple execution domains."""
 
     def setup(self) -> None:
         price = StreamInput(interval="60s", period=30)
@@ -22,24 +22,15 @@ class ModeSwitchStrategy(Strategy):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode", choices=["offline", "backtest", "dryrun", "live"], default="offline"
-    )
     parser.add_argument("--gateway-url")
-    parser.add_argument("--start", type=int)
-    parser.add_argument("--end", type=int)
+    parser.add_argument("--world-id")
     args = parser.parse_args()
 
-    if args.mode == "backtest":
-        Runner.backtest(
+    if args.world_id and args.gateway_url:
+        Runner.run(
             ModeSwitchStrategy,
-            start_time=args.start,
-            end_time=args.end,
+            world_id=args.world_id,
             gateway_url=args.gateway_url,
         )
-    elif args.mode == "dryrun":
-        Runner.dryrun(ModeSwitchStrategy, gateway_url=args.gateway_url)
-    elif args.mode == "live":
-        Runner.live(ModeSwitchStrategy, gateway_url=args.gateway_url)
     else:
         Runner.offline(ModeSwitchStrategy)

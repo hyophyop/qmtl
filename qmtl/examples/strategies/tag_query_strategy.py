@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qmtl.sdk import Strategy, Node, TagQueryNode, Runner
+from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, Runner, MatchMode
 import pandas as pd
 
 
@@ -12,7 +12,7 @@ class TagQueryStrategy(Strategy):
             query_tags=["ta-indicator"],
             interval="1h",
             period=24,
-            match_mode="any",  # default OR matching
+            match_mode=MatchMode.ANY,  # default OR matching
         )
         # Runner creates TagQueryManager so the node receives queue mappings
         # and subscriptions automatically.
@@ -39,6 +39,6 @@ class TagQueryStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Simply running the strategy triggers automatic tag resolution and
-    # WebSocket subscriptions.
-    Runner.live(TagQueryStrategy)
+    # Running the strategy triggers automatic tag resolution and
+    # WebSocket subscriptions under the selected world.
+    Runner.run(TagQueryStrategy, world_id="tag_query_demo", gateway_url="http://gateway.local")

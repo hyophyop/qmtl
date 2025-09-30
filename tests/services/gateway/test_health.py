@@ -1,0 +1,186 @@
+from datetime import datetime, UTC
+from fastapi.testclient import TestClient
+import pytest
+
+# Suppress unraisable exceptions from sockets/event loop cleanup that can
+# occur under pytest -W error when using TestClient and async gRPC clients.
+pytestmark = [
+    pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
+    pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
+    pytest.mark.filterwarnings('ignore:unclosed event loop'),
+]
+
+from qmtl.services.gateway.api import create_app as gw_create_app
+from qmtl.services.dagmanager.api import create_app as dag_api_create_app
+from qmtl.services.dagmanager.garbage_collector import QueueInfo
+from qmtl.services.dagmanager.diff_service import StreamSender
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.ws import WebSocketHub
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.database import PostgresDatabase
+
+import grpc
+import asyncio
+import gc
+import warnings
+import pytest
+
+
+class DummyGC:
+    def collect(self):
+        return [QueueInfo("q", "raw", datetime.now(UTC), interval="60s")]
+
+
+class FakeDagClient:
+    async def status(self):
+        return True
+
+    async def close(self) -> None:
+        pass
+
+
+class FakeDB(PostgresDatabase):
+    def __init__(self):
+        super().__init__("postgresql://localhost/test")
+        self._pool = None
+
+    async def healthy(self):
+        return True
+
+
+def test_gateway_health(fake_redis):
+    redis_client = fake_redis
+    db = FakeDB()
+    with TestClient(
+        gw_create_app(redis_client=redis_client, database=db, dag_client=FakeDagClient(), enable_background=False)
+    ) as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["redis"] == "ok"
+        assert data["postgres"] == "ok"
+        assert data["dagmanager"] == "ok"
+        assert data["enforce_live_guard"] is True
+
+
+def test_dagmanager_http_health():
+    with TestClient(dag_api_create_app(DummyGC())) as client:
+        resp = client.get("/status")
+    assert resp.status_code == 200
+    assert resp.json()["neo4j"] in {"ok", "error", "unknown"}
+
+
+def test_gateway_health_live_guard_disabled(fake_redis):
+    redis_client = fake_redis
+    db = FakeDB()
+    with TestClient(
+        gw_create_app(
+            redis_client=redis_client,
+            database=db,
+            dag_client=FakeDagClient(),
+            enforce_live_guard=False,
+            enable_background=False,
+        )
+    ) as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["enforce_live_guard"] is False
+
+
+@pytest.mark.asyncio
+async def test_grpc_health():
+    from qmtl.services.dagmanager.grpc_server import serve
+
+    class FakeDriver:
+        def session(self):
+            class S:
+                def run(self, *a, **k):
+                    return []
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    pass
+
+            return S()
+
+    class FakeAdmin:
+        def list_topics(self):
+            return {}
+
+        def create_topic(self, *a, **k):
+            pass
+
+    class FakeStream(StreamSender):
+        def send(self, chunk):
+            pass
+
+        def wait_for_ack(self) -> AckStatus:
+            return AckStatus.OK
+
+        def ack(self, status: AckStatus = AckStatus.OK):
+            pass
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    client = DagManagerClient(f"127.0.0.1:{port}")
+    try:
+        assert await client.status() is True
+    finally:
+        await client.close()
+        await server.stop(None)
+        await server.wait_for_termination()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ResourceWarning)
+            gc.collect()
+
+
+@pytest.mark.asyncio
+async def test_queue_healthy(fake_redis):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis)
+    assert await queue.healthy() is True
+
+
+@pytest.mark.asyncio
+async def test_ws_hub_is_running():
+    hub = WebSocketHub()
+    assert hub.is_running() is False
+    await hub.start()
+    try:
+        assert hub.is_running() is True
+    finally:
+        await hub.stop()
+
+
+@pytest.mark.asyncio
+async def test_worker_healthy(monkeypatch, fake_redis):
+    redis = fake_redis
+
+    class FakeDB(PostgresDatabase):
+        def __init__(self):
+            super().__init__("postgresql://localhost/test")
+            self._pool = None
+
+        async def healthy(self):
+            return True
+
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+    queue = RedisTaskQueue(redis)
+    client = DagManagerClient("127.0.0.1:1")
+    async def status():
+        return True
+    monkeypatch.setattr(client, "status", status)
+
+    worker = StrategyWorker(redis, db, fsm, queue, client)
+    assert await worker.healthy() is True
+    await client.close()

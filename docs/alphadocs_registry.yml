@@ -7,39 +7,40 @@
 - doc: ../docs/alphadocs/ideas/gpt5pro/tactical-liquidity-bifurcation-theory.md
   status: implemented
   modules:
-    - qmtl/transforms/tactical_liquidity_bifurcation.py
+    - qmtl/runtime/transforms/tactical_liquidity_bifurcation.py
 - doc: ../docs/alphadocs/ideas/gpt5pro/latent-liquidity-threshold-reconfiguration.md
   status: implemented
   modules:
-    - qmtl/transforms/llrti.py
+    - qmtl/runtime/transforms/llrti.py
 - doc: ../docs/alphadocs/ideas/resiliency.md
   status: implemented
   modules:
-    - qmtl/transforms/resiliency.py
+    - qmtl/runtime/transforms/resiliency.py
 - doc: "../docs/alphadocs/ideas/gpt5pro/Acceptable Price Band Theory.md"
   status: implemented
   modules:
-    - qmtl/transforms/acceptable_price_band.py
+    - qmtl/runtime/transforms/acceptable_price_band.py
 - doc: "../docs/alphadocs/ideas/gpt5pro/Dynamic Execution Diffusion-Contraction Theory.md"
   status: implemented
   modules:
-    - qmtl/transforms/execution_diffusion_contraction.py
+    - qmtl/runtime/transforms/execution_diffusion_contraction.py
 - doc: ../docs/alphadocs/basic_sequence_pipeline.md
   status: implemented
   modules:
-    - qmtl/transforms/scale.py
+    - qmtl/runtime/transforms/scale.py
     - qmtl/examples/nodes/generators/sequence.py
     - qmtl/examples/nodes/transforms/scale.py
     - qmtl/examples/nodes/indicators/average.py
 - doc: ../docs/alphadocs/ideas/gpt5pro/order-book-clustering-collapse-theory.md
   status: implemented
   modules:
-    - qmtl/transforms/order_book_clustering_collapse.py
+    - qmtl/runtime/transforms/order_book_clustering_collapse.py
 - doc: docs/architecture/lean_brokerage_model.md
   status: implemented
   modules:
-    - qmtl/brokerage/simple.py
-    - qmtl/brokerage/__init__.py
-    - qmtl/brokerage/order.py
-    - qmtl/brokerage/interfaces.py
-    - qmtl/brokerage/brokerage_model.py
+    - qmtl/runtime/brokerage/buying_power.py
+    - qmtl/runtime/brokerage/fill_models.py
+    - qmtl/runtime/brokerage/__init__.py
+    - qmtl/runtime/brokerage/order.py
+    - qmtl/runtime/brokerage/interfaces.py
+    - qmtl/runtime/brokerage/brokerage_model.py

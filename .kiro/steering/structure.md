@@ -30,7 +30,7 @@ qmtl.egg-info/        # Package metadata (generated)
 
 ## Core Package Structure
 
-### SDK (`qmtl/sdk/`)
+### SDK (`qmtl/runtime/sdk/`)
 Strategy development framework with key modules:
 - `strategy.py` - Base Strategy class
 - `node.py` - Node types (StreamInput, ProcessingNode, TagQueryNode)
@@ -40,7 +40,7 @@ Strategy development framework with key modules:
 - `tagquery_manager.py` - Dynamic upstream node discovery
 - `ws_client.py` - WebSocket client for real-time updates
 
-### Gateway (`qmtl/gateway/`)
+### Gateway (`qmtl/services/gateway/`)
 State management and DAG forwarding service:
 - `api.py` - FastAPI HTTP endpoints
 - `fsm.py` - Finite state machine for strategy execution
@@ -50,7 +50,7 @@ State management and DAG forwarding service:
 - `worker.py` - Background task processing
 - `ws.py` - WebSocket server implementation
 
-### DAG Manager (`qmtl/dagmanager/`)
+### DAG Manager (`qmtl/services/dagmanager/`)
 Global DAG storage and queue orchestration:
 - `server.py` - gRPC and HTTP server implementation
 - `node_repository.py` - Neo4j-based node storage

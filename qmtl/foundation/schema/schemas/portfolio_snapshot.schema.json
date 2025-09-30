@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/portfolio_snapshot.schema.json",
+  "title": "PortfolioSnapshot",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "world_id": { "type": "string" },
+    "strategy_id": { "type": "string" },
+    "as_of": { "type": "integer" },
+    "cash": { "type": "number" },
+    "positions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "qty": { "type": "number" },
+          "avg_cost": { "type": "number" },
+          "mark": { "type": "number" }
+        },
+        "required": ["qty", "avg_cost", "mark"]
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    }
+  },
+  "required": ["world_id", "as_of", "cash", "positions"]
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple
 
-from qmtl.sdk.risk_management import PositionInfo, RiskManager, RiskViolation
+from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager, RiskViolation
 
 
 def enforce_position_limit(

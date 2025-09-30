@@ -26,6 +26,9 @@ optionally expose asynchronous helpers:
   asynchronous coroutine.
 - `fill_missing(start, end, node_id, interval)` instructing the provider to
   populate gaps within the given range and is also a coroutine.
+- `ensure_range(start, end, *, node_id, interval)` which performs any automatic
+  backfill the provider supports. When present the runtime will prefer this
+  helper over manual coverage checks.
 
 `coverage()` should return contiguous, inclusive ranges that already exist in
 the storage backend. When `fill_missing()` is implemented the provider is
@@ -39,18 +42,18 @@ retrieve missing rows.  A ``DataFetcher`` exposes a single **asynchronous**
 structure.  When a provider is created without a fetcher, calling
 ``fill_missing`` will raise a ``RuntimeError``.
 
-The SDK ships with `QuestDBLoader` which reads from a QuestDB instance:
+The SDK ships with `QuestDBHistoryProvider` which reads from a QuestDB instance:
 
 ```python
-from qmtl.sdk import QuestDBLoader
+from qmtl.runtime.sdk import QuestDBHistoryProvider
 
-source = QuestDBLoader(
+source = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
 )
 
 # with an external fetcher supplying missing rows
 # fetcher = MyFetcher()
-# source = QuestDBLoader(
+# source = QuestDBHistoryProvider(
 #     dsn="postgresql://user:pass@localhost:8812/qdb",
 #     fetcher=fetcher,
 # )
@@ -64,7 +67,7 @@ Below is a minimal fetcher that reads candlesticks from Binance:
 ```python
 import httpx
 import pandas as pd
-from qmtl.sdk import DataFetcher
+from qmtl.runtime.sdk import DataFetcher
 
 class BinanceFetcher:
     async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
@@ -83,7 +86,7 @@ class BinanceFetcher:
         )
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
     fetcher=fetcher,
 )
@@ -102,73 +105,178 @@ signatures and return ``pandas.DataFrame`` objects with a ``ts`` column.
 Subclasses are optional—any object adhering to the protocol works with the
 SDK.
 
+## Auto Backfill Strategies
+
+The SDK ships with :class:`AugmentedHistoryProvider`, a facade that wraps a
+`HistoryBackend` and coordinates optional auto backfill helpers. When
+constructed with an :class:`AutoBackfillStrategy`, the facade exposes
+``ensure_range`` which populates missing data before history is fetched.  The
+simplest strategy delegates to an existing :class:`DataFetcher`:
+
+!!! note
+    Every :class:`HistoryProvider` exposes an ``ensure_range`` helper. When a
+    provider does not override it, the default implementation simply proxies to
+    :meth:`fill_missing`, so adapters written before auto backfill support keep
+    working unchanged.
+
+```python
+from qmtl.runtime.sdk import AugmentedHistoryProvider, FetcherBackfillStrategy
+from qmtl.runtime.io import QuestDBBackend
+
+backend = QuestDBBackend(dsn="postgresql://user:pass@localhost:8812/qdb")
+provider = AugmentedHistoryProvider(
+    backend,
+    fetcher=my_fetcher,
+    auto_backfill=FetcherBackfillStrategy(my_fetcher),
+)
+
+# ensure the warmup window is covered before loading
+await provider.ensure_range(1700000000, 1700001800, node_id="BTC", interval=60)
+frame = await provider.fetch(1700000000, 1700001860, node_id="BTC", interval=60)
+```
+
+``FetcherBackfillStrategy`` computes coverage gaps, delegates each gap to the
+fetcher, writes the normalized rows back to the backend and refreshes cached
+coverage metadata. Other strategies such as
+``LiveReplayBackfillStrategy`` can ingest live buffers instead of hitting an
+external API.
+
 ### Injecting into `StreamInput`
 
 Historical data and event recording can be supplied when creating a `StreamInput`:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.sdk import (
+    StreamInput,
+    QuestDBHistoryProvider,
+    QuestDBRecorder,
+    EventRecorderService,
+)
 
 stream = StreamInput(
     interval="60s",
-    history_provider=QuestDBLoader(
+    history_provider=QuestDBHistoryProvider(
         dsn="postgresql://user:pass@localhost:8812/qdb",
         fetcher=fetcher,
     ),
-    event_recorder=QuestDBRecorder(
-        dsn="postgresql://user:pass@localhost:8812/qdb",
+    event_service=EventRecorderService(
+        QuestDBRecorder(
+            dsn="postgresql://user:pass@localhost:8812/qdb",
+        )
     ),
 )
 ```
 
-When the QuestDB loader or recorder is created without a ``table`` argument it
+When the QuestDB history provider (also exported as ``QuestDBLoader`` for
+backwards compatibility) or recorder is created without a ``table`` argument it
 automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
 explicitly to override this behaviour.
 
-``StreamInput`` binds the provider and recorder during construction and then
-treats them as read-only. Attempting to modify ``history_provider`` or
-``event_recorder`` after creation will raise an ``AttributeError``.
+``StreamInput`` binds the provider and recorder service during construction and
+then treats them as read-only. Attempting to modify ``history_provider`` or
+``event_service`` after creation will raise an ``AttributeError``.
 
-## Running a Backfill
+## Distributed Coordinator Observability
 
-Backfills can be triggered when executing a strategy through the CLI or the
-`Runner` API. The `Runner` receives ``start_time`` and ``end_time`` arguments
-which define the historical range to load. Before fetching rows it checks
-``HistoryProvider.coverage()`` for every ``StreamInput`` and, when gaps are
-detected, calls ``fill_missing()`` if available.  This ensures caches contain a
-contiguous history before live processing begins.
+Backfill workers that rely on the distributed coordinator should monitor the
+structured lifecycle logs emitted by the SDK. Each successful transition now
+produces a log entry under the `seamless.backfill` namespace:
 
-```bash
-python -m qmtl.sdk tests.sample_strategy:SampleStrategy \
-       --mode backtest \
-       --start-time 1700000000 \
-       --end-time 1700003600 \
-       --gateway-url http://localhost:8000
+```text
+seamless.backfill.coordinator_claimed {"coordinator_id": "coordinator.local", "lease_key": "nodeA:60:1700:1760:world-1:2024-01-01T00:00:00Z", "node_id": "nodeA", "interval": 60, "batch_start": 1700, "batch_end": 1760, "world": "world-1", "requested_as_of": "2024-01-01T00:00:00Z", "worker": "worker-42", "lease_token": "abc", "lease_until_ms": 2000, "completion_ratio": 0.5}
 ```
 
-The same operation via Python code:
+Three events are emitted:
+
+- `seamless.backfill.coordinator_claimed` – a worker successfully acquired a lease.
+- `seamless.backfill.coordinator_completed` – a backfill window finished and the lease was released cleanly.
+- `seamless.backfill.coordinator_failed` – a lease was failed intentionally (for example when a backfill attempt raises).
+
+All events carry the fields called out in the operations checklist:
+
+- **`coordinator_id`** – derived from the distributed coordinator URL host.
+- **`lease_key`** – the canonical lease identifier (`node:interval:start:end:world:requested_as_of`).
+- **`node_id`**, **`interval`**, **`batch_start`**, **`batch_end`** – partition identifiers that drive dashboards.
+- **`world`** and **`requested_as_of`** – present when the request context supplies world governance metadata.
+- **`worker`** – populated from `QMTL_SEAMLESS_WORKER`, `QMTL_WORKER_ID`, or the container hostname; configure one of the environment variables in production to keep dashboards consistent.
+- **`lease_token`** and **`lease_until_ms`** – useful when recovering stuck leases via `scripts/lease_recover.py`.
+- **`completion_ratio`** – mirrors the gauge recorded in Prometheus to track progress per lease.
+- **`reason`** – included on the failed event to annotate why the lease was abandoned.
+
+Dashboards in `operations/monitoring/seamless_v2.jsonnet` already chart
+`backfill_completion_ratio`. Combine those panels with the lifecycle logs above
+to understand which worker handled a batch and whether the lease progressed or
+required manual recovery.
+
+## Auto Backfill Batch Lifecycle Logs
+
+When `DataFetcherAutoBackfiller` repairs gaps without a coordinator, the
+runtime records a structured lifecycle for each batch. These events surface in
+the same namespace so dashboards can correlate coordinator-driven and direct
+repairs:
+
+```text
+seamless.backfill.attempt {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 1, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "storage"}
+seamless.backfill.succeeded {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 1, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "storage"}
+seamless.backfill.failed {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 2, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "fetcher", "error": "timeout"}
+```
+
+- **`batch_id`** – canonical identifier `node_id:interval:start:end` generated
+  by the SDK so retries can be grouped.
+- **`attempt`** – the attempt counter supplied by the retry engine. A value of
+  `1` indicates the first try; additional attempts increment monotonically.
+- **`source`** – `storage` when the batch was materialized through
+  `fill_missing`/`fetch`, or `fetcher` when data was pulled directly from the
+  external provider.
+- **`error`** – present on failure events with the string representation of the
+  raised exception.
+
+Dashboards can aggregate on `batch_id` and `attempt` to expose retry rates while
+keeping coordinator-driven telemetry untouched.
+
+## Priming History for Warmup
+
+When executing a strategy, the SDK ensures each `StreamInput` has enough history
+to satisfy its `period × interval` warmup window. For providers that implement
+`ensure_range()`, auto backfill occurs before any gaps are inspected. Providers
+without that helper fall back to the `coverage()` plus `fill_missing()` loop so
+existing adapters continue to work.
+
+Both :func:`Runner.run` and :func:`Runner.offline` execute the same warmup
+pipeline: ranges are reconciled via the provider, the `BackfillEngine` fetches
+rows into the node caches and the runtime replays those events through the
+strategy graph. This guarantees that local dry runs exercise the identical
+bootstrap logic used in production.
+
+Integrated run (world‑driven):
 
 ```python
-from qmtl.sdk import Runner
+from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.backtest(
+Runner.run(
     SampleStrategy,
-    start_time=1700000000,
-    end_time=1700003600,
+    world_id="sample_world",
     gateway_url="http://localhost:8000",
 )
 ```
 
-During backtest and offline runs the SDK **replays** cached history through a
-``Pipeline``.  Events from each ``StreamInput`` are collected concurrently with
-``asyncio.gather`` and sorted by timestamp before being fed into the graph.
-If Ray execution is enabled, compute functions may execute in parallel during this
-replay phase.
+Offline priming for local testing:
+
+```python
+from qmtl.runtime.sdk import Runner
+from tests.sample_strategy import SampleStrategy
+
+Runner.offline(SampleStrategy)
+```
+
+During execution the SDK collects cached history and replays it through the
+`Pipeline` in timestamp order to initialize downstream nodes. If Ray execution
+is enabled, compute functions may run concurrently during this replay phase.
 
 ## Monitoring Progress
 
-Backfill operations emit Prometheus metrics via `qmtl.sdk.metrics`:
+Backfill operations emit Prometheus metrics via `qmtl.runtime.sdk.metrics`:
 
 - `backfill_jobs_in_progress`: number of active jobs
 - `backfill_last_timestamp{node_id,interval}`: latest timestamp successfully backfilled
@@ -178,7 +286,7 @@ Backfill operations emit Prometheus metrics via `qmtl.sdk.metrics`:
 Start the metrics server to scrape these values:
 
 ```python
-from qmtl.sdk import metrics
+from qmtl.runtime.sdk import metrics
 
 metrics.start_metrics_server(port=8000)
 ```
@@ -196,7 +304,7 @@ rows into the node cache using
 ``BackfillState`` so subsequent calls can skip already processed data.
 
 ```python
-from qmtl.sdk import StreamInput
+from qmtl.runtime.sdk import StreamInput
 
 stream = StreamInput(...)
 await stream.load_history(start_ts, end_ts)
@@ -211,4 +319,3 @@ engine emits metrics such as ``backfill_jobs_in_progress``,
 
 
 {{ nav_links() }}
-

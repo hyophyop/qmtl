@@ -2,7 +2,7 @@
 title: "Strategy Development and Testing Workflow"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-09-22
 ---
 
 {{ nav_links() }}
@@ -31,7 +31,7 @@ concludes with running the test suite.
 ## 0. Install QMTL
 
 Create a virtual environment and install the package in editable mode. The
-[README](../../README.md) describes the details, but the basic steps are:
+[docs home](../index.md) describes the details, but the basic steps are:
 
 ```bash
 uv venv
@@ -45,8 +45,8 @@ available templates, then initialize the project with a chosen template and
 optional sample data:
 
 ```bash
-qmtl init --list-templates
-qmtl init --path my_qmtl_project --strategy branching --with-sample-data
+qmtl project init --list-templates
+qmtl project init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```
 
@@ -65,14 +65,17 @@ extend the SDK by adding custom nodes.
 > **구조 설명:** 각 폴더/파일의 역할은 위 '실무 개발 가이드' 참고.
 
 Run the default strategy to verify that everything works. Offline mode is used
-when no flags are supplied:
+when no external services are configured:
 
 ```bash
 python strategy.py
 ```
 The scaffolded script uses `Runner.offline()` by default, so no external
-services are required. Add `--backtest` to run `Runner.backtest()`, which
-requires a running Gateway and DAG Manager and a `--gateway-url` argument.
+services are required. To connect to your environment, update the script to call
+`Runner.run(world_id=..., gateway_url=...)`, which follows WorldService decisions
+and activation events.
+
+The Gateway proxies the WorldService, and SDKs receive control events over the tokenized WebSocket returned by `/events/subscribe`. Activation and queue updates arrive through this opaque control stream instead of being read directly from Gateway state.
 
 ## 2a. Example Run Output
 
@@ -90,15 +93,9 @@ transforms
 ...
 ```
 
-Running backtest mode without a Gateway URL produces an error:
-
-```text
-$ python strategy.py --backtest
-RuntimeError: gateway_url is required for backtest mode
-```
-
-Backtesting requires a running Gateway and DAG Manager; provide a
-`--gateway-url` argument when using `--backtest`.
+If the script calls `Runner.run(...)` without a reachable Gateway/WorldService,
+the strategy will remain in a safe compute‑only state (order gates OFF) until
+the control connection is restored.
 
 > **자주 발생하는 문제**
 > - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.offline()` 사용
@@ -120,30 +117,28 @@ ready for local development but can be adjusted to point at production services.
 > - 복잡한 로직은 별도 함수/클래스로 분리하고, 주석과 docstring을 작성하세요.
 > - 변경 시 반드시 관련 문서와 테스트를 함께 수정하세요.
 
-## 4. Execute in Different Modes
+## 4. Execute with Worlds
 
-Run strategies via the CLI or programmatically with `Runner`. Offline mode is
-the default; pass `--backtest` to run a historical simulation:
+Use `Runner.offline()` for local testing without dependencies. For integrated runs,
+switch to `Runner.run(strategy_cls, world_id=..., gateway_url=...)`. Activation and queue
+updates are delivered via the Gateway's opaque control stream on the `/events/subscribe`
+WebSocket; WS remains the authority for policy and activation.
 
-```bash
-python -m qmtl.sdk mypkg.strategy:MyStrategy --backtest \
-    --start-time 2024-01-01 --end-time 2024-02-01 \
-    --gateway-url http://localhost:8000
-```
+Execution domains are now surfaced explicitly on envelopes:
 
-Available modes are `offline` (default), `backtest`, `dryrun` and `live`.
-Backtest, dryrun and live require a running Gateway and DAG Manager. Start them
-in separate terminals. The
-``--config`` flag is optional:
+- WorldService decisions emit `effective_mode` (`validate|compute-only|paper|live`).
+- Gateway/SDKs derive `execution_domain` (`backtest|dryrun|live|shadow`) using the normative mapping `validate → backtest (orders gated OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`.
+- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }}) toggles between `dryrun` and `live` by reading `QMTL_EXECUTION_DOMAIN`. Legacy `QMTL_TRADE_MODE=paper` is accepted but coerced to `dryrun` for compatibility.
+- Offline runs mirror the `backtest` domain, so a `validate` decision never publishes orders until promotion completes.
 
 ```bash
 # start with built-in defaults
-qmtl gw
-qmtl dagmanager-server
+qmtl service gateway
+qmtl service dagmanager server
 
 # or load a custom configuration
-qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
 Multiple strategies can be executed in parallel by launching separate processes
@@ -153,10 +148,10 @@ or using the `parallel_strategies_example.py` script.
 
 ## 5. Test Your Implementation
 
-Always run the unit tests before committing code:
+Always run the unit tests in parallel before committing code:
 
 ```bash
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 ```
 
 A sample execution inside the container finished successfully:
@@ -169,7 +164,7 @@ End‑to‑end tests require Docker. Start the stack and execute the tests:
 
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up -d
-uv run -m pytest tests/e2e
+uv run -m pytest -n auto tests/e2e
 ```
 
 For details on the test environment refer to
@@ -179,8 +174,43 @@ tests if desired:
 ```bash
 # Example of running wheels and tests in parallel
 uv pip wheel . &
-uv run -m pytest -W error
+uv run -m pytest -W error -n auto
 wait
+
+### Test Teardown and Shutdown
+
+When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), prefer the session context manager to ensure everything is cleaned up:
+
+```python
+async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw") as strategy:
+    ...  # assertions
+```
+
+If you cannot use ``async with`` (e.g., in synchronous tests), fall back to the explicit helpers:
+
+```python
+strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw")
+try:
+    ...  # assertions
+finally:
+    Runner.shutdown(strategy)
+```
+
+The helpers are idempotent and safe to call even if no background services are active.
+
+### Test Mode Budgets
+
+Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
+
+- HTTP clients: 짧은 폴링 주기 및 명시적 상태 확인
+- WebSocket client: shorter receive timeout and overall max runtime (≈5s)
+
+Example:
+
+```bash
+export QMTL_TEST_MODE=1
+uv run -m pytest -W error -n auto
+```
 ```
 
 > **테스트 작성 가이드**
@@ -206,9 +236,8 @@ Gateway and DAG Manager using your customized `qmtl.yml`.
 > - [architecture.md](../architecture/architecture.md): 전체 시스템 구조
 > - [sdk_tutorial.md](sdk_tutorial.md): SDK 및 전략 개발 예제
 > - [faq.md](../reference/faq.md): 자주 묻는 질문
-> - [monitoring.md](monitoring.md): 모니터링 및 운영
-> - [canary_rollout.md](canary_rollout.md): 점진적 배포 전략
-> - [qmtl/examples/](../qmtl/examples/): 다양한 전략 예제
+> - [monitoring.md](../operations/monitoring.md): 모니터링 및 운영
+> - [canary_rollout.md](../operations/canary_rollout.md): 점진적 배포 전략
+> - [qmtl/examples/]({{ code_url('qmtl/examples/') }}): 다양한 전략 예제
 
 {{ nav_links() }}
-

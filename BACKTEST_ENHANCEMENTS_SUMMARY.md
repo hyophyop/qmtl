@@ -2,11 +2,11 @@
 
 ## Overview
 
-This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements maintain full backward compatibility while providing optional advanced functionality.
+This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality and align with the WorldService‑first `Runner.run` and local `Runner.offline` APIs.
 
 ## Key Enhancements Implemented
 
-### 1. Enhanced Data Validation (`qmtl/sdk/backtest_validation.py`)
+### 1. Enhanced Data Validation (`qmtl/runtime/sdk/backtest_validation.py`)
 - **Timestamp Continuity Validation**: Detects gaps in time series data
 - **Price Data Sanity Checks**: Validates price ranges, detects negative prices
 - **OHLC Relationship Validation**: Ensures high >= open, close and low <= open, close
@@ -15,7 +15,7 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 - **Configurable Thresholds**: Customizable validation parameters
 - **Quality Score Calculation**: Provides data quality metrics (0-1 scale)
 
-### 2. Realistic Execution Modeling (`qmtl/sdk/execution_modeling.py`)
+### 2. Realistic Execution Modeling (`qmtl/runtime/sdk/execution_modeling.py`)
 - **Commission Modeling**: Configurable commission rates with minimum charges
 - **Slippage Simulation**: Market impact and bid-ask spread based slippage
 - **Execution Latency**: Realistic order execution delays
@@ -24,7 +24,7 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 - **Fill Quality Analysis**: Execution shortfall and cost analysis
 - **Multiple Order Types**: Support for market, limit, stop orders
 
-### 3. Enhanced Timing Controls (`qmtl/sdk/timing_controls.py`)
+### 3. Enhanced Timing Controls (`qmtl/runtime/sdk/timing_controls.py`)
 - **Market Hours Validation**: US equity market hours with pre/post market support
 - **Session Detection**: Automatic market session identification
 - **Weekend/Holiday Handling**: Market closure detection
@@ -32,7 +32,7 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 - **Timing Validation**: Backtest data timing validation
 - **Next Valid Time Finding**: Automatic rescheduling for invalid times
 
-### 4. Risk Management Integration (`qmtl/sdk/risk_management.py`)
+### 4. Risk Management Integration (`qmtl/runtime/sdk/risk_management.py`)
 - **Position Size Limits**: Absolute and percentage-based position limits
 - **Leverage Constraints**: Portfolio-level leverage monitoring
 - **Concentration Limits**: Single position concentration controls
@@ -40,7 +40,7 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 - **Volatility-Based Sizing**: Dynamic position sizing based on asset volatility
 - **Risk Violation Tracking**: Comprehensive violation reporting and severity classification
 
-### 5. Enhanced Performance Metrics (`qmtl/transforms/alpha_performance.py`)
+### 5. Enhanced Performance Metrics (`qmtl/runtime/transforms/alpha_performance.py`)
 - **Realistic Cost Integration**: Performance calculation with execution costs
 - **Execution Quality Metrics**: Fill rate, slippage, and commission analysis
 - **Risk-Adjusted Returns**: Returns adjusted for realistic transaction costs
@@ -48,43 +48,37 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 
 ## API Integration
 
-### Backward Compatible Runner API
+### Runner API
 ```python
-# Existing API continues to work
-Runner.backtest(strategy, start_time="2024-01-01", end_time="2024-12-31", gateway_url="http://gw")
+# WS-first run (follows WorldService decisions; orders gated by activation)
+Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
 
-# Enhanced API with new features
-Runner.backtest(
-    strategy, 
-    start_time="2024-01-01", 
-    end_time="2024-12-31",
-    gateway_url="http://gw",
-    validate_data=True,                    # Enable data validation
-    validation_config={                    # Custom validation settings
-        "max_price_change_pct": 0.05,
-        "min_price": 1.0
-    }
-)
+# Offline/local run (no Gateway/WS)
+Runner.offline(MyStrategy)
+
+# Data validation is provided as a separate utility
+from qmtl.runtime.sdk.backtest_validation import validate_backtest_data
+reports = validate_backtest_data(strategy)
 ```
 
 ### Standalone Component Usage
 ```python
 # Data validation
-from qmtl.sdk.backtest_validation import validate_backtest_data
+from qmtl.runtime.sdk.backtest_validation import validate_backtest_data
 reports = validate_backtest_data(strategy)
 
 # Execution modeling
-from qmtl.sdk.execution_modeling import ExecutionModel
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel
 model = ExecutionModel(commission_rate=0.001)
 fill = model.simulate_execution(...)
 
 # Timing controls
-from qmtl.sdk.timing_controls import TimingController
+from qmtl.runtime.sdk.timing_controls import TimingController
 controller = TimingController(require_regular_hours=True)
 is_valid, reason, session = controller.validate_timing(timestamp)
 
 # Risk management
-from qmtl.sdk.risk_management import RiskManager
+from qmtl.runtime.sdk.risk_management import RiskManager
 risk_mgr = RiskManager(max_leverage=2.0)
 violations = risk_mgr.validate_portfolio_risk(positions, portfolio_value, timestamp)
 ```
@@ -94,7 +88,6 @@ violations = risk_mgr.validate_portfolio_risk(positions, portfolio_value, timest
 - **66 test cases** across 5 test files
 - **100% functionality coverage** for all new modules
 - **Integration tests** validating component interactions
-- **Backward compatibility tests** ensuring existing functionality works
 - **Edge case testing** for robust error handling
 
 ## Performance Considerations
@@ -116,10 +109,10 @@ violations = risk_mgr.validate_portfolio_risk(positions, portfolio_value, timest
 
 ## Files Added
 
-- `qmtl/sdk/backtest_validation.py` - Data quality validation
-- `qmtl/sdk/execution_modeling.py` - Realistic execution simulation  
-- `qmtl/sdk/timing_controls.py` - Market timing and hours validation
-- `qmtl/sdk/risk_management.py` - Portfolio risk controls
+- `qmtl/runtime/sdk/backtest_validation.py` - Data quality validation
+- `qmtl/runtime/sdk/execution_modeling.py` - Realistic execution simulation  
+- `qmtl/runtime/sdk/timing_controls.py` - Market timing and hours validation
+- `qmtl/runtime/sdk/risk_management.py` - Portfolio risk controls
 - `tests/test_backtest_validation.py` - Validation tests (11 tests)
 - `tests/test_execution_modeling.py` - Execution modeling tests (14 tests)
 - `tests/test_timing_controls.py` - Timing controls tests (18 tests)
@@ -129,7 +122,7 @@ violations = risk_mgr.validate_portfolio_risk(positions, portfolio_value, timest
 
 ## Files Modified
 
-- `qmtl/sdk/runner.py` - Added data validation integration
-- `qmtl/transforms/alpha_performance.py` - Enhanced with execution cost modeling
+- `qmtl/runtime/sdk/runner.py` - Added data validation integration
+- `qmtl/runtime/transforms/alpha_performance.py` - Enhanced with execution cost modeling
 
 This implementation brings QMTL's backtesting capabilities to institutional-grade accuracy standards while maintaining the framework's ease of use and flexibility.

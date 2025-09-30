@@ -2,28 +2,36 @@
 
 # qmtl
 
-QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The gateway forwards DAGs to the DAG Manager to deduplicate and schedule computations, while the SDK enables building reusable nodes for local or distributed execution. See [architecture.md](docs/architecture/architecture.md) for full details.
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its architecture is built around three components:
+
+1. **Gateway** – accepts strategy submissions from SDKs and forwards DAGs to the DAG Manager for deduplication and scheduling.
+2. **WorldService** – the single source of truth for policy and activation state.
+3. **ControlBus** – an internal event bus bridged to clients through a tokenized WebSocket.
+
+SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/architecture/architecture.md) for full details.
 
 Use the DAG Manager CLI to preview DAG structures:
 
 ```bash
-qmtl dagmanager diff --file dag.json --dry_run
+qmtl service dagmanager diff --file dag.json --dry-run
 ```
 
 Initialize a Neo4j database with the required constraints and indexes:
 
 ```bash
-qmtl dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
 Every subcommand now exposes its own help message. For example:
 
 ```bash
-qmtl gw --help
-qmtl dagmanager --help
-qmtl dagmanager-server --help
-qmtl sdk --help
+qmtl service --help
+qmtl service gateway --help
+qmtl service dagmanager --help
+qmtl tools sdk --help
 ```
+
+Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Legacy aliases like `qmtl gw` continue to function but emit deprecation warnings to ease migration.
 
 The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
 
@@ -48,21 +56,21 @@ uv pip install -e .[io]
 
 ## Project Initialization
 
-Create a new working directory with `qmtl init`. The command generates a
+Create a new working directory with `qmtl project init`. The command generates a
 project scaffold containing extension packages and a sample strategy.
 Use `--strategy` to select from the built-in templates, `--list-templates` to
 see the choices and `--with-sample-data` to copy an example OHLCV CSV and
 notebook:
 
 ```bash
-qmtl init --path my_qmtl_project
+qmtl project init --path my_qmtl_project
 # list available templates
-qmtl init --list-templates
+qmtl project init --list-templates
 
 # create project with the branching template
-qmtl init --path my_qmtl_project --strategy branching
+qmtl project init --path my_qmtl_project --strategy branching
 # include sample data
-qmtl init --path my_qmtl_project --with-sample-data
+qmtl project init --path my_qmtl_project --with-sample-data
 cd my_qmtl_project
 ```
 
@@ -81,6 +89,39 @@ python -m qmtl.examples.strategy
 See `qmtl/examples/README.md` for additional strategies that can be executed
 in the same way. A more detailed walkthrough from project creation to
 testing is available in [docs/guides/strategy_workflow.md](docs/guides/strategy_workflow.md).
+
+## Quick Start (Validate → Export → Launch)
+
+Bring services up in three steps. This mirrors the detailed guidance in
+[Config CLI](docs/operations/config-cli.md) and [Backend Quickstart](docs/operations/backend_quickstart.md).
+
+1. **Validate configuration** – catch missing sections or offline resources
+   before booting services.
+
+   ```bash
+   uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
+   ```
+
+2. **Export and load environment variables** – persist overrides so Gateway
+   and DAG Manager pick them up without repeating `--config` flags.
+
+   ```bash
+   uv run qmtl config env export --config qmtl/examples/qmtl.yml > .env.qmtl
+   source .env.qmtl
+   export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
+   ```
+
+3. **Launch services** – with the environment in place you can start Gateway
+   and DAG Manager directly; each service falls back to `QMTL_CONFIG_FILE` if
+   no `--config` flag is provided.
+
+   ```bash
+   qmtl service gateway
+   qmtl service dagmanager server
+   ```
+
+If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with
+default settings, preventing silent misconfigurations.
 
 ## Trading Node Enhancements
 
@@ -103,10 +144,10 @@ Here’s a short workflow summary based on the repository’s guidelines:
 
    This command ensures all development dependencies are available.
 
-2. **Testing** – Run the tests via `uv` before committing:
+2. **Testing** – Run the tests in parallel via `uv` before committing:
 
    ```bash
-   uv run -m pytest
+   uv run -m pytest -n auto
    ```
 
    Commit only after tests pass.
@@ -133,10 +174,10 @@ Use consistent naming for connection strings across the project. Prefer the `*_d
 
 Install additional functionality on demand:
 
-- [Indicators](qmtl/indicators/README.md)
+- [Indicators](qmtl/runtime/indicators/README.md)
 - [IO](qmtl/io) &mdash; `pip install qmtl[io]`
-- [Generators](qmtl/generators/README.md)
-- [Transforms](qmtl/transforms/README.md)
+- [Generators](qmtl/runtime/generators/README.md)
+- [Transforms](qmtl/runtime/transforms/README.md)
 
 ## End-to-End Testing
 
@@ -146,25 +187,25 @@ Bring up the stack with Docker Compose:
 docker compose -f tests/docker-compose.e2e.yml up -d
 ```
 
-Run the tests using uv:
+Run the tests in parallel using uv:
 
 ```bash
-uv run -m pytest tests/e2e
+uv run -m pytest -n auto tests/e2e
 ```
 
-See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide.
+See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide. For Docker stacks and commands, see [docs/operations/docker.md](docs/operations/docker.md).
 
 ## Running the Test Suite
 
-Run all unit and integration tests with:
+Run all unit and integration tests in parallel with:
 
 ```bash
-uv run -m pytest
+uv run -m pytest -n auto
 ```
 
 ## Monitoring
 
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl dagmanager-metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
+Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl service dagmanager metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
 
 ## Running Services
 
@@ -176,23 +217,52 @@ demonstrates how to switch to Postgres, Neo4j and Kafka for production.
 
 ```bash
 # start the gateway HTTP server with defaults
-qmtl gw
+qmtl service gateway
 
 # start the DAG Manager with defaults
-qmtl dagmanager-server
+qmtl service dagmanager server
 
 # use a custom configuration file
-qmtl gw --config qmtl/examples/qmtl.yml
-qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 
 # submit a DAG diff
-qmtl dagmanager diff --file dag.json --target localhost:50051
+qmtl service dagmanager diff --file dag.json --target localhost:50051
 ```
 
 Customize the sample YAML files in `qmtl/examples/` to match your environment.
 
 See [gateway.md](docs/architecture/gateway.md) and [dag-manager.md](docs/architecture/dag-manager.md) for more
 information on configuration and advanced usage.
+
+### WorldService
+
+WorldService owns world policies, decisions and activation state. Run it as a
+stand‑alone FastAPI app and enable the Gateway proxy when needed.
+
+1) Start WorldService (SQLite + Redis example)
+
+```bash
+export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
+export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
+```
+
+2) Point Gateway at WorldService (optional proxy)
+
+- In `qmtl/examples/qmtl.yml`, set:
+  - `gateway.worldservice_url: http://localhost:8080`
+  - `gateway.enable_worldservice_proxy: true`
+
+Then run Gateway with that config:
+
+```bash
+qmtl service gateway --config qmtl/examples/qmtl.yml
+```
+
+With the proxy enabled, SDKs can fetch decisions and activation via the
+Gateway. When the proxy is disabled, SDKs operate in offline/backtest modes
+without world decisions.
 
 ## SDK Tutorial
 
@@ -226,9 +296,16 @@ See [qmtl/examples/README.md](qmtl/examples/README.md) for additional scripts su
 and updates all registered nodes. `Runner` creates a manager automatically and
 invokes this method in every mode, so manual calls are rarely needed.
 
+Resolved mappings are cached to `.qmtl_tagmap.json` (override with
+`QMTL_TAGQUERY_CACHE`) along with a CRC so dry-runs and backtests can
+reproduce the live mapping deterministically. `resolve_tags(offline=True)`
+hydrates nodes from this snapshot when the Gateway is unavailable.
+
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
 See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.
+
+Dry‑run parity: the `POST /strategies/dry-run` endpoint mirrors the queue mapping of the real submission path and always returns a non‑empty `sentinel_id`. When the Diff path is unavailable, the server derives a deterministic fallback of the form `dryrun:<crc32>` over DAG node IDs.
 
 ## Backfills
 
@@ -241,29 +318,39 @@ and cannot be reassigned later. The same guide covers persisting data via
 Example injection:
 
 ```python
-from qmtl.sdk import StreamInput, QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.sdk import (
+    StreamInput,
+    QuestDBHistoryProvider,
+    QuestDBRecorder,
+    EventRecorderService,
+)
 
 stream = StreamInput(
     interval="60s",
-    history_provider=QuestDBLoader(dsn="postgresql://user:pass@localhost:8812/qdb"),
-    event_recorder=QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb"),
+    history_provider=QuestDBHistoryProvider(
+        dsn="postgresql://user:pass@localhost:8812/qdb"
+    ),
+    event_service=EventRecorderService(
+        QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb")
+    ),
 )
 ```
 
-``QuestDBLoader`` and ``QuestDBRecorder`` will default to using
+``QuestDBHistoryProvider`` (also exported as ``QuestDBLoader`` for backwards
+compatibility) and ``QuestDBRecorder`` will default to using
 ``stream.node_id`` as the table name if ``table`` is not provided.
 
 [docs/operations/backfill.md](docs/operations/backfill.md).
 
-### QuestDBLoader with a custom fetcher
+### QuestDBHistoryProvider with a custom fetcher
 
-`QuestDBLoader` can pull missing rows from any async source. Implement a
+`QuestDBHistoryProvider` can pull missing rows from any async source. Implement a
 `DataFetcher` and pass it to the loader:
 
 ```python
 import httpx
 import pandas as pd
-from qmtl.sdk import DataFetcher, QuestDBLoader
+from qmtl.runtime.sdk import DataFetcher, QuestDBHistoryProvider
 
 class BinanceFetcher:
     async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
@@ -281,9 +368,8 @@ class BinanceFetcher:
         return pd.DataFrame(rows)
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://user:pass@localhost:8812/qdb",
     fetcher=fetcher,
 )
 ```
-

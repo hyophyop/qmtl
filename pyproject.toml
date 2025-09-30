@@ -15,6 +15,7 @@ dependencies = [
     "asyncpg",
     "aiosqlite",
     "websockets",
+    "grpcio>=1.75.0",
     "grpcio",
     "PyYAML",
     "psutil",
@@ -23,26 +24,35 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-httpx",
     "opentelemetry-instrumentation-grpc",
+    "cachetools",
+    "blake3",
+    "pytest-asyncio>=0.23",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis>=6.100",
+    "jsonschema>=4.0.0",
     "fakeredis",
-    "grpcio-tools",
+    "grpcio-tools>=1.74.0",
     "pyarrow",
-    "xstate",
     "mkdocs-material",
     "mkdocs-macros-plugin",
     "mkdocs-breadcrumbs-plugin",
+    "websocket-client",
 ]
 
 ray = ["ray"]
 io = ["pandas"]
+ccxt = ["ccxt"]
+questdb = ["asyncpg"]
 
 [project.scripts]
-qmtl = "qmtl.cli:main"
+qmtl = "qmtl.interfaces.cli:main"
+qmtl-commitlog-consumer = "qmtl.services.gateway.commit_log_cli:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -57,11 +67,15 @@ include = ["qmtl*"]
 
 [tool.setuptools.package-data]
 "qmtl.examples" = [
-    "*.py",
-    "*.yml",
-    "gitignore",
-"README.md",
-"data/*.csv",
-"*.csv",
-"notebooks/*.ipynb",
+  "*.py",
+  "*.yml",
+  "templates/*.yml",
+  "gitignore",
+  "README.md",
+  "data/*.csv",
+  "*.csv",
+  "notebooks/*.ipynb",
+]
+"qmtl.foundation.schema" = [
+  "schemas/*.json",
 ]

@@ -1,7 +1,7 @@
-from qmtl.sdk import Strategy, Runner
-from qmtl.generators import GarchInput
-from qmtl.indicators import ema
-from qmtl.transforms import rate_of_change
+from qmtl.runtime.sdk import Strategy, Runner
+from qmtl.runtime.generators import GarchInput
+from qmtl.runtime.indicators import ema
+from qmtl.runtime.transforms import rate_of_change
 
 
 class CombinedExtensionsStrategy(Strategy):
