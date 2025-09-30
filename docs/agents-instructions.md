@@ -17,6 +17,14 @@ Key reminders:
 - When modifying the subtree itself, follow `qmtl/AGENTS.md`. For strategy conventions, refer to `strategies/AGENTS.md`.
 - If any `AGENTS.md` files change, run `uv run python scripts/build_agent_instructions.py` to refresh `docs/agents-instructions.md` before committing. CI already runs this when relevant, so running it locally avoids surprises.
 
+QMTL subtree boundaries
+
+- Keep changes under `qmtl/` limited to upstream‑worthy, reusable logic (APIs, libraries, specs, bug fixes). Do not place repository‑specific documentation, dashboards, configs, or strategy experiments under `qmtl/`.
+- Operational docs such as Grafana dashboards guidance must live outside the subtree (e.g., `docs/operations/...`) and may link to `qmtl/docs/...` as references.
+- Before merging any PR, verify unintended subtree drift:
+  - Sync and review: `scripts/sync_qmtl.sh` then `git diff --name-only qmtl/`
+  - If non‑upstreamable changes slipped into `qmtl/`, move them out or revert them before merge.
+
 Terminology note: follow the repository’s terminology style guide in `CONTRIBUTING.md` (DAG, AlphaDocs vs `docs/alphadocs/`, Strategy vs strategy, etc.).
 
 Automation helpers
