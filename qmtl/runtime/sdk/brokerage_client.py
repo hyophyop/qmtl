@@ -232,6 +232,9 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
             "options": options,
             **kwargs,
         })
+        self._default_margin_mode = margin_mode
+        self._default_leverage = leverage
+        self._symbol_prefs_applied: set[str] = set()
         # Sandbox / testnet routing
         try:
             if sandbox and hasattr(self._ex, "set_sandbox_mode"):
@@ -289,6 +292,31 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
                 self._ex.set_leverage(int(lev), symbol)  # type: ignore[attr-defined]
         except Exception:
             pass
+
+        if symbol:
+            try:
+                if (
+                    getattr(self, "_default_margin_mode", None)
+                    and symbol not in self._symbol_prefs_applied
+                    and hasattr(self._ex, "set_margin_mode")
+                ):
+                    mode = str(self._default_margin_mode).lower()
+                    self._ex.set_margin_mode(  # type: ignore[attr-defined]
+                        "ISOLATED" if mode == "isolated" else "CROSS",
+                        symbol,
+                    )
+            except Exception:
+                pass
+            try:
+                if (
+                    getattr(self, "_default_leverage", None) is not None
+                    and symbol not in self._symbol_prefs_applied
+                    and hasattr(self._ex, "set_leverage")
+                ):
+                    self._ex.set_leverage(int(self._default_leverage), symbol)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            self._symbol_prefs_applied.add(symbol)
 
         if symbol is None or side not in {"buy", "sell"} or amount is None:
             raise ValueError("symbol, side in {buy,sell}, and quantity are required")

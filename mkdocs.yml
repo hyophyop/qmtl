@@ -29,6 +29,7 @@ nav:
       - Strategy Callbacks: guides/strategy_callbacks.md
       - Build NodeSet (SDK): guides/build_nodeset_sdk.md
       - CCXT Spot Recipe: guides/ccxt_spot_recipe.md
+      - CCXT Futures Recipe: guides/ccxt_futures_recipe.md
       - CCXT × QuestDB (IO): io/ccxt-questdb.md
       - Node Set Adapters: guides/nodeset_adapters.md
       - Advanced:
