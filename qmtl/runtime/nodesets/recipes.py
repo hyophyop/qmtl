@@ -7,7 +7,7 @@ for constructing exchange-backed execution pipelines. Treat the returned
 NodeSet as a black box; its internal composition may change between versions.
 """
 
-from typing import Any
+from typing import Any, Callable, Literal, Sequence
 
 from qmtl.runtime.sdk import Node
 from qmtl.runtime.sdk.cache_view import CacheView
@@ -16,19 +16,82 @@ from qmtl.runtime.sdk.brokerage_client import (
     FakeBrokerageClient,
     FuturesCcxtBrokerageClient,
 )
-from qmtl.runtime.nodesets.base import NodeSet
+from qmtl.runtime.nodesets.base import (
+    NodeSet,
+    NodeSetBuilder,
+    NodeSetContext,
+)
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.resources import get_execution_resources
-from qmtl.runtime.pipeline.execution_nodes import SizingNode as RealSizingNode, PortfolioNode as RealPortfolioNode
-from qmtl.runtime.nodesets.steps import (
-    pretrade,
-    execution,
-    order_publish,
-    fills,
-    risk,
-    timing,
-    compose,
+from qmtl.runtime.nodesets.steps import execution, order_publish, fills, risk, timing
+from qmtl.runtime.pipeline.execution_nodes import (
+    SizingNode as RealSizingNode,
+    PortfolioNode as RealPortfolioNode,
 )
+
+
+RecipeComponent = Node | Callable[[Node, NodeSetContext], Node] | None
+
+
+class NodeSetRecipe:
+    """Helper that centralizes Node Set composition boilerplate."""
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        builder: NodeSetBuilder | None = None,
+        modes: Sequence[str] | None = None,
+        descriptor: Any | None = None,
+    ) -> None:
+        self.builder = builder or NodeSetBuilder()
+        self.name = name
+        self._modes = tuple(modes) if modes is not None else None
+        self._descriptor = descriptor
+
+    def compose(
+        self,
+        signal: Node,
+        world_id: str,
+        *,
+        scope: Literal["strategy", "world"] | None = None,
+        descriptor: Any | None = None,
+        pretrade: RecipeComponent = None,
+        sizing: RecipeComponent = None,
+        execution: RecipeComponent = None,
+        order_publish: RecipeComponent = None,
+        fills: RecipeComponent = None,
+        portfolio: RecipeComponent = None,
+        risk: RecipeComponent = None,
+        timing: RecipeComponent = None,
+    ) -> NodeSet:
+        ctx = self.builder.context(world_id=world_id, scope=scope)
+
+        def _wrap(component: RecipeComponent) -> RecipeComponent:
+            if component is None or isinstance(component, Node):
+                return component
+
+            def _factory(upstream: Node, _ctx: NodeSetContext) -> Node:
+                return component(upstream, ctx)
+
+            return _factory
+
+        return self.builder.attach(
+            signal,
+            world_id=world_id,
+            scope=scope,
+            name=self.name,
+            modes=self._modes,
+            descriptor=descriptor if descriptor is not None else self._descriptor,
+            pretrade=_wrap(pretrade),
+            sizing=_wrap(sizing),
+            execution=_wrap(execution),
+            order_publish=_wrap(order_publish),
+            fills=_wrap(fills),
+            portfolio=_wrap(portfolio),
+            risk=_wrap(risk),
+            timing=_wrap(timing),
+        )
 
 
 def make_ccxt_spot_nodeset(
@@ -85,40 +148,30 @@ def make_ccxt_spot_nodeset(
         return order
 
     opts = options or NodeSetOptions()
-    resources = get_execution_resources(
-        world_id,
-        portfolio_scope=opts.portfolio_scope,
-        activation_weighting=opts.activation_weighting,
-    )
-    portfolio_obj = resources.portfolio
-    weight_fn = resources.weight_fn
-
-    def _sizing_step(upstream: Node) -> Node:
-        node = RealSizingNode(upstream, portfolio=portfolio_obj, weight_fn=weight_fn)
-        setattr(node, "world_id", world_id)
-        return node
-
-    def _portfolio_step(upstream: Node) -> Node:
-        node = RealPortfolioNode(upstream, portfolio=portfolio_obj)
-        setattr(node, "world_id", world_id)
-        return node
-
-    return compose(
-        signal_node,
-        steps=[
-            pretrade(),
-            _sizing_step,
-            execution(compute_fn=_exec),
-            order_publish(compute_fn=_publish),
-            fills(),
-            _portfolio_step,
-            risk(),
-            timing(),
-        ],
+    recipe = NodeSetRecipe(
         name="ccxt_spot",
+        builder=NodeSetBuilder(options=opts),
         modes=("simulate", "paper", "live"),
-        portfolio_scope=opts.portfolio_scope,
+    )
+
+    def _sizing(upstream: Node, ctx: NodeSetContext) -> Node:
+        return RealSizingNode(
+            upstream,
+            portfolio=ctx.resources.portfolio,
+            weight_fn=ctx.resources.weight_fn,
+        )
+
+    def _portfolio(upstream: Node, ctx: NodeSetContext) -> Node:
+        return RealPortfolioNode(upstream, portfolio=ctx.resources.portfolio)
+
+    return recipe.compose(
+        signal_node,
+        world_id,
         descriptor=descriptor,
+        sizing=_sizing,
+        execution=lambda upstream, _ctx: execution(compute_fn=_exec)(upstream),
+        order_publish=lambda upstream, _ctx: order_publish(compute_fn=_publish)(upstream),
+        portfolio=_portfolio,
     )
 
 
@@ -216,4 +269,4 @@ def make_ccxt_futures_nodeset(
     )
 
 
-__all__ = ["make_ccxt_spot_nodeset", "make_ccxt_futures_nodeset"]
+__all__ = ["NodeSetRecipe", "make_ccxt_spot_nodeset", "make_ccxt_futures_nodeset"]

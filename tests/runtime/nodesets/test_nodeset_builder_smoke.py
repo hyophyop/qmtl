@@ -3,8 +3,13 @@ from __future__ import annotations
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
 from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.recipes import NodeSetRecipe
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.pipeline.execution_nodes import (
+    SizingNode as RealSizingNode,
+    PortfolioNode as RealPortfolioNode,
+)
 
 
 def test_nodeset_attach_passes_through():
@@ -59,3 +64,60 @@ def test_nodeset_builder_world_scope_shares_portfolio():
     assert portfolio1 is portfolio2
     assert getattr(list(ns1)[5], "portfolio", None) is portfolio1
     assert getattr(sizing1, "weight_fn", None) is not None
+
+
+def test_nodeset_builder_accepts_factories():
+    signal = Node(name="sig", interval=1, period=1)
+    builder = NodeSetBuilder()
+    seen: dict[str, str] = {}
+
+    def sizing_factory(upstream, ctx):
+        seen["world_id"] = ctx.world_id
+        return RealSizingNode(
+            upstream,
+            portfolio=ctx.resources.portfolio,
+            weight_fn=ctx.resources.weight_fn,
+        )
+
+    def portfolio_factory(upstream, ctx):
+        return RealPortfolioNode(upstream, portfolio=ctx.resources.portfolio)
+
+    nodeset = builder.attach(
+        signal,
+        world_id="world-x",
+        name="custom",
+        modes=("simulate", "paper"),
+        sizing=sizing_factory,
+        portfolio=portfolio_factory,
+    )
+
+    nodes = list(nodeset)
+    assert isinstance(nodes[1], RealSizingNode)
+    assert isinstance(nodes[5], RealPortfolioNode)
+    assert seen["world_id"] == "world-x"
+    assert nodeset.name == "custom"
+    assert nodeset.modes == ("simulate", "paper")
+
+
+def test_nodeset_recipe_compose_uses_builder_context():
+    signal = Node(name="recipe-sig", interval=1, period=1)
+    recipe = NodeSetRecipe(name="demo")
+
+    nodeset = recipe.compose(
+        signal,
+        "world-demo",
+        sizing=lambda upstream, ctx: RealSizingNode(
+            upstream,
+            portfolio=ctx.resources.portfolio,
+            weight_fn=ctx.resources.weight_fn,
+        ),
+        portfolio=lambda upstream, ctx: RealPortfolioNode(
+            upstream,
+            portfolio=ctx.resources.portfolio,
+        ),
+    )
+
+    nodes = list(nodeset)
+    assert isinstance(nodes[1], RealSizingNode)
+    assert getattr(nodes[1], "world_id", None) == "world-demo"
+    assert nodeset.name == "demo"

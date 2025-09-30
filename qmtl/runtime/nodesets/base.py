@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Callable, Literal, Sequence
 
 from qmtl.runtime.sdk.node import Node
 
 from .options import NodeSetOptions, PortfolioScope
-from .resources import get_execution_resources
+from .resources import ExecutionResources, get_execution_resources
 from .stubs import (
     StubPreTradeGateNode,
     StubSizingNode,
@@ -94,6 +94,19 @@ class NodeSet:
         return caps
 
 
+@dataclass(frozen=True)
+class NodeSetContext:
+    """Context shared with Node Set recipes during composition."""
+
+    world_id: str
+    scope: PortfolioScope
+    resources: ExecutionResources
+    options: NodeSetOptions
+
+
+RecipeNodeFactory = Callable[[Node, NodeSetContext], Node]
+
+
 class NodeSetBuilder:
     """Compose a minimal execution chain behind a signal node.
 
@@ -105,20 +118,44 @@ class NodeSetBuilder:
     def __init__(self, *, options: NodeSetOptions | None = None) -> None:
         self.options = options or NodeSetOptions()
 
+    def context(
+        self,
+        *,
+        world_id: str,
+        scope: Literal["strategy", "world"] | None = None,
+    ) -> NodeSetContext:
+        """Return a :class:`NodeSetContext` for ``world_id`` and ``scope``."""
+
+        effective_scope: PortfolioScope = scope or self.options.portfolio_scope
+        resources = get_execution_resources(
+            world_id,
+            portfolio_scope=effective_scope,
+            activation_weighting=self.options.activation_weighting,
+        )
+        return NodeSetContext(
+            world_id=world_id,
+            scope=effective_scope,
+            resources=resources,
+            options=self.options,
+        )
+
     def attach(
         self,
         signal: Node,
         *,
         world_id: str,
         scope: Literal["strategy", "world"] | None = None,
-        pretrade: Node | None = None,
-        sizing: Node | None = None,
-        execution: Node | None = None,
-        order_publish: Node | None = None,
-        fills: Node | None = None,
-        portfolio: Node | None = None,
-        risk: Node | None = None,
-        timing: Node | None = None,
+        name: str | None = None,
+        modes: Sequence[str] | None = None,
+        descriptor: Any | None = None,
+        pretrade: Node | RecipeNodeFactory | None = None,
+        sizing: Node | RecipeNodeFactory | None = None,
+        execution: Node | RecipeNodeFactory | None = None,
+        order_publish: Node | RecipeNodeFactory | None = None,
+        fills: Node | RecipeNodeFactory | None = None,
+        portfolio: Node | RecipeNodeFactory | None = None,
+        risk: Node | RecipeNodeFactory | None = None,
+        timing: Node | RecipeNodeFactory | None = None,
     ) -> NodeSet:
         """Attach a Node Set behind ``signal`` with optional component overrides.
 
@@ -127,50 +164,82 @@ class NodeSetBuilder:
         wired to consume the appropriate upstream (e.g., ``sizing`` should
         consume ``pretrade``).
         """
-        effective_scope: PortfolioScope = scope or self.options.portfolio_scope
-        resources = get_execution_resources(
-            world_id,
-            portfolio_scope=effective_scope,
-            activation_weighting=self.options.activation_weighting,
-        )
+        ctx = self.context(world_id=world_id, scope=scope)
 
-        def _mark(node: Node) -> Node:
-            setattr(node, "world_id", world_id)
+        def _resolve(component, upstream, default_factory: RecipeNodeFactory) -> Node:
+            if isinstance(component, Node):
+                node = component
+            elif callable(component):
+                node = component(upstream, ctx)
+            else:
+                node = default_factory(upstream, ctx)
+
+            if not isinstance(node, Node):
+                raise TypeError("Recipe component must produce a Node instance")
             return node
 
-        # Defaults to pass-through stubs to preserve chain contracts
-        pre = _mark(pretrade or StubPreTradeGateNode(signal))
+        def _mark(node: Node) -> Node:
+            setattr(node, "world_id", ctx.world_id)
+            return node
 
-        if sizing is None:
-            siz_node = StubSizingNode(pre, portfolio=resources.portfolio, weight_fn=resources.weight_fn)
-        else:
-            siz_node = sizing
-            if getattr(siz_node, "portfolio", None) is None:
-                setattr(siz_node, "portfolio", resources.portfolio)
-            if resources.weight_fn is not None and getattr(siz_node, "weight_fn", None) is None:
-                setattr(siz_node, "weight_fn", resources.weight_fn)
+        def _default_pretrade(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubPreTradeGateNode(upstream)
+
+        def _default_sizing(upstream: Node, context: NodeSetContext) -> Node:
+            return StubSizingNode(
+                upstream,
+                portfolio=context.resources.portfolio,
+                weight_fn=context.resources.weight_fn,
+            )
+
+        def _default_execution(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubExecutionNode(upstream)
+
+        def _default_publish(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubOrderPublishNode(upstream)
+
+        def _default_fills(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubFillIngestNode(upstream)
+
+        def _default_portfolio(upstream: Node, context: NodeSetContext) -> Node:
+            return StubPortfolioNode(upstream, portfolio=context.resources.portfolio)
+
+        def _default_risk(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubRiskControlNode(upstream)
+
+        def _default_timing(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return StubTimingGateNode(upstream)
+
+        pre = _mark(_resolve(pretrade, signal, _default_pretrade))
+
+        siz_node = _resolve(sizing, pre, _default_sizing)
+        if getattr(siz_node, "portfolio", None) is None:
+            setattr(siz_node, "portfolio", ctx.resources.portfolio)
+        if (
+            ctx.resources.weight_fn is not None
+            and getattr(siz_node, "weight_fn", None) is None
+        ):
+            setattr(siz_node, "weight_fn", ctx.resources.weight_fn)
         siz = _mark(siz_node)
 
-        exe = _mark(execution or StubExecutionNode(siz))
-        pub = _mark(order_publish or StubOrderPublishNode(exe))
-        fil = _mark(fills or StubFillIngestNode(pub))
+        exe = _mark(_resolve(execution, siz, _default_execution))
+        pub = _mark(_resolve(order_publish, exe, _default_publish))
+        fil = _mark(_resolve(fills, pub, _default_fills))
 
-        if portfolio is None:
-            pf_node = StubPortfolioNode(fil, portfolio=resources.portfolio)
-        else:
-            pf_node = portfolio
-            if getattr(pf_node, "portfolio", None) is None:
-                setattr(pf_node, "portfolio", resources.portfolio)
+        pf_node = _resolve(portfolio, fil, _default_portfolio)
+        if getattr(pf_node, "portfolio", None) is None:
+            setattr(pf_node, "portfolio", ctx.resources.portfolio)
         pf = _mark(pf_node)
 
-        rk = _mark(risk or StubRiskControlNode(pf))
-        tm = _mark(timing or StubTimingGateNode(rk))
+        rk = _mark(_resolve(risk, pf, _default_risk))
+        tm = _mark(_resolve(timing, rk, _default_timing))
         return NodeSet(
             _nodes=(pre, siz, exe, pub, fil, pf, rk, tm),
-            name="nodeset",
-            modes=("simulate",),
-            portfolio_scope=effective_scope,
+            name=name or "nodeset",
+            modes=tuple(modes) if modes is not None else ("simulate",),
+            portfolio_scope=ctx.scope,
+            descriptor=descriptor,
         )
 
 
-__all__ = ["NodeSetBuilder", "NodeSet"]
+__all__ = ["NodeSetBuilder", "NodeSet", "NodeSetContext", "RecipeNodeFactory"]
