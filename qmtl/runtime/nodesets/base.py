@@ -167,7 +167,12 @@ class NodeSetBuilder:
         ctx = self.context(world_id=world_id, scope=scope)
 
         def _resolve(component, upstream, default_factory: RecipeNodeFactory) -> Node:
-            if isinstance(component, Node):
+            # Import locally to avoid circular dependency during module load.
+            from .steps import StepSpec
+
+            if isinstance(component, StepSpec):
+                node = component.bind(upstream, ctx, default_factory)
+            elif isinstance(component, Node):
                 node = component
             elif callable(component):
                 node = component(upstream, ctx)
