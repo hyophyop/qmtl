@@ -1,5 +1,5 @@
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.io import QuestDBLoader, QuestDBRecorder
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import pandas as pd
 
 class CrossMarketLagStrategy(Strategy):
@@ -8,22 +8,26 @@ class CrossMarketLagStrategy(Strategy):
             tags=["BTC", "price", "binance"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
         mstr_price = StreamInput(
             tags=["MSTR", "price", "nasdaq"],
             interval="60s",
             period=120,
-            history_provider=QuestDBLoader(
+            history_provider=QuestDBHistoryProvider(
                 dsn="postgresql://localhost:8812/qdb",
             ),
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
         def lagged_corr(view):
@@ -43,5 +47,4 @@ class CrossMarketLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # For backtesting provide start_time and end_time to Runner.backtest
-    Runner.dryrun(CrossMarketLagStrategy)
+    Runner.run(CrossMarketLagStrategy, world_id="cross_market_lag", gateway_url="http://gateway.local")

@@ -16,14 +16,17 @@ This document outlines the timing utilities available in QMTL for managing marke
 `MarketHours` describes the boundaries of each trading session. It accepts the start and end times for pre-market, regular, and post-market sessions.
 
 ```python
-from qmtl.sdk.timing_controls import MarketHours, MarketSession
-from datetime import datetime, time, timezone
+from qmtl.runtime.sdk.timing_controls import MarketHours, MarketSession
+from datetime import date, datetime, time, timezone
 
 hours = MarketHours(
     pre_market_start=time(4, 0),
     regular_start=time(9, 30),
     regular_end=time(16, 0),
-    post_market_end=time(20, 0)
+    post_market_end=time(20, 0),
+    lunch_start=time(11, 30),
+    lunch_end=time(12, 30),
+    early_closes={date(2024, 12, 24): time(13, 0)},
 )
 
 # Wednesday 10:00 AM UTC
@@ -31,6 +34,10 @@ ts = datetime(2024, 1, 3, 10, 0, tzinfo=timezone.utc)
 session = hours.get_session(ts)
 assert session is MarketSession.REGULAR
 ```
+
+Lunch breaks and one-off early closes can be configured using `lunch_start`,
+`lunch_end`, and the `early_closes` mapping. See [Exchange Calendars](exchange_calendars.md)
+for example hours across major markets.
 
 ## TimingController
 
@@ -43,7 +50,7 @@ assert session is MarketSession.REGULAR
 - `get_next_valid_execution_time(...)`: finds the next allowable time if the current timestamp is invalid.
 
 ```python
-from qmtl.sdk.timing_controls import TimingController
+from qmtl.runtime.sdk.timing_controls import TimingController
 
 controller = TimingController(allow_pre_post_market=False)
 valid, reason, session = controller.validate_timing(ts)
@@ -56,7 +63,7 @@ if not valid:
 `validate_backtest_timing` scans all `StreamInput` nodes in a strategy and reports timestamps that fall outside the configured trading sessions. Each issue includes the timestamp, reason, and the detected market session. Set `fail_on_invalid_timing=True` to raise an exception when invalid data is found.
 
 ```python
-from qmtl.sdk.timing_controls import validate_backtest_timing
+from qmtl.runtime.sdk.timing_controls import validate_backtest_timing
 
 issues = validate_backtest_timing(strategy)
 for node, node_issues in issues.items():

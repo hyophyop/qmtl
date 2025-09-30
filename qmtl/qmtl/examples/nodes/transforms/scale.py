@@ -9,7 +9,7 @@ TAGS = {
     "asset": "sample",
 }
 
-from qmtl.transforms import scale_transform_node
+from qmtl.runtime.transforms import scale_transform_node
 
 
 def scale_example_node(data: dict) -> dict:

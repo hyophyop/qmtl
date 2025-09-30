@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/decision_event.schema.json",
+  "title": "DecisionEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string" },
+    "world_id": { "type": ["string","null"] },
+    "node_id": { "type": "string", "pattern": "^blake3:.*$" },
+    "decision": { "type": "string", "enum": ["stop","pause","resume","quarantine"] },
+    "reason_code": { "type": "string" },
+    "scope": { "type": "string", "enum": ["world-local","multi-world","global"], "default": "world-local" },
+    "propagation_rule": { "type": "string", "enum": ["none","same-contract","same-dataset","explicit-list"], "default": "none" },
+    "ttl": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "required": ["event_id", "node_id", "decision", "reason_code", "scope", "timestamp"]
+}

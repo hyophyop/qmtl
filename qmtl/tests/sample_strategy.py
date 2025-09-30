@@ -1,4 +1,4 @@
-from qmtl.sdk import Strategy, ProcessingNode, StreamInput
+from qmtl.runtime.sdk import Strategy, ProcessingNode, StreamInput
 
 class SampleStrategy(Strategy):
     def setup(self):

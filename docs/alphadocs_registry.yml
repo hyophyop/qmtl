@@ -126,7 +126,7 @@
   status: implemented
   source_model: gpt5pro
   modules:
-  - qmtl/qmtl/transforms/credit_liquidity_amplification.py
+  - qmtl/qmtl/runtime/transforms/credit_liquidity_amplification.py
   - strategies/nodes/indicators/credit_liquidity_amplification.py
   priority: gpt5pro
   tags: []

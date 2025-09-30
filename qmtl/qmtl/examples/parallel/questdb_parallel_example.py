@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import pandas as pd
 
-from qmtl.io import QuestDBRecorder
-from qmtl.sdk import StreamInput, Node, Runner, metrics
+from qmtl.runtime.io import QuestDBRecorder
+from qmtl.runtime.sdk import StreamInput, Node, Runner, metrics, EventRecorderService
 from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
 
 
@@ -13,8 +13,10 @@ class MA1(BaseMA1):
         price = StreamInput(
             interval="60s",
             period=30,
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
 
@@ -31,8 +33,10 @@ class MA2(BaseMA2):
         price = StreamInput(
             interval="60s",
             period=60,
-            event_recorder=QuestDBRecorder(
-                dsn="postgresql://localhost:8812/qdb",
+            event_service=EventRecorderService(
+                QuestDBRecorder(
+                    dsn="postgresql://localhost:8812/qdb",
+                )
             ),
         )
 
@@ -47,19 +51,19 @@ class MA2(BaseMA2):
 async def main() -> None:
     metrics.start_metrics_server(port=8000)
     task1 = asyncio.create_task(
-        Runner.backtest_async(
+        Runner.run_async(
             MA1,
-            start_time=1700000000,
-            end_time=1700003600,
+            world_id="parallel_ma1",
             gateway_url="http://localhost:8000",
+            offline=True,
         )
     )
     task2 = asyncio.create_task(
-        Runner.backtest_async(
+        Runner.run_async(
             MA2,
-            start_time=1700000000,
-            end_time=1700003600,
+            world_id="parallel_ma2",
             gateway_url="http://localhost:8000",
+            offline=True,
         )
     )
     await asyncio.gather(task1, task2)

@@ -1,10 +1,7 @@
-"""Backtest example with pre-run data validation."""
-
-from qmtl.sdk.backtest_validation import validate_backtest_data
+"""Example strategy that can run under WS or offline."""
 
 import argparse
-from qmtl.examples.defaults import load_backtest_defaults
-from qmtl.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
 
 
 class ValidationStrategy(Strategy):
@@ -17,27 +14,15 @@ class ValidationStrategy(Strategy):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backtest", action="store_true", help="Run backtest")
-    parser.add_argument("--start-time")
-    parser.add_argument("--end-time")
-    parser.add_argument("--on-missing")
+    parser.add_argument("--world-id")
+    parser.add_argument("--gateway-url")
     args = parser.parse_args()
 
-    defaults = load_backtest_defaults(__file__)
-    start = args.start_time or defaults.get("start_time")
-    end = args.end_time or defaults.get("end_time")
-    on_missing = args.on_missing or defaults.get("on_missing", "skip")
-    
-    if args.backtest:
-        strategy = ValidationStrategy()
-        strategy.setup()
-        validate_backtest_data(strategy)
-        Runner.backtest(
+    if args.world_id and args.gateway_url:
+        Runner.run(
             ValidationStrategy,
-            start_time=start,
-            end_time=end,
-            on_missing=on_missing,
-            validate_data=True,
+            world_id=args.world_id,
+            gateway_url=args.gateway_url,
         )
     else:
         Runner.offline(ValidationStrategy)

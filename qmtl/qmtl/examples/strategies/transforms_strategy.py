@@ -1,5 +1,5 @@
-from qmtl.sdk import Strategy, StreamInput, Runner
-from qmtl.transforms import rate_of_change
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.transforms import rate_of_change
 
 
 class RocStrategy(Strategy):

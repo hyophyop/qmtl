@@ -11,17 +11,19 @@ last_modified: 2025-08-21
 
 # Strategy Templates
 
-QMTL ships with starter strategies that can be used when running `qmtl init`.
+QMTL ships with starter strategies that can be used when running `qmtl project init`.
+For a step-by-step introduction and a minimal working example, see the
+[SDK 사용 가이드](../guides/sdk_tutorial.md).
 List them with:
 
 ```bash
-qmtl init --list-templates
+qmtl project init --list-templates
 ```
 
 Add sample data and an analysis notebook with `--with-sample-data`:
 
 ```bash
-qmtl init --path my_proj --with-sample-data
+qmtl project init --path my_proj --with-sample-data
 ```
 
 Choose a template using the `--strategy` option. Each template below shows the
@@ -38,7 +40,7 @@ graph LR
 calculation and serves as a starting point for new projects.
 
 ```bash
-qmtl init --path my_proj --strategy general
+qmtl project init --path my_proj --strategy general
 ```
 
 ## single_indicator
@@ -49,9 +51,10 @@ graph LR
 ```
 
 *Single EMA indicator.* Shows how to attach one indicator to a price stream.
+Recommended as the [MVP 전략 예제](../guides/sdk_tutorial.md) starting point.
 
 ```bash
-qmtl init --path my_proj --strategy single_indicator
+qmtl project init --path my_proj --strategy single_indicator
 ```
 
 ## multi_indicator
@@ -67,7 +70,7 @@ graph LR
 indicators over the same data source.
 
 ```bash
-qmtl init --path my_proj --strategy multi_indicator
+qmtl project init --path my_proj --strategy multi_indicator
 ```
 
 ## branching
@@ -82,7 +85,7 @@ graph LR
 strategy.
 
 ```bash
-qmtl init --path my_proj --strategy branching
+qmtl project init --path my_proj --strategy branching
 ```
 
 ## state_machine
@@ -96,8 +99,23 @@ graph LR
 state inside a strategy.
 
 ```bash
-qmtl init --path my_proj --strategy state_machine
+qmtl project init --path my_proj --strategy state_machine
 ```
+
+## Backend configuration templates
+
+When you scaffold a project with `qmtl project init`, two backend configuration samples
+are included under the generated `templates/` directory:
+
+* `local_stack.example.yml` &mdash; lightweight backend stack that relies on
+  SQLite, optional Redis, and in-process fallbacks for Kafka and Neo4j. Useful
+  for local development or smoke tests without external dependencies.
+* `backend_stack.example.yml` &mdash; production-ready template covering Redis,
+  Postgres, Kafka, Neo4j, and observability services. Replace the placeholders
+  before deploying.
+
+Use these files as starting points when wiring up Gateway, DAG Manager, and
+WorldService for different environments.
 
 ## Tagging guidelines
 

@@ -1,4 +1,4 @@
-from qmtl.generators import GarchInput
+from qmtl.runtime.generators import GarchInput
 
 
 def main() -> None:

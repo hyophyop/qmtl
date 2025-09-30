@@ -14,14 +14,16 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and build distributable wheels via `uv pip wheel .`.
+- When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
 
 ## Architecture
 
-- Follow the upstream QMTL architecture docs (examples: architecture, gateway, DAG manager). In this subtree snapshot those files are not vendored; refer to the upstream repository documentation instead.
-  - Upstream docs: https://github.com/hyophyop/qmtl
+- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
+  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
 - Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
   data-processing utilities belong here. All alpha logic should live in the root project's
   `strategies/` directory.
+
 ## Documentation Management
 
 - Store documentation in the `docs/` directory with descriptive filenames.
@@ -29,16 +31,58 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Update `mkdocs.yml` navigation when adding or moving files.
 - Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
   and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
+- Diagrams: Use Mermaid fenced code blocks (```mermaid) for all diagrams. Avoid PlantUML/DOT or binary diagram files; prefer text-based Mermaid for reviewability and versioning.
+
+## Testing
+
+- Always run tests in parallel with `pytest-xdist` for faster feedback:
+  `uv run -m pytest -W error -n auto`
+- If `pytest-xdist` is not installed, add it temporarily with
+  `uv pip install pytest-xdist` (or add it to your local extras).
+- For suites with shared resources, prefer `--dist loadscope` or cap workers
+  (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
+
+### Hang Detection Preflight (required in CI and recommended locally)
+
+To prevent a single hanging test from blocking the entire suite, we run a fast
+"preflight" that auto‑fails long runners before the full test job:
+
+- Quick hang scan (no install step needed in CI/local):
+  - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1`
+  - Rationale: `pytest-timeout` turns hangs into failures with a traceback; `faulthandler` ensures a stack dump is emitted.
+- Optional: collection sanity check to catch import‑time blocks early:
+  - `uv run -m pytest --collect-only -q`
+- After preflight passes, run the full suite:
+  - `uv run -m pytest -W error -n auto`
+
+Guidance for authors:
+- If a test is expected to exceed 60s, add a per‑test timeout override: `@pytest.mark.timeout(180)`.
+- Mark intentionally long or external‑dependency tests as `slow` and exclude them from preflight via `-k 'not slow'` if necessary.
+- Prefer deterministic, dependency‑free tests; avoid unbounded network waits.
 
 ## Example Projects
 
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
 project:
 
-- Run tests with `uv run -m pytest -W error`.
+- Run tests with `uv run -m pytest -W error -n auto`.
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 
-## External alpha ideas
+## Issue & PR Linking
 
-- Prioritization of alpha ideas (including `docs/alphadocs/ideas/gpt5pro/`) is managed at the repository root. The `qmtl/` subtree should not implement alphas directly; reference the root guidelines instead.
+- When work starts from a GitHub issue, include a closing keyword in both your final result message and the PR description so the issue auto‑closes on merge.
+- Use one of: `Fixes #<number>`, `Closes #<number>`, or `Resolves #<number>` (e.g., `Fixes #123`).
+- If referencing multiple issues, list each on its own line.
+- For cross-repo issues, use `owner/repo#<number>` (e.g., `openai/qmtl#123`).
+- If the change is partial and should not close the issue, prefer `Refs #<number>` instead of a closing keyword.
+- Prefer placing the closing keyword in the PR body; commit messages on the default branch also work but are less visible.
+
+Example PR snippet:
+
+```
+Summary: Implement data loader fallback path
+
+Fixes #123
+Also Refs #119 for broader tracking
+```

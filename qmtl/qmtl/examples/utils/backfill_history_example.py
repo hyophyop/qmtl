@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.sdk import Strategy, Node, StreamInput, Runner
-from qmtl.io import QuestDBLoader, BinanceFetcher
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.io import QuestDBHistoryProvider, BinanceFetcher
 
 
 fetcher = BinanceFetcher()
-loader = QuestDBLoader(
+loader = QuestDBHistoryProvider(
     dsn="postgresql://localhost:8812/qdb",
     fetcher=fetcher,
 )
@@ -30,10 +30,9 @@ class BackfillHistoryStrategy(Strategy):
 
 
 def main() -> None:
-    Runner.backtest(
+    Runner.run(
         BackfillHistoryStrategy,
-        start_time=1700000000,
-        end_time=1700003600,
+        world_id="backfill_history",
         gateway_url="http://localhost:8000",
     )
 

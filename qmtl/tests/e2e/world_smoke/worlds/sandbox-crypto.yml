@@ -1,0 +1,32 @@
+world:
+  id: "sandbox-crypto"
+  name: "Sandbox – Crypto"
+  timezone: "UTC"
+
+  metrics:
+    eval_schedule: "cron(0 0 * * 1)"   # 예시: 월요일 00:00 UTC
+    windows: { short: "7D", mid: "30D", long: "90D" }
+
+  selection:
+    thresholds:
+      sharpe: { on: 0.80, off: 0.60 }
+      mdd_max: 0.35
+    score:
+      formula: "sharpe_mid + 0.05*winrate_long - 0.1*ulcer_mid"
+    topk:
+      total: 2
+      by_tag:
+        side: { long: 1, short: 1 }
+    correlation:
+      max_pairwise: 0.90
+
+  execution:
+    mode_default: "dry-run"
+    brokerage: { name: "Paper", account: "sandbox" }
+    papertrading: { slippage_bps: 2.0, fee_bps: 1.0 }
+    position_exit_on_deactivate: "market"
+
+  resources:
+    topic_prefix: "w/sandbox-crypto"
+    quotas: { cpu_cores: 4, mem_gb: 16 }
+
