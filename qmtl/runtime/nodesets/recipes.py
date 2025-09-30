@@ -7,7 +7,7 @@ for constructing exchange-backed execution pipelines. Treat the returned
 NodeSet as a black box; its internal composition may change between versions.
 """
 
-from typing import Any, Callable, Literal, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from qmtl.runtime.sdk import Node
 from qmtl.runtime.sdk.cache_view import CacheView
@@ -23,14 +23,22 @@ from qmtl.runtime.nodesets.base import (
 )
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.resources import get_execution_resources
-from qmtl.runtime.nodesets.steps import execution, order_publish, fills, risk, timing
+from qmtl.runtime.nodesets.steps import (
+    StepSpec,
+    STEP_ORDER,
+    execution,
+    order_publish,
+    fills,
+    risk,
+    timing,
+)
 from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
 )
 
 
-RecipeComponent = Node | Callable[[Node, NodeSetContext], Node] | None
+RecipeComponent = Node | Callable[[Node, NodeSetContext], Node] | StepSpec | None
 
 
 class NodeSetRecipe:
@@ -43,11 +51,13 @@ class NodeSetRecipe:
         builder: NodeSetBuilder | None = None,
         modes: Sequence[str] | None = None,
         descriptor: Any | None = None,
+        steps: Mapping[str, StepSpec | Callable[[Node], Node] | Node | None] | None = None,
     ) -> None:
         self.builder = builder or NodeSetBuilder()
         self.name = name
         self._modes = tuple(modes) if modes is not None else None
         self._descriptor = descriptor
+        self._steps = self._normalize_steps(steps or {}, drop_defaults=True)
 
     def compose(
         self,
@@ -56,25 +66,41 @@ class NodeSetRecipe:
         *,
         scope: Literal["strategy", "world"] | None = None,
         descriptor: Any | None = None,
-        pretrade: RecipeComponent = None,
-        sizing: RecipeComponent = None,
-        execution: RecipeComponent = None,
-        order_publish: RecipeComponent = None,
-        fills: RecipeComponent = None,
-        portfolio: RecipeComponent = None,
-        risk: RecipeComponent = None,
-        timing: RecipeComponent = None,
+        steps: Mapping[str, StepSpec | Callable[[Node], Node] | Node | None] | None = None,
+        **legacy_components: RecipeComponent,
     ) -> NodeSet:
-        ctx = self.builder.context(world_id=world_id, scope=scope)
+        resolved_steps = dict(self._steps)
+        overrides = self._normalize_steps(steps or {}, drop_defaults=False)
 
-        def _wrap(component: RecipeComponent) -> RecipeComponent:
-            if component is None or isinstance(component, Node):
-                return component
+        for name, spec in overrides.items():
+            if spec.is_default:
+                resolved_steps.pop(name, None)
+            else:
+                resolved_steps[name] = spec
 
-            def _factory(upstream: Node, _ctx: NodeSetContext) -> Node:
-                return component(upstream, ctx)
+        legacy_passthrough: dict[str, RecipeComponent] = {}
+        for name, component in legacy_components.items():
+            if name not in STEP_ORDER:
+                raise KeyError(f"Unknown step name: {name}")
+            if component is None:
+                continue
+            try:
+                spec = StepSpec.ensure(component)
+            except TypeError:
+                legacy_passthrough[name] = component
+                continue
+            if spec.is_default:
+                resolved_steps.pop(name, None)
+                legacy_passthrough.pop(name, None)
+            else:
+                resolved_steps[name] = spec
 
-            return _factory
+        attach_kwargs: dict[str, RecipeComponent] = {}
+        for name in STEP_ORDER:
+            if name in resolved_steps:
+                attach_kwargs[name] = resolved_steps[name]
+            elif name in legacy_passthrough:
+                attach_kwargs[name] = legacy_passthrough[name]
 
         return self.builder.attach(
             signal,
@@ -83,15 +109,24 @@ class NodeSetRecipe:
             name=self.name,
             modes=self._modes,
             descriptor=descriptor if descriptor is not None else self._descriptor,
-            pretrade=_wrap(pretrade),
-            sizing=_wrap(sizing),
-            execution=_wrap(execution),
-            order_publish=_wrap(order_publish),
-            fills=_wrap(fills),
-            portfolio=_wrap(portfolio),
-            risk=_wrap(risk),
-            timing=_wrap(timing),
+            **attach_kwargs,
         )
+
+    @staticmethod
+    def _normalize_steps(
+        steps: Mapping[str, StepSpec | Callable[[Node], Node] | Node | None],
+        *,
+        drop_defaults: bool,
+    ) -> dict[str, StepSpec]:
+        normalized: dict[str, StepSpec] = {}
+        for name, component in steps.items():
+            if name not in STEP_ORDER:
+                raise KeyError(f"Unknown step name: {name}")
+            spec = StepSpec.ensure(component)
+            if spec.is_default and drop_defaults:
+                continue
+            normalized[name] = spec
+        return normalized
 
 
 def make_ccxt_spot_nodeset(
@@ -154,24 +189,25 @@ def make_ccxt_spot_nodeset(
         modes=("simulate", "paper", "live"),
     )
 
-    def _sizing(upstream: Node, ctx: NodeSetContext) -> Node:
-        return RealSizingNode(
-            upstream,
-            portfolio=ctx.resources.portfolio,
-            weight_fn=ctx.resources.weight_fn,
-        )
-
-    def _portfolio(upstream: Node, ctx: NodeSetContext) -> Node:
-        return RealPortfolioNode(upstream, portfolio=ctx.resources.portfolio)
+    step_overrides = {
+        "sizing": StepSpec.from_factory(
+            RealSizingNode,
+            inject_portfolio=True,
+            inject_weight_fn=True,
+        ),
+        "execution": StepSpec.from_step(execution(compute_fn=_exec)),
+        "order_publish": StepSpec.from_step(order_publish(compute_fn=_publish)),
+        "portfolio": StepSpec.from_factory(
+            RealPortfolioNode,
+            inject_portfolio=True,
+        ),
+    }
 
     return recipe.compose(
         signal_node,
         world_id,
         descriptor=descriptor,
-        sizing=_sizing,
-        execution=lambda upstream, _ctx: execution(compute_fn=_exec)(upstream),
-        order_publish=lambda upstream, _ctx: order_publish(compute_fn=_publish)(upstream),
-        portfolio=_portfolio,
+        steps=step_overrides,
     )
 
 

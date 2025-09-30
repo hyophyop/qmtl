@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
 from qmtl.runtime.nodesets.base import NodeSetBuilder
 from qmtl.runtime.nodesets.recipes import NodeSetRecipe
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.nodesets.steps import StepSpec
+from qmtl.runtime.nodesets.stubs import StubSizingNode
 from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
@@ -99,25 +103,78 @@ def test_nodeset_builder_accepts_factories():
     assert nodeset.modes == ("simulate", "paper")
 
 
-def test_nodeset_recipe_compose_uses_builder_context():
+def test_nodeset_recipe_compose_uses_step_specs():
     signal = Node(name="recipe-sig", interval=1, period=1)
-    recipe = NodeSetRecipe(name="demo")
-
-    nodeset = recipe.compose(
-        signal,
-        "world-demo",
-        sizing=lambda upstream, ctx: RealSizingNode(
-            upstream,
-            portfolio=ctx.resources.portfolio,
-            weight_fn=ctx.resources.weight_fn,
-        ),
-        portfolio=lambda upstream, ctx: RealPortfolioNode(
-            upstream,
-            portfolio=ctx.resources.portfolio,
-        ),
+    recipe = NodeSetRecipe(
+        name="demo",
+        steps={
+            "sizing": StepSpec.from_factory(
+                RealSizingNode,
+                inject_portfolio=True,
+                inject_weight_fn=True,
+            ),
+            "portfolio": StepSpec.from_factory(
+                RealPortfolioNode,
+                inject_portfolio=True,
+            ),
+        },
     )
+
+    nodeset = recipe.compose(signal, "world-demo")
 
     nodes = list(nodeset)
     assert isinstance(nodes[1], RealSizingNode)
     assert getattr(nodes[1], "world_id", None) == "world-demo"
+    assert isinstance(nodes[5], RealPortfolioNode)
     assert nodeset.name == "demo"
+
+
+def test_step_spec_factory_injects_resources():
+    signal = Node(name="spec-sig", interval=1, period=1)
+    builder = NodeSetBuilder()
+    spec = StepSpec.from_factory(
+        RealSizingNode,
+        inject_portfolio=True,
+        inject_weight_fn=True,
+    )
+
+    nodeset = builder.attach(signal, world_id="world-spec", sizing=spec)
+    sizing_node = list(nodeset)[1]
+
+    assert isinstance(sizing_node, RealSizingNode)
+    assert getattr(sizing_node, "portfolio", None) is not None
+    assert getattr(sizing_node, "weight_fn", None) is not None
+
+
+def test_step_spec_default_resets_recipe_override():
+    signal = Node(name="reset-sig", interval=1, period=1)
+    recipe = NodeSetRecipe(
+        name="reset", steps={"sizing": StepSpec.from_factory(RealSizingNode, inject_portfolio=True)}
+    )
+
+    sized_nodeset = recipe.compose(signal, "world-reset")
+    assert isinstance(list(sized_nodeset)[1], RealSizingNode)
+
+    reverted = recipe.compose(signal, "world-reset", steps={"sizing": StepSpec.default()})
+    assert isinstance(list(reverted)[1], StubSizingNode)
+
+
+def test_step_spec_requires_node_instance():
+    signal = Node(name="bad-spec", interval=1, period=1)
+    builder = NodeSetBuilder()
+
+    def _bad_factory(upstream: Node, **_kwargs):
+        return None
+
+    bad_spec = StepSpec.from_factory(_bad_factory)
+
+    with pytest.raises(TypeError):
+        builder.attach(signal, world_id="bad-world", sizing=bad_spec)
+
+
+def test_nodeset_recipe_rejects_unknown_step_key():
+    with pytest.raises(KeyError):
+        NodeSetRecipe(
+            name="bad",
+            steps={"not-a-step": StepSpec.from_factory(RealSizingNode, inject_portfolio=True)},
+        )
