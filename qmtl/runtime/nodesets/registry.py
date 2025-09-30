@@ -30,9 +30,10 @@ def list_registered() -> list[str]:
 
 def _register_builtins() -> None:
     # Local import to avoid cycles
-    from .recipes import make_ccxt_spot_nodeset
+    from .recipes import make_ccxt_spot_nodeset, make_ccxt_futures_nodeset
 
     register("ccxt_spot", make_ccxt_spot_nodeset)
+    register("ccxt_futures", make_ccxt_futures_nodeset)
 
 
 _register_builtins()
