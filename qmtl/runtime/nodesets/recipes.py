@@ -26,12 +26,15 @@ from qmtl.runtime.nodesets.resources import get_execution_resources
 from qmtl.runtime.nodesets.steps import (
     StepSpec,
     STEP_ORDER,
+    compose,
     execution,
+    pretrade,
     order_publish,
     fills,
     risk,
     timing,
 )
+from qmtl.runtime.nodesets.registry import nodeset_recipe
 from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
@@ -129,6 +132,7 @@ class NodeSetRecipe:
         return normalized
 
 
+@nodeset_recipe("ccxt_spot")
 def make_ccxt_spot_nodeset(
     signal_node: Node,
     world_id: str,
@@ -211,6 +215,7 @@ def make_ccxt_spot_nodeset(
     )
 
 
+@nodeset_recipe("ccxt_futures")
 def make_ccxt_futures_nodeset(
     signal_node: Node,
     world_id: str,
