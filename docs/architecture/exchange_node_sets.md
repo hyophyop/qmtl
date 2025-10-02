@@ -85,6 +85,23 @@ from qmtl.runtime.nodesets.registry import make
 nodeset = make("ccxt_spot", signal, "demo-world", exchange_id="binance")
 ```
 
+- Registering a new recipe is handled by a decorator. Recipes register
+  themselves when their module is imported, keeping the registry in sync with
+  available builders:
+
+```python
+from qmtl.runtime.nodesets.registry import nodeset_recipe
+
+
+@nodeset_recipe("my_adapter")
+def make_my_adapter(signal, world_id, **kwargs):
+    # construct and return a NodeSet instance
+    ...
+```
+
+If another callable tries to reuse an existing recipe name the registry raises
+``ValueError`` to prevent silent shadowing.
+
 Branching inside
 - Node Sets may contain internal branching/join nodes when needed (e.g., execution step joining sized orders with market data). Keep the Node Set a black box to the strategy; expose multi-input needs via an Adapter’s port specs.
 
