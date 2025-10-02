@@ -63,13 +63,13 @@ Tip
 
 ## Usage
 
-- Treat a Node Set as a convenience wrapper on top of the DAG: attach it behind your signal and add the returned set to your strategy. Do not cherry‑pick internal nodes; they are implementation details and may change.
-- Example (scaffold):
+- Treat a Node Set as a convenience wrapper on top of the DAG: attach it behind your signal and add the returned set to your strategy. Do not cherry-pick internal nodes; they are implementation details and may change.
+- Compose through the registry so recipes remain discoverable and covered by shared tests:
 
 ```python
-from qmtl.runtime.nodesets.base import NodeSetBuilder
+from qmtl.runtime.nodesets.registry import make
 
-nodeset = NodeSetBuilder().attach(signal, world_id="demo")
+nodeset = make("ccxt_spot", signal, "demo-world", exchange_id="binance")
 strategy.add_nodes([price, alpha, signal, nodeset])  # NodeSet accepted directly
 
 # Optional: metadata (not internals)
@@ -77,17 +77,15 @@ info = nodeset.describe()        # { name, entry, exit, nodes[], ports? }
 caps = nodeset.capabilities()    # { modes: [...], portfolio_scope: ... }
 ```
 
-- Example (CCXT spot): see the guide at guides/ccxt_spot_recipe.md. You can
-  instantiate via the registry:
+- Direct recipe import remains available for advanced overrides, but prefer staying behind the registry to benefit from adapter generation and contract coverage.
 
 ```python
-from qmtl.runtime.nodesets.registry import make
-nodeset = make("ccxt_spot", signal, "demo-world", exchange_id="binance")
+from qmtl.runtime.nodesets.recipes import make_ccxt_spot_nodeset
+
+nodeset = make_ccxt_spot_nodeset(signal, "demo-world", exchange_id="binance")
 ```
 
-- Registering a new recipe is handled by a decorator. Recipes register
-  themselves when their module is imported, keeping the registry in sync with
-  available builders:
+- Register new recipes with the decorator so discovery stays automatic:
 
 ```python
 from qmtl.runtime.nodesets.registry import nodeset_recipe
@@ -95,12 +93,10 @@ from qmtl.runtime.nodesets.registry import nodeset_recipe
 
 @nodeset_recipe("my_adapter")
 def make_my_adapter(signal, world_id, **kwargs):
-    # construct and return a NodeSet instance
-    ...
+    ...  # return a NodeSet
 ```
 
-If another callable tries to reuse an existing recipe name the registry raises
-``ValueError`` to prevent silent shadowing.
+If another callable tries to reuse an existing recipe name the registry raises ``ValueError`` to prevent silent shadowing.
 
 Branching inside
 - Node Sets may contain internal branching/join nodes when needed (e.g., execution step joining sized orders with market data). Keep the Node Set a black box to the strategy; expose multi-input needs via an Adapter’s port specs.
@@ -113,6 +109,13 @@ builder = NodeSetBuilder()
 custom_exec = make_my_execution_node(...)
 nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 ```
+
+## Recipes, adapters, and contracts
+
+- Use `NodeSetRecipe` to capture default step wiring, shared metadata (name, modes, descriptor), and adapter parameters in one place. The helper handles context creation, resource injection, and optional overrides when a recipe is invoked.
+- `RecipeAdapterSpec` + `build_adapter()` can materialise a `NodeSetAdapter` automatically from any recipe, ensuring the exposed ports, modes, and adapter parameters stay in sync.
+- Registry-backed recipes are covered by contract tests in `tests/runtime/nodesets/test_recipe_contracts.py`; add new recipes to the parametrisation to validate chain length, descriptor metadata, and portfolio/weight function injection across modes.
+- When extending a recipe, prefer `StepSpec.from_factory()` with the appropriate injections (`inject_portfolio`, `inject_weight_fn`, etc.) rather than wiring nodes manually. This keeps adapters and tests valid even as internals evolve.
 
 ## Node Contracts
 

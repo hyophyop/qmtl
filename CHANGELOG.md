@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added contract tests covering all registered Node Set recipes to verify chain length, descriptors, modes, and portfolio/weight injection.
+- Updated exchange Node Set architecture and CCXT guides to document the NodeSetRecipe/RecipeAdapterSpec workflow and reference the new tests.
+
 - `NodeCache.snapshot()` has been deprecated in favor of the read-only `CacheView` returned by `NodeCache.view()`. Strategy code should avoid calling the snapshot helper.
 - Added `coverage()` and `fill_missing()` interfaces for history providers and removed `start`/`end` arguments from `StreamInput`.
 - `TagQueryNode.resolve()` has been removed. Use `TagQueryManager.resolve_tags()` to fetch queue mappings before execution.

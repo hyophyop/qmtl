@@ -1,8 +1,11 @@
 # CCXT Spot Recipe
 
 This guide shows how to route trade signals through the built-in CCXT spot Node Set recipe,
-which wires a strategy's signal node to a CCXT-backed spot exchange.
-See [Exchange Node Sets](../architecture/exchange_node_sets.md) for design details.
+which wires a strategy's signal node to a CCXT-backed spot exchange. The recipe is defined with
+`NodeSetRecipe` and registered for discovery so it inherits shared contract tests and adapter generation.
+See [Exchange Node Sets](../architecture/exchange_node_sets.md) for design details and authoring guidance.
+Contract coverage in `tests/runtime/nodesets/test_recipe_contracts.py` verifies descriptor metadata, world scoping,
+and portfolio/weight injection for this recipe.
 
 ## Usage
 
@@ -22,12 +25,34 @@ nodeset = make(
 strategy.add_nodes([price, alpha, history, signal, nodeset])  # NodeSet accepted directly
 ```
 
+The returned Node Set exposes its descriptor and capabilities so adapters stay in sync:
+
+```python
+info = nodeset.describe()       # ports + node count
+caps = nodeset.capabilities()  # modes + portfolio scope
+```
+
 Direct recipe import is also available:
 
 ```python
 from qmtl.runtime.nodesets.recipes import make_ccxt_spot_nodeset
 nodeset = make_ccxt_spot_nodeset(signal_node, "demo-world", exchange_id="binance")
 ```
+
+## Adapter metadata and parameters
+
+- The recipe ships with `CCXT_SPOT_ADAPTER_SPEC`, which can generate an adapter that exposes a single required `signal` port and forwards optional parameters (`sandbox`, `apiKey`, `secret`, `time_in_force`, `reduce_only`).
+- Build the adapter dynamically when embedding the Node Set into broader DAG topologies:
+
+```python
+from qmtl.runtime.nodesets.recipes import CCXT_SPOT_ADAPTER_SPEC, build_adapter
+
+CcxtSpotAdapter = build_adapter(CCXT_SPOT_ADAPTER_SPEC)
+adapter = CcxtSpotAdapter(exchange_id="binance", sandbox=False)
+nodeset = adapter.build({"signal": signal_node}, world_id="demo-world")
+```
+
+- Adapter configuration is validated: unexpected keyword arguments raise `TypeError` and required fields remain mandatory even if the recipe evolves.
 
 ## Branching example: add market data to execution
 
