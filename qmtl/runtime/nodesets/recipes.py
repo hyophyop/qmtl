@@ -209,7 +209,7 @@ def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
     descriptor_value = spec.descriptor
     compose = spec.compose
     input_port = spec.input_port
-    name_hint = spec.name or descriptor.name
+    name_hint = spec.name or getattr(descriptor_value, "name", None)
     class_name = spec.class_name or (
         f"{''.join(part.capitalize() for part in (name_hint or 'nodeset').split('_'))}Adapter"
     )
