@@ -137,8 +137,8 @@ Run the suite locally or in CI with:
 
 ```
 uv run -m pytest -W error -n auto \
-  tests/runtime/sdk/test_history_coverage_property.py \
-  tests/sdk/test_seamless_provider.py
+  tests/qmtl/runtime/sdk/test_history_coverage_property.py \
+  tests/qmtl/runtime/sdk/test_seamless_provider.py
 ```
 
 The command above is also the invocation wired into the CI Seamless job so new

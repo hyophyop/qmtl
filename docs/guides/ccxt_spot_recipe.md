@@ -4,7 +4,7 @@ This guide shows how to route trade signals through the built-in CCXT spot Node 
 which wires a strategy's signal node to a CCXT-backed spot exchange. The recipe is defined with
 `NodeSetRecipe` and registered for discovery so it inherits shared contract tests and adapter generation.
 See [Exchange Node Sets](../architecture/exchange_node_sets.md) for design details and authoring guidance.
-Contract coverage in `tests/runtime/nodesets/test_recipe_contracts.py` verifies descriptor metadata, world scoping,
+Contract coverage in `tests/qmtl/runtime/nodesets/test_recipe_contracts.py` verifies descriptor metadata, world scoping,
 and portfolio/weight injection for this recipe.
 
 ## Usage

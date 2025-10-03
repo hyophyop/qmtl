@@ -56,7 +56,7 @@ Use with caution in lower environments; production rollback should follow a cont
    - For worlds that require pre-populated `backtest`/`dryrun` buckets, replay the Gateway "world node upsert" task per domain.
 4. **Validation**
    - Sample `MATCH (n:WorldNodeRef) RETURN n.execution_domain, count(*) ORDER BY n.execution_domain;` to ensure the histogram aligns with expectations.
-   - Automated coverage: `tests/services/worldservice/test_worldservice_api.py::test_world_nodes_execution_domains_and_legacy_migration` exercises the lazy conversion path via the public API.
+   - Automated coverage: `tests/qmtl/services/worldservice/test_worldservice_api.py::test_world_nodes_execution_domains_and_legacy_migration` exercises the lazy conversion path via the public API.
    - WorldService appends `world_node_bucket_normalized` audit events when legacy payloads are promoted on-demand. Monitor `GET /worlds/{id}/audit` to confirm conversions complete without manual intervention.
 
 ### Rollback
@@ -76,8 +76,8 @@ Use with caution in lower environments; production rollback should follow a cont
 1. **Deploy compatible services** that recompute EvalKeys using the new tuple `(node_id, world_id, execution_domain, contract_id, dataset_fingerprint, code_version, resource_policy)`.
 2. **Lazy invalidation**
    - During lookup the service rehashes the context; mismatched keys are dropped and the caller re-runs validation.
-   - Tests cover this path via `tests/services/worldservice/test_validation_cache.py::test_validation_cache_legacy_payloads_are_normalised_and_invalidated`.
-   - Canonical execution domain coercion is verified by `tests/services/worldservice/test_validation_cache.py::test_validation_cache_normalises_execution_domain_on_set` to prevent divergent cache buckets during the rollout.
+   - Tests cover this path via `tests/qmtl/services/worldservice/test_validation_cache.py::test_validation_cache_legacy_payloads_are_normalised_and_invalidated`.
+   - Canonical execution domain coercion is verified by `tests/qmtl/services/worldservice/test_validation_cache.py::test_validation_cache_normalises_execution_domain_on_set` to prevent divergent cache buckets during the rollout.
    - The audit log records `validation_cache_bucket_normalized` when payloads are rewritten and `validation_cache_invalidated` once stale EvalKeys are purged, providing an operational breadcrumb during rollout.
 3. **Optional proactive purge**
    - `MATCH (v:Validation) REMOVE v.eval_key_without_domain;` if a transitional property exists.

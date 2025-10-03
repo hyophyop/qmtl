@@ -114,7 +114,7 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 
 - Use `NodeSetRecipe` to capture default step wiring, shared metadata (name, modes, descriptor), and adapter parameters in one place. The helper handles context creation, resource injection, and optional overrides when a recipe is invoked.
 - `RecipeAdapterSpec` + `build_adapter()` can materialise a `NodeSetAdapter` automatically from any recipe, ensuring the exposed ports, modes, and adapter parameters stay in sync.
-- Registry-backed recipes are covered by contract tests in `tests/runtime/nodesets/test_recipe_contracts.py`; add new recipes to the parametrisation to validate chain length, descriptor metadata, and portfolio/weight function injection across modes.
+- Registry-backed recipes are covered by contract tests in `tests/qmtl/runtime/nodesets/test_recipe_contracts.py`; add new recipes to the parametrisation to validate chain length, descriptor metadata, and portfolio/weight function injection across modes.
 - When extending a recipe, prefer `StepSpec.from_factory()` with the appropriate injections (`inject_portfolio`, `inject_weight_fn`, etc.) rather than wiring nodes manually. This keeps adapters and tests valid even as internals evolve.
 
 ## Node Contracts

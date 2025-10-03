@@ -172,8 +172,7 @@ The validation is comprehensively tested with 50+ test cases covering:
 
 Run validation tests:
 ```bash
-pytest tests/runtime/sdk/test_enhanced_validation.py -v
+pytest tests/qmtl/runtime/sdk/test_enhanced_validation.py -v
 ```
 
 {{ nav_links() }}
-
