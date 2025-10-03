@@ -17,7 +17,13 @@ from .kalman_trend import kalman_trend
 from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
 from .volatility import volatility_node, volatility
-from .order_book_obi import order_book_obi, order_book_obi_ema
+from .order_book_obi import (
+    order_book_obi,
+    order_book_obi_ema,
+    order_book_imbalance_levels,
+    order_book_depth_slope,
+    order_book_obiL_and_slope,
+)
 # Optional alpha indicator; may not be available in all deployments
 try:  # pragma: no cover - fallback for missing alpha module
     from .gap_amplification_alpha import gap_amplification_node
@@ -46,6 +52,9 @@ __all__ = [
     "volatility",
     "order_book_obi",
     "order_book_obi_ema",
+    "order_book_imbalance_levels",
+    "order_book_depth_slope",
+    "order_book_obiL_and_slope",
     "alpha_indicator_with_history",
 ]
 
