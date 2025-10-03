@@ -14,6 +14,21 @@ from qmtl.runtime.indicators import sma
 from qmtl.runtime.indicators import acceptable_price_band_node
 ```
 
+## Order-book imbalance (OBI)
+
+`order_book_obi` consumes raw order-book snapshots containing bid and ask
+levels and returns the normalized imbalance `(bid-ask)/(bid+ask)` across the
+top ``levels`` tiers. The helper also exposes
+`order_book_obi_ema(..., ema_period=20)` which applies an exponential moving
+average to the raw OBI stream for smoother downstream consumption.
+
+```python
+from qmtl.runtime.indicators import order_book_obi, order_book_obi_ema
+
+obi = order_book_obi(book_snapshots, levels=3)
+smoothed = order_book_obi_ema(book_snapshots, levels=3, ema_period=10)
+```
+
 ## Acceptable price band alpha
 
 `acceptable_price_band_node` adapts a dynamic mean and volatility band using
