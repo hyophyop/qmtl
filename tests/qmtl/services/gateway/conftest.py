@@ -8,7 +8,7 @@ import pytest
 
 from qmtl.services.gateway import metrics
 
-from tests.services.gateway.helpers import (
+from tests.qmtl.services.gateway.helpers import (
     GatewayTestContext,
     Handler,
     StubGatewayDatabase,

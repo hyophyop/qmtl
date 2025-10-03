@@ -4,7 +4,7 @@ import pytest
 
 from qmtl.foundation.common import crc32_of_list, enforce_node_identity, validate_node_identity
 from qmtl.foundation.common.node_validation import NodeValidationError
-from tests.runtime.sdk.factories import NodeFactory
+from tests.qmtl.runtime.sdk.factories import NodeFactory
 
 
 def test_validate_node_identity_success() -> None:

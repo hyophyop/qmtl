@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from qmtl.services.gateway.submission.node_identity import NodeIdentityValidator
-from tests.runtime.sdk.factories import NodeFactory, node_ids_crc32
+from tests.qmtl.runtime.sdk.factories import NodeFactory, node_ids_crc32
 
 
 @pytest.fixture()

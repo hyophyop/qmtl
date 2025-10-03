@@ -1,4 +1,4 @@
-from tests.runtime.sdk.factories import (
+from tests.qmtl.runtime.sdk.factories import (
     canonical_node_payload,
     indicator_node_payload,
     node_ids_crc32,

@@ -7,7 +7,7 @@ from qmtl.services.gateway.api import create_app, Database
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.foundation.proto import dagmanager_pb2
-from tests.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
+from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
 
 
 _TAGQUERY_NODE = tag_query_node_payload(
