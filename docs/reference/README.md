@@ -19,7 +19,6 @@ Reference materials and inventories for QMTL.
 - [FAQ](faq.md): Frequently asked questions.
 - [Lean-like Features](lean_like_features.md): Proposed feature alignment with Lean.
 - [Templates](templates.md): Document templates.
-- [Inventory](\_inventory.md): Documentation index.
+- [Inventory](_inventory.md): Documentation index.
 
 {{ nav_links() }}
-
