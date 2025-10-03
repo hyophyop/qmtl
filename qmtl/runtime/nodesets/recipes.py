@@ -30,7 +30,7 @@ from qmtl.runtime.nodesets.resources import get_execution_resources
 from qmtl.runtime.nodesets.steps import (
     StepSpec,
     STEP_ORDER,
-    compose,
+    compose as compose_steps,
     execution,
     pretrade,
     order_publish,
@@ -500,7 +500,7 @@ def make_ccxt_futures_nodeset(
         setattr(node, "world_id", world_id)
         return node
 
-    return compose(
+    return compose_steps(
         signal_node,
         steps=[
             pretrade(),
