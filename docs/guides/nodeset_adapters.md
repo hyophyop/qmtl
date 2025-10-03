@@ -75,4 +75,4 @@ Notes
 - 어댑터는 입력 검증을 강제해 런타임 wiring 오류를 줄입니다.
 - Node Set은 여전히 블랙박스이며, 전략은 포트 스펙만 알면 충분합니다.
  - 다중 업스트림(브랜칭)은 어댑터 내부에서 합류 노드를 직접 구성하는 패턴으로 쉽게 확장할 수 있습니다.
-- `RecipeAdapterSpec`를 사용하면 새로운 레시피를 등록할 때마다 어댑터와 테스트 커버리지를 동시에 갱신할 수 있습니다. 새 레시피는 `tests/runtime/nodesets/test_recipe_contracts.py`에 추가하세요.
+- `RecipeAdapterSpec`를 사용하면 새로운 레시피를 등록할 때마다 어댑터와 테스트 커버리지를 동시에 갱신할 수 있습니다. 새 레시피는 `tests/qmtl/runtime/nodesets/test_recipe_contracts.py`에 추가하세요.

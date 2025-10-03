@@ -4,7 +4,7 @@ This guide explains how to route trade signals through the CCXT futures Node Set
 which connects a strategy to a perpetual futures exchange (Binance USDT-M by default). The recipe
 leverages `NodeSetRecipe` for consistent composition and is registered for discovery so adapters and tests remain aligned.
 Refer to [Exchange Node Sets](../architecture/exchange_node_sets.md) for architecture context. Contract tests in
-`tests/runtime/nodesets/test_recipe_contracts.py` exercise this recipe alongside CCXT spot, ensuring the sizing/portfolio
+`tests/qmtl/runtime/nodesets/test_recipe_contracts.py` exercise this recipe alongside CCXT spot, ensuring the sizing/portfolio
 injection and node count remain stable.
 
 ## Usage
@@ -80,5 +80,5 @@ that places a Binance Futures Testnet order, see
 - Binance USDT-M symbols use the `BTC/USDT` form. Exchanges that require suffixes (e.g. `BTC/USDT:USDT`)
   should be handled in the signal/order payload and documented per strategy.
 - Fill ingestion remains a stub; integrate exchange webhooks or polling in follow-up work if needed.
-- Extending the recipe? Add your variant to `tests/runtime/nodesets/test_recipe_contracts.py` so chain length,
+- Extending the recipe? Add your variant to `tests/qmtl/runtime/nodesets/test_recipe_contracts.py` so chain length,
   modes, and portfolio injection keep their guarantees.

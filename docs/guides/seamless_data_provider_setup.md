@@ -69,8 +69,8 @@
 6. **검증 및 회귀 테스트 실행**
    ```bash
    uv run -m pytest -W error -n auto \
-     tests/runtime/sdk/test_history_coverage_property.py \
-     tests/sdk/test_seamless_provider.py
+     tests/qmtl/runtime/sdk/test_history_coverage_property.py \
+     tests/qmtl/runtime/sdk/test_seamless_provider.py
    ```
    테스트 스위트는 커버리지 연산과 실패 주입 시나리오를 포함해 SDP 구성의 안정성을 검증합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L124-L139】
 
