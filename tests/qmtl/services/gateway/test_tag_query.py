@@ -11,7 +11,7 @@ from qmtl.services.dagmanager.grpc_server import serve
 from qmtl.services.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
 import grpc
 from qmtl.services.dagmanager.monitor import AckStatus
-from tests.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
+from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
 
 
 class _FakeSession:

@@ -16,7 +16,7 @@ from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.redis_client import InMemoryRedis
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.submission.context_service import StrategyComputeContext
-from tests.runtime.sdk.factories import canonical_node_payload
+from tests.qmtl.runtime.sdk.factories import canonical_node_payload
 
 
 @pytest.mark.asyncio

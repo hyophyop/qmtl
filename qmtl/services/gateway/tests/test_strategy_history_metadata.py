@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from tests.services.gateway.helpers import gateway_app
+from tests.qmtl.services.gateway.helpers import gateway_app
 
 
 @pytest.mark.asyncio

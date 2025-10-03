@@ -8,7 +8,7 @@ import pytest
 from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.services.gateway.api import create_app
 from qmtl.services.gateway.world_client import Budget
-from tests.services.gateway.helpers import make_jwt
+from tests.qmtl.services.gateway.helpers import make_jwt
 
 
 @pytest.mark.asyncio

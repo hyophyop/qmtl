@@ -18,7 +18,7 @@ from qmtl.services.gateway.strategy_submission import (
 )
 from qmtl.services.gateway.submission.context_service import StrategyComputeContext
 
-from tests.services.gateway.helpers import build_strategy_payload
+from tests.qmtl.services.gateway.helpers import build_strategy_payload
 
 
 class DummyManager:
