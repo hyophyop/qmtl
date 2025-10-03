@@ -18,9 +18,11 @@ from qmtl.runtime.indicators import acceptable_price_band_node
 
 `order_book_obi` consumes raw order-book snapshots containing bid and ask
 levels and returns the normalized imbalance `(bid-ask)/(bid+ask)` across the
-top ``levels`` tiers. The helper also exposes
+top ``levels`` tiers. Pass ``period`` to control how many recent outputs the
+node retains in its cache. The helper also exposes
 `order_book_obi_ema(..., ema_period=20)` which applies an exponential moving
-average to the raw OBI stream for smoother downstream consumption.
+average to the raw OBI stream for smoother downstream consumption and ensures
+the underlying OBI cache keeps ``ema_period`` samples available.
 
 ```python
 from qmtl.runtime.indicators import order_book_obi, order_book_obi_ema

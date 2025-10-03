@@ -44,6 +44,7 @@ def order_book_obi(
     *,
     levels: int = 1,
     epsilon: float = 1e-9,
+    period: int = 1,
     name: str | None = None,
 ) -> Node:
     """Return a node computing order-book imbalance from raw snapshots.
@@ -58,6 +59,8 @@ def order_book_obi(
         Number of levels from each side included in the imbalance sum.
     epsilon:
         Small constant added to the denominator to avoid division by zero.
+    period:
+        Number of recent outputs retained in the node cache. Defaults to 1.
     name:
         Optional node name. Defaults to ``"order_book_obi"``.
     """
@@ -89,7 +92,7 @@ def order_book_obi(
         compute_fn=compute,
         name=name or "order_book_obi",
         interval=source.interval,
-        period=1,
+        period=max(1, period),
     )
 
 
@@ -108,6 +111,7 @@ def order_book_obi_ema(
         source,
         levels=levels,
         epsilon=epsilon,
+        period=max(1, ema_period),
         name=f"{base_name}_obi",
     )
     return ema(obi_node, period=ema_period, name=base_name)

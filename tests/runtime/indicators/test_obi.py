@@ -59,6 +59,8 @@ def test_order_book_obi_ema_matches_manual_computation():
     ema_node = order_book_obi_ema(source, levels=2, ema_period=ema_period)
     obi_node = ema_node.inputs[0]
 
+    assert obi_node.period == ema_period
+
     snapshots = [
         {"bids": [(101, 8), (100, 2)], "asks": [(102, 4), (103, 1)]},
         {"bids": [(101, 6), (100, 1)], "asks": [(102, 5), (103, 2)]},
