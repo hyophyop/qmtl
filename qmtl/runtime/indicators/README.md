@@ -44,6 +44,7 @@ from qmtl.runtime.indicators import (
     order_book_imbalance_levels,
     order_book_depth_slope,
     order_book_obiL_and_slope,
+    obi_regime_node,
 )
 
 obi = order_book_obi(book_snapshots, levels=3)
@@ -51,10 +52,18 @@ smoothed = order_book_obi_ema(book_snapshots, levels=3, ema_period=10)
 obi_l = order_book_imbalance_levels(book_snapshots, levels=5)
 depth_profile = order_book_depth_slope(book_snapshots, levels=5)
 combined = order_book_obiL_and_slope(book_snapshots, levels=5)
+regime = obi_regime_node(smoothed, hi=0.35, lo=-0.35, hysteresis=0.05)
 ```
 
 > **Note:** When the book snapshot is missing altogether the nodes emit
 > `None` to signal upstream data gaps.
+
+`obi_regime_node` builds a hysteresis-based state machine over any OBI stream
+and reports state dwell time, transition rate and a coarse regime label. Feed
+it with a raw or smoothed imbalance node and tune ``hi``/``lo`` thresholds,
+``hysteresis`` and the lookback ``window`` (in seconds) to match the desired
+latency. Set ``ema_span`` to apply lightweight smoothing before the regime
+logic when upstream noise is excessive.
 
 ## Acceptable price band alpha
 
