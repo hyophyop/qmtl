@@ -8,9 +8,8 @@ SDK's standard schema with a ``ts`` (seconds) column.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence, Mapping
+from typing import Any, Iterable, Sequence, Mapping, Awaitable, Callable, TypeVar
 import asyncio
-import time
 import re
 
 import pandas as pd
@@ -152,7 +151,92 @@ def _build_rate_limit_key(
 from .ccxt_rate_limiter import get_limiter
 
 
-class CcxtOHLCVFetcher(DataFetcher):
+T = TypeVar("T")
+
+
+class _BaseCcxtFetcher(DataFetcher):
+    """Shared helpers for CCXT-backed fetchers."""
+
+    def __init__(self, config: Any, *, exchange: Any | None = None) -> None:
+        self.config = config
+        self._exchange = exchange
+        self._limiter = None
+        penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
+        self._penalty_backoff_s = max(
+            0.0, (float(penalty_ms) / 1000.0) if penalty_ms else 0.0
+        )
+
+    async def _with_retry(self, operation: Callable[[], Awaitable[T]]) -> T:
+        attempt = 0
+        backoff = float(getattr(self.config, "retry_backoff_s", 0.5))
+        max_retries = max(1, int(getattr(self.config, "max_retries", 1)))
+        while True:
+            attempt += 1
+            try:
+                limiter = await self._ensure_limiter()
+                async with limiter:
+                    return await operation()
+            except Exception as exc:  # pragma: no cover - retried in tests via stubs
+                if attempt >= max_retries:
+                    raise
+                wait_s = backoff
+                if _looks_like_rate_limit(exc) and self._penalty_backoff_s > 0:
+                    wait_s = max(wait_s, self._penalty_backoff_s)
+                await asyncio.sleep(wait_s)
+                backoff = max(backoff, wait_s) * 2.0
+
+    async def _ensure_limiter(self):
+        if self._limiter is not None:
+            return self._limiter
+        key, allow_suffix = _build_rate_limit_key(
+            self.config.exchange_id, self.config.rate_limiter
+        )
+        rl = self.config.rate_limiter
+        self._limiter = await get_limiter(
+            key,
+            max_concurrency=rl.max_concurrency,
+            min_interval_s=rl.min_interval_s,
+            scope=str(getattr(rl, "scope", "process")),
+            redis_dsn=getattr(rl, "redis_dsn", None),
+            tokens_per_interval=getattr(rl, "tokens_per_interval", None),
+            interval_ms=getattr(rl, "interval_ms", None),
+            burst_tokens=getattr(rl, "burst_tokens", None),
+            local_semaphore=getattr(rl, "local_semaphore", None),
+            key_suffix=(getattr(rl, "key_suffix", None) if allow_suffix else None),
+        )
+        return self._limiter
+
+    async def _get_or_create_exchange(self) -> Any:
+        if self._exchange is not None:
+            return self._exchange
+        # Lazy import to keep ccxt optional
+        try:  # pragma: no cover - import path
+            import ccxt.async_support as ccxt_async  # type: ignore
+        except Exception as e:  # pragma: no cover - exercised when ccxt missing
+            raise RuntimeError(
+                f"ccxt is required for {type(self).__name__}; install with [ccxt]"
+            ) from e
+
+        eid = self.config.exchange_id.lower()
+        if not hasattr(ccxt_async, eid):
+            raise ValueError(f"Unknown ccxt exchange id: {eid}")
+        klass = getattr(ccxt_async, eid)
+        self._exchange = klass({"enableRateLimit": True})
+        return self._exchange
+
+    async def _maybe_close_exchange(self, exchange: Any) -> None:
+        if exchange is not self._exchange:
+            # external exchange injected by tests; don't close
+            return
+        close = getattr(exchange, "close", None)
+        if asyncio.iscoroutinefunction(close):  # type: ignore[arg-type]
+            try:
+                await close()  # type: ignore[misc]
+            except Exception:  # pragma: no cover - best-effort close
+                pass
+
+
+class CcxtOHLCVFetcher(_BaseCcxtFetcher):
     """Asynchronous OHLCV fetcher backed by ccxt.async_support.
 
     Notes
@@ -168,11 +252,7 @@ class CcxtOHLCVFetcher(DataFetcher):
         *,
         exchange: Any | None = None,
     ) -> None:
-        self.config = config
-        self._exchange = exchange
-        self._limiter = None  # created lazily
-        penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
-        self._penalty_backoff_s = max(0.0, (float(penalty_ms) / 1000.0) if penalty_ms else 0.0)
+        super().__init__(config, exchange=exchange)
 
     # ------------------------------------------------------------------
     async def fetch(
@@ -233,74 +313,13 @@ class CcxtOHLCVFetcher(DataFetcher):
         since_ms: int,
         limit: int,
     ) -> Sequence[Sequence[Any]]:
-        attempt = 0
-        backoff = self.config.retry_backoff_s
-        while True:
-            attempt += 1
-            try:
-                limiter = await self._ensure_limiter()
-                async with limiter:
-                    data = await exchange.fetch_ohlcv(
-                        symbol, timeframe, since=since_ms, limit=limit
-                    )
-                    return data or []
-            except Exception as exc:  # pragma: no cover - error path exercised in tests via stub
-                if attempt >= max(1, self.config.max_retries):
-                    raise
-                wait_s = backoff
-                if _looks_like_rate_limit(exc) and self._penalty_backoff_s > 0:
-                    wait_s = max(wait_s, self._penalty_backoff_s)
-                await asyncio.sleep(wait_s)
-                backoff = max(backoff, wait_s) * 2.0
+        async def _operation() -> Sequence[Sequence[Any]]:
+            data = await exchange.fetch_ohlcv(
+                symbol, timeframe, since=since_ms, limit=limit
+            )
+            return data or []
 
-    async def _ensure_limiter(self):
-        if self._limiter is not None:
-            return self._limiter
-        key, allow_suffix = _build_rate_limit_key(
-            self.config.exchange_id, self.config.rate_limiter
-        )
-        rl = self.config.rate_limiter
-        self._limiter = await get_limiter(
-            key,
-            max_concurrency=rl.max_concurrency,
-            min_interval_s=rl.min_interval_s,
-            scope=str(getattr(rl, "scope", "process")),
-            redis_dsn=getattr(rl, "redis_dsn", None),
-            tokens_per_interval=getattr(rl, "tokens_per_interval", None),
-            interval_ms=getattr(rl, "interval_ms", None),
-            burst_tokens=getattr(rl, "burst_tokens", None),
-            local_semaphore=getattr(rl, "local_semaphore", None),
-            key_suffix=(getattr(rl, "key_suffix", None) if allow_suffix else None),
-        )
-        return self._limiter
-
-    # ------------------------------------------------------------------
-    async def _get_or_create_exchange(self) -> Any:
-        if self._exchange is not None:
-            return self._exchange
-        # Lazy import to keep ccxt optional
-        try:  # pragma: no cover - import path
-            import ccxt.async_support as ccxt_async  # type: ignore
-        except Exception as e:  # pragma: no cover - exercised when ccxt missing
-            raise RuntimeError("ccxt is required for CcxtOHLCVFetcher; install with [ccxt]") from e
-
-        eid = self.config.exchange_id.lower()
-        if not hasattr(ccxt_async, eid):
-            raise ValueError(f"Unknown ccxt exchange id: {eid}")
-        klass = getattr(ccxt_async, eid)
-        self._exchange = klass({"enableRateLimit": True})
-        return self._exchange
-
-    async def _maybe_close_exchange(self, exchange: Any) -> None:
-        if exchange is not self._exchange:
-            # external exchange injected by tests; don't close
-            return
-        close = getattr(exchange, "close", None)
-        if asyncio.iscoroutinefunction(close):  # type: ignore[arg-type]
-            try:
-                await close()  # type: ignore[misc]
-            except Exception:  # pragma: no cover - best-effort close
-                pass
+        return await self._with_retry(_operation)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -342,7 +361,7 @@ class CcxtTradesConfig:
     rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
 
 
-class CcxtTradesFetcher(DataFetcher):
+class CcxtTradesFetcher(_BaseCcxtFetcher):
     """Asynchronous Trades fetcher backed by ccxt.async_support.
 
     Returns a DataFrame with at least: ``ts, price, amount``. ``side`` is
@@ -357,11 +376,7 @@ class CcxtTradesFetcher(DataFetcher):
         *,
         exchange: Any | None = None,
     ) -> None:
-        self.config = config
-        self._exchange = exchange
-        self._limiter = None
-        penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
-        self._penalty_backoff_s = max(0.0, (float(penalty_ms) / 1000.0) if penalty_ms else 0.0)
+        super().__init__(config, exchange=exchange)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -402,70 +417,13 @@ class CcxtTradesFetcher(DataFetcher):
     async def _fetch_trades_with_retry(
         self, exchange: Any, symbol: str, since_ms: int, limit: int
     ) -> list[dict]:
-        attempt = 0
-        backoff = self.config.retry_backoff_s
-        while True:
-            attempt += 1
-            try:
-                limiter = await self._ensure_limiter()
-                async with limiter:
-                    data = await exchange.fetch_trades(
-                        symbol, since=since_ms, limit=limit
-                    )
-                    return list(data or [])
-            except Exception as exc:  # pragma: no cover - error path in stub tests
-                if attempt >= max(1, self.config.max_retries):
-                    raise
-                wait_s = backoff
-                if _looks_like_rate_limit(exc) and self._penalty_backoff_s > 0:
-                    wait_s = max(wait_s, self._penalty_backoff_s)
-                await asyncio.sleep(wait_s)
-                backoff = max(backoff, wait_s) * 2.0
+        async def _operation() -> list[dict]:
+            data = await exchange.fetch_trades(
+                symbol, since=since_ms, limit=limit
+            )
+            return list(data or [])
 
-    async def _ensure_limiter(self):
-        if self._limiter is not None:
-            return self._limiter
-        key, allow_suffix = _build_rate_limit_key(
-            self.config.exchange_id, self.config.rate_limiter
-        )
-        rl = self.config.rate_limiter
-        self._limiter = await get_limiter(
-            key,
-            max_concurrency=rl.max_concurrency,
-            min_interval_s=rl.min_interval_s,
-            scope=str(getattr(rl, "scope", "process")),
-            redis_dsn=getattr(rl, "redis_dsn", None),
-            tokens_per_interval=getattr(rl, "tokens_per_interval", None),
-            interval_ms=getattr(rl, "interval_ms", None),
-            burst_tokens=getattr(rl, "burst_tokens", None),
-            local_semaphore=getattr(rl, "local_semaphore", None),
-            key_suffix=(getattr(rl, "key_suffix", None) if allow_suffix else None),
-        )
-        return self._limiter
-
-    async def _get_or_create_exchange(self) -> Any:
-        if self._exchange is not None:
-            return self._exchange
-        try:  # pragma: no cover - import path
-            import ccxt.async_support as ccxt_async  # type: ignore
-        except Exception as e:  # pragma: no cover
-            raise RuntimeError("ccxt is required for CcxtTradesFetcher; install with [ccxt]") from e
-        eid = self.config.exchange_id.lower()
-        if not hasattr(ccxt_async, eid):
-            raise ValueError(f"Unknown ccxt exchange id: {eid}")
-        klass = getattr(ccxt_async, eid)
-        self._exchange = klass({"enableRateLimit": True})
-        return self._exchange
-
-    async def _maybe_close_exchange(self, exchange: Any) -> None:
-        if exchange is not self._exchange:
-            return
-        close = getattr(exchange, "close", None)
-        if asyncio.iscoroutinefunction(close):  # type: ignore[arg-type]
-            try:
-                await close()  # type: ignore[misc]
-            except Exception:  # pragma: no cover
-                pass
+        return await self._with_retry(_operation)
 
     @staticmethod
     def _normalize_trades(rows: Iterable[dict], start: int, end: int) -> pd.DataFrame:
