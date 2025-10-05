@@ -21,7 +21,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     BackfillConfig,
 )
 from qmtl.runtime.io.seamless_provider import (
-    StorageDataSource,
+    HistoryProviderDataSource,
     DataFetcherAutoBackfiller,
 )
 from qmtl.foundation.common.compute_context import ComputeContext
@@ -1027,20 +1027,9 @@ async def test_storage_backfill_materializes_and_reads_back() -> None:
     sdk_metrics.reset_metrics()
     storage_provider = _FakeStorageProvider()
 
-    class _StorageDS(StorageDataSource):
-        # Expose required attribute to satisfy DataFetcherAutoBackfiller contract
+    class _StorageDS(HistoryProviderDataSource):
         def __init__(self, sp):
-            self.storage_provider = sp
-            self.priority = DataSourcePriority.STORAGE
-
-        async def is_available(self, *args, **kwargs):  # pragma: no cover
-            return False
-
-        async def fetch(self, *args, **kwargs):  # pragma: no cover
-            return pd.DataFrame()
-
-        async def coverage(self, *args, **kwargs):  # pragma: no cover
-            return []
+            super().__init__(sp, DataSourcePriority.STORAGE)
 
     storage_ds = _StorageDS(storage_provider)
     fetcher = _FakeFetcher()
@@ -1059,19 +1048,9 @@ async def test_storage_backfill_materializes_and_reads_back() -> None:
 async def test_data_fetcher_backfiller_logs_structured_success(caplog) -> None:
     storage_provider = _FakeStorageProvider()
 
-    class _StorageDS(StorageDataSource):
+    class _StorageDS(HistoryProviderDataSource):
         def __init__(self, sp):
-            self.storage_provider = sp
-            self.priority = DataSourcePriority.STORAGE
-
-        async def is_available(self, *args, **kwargs):  # pragma: no cover
-            return False
-
-        async def fetch(self, *args, **kwargs):  # pragma: no cover
-            return pd.DataFrame()
-
-        async def coverage(self, *args, **kwargs):  # pragma: no cover
-            return []
+            super().__init__(sp, DataSourcePriority.STORAGE)
 
     storage_ds = _StorageDS(storage_provider)
     fetcher = _FakeFetcher()

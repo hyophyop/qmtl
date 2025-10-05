@@ -5,8 +5,9 @@ import pytest
 import pandas as pd
 
 from qmtl.runtime.sdk import build_seamless_assembly, hydrate_builder
+from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
 from qmtl.runtime.io.seamless_provider import (
-    StorageDataSource,
+    HistoryProviderDataSource,
     DataFetcherAutoBackfiller,
 )
 
@@ -29,7 +30,8 @@ def _ccxt_preset_config() -> dict:
 def test_build_seamless_assembly_from_single_preset() -> None:
     assembly = build_seamless_assembly(_ccxt_preset_config())
 
-    assert isinstance(assembly.storage_source, StorageDataSource)
+    assert isinstance(assembly.storage_source, HistoryProviderDataSource)
+    assert assembly.storage_source.priority is DataSourcePriority.STORAGE
     assert isinstance(assembly.backfiller, DataFetcherAutoBackfiller)
     assert assembly.cache_source is None
     assert assembly.live_feed is None
@@ -49,7 +51,8 @@ def test_hydrate_builder_supports_presets_sequence() -> None:
     builder = hydrate_builder(config)
     assembly = builder.build()
 
-    assert isinstance(assembly.storage_source, StorageDataSource)
+    assert isinstance(assembly.storage_source, HistoryProviderDataSource)
+    assert assembly.storage_source.priority is DataSourcePriority.STORAGE
     assert isinstance(assembly.backfiller, DataFetcherAutoBackfiller)
 
 
@@ -93,7 +96,8 @@ def test_preset_assembly_uses_loader_and_fetcher(monkeypatch) -> None:
 
     assembly = build_seamless_assembly(_ccxt_preset_config())
 
-    assert isinstance(assembly.storage_source, StorageDataSource)
+    assert isinstance(assembly.storage_source, HistoryProviderDataSource)
+    assert assembly.storage_source.priority is DataSourcePriority.STORAGE
     assert isinstance(assembly.backfiller, DataFetcherAutoBackfiller)
     assert "loader_args" in created
     assert created["loader_args"]["dsn"] == "postgresql://localhost:8812/qdb"
