@@ -84,20 +84,6 @@ class HistoryProviderDataSource:
         elif priority is DataSourcePriority.STORAGE:
             self.storage_provider = provider
 
-
-class CacheDataSource(HistoryProviderDataSource):
-    """Compatibility wrapper that configures cache priority for a provider."""
-
-    def __init__(self, provider: HistoryProvider):
-        super().__init__(provider, DataSourcePriority.CACHE)
-
-
-class StorageDataSource(HistoryProviderDataSource):
-    """Compatibility wrapper that configures storage priority for a provider."""
-
-    def __init__(self, provider: HistoryProvider):
-        super().__init__(provider, DataSourcePriority.STORAGE)
-
     async def is_available(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> bool:
@@ -119,6 +105,20 @@ class StorageDataSource(HistoryProviderDataSource):
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
         return await self.provider.coverage(node_id=node_id, interval=interval)
+
+
+class CacheDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures cache priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.CACHE)
+
+
+class StorageDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures storage priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.STORAGE)
 
 
 class DataFetcherAutoBackfiller:
