@@ -18,6 +18,27 @@ class _FlakyOHLCVExchange:
         return [[base_ms + (self.calls * 60_000), 100.0, 110.0, 90.0, 105.0, 12.0]]
 
 
+class _DuplicateOHLCVExchange:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def watch_ohlcv(self, symbol: str, timeframe: str):
+        self.calls += 1
+        base_ms = 1_700_000_000_000
+        if self.calls == 1:
+            return [
+                [base_ms, 100.0, 110.0, 90.0, 105.0, 12.0],
+                [base_ms, 100.0, 110.0, 90.0, 105.0, 12.0],
+                [base_ms + 60_000, 101.0, 111.0, 91.0, 106.0, 13.0],
+            ]
+        if self.calls == 2:
+            return [
+                [base_ms + 60_000, 101.0, 111.0, 91.0, 106.0, 13.0],
+                [base_ms + 120_000, 102.0, 112.0, 92.0, 107.0, 14.0],
+            ]
+        return []
+
+
 class _TradesExchange:
     def __init__(self) -> None:
         self.calls = 0
@@ -95,3 +116,31 @@ async def test_dedupe_by_symbol():
 
     stored_token = next(iter(feed._last_emitted_token.values()))
     assert stored_token == (1_700_000_001, "BTC/USDT")
+
+
+@pytest.mark.asyncio
+async def test_ohlcv_dedupe_helper():
+    config = CcxtProConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        emit_building_candle=True,
+    )
+    feed = CcxtProLiveFeed(config, exchange=_DuplicateOHLCVExchange())
+
+    gen = feed.subscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+
+    first_ts, first_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
+    assert list(first_df["ts"]) == [1_700_000_000, 1_700_000_060]
+    assert first_ts == 1_700_000_060
+
+    second_ts, second_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
+    assert list(second_df["ts"]) == [1_700_000_120]
+    assert second_ts == 1_700_000_120
+
+    feed.unsubscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(gen.__anext__(), timeout=0.05)
+
+    stored_token = next(iter(feed._last_emitted_token.values()))
+    assert stored_token == 1_700_000_120

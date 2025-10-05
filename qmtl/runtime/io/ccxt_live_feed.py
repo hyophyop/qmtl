@@ -16,7 +16,7 @@ Scope
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Literal, Optional
+from typing import Any, AsyncIterator, Iterable, Literal, Optional
 import logging
 import time
 
@@ -138,7 +138,6 @@ class CcxtProLiveFeed(LiveDataFeed):
         interval: int,
         key: str,
     ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
-        last_token = self._last_emitted_token.get(key)
         interval_s = int(interval if interval > 0 else _tf_to_seconds(timeframe))
         # resolve method name once
         watch = getattr(exchange, "watch_ohlcv", None) or getattr(exchange, "watchOHLCV", None)
@@ -148,49 +147,34 @@ class CcxtProLiveFeed(LiveDataFeed):
             rows = await watch(symbol, timeframe)
             # rows is a list of candles [[ms, o, h, l, c, v], ...]
             now_s = int(time.time())
-            ready_records: list[dict] = []
-            for r in (rows or []):
-                try:
-                    ts = int(r[0]) // 1000
-                except Exception:
-                    continue
-                token = self._dedupe_token(ts, symbol)
-                if self.config.dedupe and not self._should_emit(last_token, token):
-                    continue
-                if not self.config.emit_building_candle:
-                    # Only emit when we are past the close boundary of the bar
-                    if ts + interval_s > now_s:
-                        continue
-                rec = {
-                    "ts": ts,
-                    "open": float(r[1]),
-                    "high": float(r[2]),
-                    "low": float(r[3]),
-                    "close": float(r[4]),
-                    "volume": float(r[5]),
-                }
-                if self._uses_symbol_dedupe():
-                    rec["symbol"] = symbol
-                ready_records.append(rec)
-                if self.config.dedupe:
-                    last_token = token
 
-            if not ready_records:
+            def _iter_records() -> Iterable[dict[str, Any]]:
+                for r in (rows or []):
+                    try:
+                        ts = int(r[0]) // 1000
+                    except Exception:
+                        continue
+                    if not self.config.emit_building_candle and ts + interval_s > now_s:
+                        continue
+                    record: dict[str, Any] = {
+                        "ts": ts,
+                        "open": float(r[1]),
+                        "high": float(r[2]),
+                        "low": float(r[3]),
+                        "close": float(r[4]),
+                        "volume": float(r[5]),
+                    }
+                    if self._uses_symbol_dedupe():
+                        record["symbol"] = symbol
+                    yield record
+
+            normalized = self._normalize_records(key=key, symbol=symbol, records=_iter_records())
+            if not normalized:
                 # yield nothing; let outer loop iterate again
                 await asyncio.sleep(0)
                 continue
 
-            df = pd.DataFrame.from_records(ready_records)
-            df = df.drop_duplicates(subset=self._dedupe_subset())
-            df = df.sort_values("ts")
-            last_ts = int(df["ts"].iloc[-1])
-            if self._uses_symbol_dedupe():
-                symbol_value = str(df.iloc[-1]["symbol"])
-                last_token = (last_ts, symbol_value)
-            else:
-                last_token = last_ts
-            self._last_emitted_token[key] = last_token
-            yield last_ts, df
+            yield normalized
 
     async def _stream_trades(
         self,
@@ -199,7 +183,6 @@ class CcxtProLiveFeed(LiveDataFeed):
         interval: int,
         key: str,
     ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
-        last_token = self._last_emitted_token.get(key)
         watch = getattr(exchange, "watch_trades", None) or getattr(exchange, "watchTrades", None)
         if watch is None:
             raise RuntimeError("exchange does not support watch_trades/watchTrades")
@@ -208,43 +191,86 @@ class CcxtProLiveFeed(LiveDataFeed):
             if not trades:
                 await asyncio.sleep(0)
                 continue
-            records: list[dict] = []
-            for t in trades:
-                try:
-                    ts = int(t.get("timestamp")) // 1000
-                except Exception:
-                    continue
-                token = self._dedupe_token(ts, symbol)
-                if self.config.dedupe and not self._should_emit(last_token, token):
-                    continue
-                rec = {"ts": ts}
-                if "price" in t:
-                    rec["price"] = float(t["price"])  # type: ignore[arg-type]
-                if "amount" in t:
-                    rec["amount"] = float(t["amount"])  # type: ignore[arg-type]
-                if "side" in t:
-                    rec["side"] = t["side"]
-                if self._uses_symbol_dedupe():
-                    rec["symbol"] = symbol
-                records.append(rec)
-                if self.config.dedupe:
-                    last_token = token
-
-            if not records:
+            normalized = self._normalize_records(
+                key=key,
+                symbol=symbol,
+                records=self._trade_records(trades, symbol),
+            )
+            if not normalized:
                 await asyncio.sleep(0)
                 continue
 
-            df = pd.DataFrame.from_records(records)
-            df = df.drop_duplicates(subset=self._dedupe_subset())
-            df = df.sort_values("ts")
-            last_ts = int(df["ts"].iloc[-1])
+            yield normalized
+
+    def _trade_records(self, trades: Iterable[dict[str, Any]], symbol: str) -> Iterable[dict[str, Any]]:
+        for t in trades:
+            try:
+                ts = int(t.get("timestamp")) // 1000
+            except Exception:
+                continue
+            record: dict[str, Any] = {"ts": ts}
+            if "price" in t:
+                record["price"] = float(t["price"])  # type: ignore[arg-type]
+            if "amount" in t:
+                record["amount"] = float(t["amount"])  # type: ignore[arg-type]
+            if "side" in t:
+                record["side"] = t["side"]
             if self._uses_symbol_dedupe():
-                symbol_value = str(df.iloc[-1]["symbol"])
-                last_token = (last_ts, symbol_value)
+                record["symbol"] = symbol
+            yield record
+
+    def _normalize_records(
+        self,
+        *,
+        key: str,
+        symbol: str | None,
+        records: Iterable[dict[str, Any]],
+    ) -> tuple[int, pd.DataFrame] | None:
+        last_token = self._last_emitted_token.get(key)
+        ready_records: list[dict[str, Any]] = []
+        for raw in records:
+            if "ts" not in raw:
+                continue
+            try:
+                ts = int(raw["ts"])
+            except (TypeError, ValueError):
+                continue
+            record = dict(raw)
+            record["ts"] = ts
+            symbol_for_token: str | None
+            if self._uses_symbol_dedupe():
+                symbol_for_token = record.get("symbol")
+                if symbol_for_token is None:
+                    symbol_for_token = symbol
+                    if symbol is not None:
+                        record.setdefault("symbol", symbol)
             else:
-                last_token = last_ts
-            self._last_emitted_token[key] = last_token
-            yield last_ts, df
+                symbol_for_token = symbol
+            token = self._dedupe_token(ts, symbol_for_token)
+            if self.config.dedupe and not self._should_emit(last_token, token):
+                continue
+            ready_records.append(record)
+            if self.config.dedupe:
+                last_token = token
+
+        if not ready_records:
+            return None
+
+        df = pd.DataFrame.from_records(ready_records)
+        if df.empty:
+            return None
+        df = df.drop_duplicates(subset=self._dedupe_subset())
+        df = df.sort_values("ts")
+        last_ts = int(df["ts"].iloc[-1])
+        if self._uses_symbol_dedupe():
+            symbol_value = df.iloc[-1].get("symbol")
+            if symbol_value is None and symbol is not None:
+                symbol_value = symbol
+            last_token = (last_ts, str(symbol_value) if symbol_value is not None else "")
+        else:
+            last_token = last_ts
+        self._last_emitted_token[key] = last_token
+        return last_ts, df
 
     def _mode_for_node(self, node_id: str) -> str:
         if node_id.startswith("ohlcv:"):
