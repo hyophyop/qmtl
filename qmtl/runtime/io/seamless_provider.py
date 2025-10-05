@@ -107,6 +107,20 @@ class HistoryProviderDataSource:
         return await self.provider.coverage(node_id=node_id, interval=interval)
 
 
+class CacheDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures cache priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.CACHE)
+
+
+class StorageDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures storage priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.STORAGE)
+
+
 class DataFetcherAutoBackfiller:
     """AutoBackfiller implementation using DataFetcher."""
     
@@ -522,6 +536,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
 __all__ = [
     "HistoryProviderDataSource",
+    "CacheDataSource",
+    "StorageDataSource",
     "DataFetcherAutoBackfiller",
     "LiveDataFeedImpl",
     "FingerprintPolicy",
