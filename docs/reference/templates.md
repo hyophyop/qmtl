@@ -107,10 +107,10 @@ qmtl project init --path my_proj --strategy state_machine
 When you scaffold a project with `qmtl project init`, two backend configuration samples
 are included under the generated `templates/` directory:
 
-* `local_stack.example.yml` &mdash; lightweight backend stack that relies on
+* {{ code_link('qmtl/examples/templates/local_stack.example.yml', text='`local_stack.example.yml`') }} &mdash; lightweight backend stack that relies on
   SQLite, optional Redis, and in-process fallbacks for Kafka and Neo4j. Useful
   for local development or smoke tests without external dependencies.
-* `backend_stack.example.yml` &mdash; production-ready template covering Redis,
+* {{ code_link('qmtl/examples/templates/backend_stack.example.yml', text='`backend_stack.example.yml`') }} &mdash; production-ready template covering Redis,
   Postgres, Kafka, Neo4j, and observability services. Replace the placeholders
   before deploying.
 

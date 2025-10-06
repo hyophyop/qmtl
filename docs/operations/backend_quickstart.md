@@ -58,6 +58,12 @@ Notes
 
 Use the E2E stack to run infra + services:
 
+> Canonical Compose files live in the package under
+> {{ code_link('qmtl/examples/templates/local_stack.example.yml', text='`qmtl/examples/templates/local_stack.example.yml`') }}
+> and
+> {{ code_link('qmtl/examples/templates/backend_stack.example.yml', text='`qmtl/examples/templates/backend_stack.example.yml`') }}.
+> Copy one of those templates into your project when you need a baseline stack.
+
 ```bash
 docker compose -f tests/docker-compose.e2e.yml up --build -d
 # Gateway: http://localhost:8000, DAG Manager gRPC: 50051
