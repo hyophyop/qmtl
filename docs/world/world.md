@@ -365,7 +365,7 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
   - `expires_at`: 재구독 시점 안내.
   - `fallback_url`: 주 스트림 불가 시 사용. 미제공 시 HTTP 폴링 경로를 사용.
 - 이벤트 타입(요약)
-  - ActivationUpdated: `{world_id, strategy_id, side, active, weight, etag, run_id, ts}`
+  - ActivationUpdated: `{world_id, strategy_id, side, active, weight, effective_mode (validate|compute-only|paper|live), etag, run_id, ts}`
   - QueueUpdated: `{tags[], interval, queues[], etag, ts}`
   - PolicyUpdated: `{world_id, version, checksum, status, ts}`
 - 순서/중복
@@ -421,7 +421,7 @@ SDK는 오직 Gateway와만 통신한다. ControlBus는 내부 제어 버스이�
 
 ### 15.3 이벤트 타입(요약)
 
-- ActivationUpdated: `{world_id, strategy_id, side, active, weight, etag, run_id, ts}`
+- ActivationUpdated: `{world_id, strategy_id, side, active, weight, effective_mode (validate|compute-only|paper|live), etag, run_id, ts}`
 - QueueUpdated: `{tags[], interval, queues[], etag, ts}`
 - PolicyUpdated: `{world_id, version, checksum, status, ts}`
 
