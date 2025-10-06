@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+import logging
+from http import HTTPStatus
 from typing import Any
 
 from fastapi import HTTPException
+from httpx import HTTPStatusError
 from . import metrics as gw_metrics
 from .models import StrategySubmit
 from .submission import SubmissionPipeline, StrategyComputeContext
+from .world_client import WorldServiceClient
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,11 +53,13 @@ class StrategySubmissionHelper:
         database,
         *,
         pipeline: SubmissionPipeline | None = None,
+        world_client: WorldServiceClient | None = None,
     ) -> None:
         self._manager = manager
         self._dagmanager = dagmanager
         self._database = database
         self._pipeline = pipeline or SubmissionPipeline(dagmanager)
+        self._world_client = world_client
 
     async def process(
         self, payload: StrategySubmit, config: StrategySubmissionConfig
@@ -180,7 +189,32 @@ class StrategySubmissionHelper:
             try:
                 await self._database.upsert_wsb(world_id, strategy_id)
             except Exception:
-                pass
+                logger.exception(
+                    "Failed to upsert world binding", extra={"world_id": world_id}
+                )
+                continue
+
+            if self._world_client is None:
+                continue
+
+            try:
+                await self._world_client.post_bindings(
+                    world_id, {"strategies": [strategy_id]}
+                )
+            except HTTPStatusError as exc:
+                status_code = exc.response.status_code if exc.response else None
+                if status_code == HTTPStatus.CONFLICT:
+                    continue
+                logger.warning(
+                    "WorldService binding sync failed for %s (status=%s)",
+                    world_id,
+                    status_code,
+                    exc_info=exc,
+                )
+            except Exception as exc:  # pragma: no cover - defensive network guard
+                logger.warning(
+                    "WorldService binding sync failed for %s", world_id, exc_info=exc
+                )
 
     async def _build_queue_map_from_queries(
         self,

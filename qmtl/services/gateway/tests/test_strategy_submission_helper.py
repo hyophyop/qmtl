@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+from http import HTTPStatus
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+import httpx
 
 from qmtl.foundation.common import crc32_of_list
 from qmtl.foundation.common.compute_context import DowngradeReason
@@ -19,6 +21,33 @@ from qmtl.services.gateway.strategy_submission import (
 from qmtl.services.gateway.submission.context_service import StrategyComputeContext
 
 from tests.qmtl.services.gateway.helpers import build_strategy_payload
+
+
+class StubWorldClient:
+    def __init__(
+        self,
+        *,
+        conflict_after: set[int] | None = None,
+        fail_with: Exception | None = None,
+    ) -> None:
+        self.calls: list[tuple[str, dict[str, list[str]]]] = []
+        self._call_count = 0
+        self._conflict_after = conflict_after or set()
+        self._fail_with = fail_with
+
+    async def post_bindings(self, world_id: str, payload: dict, **_: object) -> None:
+        self._call_count += 1
+        self.calls.append((world_id, payload))
+        if self._call_count in self._conflict_after:
+            request = httpx.Request(
+                "POST", f"http://world/worlds/{world_id}/bindings"
+            )
+            response = httpx.Response(HTTPStatus.CONFLICT, request=request)
+            raise httpx.HTTPStatusError(
+                "Conflict", request=request, response=response
+            )
+        if self._fail_with is not None:
+            raise self._fail_with
 
 
 class DummyManager:
@@ -152,8 +181,12 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
     manager = DummyManager()
     dagmanager = DummyDagManager()
     database = DummyDatabase()
-    helper = StrategySubmissionHelper(manager, dagmanager, database)
+    world_client = StubWorldClient()
+    helper = StrategySubmissionHelper(
+        manager, dagmanager, database, world_client=world_client
+    )
     bundle = build_strategy_payload()
+    bundle.payload.world_ids = ["world-2"]
 
     result = await helper.process(
         bundle.payload,
@@ -168,7 +201,14 @@ async def test_process_submission_uses_queries_and_diff_for_strategy():
     assert result.queue_map.keys() == {bundle.expected_node_id}
     queues = result.queue_map[bundle.expected_node_id]
     assert queues and queues[0]["queue"] == "world-1:alpha"
-    assert database.bindings == [("world-1", "strategy-abc")]
+    assert database.bindings == [
+        ("world-1", "strategy-abc"),
+        ("world-2", "strategy-abc"),
+    ]
+    assert world_client.calls == [
+        ("world-1", {"strategies": ["strategy-abc"]}),
+        ("world-2", {"strategies": ["strategy-abc"]}),
+    ]
     assert dagmanager.diff_calls, "diff should be invoked for sentinel lookup"
     strategy_id, world_id, domain, as_of, partition, dataset_fingerprint = dagmanager.diff_calls[0]
     assert manager.contexts and isinstance(manager.contexts[0], StrategyComputeContext)
@@ -363,6 +403,26 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
 
 
 @pytest.mark.asyncio
+async def test_world_bindings_world_service_failure_logged(caplog) -> None:
+    world_client = StubWorldClient(fail_with=RuntimeError("ws down"))
+    helper = StrategySubmissionHelper(
+        DummyManager(), DummyDagManager(), DummyDatabase(), world_client=world_client
+    )
+    bundle = build_strategy_payload()
+
+    with caplog.at_level("WARNING"):
+        await helper.process(
+            bundle.payload,
+            StrategySubmissionConfig(
+                submit=True,
+                diff_timeout=0.1,
+            ),
+        )
+
+    assert "WorldService binding sync failed" in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "db_builder",
     [_build_memory_db, _build_sqlite_db, _build_postgres_db],
@@ -370,7 +430,10 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc() -> None:
 )
 async def test_world_bindings_persist_for_all_databases(db_builder, monkeypatch) -> None:
     db, fetch_bindings, cleanup = await db_builder(monkeypatch)
-    helper = StrategySubmissionHelper(DummyManager(), DummyDagManager(), db)
+    world_client = StubWorldClient(conflict_after={2})
+    helper = StrategySubmissionHelper(
+        DummyManager(), DummyDagManager(), db, world_client=world_client
+    )
     bundle = build_strategy_payload()
     config = StrategySubmissionConfig(submit=True, diff_timeout=0.1)
 
@@ -379,5 +442,10 @@ async def test_world_bindings_persist_for_all_databases(db_builder, monkeypatch)
         await helper.process(bundle.payload, config)
         bindings = await fetch_bindings()
         assert bindings == {("world-1", "strategy-abc")}
+        assert [call[0] for call in world_client.calls] == ["world-1", "world-1"]
+        assert all(
+            call[1] == {"strategies": ["strategy-abc"]}
+            for call in world_client.calls
+        )
     finally:
         await cleanup()

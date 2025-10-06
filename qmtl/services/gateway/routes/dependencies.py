@@ -52,6 +52,7 @@ class GatewayDependencyProvider:
             dagmanager,
             database_obj,
             pipeline=self._pipeline,
+            world_client=self._world_client,
         )
 
     # Core dependencies -------------------------------------------------
