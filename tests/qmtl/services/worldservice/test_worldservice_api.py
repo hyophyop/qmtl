@@ -220,6 +220,31 @@ async def test_decide_effective_mode_canonicalised():
 
 
 @pytest.mark.asyncio
+async def test_post_decisions_normalizes_payload_and_validates():
+    bus = DummyBus()
+    app = create_app(bus=bus)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "w3"})
+
+            resp = await client.post(
+                "/worlds/w3/decisions",
+                json={"strategies": ["alpha", "alpha", "beta"]},
+            )
+            assert resp.status_code == 200
+            assert resp.json() == {"strategies": ["alpha", "beta"]}
+
+            stored = await app.state.world_service.store.get_decisions("w3")
+            assert stored == ["alpha", "beta"]
+
+            invalid = await client.post(
+                "/worlds/w3/decisions",
+                json={"strategies": ["alpha", " "]},
+            )
+            assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_history_metadata_in_decision_envelope():
     app = create_app()
     async with httpx.ASGITransport(app=app) as asgi:

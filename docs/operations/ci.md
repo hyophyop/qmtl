@@ -70,6 +70,6 @@ def test_long_running_case():
 Add lightweight checks (unit/integration) that fail fast when core invariants are violated:
 
 - GSG NodeID uniqueness: no duplicate `node_id` across inserted nodes; NodeID computed via BLAKE3 canonicalization.
-- World‑local isolation: a `stop` DecisionEvent in World A must not affect World B state.
+- World‑local isolation: applying a `DecisionsRequest` in World A must not affect World B state.
 - EvalKey invalidation: changing `DatasetFingerprint`/`ContractID`/`CodeVersion` or `ResourcePolicy` produces a new `eval_key` and re‑validation.
-- Scope defaults: DecisionEvent without `scope` is treated as `world-local`.
+- DecisionsRequest validation: empty or blank identifiers are rejected and duplicates are removed before persistence.

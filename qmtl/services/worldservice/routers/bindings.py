@@ -104,10 +104,11 @@ def create_bindings_router(service: WorldService) -> APIRouter:
             artifact=artifact_payload,
         )
 
-    @router.post('/worlds/{world_id}/decisions')
-    async def post_decisions(world_id: str, payload: DecisionsRequest) -> Dict:
+    @router.post('/worlds/{world_id}/decisions', response_model=BindingsResponse)
+    async def post_decisions(world_id: str, payload: DecisionsRequest) -> BindingsResponse:
         store = service.store
         await store.set_decisions(world_id, payload.strategies)
-        return {'strategies': payload.strategies}
+        strategies = await store.get_decisions(world_id)
+        return BindingsResponse(strategies=strategies)
 
     return router

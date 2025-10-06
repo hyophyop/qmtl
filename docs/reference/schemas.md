@@ -18,7 +18,7 @@ last_modified: 2025-08-29
 - World: reference/schemas/world.schema.json
 - WorldNodeRef (WVG): reference/schemas/world_node_ref.schema.json
 - Validation (WVG): reference/schemas/validation.schema.json
-- DecisionEvent (WVG): reference/schemas/decision_event.schema.json
+- DecisionsRequest (WVG): reference/schemas/decisions_request.schema.json
 - OrderPayload: reference/schemas/order_payload.schema.json
 - OrderAck: reference/schemas/order_ack.schema.json
 - ExecutionFillEvent: reference/schemas/execution_fill_event.schema.json
