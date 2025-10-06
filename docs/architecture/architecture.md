@@ -131,11 +131,11 @@ sequenceDiagram
 
 - Domains: `backtest | dryrun | live | shadow`. ExecutionDomain은 WorldService가 소유·결정하는 1급 개념이며, 게이팅과 프로모션은 2‑Phase Apply(Freeze/Drain → Switch → Unfreeze)로 백엔드에서 구동한다. SDK/Runner는 도메인을 “선택”하지 않으며, 오직 월드 결정의 결과를 반영한다.
 - NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다. SDK는 ComputeKey를 “제안”하거나 “주입”하지 않는다 — 런타임/서비스가 WS 결정과 제출 메타를 근거로 도출·검증한다.
-- WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. `WvgEdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다.
+- WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. WVG 스코프의 `EdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다. 구현은 [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }})와 WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) 라우트가 담당한다.
 - Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 “표시만” 하여 ControlBus/WebSocket 사본에 `execution_domain` 필드를 덧붙여 중계한다(WS의 정규 스키마에는 포함되지 않는다). SDK/Runner는 이를 입력으로만 취급하며 도메인을 자의적으로 변경하지 않는다. 매핑은 `validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`이며, `shadow`는 운영자 전용이다.
 - Queue 네임스페이스: 프로덕션 배포에서는 `{world_id}.{execution_domain}.<topic>` 프리픽스로 토픽을 분리해야 한다(SHALL). 교차 도메인 구독·발행은 ACL로 금지하며, 운영 환경에서만 예외를 명시적으로 허용한다. 기본 도메인 표기는 운영적 네임스페이스 목적의 “live”를 따른다. 단, 실행 모드 기본값은 WS 결정 부재·만료 시 “compute‑only(backtest, 주문 게이트 OFF)”이다.
 - WorldNodeRef 독립성: 서로 다른 `execution_domain` 조합은 상태·큐·검증 결과를 공유할 수 없다(SHALL). 공유가 필요한 경우 Feature Artifact Plane(§1.4)처럼 불변 아티팩트만 사용한다.
-- Promotion guard: WVG의 `WvgEdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
+- Promotion guard: WVG의 `EdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
 
 ### 1.4 Feature Artifact Plane (Dual-Plane)
 
@@ -167,7 +167,7 @@ sequenceDiagram
   - 월드‑로컬 격리: 유효성·중단 결정은 기본 world‑local로 독립(MUST).
   - 명시적 전파만 허용: 전파는 scope/규칙/TTL 명시 시에만 허용(MUST).
   - 재현성: Validation은 컨텍스트 해시(EvalKey)로 캐시(SHOULD).
-- 월드-로컬 에지 오버라이드: 특정 월드에서 비활성화할 에지는 **WVG**의 `WvgEdgeOverride`로 기록(MAY).
+- 월드-로컬 에지 오버라이드: 특정 월드에서 비활성화할 에지는 **WVG**의 `EdgeOverride`로 기록(MAY).
 - EvalKey (BLAKE3, namespaced)
 ```
 EvalKey = blake3:(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)

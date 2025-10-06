@@ -35,7 +35,7 @@ last_modified: 2025-09-22
 
 - ExecutionDomain: Compute/run context of a world. One of `backtest | dryrun | live | shadow`. Drives gating, queue routing, and validation scope.
 - Domain‑Scoped ComputeKey: Internal dedup/cache key used by DAG Manager and runtimes: `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`. NodeID remains world‑agnostic; ComputeKey enforces cross‑domain/world isolation.
-- WvgEdgeOverride: World‑local reachability control per edge; used to disable cross‑domain paths (e.g., backtest graph → live queues) until policy‑driven enablement.
+- EdgeOverride (WVG scope): World‑local reachability control per edge; used to disable cross‑domain paths (e.g., backtest graph → live queues) until policy‑driven enablement. Implemented by [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }}) and surfaced via the WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) API.
 - 2‑Phase Apply: WorldService operation ensuring safe domain switches: `Freeze/Drain → Switch(domain) → Unfreeze`. Orders are gated OFF while `freeze=true`.
 - Feature Artifact: Immutable output of the Feature Plane identified by `(factor, interval, params, instrument, t, dataset_fingerprint)`. Shared read-only across ExecutionDomains.
 - dataset_fingerprint: Token representing the data snapshot used for validation/promotion; policies and EvalKey MUST include it.
