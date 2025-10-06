@@ -13,7 +13,7 @@ last_modified: 2025-09-22
 
 WorldService is the system of record (SSOT) for Worlds. It owns:
 - World/Policy registry: CRUD, versioning, defaults, rollback
-- Decision engine: data-currency, sample sufficiency, gates/score/constraints, hysteresis → effective_mode (policy string) → execution_domain
+- Decision engine: data-currency, sample sufficiency, gates/score/constraints, hysteresis → effective_mode (policy string). Gateway derives the downstream execution_domain from this mode when relaying decisions/activations.
 - Activation control: per-world activation set for strategies/sides with weights
 - ExecutionDomain as a first-class concept: `backtest | dryrun | live | shadow` per world
 - 2‑Phase apply: Freeze/Drain → Switch → Unfreeze, idempotent with run_id
@@ -92,6 +92,8 @@ RBAC: world-scope roles (owner, reader, operator). Sensitive ops (`apply`, `acti
 
 ## 3. Envelopes (normative)
 
+The canonical Pydantic models for these envelopes live in [`qmtl/services/worldservice/schemas.py`](../../qmtl/services/worldservice/schemas.py). ControlBus fan-out (e.g., `ActivationUpdated`) reuses these payloads; see [`docs/reference/schemas/event_activation_updated.schema.json`](../reference/schemas/event_activation_updated.schema.json) for the CloudEvent wrapper.
+
 DecisionEnvelope
 ```json
 {
@@ -106,8 +108,9 @@ DecisionEnvelope
 ```
 
 `effective_mode` remains the legacy policy string. Gateway/SDK derive an
-ExecutionDomain from it and attach `execution_domain` when relaying the
-decision and activation downstream.
+ExecutionDomain from it and only attach `execution_domain` on the
+ControlBus/WebSocket copies they relay downstream; the field is not part of
+the canonical WorldService schema.
 
 ActivationEnvelope
 ```json
@@ -120,7 +123,6 @@ ActivationEnvelope
   "freeze": false,
   "drain": false,
   "effective_mode": "paper",
-  "execution_domain": "dryrun",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
@@ -133,7 +135,7 @@ Field semantics and precedence
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
-- `execution_domain` is the mapped ExecutionDomain (`backtest|dryrun|live|shadow`) applied by Gateway/SDK. Mapping: `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` is reserved for parallel validation against live feeds without publishing orders.
+- Gateway/SDK derive an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema omits this derived field.
 
 Idempotency: consumers must treat older etag/run_id as no‑ops. Unknown or expired decisions/activations should default to “inactive/safe”.
 
