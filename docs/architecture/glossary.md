@@ -28,7 +28,7 @@ last_modified: 2025-09-22
 - schema_id: Concrete schema registry identifier for lookup/resolution; may change across minor/patch versions without affecting `schema_compat_id`.
 - EvalKey: BLAKE3 hash for world‑local validation cache: `(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`; domain‑scopes validation so backtest/live caches never mix.
 - WorldNodeRef: `(world_id, node_id, execution_domain)` scoped record storing world‑/도메인‑로컬 `status`, `last_eval_key`, and annotations.
-- DecisionEvent: Operational action (`stop|pause|resume|quarantine`) for a `node_id` (strategy root allowed); default `scope=world-local`, optional propagation with TTL.
+- DecisionsRequest: API payload replacing the per-world strategy set; contains an ordered list of unique, non-empty strategy identifiers persisted by WorldService.
 - SSOT boundary: DAG Manager owns GSG only; WorldService owns WVG only. Gateway proxies/caches; it is not an SSOT.
 
 ## Execution Domain & Isolation

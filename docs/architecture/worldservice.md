@@ -56,7 +56,7 @@ WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay r
 
 - WorldNodeRef (DB): `(world_id, node_id, execution_domain)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
 - Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' prefix required**), `result`, `metrics{}`, `timestamp`
-- DecisionEvent (DB/Event): `event_id`, `world_id`, `node_id`, `decision` (`stop|pause|resume|quarantine`), `reason_code`, `scope` (default `world-local`), `propagation_rule`, `ttl`, `timestamp`
+- DecisionsRequest (DB/API): `strategies` (ordered, deduplicated list of strategy identifiers) stored per-world via `/worlds/{world_id}/decisions`
 - **EdgeOverride (DB, WVG scope):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다. 구현은 [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }})와 WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) 라우트가 저장·노출한다.
 
 SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycle and emits changes via ControlBus.
@@ -79,7 +79,7 @@ Bindings
 
 Decisions & Control
 - GET /worlds/{id}/decide?as_of=... → DecisionEnvelope
-- POST /worlds/{id}/decisions       (post operational DecisionEvent; default scope=world-local)
+- POST /worlds/{id}/decisions       (replace world strategy set via DecisionsRequest)
 - GET /worlds/{id}/activation?strategy_id=...&side=... → ActivationEnvelope
 - PUT /worlds/{id}/activation          (manual override; optional TTL)
 - POST /worlds/{id}/evaluate           (plan only)
@@ -173,11 +173,11 @@ TTL & Staleness
 
 The evaluation returns DecisionEnvelope and an optional plan for apply.
 
-### 4‑A. Operational Decision Events (WVG)
+### 4‑A. DecisionsRequest Updates (WVG)
 
-- Default scope is `world-local` (MUST). Non‑local scopes require explicit `scope`, `propagation_rule`, and `ttl`, and follow an approval workflow before consumption.
-- DecisionEvent targets a `node_id` (strategy root allowed). Effects are world‑scoped unless propagation explicitly applies.
-- Storage: DecisionEvents are recorded in WS (DB) and published on ControlBus with an `etag`.
+- `/worlds/{world_id}/decisions` accepts a `DecisionsRequest` and replaces the stored strategy list atomically for that world (MUST).
+- Entries are validated as non-empty strings, deduplicated, and preserved in request order before being persisted (SHALL).
+- Clearing the list removes all active strategies for the world; subsequent `/decide` calls return `validate` mode until strategies are restored (SHOULD).
 
 ### 4‑B. EvalKey and Validation Caching
 

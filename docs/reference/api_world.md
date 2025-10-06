@@ -41,23 +41,29 @@ Response (DecisionEnvelope)
 Schema: reference/schemas/decision_envelope.schema.json
 
 ### POST /worlds/{id}/decisions
-Posts an operational DecisionEvent (stop/pause/resume/quarantine). Default scope is `world-local`. Non‑local scopes require explicit `scope`, `propagation_rule`, and `ttl` and may be subject to approval.
+Replaces the active strategy set for the world. The payload is a `DecisionsRequest`, a lightweight contract that mirrors `qmtl.services.worldservice.schemas.DecisionsRequest`.
 
-Request (DecisionEvent)
+Request (DecisionsRequest)
 ```json
 {
-  "event_id": "...",
-  "world_id": "crypto_mom_1h",
-  "node_id": "blake3:...",
-  "decision": "stop",
-  "reason_code": "VAL_FAIL",
-  "scope": "world-local",
-  "propagation_rule": "none",
-  "ttl": "P0D",
-  "timestamp": "2025-08-28T09:00:00Z"
+  "strategies": ["alpha", "beta"]
 }
 ```
-Schema: reference/schemas/decision_event.schema.json
+
+Semantics
+
+- `strategies` must be a list of non-empty strings. Entries are deduplicated after trimming whitespace while preserving their original order.
+- Supplying an empty list clears all active strategy decisions for the world.
+- The response echoes the persisted strategy list using the same envelope as `/worlds/{id}/bindings`.
+
+Response (BindingsResponse)
+```json
+{
+  "strategies": ["alpha", "beta"]
+}
+```
+
+Schema: reference/schemas/decisions_request.schema.json
 
 ### GET /worlds/{id}/activation
 Returns activation for a strategy/side.

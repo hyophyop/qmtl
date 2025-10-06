@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from .policy_engine import Policy
 from .storage import EXECUTION_DOMAINS, WORLD_NODE_STATUSES
@@ -87,7 +87,26 @@ class ApplyAck(BaseModel):
 
 
 class DecisionsRequest(BaseModel):
-    strategies: List[str]
+    """Canonical payload for updating the active strategy decisions of a world."""
+
+    strategies: List[str] = Field(..., description="Ordered list of strategy identifiers", min_length=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "DecisionsRequest":
+        seen: set[str] = set()
+        normalized: list[str] = []
+        for raw in self.strategies:
+            value = str(raw).strip()
+            if not value:
+                raise ValueError("strategies entries must be non-empty strings")
+            if value in seen:
+                continue
+            seen.add(value)
+            normalized.append(value)
+        self.strategies = normalized
+        return self
 
 
 class BindingsResponse(BaseModel):
