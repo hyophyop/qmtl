@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 import pytest
@@ -43,6 +44,61 @@ async def test_world_proxy_sets_correlation_header(gateway_app_factory) -> None:
     assert resp.status_code == 200
     assert resp.headers["X-Correlation-ID"]
     assert resp.headers["X-Correlation-ID"] == captured.get("cid")
+
+
+@pytest.mark.asyncio
+async def test_world_post_payload_forwarding(gateway_app_factory) -> None:
+    captured: dict[str, Any] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/worlds":
+            captured["method"] = request.method
+            captured["payload"] = json.loads(request.content.decode())
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.post("/worlds", json={"name": "earth"})
+
+    assert resp.status_code == 200
+    assert captured == {"method": "POST", "payload": {"name": "earth"}}
+
+
+@pytest.mark.asyncio
+async def test_world_delete_returns_no_content(gateway_app_factory) -> None:
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/worlds/alpha"):
+            captured["path"] = request.url.path
+            return httpx.Response(204)
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.delete("/worlds/alpha")
+
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert captured.get("path") == "/worlds/alpha"
+
+
+@pytest.mark.asyncio
+async def test_world_activation_injects_query_defaults(
+    gateway_app_factory,
+) -> None:
+    captured: dict[str, dict[str, str]] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.get("/worlds/abc/activation")
+
+    assert resp.status_code == 200
+    assert captured.get("params") == {"strategy_id": "", "side": ""}
 
 
 @pytest.mark.asyncio

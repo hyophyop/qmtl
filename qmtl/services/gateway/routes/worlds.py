@@ -3,7 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import uuid
-from typing import Any, Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -13,6 +14,38 @@ from qmtl.services.gateway.world_client import WorldServiceClient
 from .dependencies import GatewayDependencyProvider
 
 WorldCall = Callable[[WorldServiceClient, dict[str, str]], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
+class WorldRoute:
+    """Declarative route configuration for WorldService proxies."""
+
+    method: str
+    path: str
+    client_method: str
+    path_params: Sequence[str] = ()
+    include_payload: bool = False
+    query_params: Sequence[str] = ()
+    stale_response: bool = False
+    enforce_live_guard: bool = False
+    status_code: int | None = None
+    response_builder: Callable[[Any, dict[str, str]], Response] | None = None
+
+
+_STALE_WARNING = "110 - Response is stale"
+
+
+def _stale_response_builder(result: Any, headers: dict[str, str]) -> Response:
+    data, stale = result
+    resp_headers = dict(headers)
+    if stale:
+        resp_headers["Warning"] = _STALE_WARNING
+        resp_headers["X-Stale"] = "true"
+    return JSONResponse(data, headers=resp_headers)
+
+
+def _no_content_response(_: Any, headers: dict[str, str]) -> Response:
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
 
 
 def _build_world_headers(request: Request) -> tuple[dict[str, str], str]:
@@ -59,257 +92,16 @@ async def _proxy_world_call(
     return builder(data, dict(base_headers))
 
 
-def create_router(deps: GatewayDependencyProvider) -> APIRouter:
-    router = APIRouter()
-
-    @router.post("/worlds")
-    async def create_world(
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.create_world(payload, headers=headers),
-        )
-
-    @router.get("/worlds")
-    async def list_worlds(
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request, world_client, lambda client, headers: client.list_worlds(headers=headers)
-        )
-
-    @router.get("/worlds/{world_id}")
-    async def get_world(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_world(world_id, headers=headers),
-        )
-
-    @router.put("/worlds/{world_id}")
-    async def put_world(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.put_world(world_id, payload, headers=headers),
-        )
-
-    @router.delete(
-        "/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
-    )
-    async def delete_world(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Response:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.delete_world(world_id, headers=headers),
-            response_builder=lambda _data, headers: Response(
-                status_code=status.HTTP_204_NO_CONTENT, headers=headers
-            ),
-        )
-
-    @router.post("/worlds/{world_id}/policies")
-    async def post_world_policy(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.post_policy(world_id, payload, headers=headers),
-        )
-
-    @router.get("/worlds/{world_id}/policies")
-    async def get_world_policies(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_policies(world_id, headers=headers),
-        )
-
-    @router.post("/worlds/{world_id}/set-default")
-    async def post_world_set_default(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.set_default_policy(
-                world_id, payload, headers=headers
-            ),
-        )
-
-    @router.post("/worlds/{world_id}/bindings")
-    async def post_world_bindings(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.post_bindings(world_id, payload, headers=headers),
-        )
-
-    @router.get("/worlds/{world_id}/bindings")
-    async def get_world_bindings(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_bindings(world_id, headers=headers),
-        )
-
-    @router.post("/worlds/{world_id}/decisions")
-    async def post_world_decisions(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.post_decisions(world_id, payload, headers=headers),
-        )
-
-    @router.put("/worlds/{world_id}/activation")
-    async def put_world_activation(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.put_activation(world_id, payload, headers=headers),
-        )
-
-    @router.get("/worlds/{world_id}/audit")
-    async def get_world_audit(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_audit(world_id, headers=headers),
-        )
-
-    @router.get("/worlds/{world_id}/decide")
-    async def get_world_decide(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        def _response(result: Any, headers: dict[str, str]) -> Response:
-            data, stale = result
-            resp_headers = dict(headers)
-            if stale:
-                resp_headers["Warning"] = "110 - Response is stale"
-                resp_headers["X-Stale"] = "true"
-            return JSONResponse(data, headers=resp_headers)
-
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_decide(world_id, headers=headers),
-            response_builder=_response,
-        )
-
-    @router.get("/worlds/{world_id}/activation")
-    async def get_world_activation(
-        world_id: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        strategy_id = request.query_params.get("strategy_id", "")
-        side = request.query_params.get("side", "")
-
-        def _response(result: Any, headers: dict[str, str]) -> Response:
-            data, stale = result
-            resp_headers = dict(headers)
-            if stale:
-                resp_headers["Warning"] = "110 - Response is stale"
-                resp_headers["X-Stale"] = "true"
-            return JSONResponse(data, headers=resp_headers)
-
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_activation(
-                world_id, strategy_id, side, headers=headers
-            ),
-            response_builder=_response,
-        )
-
-    @router.get("/worlds/{world_id}/{topic}/state_hash")
-    async def get_world_state_hash(
-        world_id: str,
-        topic: str,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.get_state_hash(world_id, topic, headers=headers),
-        )
-
-    @router.post("/worlds/{world_id}/evaluate")
-    async def post_world_evaluate(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.post_evaluate(world_id, payload, headers=headers),
-        )
-
-    @router.post("/worlds/{world_id}/apply")
-    async def post_world_apply(
-        world_id: str,
-        payload: dict,
-        request: Request,
-        enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
-        world_client: WorldServiceClient = Depends(deps.provide_world_client),
-    ) -> Any:
-        if enforce_live_guard and request.headers.get("X-Allow-Live") != "true":
+async def _execute_world_call(
+    config: WorldRoute,
+    request: Request,
+    payload: dict | None,
+    world_client: WorldServiceClient,
+    path_params: dict[str, str],
+    enforce_live_guard: bool | None,
+) -> Response:
+    if config.enforce_live_guard and enforce_live_guard:
+        if request.headers.get("X-Allow-Live") != "true":
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -317,11 +109,241 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                     "message": "live trading not allowed",
                 },
             )
-        return await _proxy_world_call(
-            request,
-            world_client,
-            lambda client, headers: client.post_apply(world_id, payload, headers=headers),
-        )
+
+    args: list[Any] = [path_params[param] for param in config.path_params]
+
+    for query_param in config.query_params:
+        args.append(request.query_params.get(query_param, ""))
+
+    if config.include_payload:
+        args.append(payload)
+
+    async def _call(client: WorldServiceClient, headers: dict[str, str]) -> Any:
+        method = getattr(client, config.client_method)
+        return await method(*args, headers=headers)
+
+    response_builder = config.response_builder
+    if response_builder is None and config.stale_response:
+        response_builder = _stale_response_builder
+
+    return await _proxy_world_call(
+        request,
+        world_client,
+        _call,
+        response_builder=response_builder,
+    )
+
+
+def _register_world_route(
+    router: APIRouter,
+    deps: GatewayDependencyProvider,
+    config: WorldRoute,
+) -> None:
+    # Validate client method exists early to surface typos.
+    getattr(WorldServiceClient, config.client_method)
+
+    route_kwargs: dict[str, Any] = {}
+    if config.status_code is not None:
+        route_kwargs["status_code"] = config.status_code
+        if config.status_code == status.HTTP_204_NO_CONTENT:
+            route_kwargs["response_model"] = None
+
+    registrar = getattr(router, config.method.lower())
+
+    if config.include_payload and config.enforce_live_guard:
+
+        @registrar(config.path, **route_kwargs)
+        async def endpoint(
+            payload: dict,
+            request: Request,
+            enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+            world_client: WorldServiceClient = Depends(deps.provide_world_client),
+            **path_params: str,
+        ) -> Response:
+            return await _execute_world_call(
+                config,
+                request,
+                payload,
+                world_client,
+                path_params,
+                enforce_live_guard,
+            )
+
+    elif config.include_payload:
+
+        @registrar(config.path, **route_kwargs)
+        async def endpoint(
+            payload: dict,
+            request: Request,
+            world_client: WorldServiceClient = Depends(deps.provide_world_client),
+            **path_params: str,
+        ) -> Response:
+            return await _execute_world_call(
+                config,
+                request,
+                payload,
+                world_client,
+                path_params,
+                None,
+            )
+
+    elif config.enforce_live_guard:
+
+        @registrar(config.path, **route_kwargs)
+        async def endpoint(
+            request: Request,
+            enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+            world_client: WorldServiceClient = Depends(deps.provide_world_client),
+            **path_params: str,
+        ) -> Response:
+            return await _execute_world_call(
+                config,
+                request,
+                None,
+                world_client,
+                path_params,
+                enforce_live_guard,
+            )
+
+    else:
+
+        @registrar(config.path, **route_kwargs)
+        async def endpoint(
+            request: Request,
+            world_client: WorldServiceClient = Depends(deps.provide_world_client),
+            **path_params: str,
+        ) -> Response:
+            return await _execute_world_call(
+                config,
+                request,
+                None,
+                world_client,
+                path_params,
+                None,
+            )
+
+
+WORLD_ROUTES: tuple[WorldRoute, ...] = (
+    WorldRoute("post", "/worlds", "create_world", include_payload=True),
+    WorldRoute("get", "/worlds", "list_worlds"),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}",
+        "get_world",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
+        "put",
+        "/worlds/{world_id}",
+        "put_world",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "delete",
+        "/worlds/{world_id}",
+        "delete_world",
+        path_params=("world_id",),
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_builder=_no_content_response,
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/policies",
+        "post_policy",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/policies",
+        "get_policies",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/set-default",
+        "set_default_policy",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/bindings",
+        "post_bindings",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/bindings",
+        "get_bindings",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/decisions",
+        "post_decisions",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "put",
+        "/worlds/{world_id}/activation",
+        "put_activation",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/audit",
+        "get_audit",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/decide",
+        "get_decide",
+        path_params=("world_id",),
+        stale_response=True,
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/activation",
+        "get_activation",
+        path_params=("world_id",),
+        query_params=("strategy_id", "side"),
+        stale_response=True,
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/{topic}/state_hash",
+        "get_state_hash",
+        path_params=("world_id", "topic"),
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/evaluate",
+        "post_evaluate",
+        path_params=("world_id",),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/apply",
+        "post_apply",
+        path_params=("world_id",),
+        include_payload=True,
+        enforce_live_guard=True,
+    ),
+)
+
+
+def create_router(deps: GatewayDependencyProvider) -> APIRouter:
+    router = APIRouter()
+
+    for route in WORLD_ROUTES:
+        _register_world_route(router, deps, route)
 
     return router
 
