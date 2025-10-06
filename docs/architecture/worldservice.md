@@ -92,7 +92,7 @@ RBAC: world-scope roles (owner, reader, operator). Sensitive ops (`apply`, `acti
 
 ## 3. Envelopes (normative)
 
-The canonical Pydantic models for these envelopes live in [`qmtl/services/worldservice/schemas.py`](../../qmtl/services/worldservice/schemas.py). ControlBus fan-out (e.g., `ActivationUpdated`) reuses these payloads; see [`docs/reference/schemas/event_activation_updated.schema.json`](../reference/schemas/event_activation_updated.schema.json) for the CloudEvent wrapper.
+The canonical Pydantic models for these envelopes live in [`qmtl/services/worldservice/schemas.py`]({{ code_url('qmtl/services/worldservice/schemas.py') }}). ControlBus fan-out (e.g., `ActivationUpdated`) reuses these payloads; see [`docs/reference/schemas/event_activation_updated.schema.json`](../reference/schemas/event_activation_updated.schema.json) for the CloudEvent wrapper.
 
 DecisionEnvelope
 ```json

@@ -4,7 +4,7 @@ import base64
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -97,7 +97,7 @@ async def _execute_world_call(
     request: Request,
     payload: dict | None,
     world_client: WorldServiceClient,
-    path_params: dict[str, str],
+    path_params: Mapping[str, str],
     enforce_live_guard: bool | None,
 ) -> Response:
     if config.enforce_live_guard and enforce_live_guard:
@@ -158,14 +158,13 @@ def _register_world_route(
             request: Request,
             enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
             world_client: WorldServiceClient = Depends(deps.provide_world_client),
-            **path_params: str,
         ) -> Response:
             return await _execute_world_call(
                 config,
                 request,
                 payload,
                 world_client,
-                path_params,
+                request.path_params,
                 enforce_live_guard,
             )
 
@@ -176,14 +175,13 @@ def _register_world_route(
             payload: dict,
             request: Request,
             world_client: WorldServiceClient = Depends(deps.provide_world_client),
-            **path_params: str,
         ) -> Response:
             return await _execute_world_call(
                 config,
                 request,
                 payload,
                 world_client,
-                path_params,
+                request.path_params,
                 None,
             )
 
@@ -194,14 +192,13 @@ def _register_world_route(
             request: Request,
             enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
             world_client: WorldServiceClient = Depends(deps.provide_world_client),
-            **path_params: str,
         ) -> Response:
             return await _execute_world_call(
                 config,
                 request,
                 None,
                 world_client,
-                path_params,
+                request.path_params,
                 enforce_live_guard,
             )
 
@@ -211,14 +208,13 @@ def _register_world_route(
         async def endpoint(
             request: Request,
             world_client: WorldServiceClient = Depends(deps.provide_world_client),
-            **path_params: str,
         ) -> Response:
             return await _execute_world_call(
                 config,
                 request,
                 None,
                 world_client,
-                path_params,
+                request.path_params,
                 None,
             )
 
