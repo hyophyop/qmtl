@@ -17,6 +17,7 @@ __all__ = [
     "build_strategy_compute_context",
     "build_worldservice_compute_context",
     "coerce_compute_context",
+    "canonicalize_world_mode",
 ]
 
 DEFAULT_EXECUTION_DOMAIN = "default"
@@ -47,17 +48,31 @@ _DRYRUN_TOKENS = {
 _LIVE_TOKENS = {"live", "prod", "production"}
 _SHADOW_TOKENS = {"shadow"}
 
-_WORLD_MODE_TOKENS = {
+_CANONICAL_WORLD_MODE_TO_DOMAIN = {
     "validate": "backtest",
     "compute-only": "backtest",
-    "compute_only": "backtest",
     "paper": "dryrun",
-    "papertrade": "dryrun",
-    "papertrading": "dryrun",
-    "paper_trading": "dryrun",
+    "live": "live",
+    "shadow": "shadow",
+}
+
+_WORLD_MODE_ALIASES = {
+    "validate": "validate",
+    "compute-only": "compute-only",
+    "compute_only": "compute-only",
+    "computeonly": "compute-only",
+    "paper": "paper",
+    "papertrade": "paper",
+    "papertrading": "paper",
+    "paper_trading": "paper",
     "live": "live",
     "active": "live",
     "shadow": "shadow",
+}
+
+_WORLD_MODE_TOKENS = {
+    alias: _CANONICAL_WORLD_MODE_TO_DOMAIN[canonical]
+    for alias, canonical in _WORLD_MODE_ALIASES.items()
 }
 
 
@@ -290,11 +305,20 @@ def build_strategy_compute_context(meta: Mapping[str, Any] | None) -> ComputeCon
     )
 
 
-def _resolve_world_mode(value: Any | None) -> str:
+def canonicalize_world_mode(value: Any | None) -> str:
+    """Normalize world policy modes to the canonical vocabulary."""
+
     if not isinstance(value, str):
-        return "backtest"
-    key = value.strip().lower()
-    return _WORLD_MODE_TOKENS.get(key, "backtest")
+        return "validate"
+    token = value.strip().lower()
+    if not token:
+        return "validate"
+    return _WORLD_MODE_ALIASES.get(token, "validate")
+
+
+def _resolve_world_mode(value: Any | None) -> str:
+    canonical = canonicalize_world_mode(value)
+    return _CANONICAL_WORLD_MODE_TO_DOMAIN.get(canonical, "backtest")
 
 
 def build_worldservice_compute_context(
