@@ -1,5 +1,5 @@
 # Index of templates
 
 - [Document skeleton](template.md)
-- [Backend stack configuration template](backend_stack.example.yml)
-- [Local stack configuration template](local_stack.example.yml)
+- {{ code_link('qmtl/examples/templates/backend_stack.example.yml', text='Backend stack configuration template') }}
+- {{ code_link('qmtl/examples/templates/local_stack.example.yml', text='Local stack configuration template') }}
