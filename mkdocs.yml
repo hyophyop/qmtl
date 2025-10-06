@@ -99,8 +99,8 @@ nav:
   - Templates:
       - Index: templates/index.md
       - Document Skeleton: templates/template.md
-      - Backend Stack Config: templates/backend_stack.example.yml
-      - Local Stack Config: templates/local_stack.example.yml
+      - Backend Stack Config: templates/backend_stack.md
+      - Local Stack Config: templates/local_stack.md
 plugins:
   - search
   - macros
