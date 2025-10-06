@@ -36,3 +36,14 @@ curl -X POST /worlds/alpha/apply \
 ```
 
 The response contains the active strategies after evaluation.
+
+```json
+{
+  "ok": true,
+  "run_id": "...",
+  "active": ["alpha-core", "alpha-hedge"],
+  "phase": "completed"
+}
+```
+
+`ok` defaults to `true`, `active` mirrors the persisted strategy roster (empty when nothing is active), and `phase` is optional—`completed` for successful runs, or another stage while the 2‑Phase apply is still progressing.

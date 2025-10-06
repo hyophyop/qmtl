@@ -125,7 +125,9 @@ class ApplyRequest(BaseModel):
 
 @app.post("/worlds/{wid}/apply")
 async def apply(wid: str, req: ApplyRequest) -> dict:
-    return {"ok": True, "run_id": req.run_id}
+    plan = req.plan or {}
+    active = list(plan.get("activate", [])) if isinstance(plan, dict) else []
+    return {"ok": True, "run_id": req.run_id, "active": active, "phase": "completed"}
 
 
 def main() -> None:
