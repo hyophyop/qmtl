@@ -198,6 +198,28 @@ async def test_apply_rejects_invalid_gating_policy():
 
 
 @pytest.mark.asyncio
+async def test_decide_effective_mode_canonicalised():
+    app = create_app()
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "mode-test"})
+
+            resp = await client.get("/worlds/mode-test/decide")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["effective_mode"] == "validate"
+
+            await client.post(
+                "/worlds/mode-test/decisions", json={"strategies": ["s-live"]}
+            )
+
+            live_resp = await client.get("/worlds/mode-test/decide")
+            assert live_resp.status_code == 200
+            live_body = live_resp.json()
+            assert live_body["effective_mode"] == "live"
+
+
+@pytest.mark.asyncio
 async def test_history_metadata_in_decision_envelope():
     app = create_app()
     async with httpx.ASGITransport(app=app) as asgi:

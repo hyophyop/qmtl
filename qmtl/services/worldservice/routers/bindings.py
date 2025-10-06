@@ -7,6 +7,7 @@ from fastapi import APIRouter, Response
 
 from ..schemas import BindingsResponse, DecisionEnvelope, DecisionsRequest
 from ..services import WorldService
+from qmtl.foundation.common.compute_context import canonicalize_world_mode
 
 
 def create_bindings_router(service: WorldService) -> APIRouter:
@@ -31,7 +32,8 @@ def create_bindings_router(service: WorldService) -> APIRouter:
         version = await store.default_policy_version(world_id)
         now = datetime.now(timezone.utc)
         strategies = await store.get_decisions(world_id)
-        effective_mode = 'active' if strategies else 'validate'
+        candidate_mode = 'active' if strategies else 'validate'
+        effective_mode = canonicalize_world_mode(candidate_mode)
         reason = 'policy_evaluated' if strategies else 'no_active_strategies'
         ttl = '300s'
         metadata = await store.latest_history_metadata(world_id)

@@ -219,7 +219,7 @@ GET /worlds/{world}/decide?as_of=2025-08-28T09:00:00Z HTTP/1.1
 → {
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
-  "effective_mode": "validate",   # validate|active
+  "effective_mode": "validate",   # validate|compute-only|paper|live (placeholder worlds default to validate)
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",                   # 캐시 유효 시간(권장)
