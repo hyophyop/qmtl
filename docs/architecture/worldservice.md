@@ -57,7 +57,7 @@ WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay r
 - WorldNodeRef (DB): `(world_id, node_id, execution_domain)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
 - Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' prefix required**), `result`, `metrics{}`, `timestamp`
 - DecisionEvent (DB/Event): `event_id`, `world_id`, `node_id`, `decision` (`stop|pause|resume|quarantine`), `reason_code`, `scope` (default `world-local`), `propagation_rule`, `ttl`, `timestamp`
-- **WvgEdgeOverride (DB):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다.
+- **EdgeOverride (DB, WVG scope):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다. 구현은 [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }})와 WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) 라우트가 저장·노출한다.
 
 SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycle and emits changes via ControlBus.
 
@@ -147,7 +147,7 @@ TTL & Staleness
 
 - Domains: `backtest | dryrun | live | shadow`.
 - Isolation invariants:
-  - Cross‑domain edges MUST be disabled by default via `WvgEdgeOverride` until a policy explicitly enables them post‑promotion.
+  - Cross‑domain edges MUST be disabled by default via `EdgeOverride` until a policy explicitly enables them post‑promotion.
   - Orders are always gated OFF while `freeze=true` during 2‑Phase apply.
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain → Switch(domain) → Unfreeze`.
 - 2‑Phase Apply protocol (SHALL):
