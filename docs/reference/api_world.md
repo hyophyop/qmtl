@@ -132,8 +132,17 @@ Request
 
 Response
 ```json
-{ "ok": true, "run_id": "..." }
+{
+  "ok": true,
+  "run_id": "...",
+  "active": ["s1", "s2"],
+  "phase": "completed"
+}
 ```
+
+- `ok` defaults to `true` and only flips to `false` if the apply run aborts.
+- `active` always echoes the persisted strategy list after the apply completes (empty when nothing is active).
+- `phase` is optional; when present it reflects the final stage (`completed`, `rolled_back`, etc.). Intermediate polling may observe `phase` transitions such as `freeze` or `switch`.
 
 ### POST /events/subscribe
 Returns an opaque event stream descriptor for real‑time control updates (activation/queues/policy).

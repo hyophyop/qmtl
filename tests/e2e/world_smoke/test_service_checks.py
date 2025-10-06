@@ -162,7 +162,10 @@ def test_service_mode_evaluate_apply_roundtrip():
         pytest.skip("/worlds/{id}/apply not available")
 
     assert apply_js.get("run_id", run_id) == run_id
-    assert apply_js.get("ok") in (True, 1, "true")
+    assert apply_js.get("ok", True) in (True, 1, "true")
+    assert isinstance(apply_js.get("active"), list)
+    if "phase" in apply_js:
+        assert isinstance(apply_js["phase"], str) and apply_js["phase"]
 
 
 @pytest.mark.order(8)

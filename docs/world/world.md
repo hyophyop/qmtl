@@ -256,8 +256,17 @@ POST /worlds/{world}/evaluate HTTP/1.1
 ```http
 POST /worlds/{world}/apply HTTP/1.1
 { "run_id": "...", "plan": { ... } }
-→ { "ok": true, "run_id": "..." }
+→ {
+  "ok": true,
+  "run_id": "...",
+  "active": ["s1", "s2"],
+  "phase": "completed"
+}
 ```
+
+- `ok` 기본값은 `true`이며 적용(run) 중단 시에만 `false`로 내려간다.
+- `active`는 적용 이후 월드에 남아 있는 활성 전략 ID 목록을 그대로 반환한다(없으면 빈 배열).
+- `phase`는 옵션 필드이며 `freeze` → `switch` → `unfreeze` → `completed` 등 2‑Phase 진행 단계를 나타낸다. 롤백이 발생하면 `rolled_back`으로 종료된다.
 
 이벤트 구독(은닉 ControlBus 핸드오버)
 
