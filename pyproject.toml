@@ -69,11 +69,14 @@ include = ["qmtl*"]
 "qmtl.examples" = [
   "*.py",
   "*.yml",
+  "*.yaml",
   "templates/*.yml",
   "gitignore",
   "README.md",
   "data/*.csv",
   "*.csv",
+  "seamless/*.yaml",
+  "seamless/*.yml",
   "notebooks/*.ipynb",
 ]
 "qmtl.foundation.schema" = [

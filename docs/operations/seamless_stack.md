@@ -11,8 +11,10 @@ The repository ships the following artifacts:
   the Seamless backfill coordinator, QuestDB, Redis, and MinIO.
 - `operations/seamless/.env.example` – Baseline environment variables for the
   Compose stack and Seamless SDK.
-- `operations/seamless/presets.yaml` – SLA and conformance presets aligned with
-  the QMTL SDK defaults.
+- `qmtl/examples/seamless/presets.yaml` – SLA and conformance presets aligned
+  with the QMTL SDK defaults. A convenience copy remains under
+  `operations/seamless/presets.yaml` for operators working from the repository
+  checkout.
 - `operations/seamless/README.md` – Detailed documentation of services and
   configuration options.
 
