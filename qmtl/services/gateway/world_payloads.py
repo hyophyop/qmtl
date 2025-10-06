@@ -44,7 +44,10 @@ def augment_activation_payload(payload: Any) -> Any:
         return payload
 
     domain = resolve_execution_domain(payload.get("effective_mode"))
-    payload["execution_domain"] = domain
+    if domain is not None:
+        payload["execution_domain"] = domain
+    else:
+        payload.pop("execution_domain", None)
     return payload
 
 
