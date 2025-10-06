@@ -19,7 +19,7 @@ class ActivationEnvelope(BaseModel):
     weight: StrictFloat
     freeze: Optional[bool] = None
     drain: Optional[bool] = None
-    effective_mode: Optional[Literal["compute-only", "paper", "live"]] = None
+    effective_mode: Optional[Literal["validate", "compute-only", "paper", "live"]] = None
     etag: StrictStr
     run_id: Optional[StrictStr] = None
     ts: StrictStr
@@ -36,7 +36,7 @@ class ActivationUpdated(BaseModel):
     weight: StrictFloat
     freeze: Optional[bool] = None
     drain: Optional[bool] = None
-    effective_mode: Optional[Literal["compute-only", "paper", "live"]] = None
+    effective_mode: Optional[Literal["validate", "compute-only", "paper", "live"]] = None
     etag: StrictStr
     run_id: Optional[StrictStr] = None
     ts: StrictStr
