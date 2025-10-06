@@ -50,6 +50,25 @@ io = ["pandas"]
 ccxt = ["ccxt"]
 questdb = ["asyncpg"]
 
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis>=6.100",
+    "jsonschema>=4.0.0",
+    "fakeredis",
+    "grpcio-tools>=1.74.0",
+    "pyarrow",
+    "mkdocs-material",
+    "mkdocs-macros-plugin",
+    "mkdocs-breadcrumbs-plugin",
+    "websocket-client",
+]
+
 [project.scripts]
 qmtl = "qmtl.interfaces.cli:main"
 qmtl-commitlog-consumer = "qmtl.services.gateway.commit_log_cli:main"
