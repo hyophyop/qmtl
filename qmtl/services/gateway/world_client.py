@@ -12,7 +12,7 @@ from qmtl.foundation.common.compute_context import ComputeContext
 from . import metrics as gw_metrics
 from .caches import ActivationCache, TTLCache, TTLCacheResult
 from .transport import BreakerRetryTransport
-from .world_payloads import augment_decision_payload
+from .world_payloads import augment_activation_payload, augment_decision_payload
 
 
 @dataclass
@@ -245,7 +245,7 @@ class WorldServiceClient:
             gw_metrics.record_worlds_stale_response()
             return cached_payload, True
         resp.raise_for_status()
-        data = resp.json()
+        data = augment_activation_payload(resp.json())
         new_etag = resp.headers.get("ETag")
         if new_etag:
             self._activation_cache.set(key, new_etag, data)

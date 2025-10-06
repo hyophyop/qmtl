@@ -82,6 +82,45 @@ async def test_activation_backend_error_no_cache(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("effective_mode", "expected_domain"),
+    [
+        ("validate", "backtest"),
+        ("compute-only", "backtest"),
+        ("paper", "dryrun"),
+        ("live", "live"),
+        ("shadow", "shadow"),
+    ],
+)
+async def test_activation_execution_domain_augmentation(
+    gateway_app_factory, effective_mode, expected_domain
+) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            return httpx.Response(
+                200,
+                json={
+                    "world_id": "w",
+                    "strategy_id": "s",
+                    "side": "long",
+                    "effective_mode": effective_mode,
+                },
+                headers={"ETag": "etag"},
+            )
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.get(
+            "/worlds/w/activation",
+            params={"strategy_id": "s", "side": "long"},
+        )
+
+    data = resp.json()
+    assert data["effective_mode"] == effective_mode
+    assert data["execution_domain"] == expected_domain
+
+
+@pytest.mark.asyncio
 async def test_state_hash_probe_divergence(gateway_app_factory) -> None:
     hashes = ["h1", "h1", "h2"]
     calls = {"hash": 0, "snap": 0}
