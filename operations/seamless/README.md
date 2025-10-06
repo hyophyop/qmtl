@@ -12,7 +12,11 @@ artifact bucket) together with opinionated SLA and conformance presets.
 | `.env.example` | Seed environment variables that the Seamless runtime and Compose stack expect. Copy it to `.env` before launching containers. |
 | `.gitignore` | Prevents accidental commits of local `.env` overrides. |
 | `docker-compose.seamless.yml` | Compose bundle for the coordinator, QuestDB, Redis, and MinIO services. |
-| `presets.yaml` | Reference SLA and conformance presets that align with the provider defaults. |
+| `presets.yaml` | Reference SLA and conformance presets that align with the provider defaults. Packaged copy lives in `qmtl/examples/seamless/presets.yaml`. |
+
+> **Note:** The packaged copy is distributed with the `qmtl.examples`
+> module so SDK consumers can load presets without checking out the operations
+> assets.
 
 ## Services
 
@@ -84,7 +88,9 @@ from qmtl.runtime.sdk.sla import SLAPolicy
 from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 
-with open("operations/seamless/presets.yaml", "r", encoding="utf-8") as handle:
+from qmtl.examples.seamless import open_presets
+
+with open_presets() as handle:
     presets = yaml.safe_load(handle)
 
 sla_config = presets["sla_presets"]["baseline"]["policy"]
