@@ -4,7 +4,7 @@ Wrapper nodes for pre-trade checks, order sizing, execution, fill ingestion,
 portfolio updates, risk controls and timing gates. These classes bridge
 strategy signals with exchange node sets described in
 [exchange_node_sets.md](exchange_node_sets.md) and rely on helper modules
-under `qmtl/sdk`.
+under `qmtl/runtime/sdk`.
 
 Usage note
 - In typical strategies you should attach a prebuilt Node Set (wrapper) rather than wiring these nodes one by one. The Node Set API provides a convenient, stable surface while allowing internal node composition to evolve.
