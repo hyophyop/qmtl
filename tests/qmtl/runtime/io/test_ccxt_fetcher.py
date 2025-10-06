@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+import types
 import pandas as pd
 import pytest
 
@@ -241,4 +243,87 @@ async def test_ccxt_fetcher_key_template_optional_section(monkeypatch):
     key, kwargs = calls[0]
     assert key == "ccxt:binance"
     assert kwargs.get("key_suffix") is None
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_reuses_limiter(monkeypatch):
+    limiter_calls = 0
+    limiter = _DummyLimiter()
+
+    async def _fake_get_limiter(key: str, **kwargs):
+        nonlocal limiter_calls
+        limiter_calls += 1
+        return limiter
+
+    monkeypatch.setattr(
+        "qmtl.runtime.io.ccxt_fetcher.get_limiter", _fake_get_limiter
+    )
+
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+        rate_limiter=RateLimiterConfig(),
+    )
+    ex = _StubExchange([[[60_000, 1, 1, 1, 1, 1]]])
+    fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
+
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+
+    assert limiter_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ccxt_fetcher_reuses_cached_exchange(monkeypatch):
+    class _FakeOhlcvExchange:
+        instances: list["_FakeOhlcvExchange"] = []
+
+        def __init__(self, options):
+            self.options = options
+            self.fetch_calls = 0
+            self.close_calls = 0
+            type(self).instances.append(self)
+
+        async def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None):
+            self.fetch_calls += 1
+            await asyncio.sleep(0)
+            return []
+
+        async def close(self):
+            self.close_calls += 1
+            await asyncio.sleep(0)
+
+    module = types.ModuleType("ccxt.async_support")
+    module.binance = _FakeOhlcvExchange
+    parent = types.ModuleType("ccxt")
+    parent.async_support = module
+    monkeypatch.setitem(sys.modules, "ccxt", parent)
+    monkeypatch.setitem(sys.modules, "ccxt.async_support", module)
+
+    limiter = _DummyLimiter()
+
+    async def _fake_get_limiter(key: str, **kwargs):
+        return limiter
+
+    monkeypatch.setattr(
+        "qmtl.runtime.io.ccxt_fetcher.get_limiter", _fake_get_limiter
+    )
+
+    _FakeOhlcvExchange.instances.clear()
+
+    cfg = CcxtBackfillConfig(
+        exchange_id="binance",
+        symbols=["BTC/USDT"],
+        timeframe="1m",
+    )
+    fetcher = CcxtOHLCVFetcher(cfg)
+
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+    await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
+
+    assert len(_FakeOhlcvExchange.instances) == 1
+    instance = _FakeOhlcvExchange.instances[0]
+    assert instance.fetch_calls >= 1
+    assert instance.close_calls == 2
 
