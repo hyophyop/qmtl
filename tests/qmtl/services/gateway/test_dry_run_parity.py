@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from qmtl.services.gateway.api import create_app, Database
 from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway.routes.strategies import _ack_from_result
+from qmtl.services.gateway.strategy_submission import StrategySubmissionResult
 from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 from qmtl.foundation.proto import dagmanager_pb2
 from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
@@ -86,6 +88,30 @@ def _payload_for(dag: dict) -> StrategySubmit:
     )
 
 
+def test_ack_from_result_copies_submission_result_fields():
+    result = StrategySubmissionResult(
+        strategy_id="s-1",
+        queue_map={"node": [{"queue": "q", "global": False}]},
+        sentinel_id="sentinel",
+        node_ids_crc32=1234,
+        downgraded=True,
+        downgrade_reason="missing-context",
+        safe_mode=True,
+    )
+
+    ack = _ack_from_result(result)
+
+    assert ack.model_dump() == {
+        "strategy_id": "s-1",
+        "queue_map": {"node": [{"queue": "q", "global": False}]},
+        "sentinel_id": "sentinel",
+        "node_ids_crc32": 1234,
+        "downgraded": True,
+        "downgrade_reason": "missing-context",
+        "safe_mode": True,
+    }
+
+
 def test_dry_run_matches_submit_queue_map_and_sentinel(fake_redis):
     dag_client = DummyDagClient()
     app = create_app(redis_client=fake_redis, database=FakeDB(), dag_client=dag_client, enable_background=False)
@@ -107,12 +133,19 @@ def test_dry_run_matches_submit_queue_map_and_sentinel(fake_redis):
         submit = c.post("/strategies", json=payload.model_dump())
         assert submit.status_code == 202
 
-        dq = dry.json()["queue_map"]
-        sq = submit.json()["queue_map"]
+        dry_payload = dry.json()
+        submit_payload = submit.json()
+
+        dq = dry_payload["queue_map"]
+        sq = submit_payload["queue_map"]
         # Compare ignoring order of queues per node
         def _norm(m: dict[str, list[dict]]):
             return {k: sorted(v, key=lambda x: (bool(x.get("global")), x.get("queue"))) for k, v in m.items()}
         assert _norm(dq) == _norm(sq)
         # sentinel_id should be present in both responses
-        assert "sentinel_id" in dry.json()
-        assert "sentinel_id" in submit.json()
+        assert "sentinel_id" in dry_payload
+        assert "sentinel_id" in submit_payload
+
+        assert set(dry_payload) == set(submit_payload)
+        for key in ("node_ids_crc32", "downgraded", "downgrade_reason", "safe_mode"):
+            assert dry_payload[key] == submit_payload[key]
