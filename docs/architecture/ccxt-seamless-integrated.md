@@ -239,7 +239,6 @@ assembly = build_seamless_assembly(config)
   - Purpose: File-system artifact registrar using env configuration
   - Options: none (honors `QMTL_SEAMLESS_ARTIFACTS=1`, `QMTL_SEAMLESS_ARTIFACT_DIR`); `stabilization_bars` override supported.
 
-<<<<<<< HEAD
 - `ccxt.bundle.ohlcv_live`
   - Purpose: Convenience bundle that applies `ccxt.questdb.ohlcv` and `ccxt.live.pro` together
   - Options: union of both presets; typical: `exchange_id`, `symbols`, `timeframe`, `questdb`, and live options like `reconnect_backoff_ms`
