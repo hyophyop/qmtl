@@ -111,5 +111,11 @@ def test_strict_history_detects_missing_points() -> None:
     timestamps = [0, 10, 30, 40]
     coverage = [(0, 40)]
 
-    with pytest.raises(RuntimeError):
-        ensure_strict_history(timestamps, interval=10, required_points=5, coverage=coverage)
+    with pytest.raises(
+        RuntimeError,
+        match=r"expected 5 points in \[0, 40\] at interval 10",
+    ) as exc:
+        ensure_strict_history(
+            timestamps, interval=10, required_points=5, coverage=coverage
+        )
+    assert "total=4" in str(exc.value)
