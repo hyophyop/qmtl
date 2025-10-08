@@ -115,7 +115,12 @@ class StrategyBootstrapper:
             )
             if isinstance(ack, dict):
                 if "error" in ack:
-                    raise RuntimeError(ack["error"])
+                    error_detail = str(ack.get("error") or "unknown error")
+                    raise RuntimeError(
+                        "Gateway rejected strategy submission: "
+                        f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
+                        f"gateway_url={gateway_url})"
+                    )
                 if isinstance(ack.get("strategy_id"), str):
                     strategy_id = ack["strategy_id"]
                 queue_map = ack.get("queue_map", ack)
