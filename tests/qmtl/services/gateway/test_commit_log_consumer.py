@@ -39,6 +39,26 @@ def test_commit_log_deduplicator_evicts_old_keys():
     assert list(dedup.filter([r1])) == [r1]
 
 
+def test_commit_log_deduplicator_counts_replay_duplicates_per_process():
+    metrics.reset_metrics()
+
+    first_batch = [
+        ("n1", 100, "h1", {"a": 1}),
+        ("n1", 100, "h1", {"a": 2}),
+    ]
+
+    # Process A receives a batch with a duplicate window hash and filters it out.
+    dedup_a = CommitLogDeduplicator()
+    assert list(dedup_a.filter(first_batch)) == [first_batch[0]]
+    assert metrics.commit_duplicate_total._value.get() == 1
+
+    # Simulate a restart: Process B has a fresh deduplicator state and must rely on
+    # per-process filtering. Cross-process deduplication is intentionally out of scope.
+    dedup_b = CommitLogDeduplicator()
+    assert list(dedup_b.filter(first_batch)) == [first_batch[0]]
+    assert metrics.commit_duplicate_total._value.get() == 2
+
+
 @pytest.mark.asyncio
 async def test_concurrent_workers_single_commit() -> None:
     metrics.reset_metrics()
