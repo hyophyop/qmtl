@@ -1,6 +1,7 @@
 import asyncio
 import pytest
 import grpc
+from collections import defaultdict
 
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
@@ -114,6 +115,69 @@ async def test_diff_retries(monkeypatch):
     assert result.queue_map == {_queue_key("A"): "t"}
     assert get_calls() == 3
     assert get_acks() == 1
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_diff_stream_timeout_retries_and_recovers(monkeypatch):
+    queue_key_a = _queue_key("A")
+    queue_key_b = _queue_key("B")
+    chunk_a = dagmanager_pb2.DiffChunk(
+        queue_map={queue_key_a: "topic_a"}, sentinel_id="s", crc32=987
+    )
+    chunk_b = dagmanager_pb2.DiffChunk(
+        queue_map={queue_key_b: "topic_b"}, sentinel_id="s", crc32=987
+    )
+
+    call_count = 0
+    ack_counter: defaultdict[int, int] = defaultdict(int)
+
+    class TimeoutStub:
+        def __init__(self, channel):
+            pass
+
+        def Diff(self, request):
+            nonlocal call_count
+            call_count += 1
+
+            async def gen():
+                yield chunk_a
+                if call_count == 1:
+                    raise grpc.RpcError("stream timeout")
+                yield chunk_b
+
+            return gen()
+
+        async def AckChunk(self, ack):
+            ack_counter[call_count] += 1
+            return ack
+
+    wait_calls = 0
+
+    async def fake_wait(self, timeout: float = 5.0) -> None:
+        nonlocal wait_calls
+        wait_calls += 1
+
+    monkeypatch.setattr(dagmanager_pb2_grpc, "DiffServiceStub", TimeoutStub)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
+    monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
+    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+    monkeypatch.setattr(DagManagerClient, "_wait_for_service", fake_wait)
+
+    client = DagManagerClient("127.0.0.1:1")
+    result = await client.diff("sid", "{}")
+    assert result is not None
+    assert result.queue_map == {
+        queue_key_a: "topic_a",
+        queue_key_b: "topic_b",
+    }
+    assert result.sentinel_id == "s"
+    assert result.crc32 == 987
+
+    assert call_count == 2
+    assert wait_calls == 1
+    assert ack_counter[1] == 1
+    assert ack_counter[2] == 2
     await client.close()
 
 
