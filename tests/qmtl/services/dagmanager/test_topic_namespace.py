@@ -1,18 +1,39 @@
-import pytest
+from __future__ import annotations
 
-from qmtl.services.dagmanager.topic import topic_namespace_enabled
-
-
-@pytest.mark.parametrize("value", [None, "1", "true", "yes", "ON", "unexpected"])
-def test_namespace_enabled_by_default(monkeypatch, value):
-    if value is None:
-        monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
-    else:
-        monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", value)
-    assert topic_namespace_enabled() is True
+from qmtl.services.dagmanager.topic import (
+    build_namespace,
+    ensure_namespace,
+    normalize_namespace,
+    topic_name,
+)
 
 
-@pytest.mark.parametrize("value", ["0", "false", "no", "off", "disable", "disabled", " False "])
-def test_namespace_opt_out(monkeypatch, value):
-    monkeypatch.setenv("QMTL_ENABLE_TOPIC_NAMESPACE", value)
-    assert topic_namespace_enabled() is False
+def test_build_namespace_sanitizes_world_and_domain() -> None:
+    assert build_namespace("World 1", "Live/Prod") == "world-1.live-prod"
+
+
+def test_ensure_namespace_prefixes_topic_once() -> None:
+    base = "asset_indicator_abcdef_v1"
+    prefixed = ensure_namespace(base, {"world_id": "World-1", "execution_domain": "Live"})
+    assert prefixed == "world-1.live.asset_indicator_abcdef_v1"
+
+    # Idempotent when already prefixed
+    again = ensure_namespace(prefixed, "world-1.live")
+    assert again == prefixed
+
+
+def test_topic_name_applies_namespace_prefix() -> None:
+    topic = topic_name(
+        "asset",
+        "node",
+        "abcdef123456",
+        "v1",
+        namespace={"world_id": "World-1", "execution_domain": "DryRun"},
+    )
+    assert topic.startswith("world-1.dryrun.")
+    assert topic.endswith("asset_node_abcdef_v1")
+
+
+def test_normalize_namespace_accepts_mapping_input() -> None:
+    normalized = normalize_namespace({"world": "W-1", "domain": "Live"})
+    assert normalized == "w-1.live"

@@ -186,6 +186,50 @@ def test_compute_context_switch_clears_cache_and_records_metric():
     assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
 
 
+class _RecordingMetrics:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str, str | None, str | None]] = []
+
+    def observe_cross_context_cache_hit(
+        self,
+        node_id: str,
+        world_id: str,
+        execution_domain: str,
+        *,
+        as_of: str | None,
+        partition: str | None,
+    ) -> None:
+        self.calls.append((node_id, world_id, execution_domain, as_of, partition))
+
+
+def test_cross_domain_cache_miss_enforced():
+    metrics = _RecordingMetrics()
+    cache = NodeCache(period=2, metrics=metrics)
+
+    cache.activate_compute_key(
+        "ck-backtest",
+        node_id="node-a",
+        world_id="world-1",
+        execution_domain="backtest",
+    )
+    cache.append("u1", 60, 60, {"v": 1})
+    cache.append("u1", 60, 120, {"v": 2})
+    snapshot = cache._snapshot()
+    assert snapshot == {"u1": {60: [(60, {"v": 1}), (120, {"v": 2})]}}
+
+    cache.activate_compute_key(
+        "ck-live",
+        node_id="node-a",
+        world_id="world-1",
+        execution_domain="live",
+    )
+    assert cache._snapshot() == {}
+    assert metrics.calls == [("node-a", "world-1", "live", None, None)]
+
+    cache.append("u1", 60, 180, {"v": 3})
+    assert cache._snapshot() == {"u1": {60: [(180, {"v": 3})]}}
+
+
 def test_compute_context_switch_resets_warmup_state():
     calls = []
 
