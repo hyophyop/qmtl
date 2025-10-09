@@ -1,6 +1,7 @@
 import pytest
 
 from qmtl.foundation.common.compute_context import DowngradeReason
+from qmtl.foundation.common.compute_key import compute_compute_key
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.submission.context_service import (
     ComputeContextService,
@@ -139,3 +140,16 @@ async def test_build_without_worlds() -> None:
         "compute_execution_domain": "backtest",
         "compute_downgrade_reason": "decision_unavailable",
     }
+
+
+@pytest.mark.asyncio
+async def test_build_ignores_sdk_compute_key_override() -> None:
+    service = ComputeContextService()
+    payload = _make_payload()
+    payload.meta["compute_key"] = "blake3:injected"  # type: ignore[index]
+
+    strategy_ctx = await service.build(payload)
+
+    assert "compute_key" not in strategy_ctx.commit_log_payload()
+    derived = compute_compute_key("node-x", strategy_ctx.context)
+    assert derived != "blake3:injected"
