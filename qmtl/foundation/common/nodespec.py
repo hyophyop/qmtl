@@ -7,6 +7,9 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+# NOTE: Architecture spec (§3) requires NodeID inputs to exclude non-deterministic
+# fields such as timestamps, random seeds, and environment payloads to preserve
+# global stability across worlds/domains.
 _PARAM_EXCLUDE_KEYS = {
     "world",
     "world_id",
@@ -18,7 +21,13 @@ _PARAM_EXCLUDE_KEYS = {
     "as_of",
     "partition",
     "dataset_fingerprint",
+    "timestamp",
+    "seed",
+    "random_state",
+    "env",
 }
+
+_PARAM_EXCLUDE_PREFIXES = ("env_",)
 
 
 def _safe_deepcopy(value: Any) -> Any:
@@ -55,7 +64,11 @@ def _canonicalize_params(value: Any) -> Any:
     if isinstance(value, Mapping):
         canonical: dict[str, Any] = {}
         for key in sorted(value.keys()):
-            if key in _PARAM_EXCLUDE_KEYS:
+            key_name = str(key)
+            lowered = key_name.lower()
+            if lowered in _PARAM_EXCLUDE_KEYS:
+                continue
+            if any(lowered.startswith(prefix) for prefix in _PARAM_EXCLUDE_PREFIXES):
                 continue
             canonical[key] = _canonicalize_params(value[key])
         return canonical
