@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 from datetime import datetime, timedelta, UTC
 
 import grpc
@@ -134,6 +135,113 @@ async def test_grpc_diff_multiple_chunks():
             )
     await server.stop(None)
     assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_grpc_diff_ack_timeout_recovery(monkeypatch):
+    from qmtl.services.dagmanager import grpc_server as grpc_mod
+
+    plan_template = [AckStatus.OK, AckStatus.TIMEOUT, AckStatus.OK]
+    resume_calls = 0
+
+    original_init = grpc_mod._GrpcStream.__init__
+
+    def patched_init(self, loop):
+        original_init(self, loop)
+        self._test_ack_plan = deque(plan_template)
+
+    monkeypatch.setattr(grpc_mod._GrpcStream, "__init__", patched_init)
+
+    original_wait = grpc_mod._GrpcStream.wait_for_ack
+
+    def patched_wait(self):
+        plan = getattr(self, "_test_ack_plan", None)
+        if plan:
+            status = plan[0]
+            if status is AckStatus.TIMEOUT:
+                plan.popleft()
+                with self._ack_lock:
+                    self._last_ack = AckStatus.TIMEOUT
+                return self._last_ack
+            plan.popleft()
+        return original_wait(self)
+
+    monkeypatch.setattr(grpc_mod._GrpcStream, "wait_for_ack", patched_wait)
+
+    original_resume = grpc_mod._GrpcStream.resume_from_last_offset
+
+    def patched_resume(self):
+        nonlocal resume_calls
+        resume_calls += 1
+        return original_resume(self)
+
+    monkeypatch.setattr(
+        grpc_mod._GrpcStream, "resume_from_last_offset", patched_resume
+    )
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+
+    nodes = [
+        {
+            "node_id": str(i),
+            "node_type": "N",
+            "code_hash": "c",
+            "config_hash": "cfg",
+            "schema_hash": "s",
+            "schema_compat_id": "s-major",
+            "params": {},
+            "dependencies": [],
+        }
+        for i in range(120)
+    ]
+    dag_json = json.dumps({"nodes": nodes})
+
+    sentinel_ids: set[str] = set()
+    chunk_sizes: list[int] = []
+    second_chunk_seen = 0
+    acked = 0
+
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            stub = dagmanager_pb2_grpc.DiffServiceStub(channel)
+            request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+            async for chunk in stub.Diff(request):
+                sentinel_ids.add(chunk.sentinel_id)
+                chunk_sizes.append(len(chunk.queue_map))
+                if len(chunk_sizes) == 1:
+                    await stub.AckChunk(
+                        dagmanager_pb2.ChunkAck(
+                            sentinel_id=chunk.sentinel_id, chunk_id=0
+                        )
+                    )
+                    acked += 1
+                    continue
+
+                second_chunk_seen += 1
+                if second_chunk_seen == 1:
+                    expected_queue_map = dict(chunk.queue_map)
+                    continue
+
+                assert dict(chunk.queue_map) == expected_queue_map
+                await stub.AckChunk(
+                    dagmanager_pb2.ChunkAck(
+                        sentinel_id=chunk.sentinel_id, chunk_id=0
+                    )
+                )
+                acked += 1
+    finally:
+        await server.stop(None)
+
+    assert acked == 2
+    assert second_chunk_seen == 2, "chunk should be replayed after timeout"
+    assert resume_calls == 1
+    assert sentinel_ids == {"s-sentinel"}
+    # every chunk carries the full queue map, ensure it covers all nodes
+    assert chunk_sizes and chunk_sizes[-1] == len(nodes)
 
 
 @pytest.mark.asyncio
