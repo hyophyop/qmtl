@@ -139,3 +139,34 @@ def test_runner_reuses_artifacts_across_domains(tmp_path: Path, monkeypatch):
     assert backtest.factor.cache._active_execution_domain == "backtest"
 
     Runner.set_feature_artifact_plane(previous)
+
+
+def test_live_domain_does_not_write_feature_artifacts(artifact_plane):
+    strategy = _ArtifactStrategy(multiplier=3.0)
+    strategy.setup()
+    strategy.factor.dataset_fingerprint = "lake:blake3:live-test"
+    strategy.factor.execution_domain = "live"
+    artifact_plane.configure(
+        dataset_fingerprint="lake:blake3:live-test",
+        execution_domain="live",
+    )
+
+    initial_count = artifact_plane.count(strategy.factor, instrument="BTC")
+
+    Runner.feed_queue_data(
+        strategy.src,
+        strategy.src.node_id,
+        strategy.src.interval,
+        1,
+        {"instrument": "BTC", "value": 10},
+    )
+    result = Runner.feed_queue_data(
+        strategy.factor,
+        strategy.src.node_id,
+        strategy.src.interval,
+        1,
+        {"instrument": "BTC", "value": 10},
+    )
+
+    assert result["value"] == 30
+    assert artifact_plane.count(strategy.factor, instrument="BTC") == initial_count
