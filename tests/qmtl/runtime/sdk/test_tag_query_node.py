@@ -1,5 +1,6 @@
 import logging
 
+from qmtl.foundation.common.tagquery import split_tags
 from qmtl.runtime.sdk import TagQueryNode, MatchMode
 
 
@@ -31,3 +32,24 @@ def test_update_queues_logs_warning_when_empty(caplog):
 def test_tag_query_node_accepts_string_match_mode():
     node = TagQueryNode(["t"], interval="60s", period=1, match_mode="all")
     assert node.match_mode is MatchMode.ALL
+
+
+def test_tag_query_node_id_permutation_invariance():
+    node_a = TagQueryNode(["t2", "t1"], interval="60s", period=1)
+    node_b = TagQueryNode(["t1", "t2"], interval="60s", period=1)
+
+    assert sorted(node_a.query_tags) == ["t1", "t2"]
+    assert sorted(node_b.query_tags) == ["t1", "t2"]
+    assert node_a.node_id == node_b.node_id
+
+
+def test_tag_query_node_id_whitespace_normalization():
+    raw = " t1 ,\t t2 "
+    normalized = split_tags(raw)
+
+    assert normalized == ["t1", "t2"]
+
+    node_from_http = TagQueryNode(normalized, interval="60s", period=1)
+    node_reference = TagQueryNode(["t1", "t2"], interval="60s", period=1)
+
+    assert node_from_http.node_id == node_reference.node_id
