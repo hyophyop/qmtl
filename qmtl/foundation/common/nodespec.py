@@ -62,15 +62,25 @@ def _sorted_deps(node: Mapping[str, Any]) -> list[str]:
 
 def _canonicalize_params(value: Any) -> Any:
     if isinstance(value, Mapping):
-        canonical: dict[str, Any] = {}
-        for key in sorted(value.keys()):
-            key_name = str(key)
+        canonical_items: list[tuple[str, Any]] = []
+        for raw_key, raw_value in value.items():
+            key_name = str(raw_key)
             lowered = key_name.lower()
             if lowered in _PARAM_EXCLUDE_KEYS:
                 continue
             if any(lowered.startswith(prefix) for prefix in _PARAM_EXCLUDE_PREFIXES):
                 continue
-            canonical[key] = _canonicalize_params(value[key])
+            canonical_items.append((key_name, _canonicalize_params(raw_value)))
+        # Sort using the normalized string form to guarantee deterministic output
+        # even when heterogeneous key types are supplied (e.g., integers mixed with
+        # strings). ``json.dumps(..., sort_keys=True)`` will take care of the final
+        # ordering, but normalising here prevents ``TypeError`` from unsortable key
+        # combinations before reaching the serializer.
+        canonical: dict[str, Any] = {}
+        for key_name, normalized_value in sorted(
+            canonical_items, key=lambda item: item[0]
+        ):
+            canonical[key_name] = normalized_value
         return canonical
     if isinstance(value, set):
         items = [_canonicalize_params(item) for item in value]
