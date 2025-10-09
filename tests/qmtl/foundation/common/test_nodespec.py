@@ -72,3 +72,41 @@ def test_compute_node_id_accepts_builder() -> None:
     spec = CanonicalNodeSpec.from_payload(payload)
 
     assert compute_node_id(spec) == compute_node_id(payload)
+
+
+def test_compute_node_id_ignores_nondeterministic_params() -> None:
+    def _make_payload(extra_params: dict[str, object] | None = None) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "node_type": "EnvSensitiveNode",
+            "interval": 30,
+            "period": 5,
+            "params": {"alpha": 1},
+            "dependencies": ["dep-a"],
+            "schema_compat_id": "compat-1",
+            "code_hash": "hash-xyz",
+        }
+        if extra_params:
+            merged = dict(payload["params"])
+            merged.update(extra_params)
+            payload["params"] = merged
+        return payload
+
+    base_payload = _make_payload()
+    base_node_id = compute_node_id(base_payload)
+
+    nondeterministic_params = {
+        "timestamp": "2024-05-01T00:00:00Z",
+        "seed": 1234,
+        "random_state": {"numpy": 99},
+        "ENV": {
+            "AS": "arm64-apple-darwin20.0.0-as",
+            "RUST_LOG": "warn",
+            "PATH": "/usr/bin:/bin",
+        },
+        "env_extra": "ignored",
+        "Env_Path": "/tmp/path",
+    }
+
+    payload_with_env = _make_payload(nondeterministic_params)
+
+    assert compute_node_id(payload_with_env) == base_node_id
