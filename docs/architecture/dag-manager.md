@@ -106,6 +106,12 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
 - NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
 - Non-deterministic fields (timestamps, RNG seeds, environment variables) are **excluded** from the input. All separable parameters must be split into individual fields and serialized in canonical JSON with sorted keys and fixed numeric precision.
 - NodeID MUST NOT include `world_id`. World-local isolation belongs to the World View Graph (WVG) and queue namespaces (e.g., world `topic_prefix`).
+- Canonicalization guarantees:
+  - Parameter maps with equivalent content (regardless of insertion/key order) hash to the same NodeID.
+  - Dependency identifiers are sorted lexicographically before hashing so upload order cannot perturb the digest.
+  - Presentation metadata (`name`, `tags`, `metadata`, etc.) and other non-deterministic inputs are stripped prior to hashing.
+  - NodeIDs that do not begin with the required `blake3:` namespace are rejected by Gateway validation.
+  - Collision hardening uses deterministic BLAKE3 re-hashing with domain-separated suffixes when `existing_ids` already contain the digest (mirrors the XOF guidance in §3.1).
 - TagQueryNode canonicalization:
   - Do not include the runtime-resolved upstream queue set in `dependencies`.
   - Include the query spec in `params_canon` instead (normalized `query_tags` sorted, `match_mode`, and `interval`).
