@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+import copy
+
 from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
 from qmtl.foundation.common.nodespec import serialize_nodespec
+
+
+_NONDETERMINISTIC_ENV_SAMPLE = {
+    "AS": "arm64-apple-darwin20.0.0-as",
+    "RUST_LOG": "warn",
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "MallocNanoZone": "0",
+    "APPLICATIONINSIGHTS_CONFIGURATION_CONTENT": "{}",
+    "SDKROOT": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+    "_": "/usr/bin/env",
+}
 
 
 def test_canonical_nodespec_serialization_matches_legacy() -> None:
@@ -98,11 +111,7 @@ def test_compute_node_id_ignores_nondeterministic_params() -> None:
         "timestamp": "2024-05-01T00:00:00Z",
         "seed": 1234,
         "random_state": {"numpy": 99},
-        "ENV": {
-            "AS": "arm64-apple-darwin20.0.0-as",
-            "RUST_LOG": "warn",
-            "PATH": "/usr/bin:/bin",
-        },
+        "ENV": dict(_NONDETERMINISTIC_ENV_SAMPLE),
         "env_extra": "ignored",
         "Env_Path": "/tmp/path",
     }
@@ -110,3 +119,32 @@ def test_compute_node_id_ignores_nondeterministic_params() -> None:
     payload_with_env = _make_payload(nondeterministic_params)
 
     assert compute_node_id(payload_with_env) == base_node_id
+
+
+def test_compute_node_id_ignores_nondeterministic_config() -> None:
+    base_payload = {
+        "node_type": "ConfigDrivenNode",
+        "interval": 10,
+        "period": 0,
+        "config": {"alpha": 0.2, "beta": [1, 2, 3]},
+        "dependencies": ["dep-1"],
+        "schema_compat_id": "compat-2",
+        "code_hash": "hash-cfg",
+    }
+
+    base_id = compute_node_id(base_payload)
+
+    mutated = copy.deepcopy(base_payload)
+    mutated_config = dict(mutated["config"])
+    mutated_config.update(
+        {
+            "Seed": 99,
+            "TIMESTAMP": "2024-05-01T12:00:00Z",
+            "ENV": dict(_NONDETERMINISTIC_ENV_SAMPLE),
+            "env_runtime": "ignored",
+            "random_state": {"numpy": 123},
+        }
+    )
+    mutated["config"] = mutated_config
+
+    assert compute_node_id(mutated) == base_id
