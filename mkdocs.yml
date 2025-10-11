@@ -68,6 +68,7 @@ nav:
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
+      - Configuration: reference/configuration.md
       - TagQuery: reference/tagquery.md
       - Schema Registry: reference/schema_registry.md
       - Schemas: reference/schemas.md

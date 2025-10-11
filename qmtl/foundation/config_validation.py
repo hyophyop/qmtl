@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from dataclasses import dataclass
-from typing import Dict, Mapping, Sequence
+from dataclasses import dataclass, fields
+from typing import Any, Dict, Mapping, Sequence, get_args, get_origin, get_type_hints
 
 import aiosqlite
 import asyncpg
@@ -11,6 +11,7 @@ import redis.asyncio as redis
 import httpx  # test compatibility: referenced via monkeypatch in tests
 
 from qmtl.foundation.common.health import probe_http_async
+from qmtl.foundation.config import CONFIG_SECTION_NAMES, UnifiedConfig
 from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
 from qmtl.services.gateway.config import GatewayConfig
@@ -305,8 +306,137 @@ async def validate_dagmanager_config(
     return issues
 
 
+def _type_description(annotation: Any) -> str:
+    if annotation is Any:
+        return "any"
+    origin = get_origin(annotation)
+    if origin is None:
+        if annotation is type(None):  # pragma: no cover - explicit None type
+            return "null"
+        return getattr(annotation, "__name__", str(annotation))
+    args = get_args(annotation)
+    if origin in {list, Sequence}:
+        inner = _type_description(args[0]) if args else "any"
+        label = "list" if origin is list else "sequence"
+        return f"{label}[{inner}]"
+    if origin in {set, tuple}:
+        inner = _type_description(args[0]) if args else "any"
+        return f"{origin.__name__}[{inner}]"
+    if origin in {dict, Mapping}:
+        key_desc = _type_description(args[0]) if args else "any"
+        value_desc = _type_description(args[1]) if len(args) > 1 else "any"
+        return f"mapping[{key_desc}, {value_desc}]"
+    if origin is tuple:
+        inner_desc = ", ".join(_type_description(arg) for arg in args) if args else ""
+        return f"tuple[{inner_desc}]"
+    if origin is type(None):  # pragma: no cover - defensive
+        return "null"
+    return " | ".join(_type_description(arg) for arg in args)
+
+
+def _value_type_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, list):
+        inner = {type(item).__name__ for item in value}
+        inner_desc = ",".join(sorted(inner)) or "unknown"
+        return f"list[{inner_desc}]"
+    if isinstance(value, tuple):
+        return "tuple"
+    if isinstance(value, set):
+        inner = {type(item).__name__ for item in value}
+        inner_desc = ",".join(sorted(inner)) or "unknown"
+        return f"set[{inner_desc}]"
+    if isinstance(value, dict):
+        return "mapping"
+    return type(value).__name__
+
+
+def _type_matches(value: Any, annotation: Any) -> bool:
+    if annotation is Any:
+        return True
+    origin = get_origin(annotation)
+    if origin is None:
+        if annotation is type(None):
+            return value is None
+        if isinstance(annotation, type):
+            return isinstance(value, annotation)
+        return True
+    args = get_args(annotation)
+    if origin in {list, Sequence}:
+        if not isinstance(value, list):
+            return False
+        inner = args[0] if args else Any
+        return all(_type_matches(item, inner) for item in value)
+    if origin is tuple:
+        if not isinstance(value, tuple):
+            return False
+        if not args:
+            return True
+        if len(args) == 2 and args[1] is Ellipsis:
+            return all(_type_matches(item, args[0]) for item in value)
+        if len(value) != len(args):
+            return False
+        return all(_type_matches(item, expected) for item, expected in zip(value, args))
+    if origin is set:
+        if not isinstance(value, set):
+            return False
+        inner = args[0] if args else Any
+        return all(_type_matches(item, inner) for item in value)
+    if origin in {dict, Mapping}:
+        if not isinstance(value, dict):
+            return False
+        key_type = args[0] if args else Any
+        value_type = args[1] if len(args) > 1 else Any
+        return all(
+            _type_matches(k, key_type) and _type_matches(v, value_type)
+            for k, v in value.items()
+        )
+    if origin is Sequence:
+        if isinstance(value, (str, bytes)):
+            return False
+        if not isinstance(value, Sequence):
+            return False
+        inner = args[0] if args else Any
+        return all(_type_matches(item, inner) for item in value)
+    return any(_type_matches(value, option) for option in args)
+
+
+def validate_config_structure(unified: UnifiedConfig) -> Dict[str, ValidationIssue]:
+    """Return per-section type validation results for ``UnifiedConfig``."""
+
+    results: Dict[str, ValidationIssue] = {}
+    for section in CONFIG_SECTION_NAMES:
+        obj = getattr(unified, section, None)
+        if obj is None:
+            results[section] = ValidationIssue(
+                "error", "Section missing from UnifiedConfig"
+            )
+            continue
+
+        hints = get_type_hints(type(obj))
+        errors: list[str] = []
+        for field in fields(obj):
+            expected = hints.get(field.name, Any)
+            value = getattr(obj, field.name)
+            if not _type_matches(value, expected):
+                errors.append(
+                    f"{field.name}: expected {_type_description(expected)}, got {_value_type_name(value)}"
+                )
+
+        if errors:
+            results[section] = ValidationIssue("error", "; ".join(errors))
+        else:
+            results[section] = ValidationIssue(
+                "ok", "All keys present with expected types"
+            )
+
+    return results
+
+
 __all__ = [
     "ValidationIssue",
     "validate_gateway_config",
     "validate_dagmanager_config",
+    "validate_config_structure",
 ]

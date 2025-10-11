@@ -96,6 +96,7 @@ def test_validate_success_outputs_table(
 ) -> None:
     cli_config.run(["validate", "--config", str(config_file)])
     captured = capsys.readouterr()
+    assert "schema:" in captured.out
     assert "gateway:" in captured.out
     assert "redis" in captured.out
     assert "OK" in captured.out
@@ -157,6 +158,25 @@ def test_validate_json_output(
     payload = json.loads(captured.out[captured.out.index("{") :])
     assert payload["status"] == "ok"
     assert payload["results"]["gateway"]["redis"]["severity"] == "ok"
+
+
+def test_validate_schema_type_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bad_cfg = {
+        "cache": {"feature_artifact_write_domains": "not-a-list"},
+    }
+    path = tmp_path / "schema.yml"
+    path.write_text(yaml.safe_dump(bad_cfg))
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli_config.run(["validate", "--config", str(path), "--target", "schema"])
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "schema:" in captured.out
+    assert "feature_artifact_write_domains" in captured.out
+    assert "ERROR" in captured.out
 
 
 def test_validate_missing_config_path(capsys: pytest.CaptureFixture[str]) -> None:

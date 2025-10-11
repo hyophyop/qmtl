@@ -1,0 +1,64 @@
+# Staging environment configuration with managed services.
+worldservice:
+  url: https://stage-worldservice.internal
+  timeout: 0.5
+  retries: 3
+  enable_proxy: true
+  enforce_live_guard: true
+
+gateway:
+  host: 0.0.0.0
+  port: 8080
+  redis_dsn: redis://stage-redis:6379/0
+  database_backend: postgres
+  database_dsn: postgresql://qmtl_stage:secret@stage-postgres:5432/qmtl
+  controlbus_brokers:
+    - stage-kafka:9092
+  controlbus_topics:
+    - activation
+    - policy
+    - queue
+  commitlog_topic: stage.gateway.ingest
+  commitlog_group: stage-gateway-commit
+
+dagmanager:
+  neo4j_dsn: neo4j://stage-neo4j:7687
+  neo4j_user: neo4j
+  neo4j_password: stage-secret
+  kafka_dsn: stage-kafka:9092
+  grpc_host: 0.0.0.0
+  grpc_port: 50051
+  http_host: 0.0.0.0
+  http_port: 8101
+  controlbus_dsn: stage-kafka:9092
+  controlbus_queue_topic: queue
+
+seamless:
+  coordinator_url: https://stage-seamless-coordinator.internal
+  artifacts_enabled: true
+  artifact_dir: /var/lib/qmtl/seamless-artifacts
+  fingerprint_mode: canonical
+  publish_fingerprint: true
+  sla_preset: staging
+
+connectors:
+  ccxt_rate_limiter_redis: redis://stage-redis:6379/1
+  schema_registry_url: https://stage-schema-registry.internal
+  worker_id: stage-worker
+
+telemetry:
+  otel_exporter_endpoint: https://stage-otel-collector:4318/v1/traces
+  enable_fastapi_otel: true
+  prometheus_url: https://stage-prometheus.internal
+
+cache:
+  arrow_cache_enabled: true
+  cache_evict_interval: 45
+  feature_artifacts_enabled: true
+  feature_artifact_dir: /var/lib/qmtl/feature-artifacts
+  feature_artifact_versions: 10
+
+test:
+  test_mode: false
+  fail_on_history_gap: true
+  enable_topic_namespace: true

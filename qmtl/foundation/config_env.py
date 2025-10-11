@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Mapping
+from typing import Dict, Mapping, Set
 
-from qmtl.foundation.config import UnifiedConfig
+from qmtl.foundation.config import (
+    CONFIG_SECTION_NAMES,
+    ENV_EXPORT_IGNORED_FIELDS,
+    ENV_EXPORT_OVERRIDES,
+    ENV_EXPORT_PREFIXES,
+    UnifiedConfig,
+)
 
 MASK_PLACEHOLDER = "********"
 META_KEYS = ("QMTL_CONFIG_SOURCE", "QMTL_CONFIG_EXPORT")
 
-_SECTION_PREFIXES = {
-    "gateway": "QMTL__GATEWAY__",
-    "dagmanager": "QMTL__DAGMANAGER__",
+_MANAGED_PREFIXES: tuple[str, ...] = tuple(sorted(set(ENV_EXPORT_PREFIXES.values())))
+_OVERRIDE_KEYS: Set[str] = {
+    env
+    for overrides in ENV_EXPORT_OVERRIDES.values()
+    for env in overrides.values()
+    if env
+}
+_ENV_TO_FIELD: Dict[str, str] = {
+    env: field
+    for section_overrides in ENV_EXPORT_OVERRIDES.values()
+    for field, env in section_overrides.items()
+    if env
 }
 
 _SECRET_KEYWORDS = ("PASSWORD", "SECRET", "TOKEN", "KEY", "DSN")
@@ -43,16 +58,29 @@ def is_secret_field(name: str) -> bool:
 
 def unified_to_env(unified: UnifiedConfig) -> list[ConfigEnvVar]:
     result: list[ConfigEnvVar] = []
-    for section, prefix in _SECTION_PREFIXES.items():
-        config_obj = getattr(unified, section)
+    seen: Set[str] = set()
+    for section in CONFIG_SECTION_NAMES:
+        config_obj = getattr(unified, section, None)
+        if config_obj is None:
+            continue
         data = asdict(config_obj)
+        prefix = ENV_EXPORT_PREFIXES.get(section)
+        overrides = ENV_EXPORT_OVERRIDES.get(section, {})
+        ignored = ENV_EXPORT_IGNORED_FIELDS.get(section, set())
         for field, raw_value in sorted(data.items()):
+            if field in ignored:
+                continue
+            key = overrides.get(field)
+            if key is None and prefix:
+                key = f"{prefix}{field.upper()}"
+            if not key or key in seen:
+                continue
             value = _stringify(raw_value)
             if value is None:
                 continue
             secret = is_secret_field(field)
-            key = f"{prefix}{field.upper()}"
             result.append(ConfigEnvVar(key=key, value=value, secret=secret, section=section))
+            seen.add(key)
     return result
 
 
@@ -65,15 +93,21 @@ def mask_value(value: str) -> str:
 def is_managed_key(key: str) -> bool:
     if key in META_KEYS:
         return True
-    return any(key.startswith(prefix) for prefix in _SECTION_PREFIXES.values())
+    if any(prefix and key.startswith(prefix) for prefix in _MANAGED_PREFIXES):
+        return True
+    return key in _OVERRIDE_KEYS
 
 
 def is_secret_key(key: str) -> bool:
     if key in META_KEYS:
         return False
-    if "__" not in key:
+    field = None
+    if key in _ENV_TO_FIELD:
+        field = _ENV_TO_FIELD[key]
+    elif "__" in key:
+        field = key.split("__")[-1]
+    if field is None:
         return False
-    field = key.split("__")[-1]
     return is_secret_field(field)
 
 

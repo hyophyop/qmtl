@@ -1,0 +1,49 @@
+# Local developer stack configuration.
+worldservice:
+  url: http://localhost:8080
+  timeout: 0.3
+  retries: 2
+  enable_proxy: true
+  enforce_live_guard: true
+
+gateway:
+  host: 127.0.0.1
+  port: 8000
+  redis_dsn: redis://localhost:6379/0
+  database_backend: sqlite
+  database_dsn: ./qmtl.dev.db
+  insert_sentinel: true
+  controlbus_topics:
+    - activation
+    - policy
+    - queue
+
+dagmanager:
+  memory_repo_path: memrepo.dev.gpickle
+  grpc_host: 127.0.0.1
+  grpc_port: 50051
+  http_host: 127.0.0.1
+  http_port: 8001
+
+seamless:
+  coordinator_url: http://localhost:5010
+  artifacts_enabled: false
+  fingerprint_mode: canonical
+  sla_preset: baseline
+
+connectors:
+  ccxt_rate_limiter_redis: redis://localhost:6379/0
+  worker_id: dev-worker
+
+telemetry:
+  enable_fastapi_otel: false
+
+cache:
+  arrow_cache_enabled: false
+  cache_evict_interval: 60
+  feature_artifacts_enabled: false
+
+test:
+  test_mode: true
+  fail_on_history_gap: false
+  enable_topic_namespace: false
