@@ -103,14 +103,14 @@ price = StreamInput(
 )
 ```
 
-Seamless provider는 DAG가 요청한 구간을 충족할 때까지 백그라운드 백필과 SLA 측정을 자동으로 수행합니다. `QMTL_SEAMLESS_ARTIFACTS=1`을 설정하면 로컬 개발 중에도 `~/.qmtl_seamless_artifacts/` 하위에 파케이(parquet) 아티팩트가 남아 재현성을 높일 수 있습니다.
+Seamless provider는 DAG가 요청한 구간을 충족할 때까지 백그라운드 백필과 SLA 측정을 자동으로 수행합니다. `qmtl.yml`의 `seamless.artifacts_enabled`를 활성화하면 로컬 개발 중에도 `~/.qmtl_seamless_artifacts/` 하위에 파케이(parquet) 아티팩트가 남아 재현성을 높일 수 있습니다.
 
 ## 운영 체크리스트
 
 - **커버리지 점검**: `provider.coverage(node_id=..., interval=...)`를 호출해 QuestDB가 요청 구간을 완전히 보유하고 있는지 주기적으로 확인합니다.
 - **모니터링**: `operations/monitoring/seamless_v2.jsonnet` 번들을 배포해 `seamless_sla_deadline_seconds`, `seamless_conformance_flag_total` 대시보드를 활성화합니다.
 - **레이트리밋**: 교환소 정책을 위반하면 CCXT가 429를 반환합니다. `CcxtBackfillConfig`의 `min_interval_ms` 또는 Redis 버킷 설정을 조정해 재시도 전 쿨다운을 충분히 확보하세요.
-- **에러 재현**: `QMTL_SEAMLESS_COORDINATOR_URL`을 동일하게 설정한 여러 워커는 백필 단일화를 위해 임계구역을 공유합니다. 충돌 시 로그에서 `seamless.backfill.coordinator_*` 이벤트를 확인하세요.
+- **에러 재현**: 여러 워커의 `seamless.coordinator_url`을 동일하게 지정하면 백필 단일화를 위해 임계구역을 공유합니다. 충돌 시 로그에서 `seamless.backfill.coordinator_*` 이벤트를 확인하세요.
 
 ## 문제 해결 FAQ
 

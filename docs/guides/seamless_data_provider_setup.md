@@ -5,22 +5,22 @@
 ## 1. 선행 준비 사항
 
 1. **저장소 및 페치 계층** – QuestDB와 같은 히스토리 저장소와 이를 채우는 `DataFetcher`를 준비합니다. `EnhancedQuestDBProvider`는 저장소와 페치 계층을 우선순위 기반으로 조합해 투명한 조회를 수행합니다.【F:qmtl/docs/design/seamless_data_provider.md†L45-L90】【F:qmtl/qmtl/runtime/io/seamless_provider.py†L1-L108】
-2. **분산 백필 코디네이터** – `QMTL_SEAMLESS_COORDINATOR_URL` 환경 변수를 통해 분산 코디네이터를 활성화하면 자동으로 Raft 기반 분산 백필 경로가 사용됩니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L38-L81】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L421-L432】
+2. **분산 백필 코디네이터** – `qmtl.yml`의 `seamless.coordinator_url`을 설정하면 SDK가 자동으로 분산 백필 코디네이터와 통신합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L38-L81】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L421-L432】
 3. **정합성 파이프라인** – 기본적으로 활성화된 `ConformancePipeline`은 스키마·시간 롤업과 리포트를 생성하며, 위반 시 요청을 차단합니다. 필요 시 `partial_ok=True`로 허용 모드를 사용할 수 있습니다.【F:qmtl/docs/design/seamless_data_provider.md†L31-L66】
 4. **SLA 정책** – `SLAPolicy`를 구성하면 각 단계별 대기 시간을 추적하고 기준 초과 시 `SeamlessSLAExceeded` 예외 및 메트릭을 발행합니다.【F:qmtl/docs/design/seamless_data_provider.md†L66-L86】
 5. **아티팩트/메트릭 수집** – 관측 지표(`seamless_sla_deadline_seconds`, `backfill_completion_ratio` 등)를 수집할 수 있도록 Prometheus 및 관련 대시보드를 구성합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L82-L123】
 
 ## 2. 단계별 구성
 
-1. **환경 변수 설정**
-   ```bash
-   export QMTL_SEAMLESS_COORDINATOR_URL="https://seamless-coordinator.internal"
-   export QMTL_SEAMLESS_FP_MODE=canonical            # (선택) 지문 발행 모드
-   export QMTL_SEAMLESS_PUBLISH_FP=true              # (선택) 아티팩트 지문 게시
-   export QMTL_SEAMLESS_PREVIEW_FP=false             # (선택) 프리뷰 지문 허용
-   export QMTL_SEAMLESS_EARLY_FP=false               # (선택) 선행 지문 허용
+1. **런타임 설정 갱신**
+   ```yaml
+   seamless:
+     coordinator_url: https://seamless-coordinator.internal
+     publish_fingerprint: true      # (선택) 아티팩트 지문 게시
+     preview_fingerprint: false     # (선택) 프리뷰 지문 허용
+     early_fingerprint: false       # (선택) 선행 지문 허용
    ```
-   환경 변수는 분산 백필 사용 여부, 지문 발행 정책을 제어해 감사 추적과 데이터 재현성을 강화합니다.【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L320-L373】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L421-L432】
+   YAML 설정은 분산 백필 사용 여부와 지문 발행 정책을 제어해 감사 추적과 데이터 재현성을 강화합니다.【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L320-L373】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L421-L432】
 
 2. **프로바이더 인스턴스 생성**
    ```python
@@ -76,7 +76,7 @@
 
 ## 3. 복잡도 평가
 
-- **구성 요소 다양성**: 저장소, 페치, 백필, 라이브, 정합성, SLA 등 다수의 컴포넌트를 조정해야 하므로 초기 학습 곡선이 높습니다. 특히 분산 코디네이터와 지문(artifact fingerprint) 설정은 환경 변수를 통한 세밀한 제어가 필요합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L38-L123】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L320-L373】
+- **구성 요소 다양성**: 저장소, 페치, 백필, 라이브, 정합성, SLA 등 다수의 컴포넌트를 조정해야 하므로 초기 학습 곡선이 높습니다. 특히 분산 코디네이터와 지문(artifact fingerprint) 설정은 `qmtl.yml`의 `seamless` 섹션을 통해 세밀한 제어가 필요합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L38-L123】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L320-L373】
 - **관측 의존도**: SLA 및 백필 상태를 모니터링하지 않으면 문제를 조기에 탐지하기 어렵습니다. Prometheus 및 Jsonnet 대시보드 구성은 운영팀 역량을 요구합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L82-L123】
 - **테스트 요구 사항**: 공식 테스트 스위트 실행이 권장되므로 CI 통합이나 로컬 환경에서 `uv` 기반 파이프라인을 유지해야 합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L124-L139】
 

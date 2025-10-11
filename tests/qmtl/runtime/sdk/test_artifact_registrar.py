@@ -5,35 +5,39 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
+from qmtl.runtime.sdk.configuration import runtime_config_override
 
 
-def test_from_env_disabled_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("QMTL_SEAMLESS_ARTIFACTS", raising=False)
-    monkeypatch.delenv("QMTL_SEAMLESS_ARTIFACT_DIR", raising=False)
-
-    assert FileSystemArtifactRegistrar.from_env() is None
+def _make_config(**kwargs: object) -> UnifiedConfig:
+    return UnifiedConfig(seamless=SeamlessConfig(**kwargs))
 
 
-def test_from_env_enabled_with_flag_and_dir(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("QMTL_SEAMLESS_ARTIFACTS", "1")
-    monkeypatch.setenv("QMTL_SEAMLESS_ARTIFACT_DIR", str(tmp_path))
-
-    registrar = FileSystemArtifactRegistrar.from_env()
-
-    assert isinstance(registrar, FileSystemArtifactRegistrar)
-    assert registrar.base_dir == Path(tmp_path)
+def test_from_config_disabled_by_default() -> None:
+    with runtime_config_override(_make_config(artifacts_enabled=False)):
+        assert FileSystemArtifactRegistrar.from_runtime_config() is None
 
 
-def test_from_env_enabled_with_directory_only(monkeypatch, tmp_path) -> None:
-    monkeypatch.delenv("QMTL_SEAMLESS_ARTIFACTS", raising=False)
-    monkeypatch.setenv("QMTL_SEAMLESS_ARTIFACT_DIR", str(tmp_path))
+def test_from_config_enabled_with_flag_and_dir(tmp_path) -> None:
+    with runtime_config_override(
+        _make_config(artifacts_enabled=True, artifact_dir=str(tmp_path))
+    ):
+        registrar = FileSystemArtifactRegistrar.from_runtime_config()
 
-    registrar = FileSystemArtifactRegistrar.from_env()
+        assert isinstance(registrar, FileSystemArtifactRegistrar)
+        assert registrar.base_dir == Path(tmp_path)
 
-    assert isinstance(registrar, FileSystemArtifactRegistrar)
-    assert registrar.base_dir == Path(tmp_path)
+
+def test_from_config_alias_from_env(tmp_path) -> None:
+    with runtime_config_override(
+        _make_config(artifacts_enabled=True, artifact_dir=str(tmp_path))
+    ):
+        registrar = FileSystemArtifactRegistrar.from_env()
+
+        assert isinstance(registrar, FileSystemArtifactRegistrar)
+        assert registrar.base_dir == Path(tmp_path)
 
 
 @pytest.mark.asyncio

@@ -36,6 +36,7 @@ seamless:
   artifacts_enabled: false
   fingerprint_mode: canonical
   sla_preset: baseline
+  presets_file: ../seamless/presets.yaml
 
 connectors:
   ccxt_rate_limiter_redis: redis://localhost:6379/0

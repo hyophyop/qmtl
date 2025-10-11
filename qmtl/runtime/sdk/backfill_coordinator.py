@@ -13,8 +13,6 @@ from . import metrics as sdk_metrics
 from . import runtime
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_COORDINATOR_URL_ENV = "QMTL_SEAMLESS_COORDINATOR_URL"
 _WORKER_ID_ENV_VARS: tuple[str, ...] = (
     "QMTL_SEAMLESS_WORKER",
     "QMTL_WORKER_ID",
@@ -152,7 +150,7 @@ class DistributedBackfillCoordinator:
         *,
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
     ) -> None:
-        url = (base_url or os.getenv(_DEFAULT_COORDINATOR_URL_ENV, "")).strip()
+        url = (base_url or "").strip()
         if not url:
             raise ValueError("DistributedBackfillCoordinator requires a base URL")
         self._base_url = url.rstrip("/")

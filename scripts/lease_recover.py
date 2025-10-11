@@ -25,6 +25,7 @@ from qmtl.runtime.sdk.backfill_coordinator import (
     DistributedBackfillCoordinator,
     Lease,
 )
+from qmtl.runtime.sdk.configuration import get_seamless_config
 
 
 @dataclass(frozen=True)
@@ -124,9 +125,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Lease specs in KEY:TOKEN form. Tokens are required unless --dry-run is used.",
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        dest="config",
+        help="Optional path to qmtl.yml. Defaults to auto-discovery when omitted.",
+    )
+    parser.add_argument(
         "--coordinator-url",
         dest="coordinator_url",
-        help="Base URL for the distributed backfill coordinator. Defaults to QMTL_SEAMLESS_COORDINATOR_URL.",
+        default=None,
+        help="Base URL for the distributed backfill coordinator (overrides configuration).",
     )
     parser.add_argument(
         "--from-file",
@@ -157,9 +165,17 @@ async def _run_async(args: argparse.Namespace) -> LeaseRecoverySummary:
     specs = _read_specs(args.leases, args.from_file)
     if not specs:
         raise SystemExit("No leases supplied")
+    coordinator_url = args.coordinator_url
+    coordinator = None
+    if not coordinator_url:
+        cfg = get_seamless_config(args.config)
+        coordinator_url = (cfg.coordinator_url or "").strip()
+    if coordinator_url:
+        coordinator = DistributedBackfillCoordinator(base_url=coordinator_url)
     summary = await recover_leases(
         specs,
-        base_url=args.coordinator_url,
+        coordinator=coordinator,
+        base_url=None if coordinator is not None else coordinator_url,
         action=args.action,
         reason=args.reason,
         dry_run=args.dry_run,

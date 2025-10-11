@@ -66,6 +66,7 @@ class SeamlessConfig:
         default="strict-blocking",
         metadata={"env": "QMTL_SEAMLESS_CONFORMANCE_PRESET"},
     )
+    presets_file: str | None = None
 
 
 @dataclass
