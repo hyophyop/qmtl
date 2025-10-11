@@ -16,9 +16,21 @@ class _QuestDBLoaderStub:
         self.dsn = dsn
         self.table = table
         self.fetcher = fetcher
+        self.fetch_calls = 0
 
     async def fetch(self, start, end, *, node_id: str, interval: int) -> pd.DataFrame:
-        return pd.DataFrame({"ts": [start]})
+        self.fetch_calls += 1
+        frame = pd.DataFrame(
+            {
+                "ts": pd.Series([start], dtype="int64"),
+                "open": [1.0],
+                "high": [1.5],
+                "low": [0.9],
+                "close": [1.2],
+                "volume": [123.0],
+            }
+        )
+        return frame
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
         return [(0, 10_000_000)]
@@ -43,17 +55,21 @@ async def test_enhanced_provider_validates_node_ids(monkeypatch):
         registrar=_RegistrarStub(),
         node_id_format="ohlcv:{exchange}:{symbol}:{timeframe}",
         strategy=DataAvailabilityStrategy.FAIL_FAST,
+        partial_ok=True,
     )
 
     provider = EnhancedQuestDBProvider("memory://", settings=settings)
+    storage = provider.storage_provider
 
     # Invalid OHLCV identifier should fail fast before hitting storage.
     with pytest.raises(ValueError):
         await provider.fetch(0, 60, node_id="ohlcv:binance:BTC/USDT", interval=60)
+    assert getattr(storage, "fetch_calls", 0) == 0
 
     # Well-formed identifier is accepted.
     df = await provider.fetch(0, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     assert df.empty or "ts" in df.columns
+    assert storage.fetch_calls == 1
 
 
 @pytest.mark.asyncio
