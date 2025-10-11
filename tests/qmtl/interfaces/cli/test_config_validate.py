@@ -78,7 +78,6 @@ def test_validate_runs_all_when_sections_present(tmp_path: Path, monkeypatch, ca
             "dagmanager": {"grpc_port": 5100},
         },
     )
-    )
 
     async def _fake_gateway(_cfg, *, offline: bool = False):
         return {"redis": ValidationIssue("ok", "Redis reachable")}
