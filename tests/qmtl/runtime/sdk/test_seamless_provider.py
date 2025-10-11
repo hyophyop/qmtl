@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 from typing import Optional, Any
 import logging
+import textwrap
 from types import MethodType
 
 import pandas as pd
@@ -34,7 +35,10 @@ from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import Lease
-from qmtl.runtime.sdk.configuration import runtime_config_override
+from qmtl.runtime.sdk.configuration import (
+    reset_runtime_config_cache,
+    runtime_config_override,
+)
 
 
 def _override_seamless(**kwargs: object):
@@ -256,6 +260,38 @@ async def test_publish_toggle_respects_config() -> None:
 
     assert result.metadata.dataset_fingerprint.startswith("sha256:")
     assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
+
+
+def test_legacy_mode_disables_publish_by_default() -> None:
+    provider = _DummyProvider(
+        seamless_config=SeamlessConfig(fingerprint_mode="legacy"),
+    )
+
+    assert provider._publish_fingerprint is False
+
+
+def test_legacy_mode_allows_publish_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            seamless:
+              fingerprint_mode: legacy
+              publish_fingerprint: true
+            """
+        )
+    )
+
+    monkeypatch.setenv("QMTL_CONFIG_FILE", str(config_path))
+    reset_runtime_config_cache()
+    try:
+        provider = _DummyProvider()
+        assert provider._publish_fingerprint is True
+    finally:
+        reset_runtime_config_cache()
+        monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
 
 
 @pytest.mark.asyncio

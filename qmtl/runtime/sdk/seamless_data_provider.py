@@ -34,7 +34,10 @@ import yaml
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.foundation.common.compute_context import normalize_context_value
-from qmtl.runtime.sdk.configuration import get_runtime_config_path, get_seamless_config
+from qmtl.runtime.sdk.configuration import (
+    get_runtime_config_path,
+    get_seamless_config,
+)
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -76,6 +79,10 @@ _FINGERPRINT_MODE_LEGACY = "legacy"
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
 
+_PUBLISH_OVERRIDE_CACHE_PATH: str | None = None
+_PUBLISH_OVERRIDE_CACHE_VALUE: bool | None = None
+_PUBLISH_OVERRIDE_CACHE_LOADED: bool = False
+
 
 def _coerce_bool(value: object | None, *, default: bool) -> bool:
     if isinstance(value, bool):
@@ -90,6 +97,69 @@ def _coerce_bool(value: object | None, *, default: bool) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     return default
+
+
+def _read_publish_override_from_config() -> bool | None:
+    """Return publish override from the active config file when available."""
+
+    global _PUBLISH_OVERRIDE_CACHE_LOADED
+    global _PUBLISH_OVERRIDE_CACHE_PATH
+    global _PUBLISH_OVERRIDE_CACHE_VALUE
+
+    path = get_runtime_config_path()
+    if path is None:
+        _PUBLISH_OVERRIDE_CACHE_LOADED = False
+        _PUBLISH_OVERRIDE_CACHE_PATH = None
+        _PUBLISH_OVERRIDE_CACHE_VALUE = None
+        return None
+
+    if _PUBLISH_OVERRIDE_CACHE_LOADED and path == _PUBLISH_OVERRIDE_CACHE_PATH:
+        return _PUBLISH_OVERRIDE_CACHE_VALUE
+
+    override: bool | None = None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        logger.debug("seamless.publish_config_missing", extra={"path": path})
+    except OSError as exc:
+        logger.debug(
+            "seamless.publish_config_read_failed",
+            extra={"path": path, "error": str(exc)},
+        )
+    except yaml.YAMLError as exc:
+        logger.debug(
+            "seamless.publish_config_parse_failed",
+            extra={"path": path, "error": str(exc)},
+        )
+    else:
+        if isinstance(data, dict):
+            section = data.get("seamless")
+            if isinstance(section, dict) and "publish_fingerprint" in section:
+                override = _coerce_bool(section.get("publish_fingerprint"), default=True)
+
+    _PUBLISH_OVERRIDE_CACHE_LOADED = True
+    _PUBLISH_OVERRIDE_CACHE_PATH = path
+    _PUBLISH_OVERRIDE_CACHE_VALUE = override
+    return override
+
+
+def _resolve_publish_override(config: SeamlessConfig) -> bool | None:
+    """Return the explicit publish override if one is configured."""
+
+    env_value = os.getenv("QMTL_SEAMLESS_PUBLISH_FP")
+    if env_value is not None:
+        return _coerce_bool(env_value, default=True)
+
+    file_override = _read_publish_override_from_config()
+    if file_override is not None:
+        return file_override
+
+    field_default = type(config).__dataclass_fields__["publish_fingerprint"].default
+    if config.publish_fingerprint != field_default:
+        return bool(config.publish_fingerprint)
+
+    return None
 
 
 def _load_presets_document(config: SeamlessConfig) -> tuple[dict[str, Any], str | None]:
@@ -505,10 +575,16 @@ class SeamlessDataProvider(ABC):
         legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
         canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
 
-        publish_default = not legacy_requested and _coerce_bool(
-            config.publish_fingerprint,
-            default=True,
-        )
+        publish_override = _resolve_publish_override(config)
+        if publish_override is None:
+            publish_default = _coerce_bool(
+                config.publish_fingerprint,
+                default=True,
+            )
+            if legacy_requested:
+                publish_default = False
+        else:
+            publish_default = publish_override
         self._publish_fingerprint = _coerce_bool(
             publish_fingerprint,
             default=publish_default,
