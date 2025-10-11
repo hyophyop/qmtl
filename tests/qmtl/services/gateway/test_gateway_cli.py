@@ -55,6 +55,8 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
                 "  port: 12345",
                 "  database_backend: memory",
                 "  database_dsn: 'sqlite:///:memory:'",
+                "dagmanager:",
+                "  enable_topic_namespace: false",
             ]
         )
     )
@@ -63,6 +65,11 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
 
     from types import SimpleNamespace
     from qmtl.services.gateway import cli
+
+    namespace_calls: list[bool] = []
+
+    def fake_set_namespace(enabled: bool) -> None:
+        namespace_calls.append(enabled)
 
     class DummyDB:
         async def connect(self):
@@ -79,6 +86,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
         return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setattr(cli, "set_topic_namespace_enabled", fake_set_namespace)
 
     fake_uvicorn = SimpleNamespace(run=lambda app, host, port: captured.update({"host": host, "port": port}))
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
@@ -92,6 +100,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     assert captured["db_dsn"] == "sqlite:///:memory:"
     assert captured["redis"]
     assert captured["insert_sentinel"] is True
+    assert namespace_calls == [False]
 
 
 def test_gateway_cli_redis_backend(monkeypatch, tmp_path):

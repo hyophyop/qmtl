@@ -15,6 +15,7 @@ from .api import create_app
 from .config import GatewayConfig
 from .ws import WebSocketHub
 from qmtl.foundation.config import find_config_file, load_config
+from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
 from .commit_log import create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
@@ -93,6 +94,7 @@ async def _main(argv: list[str] | None = None) -> None:
     _log_config_source(cfg_path, cli_override=args.config, env_override=env_override)
     config = GatewayConfig()
     telemetry_enabled: bool | None = None
+    namespace_toggle: bool | None = None
     if cfg_path:
         unified = load_config(cfg_path)
         if "gateway" not in unified.present_sections:
@@ -103,6 +105,10 @@ async def _main(argv: list[str] | None = None) -> None:
             raise SystemExit(2)
         config = unified.gateway
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
+        namespace_toggle = unified.dagmanager.enable_topic_namespace
+
+    if namespace_toggle is not None:
+        set_topic_namespace_enabled(namespace_toggle)
 
     if config.redis_dsn:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
