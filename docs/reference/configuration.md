@@ -43,6 +43,12 @@ Sample configurations for common environments live under
 | `enforce_live_guard` | boolean | `True` | `QMTL__GATEWAY__ENFORCE_LIVE_GUARD` | No |
 | `cache_ttl_seconds` | integer or null | `null` | `QMTL__GATEWAY__WORLDSERVICE_CACHE_TTL` | No |
 | `cache_max_entries` | integer or null | `null` | `QMTL__GATEWAY__WORLDSERVICE_CACHE_MAX` | No |
+| `dsn` | string | – | – | Yes |
+| `redis` | string | – | – | Yes |
+| `bind.host` | string | `"0.0.0.0"` | – | No |
+| `bind.port` | integer | `8080` | – | No |
+| `auth.header` | string | `"Authorization"` | – | No |
+| `auth.tokens` | list of strings | `[]` | – | No |
 
 ### Gateway
 
@@ -62,6 +68,13 @@ Sample configurations for common environments live under
 | `commitlog_group` | string | `"gateway-commit"` | `QMTL__GATEWAY__COMMITLOG_GROUP` | No |
 | `commitlog_transactional_id` | string | `"gateway-commit-writer"` | `QMTL__GATEWAY__COMMITLOG_TRANSACTIONAL_ID` | No |
 | `controlbus_dsn` | string or null | `null` | `QMTL__GATEWAY__CONTROLBUS_DSN` | No |
+| `events.secret` | string or null | `null` | — | No |
+| `events.keys` | mapping | `{}` | — | No |
+| `events.active_kid` | string | `"default"` | — | No |
+| `events.ttl` | integer | `300` | — | No |
+| `events.stream_url` | string | `"wss://gateway/ws/evt"` | — | No |
+| `events.fallback_url` | string | `"wss://gateway/ws"` | — | No |
+| `websocket.rate_limit_per_sec` | integer or null | `null` | — | No |
 
 ### Dagmanager
 
@@ -78,20 +91,22 @@ Sample configurations for common environments live under
 | `http_port` | integer | `8001` | `QMTL__DAGMANAGER__HTTP_PORT` | No |
 | `controlbus_dsn` | string or null | `null` | `QMTL__DAGMANAGER__CONTROLBUS_DSN` | No |
 | `controlbus_queue_topic` | string | `"queue"` | `QMTL__DAGMANAGER__CONTROLBUS_QUEUE_TOPIC` | No |
+| `enable_topic_namespace` | boolean | `True` | — | No |
 
 ### Seamless
 
 | Key | Type | Default | Environment variable | Required |
 | --- | --- | --- | --- | --- |
-| `coordinator_url` | string or null | `null` | `QMTL_SEAMLESS_COORDINATOR_URL` | No |
-| `artifacts_enabled` | boolean | `False` | `QMTL_SEAMLESS_ARTIFACTS` | No |
-| `artifact_dir` | string | `"~/.qmtl_seamless_artifacts"` | `QMTL_SEAMLESS_ARTIFACT_DIR` | No |
-| `fingerprint_mode` | string | `"canonical"` | `QMTL_SEAMLESS_FP_MODE` | No |
-| `publish_fingerprint` | boolean | `True` | `QMTL_SEAMLESS_PUBLISH_FP` | No |
-| `preview_fingerprint` | boolean | `False` | `QMTL_SEAMLESS_PREVIEW_FP` | No |
-| `early_fingerprint` | boolean | `False` | `QMTL_SEAMLESS_EARLY_FP` | No |
-| `sla_preset` | string | `"baseline"` | `QMTL_SEAMLESS_SLA_PRESET` | No |
-| `conformance_preset` | string | `"strict-blocking"` | `QMTL_SEAMLESS_CONFORMANCE_PRESET` | No |
+| `coordinator_url` | string or null | `null` | — | No |
+| `artifacts_enabled` | boolean | `False` | — | No |
+| `artifact_dir` | string | `"~/.qmtl_seamless_artifacts"` | — | No |
+| `fingerprint_mode` | string | `"canonical"` | — | No |
+| `publish_fingerprint` | boolean | `True` | — | No |
+| `preview_fingerprint` | boolean | `False` | — | No |
+| `early_fingerprint` | boolean | `False` | — | No |
+| `sla_preset` | string | `"baseline"` | — | No |
+| `conformance_preset` | string | `"strict-blocking"` | — | No |
+| `presets_file` | string or null | `null` | — | No |
 
 ### Connectors
 
@@ -154,7 +169,6 @@ Sample configurations for common environments live under
 | `fixed_now` | string or null | `null` | `QMTL_FIXED_NOW` | No |
 | `history_start` | string or null | `null` | `QMTL_HISTORY_START` | No |
 | `history_end` | string or null | `null` | `QMTL_HISTORY_END` | No |
-| `enable_topic_namespace` | boolean or null | `null` | `QMTL_ENABLE_TOPIC_NAMESPACE` | No |
 
 ## Validation summary
 

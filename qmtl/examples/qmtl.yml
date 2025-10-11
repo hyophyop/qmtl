@@ -9,6 +9,14 @@ worldservice:
   enforce_live_guard: true
   cache_ttl_seconds: 300
   cache_max_entries: 128
+  dsn: sqlite:///./worlds.db
+  redis: redis://localhost:6379/0
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
 
 gateway:
   host: 0.0.0.0
@@ -25,6 +33,11 @@ gateway:
   commitlog_topic: gateway.ingest
   commitlog_group: gateway-commit
   commitlog_transactional_id: gateway-commit-writer
+  events:
+    secret: change-me-gateway-secret
+    ttl: 300
+  websocket:
+    rate_limit_per_sec: 0
 
 # The DAG Manager can run entirely in-memory (default) or target external stores.
 dagmanager:
@@ -39,6 +52,7 @@ dagmanager:
   http_port: 8001
   controlbus_dsn: localhost:9092
   controlbus_queue_topic: queue
+  enable_topic_namespace: true
 
 seamless:
   coordinator_url: http://localhost:5010
@@ -98,4 +112,3 @@ test:
   fixed_now: null
   history_start: null
   history_end: null
-  enable_topic_namespace: true

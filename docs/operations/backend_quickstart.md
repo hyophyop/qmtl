@@ -28,8 +28,18 @@ end-to-end tests in [E2E Testing](e2e_testing.md).
 1) Start WorldService (SQLite + Redis example)
 
 ```bash
-export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
-export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+cat > worldservice.yml <<'EOF'
+worldservice:
+  dsn: sqlite:///worlds.db
+  redis: redis://localhost:6379/0
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
+EOF
+export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
@@ -38,6 +48,8 @@ uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.
 - Edit `qmtl/examples/qmtl.yml`:
   - `gateway.worldservice_url: http://localhost:8080`
   - `gateway.enable_worldservice_proxy: true`
+  - `gateway.events.secret: <generate a 64-character hex secret>`
+  - `gateway.websocket.rate_limit_per_sec: 0` (leave `0` for unlimited)
 - Start Gateway with the config:
 
 ```bash
@@ -52,7 +64,7 @@ qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 
 Notes
 - For production-like topics, set Kafka/Neo4j in the YAML. Without them, DM uses in-memory repo and queues.
-- Topic namespaces are on by default. For simple local testing without prefixes: `export QMTL_ENABLE_TOPIC_NAMESPACE=0` before starting services.
+- Topic namespaces are on by default. For simple local testing without prefixes set `dagmanager.enable_topic_namespace: false` in the same YAML.
 
 ## Option B — Docker Compose
 

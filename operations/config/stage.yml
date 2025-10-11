@@ -20,6 +20,11 @@ gateway:
     - queue
   commitlog_topic: stage.gateway.ingest
   commitlog_group: stage-gateway-commit
+  events:
+    secret: stage-gateway-secret
+    ttl: 300
+  websocket:
+    rate_limit_per_sec: 200
 
 dagmanager:
   neo4j_dsn: neo4j://stage-neo4j:7687
@@ -32,6 +37,7 @@ dagmanager:
   http_port: 8101
   controlbus_dsn: stage-kafka:9092
   controlbus_queue_topic: queue
+  enable_topic_namespace: true
 
 seamless:
   coordinator_url: https://stage-seamless-coordinator.internal
@@ -40,6 +46,7 @@ seamless:
   fingerprint_mode: canonical
   publish_fingerprint: true
   sla_preset: staging
+  presets_file: ../seamless/presets.yaml
 
 connectors:
   ccxt_rate_limiter_redis: redis://stage-redis:6379/1
@@ -61,4 +68,3 @@ cache:
 test:
   test_mode: false
   fail_on_history_gap: true
-  enable_topic_namespace: true

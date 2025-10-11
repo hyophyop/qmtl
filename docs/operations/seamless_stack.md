@@ -36,14 +36,15 @@ Verify the services:
 - QuestDB UI – `http://localhost:9000`
 - MinIO console – `http://localhost:9001`
 
-Update the `QMTL_SEAMLESS_COORDINATOR_URL`, `QMTL_SEAMLESS_SLA_PRESET`, and
-`QMTL_SEAMLESS_CONFORMANCE_PRESET` variables in the `.env` file to match your
-runtime needs.
+Adjust `operations/config/*.yml` to point at your coordinator, select the
+desired SLA/conformance presets, and configure artifact capture. The
+`seamless` section drives these runtime behaviours.
 
 ## Using the Presets
 
-Load the SLA and conformance presets directly in application code or service
-configuration. Each entry under `sla_presets` maps to
+Load the SLA and conformance presets by pointing `seamless.presets_file` at the
+desired document and selecting `seamless.sla_preset` /
+`seamless.conformance_preset`. Each entry under `sla_presets` maps to
 `qmtl.runtime.sdk.sla.SLAPolicy`, and each entry under `conformance_presets`
 defines whether Seamless should block responses when warnings occur. The default
 pair is:

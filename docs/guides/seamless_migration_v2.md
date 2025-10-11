@@ -13,7 +13,7 @@ milestone.
 ## Prerequisites
 
 - Ensure the `seamless-backfill-coordinator` service is deployed and reachable;
-  set `QMTL_SEAMLESS_COORDINATOR_URL` in runtime environments.
+  set `seamless.coordinator_url` in runtime configuration.
 - Roll out the observability bundle from `operations/monitoring/seamless_v2.jsonnet`
   so `backfill_completion_ratio` and `seamless_sla_deadline_seconds` surface in
   Grafana.
@@ -35,8 +35,9 @@ milestone.
 
 ### 2. Adopt the Distributed Backfill Coordinator
 
-1. Configure strategies to rely on the default coordinator. When the URL is set
-   the SDK instantiates `DistributedBackfillCoordinator` automatically.
+1. Configure strategies to rely on the default coordinator. When
+   `seamless.coordinator_url` is set the SDK instantiates
+   `DistributedBackfillCoordinator` automatically.
 2. Validate `backfill_completion_ratio` in staging to ensure leases converge and
    shards are not duplicated.
 3. Document recovery procedures (`scripts/lease_recover.py`) for on-call use and

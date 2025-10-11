@@ -23,7 +23,7 @@ backends:
     url: redis://localhost:6379/0
     notes:
       - "Gateway falls back to InMemoryRedis when redis_dsn is omitted."
-      - "WorldService defaults to the in-memory activation store when QMTL_WORLDSERVICE_REDIS_DSN is unset."
+      - "WorldService defaults to the in-memory activation store when its redis setting is unset."
   controlbus:
     mode: in-process
     notes:
@@ -34,18 +34,21 @@ backends:
     notes:
       - "Gateway buffers ingest events in process when commit log brokers are not configured."
 worldservice:
-  host: 0.0.0.0
-  port: 8080
-  storage:
-    backend: sqlite
-    db_dsn: sqlite:///${filesystem.state_root}/worlds.sqlite3
-    redis_dsn: ${backends.redis.url}
-  env:
-    QMTL_WORLDSERVICE_DB_DSN: ${worldservice.storage.db_dsn}
-    QMTL_WORLDSERVICE_REDIS_DSN: ${worldservice.storage.redis_dsn}
+  dsn: sqlite:///${filesystem.state_root}/worlds.sqlite3
+  redis: ${backends.redis.url}
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
   notes:
-    - "Unset the env vars above to use the bundled in-memory storage façade (handy for unit tests)."
-    - "Run with: uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host ${worldservice.host} --port ${worldservice.port}"
+    - >-
+      For an in-memory activation cache leave redis unset. Provide a redis:// URL
+      to enable durable activation caching across restarts.
+    - >-
+      Run with: uv run uvicorn qmtl.services.worldservice.api:create_app --factory
+      --host ${worldservice.bind.host} --port ${worldservice.bind.port}
 gateway:
   host: 0.0.0.0
   port: 8000
@@ -53,11 +56,16 @@ gateway:
   database_backend: sqlite
   database_dsn: ${backends.sqlite.gateway_path}
   insert_sentinel: true
-  worldservice_url: "http://localhost:${worldservice.port}"
+  worldservice_url: "http://localhost:${worldservice.bind.port}"
   enable_worldservice_proxy: true
   enforce_live_guard: false
   controlbus_brokers: []
   controlbus_topics: []
+  events:
+    secret: local-dev-secret-change-me
+    ttl: 300
+  websocket:
+    rate_limit_per_sec: 0
   notes:
     - "Persistent storage defaults to SQLite; switch to Postgres by adjusting database_backend."
     - "Commit log fields are omitted; Gateway falls back to its local queue implementation."
@@ -71,6 +79,7 @@ dagmanager:
   http_port: 8001
   controlbus_dsn: null      # omit to keep ControlBus events in process
   controlbus_queue_topic: queue
+  enable_topic_namespace: true
   notes:
     - "Create the memrepo directory before launch: mkdir -p ${filesystem.state_root}/dagmanager"
     - "Neo4j and Kafka dependencies stay disabled for pure local runs."
@@ -90,6 +99,6 @@ qmtl:
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"
   - "Create local state directories upfront: mkdir -p ./var/dagmanager"
-  - "Set QMTL_ENABLE_TOPIC_NAMESPACE=0 to reuse legacy topic names when testing against mocks."
+  - "Set dagmanager.enable_topic_namespace: false if you need to reuse legacy topic names when testing against mocks."
   - "Install dependencies with uv pip install -e .[dev] before starting services."
   - "Set QMTL_CONFIG_FILE to this template's YAML so service CLIs pick it up without passing --config each time."

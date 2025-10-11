@@ -1,84 +1,128 @@
-"""Helpers for loading the unified SDK configuration."""
+"""Runtime configuration helpers for SDK components."""
 
 from __future__ import annotations
+
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
 import logging
-from typing import Optional
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover - import-time cycle guard
-    from qmtl.foundation.config import (
-        CacheConfig,
-        ConnectorsConfig,
-        RuntimeConfig,
-        TestConfig,
-        UnifiedConfig,
-    )
+from qmtl.foundation.config import (
+    ConnectorsConfig,
+    SeamlessConfig,
+    UnifiedConfig,
+    find_config_file,
+    load_config,
+)
 
 logger = logging.getLogger(__name__)
 
-_CONFIG: Optional["UnifiedConfig"] = None
-_CONFIG_PATH: Optional[str] = None
+_CONFIG_OVERRIDE: UnifiedConfig | None = None
+_CONFIG_CACHE: UnifiedConfig | None = None
+_CONFIG_CACHE_LOADED: bool = False
+_CONFIG_SOURCE_PATH: str | None = None
 
 
-def _load_from_path(path: Optional[str]) -> "UnifiedConfig":
-    from qmtl.foundation.config import UnifiedConfig, load_config
+def _load_from_path(path: str | Path) -> UnifiedConfig:
+    return load_config(str(path))
 
-    if not path:
-        return UnifiedConfig()
+
+def set_runtime_config_override(config: UnifiedConfig | None) -> None:
+    """Set a process-wide override for the runtime configuration."""
+
+    global _CONFIG_OVERRIDE, _CONFIG_SOURCE_PATH
+    _CONFIG_OVERRIDE = config
+    _CONFIG_SOURCE_PATH = None
+
+
+def reset_runtime_config_cache() -> None:
+    """Clear the cached runtime configuration."""
+
+    global _CONFIG_CACHE, _CONFIG_CACHE_LOADED, _CONFIG_SOURCE_PATH
+    _CONFIG_CACHE = None
+    _CONFIG_CACHE_LOADED = False
+    _CONFIG_SOURCE_PATH = None
+
+
+@contextmanager
+def runtime_config_override(config: UnifiedConfig | None) -> Iterator[None]:
+    """Temporarily override the runtime configuration returned by helpers."""
+
+    global _CONFIG_SOURCE_PATH
+    previous_override = _CONFIG_OVERRIDE
+    previous_source = _CONFIG_SOURCE_PATH
+    set_runtime_config_override(config)
     try:
-        return load_config(path)
-    except FileNotFoundError:
-        logger.warning("Configuration file %s was not found; using defaults", path)
-    except Exception as exc:  # pragma: no cover - defensive catch
-        logger.warning("Failed to load configuration file %s: %s", path, exc)
-    return UnifiedConfig()
+        yield
+    finally:
+        set_runtime_config_override(previous_override)
+        _CONFIG_SOURCE_PATH = previous_source
 
 
-def get_unified_config(*, reload: bool = False) -> "UnifiedConfig":
-    """Return the cached :class:`~qmtl.foundation.config.UnifiedConfig`."""
+def get_runtime_config(path: str | Path | None = None) -> UnifiedConfig | None:
+    """Return the active runtime configuration or ``None`` when unavailable."""
 
-    global _CONFIG, _CONFIG_PATH
-    if reload:
-        _CONFIG = None
-        _CONFIG_PATH = None
+    if path is not None:
+        return _load_from_path(path)
 
-    from qmtl.foundation.config import find_config_file
+    override = _CONFIG_OVERRIDE
+    if override is not None:
+        return override
 
-    path = find_config_file()
-    if _CONFIG is None or path != _CONFIG_PATH:
-        _CONFIG = _load_from_path(path)
-        _CONFIG_PATH = path
-    return _CONFIG
+    global _CONFIG_CACHE_LOADED, _CONFIG_CACHE, _CONFIG_SOURCE_PATH
+    if _CONFIG_CACHE_LOADED:
+        return _CONFIG_CACHE
 
+    cfg_path = find_config_file()
+    if not cfg_path:
+        logger.debug("No qmtl config file discovered; using defaults")
+        _CONFIG_CACHE_LOADED = True
+        _CONFIG_CACHE = None
+        _CONFIG_SOURCE_PATH = None
+        return None
 
-def reload() -> "UnifiedConfig":
-    """Force a reload of the configuration file."""
-
-    return get_unified_config(reload=True)
-
-
-def cache_config() -> "CacheConfig":
-    return get_unified_config().cache
-
-
-def runtime_config() -> "RuntimeConfig":
-    return get_unified_config().runtime
-
-
-def connectors_config() -> "ConnectorsConfig":
-    return get_unified_config().connectors
+    try:
+        _CONFIG_CACHE = _load_from_path(cfg_path)
+        _CONFIG_SOURCE_PATH = cfg_path
+    finally:
+        _CONFIG_CACHE_LOADED = True
+    return _CONFIG_CACHE
 
 
-def test_config() -> "TestConfig":
-    return get_unified_config().test
+def get_runtime_config_path() -> str | None:
+    """Return the path used for the cached runtime configuration."""
+
+    if _CONFIG_OVERRIDE is not None:
+        return None
+    if not _CONFIG_CACHE_LOADED:
+        get_runtime_config()
+    return _CONFIG_SOURCE_PATH
+
+
+def get_seamless_config(path: str | Path | None = None) -> SeamlessConfig:
+    """Return seamless configuration from runtime config or defaults."""
+
+    unified = get_runtime_config(path)
+    if unified is not None:
+        return unified.seamless
+    return SeamlessConfig()
+
+
+def get_connectors_config(path: str | Path | None = None) -> ConnectorsConfig:
+    """Return connectors configuration from runtime config or defaults."""
+
+    unified = get_runtime_config(path)
+    if unified is not None:
+        return unified.connectors
+    return ConnectorsConfig()
 
 
 __all__ = [
-    "cache_config",
-    "connectors_config",
-    "get_unified_config",
-    "reload",
-    "runtime_config",
-    "test_config",
+    "get_runtime_config",
+    "get_runtime_config_path",
+    "get_seamless_config",
+    "get_connectors_config",
+    "runtime_config_override",
+    "reset_runtime_config_cache",
+    "set_runtime_config_override",
 ]

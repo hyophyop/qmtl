@@ -114,7 +114,7 @@ async def test_validation_cache_invalidation_handles_domain_normalisation():
 
 @pytest.mark.asyncio
 async def test_validation_cache_endpoints_domain_and_context_handling():
-    app = create_app()
+    app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as transport:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "world-api"})

@@ -12,6 +12,7 @@ from qmtl.services.gateway.event_descriptor import (
     sign_event_token,
     jwks,
 )
+from qmtl.services.gateway.config import GatewayEventsConfig
 
 
 class FakeDB(Database):
@@ -63,11 +64,16 @@ async def test_event_descriptor_scope_and_expiry(fake_redis):
 
 
 @pytest.mark.asyncio
-async def test_event_descriptor_secret_from_env(fake_redis, monkeypatch):
-    monkeypatch.setenv("QMTL_EVENT_SECRET", "envsecret")
-    app = create_app(redis_client=fake_redis, database=FakeDB(), enable_background=False)
+async def test_event_descriptor_secret_from_config(fake_redis):
+    events_cfg = GatewayEventsConfig(secret="cfgsecret")
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        enable_background=False,
+        event_config=events_cfg.build_descriptor(),
+    )
     cfg: EventDescriptorConfig = app.state.event_config
-    assert cfg.keys[cfg.active_kid] == "envsecret"
+    assert cfg.keys[cfg.active_kid] == "cfgsecret"
 
 
 @pytest.mark.asyncio

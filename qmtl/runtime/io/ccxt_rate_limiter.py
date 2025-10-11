@@ -13,7 +13,7 @@ import time
 from typing import Dict, Any
 
 from qmtl.runtime.sdk import metrics as sdk_metrics
-from qmtl.runtime.sdk import configuration as sdk_configuration
+from qmtl.runtime.sdk.configuration import get_connectors_config
 
 try:  # Optional at runtime; required for cluster scope
     from redis import asyncio as aioredis  # type: ignore
@@ -237,8 +237,10 @@ async def get_limiter(
         if cache_key in _CLUSTER_CACHE:
             return _CLUSTER_CACHE[cache_key]
 
-        # Resolve Redis DSN from configuration, falling back to environment
-        dsn = _resolve_redis_dsn(redis_dsn)
+        connectors_cfg = get_connectors_config()
+        default_dsn = connectors_cfg.ccxt_rate_limiter_redis or "redis://localhost:6379/0"
+        dsn = redis_dsn or default_dsn
+        
 
         client = aioredis.from_url(dsn, encoding=None, decode_responses=False)
         limiter = _RedisTokenBucketLimiter(
@@ -254,32 +256,6 @@ async def get_limiter(
     return await get_shared_limiter(
         key, max_concurrency=max_concurrency, min_interval_s=min_interval_s
     )
-
-
-def _resolve_redis_dsn(redis_dsn: str | None) -> str:
-    if redis_dsn:
-        return redis_dsn
-
-    try:
-        cfg = sdk_configuration.connectors_config()
-        candidate = getattr(cfg, "ccxt_rate_limiter_redis", None)
-        if candidate:
-            text = str(candidate).strip()
-            if text:
-                return text
-    except Exception:  # pragma: no cover - defensive configuration access
-        pass
-
-    import os  # local import to avoid redis dependency during module import
-
-    env_value = os.getenv("QMTL_CCXT_RATE_LIMITER_REDIS")
-    if env_value:
-        text = env_value.strip()
-        if text:
-            return text
-    return "redis://localhost:6379/0"
-
-
 __all__ = [
     "get_limiter",
 ]

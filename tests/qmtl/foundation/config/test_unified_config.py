@@ -80,6 +80,29 @@ def test_load_unified_config_defaults(tmp_path: Path) -> None:
     assert config.present_sections == frozenset()
 
 
+def test_load_unified_config_worldservice_server(tmp_path: Path) -> None:
+    config_file = tmp_path / "ws.yml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "worldservice": {
+                    "dsn": "sqlite:///ws.db",
+                    "redis": "redis://localhost:6379/5",
+                    "bind": {"host": "127.0.0.1", "port": 9090},
+                    "auth": {"tokens": ["secret-token"]},
+                }
+            }
+        )
+    )
+
+    config = load_config(str(config_file))
+    assert config.worldservice.server is not None
+    assert config.worldservice.server.dsn == "sqlite:///ws.db"
+    assert config.worldservice.server.redis == "redis://localhost:6379/5"
+    assert config.worldservice.server.bind.port == 9090
+    assert config.worldservice.server.auth.tokens == ["secret-token"]
+
+
 def test_load_unified_config_aliases(tmp_path: Path) -> None:
     data = {
         "gateway": {

@@ -11,11 +11,14 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
 import httpx
 
-DEFAULT_REQUIRED_ENV = ("QMTL_SEAMLESS_COORDINATOR_URL",)
+from qmtl.runtime.sdk.configuration import get_runtime_config, get_seamless_config
+
+DEFAULT_REQUIRED_ENV: tuple[str, ...] = ()
 DEFAULT_PROMETHEUS_METRICS = (
     "backfill_completion_ratio",
     "seamless_sla_deadline_seconds",
@@ -191,6 +194,12 @@ def check_prometheus_metrics(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--config",
+        type=Path,
+        dest="config",
+        help="Optional path to qmtl.yml. Defaults to auto-discovery when omitted.",
+    )
+    parser.add_argument(
         "--required-env",
         action="append",
         dest="required_env",
@@ -198,8 +207,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--coordinator-url",
-        default=os.getenv("QMTL_SEAMLESS_COORDINATOR_URL", ""),
-        help="Distributed coordinator base URL (default: QMTL_SEAMLESS_COORDINATOR_URL)",
+        default=None,
+        help="Distributed coordinator base URL (overrides configuration).",
     )
     parser.add_argument(
         "--coordinator-health-path",
@@ -208,8 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--prometheus-url",
-        default=os.getenv("QMTL_PROMETHEUS_URL") or os.getenv("PROMETHEUS_URL", ""),
-        help="Prometheus base URL (default: QMTL_PROMETHEUS_URL or PROMETHEUS_URL)",
+        default=None,
+        help="Prometheus base URL (overrides configuration).",
     )
     parser.add_argument(
         "--prometheus-metric",
@@ -237,15 +246,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         else DEFAULT_PROMETHEUS_METRICS
     )
 
+    unified = get_runtime_config(args.config)
+    seamless_cfg = unified.seamless if unified is not None else get_seamless_config(args.config)
+    prometheus_cfg = (unified.telemetry.prometheus_url if unified is not None else None)
+
+    coordinator_url = args.coordinator_url or (seamless_cfg.coordinator_url or "").strip()
+    prometheus_url = args.prometheus_url or (prometheus_cfg or "").strip()
+
     results = [
         verify_required_env(required_env),
         check_coordinator_health(
-            args.coordinator_url,
+            coordinator_url,
             path=args.coordinator_health_path,
             timeout=args.timeout,
         ),
         check_prometheus_metrics(
-            args.prometheus_url,
+            prometheus_url,
             prometheus_metrics,
             timeout=args.timeout,
         ),
