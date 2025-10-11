@@ -113,9 +113,8 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
         raise SystemExit(2) from exc
 
     results: Dict[str, Dict[str, ValidationIssue]] = {}
-
-    if args.target in {"schema", "all"}:
-        results["schema"] = validate_config_structure(unified)
+    # Always include schema validation for structure/type checks
+    results["schema"] = validate_config_structure(unified)
 
     targets: List[str] = []
     if args.target in {"gateway", "all"}:

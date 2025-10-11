@@ -37,7 +37,7 @@ compute executions for the same `(node_id, bucket_ts, input_window_hash)`.
 
 ## Operational guidance
 
-- Favor short timeouts in test and staging (`QMTL_TEST_MODE=1`) to surface
+- Favor short timeouts in test and staging (`test.test_mode: true`) to surface
   reconnection paths quickly.
 - For long‑running soaks, monitor:
   - `gateway_ws_duplicate_drop_total` (if enabled) and commit‑log duplicate

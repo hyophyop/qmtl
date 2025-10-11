@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Iterable
 
 from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
@@ -95,7 +94,7 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         )
 
     def _create_cache(self, period: int | None) -> Any:
-        if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
+        if arrow_cache.ARROW_AVAILABLE and arrow_cache.ARROW_CACHE_ENABLED:
             return arrow_cache.NodeCacheArrow(period or 0)
         return NodeCache(period or 0)
 

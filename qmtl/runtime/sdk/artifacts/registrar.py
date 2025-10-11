@@ -18,6 +18,28 @@ from qmtl.runtime.io.artifact import (
 )
 from qmtl.runtime.sdk.configuration import get_seamless_config
 
+from .. import configuration
+
+
+def _resolve_strategy_id() -> str | None:
+    try:
+        cfg = configuration.get_connectors_config()
+        value = getattr(cfg, "strategy_id", None)
+    except Exception:  # pragma: no cover - defensive cache access
+        value = None
+
+    if value:
+        text = str(value).strip()
+        if text:
+            return text
+
+    raw = os.getenv("QMTL_STRATEGY_ID")
+    if raw:
+        text = raw.strip()
+        if text:
+            return text
+    return None
+
 
 @dataclass(slots=True)
 class ProducerContext:
@@ -200,7 +222,7 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
             node_id=str(manifest.get("node_id", "unknown")),
             interval=int(manifest.get("interval", 0)),
             world_id=os.getenv("WORLD_ID", "default"),
-            strategy_id=os.getenv("QMTL_STRATEGY_ID"),
+            strategy_id=_resolve_strategy_id(),
         )
         producer_payload = producer.as_dict()
         if self._producer_identity:

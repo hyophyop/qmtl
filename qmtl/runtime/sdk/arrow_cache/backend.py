@@ -1,7 +1,6 @@
 """Arrow-backed cache backend implementation."""
 from __future__ import annotations
 
-import os
 import time
 from collections.abc import Iterable
 from typing import Any, Dict
@@ -9,6 +8,7 @@ from typing import Any, Dict
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 from ..backfill_state import BackfillState
+from .. import configuration
 from .dependencies import ARROW_AVAILABLE, ARROW_CACHE_ENABLED, pa
 from .eviction import EvictionStrategy, create_default_eviction_strategy
 from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION, default_instrumentation
@@ -46,7 +46,9 @@ class NodeCacheArrow:
         if self._metrics is None:  # pragma: no cover - defensive
             self._metrics = NOOP_INSTRUMENTATION
 
-        self._evict_interval = int(os.getenv("QMTL_CACHE_EVICT_INTERVAL", "60"))
+        cfg = configuration.get_runtime_config()
+        interval = int(cfg.cache.cache_evict_interval) if cfg is not None else 60
+        self._evict_interval = interval
         self._eviction = eviction_strategy or create_default_eviction_strategy(self._evict_interval)
         self._eviction.start(self)
 

@@ -18,7 +18,8 @@
   
 - (선택) Redis 실행 — 클러스터 레이트리밋
   - Docker 예시: `docker run -p 6379:6379 redis:7-alpine`
-  - 환경변수: `QMTL_CCXT_RATE_LIMITER_REDIS=redis://localhost:6379/0`
+  - 설정: `connectors.ccxt_rate_limiter_redis: redis://localhost:6379/0`
+  - (레거시) 환경변수: `QMTL_CCXT_RATE_LIMITER_REDIS=redis://localhost:6379/0`
 
 ## 빠른 시작
 
@@ -82,7 +83,7 @@ sequenceDiagram
 - 레이트리밋(옵션): `rate_limiter = {max_concurrency, min_interval_s, scope}`
   - `scope`: `local`(페처별), `process`(프로세스 전역, 기본), `cluster`(분산)
   - `cluster` 추가 옵션: `redis_dsn`, `tokens_per_interval`, `interval_ms`, `burst_tokens`, `local_semaphore`, `key_suffix`, `key_template`
-    - `redis_dsn`: Redis DSN (미설정 시 `QMTL_CCXT_RATE_LIMITER_REDIS` → 기본값)
+    - `redis_dsn`: Redis DSN (미설정 시 `connectors.ccxt_rate_limiter_redis` 또는 `QMTL_CCXT_RATE_LIMITER_REDIS` → 기본값)
     - `tokens_per_interval`: 윈도우(`interval_ms`)당 허용 토큰 수
     - `interval_ms`: 토큰 버킷 윈도우 크기(ms)
     - `burst_tokens`: 버스트 허용량(미설정 시 `tokens_per_interval`)

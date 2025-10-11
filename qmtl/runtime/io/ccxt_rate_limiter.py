@@ -240,6 +240,7 @@ async def get_limiter(
         connectors_cfg = get_connectors_config()
         default_dsn = connectors_cfg.ccxt_rate_limiter_redis or "redis://localhost:6379/0"
         dsn = redis_dsn or default_dsn
+        
 
         client = aioredis.from_url(dsn, encoding=None, decode_responses=False)
         limiter = _RedisTokenBucketLimiter(
@@ -255,8 +256,6 @@ async def get_limiter(
     return await get_shared_limiter(
         key, max_concurrency=max_concurrency, min_interval_s=min_interval_s
     )
-
-
 __all__ = [
     "get_limiter",
 ]

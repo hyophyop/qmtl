@@ -88,6 +88,35 @@ class ConnectorsConfig:
     strategy_id: str | None = field(
         default=None, metadata={"env": "QMTL_STRATEGY_ID"}
     )
+    execution_domain: str | None = field(
+        default=None, metadata={"env": "QMTL_EXECUTION_DOMAIN"}
+    )
+    broker_url: str | None = field(
+        default=None, metadata={"env": "QMTL_BROKER_URL"}
+    )
+    trade_max_retries: int = field(
+        default=3, metadata={"env": "QMTL_TRADE_MAX_RETRIES"}
+    )
+    trade_backoff: float = field(
+        default=0.1, metadata={"env": "QMTL_TRADE_BACKOFF"}
+    )
+    ws_url: str | None = field(
+        default=None, metadata={"env": "QMTL_WS_URL"}
+    )
+
+
+@dataclass
+class RuntimeConfig:
+    """SDK runtime tuning knobs (timeouts, polling)."""
+
+    http_timeout_seconds: float = 2.0
+    http_timeout_seconds_test: float = 1.5
+    ws_recv_timeout_seconds: float = 30.0
+    ws_recv_timeout_seconds_test: float = 5.0
+    ws_max_total_time_seconds: float | None = None
+    ws_max_total_time_seconds_test: float | None = 5.0
+    poll_interval_seconds: float = 10.0
+    poll_interval_seconds_test: float = 2.0
 
 
 @dataclass
@@ -173,6 +202,7 @@ CONFIG_SECTION_NAMES: tuple[str, ...] = (
     "connectors",
     "telemetry",
     "cache",
+    "runtime",
     "test",
 )
 
@@ -210,6 +240,11 @@ ENV_EXPORT_OVERRIDES: Dict[str, Dict[str, str | None]] = {
         "worker_id": "QMTL_WORKER_ID",
         "seamless_worker_id": "QMTL_SEAMLESS_WORKER",
         "strategy_id": "QMTL_STRATEGY_ID",
+        "execution_domain": "QMTL_EXECUTION_DOMAIN",
+        "broker_url": "QMTL_BROKER_URL",
+        "trade_max_retries": "QMTL_TRADE_MAX_RETRIES",
+        "trade_backoff": "QMTL_TRADE_BACKOFF",
+        "ws_url": "QMTL_WS_URL",
     },
     "telemetry": {
         "otel_exporter_endpoint": "QMTL_OTEL_EXPORTER_ENDPOINT",
@@ -228,6 +263,16 @@ ENV_EXPORT_OVERRIDES: Dict[str, Dict[str, str | None]] = {
         "snapshot_url": "QMTL_SNAPSHOT_URL",
         "snapshot_strict_runtime": "QMTL_SNAPSHOT_STRICT_RUNTIME",
         "snapshot_format": "QMTL_SNAPSHOT_FORMAT",
+    },
+    "runtime": {
+        "http_timeout_seconds": "QMTL_HTTP_TIMEOUT",
+        "http_timeout_seconds_test": "QMTL_HTTP_TIMEOUT_TEST",
+        "ws_recv_timeout_seconds": "QMTL_WS_RECV_TIMEOUT",
+        "ws_recv_timeout_seconds_test": "QMTL_WS_RECV_TIMEOUT_TEST",
+        "ws_max_total_time_seconds": "QMTL_WS_MAX_TOTAL_TIME",
+        "ws_max_total_time_seconds_test": "QMTL_WS_MAX_TOTAL_TIME_TEST",
+        "poll_interval_seconds": "QMTL_POLL_INTERVAL",
+        "poll_interval_seconds_test": "QMTL_POLL_INTERVAL_TEST",
     },
     "test": {
         "test_mode": "QMTL_TEST_MODE",
@@ -261,6 +306,7 @@ class UnifiedConfig:
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     test: TestConfig = field(default_factory=TestConfig)
     present_sections: FrozenSet[str] = field(default_factory=frozenset)
 
@@ -326,6 +372,7 @@ def load_config(path: str) -> UnifiedConfig:
     connectors_data = data.get("connectors", {})
     telemetry_data = data.get("telemetry", {})
     cache_data = data.get("cache", {})
+    runtime_data = data.get("runtime", {})
     test_data = data.get("test", {})
     present_sections: FrozenSet[str] = frozenset(
         section
@@ -341,6 +388,7 @@ def load_config(path: str) -> UnifiedConfig:
         ("connectors", connectors_data),
         ("telemetry", telemetry_data),
         ("cache", cache_data),
+        ("runtime", runtime_data),
         ("test", test_data),
     ):
         if section_data is None:
@@ -361,6 +409,8 @@ def load_config(path: str) -> UnifiedConfig:
             telemetry_data = section_data
         elif section_name == "cache":
             cache_data = section_data
+        elif section_name == "runtime":
+            runtime_data = section_data
         elif section_name == "test":
             test_data = section_data
 
@@ -445,6 +495,7 @@ def load_config(path: str) -> UnifiedConfig:
     connectors_cfg = ConnectorsConfig(**connectors_data)
     telemetry_cfg = TelemetryConfig(**telemetry_data)
     cache_cfg = CacheConfig(**cache_data)
+    runtime_cfg = RuntimeConfig(**runtime_data)
     test_cfg = TestConfig(**test_data)
 
     # Canonical WorldService settings live in the dedicated section; mirror them into
@@ -469,6 +520,7 @@ def load_config(path: str) -> UnifiedConfig:
         connectors=connectors_cfg,
         telemetry=telemetry_cfg,
         cache=cache_cfg,
+        runtime=runtime_cfg,
         test=test_cfg,
         present_sections=present_sections,
     )

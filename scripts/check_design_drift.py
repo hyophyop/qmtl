@@ -46,11 +46,18 @@ def _read_front_matter(path: Path) -> dict[str, str]:
 
 def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
     # Late import to avoid import-time failures if qmtl isn't installed yet
-    sys.path.insert(0, str(root))
+    # Avoid importing the qmtl.foundation package to prevent import-time cycles.
+    # Load the spec file directly.
+    spec_file = root / "qmtl" / "foundation" / "spec.py"
     try:
-        from qmtl.foundation.spec import ARCH_SPEC_VERSIONS
+        ns: dict[str, object] = {}
+        code = spec_file.read_text(encoding="utf-8")
+        exec(compile(code, str(spec_file), "exec"), ns, ns)
+        ARCH_SPEC_VERSIONS = ns.get("ARCH_SPEC_VERSIONS", {})  # type: ignore[assignment]
+        if not isinstance(ARCH_SPEC_VERSIONS, dict):
+            raise RuntimeError("ARCH_SPEC_VERSIONS not found or invalid in spec.py")
     except Exception as exc:  # pragma: no cover - defensive
-        return 2, f"Failed to import qmtl.foundation.spec: {exc}"
+        return 2, f"Failed to load foundation spec: {exc}"
 
     arch_dir = root / "docs" / "architecture"
     if not arch_dir.exists():
@@ -109,4 +116,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

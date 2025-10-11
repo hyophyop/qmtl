@@ -23,7 +23,7 @@ last_modified: 2025-09-23
 
 ## Caching & Determinism
 
-- Each resolve call writes a snapshot of tag→queue mappings to `.qmtl_tagmap.json` (override via `QMTL_TAGQUERY_CACHE`).
+- Each resolve call writes a snapshot of tag→queue mappings to `.qmtl_tagmap.json` (override via `cache.tagquery_cache_path`).
 - The snapshot stores a CRC32 checksum to detect corruption and ensure dry-runs and backtests replay the exact queue set.
 
 ## Timing & Timeouts
@@ -31,6 +31,6 @@ last_modified: 2025-09-23
 - HTTP timeout: `qmtl.runtime.sdk.runtime.HTTP_TIMEOUT_SECONDS` (default 2.0s; 1.5s in tests).
 - WebSocket receive timeout: `qmtl.runtime.sdk.runtime.WS_RECV_TIMEOUT_SECONDS` (default 30s; 5s in tests).
 - Reconcile poll interval: `qmtl.runtime.sdk.runtime.POLL_INTERVAL_SECONDS` (default 10s; 2s in tests).
-- Test mode: Set `QMTL_TEST_MODE=1` to activate conservative time budgets for CI and local tests.
+- Test mode: Set `test.test_mode: true` in `qmtl.yml` to activate conservative time budgets for CI and local tests.
 
 {{ nav_links() }}

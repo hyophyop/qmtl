@@ -23,7 +23,7 @@ Workflow
 5) **Strict Rollout**: switch to `validation_mode=strict` only after canary passes. Strict mode blocks incompatible schemas and raises `SchemaValidationError` when breaking fields are removed or mutated. Update the audit log below with the change reference, timestamp, and validation evidence.
 
 Tools
-- `qmtl.foundation.schema.SchemaRegistryClient` — in‑memory by default; set `QMTL_SCHEMA_REGISTRY_URL` for remote. Configure governance with `validation_mode` or `QMTL_SCHEMA_VALIDATION_MODE` (`canary` default, `strict` for enforcement).
+- `qmtl.foundation.schema.SchemaRegistryClient` — in‑memory by default; set `connectors.schema_registry_url` (or the legacy `QMTL_SCHEMA_REGISTRY_URL`) for remote. Configure governance with `validation_mode` or `QMTL_SCHEMA_VALIDATION_MODE` (`canary` default, `strict` for enforcement).
 - `scripts/check_design_drift.py` — detects doc/code spec drift.
 - `scripts/schema/audit_log.py` — records promotions to strict mode and stores SHA fingerprints of schema bundles.
 

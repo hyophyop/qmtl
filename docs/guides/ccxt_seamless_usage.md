@@ -10,7 +10,7 @@ CCXT 기반 거래소 데이터를 QMTL의 Seamless Data Provider와 결합하�
 | --- | --- | --- |
 | Python 환경 | QMTL 및 ccxt 의존성 설치 | `uv pip install -e .[dev,ccxt,questdb]` |
 | QuestDB | 히스토리 저장소 | `docker run -p 8812:8812 -p 9000:9000 questdb/questdb:latest` |
-| (선택) Redis | 클러스터 레이트리밋 공유 | `docker run -p 6379:6379 redis:7-alpine` 후 `QMTL_CCXT_RATE_LIMITER_REDIS=redis://localhost:6379/0` |
+| (선택) Redis | 클러스터 레이트리밋 공유 | `docker run -p 6379:6379 redis:7-alpine` 후 `connectors.ccxt_rate_limiter_redis: redis://localhost:6379/0` (`QMTL_CCXT_RATE_LIMITER_REDIS` 레거시 지원) |
 | CCXT API 키 | 사설 엔드포인트/고빈도 요청 시 필요 | 거래소 콘솔에서 발급 후 `CCXT_APIKEY`, `CCXT_SECRET` 환경변수로 주입 |
 
 ## 핵심 구성 요소

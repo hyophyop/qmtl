@@ -2,8 +2,8 @@
 
 QMTL ships with a lightweight, in-memory schema registry client and an optional
 remote HTTP client. Use `SchemaRegistryClient.from_env()` to automatically pick
-the right implementation based on the `QMTL_SCHEMA_REGISTRY_URL` environment
-variable.
+the right implementation based on the `connectors.schema_registry_url` entry in
+`qmtl.yml` (with `QMTL_SCHEMA_REGISTRY_URL` retained as a fallback).
 
 ## In-Memory Client
 
@@ -59,11 +59,15 @@ dashboards can track regressions.
 
 ## Remote Client
 
-Set `QMTL_SCHEMA_REGISTRY_URL` to enable a minimal HTTP client:
+Set `connectors.schema_registry_url` to enable a minimal HTTP client:
 
-```bash
-export QMTL_SCHEMA_REGISTRY_URL="http://registry:8081"
+```yaml
+connectors:
+  schema_registry_url: "http://registry:8081"
 ```
+
+Legacy deployments can continue to rely on `QMTL_SCHEMA_REGISTRY_URL` if
+necessary.
 
 ```python
 from qmtl.foundation.schema import SchemaRegistryClient

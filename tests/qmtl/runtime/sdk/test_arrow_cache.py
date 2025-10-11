@@ -7,6 +7,7 @@ from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk import ProcessingNode, StreamInput
 from qmtl.runtime.sdk import metrics as sdk_metrics
 import qmtl.runtime.sdk.arrow_cache.eviction as eviction
+from qmtl.runtime.sdk import configuration as sdk_configuration
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),
@@ -26,12 +27,28 @@ def test_arrow_cache_basic():
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
-def test_node_uses_arrow_cache(monkeypatch):
-    monkeypatch.setenv("QMTL_ARROW_CACHE", "1")
+def test_node_uses_arrow_cache(configure_sdk):
+    configure_sdk({"cache": {"arrow_cache_enabled": True}})
     src = StreamInput(interval="60s", period=2)
     node = ProcessingNode(input=src, compute_fn=lambda v: None, name="n", interval="60s", period=2)
     assert isinstance(node.cache, arrow_cache.NodeCacheArrow)
+
+
+@pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
+def test_arrow_cache_env_toggle(monkeypatch):
+    monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
     monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)
+    sdk_configuration.reload()
+    arrow_cache.reload_arrow_cache()
+    assert arrow_cache.ARROW_CACHE_ENABLED is False
+
+    monkeypatch.setenv("QMTL_ARROW_CACHE", "1")
+    try:
+        arrow_cache.reload_arrow_cache()
+        assert arrow_cache.ARROW_CACHE_ENABLED is True
+    finally:
+        monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)
+        arrow_cache.reload_arrow_cache()
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")

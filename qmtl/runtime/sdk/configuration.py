@@ -126,3 +126,18 @@ __all__ = [
     "reset_runtime_config_cache",
     "set_runtime_config_override",
 ]
+
+# ---------------------------------------------------------------------------
+# Backwards-compatibility shims for legacy accessor names used within SDK
+# ---------------------------------------------------------------------------
+
+def get_unified_config(*, reload: bool = False) -> UnifiedConfig:
+    if reload:
+        reset_runtime_config_cache()
+    cfg = get_runtime_config()
+    return cfg or UnifiedConfig()
+
+
+def reload() -> UnifiedConfig:
+    reset_runtime_config_cache()
+    return get_unified_config()
