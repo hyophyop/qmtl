@@ -2,11 +2,12 @@ import httpx
 import pytest
 
 from qmtl.services.worldservice.api import create_app
+from qmtl.services.worldservice.storage import Storage
 
 
 @pytest.mark.asyncio
 async def test_worldservice_augments_metrics_v2_threshold():
-    app = create_app()
+    app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "w1", "name": "World"})

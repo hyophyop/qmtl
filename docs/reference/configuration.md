@@ -42,6 +42,12 @@ Sample configurations for common environments live under
 | `enforce_live_guard` | boolean | `True` | `QMTL__GATEWAY__ENFORCE_LIVE_GUARD` | No |
 | `cache_ttl_seconds` | integer or null | `null` | `QMTL__GATEWAY__WORLDSERVICE_CACHE_TTL` | No |
 | `cache_max_entries` | integer or null | `null` | `QMTL__GATEWAY__WORLDSERVICE_CACHE_MAX` | No |
+| `dsn` | string | – | – | Yes |
+| `redis` | string | – | – | Yes |
+| `bind.host` | string | `"0.0.0.0"` | – | No |
+| `bind.port` | integer | `8080` | – | No |
+| `auth.header` | string | `"Authorization"` | – | No |
+| `auth.tokens` | list of strings | `[]` | – | No |
 
 ### Gateway
 

@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import httpx
 import pytest
-from pathlib import Path
 
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.services.worldservice.config import WorldServiceServerConfig
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
 
 
@@ -69,7 +71,7 @@ class DummyBus(ControlBusProducer):
 @pytest.mark.asyncio
 async def test_world_crud_policy_apply_and_events():
     bus = DummyBus()
-    app = create_app(bus=bus)
+    app = create_app(bus=bus, storage=Storage())
     gating_policy = {
         "dataset_fingerprint": "ohlcv:ASOF=2025-09-30T23:59:59Z",
         "share_policy": "feature-artifacts-only",
@@ -171,7 +173,7 @@ async def test_world_crud_policy_apply_and_events():
 @pytest.mark.asyncio
 async def test_apply_rejects_invalid_gating_policy():
     bus = DummyBus()
-    app = create_app(bus=bus)
+    app = create_app(bus=bus, storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "w2"})
@@ -199,7 +201,7 @@ async def test_apply_rejects_invalid_gating_policy():
 
 @pytest.mark.asyncio
 async def test_decide_effective_mode_canonicalised():
-    app = create_app()
+    app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "mode-test"})
@@ -222,7 +224,7 @@ async def test_decide_effective_mode_canonicalised():
 @pytest.mark.asyncio
 async def test_post_decisions_normalizes_payload_and_validates():
     bus = DummyBus()
-    app = create_app(bus=bus)
+    app = create_app(bus=bus, storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "w3"})
@@ -246,7 +248,7 @@ async def test_post_decisions_normalizes_payload_and_validates():
 
 @pytest.mark.asyncio
 async def test_history_metadata_in_decision_envelope():
-    app = create_app()
+    app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "wx"})
@@ -293,7 +295,7 @@ async def test_history_metadata_in_decision_envelope():
 
 @pytest.mark.asyncio
 async def test_edge_overrides_upsert_and_reason_preservation():
-    app = create_app()
+    app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "edge-world", "name": "Edges"})
@@ -538,3 +540,24 @@ async def test_persistent_storage_survives_restart(tmp_path, fake_redis):
 
                 decisions = await app_restart.state.world_service.store.get_decisions("persist")
                 assert decisions == ["strategy-1"]
+
+
+def test_create_app_without_storage_requires_config(monkeypatch):
+    monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
+    with pytest.raises(RuntimeError, match="configuration file not found"):
+        create_app()
+
+
+@pytest.mark.asyncio
+async def test_create_app_without_redis_uses_in_memory_storage():
+    config = WorldServiceServerConfig(dsn="sqlite+aiosqlite:///worlds.db")
+
+    app = create_app(config=config)
+
+    assert isinstance(app.state.storage, Storage)
+    assert not isinstance(app.state.storage, PersistentStorage)
+    assert app.state.worldservice_config == config
+
+    async with app.router.lifespan_context(app):
+        assert isinstance(app.state.storage, Storage)
+        assert app.state.storage is app.state.world_service.store
