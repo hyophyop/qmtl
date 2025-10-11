@@ -5,6 +5,7 @@ import pytest
 
 from qmtl.foundation.common import ComputeContext, compute_compute_key
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
+import qmtl.services.dagmanager.topic as topic_module
 from qmtl.runtime.sdk.activation_manager import ActivationManager
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
@@ -139,7 +140,7 @@ async def test_domain_promotion_flow_respects_freeze_and_isolation(monkeypatch):
                     queues=[SimpleNamespace(**{"queue": "base", "global": False})]
                 )
 
-        monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
+        monkeypatch.setattr(topic_module, "_NAMESPACE_ENABLED", True)
         monkeypatch.setattr(
             DagManagerClient,
             "_ensure_channel",

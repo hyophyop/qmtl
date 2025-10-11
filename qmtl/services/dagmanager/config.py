@@ -20,6 +20,7 @@ class DagManagerConfig:
     http_port: int = 8001
     controlbus_dsn: Optional[str] = None
     controlbus_queue_topic: str = "queue"
+    enable_topic_namespace: bool = True
 
 
 def load_dagmanager_config(path: str) -> DagManagerConfig:
