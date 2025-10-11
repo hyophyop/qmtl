@@ -46,10 +46,8 @@ class NodeCacheArrow:
         if self._metrics is None:  # pragma: no cover - defensive
             self._metrics = NOOP_INSTRUMENTATION
 
-        try:
-            interval = int(configuration.cache_config().cache_evict_interval)
-        except Exception:  # pragma: no cover - defensive catch
-            interval = 60
+        cfg = configuration.get_runtime_config()
+        interval = int(cfg.cache.cache_evict_interval) if cfg is not None else 60
         self._evict_interval = interval
         self._eviction = eviction_strategy or create_default_eviction_strategy(self._evict_interval)
         self._eviction.start(self)

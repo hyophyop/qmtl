@@ -10,6 +10,7 @@ from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 from .base import FeatureArtifactKey, FeatureStoreBackend
 from .filesystem import FileSystemFeatureStore
 from .. import configuration
+from qmtl.foundation.config import CacheConfig as _CacheConfig
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,9 @@ class FeatureArtifactPlane:
     # ------------------------------------------------------------------
     @classmethod
     def from_env(cls) -> FeatureArtifactPlane | None:
-        cfg = configuration.cache_config()
-        if not cfg.feature_artifacts_enabled:
+        unified = configuration.get_runtime_config()
+        cfg = unified.cache if unified is not None else _CacheConfig()
+        if not bool(cfg.feature_artifacts_enabled):
             return None
 
         base = cfg.feature_artifact_dir
@@ -190,4 +192,3 @@ class FeatureArtifactPlane:
             self.backend.write(key, payload)
         except Exception:
             logger.exception("failed to write feature artifact for factor %s", factor_id)
-

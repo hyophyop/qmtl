@@ -22,8 +22,9 @@ _WORKER_ID_ENV_VARS: tuple[str, ...] = (
 
 
 def _connectors_worker_ids() -> tuple[str, ...]:
+    cfg = None
     try:
-        cfg = configuration.connectors_config()
+        cfg = configuration.get_connectors_config()
     except Exception:  # pragma: no cover - defensive cache access
         return ()
 
@@ -315,4 +316,3 @@ __all__ = [
     "InMemoryBackfillCoordinator",
     "Lease",
 ]
-

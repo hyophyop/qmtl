@@ -320,9 +320,9 @@ def _flatten_dict(value: dict, prefix: str = "") -> Dict[str, str]:
 @lru_cache(maxsize=1)
 def _schema_registry_url_from_config() -> str | None:
     try:
-        from qmtl.runtime.sdk import configuration as sdk_configuration
+        from qmtl.runtime.sdk.configuration import get_connectors_config
 
-        cfg = sdk_configuration.connectors_config()
+        cfg = get_connectors_config()
         candidate = getattr(cfg, "schema_registry_url", None)
         if candidate:
             text = str(candidate).strip()

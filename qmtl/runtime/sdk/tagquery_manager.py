@@ -51,7 +51,10 @@ class TagQueryManager:
             Tuple[Tuple[str, ...], int, MatchMode], frozenset[str]
         ] = {}
         if cache_path is None:
-            cache_path = configuration.cache_config().tagquery_cache_path
+            cfg = configuration.get_runtime_config()
+            cache_path = (
+                cfg.cache.tagquery_cache_path if cfg is not None else ".qmtl_tagmap.json"
+            )
         self.cache_path = Path(cache_path)
 
     # ------------------------------------------------------------------
