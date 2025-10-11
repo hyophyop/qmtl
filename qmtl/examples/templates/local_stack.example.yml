@@ -61,6 +61,11 @@ gateway:
   enforce_live_guard: false
   controlbus_brokers: []
   controlbus_topics: []
+  events:
+    secret: local-dev-secret-change-me
+    ttl: 300
+  websocket:
+    rate_limit_per_sec: 0
   notes:
     - "Persistent storage defaults to SQLite; switch to Postgres by adjusting database_backend."
     - "Commit log fields are omitted; Gateway falls back to its local queue implementation."
@@ -74,6 +79,7 @@ dagmanager:
   http_port: 8001
   controlbus_dsn: null      # omit to keep ControlBus events in process
   controlbus_queue_topic: queue
+  enable_topic_namespace: true
   notes:
     - "Create the memrepo directory before launch: mkdir -p ${filesystem.state_root}/dagmanager"
     - "Neo4j and Kafka dependencies stay disabled for pure local runs."
@@ -93,6 +99,6 @@ qmtl:
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"
   - "Create local state directories upfront: mkdir -p ./var/dagmanager"
-  - "Set QMTL_ENABLE_TOPIC_NAMESPACE=0 to reuse legacy topic names when testing against mocks."
+  - "Set dagmanager.enable_topic_namespace: false if you need to reuse legacy topic names when testing against mocks."
   - "Install dependencies with uv pip install -e .[dev] before starting services."
   - "Set QMTL_CONFIG_FILE to this template's YAML so service CLIs pick it up without passing --config each time."

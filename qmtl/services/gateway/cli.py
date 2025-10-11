@@ -13,7 +13,9 @@ from .redis_client import InMemoryRedis
 
 from .api import create_app
 from .config import GatewayConfig
+from .ws import WebSocketHub
 from qmtl.foundation.config import find_config_file, load_config
+from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
 from .commit_log import create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
@@ -91,6 +93,8 @@ async def _main(argv: list[str] | None = None) -> None:
     cfg_path = args.config or find_config_file()
     _log_config_source(cfg_path, cli_override=args.config, env_override=env_override)
     config = GatewayConfig()
+    telemetry_enabled: bool | None = None
+    namespace_toggle: bool | None = None
     if cfg_path:
         unified = load_config(cfg_path)
         if "gateway" not in unified.present_sections:
@@ -100,6 +104,11 @@ async def _main(argv: list[str] | None = None) -> None:
             )
             raise SystemExit(2)
         config = unified.gateway
+        telemetry_enabled = unified.telemetry.enable_fastapi_otel
+        namespace_toggle = unified.dagmanager.enable_topic_namespace
+
+    if namespace_toggle is not None:
+        set_topic_namespace_enabled(namespace_toggle)
 
     if config.redis_dsn:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
@@ -153,6 +162,13 @@ async def _main(argv: list[str] | None = None) -> None:
         for rec in records:
             logging.info("commit %s", rec)
 
+    ws_hub = WebSocketHub(
+        rate_limit_per_sec=config.websocket.rate_limit_per_sec,
+    )
+    event_descriptor = config.events.build_descriptor(
+        logger=logging.getLogger(__name__)
+    )
+
     app = create_app(
         redis_client=redis_client,
         database_backend=config.database_backend,
@@ -167,6 +183,9 @@ async def _main(argv: list[str] | None = None) -> None:
         worldservice_retries=config.worldservice_retries,
         enable_worldservice_proxy=config.enable_worldservice_proxy,
         enforce_live_guard=enforce_live_guard,
+        ws_hub=ws_hub,
+        event_config=event_descriptor,
+        enable_otel=telemetry_enabled,
     )
     db = app.state.database
     if hasattr(db, "connect"):

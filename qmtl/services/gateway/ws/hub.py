@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import os
 from typing import Any, Optional, Set
 
 from fastapi import WebSocket
@@ -196,12 +195,13 @@ class WebSocketHub:
         await self._send_event("deprecation.notice", payload, topic="deprecation")
 
     def _configure_rate_limit(self, explicit_rate: int | None) -> None:
-        rate = 0 if explicit_rate is None else explicit_rate
         if explicit_rate is None:
-            try:
-                env_value = os.getenv("QMTL_WS_RATE_LIMIT")
-                if env_value:
-                    rate = int(env_value)
-            except Exception:
-                pass
+            self._rate_limiter.configure(0)
+            return
+        rate = max(0, int(explicit_rate))
+        if rate != explicit_rate:
+            logger.warning(
+                "WebSocket rate limit must be non-negative; clamped value to %s",
+                rate,
+            )
         self._rate_limiter.configure(rate)

@@ -14,6 +14,7 @@ import uvicorn
 from .grpc_server import serve
 from .config import DagManagerConfig
 from qmtl.foundation.config import find_config_file, load_config
+from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 
 
 def _log_config_source(
@@ -103,6 +104,7 @@ class _KafkaAdminClient:
 
 
 async def _run(cfg: DagManagerConfig) -> None:
+    set_topic_namespace_enabled(cfg.enable_topic_namespace)
     driver = None
     repo = None
     admin_client = None

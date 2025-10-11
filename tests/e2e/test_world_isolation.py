@@ -5,6 +5,7 @@ import httpx
 
 from qmtl.foundation.common import compute_node_id
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
+import qmtl.services.dagmanager.topic as topic_module
 from qmtl.services.gateway.event_handlers import create_event_router
 from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, validate_event_token
 from qmtl.runtime.sdk.activation_manager import ActivationManager
@@ -41,7 +42,7 @@ async def test_world_isolation(monkeypatch):
         self._tag_stub = StubTagStub()
 
     monkeypatch.setattr(DagManagerClient, "_ensure_channel", fake_ensure)
-    monkeypatch.delenv("QMTL_ENABLE_TOPIC_NAMESPACE", raising=False)
+    monkeypatch.setattr(topic_module, "_NAMESPACE_ENABLED", True)
 
     q1 = await client.get_queues_by_tag(["t"], 60, world_id="w1", execution_domain="dryrun")
     q2 = await client.get_queues_by_tag(["t"], 60, world_id="w2", execution_domain="dryrun")

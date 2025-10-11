@@ -17,6 +17,11 @@ gateway:
     - activation
     - policy
     - queue
+  events:
+    secret: dev-gateway-secret
+    ttl: 300
+  websocket:
+    rate_limit_per_sec: 0
 
 dagmanager:
   memory_repo_path: memrepo.dev.gpickle
@@ -24,6 +29,7 @@ dagmanager:
   grpc_port: 50051
   http_host: 127.0.0.1
   http_port: 8001
+  enable_topic_namespace: false
 
 seamless:
   coordinator_url: http://localhost:5010
@@ -46,4 +52,3 @@ cache:
 test:
   test_mode: true
   fail_on_history_gap: false
-  enable_topic_namespace: false

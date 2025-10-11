@@ -162,9 +162,6 @@ class TestConfig:
     history_end: str | None = field(
         default=None, metadata={"env": "QMTL_HISTORY_END"}
     )
-    enable_topic_namespace: bool | None = field(
-        default=None, metadata={"env": "QMTL_ENABLE_TOPIC_NAMESPACE"}
-    )
 
 
 CONFIG_SECTION_NAMES: tuple[str, ...] = (
@@ -237,7 +234,6 @@ ENV_EXPORT_OVERRIDES: Dict[str, Dict[str, str | None]] = {
         "fixed_now": "QMTL_FIXED_NOW",
         "history_start": "QMTL_HISTORY_START",
         "history_end": "QMTL_HISTORY_END",
-        "enable_topic_namespace": "QMTL_ENABLE_TOPIC_NAMESPACE",
     },
 }
 
@@ -437,7 +433,7 @@ def load_config(path: str) -> UnifiedConfig:
 
     # Deprecated breaker keys are no longer filtered; invalid keys should be surfaced
 
-    gateway_cfg = GatewayConfig(**gw_data)
+    gateway_cfg = GatewayConfig.from_mapping(gw_data)
     dagmanager_cfg = DagManagerConfig(**dm_data)
     server_cfg: WorldServiceServerConfig | None = None
     if server_data is not None:

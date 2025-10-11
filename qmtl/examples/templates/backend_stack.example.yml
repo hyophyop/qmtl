@@ -99,6 +99,13 @@ gateway:
   worldservice_retries: 3
   enable_worldservice_proxy: true
   enforce_live_guard: true
+  events:
+    secret: CHANGE_ME_EVENT_SECRET
+    ttl: 300
+    stream_url: wss://gateway/ws/evt
+    fallback_url: wss://gateway/ws
+  websocket:
+    rate_limit_per_sec: 0
 
 # DAG Manager section matches qmtl.services.dagmanager.config.DagManagerConfig.
 dagmanager:
@@ -113,6 +120,7 @@ dagmanager:
   http_port: 8001
   controlbus_dsn: redpanda-0:9092
   controlbus_queue_topic: ${backends.kafka.controlbus_topics.queue}
+  enable_topic_namespace: true
   notes:
     - >-
       After provisioning Neo4j, initialise schema with:
@@ -121,7 +129,7 @@ dagmanager:
 
 # Additional operational hints for the full stack.
 notes:
-  - "Export QMTL_ENABLE_TOPIC_NAMESPACE=1 to keep Kafka topics partitioned by world/domain."
+  - "Set dagmanager.enable_topic_namespace: true to keep Kafka topics partitioned by world/domain."
   - "Provision alerts for gateway_e2e_latency_p95, dagmanager_diff_errors_total, and worldservice_decision_stale_total."
   - "Store secrets (passwords, SASL credentials) in your secrets manager instead of committing them."
   - "Validate config before launch: uv run qmtl config validate --config /etc/qmtl/backend.yml"

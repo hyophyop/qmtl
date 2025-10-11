@@ -67,6 +67,13 @@ Sample configurations for common environments live under
 | `commitlog_group` | string | `"gateway-commit"` | `QMTL__GATEWAY__COMMITLOG_GROUP` | No |
 | `commitlog_transactional_id` | string | `"gateway-commit-writer"` | `QMTL__GATEWAY__COMMITLOG_TRANSACTIONAL_ID` | No |
 | `controlbus_dsn` | string or null | `null` | `QMTL__GATEWAY__CONTROLBUS_DSN` | No |
+| `events.secret` | string or null | `null` | — | No |
+| `events.keys` | mapping | `{}` | — | No |
+| `events.active_kid` | string | `"default"` | — | No |
+| `events.ttl` | integer | `300` | — | No |
+| `events.stream_url` | string | `"wss://gateway/ws/evt"` | — | No |
+| `events.fallback_url` | string | `"wss://gateway/ws"` | — | No |
+| `websocket.rate_limit_per_sec` | integer or null | `null` | — | No |
 
 ### Dagmanager
 
@@ -83,6 +90,7 @@ Sample configurations for common environments live under
 | `http_port` | integer | `8001` | `QMTL__DAGMANAGER__HTTP_PORT` | No |
 | `controlbus_dsn` | string or null | `null` | `QMTL__DAGMANAGER__CONTROLBUS_DSN` | No |
 | `controlbus_queue_topic` | string | `"queue"` | `QMTL__DAGMANAGER__CONTROLBUS_QUEUE_TOPIC` | No |
+| `enable_topic_namespace` | boolean | `True` | — | No |
 
 ### Seamless
 
@@ -141,7 +149,6 @@ Sample configurations for common environments live under
 | `fixed_now` | string or null | `null` | `QMTL_FIXED_NOW` | No |
 | `history_start` | string or null | `null` | `QMTL_HISTORY_START` | No |
 | `history_end` | string or null | `null` | `QMTL_HISTORY_END` | No |
-| `enable_topic_namespace` | boolean or null | `null` | `QMTL_ENABLE_TOPIC_NAMESPACE` | No |
 
 ## Validation summary
 

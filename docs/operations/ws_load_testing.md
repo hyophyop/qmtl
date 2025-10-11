@@ -34,7 +34,7 @@ Gateway’s WS bridge relays ControlBus updates to SDKs. This page documents the
 
 ### Rate limiting
 
-- Per-connection rate limiting is available via a simple token bucket in the WS hub. It is disabled by default. To enable, set `QMTL_WS_RATE_LIMIT` (tokens/messages per second) in the Gateway process environment, e.g. `QMTL_WS_RATE_LIMIT=200`.
+- Per-connection rate limiting is available via a simple token bucket in the WS hub. It is disabled by default. To enable it, set `gateway.websocket.rate_limit_per_sec` in the Gateway YAML (tokens/messages per second), e.g. `gateway.websocket.rate_limit_per_sec: 200`.
 
 ## Troubleshooting
 
