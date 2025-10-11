@@ -20,13 +20,11 @@ last_modified: 2025-09-22
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 
-!!! tip "빠른 시작: 검증 → 환경 → 기동"
+!!! tip "빠른 시작: 검증 → 기동"
     운영용 YAML을 작성했다면 `uv run qmtl config validate --config <파일> --offline`
-    으로 구조를 확인하고, `uv run qmtl config env export --config <파일> > .env.qmtl`
-    후 `source .env.qmtl` + `export QMTL_CONFIG_FILE=<파일>` 을 실행하라. 그러면
-    `qmtl service gateway` / `qmtl service dagmanager server` 가 동일한 설정으로
-    부팅되며, 누락된 섹션이 있을 때 `QMTL_CONFIG_EXPORT` 메타데이터와 함께 경고가
-    출력된다.
+    으로 구조를 확인하고, 동일한 파일을 `qmtl service gateway --config <파일>` 및
+    `qmtl service dagmanager server --config <파일>` 인자로 넘겨라. 장기 실행
+    프로세스에는 `export QMTL_CONFIG_FILE=<파일>` 로 경로만 공유하면 된다.
 
 ---
 

@@ -54,9 +54,7 @@ services:
       - neo4j
       - postgres
     environment:
-      QMTL__DAGMANAGER__NEO4J_DSN: bolt://neo4j:7687
-      QMTL__DAGMANAGER__KAFKA_DSN: kafka:9092
-      QMTL__DAGMANAGER__DATABASE_DSN: postgresql://qmtl:qmtl@postgres:5432/qmtl
+      QMTL_CONFIG_FILE: /app/operations/docker-compose.qmtl.yml
     volumes:
       - .:/app
     ports:
@@ -71,8 +69,7 @@ services:
       - dagmanager
       - redis
     environment:
-      QMTL__GATEWAY__REDIS_DSN: redis://redis:6379/0
-      QMTL__GATEWAY__DAGMANAGER_DSN: dagmanager:50051
+      QMTL_CONFIG_FILE: /app/operations/docker-compose.qmtl.yml
     volumes:
       - .:/app
     ports:
