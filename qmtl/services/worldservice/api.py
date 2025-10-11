@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import logging
-import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -10,7 +9,10 @@ from typing import Any, Awaitable, Callable
 import redis.asyncio as redis
 from fastapi import FastAPI
 
+from qmtl.foundation.config import find_config_file, load_config
+
 from .controlbus_producer import ControlBusProducer
+from .config import WorldServiceServerConfig
 from .routers import (
     create_activation_router,
     create_bindings_router,
@@ -53,15 +55,13 @@ async def _maybe_await(value: Any) -> None:
         await value
 
 
-def _env_storage_factory() -> Callable[[], Awaitable[StorageHandle]] | None:
-    db_dsn = os.getenv("QMTL_WORLDSERVICE_DB_DSN")
-    redis_dsn = os.getenv("QMTL_WORLDSERVICE_REDIS_DSN")
-    if not db_dsn or not redis_dsn:
-        return None
+def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Awaitable[StorageHandle]]:
+    if not config.redis:
+        raise ValueError("WorldService configuration requires a Redis DSN")
 
     async def _factory() -> StorageHandle:
-        redis_client = redis.from_url(redis_dsn, decode_responses=True)
-        storage = await PersistentStorage.create(db_dsn=db_dsn, redis_client=redis_client)
+        redis_client = redis.from_url(config.redis, decode_responses=True)
+        storage = await PersistentStorage.create(db_dsn=config.dsn, redis_client=redis_client)
 
         async def _shutdown() -> None:
             await storage.close()
@@ -81,23 +81,48 @@ def _env_storage_factory() -> Callable[[], Awaitable[StorageHandle]] | None:
     return _factory
 
 
+def _load_server_config(config: WorldServiceServerConfig | None) -> WorldServiceServerConfig:
+    if config is not None:
+        return config
+
+    config_path = find_config_file()
+    if config_path is None:
+        raise RuntimeError(
+            "WorldService configuration file not found. Set QMTL_CONFIG_FILE or create qmtl.yml in the working directory."
+        )
+
+    unified = load_config(config_path)
+    server_config = unified.worldservice.server
+    if server_config is None:
+        raise RuntimeError(
+            "WorldService configuration missing 'worldservice' server settings (dsn, redis, bind, auth)."
+        )
+    return server_config
+
+
 def create_app(
     *,
     bus: ControlBusProducer | None = None,
     storage: Storage | None = None,
     storage_factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = None,
+    config: WorldServiceServerConfig | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
 
-    factory = storage_factory or _env_storage_factory()
+    resolved_config: WorldServiceServerConfig | None = None
+    factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = storage_factory
+    if storage is None and factory is None:
+        resolved_config = _load_server_config(config)
+        factory = _config_storage_factory(resolved_config)
+
     store = storage or Storage()
     service = WorldService(store=store, bus=bus)
     storage_handle: StorageHandle | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        nonlocal storage_handle
+        nonlocal storage_handle, resolved_config
         try:
             if factory is not None:
                 storage_handle = _coerce_storage_handle(await factory())
@@ -125,6 +150,7 @@ def create_app(
     app.state.apply_runs = service.apply_runs
     app.state.storage = store
     app.state.world_service = service
+    app.state.worldservice_config = resolved_config
     app.include_router(create_worlds_router(service))
     app.include_router(create_policies_router(service))
     app.include_router(create_bindings_router(service))

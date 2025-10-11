@@ -5,12 +5,16 @@ from pathlib import Path
 from typing import FrozenSet
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 import yaml
 
 from qmtl.services.gateway.config import GatewayConfig
 from qmtl.services.dagmanager.config import DagManagerConfig
+from qmtl.services.worldservice.config import (
+    WorldServiceServerConfig,
+    load_worldservice_server_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,7 @@ class WorldServiceConfig:
     enforce_live_guard: bool = True
     cache_ttl_seconds: int | None = None
     cache_max_entries: int | None = None
+    server: WorldServiceServerConfig | None = None
 
 
 @dataclass
@@ -399,6 +404,24 @@ def load_config(path: str) -> UnifiedConfig:
     # yet. Only fill values that are missing from the dedicated section so that
     # explicit ``worldservice`` entries continue to take precedence.
     world_data = dict(world_data)
+    server_data: Mapping[str, Any] | None = None
+    inline_server: dict[str, Any] = {}
+    for inline_key in ("dsn", "redis", "bind", "auth"):
+        if inline_key in world_data:
+            inline_server[inline_key] = world_data.pop(inline_key)
+
+    if "server" in world_data:
+        raw_server = world_data.pop("server")
+        if raw_server is None:
+            raw_server = {}
+        if not isinstance(raw_server, Mapping):
+            raise TypeError("worldservice.server must be a mapping")
+        merged_server = dict(raw_server)
+        if inline_server:
+            merged_server.update(inline_server)
+        server_data = merged_server
+    elif inline_server:
+        server_data = inline_server
     legacy_worldservice_keys = {
         "worldservice_url": "url",
         "worldservice_timeout": "timeout",
@@ -416,7 +439,11 @@ def load_config(path: str) -> UnifiedConfig:
 
     gateway_cfg = GatewayConfig(**gw_data)
     dagmanager_cfg = DagManagerConfig(**dm_data)
-    worldservice_cfg = WorldServiceConfig(**world_data)
+    server_cfg: WorldServiceServerConfig | None = None
+    if server_data is not None:
+        server_cfg = load_worldservice_server_config(server_data)
+
+    worldservice_cfg = WorldServiceConfig(**world_data, server=server_cfg)
     seamless_cfg = SeamlessConfig(**seamless_data)
     connectors_cfg = ConnectorsConfig(**connectors_data)
     telemetry_cfg = TelemetryConfig(**telemetry_data)

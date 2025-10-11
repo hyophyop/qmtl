@@ -239,8 +239,18 @@ stand‑alone FastAPI app and enable the Gateway proxy when needed.
 1) Start WorldService (SQLite + Redis example)
 
 ```bash
-export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
-export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+cat > worldservice.yml <<'EOF'
+worldservice:
+  dsn: sqlite:///worlds.db
+  redis: redis://localhost:6379/0
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
+EOF
+export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
