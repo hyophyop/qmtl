@@ -1,6 +1,8 @@
 """Optional dependency guards for Arrow cache backend."""
 from __future__ import annotations
 
+import os
+
 try:  # pragma: no cover - optional dependency
     import pyarrow as pa  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -13,10 +15,22 @@ except Exception:  # pragma: no cover - optional dependency
 
 from .. import configuration
 
+_FALSE_SENTINELS = {"", "0", "false", "no", "off"}
+
+
+def _env_override() -> bool | None:
+    value = os.getenv("QMTL_ARROW_CACHE")
+    if value is None:
+        return None
+    return value.strip().lower() not in _FALSE_SENTINELS
+
 
 def _resolve_enabled() -> bool:
     if pa is None:
         return False
+    override = _env_override()
+    if override is not None:
+        return override
     try:
         return bool(configuration.cache_config().arrow_cache_enabled)
     except Exception:  # pragma: no cover - defensive catch
