@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum
+from functools import lru_cache
 from typing import Dict, Optional
 import json
 import logging
@@ -94,7 +95,7 @@ class SchemaRegistryClient:
     """In-memory schema registry client with governance hooks."""
 
     def __init__(self, *, validation_mode: SchemaValidationMode | str | None = None) -> None:
-        self._url = os.getenv("QMTL_SCHEMA_REGISTRY_URL")
+        self._url = _schema_registry_url_from_config() or os.getenv("QMTL_SCHEMA_REGISTRY_URL")
         self._by_subject: Dict[str, list[Schema]] = {}
         self._next_id = 1
         env_mode = os.getenv("QMTL_SCHEMA_VALIDATION_MODE")
@@ -216,7 +217,7 @@ class SchemaRegistryClient:
     @classmethod
     def from_env(cls) -> "SchemaRegistryClient | RemoteSchemaRegistryClient":
         """Factory: return remote client if URL is configured, else in-memory."""
-        url = os.getenv("QMTL_SCHEMA_REGISTRY_URL")
+        url = _schema_registry_url_from_config() or os.getenv("QMTL_SCHEMA_REGISTRY_URL")
         if url:
             return RemoteSchemaRegistryClient(url)
         return cls()
@@ -314,6 +315,38 @@ def _flatten_dict(value: dict, prefix: str = "") -> Dict[str, str]:
         else:
             flattened[path] = type(inner).__name__
     return flattened
+
+
+@lru_cache(maxsize=1)
+def _schema_registry_url_from_config() -> str | None:
+    try:
+        from qmtl.runtime.sdk import configuration as sdk_configuration
+
+        cfg = sdk_configuration.connectors_config()
+        candidate = getattr(cfg, "schema_registry_url", None)
+        if candidate:
+            text = str(candidate).strip()
+            if text:
+                return text
+    except Exception:  # pragma: no cover - runtime SDK not available or config error
+        pass
+
+    try:
+        from qmtl.foundation.config import find_config_file, load_config
+
+        path = find_config_file()
+        if not path:
+            return None
+        unified = load_config(path)
+        candidate = getattr(unified.connectors, "schema_registry_url", None)
+        if candidate:
+            text = str(candidate).strip()
+            if text:
+                return text
+    except Exception:  # pragma: no cover - defensive fallback
+        return None
+
+    return None
 
 
 __all__ = [

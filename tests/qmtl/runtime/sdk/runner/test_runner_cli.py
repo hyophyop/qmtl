@@ -6,8 +6,8 @@ import httpx
 from qmtl.runtime.sdk import runtime
 
 
-def test_cli_execution(monkeypatch, gateway_mock):
-    monkeypatch.setenv("QMTL_TEST_MODE", "1")
+def test_cli_execution(monkeypatch, gateway_mock, configure_sdk):
+    configure_sdk({"test": {"test_mode": True}})
     from qmtl.runtime.sdk.cli import main
     from qmtl.runtime.sdk.runner import Runner
     from qmtl.runtime.sdk import StreamInput

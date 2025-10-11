@@ -198,7 +198,7 @@ All events carry the fields called out in the operations checklist:
 - **`lease_key`** – the canonical lease identifier (`node:interval:start:end:world:requested_as_of`).
 - **`node_id`**, **`interval`**, **`batch_start`**, **`batch_end`** – partition identifiers that drive dashboards.
 - **`world`** and **`requested_as_of`** – present when the request context supplies world governance metadata.
-- **`worker`** – populated from `QMTL_SEAMLESS_WORKER`, `QMTL_WORKER_ID`, or the container hostname; configure one of the environment variables in production to keep dashboards consistent.
+- **`worker`** – populated from `connectors.seamless_worker_id`, `connectors.worker_id`, the legacy `QMTL_SEAMLESS_WORKER`/`QMTL_WORKER_ID` variables, or the container hostname. Configure one of these values in production to keep dashboards consistent.
 - **`lease_token`** and **`lease_until_ms`** – useful when recovering stuck leases via `scripts/lease_recover.py`.
 - **`completion_ratio`** – mirrors the gauge recorded in Prometheus to track progress per lease.
 - **`reason`** – included on the failed event to annotate why the lease was abandoned.

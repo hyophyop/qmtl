@@ -15,6 +15,7 @@ flowchart TB
     root --> connectors
     root --> telemetry
     root --> cache
+    root --> runtime
     root --> test
 ```
 
@@ -101,6 +102,11 @@ Sample configurations for common environments live under
 | `worker_id` | string or null | `null` | `QMTL_WORKER_ID` | No |
 | `seamless_worker_id` | string or null | `null` | `QMTL_SEAMLESS_WORKER` | No |
 | `strategy_id` | string or null | `null` | `QMTL_STRATEGY_ID` | No |
+| `execution_domain` | string or null | `null` | `QMTL_EXECUTION_DOMAIN` | No |
+| `broker_url` | string or null | `null` | `QMTL_BROKER_URL` | No |
+| `trade_max_retries` | integer | `3` | `QMTL_TRADE_MAX_RETRIES` | No |
+| `trade_backoff` | float | `0.1` | `QMTL_TRADE_BACKOFF` | No |
+| `ws_url` | string or null | `null` | `QMTL_WS_URL` | No |
 
 ### Telemetry
 
@@ -125,6 +131,19 @@ Sample configurations for common environments live under
 | `snapshot_url` | string or null | `null` | `QMTL_SNAPSHOT_URL` | No |
 | `snapshot_strict_runtime` | boolean | `False` | `QMTL_SNAPSHOT_STRICT_RUNTIME` | No |
 | `snapshot_format` | string | `"json"` | `QMTL_SNAPSHOT_FORMAT` | No |
+
+### Runtime
+
+| Key | Type | Default | Environment variable | Required |
+| --- | --- | --- | --- | --- |
+| `http_timeout_seconds` | float | `2.0` | `QMTL_HTTP_TIMEOUT` | No |
+| `http_timeout_seconds_test` | float | `1.5` | `QMTL_HTTP_TIMEOUT_TEST` | No |
+| `ws_recv_timeout_seconds` | float | `30.0` | `QMTL_WS_RECV_TIMEOUT` | No |
+| `ws_recv_timeout_seconds_test` | float | `5.0` | `QMTL_WS_RECV_TIMEOUT_TEST` | No |
+| `ws_max_total_time_seconds` | float or null | `null` | `QMTL_WS_MAX_TOTAL_TIME` | No |
+| `ws_max_total_time_seconds_test` | float or null | `5.0` | `QMTL_WS_MAX_TOTAL_TIME_TEST` | No |
+| `poll_interval_seconds` | float | `10.0` | `QMTL_POLL_INTERVAL` | No |
+| `poll_interval_seconds_test` | float | `2.0` | `QMTL_POLL_INTERVAL_TEST` | No |
 
 ### Test
 

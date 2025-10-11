@@ -140,23 +140,20 @@ await fake.stop()
 - `FakeLiveDataFeed` is an in-memory stub that forwards messages pushed via `emit`.
 - Timeouts/backoffs come from `runtime`: `WS_RECV_TIMEOUT_SECONDS` (30s default) and internal exponential backoff.
 
-## Configuration (YAML/Env)
+## Configuration
 
-Minimal env configuration for a live run:
+Minimal `qmtl.yml` excerpt for a live run:
 
-```bash
-export QMTL_EXECUTION_DOMAIN=live
-export QMTL_BROKER_URL=https://broker/api/orders
-export QMTL_TRADE_MAX_RETRIES=3
-export QMTL_TRADE_BACKOFF=0.1
-export QMTL_WS_URL=wss://gateway/ws
-# Optional legacy compatibility (maps "paper" → "dryrun")
-export QMTL_TRADE_MODE=live
+```yaml
+connectors:
+  execution_domain: live
+  broker_url: https://broker/api/orders
+  trade_max_retries: 3
+  trade_backoff: 0.1
+  ws_url: wss://gateway/ws
 ```
 
-Example strategy: `qmtl/examples/strategies/dryrun_live_switch_strategy.py` reads these variables to switch between dryrun and live domains.
-
-YAML integration: you can mirror these settings in your project config and load them before constructing clients. The SDK does not enforce a specific YAML schema.
+Example strategy: `qmtl/examples/strategies/dryrun_live_switch_strategy.py` reads these settings to switch between dryrun and live domains.
 
 ## Usage with Runner
 

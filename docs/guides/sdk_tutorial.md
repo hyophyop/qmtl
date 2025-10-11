@@ -146,7 +146,7 @@ Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
 - WorldService는 정책 평가 결과를 `effective_mode` (`validate|compute-only|paper|live`)로 전달합니다.
 - Gateway와 SDK는 이 값을 ExecutionDomain으로 매핑해 `execution_domain` 필드를 채웁니다.
 - **매핑 규칙:** `validate → backtest (주문 게이트 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow`는 운영자 전용입니다.
-- 실행 예시: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})는 `QMTL_EXECUTION_DOMAIN` 환경 변수로 `dryrun`/`live`를 전환합니다. 레거시 `QMTL_TRADE_MODE` 값 `paper`는 자동으로 `dryrun`으로 변환됩니다.
+- 실행 예시: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})는 `connectors.execution_domain` 설정으로 `dryrun`/`live`를 전환합니다. 레거시 `trade_mode` 값 `paper`는 자동으로 `dryrun`으로 변환됩니다.
 - 오프라인 실행(`Runner.offline`)은 기본적으로 `backtest` 도메인과 동일한 게이팅을 적용합니다. WorldService가 `effective_mode="validate"`를 전달하면 SDK는 자동으로 `backtest` ExecutionDomain을 사용해 주문을 차단합니다.
 
 ## CLI 도움말
@@ -204,8 +204,8 @@ qmtl tools sdk run strategies.my:MyStrategy \
 전달됩니다. 이전 버전에서 사용하던 `NodeCache.snapshot()`은 내부 구현으로
 변경되었으므로 전략 코드에서 직접 호출하지 않아야 합니다.
 
-PyArrow 기반 캐시를 사용하려면 환경 변수 `QMTL_ARROW_CACHE=1`을 설정합니다.
-만료 슬라이스 정리는 `QMTL_CACHE_EVICT_INTERVAL`(초) 값에 따라 주기적으로 실행되며
+PyArrow 기반 캐시는 `cache.arrow_cache_enabled: true` 설정으로 활성화합니다.
+만료 슬라이스 정리는 `cache.cache_evict_interval`(초) 값에 따라 주기적으로 실행되며
 Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray` 옵션을 사용하면 계산 함수 실행과
 캐시 정리가 모두 스레드 기반으로 전환됩니다.
 
@@ -216,8 +216,8 @@ Ray가 설치되어 있으면 Ray Actor에서 동작합니다. CLI의 `--no-ray`
 수 있습니다. `get_slice()`는 리스트 또는 `xarray.DataArray` 형태의 윈도우 데이터를
 반환합니다.
 
-PyArrow가 설치되어 있고 `QMTL_ARROW_CACHE=1`을 설정하면 `NodeCacheArrow` 백엔드가
-활성화됩니다. 만료된 슬라이스는 `QMTL_CACHE_EVICT_INTERVAL` 초 간격으로 제거되며
+PyArrow가 설치되어 있고 `cache.arrow_cache_enabled: true`를 설정하면 `NodeCacheArrow` 백엔드가
+활성화됩니다. 만료된 슬라이스는 `cache.cache_evict_interval` 초 간격으로 제거되며
 Ray가 켜져 있고 `--no-ray`를 사용하지 않는 경우 Actor에서, 그렇지 않으면 백그라운드 스레드에서 실행됩니다.
 
 캐시 조회 수는 `qmtl.runtime.sdk.metrics` 모듈의 `cache_read_total` 및

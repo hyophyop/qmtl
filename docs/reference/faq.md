@@ -21,7 +21,7 @@ See [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migr
   - `async with Runner.session(...):`을 사용하면 `TagQueryManager`/`ActivationManager`가 자동으로 정리됩니다.
   - 또는 `Runner.shutdown(strategy)`나 `await Runner.shutdown_async(strategy)`를 호출해 수동으로 정리하세요.
 - 보수적인 타임아웃 적용:
-  - 테스트 실행 전에 `QMTL_TEST_MODE=1`을 설정하면 SDK의 기본 HTTP/WS 타임아웃이 짧게 설정되어 hang 가능성이 줄어듭니다.
+  - 테스트 실행 전에 `qmtl.yml`의 `test.test_mode`를 `true`로 설정하면 SDK의 기본 HTTP/WS 타임아웃이 짧게 설정되어 hang 가능성이 줄어듭니다.
 - ASGI/Transport 자원 정리:
   - FastAPI 수명 주기를 적용하려면 `async with httpx.ASGITransport(app) as transport:` 블록을 사용하고, 그 안에서 `async with httpx.AsyncClient(transport=transport, ...)`으로 호출을 수행하세요.
   - Gateway 앱은 백그라운드 태스크를 시작하지 않도록 `create_app(enable_background=False)` 옵션을 제공합니다. 단위 테스트에서는 이 플래그를 끄면 리소스 경합과 경고를 줄일 수 있습니다.

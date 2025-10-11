@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 import zlib
 import httpx
@@ -13,7 +12,7 @@ from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.foundation.common.tagquery import split_tags, normalize_match_mode, normalize_queues
 
 from .ws_client import WebSocketClient
-from . import runtime
+from . import runtime, configuration
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .node import TagQueryNode
@@ -52,7 +51,7 @@ class TagQueryManager:
             Tuple[Tuple[str, ...], int, MatchMode], frozenset[str]
         ] = {}
         if cache_path is None:
-            cache_path = os.getenv("QMTL_TAGQUERY_CACHE", ".qmtl_tagmap.json")
+            cache_path = configuration.cache_config().tagquery_cache_path
         self.cache_path = Path(cache_path)
 
     # ------------------------------------------------------------------

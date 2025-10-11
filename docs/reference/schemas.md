@@ -58,10 +58,11 @@ validate_schema(df, "bar")
 
 ## Registry Integration (optional)
 
-When `QMTL_SCHEMA_REGISTRY_URL` is set, components can resolve `schema_id`s via
-an external Schema Registry. A lightweight in-memory client is available at
-`qmtl/foundation/schema/registry.py`. Production deployments can swap in Confluent or
-Redpanda clients.
+When `connectors.schema_registry_url` is set in `qmtl.yml` (or the legacy
+`QMTL_SCHEMA_REGISTRY_URL` environment variable is provided), components can
+resolve `schema_id`s via an external Schema Registry. A lightweight in-memory
+client is available at `qmtl/foundation/schema/registry.py`. Production
+deployments can swap in Confluent or Redpanda clients.
 
 ## ControlBus CloudEvents — Protobuf Migration Path
 

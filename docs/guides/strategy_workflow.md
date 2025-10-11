@@ -128,7 +128,7 @@ Execution domains are now surfaced explicitly on envelopes:
 
 - WorldService decisions emit `effective_mode` (`validate|compute-only|paper|live`).
 - Gateway/SDKs derive `execution_domain` (`backtest|dryrun|live|shadow`) using the normative mapping `validate → backtest (orders gated OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`.
-- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }}) toggles between `dryrun` and `live` by reading `QMTL_EXECUTION_DOMAIN`. Legacy `QMTL_TRADE_MODE=paper` is accepted but coerced to `dryrun` for compatibility.
+- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }}) toggles between `dryrun` and `live` by reading `connectors.execution_domain`. Legacy `trade_mode=paper` values are coerced to `dryrun` for compatibility.
 - Offline runs mirror the `backtest` domain, so a `validate` decision never publishes orders until promotion completes.
 
 ```bash
@@ -200,16 +200,14 @@ The helpers are idempotent and safe to call even if no background services are a
 
 ### Test Mode Budgets
 
-Set `QMTL_TEST_MODE=1` when running tests to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
+Enable `test.test_mode` in `qmtl.yml` to apply conservative client-side time budgets that reduce the chance of hangs in flaky environments:
 
 - HTTP clients: 짧은 폴링 주기 및 명시적 상태 확인
 - WebSocket client: shorter receive timeout and overall max runtime (≈5s)
 
-Example:
-
-```bash
-export QMTL_TEST_MODE=1
-uv run -m pytest -W error -n auto
+```yaml
+test:
+  test_mode: true
 ```
 ```
 

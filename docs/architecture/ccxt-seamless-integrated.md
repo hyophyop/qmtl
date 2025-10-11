@@ -139,7 +139,7 @@ flowchart LR
 
 | Parameter | Purpose | Default Source |
 | --- | --- | --- |
-| `QMTL_CCXT_RATE_LIMITER_REDIS` | Connection string for cluster token bucket state | Environment variable |
+| `connectors.ccxt_rate_limiter_redis` | Connection string for cluster token bucket state | `qmtl.yml` (`QMTL_CCXT_RATE_LIMITER_REDIS` fallback) |
 | `tokens_per_interval` | Allowance per rolling window | Provider configuration |
 | `interval_ms` | Shared window duration | Provider configuration |
 | `burst_tokens` | Extra headroom before throttling | Provider configuration |
@@ -551,7 +551,7 @@ exchanges:
     rate_limit_rps: 10
 environment:
   coordinator_url: ${QMTL_SEAMLESS_COORDINATOR_URL}
-  rate_limiter_redis: ${QMTL_CCXT_RATE_LIMITER_REDIS}
+  rate_limiter_redis: ${connectors.ccxt_rate_limiter_redis}
 ```
 
 The blueprint aligns configuration knobs with existing runtime modules. Teams should implement validation that cross-checks domain policies, rate-limit settings, and artifact destinations during startup.
@@ -584,7 +584,7 @@ This workflow keeps hot storage responsive without sacrificing the reproducibili
 
 ## Operational Practices
 
-- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases and `QMTL_CCXT_RATE_LIMITER_REDIS` for shared throttles; Gateway supplies world context via `StrategyComputeContext`.
+- **Environment coordination**: configure `QMTL_SEAMLESS_COORDINATOR_URL` for distributed leases and `connectors.ccxt_rate_limiter_redis` (or the legacy `QMTL_CCXT_RATE_LIMITER_REDIS`) for shared throttles; Gateway supplies world context via `StrategyComputeContext`.
 - **Metrics**: emit the full catalog below, including SLA phase timers, coverage quality, artifact throughput, and gating outcomes.
 - **Alerting**: trigger warnings for SLA breaches, persistent coverage gaps, Redis rate-limit saturation, or fingerprint collisions. Suggested thresholds are listed alongside each metric.
 - **Backfill visibility**: monitor coordinator claim/complete/fail events via structured logs; integrate into dashboards already defined in `operations/seamless_sla_dashboards.md`.

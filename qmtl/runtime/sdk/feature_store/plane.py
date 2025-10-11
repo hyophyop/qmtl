@@ -3,13 +3,13 @@ from __future__ import annotations
 """High level helpers for interacting with feature artifact storage."""
 
 import logging
-import os
 from typing import Any, Iterable, Sequence
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 from .base import FeatureArtifactKey, FeatureStoreBackend
 from .filesystem import FileSystemFeatureStore
+from .. import configuration
 
 logger = logging.getLogger(__name__)
 
@@ -45,27 +45,26 @@ class FeatureArtifactPlane:
     # ------------------------------------------------------------------
     @classmethod
     def from_env(cls) -> FeatureArtifactPlane | None:
-        disabled = str(os.getenv("QMTL_FEATURE_ARTIFACTS", "")).strip().lower() in {
-            "0",
-            "false",
-            "off",
-            "no",
-        }
-        if disabled:
+        cfg = configuration.cache_config()
+        if not cfg.feature_artifacts_enabled:
             return None
-        base = os.getenv("QMTL_FEATURE_ARTIFACT_DIR", ".qmtl_feature_artifacts")
-        max_versions_env = os.getenv("QMTL_FEATURE_ARTIFACT_VERSIONS")
-        max_versions = None
-        if max_versions_env:
+
+        base = cfg.feature_artifact_dir
+        max_versions = cfg.feature_artifact_versions
+        if max_versions is not None:
             try:
-                max_versions = int(max_versions_env)
-            except ValueError:
-                logger.warning("invalid QMTL_FEATURE_ARTIFACT_VERSIONS value: %s", max_versions_env)
+                max_versions = int(max_versions)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                logger.warning(
+                    "invalid feature_artifact_versions value in configuration: %s",
+                    max_versions,
+                )
+                max_versions = None
+
         backend = FileSystemFeatureStore(base, max_versions=max_versions)
-        domains_env = os.getenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS")
         domains: Sequence[str] | None = None
-        if domains_env:
-            domains = [d.strip() for d in domains_env.split(",") if d.strip()]
+        if cfg.feature_artifact_write_domains:
+            domains = [str(d).strip() for d in cfg.feature_artifact_write_domains if str(d).strip()]
         return cls(backend, write_domains=domains)
 
     # ------------------------------------------------------------------

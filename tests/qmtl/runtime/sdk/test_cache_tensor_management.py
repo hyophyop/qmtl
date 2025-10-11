@@ -102,10 +102,10 @@ def test_timestamp_bucket_gap_detection_and_out_of_order(node_cache: NodeCache) 
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
-def test_arrow_backend_matches_tensor_semantics(monkeypatch):
+def test_arrow_backend_matches_tensor_semantics(configure_sdk):
     """Arrow cache backend mirrors NodeCache window semantics when enabled."""
 
-    monkeypatch.setenv("QMTL_ARROW_CACHE", "1")
+    configure_sdk({"cache": {"arrow_cache_enabled": True}})
     cache = arrow_cache.NodeCacheArrow(period=2)
     try:
         cache.append("btc", 60, 60, {"v": 1})
@@ -128,4 +128,3 @@ def test_arrow_backend_matches_tensor_semantics(monkeypatch):
         assert cache.missing_flags()["btc"][60] is False
     finally:
         cache.close()
-        monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)

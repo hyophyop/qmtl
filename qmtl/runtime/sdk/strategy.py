@@ -1,7 +1,6 @@
 from .util import parse_interval, parse_period
 from . import arrow_cache
 from .node import NodeCache
-import os
 
 
 class Strategy:
@@ -58,7 +57,7 @@ class Strategy:
             node.period = parse_period(node.period)
 
             if getattr(node.cache, "period", None) != node.period:
-                if arrow_cache.ARROW_AVAILABLE and os.getenv("QMTL_ARROW_CACHE") == "1":
+                if arrow_cache.ARROW_AVAILABLE and arrow_cache.ARROW_CACHE_ENABLED:
                     node.cache = arrow_cache.NodeCacheArrow(node.period)
                 else:
                     node.cache = NodeCache(node.period)

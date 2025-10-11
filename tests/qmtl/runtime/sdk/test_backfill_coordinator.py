@@ -90,11 +90,12 @@ async def test_distributed_coordinator_gracefully_handles_conflict() -> None:
 
 @pytest.mark.asyncio
 async def test_distributed_coordinator_emits_success_logs(
-    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    caplog: pytest.LogCaptureFixture,
+    configure_sdk,
 ) -> None:
     sdk_metrics.reset_metrics()
     caplog.set_level(logging.INFO, logger="qmtl.runtime.sdk.backfill_coordinator")
-    monkeypatch.setenv("QMTL_WORKER_ID", "worker-42")
+    configure_sdk({"connectors": {"worker_id": "worker-42"}})
 
     claim_response = _make_response(
         200,
