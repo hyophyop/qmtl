@@ -1,5 +1,7 @@
-"""Service implementations for QMTL runtime."""
+"""Service implementations for QMTL runtime.
 
-from . import dagmanager, gateway, worldservice
+Avoid importing subpackages at module import time to prevent circular imports
+from configuration loaders. Import service modules directly where needed.
+"""
 
-__all__ = ["dagmanager", "gateway", "worldservice"]
+__all__ = []
