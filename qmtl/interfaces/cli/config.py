@@ -10,6 +10,7 @@ from typing import Dict, Iterable, List, Mapping
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.foundation.config_validation import (
     ValidationIssue,
+    validate_config_structure,
     validate_dagmanager_config,
     validate_gateway_config,
 )
@@ -48,7 +49,7 @@ def _build_validate_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["gateway", "dagmanager", "all"],
+        choices=["schema", "gateway", "dagmanager", "all"],
         default="all",
         help="Limit validation to a specific service",
     )
@@ -111,6 +112,11 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
         print(f"[qmtl] Failed to load configuration: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
+    results: Dict[str, Dict[str, ValidationIssue]] = {}
+
+    if args.target in {"schema", "all"}:
+        results["schema"] = validate_config_structure(unified)
+
     targets: List[str] = []
     if args.target in {"gateway", "all"}:
         targets.append("gateway")
@@ -126,7 +132,6 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
             )
         raise SystemExit(2)
 
-    results: Dict[str, Dict[str, ValidationIssue]] = {}
     if "gateway" in targets:
         results["gateway"] = await validate_gateway_config(unified.gateway, offline=args.offline)
     if "dagmanager" in targets:

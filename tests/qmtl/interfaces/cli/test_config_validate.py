@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict
+import yaml
 
 import pytest
 
@@ -58,6 +59,7 @@ def test_validate_allows_target_subset(tmp_path: Path, monkeypatch, capsys):
     config_cli.run(["validate", "--config", str(config_path), "--target", "gateway", "--json"])
 
     captured = capsys.readouterr()
+    assert "schema:" in captured.out
     assert "gateway:" in captured.out
     lines = captured.out.splitlines()
     json_start = next(i for i, line in enumerate(lines) if line.startswith("{"))
@@ -75,6 +77,7 @@ def test_validate_runs_all_when_sections_present(tmp_path: Path, monkeypatch, ca
             "gateway": {"host": "0.0.0.0"},
             "dagmanager": {"grpc_port": 5100},
         },
+    )
     )
 
     async def _fake_gateway(_cfg, *, offline: bool = False):
@@ -94,3 +97,28 @@ def test_validate_runs_all_when_sections_present(tmp_path: Path, monkeypatch, ca
     assert "gateway:" in captured.out
     assert "dagmanager:" in captured.out
     assert "Neo4j unavailable" in captured.out
+
+
+def test_validate_schema_type_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bad_cfg = {
+        "cache": {"feature_artifact_write_domains": "not-a-list"},
+    }
+    path = tmp_path / "schema.yml"
+    path.write_text(yaml.safe_dump(bad_cfg))
+
+    with pytest.raises(SystemExit) as excinfo:
+        config_cli.run(["validate", "--config", str(path), "--target", "schema"])
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "schema:" in captured.out
+    assert "feature_artifact_write_domains" in captured.out
+    assert "ERROR" in captured.out
+
+
+def test_validate_missing_config_path(capsys: pytest.CaptureFixture[str]) -> None:
+    missing = Path("/nonexistent/qmtl.yml")
+    with pytest.raises(SystemExit) as excinfo:
+        config_cli.run(["validate", "--config", str(missing)])
