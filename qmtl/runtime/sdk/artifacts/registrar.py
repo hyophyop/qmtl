@@ -23,7 +23,7 @@ from .. import configuration
 
 def _resolve_strategy_id() -> str | None:
     try:
-        cfg = configuration.connectors_config()
+        cfg = configuration.get_connectors_config()
         value = getattr(cfg, "strategy_id", None)
     except Exception:  # pragma: no cover - defensive cache access
         value = None
