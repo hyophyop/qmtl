@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import FrozenSet
 import logging
 import os
 from typing import Any, Dict
@@ -259,6 +260,7 @@ class UnifiedConfig:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     test: TestConfig = field(default_factory=TestConfig)
+    present_sections: FrozenSet[str] = field(default_factory=frozenset)
 
 
 def find_config_file(cwd: Path | None = None) -> str | None:
@@ -323,6 +325,11 @@ def load_config(path: str) -> UnifiedConfig:
     telemetry_data = data.get("telemetry", {})
     cache_data = data.get("cache", {})
     test_data = data.get("test", {})
+    present_sections: FrozenSet[str] = frozenset(
+        section
+        for section in CONFIG_SECTION_NAMES
+        if section in data and isinstance(data.get(section), dict)
+    )
 
     for section_name, section_data in (
         ("gateway", gw_data),
@@ -439,4 +446,5 @@ def load_config(path: str) -> UnifiedConfig:
         telemetry=telemetry_cfg,
         cache=cache_cfg,
         test=test_cfg,
+        present_sections=present_sections,
     )

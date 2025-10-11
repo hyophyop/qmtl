@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
@@ -14,7 +13,7 @@ from .redis_client import InMemoryRedis
 
 from .api import create_app
 from .config import GatewayConfig
-from qmtl.foundation.config import load_config, find_config_file, has_config_section
+from qmtl.foundation.config import find_config_file, load_config
 from .controlbus_consumer import ControlBusConsumer
 from .commit_log import create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
@@ -62,55 +61,6 @@ def _log_config_source(
         logging.info("Gateway configuration file not provided; using built-in defaults")
 
 
-def _warn_missing_section(section: str, cfg_path: str | None) -> None:
-    if not cfg_path:
-        return
-    if has_config_section(cfg_path, section):
-        return
-
-    meta_raw = os.getenv("QMTL_CONFIG_EXPORT")
-    source_hint = os.getenv("QMTL_CONFIG_SOURCE")
-
-    if meta_raw:
-        try:
-            metadata = json.loads(meta_raw)
-        except json.JSONDecodeError:
-            logging.warning(
-                "Gateway configuration file %s lacks the '%s' section; "
-                "QMTL_CONFIG_EXPORT metadata is not valid JSON (%s). Using default values.",
-                cfg_path,
-                section,
-                meta_raw,
-            )
-            return
-
-        generated = metadata.get("generated_at")
-        variables = metadata.get("variables")
-        details: list[str] = []
-        if generated:
-            details.append(f"generated at {generated}")
-        if variables is not None:
-            details.append(f"{variables} variables")
-        if source_hint:
-            details.append(f"source {source_hint}")
-        detail_str = ", ".join(details) if details else "export metadata available"
-
-        logging.warning(
-            "Gateway configuration file %s does not define the '%s' section. "
-            "QMTL_CONFIG_EXPORT (%s) suggests the export omitted it; the gateway will use default settings. "
-            "Re-run 'qmtl interfaces config env export' to regenerate a complete configuration.",
-            cfg_path,
-            section,
-            detail_str,
-        )
-        return
-
-    logging.warning(
-        "Gateway configuration file %s does not define the '%s' section; using default gateway settings.",
-        cfg_path,
-        section,
-    )
-
 try:  # pragma: no cover - aiokafka optional
     from aiokafka import AIOKafkaConsumer
 except Exception:  # pragma: no cover - import guard
@@ -142,8 +92,14 @@ async def _main(argv: list[str] | None = None) -> None:
     _log_config_source(cfg_path, cli_override=args.config, env_override=env_override)
     config = GatewayConfig()
     if cfg_path:
-        config = load_config(cfg_path).gateway
-        _warn_missing_section("gateway", cfg_path)
+        unified = load_config(cfg_path)
+        if "gateway" not in unified.present_sections:
+            logging.error(
+                "Gateway configuration file %s does not define the 'gateway' section.",
+                cfg_path,
+            )
+            raise SystemExit(2)
+        config = unified.gateway
 
     if config.redis_dsn:
         redis_client = redis.from_url(config.redis_dsn, decode_responses=True)

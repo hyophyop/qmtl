@@ -83,8 +83,7 @@ qmtl:
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
     - "uv run qmtl config validate --config ${qmtl.foundation.config_file} --offline"
-    - "uv run qmtl config env export --config ${qmtl.foundation.config_file} > .env.qmtl"
-    - "source .env.qmtl && export QMTL_CONFIG_FILE=${qmtl.foundation.config_file}"
+    - "export QMTL_CONFIG_FILE=${qmtl.foundation.config_file}"
     - "qmtl service gateway --config ${qmtl.foundation.config_file}"
     - "qmtl service dagmanager server --config ${qmtl.foundation.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"

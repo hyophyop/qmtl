@@ -35,11 +35,10 @@ See also: Architecture Glossary (architecture/glossary.md) for canonical terms s
 1. `uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline`
    으로 게이트웨이/다그매니저 설정을 검증한다. 오류가 발생하면 아키텍처 설계
    문서를 참고해 빠진 요소를 보완한다.
-2. `uv run qmtl config env export ... > .env.qmtl` 뒤 `source .env.qmtl` 로 환경 변수를
-   등록하고 `export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml` 을 추가해 서비스가
-   동일한 YAML을 참조하도록 한다.
-3. `qmtl service gateway` 와 `qmtl service dagmanager server` 를 실행하면
-   환경 변수 폴백이 적용되어 별도의 `--config` 없이도 기동된다. 로그에
-   경고가 나오면 아키텍처 상 의존하는 외부 리소스를 점검한다.
+2. 동일한 파일을 서비스 실행 시 `--config qmtl/examples/qmtl.yml` 로 넘기거나,
+   장기 실행 환경에서는 `export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml` 한 줄로
+   경로만 공유한다.
+3. `qmtl service gateway --config qmtl/examples/qmtl.yml` 와 `qmtl service dagmanager server --config qmtl/examples/qmtl.yml`
+   를 실행한다. 로그에 경고가 나오면 아키텍처 상 의존하는 외부 리소스를 점검한다.
 
 {{ nav_links() }}

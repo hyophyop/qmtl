@@ -120,5 +120,5 @@ notes:
   - "Export QMTL_ENABLE_TOPIC_NAMESPACE=1 to keep Kafka topics partitioned by world/domain."
   - "Provision alerts for gateway_e2e_latency_p95, dagmanager_diff_errors_total, and worldservice_decision_stale_total."
   - "Store secrets (passwords, SASL credentials) in your secrets manager instead of committing them."
-  - "Validate and export config before launch: uv run qmtl config validate --config /etc/qmtl/backend.yml && uv run qmtl config env export --config /etc/qmtl/backend.yml > /etc/qmtl/.env"
-  - "Source the export and set QMTL_CONFIG_FILE=/etc/qmtl/backend.yml so qmtl service gateway/dagmanager reuse the same YAML and emit QMTL_CONFIG_EXPORT metadata if sections are missing."
+  - "Validate config before launch: uv run qmtl config validate --config /etc/qmtl/backend.yml"
+  - "Set QMTL_CONFIG_FILE=/etc/qmtl/backend.yml so qmtl service gateway/dagmanager reuse the same YAML."
