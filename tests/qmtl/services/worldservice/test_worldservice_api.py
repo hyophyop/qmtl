@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import httpx
 import pytest
-from pathlib import Path
 
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
+from qmtl.services.worldservice.config import WorldServiceServerConfig
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
 
 
@@ -544,3 +546,18 @@ def test_create_app_without_storage_requires_config(monkeypatch):
     monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
     with pytest.raises(RuntimeError, match="configuration file not found"):
         create_app()
+
+
+@pytest.mark.asyncio
+async def test_create_app_without_redis_uses_in_memory_storage():
+    config = WorldServiceServerConfig(dsn="sqlite+aiosqlite:///worlds.db")
+
+    app = create_app(config=config)
+
+    assert isinstance(app.state.storage, Storage)
+    assert not isinstance(app.state.storage, PersistentStorage)
+    assert app.state.worldservice_config == config
+
+    async with app.router.lifespan_context(app):
+        assert isinstance(app.state.storage, Storage)
+        assert app.state.storage is app.state.world_service.store

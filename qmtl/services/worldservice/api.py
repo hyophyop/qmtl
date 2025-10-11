@@ -114,7 +114,8 @@ def create_app(
     factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = storage_factory
     if storage is None and factory is None:
         resolved_config = _load_server_config(config)
-        factory = _config_storage_factory(resolved_config)
+        if resolved_config.redis:
+            factory = _config_storage_factory(resolved_config)
 
     store = storage or Storage()
     service = WorldService(store=store, bus=bus)
