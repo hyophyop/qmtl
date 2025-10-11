@@ -1,4 +1,3 @@
-import json
 import logging
 
 import pytest
@@ -75,25 +74,15 @@ def test_dagmanager_cli_invalid_env_path_warns_and_falls_back(
     assert any("QMTL_CONFIG_FILE" in record.message and "ignored" in record.message for record in caplog.records)
 
 
-def test_dagmanager_cli_warns_when_section_missing_with_metadata(
-    tmp_path, monkeypatch, caplog, dagmanager_testbed
-):
+def test_dagmanager_cli_errors_when_section_missing(tmp_path, monkeypatch, caplog, dagmanager_testbed):
     config_path = tmp_path / "no_dagmanager.yml"
     config_path.write_text("gateway:\n  host: example\n")
 
-    monkeypatch.setenv(
-        "QMTL_CONFIG_EXPORT",
-        json.dumps({"generated_at": "2024-03-10T00:00:00Z", "variables": 2}),
-    )
-    monkeypatch.setenv("QMTL_CONFIG_SOURCE", str(config_path))
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(SystemExit) as exc:
+        server.main(["--config", str(config_path)])
 
-    caplog.set_level(logging.WARNING)
-    server.main(["--config", str(config_path)])
-
-    cfg = dagmanager_testbed["config"]
-    assert cfg.grpc_port == 50051
-    assert cfg.http_port == 8001
+    assert exc.value.code == 2
     assert any(
-        "does not define the 'dagmanager' section" in record.message and "QMTL_CONFIG_EXPORT" in record.message
-        for record in caplog.records
+        "does not define the 'dagmanager' section" in record.message for record in caplog.records
     )

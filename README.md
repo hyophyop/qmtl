@@ -102,22 +102,18 @@ Bring services up in three steps. This mirrors the detailed guidance in
    uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
    ```
 
-2. **Export and load environment variables** – persist overrides so Gateway
-   and DAG Manager pick them up without repeating `--config` flags.
+2. **Share the YAML with services** – either pass the path explicitly or export
+   it once for long-running processes.
 
    ```bash
-   uv run qmtl config env export --config qmtl/examples/qmtl.yml > .env.qmtl
-   source .env.qmtl
    export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
    ```
 
-3. **Launch services** – with the environment in place you can start Gateway
-   and DAG Manager directly; each service falls back to `QMTL_CONFIG_FILE` if
-   no `--config` flag is provided.
+3. **Launch services** – point both Gateway and DAG Manager at the same file.
 
    ```bash
-   qmtl service gateway
-   qmtl service dagmanager server
+   qmtl service gateway --config qmtl/examples/qmtl.yml
+   qmtl service dagmanager server --config qmtl/examples/qmtl.yml
    ```
 
 If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import FrozenSet
 import logging
 import os
 import yaml
@@ -18,6 +19,7 @@ class UnifiedConfig:
 
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     dagmanager: DagManagerConfig = field(default_factory=DagManagerConfig)
+    present_sections: FrozenSet[str] = field(default_factory=frozenset)
 
 
 def find_config_file(cwd: Path | None = None) -> str | None:
@@ -76,6 +78,11 @@ def load_config(path: str) -> UnifiedConfig:
 
     gw_data = data.get("gateway", {})
     dm_data = data.get("dagmanager", {})
+    present_sections: FrozenSet[str] = frozenset(
+        section
+        for section in ("gateway", "dagmanager")
+        if section in data and isinstance(data.get(section), dict)
+    )
 
     if not isinstance(gw_data, dict):
         raise TypeError("gateway section must be a mapping")
@@ -118,4 +125,8 @@ def load_config(path: str) -> UnifiedConfig:
 
     gateway_cfg = GatewayConfig(**gw_data)
     dagmanager_cfg = DagManagerConfig(**dm_data)
-    return UnifiedConfig(gateway=gateway_cfg, dagmanager=dagmanager_cfg)
+    return UnifiedConfig(
+        gateway=gateway_cfg,
+        dagmanager=dagmanager_cfg,
+        present_sections=present_sections,
+    )

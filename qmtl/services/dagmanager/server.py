@@ -1,7 +1,6 @@
 from __future__ import annotations
 import argparse
 import asyncio
-import json
 import logging
 import os
 from dataclasses import dataclass
@@ -14,7 +13,7 @@ import uvicorn
 
 from .grpc_server import serve
 from .config import DagManagerConfig
-from qmtl.foundation.config import load_config, find_config_file, has_config_section
+from qmtl.foundation.config import find_config_file, load_config
 
 
 def _log_config_source(
@@ -59,54 +58,6 @@ def _log_config_source(
         logging.info("DAG Manager configuration file not provided; using built-in defaults")
 
 
-def _warn_missing_section(section: str, cfg_path: str | None) -> None:
-    if not cfg_path:
-        return
-    if has_config_section(cfg_path, section):
-        return
-
-    meta_raw = os.getenv("QMTL_CONFIG_EXPORT")
-    source_hint = os.getenv("QMTL_CONFIG_SOURCE")
-
-    if meta_raw:
-        try:
-            metadata = json.loads(meta_raw)
-        except json.JSONDecodeError:
-            logging.warning(
-                "DAG Manager configuration file %s lacks the '%s' section; "
-                "QMTL_CONFIG_EXPORT metadata is not valid JSON (%s). Using default values.",
-                cfg_path,
-                section,
-                meta_raw,
-            )
-            return
-
-        generated = metadata.get("generated_at")
-        variables = metadata.get("variables")
-        details: list[str] = []
-        if generated:
-            details.append(f"generated at {generated}")
-        if variables is not None:
-            details.append(f"{variables} variables")
-        if source_hint:
-            details.append(f"source {source_hint}")
-        detail_str = ", ".join(details) if details else "export metadata available"
-
-        logging.warning(
-            "DAG Manager configuration file %s does not define the '%s' section. "
-            "QMTL_CONFIG_EXPORT (%s) suggests the export omitted it; the server will use default settings. "
-            "Re-run 'qmtl interfaces config env export' to regenerate a complete configuration.",
-            cfg_path,
-            section,
-            detail_str,
-        )
-        return
-
-    logging.warning(
-        "DAG Manager configuration file %s does not define the '%s' section; using default DAG Manager settings.",
-        cfg_path,
-        section,
-    )
 from .api import create_app
 from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
 from .diff_service import StreamSender
@@ -233,8 +184,14 @@ def main(argv: list[str] | None = None) -> None:
 
     cfg = DagManagerConfig()
     if cfg_path:
-        cfg = load_config(cfg_path).dagmanager
-        _warn_missing_section("dagmanager", cfg_path)
+        unified = load_config(cfg_path)
+        if "dagmanager" not in unified.present_sections:
+            logging.error(
+                "DAG Manager configuration file %s does not define the 'dagmanager' section.",
+                cfg_path,
+            )
+            raise SystemExit(2)
+        cfg = unified.dagmanager
 
     asyncio.run(_run(cfg))
 
