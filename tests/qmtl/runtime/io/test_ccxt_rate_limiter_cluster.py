@@ -6,6 +6,8 @@ import time
 import uuid
 import pytest
 
+from qmtl.foundation.config import ConnectorsConfig, UnifiedConfig
+
 from qmtl.runtime.io.ccxt_fetcher import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
@@ -13,6 +15,10 @@ from qmtl.runtime.io.ccxt_fetcher import (
 )
 from qmtl.runtime.io.ccxt_rate_limiter import _RedisTokenBucketLimiter
 from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.configuration import runtime_config_override
+
+
+DEFAULT_REDIS_DSN = "redis://localhost:6379/0"
 
 
 class _TimedExchange:
@@ -47,13 +53,22 @@ def _redis_available(url: str) -> bool:
         return False
 
 
+@pytest.fixture(autouse=True)
+def _connectors_override():
+    config = UnifiedConfig(
+        connectors=ConnectorsConfig(ccxt_rate_limiter_redis=DEFAULT_REDIS_DSN)
+    )
+    with runtime_config_override(config):
+        yield
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not _redis_available(os.getenv("QMTL_CCXT_RATE_LIMITER_REDIS", "redis://localhost:6379/0")),
+    not _redis_available(DEFAULT_REDIS_DSN),
     reason="Redis not available for cluster rate limiter test",
 )
 async def test_cluster_rate_limit_spreads_calls_across_fetchers():
-    redis_url = os.getenv("QMTL_CCXT_RATE_LIMITER_REDIS", "redis://localhost:6379/0")
+    redis_url = DEFAULT_REDIS_DSN
     ex1 = _TimedExchange(60_000)
     ex2 = _TimedExchange(60_000)
     # Use unique suffix to avoid collisions across parallel runs

@@ -40,6 +40,7 @@ seamless:
   fingerprint_mode: canonical
   publish_fingerprint: true
   sla_preset: staging
+  presets_file: ../seamless/presets.yaml
 
 connectors:
   ccxt_rate_limiter_redis: redis://stage-redis:6379/1

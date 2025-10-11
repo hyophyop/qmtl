@@ -82,15 +82,16 @@ Sample configurations for common environments live under
 
 | Key | Type | Default | Environment variable | Required |
 | --- | --- | --- | --- | --- |
-| `coordinator_url` | string or null | `null` | `QMTL_SEAMLESS_COORDINATOR_URL` | No |
-| `artifacts_enabled` | boolean | `False` | `QMTL_SEAMLESS_ARTIFACTS` | No |
-| `artifact_dir` | string | `"~/.qmtl_seamless_artifacts"` | `QMTL_SEAMLESS_ARTIFACT_DIR` | No |
-| `fingerprint_mode` | string | `"canonical"` | `QMTL_SEAMLESS_FP_MODE` | No |
-| `publish_fingerprint` | boolean | `True` | `QMTL_SEAMLESS_PUBLISH_FP` | No |
-| `preview_fingerprint` | boolean | `False` | `QMTL_SEAMLESS_PREVIEW_FP` | No |
-| `early_fingerprint` | boolean | `False` | `QMTL_SEAMLESS_EARLY_FP` | No |
-| `sla_preset` | string | `"baseline"` | `QMTL_SEAMLESS_SLA_PRESET` | No |
-| `conformance_preset` | string | `"strict-blocking"` | `QMTL_SEAMLESS_CONFORMANCE_PRESET` | No |
+| `coordinator_url` | string or null | `null` | — | No |
+| `artifacts_enabled` | boolean | `False` | — | No |
+| `artifact_dir` | string | `"~/.qmtl_seamless_artifacts"` | — | No |
+| `fingerprint_mode` | string | `"canonical"` | — | No |
+| `publish_fingerprint` | boolean | `True` | — | No |
+| `preview_fingerprint` | boolean | `False` | — | No |
+| `early_fingerprint` | boolean | `False` | — | No |
+| `sla_preset` | string | `"baseline"` | — | No |
+| `conformance_preset` | string | `"strict-blocking"` | — | No |
+| `presets_file` | string or null | `null` | — | No |
 
 ### Connectors
 

@@ -16,6 +16,7 @@ from abc import ABC
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from importlib import resources
 import inspect
 import pandas as pd
 from enum import Enum
@@ -23,12 +24,17 @@ import asyncio
 import logging
 import math
 import os
+from pathlib import Path
 import time
 import random
 from asyncio import TaskGroup
 from itertools import count
 
+import yaml
+
+from qmtl.foundation.config import SeamlessConfig
 from qmtl.foundation.common.compute_context import normalize_context_value
+from qmtl.runtime.sdk.configuration import get_runtime_config_path, get_seamless_config
 
 from .history_coverage import (
     merge_coverage as _merge_coverage,
@@ -64,10 +70,6 @@ CONFORMANCE_VERSION = "v2"
 
 _FINGERPRINT_HISTORY_LIMIT = 32
 
-_FINGERPRINT_MODE_ENV = "QMTL_SEAMLESS_FP_MODE"
-_FINGERPRINT_PREVIEW_ENV = "QMTL_SEAMLESS_PREVIEW_FP"
-_FINGERPRINT_PUBLISH_ENV = "QMTL_SEAMLESS_PUBLISH_FP"
-_FINGERPRINT_EARLY_ENV = "QMTL_SEAMLESS_EARLY_FP"
 _FINGERPRINT_MODE_CANONICAL = "canonical"
 _FINGERPRINT_MODE_LEGACY = "legacy"
 
@@ -90,6 +92,125 @@ def _coerce_bool(value: object | None, *, default: bool) -> bool:
     return default
 
 
+def _load_presets_document(config: SeamlessConfig) -> tuple[dict[str, Any], str | None]:
+    """Return the parsed presets mapping and the source identifier."""
+
+    if getattr(config, "presets_file", None):
+        path = Path(config.presets_file)
+        if not path.is_absolute():
+            base = get_runtime_config_path()
+            if base:
+                path = Path(base).parent / path
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle) or {}
+        except FileNotFoundError:
+            logger.warning("seamless.presets.missing_file", extra={"path": str(path)})
+            return {}, str(path)
+        except OSError as exc:
+            logger.warning(
+                "seamless.presets.read_failed",
+                extra={"path": str(path), "error": str(exc)},
+            )
+            return {}, str(path)
+        except yaml.YAMLError as exc:
+            logger.warning(
+                "seamless.presets.parse_failed",
+                extra={"path": str(path), "error": str(exc)},
+            )
+            return {}, str(path)
+        if not isinstance(data, dict):
+            logger.warning(
+                "seamless.presets.invalid_document", extra={"path": str(path)}
+            )
+            return {}, str(path)
+        return data, str(path)
+
+    try:
+        resource = resources.files("qmtl.examples.seamless").joinpath("presets.yaml")
+    except AttributeError:  # pragma: no cover - older Python fallback
+        resource = None
+
+    if resource is not None:
+        try:
+            with resource.open("r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle) or {}
+            if not isinstance(data, dict):
+                logger.warning("seamless.presets.invalid_document", extra={"path": str(resource)})
+                return {}, str(resource)
+            return data, str(resource)
+        except FileNotFoundError:
+            logger.warning("seamless.presets.packaged_missing")
+        except OSError as exc:
+            logger.warning(
+                "seamless.presets.packaged_read_failed", extra={"error": str(exc)}
+            )
+        except yaml.YAMLError as exc:
+            logger.warning(
+                "seamless.presets.packaged_parse_failed", extra={"error": str(exc)}
+            )
+
+    return {}, None
+
+
+def _resolve_sla_preset(data: dict[str, Any], config: SeamlessConfig) -> SLAPolicy | None:
+    key = getattr(config, "sla_preset", None)
+    if not key:
+        return None
+    presets = data.get("sla_presets")
+    if not isinstance(presets, dict):
+        return None
+    entry = presets.get(key)
+    if not isinstance(entry, dict):
+        logger.warning("seamless.presets.sla_missing", extra={"preset": key})
+        return None
+    policy = entry.get("policy")
+    if not isinstance(policy, dict):
+        logger.warning("seamless.presets.sla_invalid", extra={"preset": key})
+        return None
+    try:
+        return SLAPolicy(**policy)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "seamless.presets.sla_error", extra={"preset": key, "error": str(exc)}
+        )
+        return None
+
+
+def _resolve_conformance_preset(
+    data: dict[str, Any], config: SeamlessConfig
+) -> tuple[bool | None, dict[str, Any] | None, int | None]:
+    key = getattr(config, "conformance_preset", None)
+    if not key:
+        return None, None, None
+    presets = data.get("conformance_presets")
+    if not isinstance(presets, dict):
+        return None, None, None
+    entry = presets.get(key)
+    if not isinstance(entry, dict):
+        logger.warning(
+            "seamless.presets.conformance_missing", extra={"preset": key}
+        )
+        return None, None, None
+    partial_raw = entry.get("partial_ok")
+    partial_ok: bool | None
+    if isinstance(partial_raw, bool):
+        partial_ok = partial_raw
+    elif isinstance(partial_raw, str):
+        partial_ok = _coerce_bool(partial_raw, default=False)
+    else:
+        partial_ok = None
+    schema = entry.get("schema") if isinstance(entry.get("schema"), dict) else None
+    interval_raw = entry.get("interval_ms")
+    interval_ms: int | None
+    if isinstance(interval_raw, (int, float)):
+        try:
+            interval_ms = int(interval_raw)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            interval_ms = None
+    else:
+        interval_ms = None
+    return partial_ok, schema, interval_ms
 @dataclass(slots=True)
 class SeamlessFetchMetadata:
     node_id: str
@@ -311,13 +432,14 @@ class SeamlessDataProvider(ABC):
         conformance: Optional[ConformancePipeline] = None,
         coordinator: Optional[BackfillCoordinator] = None,
         sla: Optional[SLAPolicy] = None,
-        partial_ok: bool = False,
+        partial_ok: bool | None = None,
         registrar: ArtifactRegistrar | None = None,
         stabilization_bars: int = 2,
         backfill_config: BackfillConfig | None = None,
         cache: Mapping[str, Any] | None = None,
         publish_fingerprint: bool | None = None,
         early_fingerprint: bool | None = None,
+        seamless_config: SeamlessConfig | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -325,6 +447,32 @@ class SeamlessDataProvider(ABC):
         self.backfiller = backfiller
         self.live_feed = live_feed
         self.max_backfill_chunk_size = max_backfill_chunk_size
+        config = seamless_config or get_seamless_config()
+        self._seamless_config = config
+        self._conformance_schema: dict[str, Any] | None = None
+        self._conformance_interval: int | None = None
+        presets_data, _ = _load_presets_document(config)
+        preset_sla = _resolve_sla_preset(presets_data, config)
+        (
+            preset_partial_ok,
+            preset_schema,
+            preset_interval_ms,
+        ) = _resolve_conformance_preset(presets_data, config)
+        resolved_sla = sla or preset_sla
+        resolved_partial_ok = (
+            partial_ok if partial_ok is not None else preset_partial_ok
+        )
+        if preset_schema is not None:
+            self._conformance_schema = preset_schema
+        if preset_interval_ms is not None:
+            try:
+                interval_value = int(preset_interval_ms)
+                if interval_value > 0:
+                    if interval_value % 1000 == 0:
+                        interval_value //= 1000
+                    self._conformance_interval = interval_value
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                self._conformance_interval = None
         effective_config = self._normalize_backfill_config(
             backfill_config
             if backfill_config is not None
@@ -336,8 +484,8 @@ class SeamlessDataProvider(ABC):
         )
         self._conformance = conformance
         self._coordinator = coordinator or self._create_default_coordinator()
-        self._sla = sla
-        self._partial_ok = bool(partial_ok)
+        self._sla = resolved_sla
+        self._partial_ok = bool(resolved_partial_ok)
         self._last_conformance_report: Optional[ConformanceReport] = None
         self._registrar = registrar
         self._stabilization_bars = max(0, int(stabilization_bars))
@@ -352,35 +500,36 @@ class SeamlessDataProvider(ABC):
             self._create_fingerprint_window
         )
         self._live_as_of_state: dict[tuple[str, str], str] = {}
-        mode_env = os.getenv(_FINGERPRINT_MODE_ENV, "").strip().lower()
-        legacy_requested = mode_env == _FINGERPRINT_MODE_LEGACY
-        canonical_requested = mode_env == _FINGERPRINT_MODE_CANONICAL
 
-        publish_env = os.getenv(_FINGERPRINT_PUBLISH_ENV)
-        publish_default = not legacy_requested
-        publish_flag = _coerce_bool(publish_env, default=publish_default)
+        mode_value = str(config.fingerprint_mode or "").strip().lower()
+        legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
+        canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
+
+        publish_default = not legacy_requested and _coerce_bool(
+            config.publish_fingerprint,
+            default=True,
+        )
         self._publish_fingerprint = _coerce_bool(
             publish_fingerprint,
-            default=publish_flag,
+            default=publish_default,
         )
 
-        early_env = os.getenv(_FINGERPRINT_EARLY_ENV)
-        early_flag = _coerce_bool(early_env, default=False)
+        early_default = _coerce_bool(config.early_fingerprint, default=False)
         self._early_fingerprint = _coerce_bool(
             early_fingerprint,
-            default=early_flag,
+            default=early_default,
         )
 
         if canonical_requested or legacy_requested:
-            self._fingerprint_mode = mode_env
+            self._fingerprint_mode = mode_value
         else:
             self._fingerprint_mode = (
                 _FINGERPRINT_MODE_CANONICAL
                 if self._publish_fingerprint
                 else _FINGERPRINT_MODE_LEGACY
             )
-        preview_env = os.getenv(_FINGERPRINT_PREVIEW_ENV, "").strip().lower()
-        preview_flag = preview_env in _TRUE_VALUES
+
+        preview_flag = _coerce_bool(config.preview_fingerprint, default=False)
         self._preview_fingerprint = preview_flag or self._early_fingerprint
 
         cache_config = cache or {}
@@ -418,7 +567,7 @@ class SeamlessDataProvider(ABC):
         return self._last_fetch_metadata
 
     def _create_default_coordinator(self) -> BackfillCoordinator:
-        url = os.getenv("QMTL_SEAMLESS_COORDINATOR_URL", "").strip()
+        url = (self._seamless_config.coordinator_url or "").strip()
         if url:
             try:
                 return DistributedBackfillCoordinator(url)
@@ -1638,10 +1787,11 @@ class SeamlessDataProvider(ABC):
         report: ConformanceReport | None = None
         if self._conformance:
             try:
+                interval_override = self._conformance_interval or interval
                 normalized, report = self._conformance.normalize(
                     frame,
-                    schema=None,
-                    interval=interval,
+                    schema=self._conformance_schema,
+                    interval=interval_override,
                 )
             except ConformancePipelineError:
                 raise

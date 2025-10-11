@@ -110,8 +110,9 @@ async def main() -> None:
     settings = ExampleSettings()
     provider = await build_provider(settings)
 
-    # Optional: persist artifacts locally for reproducibility
-    # os.environ["QMTL_SEAMLESS_ARTIFACTS"] = "1"
+    # Optional: persist artifacts locally for reproducibility.
+    # Enable ``seamless.artifacts_enabled`` in qmtl.yml and point
+    # ``seamless.artifact_dir`` to a writable location.
 
     await fetch_history(provider, settings)
 

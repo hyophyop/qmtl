@@ -465,7 +465,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
         registrar_obj: ArtifactRegistrar | None = resolved_registrar
         if registrar_obj is None:
-            registrar_obj = FileSystemArtifactRegistrar.from_env()
+            registrar_obj = FileSystemArtifactRegistrar.from_runtime_config()
         if registrar_obj is None:
             registrar_obj = IOArtifactRegistrar(stabilization_bars=2)
 

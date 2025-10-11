@@ -12,6 +12,7 @@ import pytest
 import json
 from pathlib import Path
 
+from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
 from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
     DataSource,
@@ -33,6 +34,11 @@ from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import Lease
+from qmtl.runtime.sdk.configuration import runtime_config_override
+
+
+def _override_seamless(**kwargs: object):
+    return runtime_config_override(UnifiedConfig(seamless=SeamlessConfig(**kwargs)))
 
 
 class _StaticSource:
@@ -229,26 +235,26 @@ async def test_publish_fingerprint_toggle_disables_publication() -> None:
 
     result = await provider.fetch(0, 100, node_id="node", interval=10)
 
-    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert result.metadata.dataset_fingerprint.startswith("sha256:")
     assert result.metadata.artifact is None
     assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
 
 
 @pytest.mark.asyncio
-async def test_publish_toggle_respects_environment(monkeypatch) -> None:
+async def test_publish_toggle_respects_config() -> None:
     sdk_metrics.reset_metrics()
-    monkeypatch.setenv("QMTL_SEAMLESS_PUBLISH_FP", "0")
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
     registrar = _RecordingRegistrar()
-    provider = _DummyProvider(
-        storage_source=storage,
-        registrar=registrar,
-        stabilization_bars=1,
-    )
+    with _override_seamless(publish_fingerprint=False):
+        provider = _DummyProvider(
+            storage_source=storage,
+            registrar=registrar,
+            stabilization_bars=1,
+        )
 
-    result = await provider.fetch(0, 100, node_id="node", interval=10)
+        result = await provider.fetch(0, 100, node_id="node", interval=10)
 
-    assert result.metadata.dataset_fingerprint.startswith("lake:sha256:")
+    assert result.metadata.dataset_fingerprint.startswith("sha256:")
     assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
 
 
@@ -317,38 +323,38 @@ async def test_in_memory_cache_recomputes_staleness(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(seamless_module.time, "time", fake_clock.time)
     monkeypatch.setattr(seamless_module.time, "monotonic", fake_clock.monotonic)
 
-    storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
-    provider = _DummyProvider(
-        storage_source=storage,
-        cache={"enable": True, "ttl_ms": 10_000_000, "max_shards": 8},
-    )
-    provider._cache_clock = fake_clock.monotonic  # type: ignore[attr-defined]
+    with _override_seamless(sla_preset="", conformance_preset=""):
+        storage = _CountingSource([(0, 100)], DataSourcePriority.STORAGE)
+        provider = _DummyProvider(
+            storage_source=storage,
+            cache={"enable": True, "ttl_ms": 10_000_000, "max_shards": 8},
+        )
+        provider._cache_clock = fake_clock.monotonic  # type: ignore[attr-defined]
 
-    first = await provider.fetch(
-        0,
-        100,
-        node_id="node",
-        interval=10,
-        world_id="world-a",
-        as_of="2024-01-01T00:00:00Z",
-    )
+        first = await provider.fetch(
+            0,
+            100,
+            node_id="node",
+            interval=10,
+            world_id="world-a",
+            as_of="2024-01-01T00:00:00Z",
+        )
 
-    initial_staleness = first.metadata.staleness_ms
+        initial_staleness = first.metadata.staleness_ms
+
+        fake_clock.advance(30.0)
+
+        second = await provider.fetch(
+            0,
+            100,
+            node_id="node",
+            interval=10,
+            world_id="world-a",
+            as_of="2024-01-01T00:00:00Z",
+        )
+
     assert storage.fetch_calls == 1
     assert initial_staleness is not None
-
-    fake_clock.advance(30.0)
-
-    second = await provider.fetch(
-        0,
-        100,
-        node_id="node",
-        interval=10,
-        world_id="world-a",
-        as_of="2024-01-01T00:00:00Z",
-    )
-
-    assert storage.fetch_calls == 1
     assert second.metadata.staleness_ms is not None
     assert second.metadata.staleness_ms == pytest.approx(initial_staleness + 30_000, rel=0, abs=1)
     assert second.metadata.downgraded is False
@@ -1265,13 +1271,14 @@ async def test_backfill_retry_applies_jitter_ratio(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_conformance_pipeline_blocks_by_default() -> None:
-    provider = _DummyProvider(
-        storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
-        conformance=ConformancePipeline(),
-    )
+    with _override_seamless(conformance_preset=""):
+        provider = _DummyProvider(
+            storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
+            conformance=ConformancePipeline(),
+        )
 
-    with pytest.raises(ConformancePipelineError) as exc:
-        await provider.fetch(0, 10, node_id="n", interval=10)
+        with pytest.raises(ConformancePipelineError) as exc:
+            await provider.fetch(0, 10, node_id="n", interval=10)
 
     report = exc.value.report
     assert report.warnings and "duplicate" in report.warnings[0]
@@ -1281,13 +1288,14 @@ async def test_conformance_pipeline_blocks_by_default() -> None:
 
 @pytest.mark.asyncio
 async def test_conformance_pipeline_respects_partial_ok() -> None:
-    provider = _DummyProvider(
-        storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
-        conformance=ConformancePipeline(),
-        partial_ok=True,
-    )
+    with _override_seamless(conformance_preset=""):
+        provider = _DummyProvider(
+            storage_source=_DuplicateSource([(0, 10)], DataSourcePriority.STORAGE),
+            conformance=ConformancePipeline(),
+            partial_ok=True,
+        )
 
-    df = await provider.fetch(0, 10, node_id="n", interval=10)
+        df = await provider.fetch(0, 10, node_id="n", interval=10)
     assert df["ts"].tolist() == [0]
 
     report = provider.last_conformance_report
