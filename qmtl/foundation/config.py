@@ -387,6 +387,24 @@ def load_config(path: str) -> UnifiedConfig:
     gw_data = _apply_aliases(gw_data, gw_aliases, logger_prefix="gateway")
     dm_data = _apply_aliases(dm_data, dm_aliases, logger_prefix="dagmanager")
 
+    # Backfill canonical WorldService settings from legacy Gateway keys to keep
+    # `worldservice` exports populated for configurations that have not migrated
+    # yet. Only fill values that are missing from the dedicated section so that
+    # explicit ``worldservice`` entries continue to take precedence.
+    world_data = dict(world_data)
+    legacy_worldservice_keys = {
+        "worldservice_url": "url",
+        "worldservice_timeout": "timeout",
+        "worldservice_retries": "retries",
+        "enable_worldservice_proxy": "enable_proxy",
+        "enforce_live_guard": "enforce_live_guard",
+    }
+    for legacy_key, canonical_key in legacy_worldservice_keys.items():
+        if canonical_key in world_data:
+            continue
+        if legacy_key in gw_data:
+            world_data[canonical_key] = gw_data[legacy_key]
+
     # Deprecated breaker keys are no longer filtered; invalid keys should be surfaced
 
     gateway_cfg = GatewayConfig(**gw_data)
