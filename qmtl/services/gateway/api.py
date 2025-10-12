@@ -12,7 +12,6 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry import trace
 
 from qmtl.foundation.common import AsyncCircuitBreaker
-from qmtl.foundation.common.tracing import setup_tracing
 
 from . import metrics as gw_metrics
 from .controlbus_consumer import ControlBusConsumer
@@ -61,7 +60,6 @@ def create_app(
     enable_otel: bool | None = None,
     enable_background: bool = True,
 ) -> FastAPI:
-    setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     if database is not None:
         database_obj = database

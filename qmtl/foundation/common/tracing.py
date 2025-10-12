@@ -4,13 +4,14 @@ from __future__ import annotations
 
 This module exposes a ``setup_tracing`` helper which configures the global
 tracer provider. Traces can be exported to an OTLP compatible backend such as
-Jaeger or Tempo by setting the ``QMTL_OTEL_EXPORTER_ENDPOINT`` environment
-variable. When unset, spans are logged to the console which is useful for
-local development.
+Jaeger or Tempo by defining the ``telemetry.otel_exporter_endpoint`` key in the
+canonical YAML configuration. Setting the value to ``console`` retains the
+development-friendly behaviour of printing spans locally.
 """
 
-import os
-from typing import Optional, Dict
+import logging
+from pathlib import Path
+from typing import Dict, Optional
 
 from opentelemetry import trace
 from opentelemetry.propagate import inject
@@ -27,16 +28,70 @@ try:  # Console exporter is optional; avoid when not explicitly requested
 except Exception:  # pragma: no cover - optional dependency not present
     ConsoleSpanExporter = None  # type: ignore
 
+logger = logging.getLogger(__name__)
+
 _INITIALISED = False
 
 
-def setup_tracing(service_name: str, exporter_endpoint: Optional[str] = None) -> None:
+def _load_endpoint_from_config(config_path: str | Path | None) -> str | None:
+    """Return ``telemetry.otel_exporter_endpoint`` from YAML configuration."""
+
+    from qmtl.foundation.config import find_config_file, load_config
+
+    resolved_path: str | None
+    if config_path is not None:
+        resolved_path = str(config_path)
+    else:
+        resolved_path = find_config_file()
+
+    if not resolved_path:
+        return None
+
+    try:
+        unified = load_config(resolved_path)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(
+            "Failed to load telemetry configuration from %s: %s",
+            resolved_path,
+            exc,
+        )
+        return None
+
+    endpoint = unified.telemetry.otel_exporter_endpoint
+    if not endpoint:
+        return None
+
+    normalized = str(endpoint).strip()
+    return normalized or None
+
+
+def _resolve_exporter_endpoint(
+    exporter_endpoint: Optional[str],
+    config_path: str | Path | None,
+) -> Optional[str]:
+    """Normalise explicit endpoint or fall back to YAML configuration."""
+
+    if exporter_endpoint is not None:
+        normalized = exporter_endpoint.strip()
+        if normalized:
+            return normalized
+        return None
+
+    return _load_endpoint_from_config(config_path)
+
+
+def setup_tracing(
+    service_name: str,
+    exporter_endpoint: Optional[str] = None,
+    *,
+    config_path: str | Path | None = None,
+) -> None:
     """Configure a global :class:`TracerProvider` if not already set."""
     global _INITIALISED
     if _INITIALISED:
         return
 
-    endpoint = exporter_endpoint or os.getenv("QMTL_OTEL_EXPORTER_ENDPOINT")
+    endpoint = _resolve_exporter_endpoint(exporter_endpoint, config_path)
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
     # Exporters:

@@ -178,14 +178,15 @@ be exported to any OTLP-compatible backend such as Jaeger or Tempo.
 
 ### Configuration
 
-Set the ``QMTL_OTEL_EXPORTER_ENDPOINT`` environment variable to the OTLP HTTP
-collector endpoint before starting services:
+Define the exporter endpoint in ``qmtl.yml`` under the ``telemetry`` section so
+that every process shares the same configuration:
 
-```bash
-export QMTL_OTEL_EXPORTER_ENDPOINT="http://localhost:4318/v1/traces"
+```yaml
+telemetry:
+  otel_exporter_endpoint: http://localhost:4318/v1/traces
 ```
 
-When unset, spans are logged to the console which is useful for development.
+Set the value to ``console`` to emit spans to stdout during local development.
 
 ### Sample Jaeger query
 

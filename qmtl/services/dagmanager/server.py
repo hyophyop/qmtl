@@ -11,6 +11,7 @@ import uvicorn
 
 from .grpc_server import serve
 from .config import DagManagerConfig
+from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 
@@ -74,7 +75,7 @@ class _KafkaAdminClient:
         pass  # pragma: no cover - noop
 
 
-async def _run(cfg: DagManagerConfig) -> None:
+async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
     set_topic_namespace_enabled(cfg.enable_topic_namespace)
     driver = None
     repo = None
@@ -134,6 +135,7 @@ async def _run(cfg: DagManagerConfig) -> None:
         gc,
         driver=driver,
         bus=bus,
+        enable_otel=enable_otel,
     )
     config = uvicorn.Config(app, host=cfg.http_host, port=cfg.http_port, loop="asyncio", log_level="info")
     http_server = uvicorn.Server(config)
@@ -155,6 +157,8 @@ def main(argv: list[str] | None = None) -> None:
     _log_config_source(cfg_path, cli_override=args.config)
 
     cfg = DagManagerConfig()
+    telemetry_enabled: bool | None = None
+    telemetry_endpoint: str | None = None
     if cfg_path:
         unified = load_config(cfg_path)
         if "dagmanager" not in unified.present_sections:
@@ -164,8 +168,16 @@ def main(argv: list[str] | None = None) -> None:
             )
             raise SystemExit(2)
         cfg = unified.dagmanager
+        telemetry_enabled = unified.telemetry.enable_fastapi_otel
+        telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
 
-    asyncio.run(_run(cfg))
+    setup_tracing(
+        "dagmanager",
+        exporter_endpoint=telemetry_endpoint,
+        config_path=cfg_path,
+    )
+
+    asyncio.run(_run(cfg, enable_otel=bool(telemetry_enabled)))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

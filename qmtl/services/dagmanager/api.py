@@ -6,8 +6,6 @@ from typing import Optional, TYPE_CHECKING
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-from qmtl.foundation.common.tracing import setup_tracing
 from .garbage_collector import GarbageCollector
 from .dagmanager_health import get_health
 from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
@@ -32,11 +30,12 @@ def create_app(
     *,
     driver: "Driver" | None = None,
     bus: ControlBusProducer | None = None,
+    enable_otel: bool | None = None,
 ) -> FastAPI:
     """Return a FastAPI app exposing admin routes."""
-    setup_tracing("dagmanager")
     app = FastAPI()
-    FastAPIInstrumentor().instrument_app(app)
+    if enable_otel:
+        FastAPIInstrumentor().instrument_app(app)
 
     node_count_scheduler: GraphCountScheduler | None = None
     if driver is not None:

@@ -127,9 +127,13 @@ Sample configurations for common environments live under
 
 | Key | Type | Default | Environment variable | Required |
 | --- | --- | --- | --- | --- |
-| `otel_exporter_endpoint` | string or null | `null` | `QMTL_OTEL_EXPORTER_ENDPOINT` | No |
+| `otel_exporter_endpoint` | string or null | `null` | — (legacy env removed) | No |
 | `enable_fastapi_otel` | boolean | `False` | `QMTL_ENABLE_FASTAPI_OTEL` | No |
 | `prometheus_url` | string or null | `null` | `QMTL_PROMETHEUS_URL` | No |
+
+> **Note:** Telemetry configuration now resolves exclusively from YAML. The
+> deprecated ``QMTL_OTEL_EXPORTER_ENDPOINT`` environment variable is ignored by
+> the CLI and services.
 
 ### Cache
 
