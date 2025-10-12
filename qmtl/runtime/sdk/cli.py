@@ -4,16 +4,16 @@ import importlib
 
 import asyncio
 import logging
-import os
 from typing import List
 from .runner import Runner
 from . import runtime
+from . import configuration
 
 
 logger = logging.getLogger(__name__)
 
 
-def _parse_history_boundary(value: str | None, env_var: str) -> int | None:
+def _parse_history_boundary(value: object | None, source: str) -> int | None:
     """Return an integer history boundary or ``None`` when unset/invalid."""
 
     if value is None:
@@ -21,8 +21,21 @@ def _parse_history_boundary(value: str | None, env_var: str) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
-        logger.warning("Ignoring non-integer value for %s: %s", env_var, value)
+        logger.warning("Ignoring non-integer value for %s: %s", source, value)
         return None
+
+
+def _resolve_history_bounds() -> tuple[int | None, int | None]:
+    """Resolve history boundaries from the unified YAML configuration."""
+
+    unified = configuration.get_runtime_config()
+    if unified is None:
+        return None, None
+
+    test_cfg = unified.test
+    start = _parse_history_boundary(getattr(test_cfg, "history_start", None), "test.history_start")
+    end = _parse_history_boundary(getattr(test_cfg, "history_end", None), "test.history_end")
+    return start, end
 
 
 async def _main(argv: List[str] | None = None) -> int:
@@ -61,19 +74,15 @@ async def _main(argv: List[str] | None = None) -> int:
     strategy_cls = getattr(module, class_name)
 
     if args.cmd == "run":
-        # Internal hooks for deterministic history ranges via env vars only
-        h_start_raw = os.getenv("QMTL_HISTORY_START")
-        h_end_raw = os.getenv("QMTL_HISTORY_END")
-        if runtime.TEST_MODE and h_start_raw is None and h_end_raw is None:
-            h_start_raw, h_end_raw = "1", "2"
-        h_start = _parse_history_boundary(h_start_raw, "QMTL_HISTORY_START")
-        h_end = _parse_history_boundary(h_end_raw, "QMTL_HISTORY_END")
+        history_start, history_end = _resolve_history_bounds()
+        if runtime.TEST_MODE and history_start is None and history_end is None:
+            history_start, history_end = 1, 2
         await Runner.run_async(
             strategy_cls,
             world_id=args.world_id,
             gateway_url=args.gateway_url,
-            history_start=h_start,
-            history_end=h_end,
+            history_start=history_start,
+            history_end=history_end,
         )
     else:
         await Runner.offline_async(strategy_cls)
