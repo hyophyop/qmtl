@@ -84,7 +84,7 @@
 
 ## 4. 사용성 개선 제안
 
-1. **구성 템플릿 제공** – `operations` 디렉터리에 환경 변수 예시와 SLA/정합성 프리셋을 포함한 샘플 Compose 파일을 추가해 초기 설정을 단순화합니다.
+1. **구성 템플릿 제공** – `operations` 디렉터리에 YAML 기반 구성 샘플과 SLA/정합성 프리셋을 포함한 Compose 파일을 추가해 초기 설정을 단순화합니다.
 2. **자동 검증 스크립트** – `scripts/` 아래에 환경 변수를 검사하고 코디네이터 연결성, Prometheus 지표 노출 여부를 확인하는 건강 검진 스크립트를 제공하면 배포 안정성을 높일 수 있습니다.
 3. **모듈형 설정 객체** – `EnhancedQuestDBProvider` 초기화 인자 수를 줄이기 위해 설정 dataclass를 도입하고, 전략/SLA/지문 정책을 한 곳에서 선언하도록 개선하면 코드 가독성이 향상됩니다.【F:qmtl/qmtl/runtime/io/seamless_provider.py†L1-L213】
 4. **대시보드 패키징** – Jsonnet 번들을 Helm Chart 또는 Terraform 모듈로 패키징해 Prometheus/Grafana 구성이 자동화되도록 하면 운영 복잡도를 줄일 수 있습니다.【F:qmtl/operations/monitoring/seamless_v2.jsonnet†L1-L123】
@@ -94,7 +94,7 @@
 ## 5. 개선안 적용 작업 목록
 
 1. **구성 템플릿 제공**
-   - `operations/` 아래에 Seamless 구성용 새 하위 디렉터리를 만들고 예시 `.env` 파일, SLA/정합성 프리셋, Compose 스택을 정의합니다.
+   - `operations/` 아래에 Seamless 구성용 새 하위 디렉터리를 만들고 예시 YAML 설정, SLA/정합성 프리셋, Compose 스택을 정의합니다.
    - 템플릿에서 사용되는 서비스/변수 정의를 README로 문서화하고, `mkdocs.yml` 내 운영 가이드 네비게이션을 업데이트합니다.
 
 2. **자동 검증 스크립트 작성**

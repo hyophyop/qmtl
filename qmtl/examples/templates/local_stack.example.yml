@@ -91,14 +91,13 @@ qmtl:
     gateway.worldservice_url: ${gateway.worldservice_url}
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
-    - "uv run qmtl config validate --config ${qmtl.foundation.config_file} --offline"
-    - "export QMTL_CONFIG_FILE=${qmtl.foundation.config_file}"
-    - "qmtl service gateway --config ${qmtl.foundation.config_file}"
-    - "qmtl service dagmanager server --config ${qmtl.foundation.config_file}"
+    - "uv run qmtl config validate --config ${qmtl.config_file} --offline"
+    - "uv run qmtl service gateway --config ${qmtl.config_file}"
+    - "uv run qmtl service dagmanager server --config ${qmtl.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"
   - "Create local state directories upfront: mkdir -p ./var/dagmanager"
   - "Set dagmanager.enable_topic_namespace: false if you need to reuse legacy topic names when testing against mocks."
   - "Install dependencies with uv pip install -e .[dev] before starting services."
-  - "Set QMTL_CONFIG_FILE to this template's YAML so service CLIs pick it up without passing --config each time."
+  - "Pass --config ${qmtl.config_file} to CLI commands or export QMTL_CONFIG_FILE if you prefer an environment variable override."
