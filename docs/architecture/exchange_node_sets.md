@@ -182,6 +182,9 @@ Both options are compatible with the Commit‑Log design; they do not change DM�
 
 ## Execution Semantics (Enhancements)
 
+!!! note "Design intent"
+- Preserve DAG acyclicity and determinism by consuming feedback at `t−1` only and advancing bucket processing behind an upstream watermark. Watermark gating is disabled for simulate/backtest and enabled for paper/live by default.
+
 - DelayedEdge Contract
   - Nodes consuming portfolio/risk must declare an explicit time offset (e.g., `lag=1`) and only read snapshots from the previous bucket. This guarantees deterministic evaluation order at bucket barriers and prevents hidden cycles.
   - Scheduler Watermarks: Bucket processing advances only after upstream state topics commit up to a watermark for `t−1`. This can be implemented as a soft rule at the node/scheduler interface without changing DM invariants.

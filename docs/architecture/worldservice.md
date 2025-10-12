@@ -20,6 +20,9 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
 - Events: emits activation/policy updates to the internal ControlBus
 
+!!! note "Design intent"
+- WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute‑only with order gates OFF.
+
 Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 
 ---
@@ -76,6 +79,9 @@ Policies
 Bindings
 - POST /worlds/{id}/bindings        (upsert WSB: bind `strategy_id` to world)
 - GET  /worlds/{id}/bindings        (list; filter by `strategy_id`)
+
+Purpose
+- WSB ensures a `(world_id, strategy_id)` root exists in the WVG for each submission. For operational isolation and resource control, running separate processes per world is recommended when strategies target multiple worlds.
 
 Decisions & Control
 - GET /worlds/{id}/decide?as_of=... → DecisionEnvelope

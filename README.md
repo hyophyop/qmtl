@@ -307,6 +307,9 @@ Resolved mappings are cached to `.qmtl_tagmap.json` (override with
 reproduce the live mapping deterministically. `resolve_tags(offline=True)`
 hydrates nodes from this snapshot when the Gateway is unavailable.
 
+Purpose & guidance
+- The snapshot exists to make offline runs reproducible. When a snapshot is stale or its CRC no longer matches, prefer re‑resolving via Gateway when online, or fail fast/skip according to your policy when offline. `resolve_tags(offline=True)` SHOULD rely only on the snapshot and MUST NOT invent mappings.
+
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 
 See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.
