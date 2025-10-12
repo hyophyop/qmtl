@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from qmtl.foundation.config import TestConfig, UnifiedConfig
+from qmtl.foundation.config import TestConfig as FoundationTestConfig, UnifiedConfig
 from qmtl.runtime.sdk.configuration import runtime_config_override
 from qmtl.runtime.sdk import cli as sdk_cli, runtime
 
@@ -83,7 +83,7 @@ async def test_cli_run_uses_config_history(monkeypatch):
 
     monkeypatch.setattr(sdk_cli.Runner, "run_async", staticmethod(_fake_run_async))
 
-    config = UnifiedConfig(test=TestConfig(history_start="7", history_end="19"))
+    config = UnifiedConfig(test=FoundationTestConfig(history_start="7", history_end="19"))
     with runtime_config_override(config):
         await sdk_cli._main(
             [
