@@ -49,7 +49,10 @@ seamless:
   artifact_dir: /var/lib/qmtl/seamless-artifacts
   fingerprint_mode: canonical
   publish_fingerprint: true
-  sla_preset: prod
+  preview_fingerprint: false
+  early_fingerprint: false
+  sla_preset: baseline
+  conformance_preset: strict-blocking
   presets_file: ../seamless/presets.yaml
 
 connectors:

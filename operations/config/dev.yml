@@ -33,9 +33,14 @@ dagmanager:
 
 seamless:
   coordinator_url: http://localhost:5010
-  artifacts_enabled: false
+  artifacts_enabled: true
+  artifact_dir: ./var/seamless-artifacts
   fingerprint_mode: canonical
+  publish_fingerprint: true
+  preview_fingerprint: false
+  early_fingerprint: false
   sla_preset: baseline
+  conformance_preset: strict-blocking
   presets_file: ../seamless/presets.yaml
 
 connectors:

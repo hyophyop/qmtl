@@ -9,24 +9,23 @@ The repository ships the following artifacts:
 
 - `operations/seamless/docker-compose.seamless.yml` – Compose bundle that starts
   the Seamless backfill coordinator, QuestDB, Redis, and MinIO.
-- `operations/seamless/.env.example` – Baseline environment variables for the
-  Compose stack and Seamless SDK.
 - `qmtl/examples/seamless/presets.yaml` – SLA and conformance presets aligned
   with the QMTL SDK defaults. A convenience copy remains under
   `operations/seamless/presets.yaml` for operators working from the repository
   checkout.
 - `operations/seamless/README.md` – Detailed documentation of services and
   configuration options.
+- `operations/config/*.yml` – Sample QMTL runtime configurations for
+  development, staging, and production deployments.
 
-Copy `.env.example` to `.env` and tune any secrets before launching the stack.
+The Compose bundle now ships sensible defaults, so no `.env` bootstrap is
+required before launching the stack.
 
 ## Launching the Stack
 
-Run the following commands from the repository root:
+Run the following command from the repository root:
 
 ```bash
-cp operations/seamless/.env.example operations/seamless/.env
-
 docker compose -f operations/seamless/docker-compose.seamless.yml up -d
 ```
 
@@ -37,8 +36,9 @@ Verify the services:
 - MinIO console – `http://localhost:9001`
 
 Adjust `operations/config/*.yml` to point at your coordinator, select the
-desired SLA/conformance presets, and configure artifact capture. The
-`seamless` section drives these runtime behaviours.
+desired SLA/conformance presets, and configure artifact capture. These YAML
+files replace the previous `.env` workflow and can be passed to the CLI via
+`--config` or mounted into your deployment tooling.
 
 ## Using the Presets
 

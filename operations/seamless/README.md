@@ -9,10 +9,9 @@ artifact bucket) together with opinionated SLA and conformance presets.
 
 | File | Purpose |
 | --- | --- |
-| `.env.example` | Seed environment variables that the Seamless runtime and Compose stack expect. Copy it to `.env` before launching containers. |
-| `.gitignore` | Prevents accidental commits of local `.env` overrides. |
 | `docker-compose.seamless.yml` | Compose bundle for the coordinator, QuestDB, Redis, and MinIO services. |
 | `presets.yaml` | Reference SLA and conformance presets that align with the provider defaults. Packaged copy lives in `qmtl/examples/seamless/presets.yaml`. |
+| `../config/*.yml` | Sample QMTL runtime configurations for dev/stage/prod deployments. Point the SDK at these YAML files instead of exporting `.env` variables. |
 
 > **Note:** The packaged copy is distributed with the `qmtl.examples`
 > module so SDK consumers can load presets without checking out the operations
@@ -39,19 +38,22 @@ artifact bucket) together with opinionated SLA and conformance presets.
 ### `redis`
 
 - Powers rate limiting and distributed locks for the coordinator. The default
-  DSN (`redis://redis:6379/3`) is wired into the `.env.example` file.
+  DSN (`redis://redis:6379/3`) is baked into the Compose file and can be
+  overridden with environment variables when needed.
 
 ### `minio`
 
 - Acts as an S3-compatible bucket for Seamless artifacts, regression reports,
-  and conformance outputs. The bucket name is configurable through
-  `MINIO_BUCKET`.
+  and conformance outputs. Override the bucket or credentials by exporting
+  `MINIO_BUCKET`, `MINIO_ROOT_USER`, or `MINIO_ROOT_PASSWORD` before running
+  Compose. Defaults are provided inline in the bundle for local testing.
 
 ## Runtime Configuration
 
-Edit `operations/config/*.yml` to align the runtime with your deployment. The
-`seamless` section controls coordinator access, artifact capture, and preset
-selection:
+Edit `operations/config/*.yml` to align the runtime with your deployment. These
+YAML documents replace the previous `.env` workflow and can be mounted or
+passed directly to the CLI via `--config`. The `seamless` section controls
+coordinator access, artifact capture, and preset selection:
 
 | Key | Description | Example |
 | --- | --- | --- |
@@ -63,10 +65,9 @@ selection:
 | `seamless.conformance_preset` | Conformance configuration key within `presets.yaml`. | `strict-blocking` |
 | `seamless.presets_file` | Path (relative to the config file) to the presets document. | `../seamless/presets.yaml` |
 
-The coordinator service continues to honour its `.env` file for service-level
-settings such as Redis DSNs and QuestDB credentials. Refer to
-`docker-compose.seamless.yml` for the environment variables consumed by the
-coordinator container.
+Compose now injects coordinator and MinIO defaults directly, so no `.env`
+bootstrap step is required. Override any setting by exporting the matching
+environment variable before invoking `docker compose`.
 
 ## SLA and Conformance Presets
 
@@ -77,17 +78,23 @@ coordinator container.
 
 ## Launching the Stack
 
-1. Copy `.env.example` to `.env` and override secrets as needed.
-2. Start the services:
+1. Start the services:
 
    ```bash
    docker compose -f operations/seamless/docker-compose.seamless.yml up -d
    ```
 
-3. Verify health:
+2. Verify health:
    - Coordinator health: `curl http://localhost:8080/healthz`
    - QuestDB UI: `http://localhost:9000`
    - MinIO console: `http://localhost:${MINIO_CONSOLE_PORT}`
 
-4. Configure your QMTL runtime with the matching `QMTL_SEAMLESS_*` variables and
-   point the SDK to the coordinator URL.
+3. Configure your QMTL runtime by pointing the SDK at one of the
+   `operations/config/*.yml` samples or a customised copy:
+
+   ```bash
+   uv run qmtl service gateway --config operations/config/dev.yml
+   ```
+
+   Update the selected YAML file to reference your coordinator URL,
+   credentials, and desired presets.
