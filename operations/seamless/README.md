@@ -89,16 +89,5 @@ coordinator container.
    - QuestDB UI: `http://localhost:9000`
    - MinIO console: `http://localhost:${MINIO_CONSOLE_PORT}`
 
-4. Update your unified configuration so runtime services match the stack, for
-   example:
-
-   ```yaml
-   seamless:
-     coordinator_url: http://localhost:8080
-
-   connectors:
-     seamless_worker_id: worker-a
-   ```
-
-   Validate with `uv run qmtl config validate --config path/to/qmtl.yml` before
-   deploying.
+4. Configure your QMTL runtime with the matching `QMTL_SEAMLESS_*` variables and
+   point the SDK to the coordinator URL.

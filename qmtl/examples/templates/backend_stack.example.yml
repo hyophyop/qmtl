@@ -133,4 +133,4 @@ notes:
   - "Provision alerts for gateway_e2e_latency_p95, dagmanager_diff_errors_total, and worldservice_decision_stale_total."
   - "Store secrets (passwords, SASL credentials) in your secrets manager instead of committing them."
   - "Validate config before launch: uv run qmtl config validate --config /etc/qmtl/backend.yml"
-  - "Pass --config /etc/qmtl/backend.yml to qmtl service gateway/dagmanager or copy it to ./qmtl.yml for autodiscovery."
+  - "Set QMTL_CONFIG_FILE=/etc/qmtl/backend.yml so qmtl service gateway/dagmanager reuse the same YAML."
