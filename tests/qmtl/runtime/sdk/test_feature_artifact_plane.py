@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode
+from qmtl.foundation.config import CacheConfig, UnifiedConfig
+from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, configuration
 from qmtl.runtime.sdk.runner import Runner
 from qmtl.runtime.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
 
@@ -83,9 +84,16 @@ def test_feature_artifacts_written_and_read(artifact_plane):
     assert series[-1][1]["value"] == 20
 
 
-def test_runner_reuses_artifacts_across_domains(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_DIR", str(tmp_path / "plane"))
-    plane = FeatureArtifactPlane.from_env()
+def test_runner_reuses_artifacts_across_domains(tmp_path: Path):
+    cfg = UnifiedConfig(
+        cache=CacheConfig(
+            feature_artifacts_enabled=True,
+            feature_artifact_dir=str(tmp_path / "plane"),
+        ),
+        present_sections=frozenset({"cache"}),
+    )
+    with configuration.runtime_config_override(cfg):
+        plane = FeatureArtifactPlane.from_config()
     assert plane is not None
     previous = Runner.feature_artifact_plane()
     Runner.set_feature_artifact_plane(plane)
