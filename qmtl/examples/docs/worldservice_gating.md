@@ -39,9 +39,10 @@ WorldService gating flow.
          header: Authorization
          tokens: []
      EOF
-     export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
      uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
-     ```
+```
+
+Run the command from the same directory to ensure the YAML is discovered.
    - Gateway (optionally proxying WorldService):
      - In `qmtl/examples/qmtl.yml` set `gateway.worldservice_url: http://localhost:8080`
        and `gateway.enable_worldservice_proxy: true`.

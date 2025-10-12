@@ -102,12 +102,9 @@ Bring services up in three steps. This mirrors the detailed guidance in
    uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
    ```
 
-2. **Share the YAML with services** – either pass the path explicitly or export
-   it once for long-running processes.
-
-   ```bash
-   export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
-   ```
+2. **Share the YAML with services** – either keep the path handy for `--config`
+   or copy it to `qmtl.yml` in your working directory so discovery works
+   automatically.
 
 3. **Launch services** – point both Gateway and DAG Manager at the same file.
 
@@ -116,8 +113,8 @@ Bring services up in three steps. This mirrors the detailed guidance in
    qmtl service dagmanager server --config qmtl/examples/qmtl.yml
    ```
 
-If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with
-default settings, preventing silent misconfigurations.
+When no configuration file is discovered the services fall back to built-in
+defaults, preventing silent misconfigurations.
 
 ## Trading Node Enhancements
 
@@ -250,9 +247,11 @@ worldservice:
     header: Authorization
     tokens: []
 EOF
-export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
+
+Run the command from the directory containing `worldservice.yml` so the server
+discovers the file automatically.
 
 2) Point Gateway at WorldService (optional proxy)
 

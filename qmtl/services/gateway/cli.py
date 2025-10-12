@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
-from pathlib import Path
 from typing import Any
 
 import redis.asyncio as redis
@@ -25,36 +23,9 @@ def _log_config_source(
     cfg_path: str | None,
     *,
     cli_override: str | None,
-    env_override: str | None,
 ) -> None:
     if cli_override:
         logging.info("Gateway configuration loaded from %s (--config)", cli_override)
-        return
-
-    if env_override:
-        env_candidate = Path(env_override)
-        if not env_candidate.is_absolute():
-            env_candidate = Path.cwd() / env_candidate
-
-        if cfg_path and Path(cfg_path) == env_candidate:
-            logging.info(
-                "Gateway configuration loaded from %s (QMTL_CONFIG_FILE)",
-                cfg_path,
-            )
-            return
-
-        if cfg_path:
-            logging.warning(
-                "QMTL_CONFIG_FILE=%s was ignored because the file could not be read; "
-                "using %s instead",
-                env_override,
-                cfg_path,
-            )
-        else:
-            logging.error(
-                "QMTL_CONFIG_FILE=%s did not resolve to a readable file; using built-in defaults",
-                env_override,
-            )
         return
 
     if cfg_path:
@@ -89,9 +60,8 @@ async def _main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    env_override = os.getenv("QMTL_CONFIG_FILE")
     cfg_path = args.config or find_config_file()
-    _log_config_source(cfg_path, cli_override=args.config, env_override=env_override)
+    _log_config_source(cfg_path, cli_override=args.config)
     config = GatewayConfig()
     telemetry_enabled: bool | None = None
     namespace_toggle: bool | None = None

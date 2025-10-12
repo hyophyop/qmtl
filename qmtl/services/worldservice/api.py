@@ -4,6 +4,7 @@ import inspect
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import redis.asyncio as redis
@@ -81,17 +82,30 @@ def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Aw
     return _factory
 
 
-def _load_server_config(config: WorldServiceServerConfig | None) -> WorldServiceServerConfig:
+def _load_server_config(
+    config: WorldServiceServerConfig | None,
+    *,
+    config_path: str | Path | None = None,
+) -> WorldServiceServerConfig:
     if config is not None:
         return config
 
-    config_path = find_config_file()
-    if config_path is None:
-        raise RuntimeError(
-            "WorldService configuration file not found. Set QMTL_CONFIG_FILE or create qmtl.yml in the working directory."
-        )
+    resolved_path: str | None
+    if config_path is not None:
+        candidate = Path(config_path)
+        if not candidate.is_file():
+            raise RuntimeError(
+                "WorldService configuration file not found. Provide --config, pass config_path to create_app, or create qmtl.yml in the working directory."
+            )
+        resolved_path = str(candidate)
+    else:
+        resolved_path = find_config_file()
+        if resolved_path is None:
+            raise RuntimeError(
+                "WorldService configuration file not found. Provide --config, pass config_path to create_app, or create qmtl.yml in the working directory."
+            )
 
-    unified = load_config(config_path)
+    unified = load_config(resolved_path)
     server_config = unified.worldservice.server
     if server_config is None:
         raise RuntimeError(
@@ -106,6 +120,7 @@ def create_app(
     storage: Storage | None = None,
     storage_factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = None,
     config: WorldServiceServerConfig | None = None,
+    config_path: str | Path | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
@@ -113,7 +128,7 @@ def create_app(
     resolved_config: WorldServiceServerConfig | None = None
     factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = storage_factory
     if storage is None and factory is None:
-        resolved_config = _load_server_config(config)
+        resolved_config = _load_server_config(config, config_path=config_path)
         if resolved_config.redis:
             factory = _config_storage_factory(resolved_config)
 
