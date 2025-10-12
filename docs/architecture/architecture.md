@@ -23,8 +23,9 @@ last_modified: 2025-09-22
 !!! tip "빠른 시작: 검증 → 기동"
     운영용 YAML을 작성했다면 `uv run qmtl config validate --config <파일> --offline`
     으로 구조를 확인하고, 동일한 파일을 `qmtl service gateway --config <파일>` 및
-    `qmtl service dagmanager server --config <파일>` 인자로 넘겨라. 장기 실행
-    프로세스에는 `export QMTL_CONFIG_FILE=<파일>` 로 경로만 공유하면 된다.
+    `qmtl service dagmanager server --config <파일>` 인자로 넘겨라. 반복 실행이
+    필요하면 파일을 작업 디렉터리의 `qmtl.yml`로 복사해 CLI가 자동으로 인식하게
+    만들 수 있다.
 
 ---
 

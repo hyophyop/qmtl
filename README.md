@@ -102,11 +102,12 @@ Bring services up in three steps. This mirrors the detailed guidance in
    uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
    ```
 
-2. **Share the YAML with services** – either pass the path explicitly or export
-   it once for long-running processes.
+2. **Share the YAML with services** – keep the file in your workspace and pass
+   it explicitly, or copy it to `./qmtl.yml` so CLIs discover it automatically.
 
    ```bash
-   export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
+   # Optional: make the sample config discoverable without extra flags.
+   cp qmtl/examples/qmtl.yml ./qmtl.yml
    ```
 
 3. **Launch services** – point both Gateway and DAG Manager at the same file.
@@ -116,8 +117,9 @@ Bring services up in three steps. This mirrors the detailed guidance in
    qmtl service dagmanager server --config qmtl/examples/qmtl.yml
    ```
 
-If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with
-default settings, preventing silent misconfigurations.
+If the path is wrong or missing, the services log a warning and continue with
+default settings—keep `qmtl config validate` in your workflow to catch typos
+early.
 
 ## Trading Node Enhancements
 
@@ -239,7 +241,7 @@ stand‑alone FastAPI app and enable the Gateway proxy when needed.
 1) Start WorldService (SQLite + Redis example)
 
 ```bash
-cat > worldservice.yml <<'EOF'
+cat > qmtl.yml <<'EOF'
 worldservice:
   dsn: sqlite:///worlds.db
   redis: redis://localhost:6379/0
@@ -250,7 +252,8 @@ worldservice:
     header: Authorization
     tokens: []
 EOF
-export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
+# Validate the file once before launching the service.
+uv run qmtl config validate --config qmtl.yml --target schema --offline
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
