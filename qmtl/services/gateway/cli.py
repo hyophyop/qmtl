@@ -12,6 +12,7 @@ from .redis_client import InMemoryRedis
 from .api import create_app
 from .config import GatewayConfig
 from .ws import WebSocketHub
+from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
@@ -64,6 +65,7 @@ async def _main(argv: list[str] | None = None) -> None:
     _log_config_source(cfg_path, cli_override=args.config)
     config = GatewayConfig()
     telemetry_enabled: bool | None = None
+    telemetry_endpoint: str | None = None
     namespace_toggle: bool | None = None
     if cfg_path:
         unified = load_config(cfg_path)
@@ -75,7 +77,14 @@ async def _main(argv: list[str] | None = None) -> None:
             raise SystemExit(2)
         config = unified.gateway
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
+        telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
         namespace_toggle = unified.dagmanager.enable_topic_namespace
+
+    setup_tracing(
+        "gateway",
+        exporter_endpoint=telemetry_endpoint,
+        config_path=cfg_path,
+    )
 
     if namespace_toggle is not None:
         set_topic_namespace_enabled(namespace_toggle)

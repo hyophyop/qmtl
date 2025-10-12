@@ -9,8 +9,9 @@ from qmtl.services.dagmanager import server
 def dagmanager_testbed(monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_run(cfg):
+    async def fake_run(cfg, *, enable_otel: bool = False):
         captured["config"] = cfg
+        captured["enable_otel"] = enable_otel
 
     monkeypatch.setattr(server, "_run", fake_run)
     return captured
@@ -34,6 +35,7 @@ def test_dagmanager_cli_honors_cli_path(tmp_path, monkeypatch, caplog, dagmanage
     cfg = dagmanager_testbed["config"]
     assert cfg.grpc_port == 60000
     assert cfg.http_port == 61000
+    assert dagmanager_testbed["enable_otel"] is False
     assert any(
         "DAG Manager configuration loaded from" in record.message and "--config" in record.message
         for record in caplog.records
@@ -62,6 +64,7 @@ def test_dagmanager_cli_discovers_default_file(tmp_path, monkeypatch, caplog, da
     cfg = dagmanager_testbed["config"]
     assert cfg.grpc_port == 61001
     assert cfg.http_port == 62001
+    assert dagmanager_testbed["enable_otel"] is False
     assert any(
         "DAG Manager configuration loaded from" in record.message and str(fallback) in record.message
         for record in caplog.records
