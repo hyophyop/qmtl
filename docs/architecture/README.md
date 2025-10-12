@@ -36,8 +36,8 @@ See also: Architecture Glossary (architecture/glossary.md) for canonical terms s
    으로 게이트웨이/다그매니저 설정을 검증한다. 오류가 발생하면 아키텍처 설계
    문서를 참고해 빠진 요소를 보완한다.
 2. 동일한 파일을 서비스 실행 시 `--config qmtl/examples/qmtl.yml` 로 넘기거나,
-   자주 실행한다면 작업 디렉터리에 `cp qmtl/examples/qmtl.yml ./qmtl.yml`로 복사해
-   자동 감지를 활용한다.
+   장기 실행 환경에서는 `export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml` 한 줄로
+   경로만 공유한다.
 3. `qmtl service gateway --config qmtl/examples/qmtl.yml` 와 `qmtl service dagmanager server --config qmtl/examples/qmtl.yml`
    를 실행한다. 로그에 경고가 나오면 아키텍처 상 의존하는 외부 리소스를 점검한다.
 

@@ -92,7 +92,7 @@ qmtl:
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
     - "uv run qmtl config validate --config ${qmtl.foundation.config_file} --offline"
-    - "# Optional: cp ${qmtl.foundation.config_file} ./qmtl.yml for autodiscovery"
+    - "export QMTL_CONFIG_FILE=${qmtl.foundation.config_file}"
     - "qmtl service gateway --config ${qmtl.foundation.config_file}"
     - "qmtl service dagmanager server --config ${qmtl.foundation.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"
@@ -101,4 +101,4 @@ notes:
   - "Create local state directories upfront: mkdir -p ./var/dagmanager"
   - "Set dagmanager.enable_topic_namespace: false if you need to reuse legacy topic names when testing against mocks."
   - "Install dependencies with uv pip install -e .[dev] before starting services."
-  - "Copy this YAML to ./qmtl.yml if you want service CLIs to discover it without passing --config each time."
+  - "Set QMTL_CONFIG_FILE to this template's YAML so service CLIs pick it up without passing --config each time."

@@ -46,7 +46,7 @@ message and exits with status code `2` before executing any validations.
 ## Launch sequence
 
 Services consume the same YAML directly. Provide the path on the command line or
-copy it to `./qmtl.yml` so long-running daemons discover it automatically:
+set `QMTL_CONFIG_FILE` so long-running daemons can discover it:
 
 ```bash
 # Validate first.
@@ -57,7 +57,16 @@ qmtl service gateway --config qmtl/examples/qmtl.yml
 qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ```
 
-When the path is wrong or missing the services log a warning and fall back to
-built-in defaults, ensuring operators can spot stale files during startup.
+If you prefer environment discovery, export the path once:
+
+```bash
+export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
+qmtl service gateway
+qmtl service dagmanager server
+```
+
+When `QMTL_CONFIG_FILE` points at a missing file the services log a warning and
+fall back to built-in defaults, ensuring operators can spot stale paths during
+startup.
 
 {{ nav_links() }}
