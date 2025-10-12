@@ -42,11 +42,11 @@ def _default_runner_context():
 def configure_sdk(tmp_path, monkeypatch):
     """Write a temporary qmtl.yml and reload runtime/config caches."""
 
-    def _apply(data: dict) -> str:
-        cfg_path = tmp_path / "qmtl.yml"
+    def _apply(data: dict, *, filename: str = "qmtl.yml") -> str:
+        cfg_path = tmp_path / filename
         cfg_path.write_text(yaml.safe_dump(data))
-        monkeypatch.setenv("QMTL_CONFIG_FILE", str(cfg_path))
-        sdk_configuration.reload()
+        monkeypatch.chdir(tmp_path)
+        sdk_configuration.reset_runtime_config_cache()
         runtime.reload()
         reload_arrow_cache()
         return str(cfg_path)
@@ -54,7 +54,6 @@ def configure_sdk(tmp_path, monkeypatch):
     try:
         yield _apply
     finally:
-        monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
-        sdk_configuration.reload()
+        sdk_configuration.reset_runtime_config_cache()
         runtime.reload()
         reload_arrow_cache()

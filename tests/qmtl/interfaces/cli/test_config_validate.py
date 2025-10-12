@@ -103,6 +103,10 @@ def test_validate_schema_type_errors(
 ) -> None:
     bad_cfg = {
         "cache": {"feature_artifact_write_domains": "not-a-list"},
+        "seamless": {
+            "coordinator_url": ["not", "a", "url"],
+            "presets_file": {"path": "invalid"},
+        },
     }
     path = tmp_path / "schema.yml"
     path.write_text(yaml.safe_dump(bad_cfg))
@@ -114,7 +118,29 @@ def test_validate_schema_type_errors(
     captured = capsys.readouterr()
     assert "schema:" in captured.out
     assert "feature_artifact_write_domains" in captured.out
+    assert "coordinator_url" in captured.out
+    assert "presets_file" in captured.out
     assert "ERROR" in captured.out
+
+
+def test_validate_schema_accepts_seamless_yaml(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    presets = tmp_path / "presets.yaml"
+    presets.write_text("{}\n")
+    config = {
+        "seamless": {
+            "coordinator_url": "https://coord.example",
+            "presets_file": presets.name,
+        }
+    }
+    path = tmp_path / "schema_ok.yml"
+    path.write_text(yaml.safe_dump(config))
+
+    config_cli.run(["validate", "--config", str(path), "--target", "schema"])
+
+    captured = capsys.readouterr()
+    assert "schema:" in captured.out
+    assert "seamless" in captured.out
+    assert "OK" in captured.out
 
 
 def test_validate_missing_config_path(capsys: pytest.CaptureFixture[str]) -> None:
