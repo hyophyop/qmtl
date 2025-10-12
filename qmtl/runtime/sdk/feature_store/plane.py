@@ -3,6 +3,7 @@ from __future__ import annotations
 """High level helpers for interacting with feature artifact storage."""
 
 import logging
+import os
 from typing import Any, Iterable, Sequence
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
@@ -48,11 +49,48 @@ class FeatureArtifactPlane:
     def from_env(cls) -> FeatureArtifactPlane | None:
         unified = configuration.get_runtime_config()
         cfg = unified.cache if unified is not None else _CacheConfig()
-        if not bool(cfg.feature_artifacts_enabled):
-            return None
 
+        def _env_flag(name: str) -> bool | None:
+            value = os.getenv(name)
+            if value is None:
+                return None
+            normalized = value.strip().lower()
+            if normalized in {"", "0", "false", "no", "off"}:
+                return False
+            return True
+
+        enabled = bool(cfg.feature_artifacts_enabled)
         base = cfg.feature_artifact_dir
         max_versions = cfg.feature_artifact_versions
+        write_domains = list(cfg.feature_artifact_write_domains)
+
+        enabled_override = _env_flag("QMTL_FEATURE_ARTIFACTS")
+        dir_override = os.getenv("QMTL_FEATURE_ARTIFACT_DIR")
+        versions_override = os.getenv("QMTL_FEATURE_ARTIFACT_VERSIONS")
+        domains_override = os.getenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS")
+
+        if dir_override:
+            base = dir_override
+            if enabled_override is None:
+                enabled = True
+
+        if enabled_override is not None:
+            enabled = enabled_override
+
+        if versions_override is not None:
+            versions_override = versions_override.strip()
+            max_versions = versions_override if versions_override else None
+
+        if domains_override is not None:
+            write_domains = [
+                part.strip()
+                for part in domains_override.split(",")
+                if part.strip()
+            ]
+
+        if not enabled:
+            return None
+
         if max_versions is not None:
             try:
                 max_versions = int(max_versions)
@@ -65,8 +103,8 @@ class FeatureArtifactPlane:
 
         backend = FileSystemFeatureStore(base, max_versions=max_versions)
         domains: Sequence[str] | None = None
-        if cfg.feature_artifact_write_domains:
-            domains = [str(d).strip() for d in cfg.feature_artifact_write_domains if str(d).strip()]
+        if write_domains:
+            domains = [str(d).strip() for d in write_domains if str(d).strip()]
         return cls(backend, write_domains=domains)
 
     # ------------------------------------------------------------------
