@@ -28,7 +28,7 @@ end-to-end tests in [E2E Testing](e2e_testing.md).
 1) Start WorldService (SQLite + Redis example)
 
 ```bash
-cat > worldservice.yml <<'EOF'
+cat > qmtl.yml <<'EOF'
 worldservice:
   dsn: sqlite:///worlds.db
   redis: redis://localhost:6379/0
@@ -39,7 +39,8 @@ worldservice:
     header: Authorization
     tokens: []
 EOF
-export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
+# Validate before starting services (schema-only for offline machines).
+uv run qmtl config validate --config qmtl.yml --target schema --offline
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 

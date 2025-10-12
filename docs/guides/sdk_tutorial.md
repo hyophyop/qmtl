@@ -157,13 +157,6 @@ Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
 qmtl tools sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
 ```
 
-환경 변수로 값을 주입할 수도 있습니다.
-
-```bash
-export WORLD_ID=demo_world
-qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
-```
-
 구성 파일에서 값을 읽어오는 방법의 예시는 다음과 같습니다.
 
 ```yaml
