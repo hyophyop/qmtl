@@ -39,9 +39,10 @@ worldservice:
     header: Authorization
     tokens: []
 EOF
-export QMTL_CONFIG_FILE=$(pwd)/worldservice.yml
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
+
+Run the command from the same directory so `worldservice.yml` is discovered.
 
 2) Configure and start Gateway
 

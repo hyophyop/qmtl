@@ -88,7 +88,7 @@ def _load_server_config(config: WorldServiceServerConfig | None) -> WorldService
     config_path = find_config_file()
     if config_path is None:
         raise RuntimeError(
-            "WorldService configuration file not found. Set QMTL_CONFIG_FILE or create qmtl.yml in the working directory."
+            "WorldService configuration file not found. Provide --config or create qmtl.yml in the working directory."
         )
 
     unified = load_config(config_path)

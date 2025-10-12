@@ -16,7 +16,7 @@ def dagmanager_testbed(monkeypatch):
     return captured
 
 
-def test_dagmanager_cli_prefers_env_path(tmp_path, monkeypatch, caplog, dagmanager_testbed):
+def test_dagmanager_cli_honors_cli_path(tmp_path, monkeypatch, caplog, dagmanager_testbed):
     config_path = tmp_path / "external.yml"
     config_path.write_text(
         "\n".join(
@@ -28,27 +28,19 @@ def test_dagmanager_cli_prefers_env_path(tmp_path, monkeypatch, caplog, dagmanag
         )
     )
 
-    workdir = tmp_path / "run"
-    workdir.mkdir()
-    monkeypatch.chdir(workdir)
-    monkeypatch.setenv("QMTL_CONFIG_FILE", str(config_path))
-
     caplog.set_level(logging.INFO)
-    server.main([])
+    server.main(["--config", str(config_path)])
 
     cfg = dagmanager_testbed["config"]
     assert cfg.grpc_port == 60000
     assert cfg.http_port == 61000
     assert any(
-        "QMTL_CONFIG_FILE" in record.message and "loaded" in record.message
+        "DAG Manager configuration loaded from" in record.message and "--config" in record.message
         for record in caplog.records
     )
 
 
-def test_dagmanager_cli_invalid_env_path_warns_and_falls_back(
-    tmp_path, monkeypatch, caplog, dagmanager_testbed
-):
-    bad_path = tmp_path / "missing.yml"
+def test_dagmanager_cli_discovers_default_file(tmp_path, monkeypatch, caplog, dagmanager_testbed):
     workdir = tmp_path / "cwd"
     workdir.mkdir()
     fallback = workdir / "qmtl.yaml"
@@ -63,15 +55,17 @@ def test_dagmanager_cli_invalid_env_path_warns_and_falls_back(
     )
 
     monkeypatch.chdir(workdir)
-    monkeypatch.setenv("QMTL_CONFIG_FILE", str(bad_path))
 
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.INFO)
     server.main([])
 
     cfg = dagmanager_testbed["config"]
     assert cfg.grpc_port == 61001
     assert cfg.http_port == 62001
-    assert any("QMTL_CONFIG_FILE" in record.message and "ignored" in record.message for record in caplog.records)
+    assert any(
+        "DAG Manager configuration loaded from" in record.message and str(fallback) in record.message
+        for record in caplog.records
+    )
 
 
 def test_dagmanager_cli_errors_when_section_missing(tmp_path, monkeypatch, caplog, dagmanager_testbed):

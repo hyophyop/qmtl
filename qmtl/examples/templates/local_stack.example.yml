@@ -100,4 +100,4 @@ notes:
   - "Create local state directories upfront: mkdir -p ./var/dagmanager"
   - "Set dagmanager.enable_topic_namespace: false if you need to reuse legacy topic names when testing against mocks."
   - "Install dependencies with uv pip install -e .[dev] before starting services."
-  - "Pass --config ${qmtl.config_file} to CLI commands or export QMTL_CONFIG_FILE if you prefer an environment variable override."
+  - "Pass --config ${qmtl.config_file} to CLI commands or copy it to qmtl.yml in the working directory for auto-discovery."

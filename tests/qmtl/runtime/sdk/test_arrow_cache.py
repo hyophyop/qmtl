@@ -36,7 +36,6 @@ def test_node_uses_arrow_cache(configure_sdk):
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")
 def test_arrow_cache_env_toggle(monkeypatch):
-    monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
     monkeypatch.delenv("QMTL_ARROW_CACHE", raising=False)
     sdk_configuration.reload()
     arrow_cache.reload_arrow_cache()

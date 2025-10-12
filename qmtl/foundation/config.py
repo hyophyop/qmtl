@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import FrozenSet
 import logging
-import os
 from typing import Any, Dict, Mapping
 
 import yaml
@@ -312,18 +311,9 @@ class UnifiedConfig:
 
 
 def find_config_file(cwd: Path | None = None) -> str | None:
-    """Return configuration path preferring ``QMTL_CONFIG_FILE`` when set."""
+    """Return the first discoverable configuration file in ``cwd``."""
 
     base = Path.cwd() if cwd is None else cwd
-
-    env_override = os.getenv("QMTL_CONFIG_FILE")
-    if env_override:
-        candidate = Path(env_override)
-        if not candidate.is_absolute():
-            candidate = base / candidate
-        if candidate.is_file():
-            return str(candidate)
-        logger.warning("QMTL_CONFIG_FILE=%s does not point to a readable file", env_override)
 
     for name in ("qmtl.yml", "qmtl.yaml"):
         candidate = base / name

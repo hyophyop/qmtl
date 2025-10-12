@@ -542,8 +542,7 @@ async def test_persistent_storage_survives_restart(tmp_path, fake_redis):
                 assert decisions == ["strategy-1"]
 
 
-def test_create_app_without_storage_requires_config(monkeypatch):
-    monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
+def test_create_app_without_storage_requires_config():
     with pytest.raises(RuntimeError, match="configuration file not found"):
         create_app()
 

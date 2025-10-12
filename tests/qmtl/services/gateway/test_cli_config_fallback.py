@@ -33,7 +33,7 @@ def gateway_testbed(monkeypatch):
     return captured
 
 
-def test_gateway_cli_prefers_env_path(tmp_path, monkeypatch, caplog, gateway_testbed):
+def test_gateway_cli_honors_cli_path(tmp_path, monkeypatch, caplog, gateway_testbed):
     config_path = tmp_path / "external.yml"
     config_path.write_text(
         "\n".join(
@@ -47,30 +47,22 @@ def test_gateway_cli_prefers_env_path(tmp_path, monkeypatch, caplog, gateway_tes
         )
     )
 
-    run_dir = tmp_path / "run"
-    run_dir.mkdir()
-    monkeypatch.chdir(run_dir)
-    monkeypatch.setenv("QMTL_CONFIG_FILE", str(config_path))
-
     caplog.set_level(logging.INFO)
-    cli.main([])
+    cli.main(["--config", str(config_path)])
 
     assert gateway_testbed["uvicorn"] == {"host": "127.0.0.1", "port": 12345}
     assert gateway_testbed["app_kwargs"]["database_backend"] == "memory"
     assert any(
-        "QMTL_CONFIG_FILE" in record.message and "loaded" in record.message
+        "Gateway configuration loaded from" in record.message and "--config" in record.message
         for record in caplog.records
     )
 
 
-def test_gateway_cli_invalid_env_path_warns_and_falls_back(
-    tmp_path, monkeypatch, caplog, gateway_testbed
-):
-    env_path = tmp_path / "missing.yml"
+def test_gateway_cli_discovers_default_file(tmp_path, monkeypatch, caplog, gateway_testbed):
     run_dir = tmp_path / "cwd"
     run_dir.mkdir()
-    fallback = run_dir / "qmtl.yml"
-    fallback.write_text(
+    default_path = run_dir / "qmtl.yml"
+    default_path.write_text(
         "\n".join(
             [
                 "gateway:",
@@ -83,13 +75,15 @@ def test_gateway_cli_invalid_env_path_warns_and_falls_back(
     )
 
     monkeypatch.chdir(run_dir)
-    monkeypatch.setenv("QMTL_CONFIG_FILE", str(env_path))
 
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.INFO)
     cli.main([])
 
     assert gateway_testbed["uvicorn"] == {"host": "10.0.0.5", "port": 2222}
-    assert any("QMTL_CONFIG_FILE" in record.message and "ignored" in record.message for record in caplog.records)
+    assert any(
+        "Gateway configuration loaded from" in record.message and str(default_path) in record.message
+        for record in caplog.records
+    )
 
 
 def test_gateway_cli_errors_when_section_missing(tmp_path, monkeypatch, caplog, gateway_testbed):
