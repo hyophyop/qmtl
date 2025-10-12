@@ -139,6 +139,7 @@ sequenceDiagram
 
 - 목표: Feature Plane(불변)과 Strategy/Execution Plane(도메인 스코프)을 분리하여 안전하게 재사용하면서 격리를 유지한다.
 - Feature Artifact Key (SHALL): `(factor, interval, params, instrument, t, dataset_fingerprint)`.
+- 설계 의도: 아티팩트는 도메인 간 재현 가능한 재사용을 위한 “불변·읽기 전용” 매체이며, 런타임 캐시/상태는 도메인 격리를 전제로 한 일시적 최적화 수단이다(교차 도메인 공유 금지).
 - 저장소: 파일 시스템, 객체 스토리지, RocksDB 등 불변 백엔드 중 하나를 사용하고, 라이브에서는 읽기 전용으로 마운트한다(SHOULD).
 - 공유 원칙: 도메인 간 공유는 Feature Artifact 파일만 읽기 전용으로 허용한다(SHALL). 런타임 캐시(ComputeKey 기반)나 상태는 도메인 간 공유가 금지된다.
 - Retention/Backfill: 아티팩트는 버전 관리되며, 백테스트/리플레이 요구에 맞춰 보존 정책과 백필 경로를 문서화한다(SHOULD). 삭제 전에는 소비자 영향도를 평가한다.
@@ -171,6 +172,11 @@ sequenceDiagram
 EvalKey = blake3:(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
 ```
 같은 노드여도 월드/데이터/정책/코드/자원이 다르면 재평가한다.
+
+키 경계 요약(Design intent)
+- NodeID: 전역 내용주소(불변·월드 무관). 동일 코드/파라미터/의존이면 하나의 ID만 존재해야 한다.
+- ComputeKey: 실행/캐시 키(세계·도메인·as_of·partition 포함)로 런타임 격리를 보장한다.
+- EvalKey: WS 검증 캐시 키(정책·데이터 지문 포함)로 프로모션 판단의 재현성을 보장한다.
 
 ### World ID 전달 흐름
 
@@ -231,9 +237,13 @@ Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
    - **네임스페이스:** 해시 문자열은 반드시 `blake3:` **접두사**를 갖는다. 충돌 방지·강화를 위해 필요 시 **BLAKE3 XOF**로 길이 확장하고, 도메인 분리를 유지한다.
    - **구현:** SDK와 Gateway는 `CanonicalNodeSpec` 빌더를 사용해 노드 페이로드를 구성한다. 빌더는 필드 순서를 고정하고 `schema_compat_id` 기본값과 월드/도메인 파라미터 배제를 보장하며, `.from_payload()` / `.to_payload()` 브리지로 기존 DAG JSON과 상호 변환된다.
    - **스키마 호환성:** NodeID 입력에는 `schema_compat_id`(Schema Registry의 major‑compat 식별자)를 사용한다. Minor/Patch 수준 변경에서는 동일 `schema_compat_id`를 유지하므로 Back‑compat 스키마 변경 시에도 `node_id`는 보존된다.
+   - 목적: NodeID 안정성을 유지하면서 스키마의 점진적(호환) 변화를 허용한다. 메이저 호환 단위 변경시에만 `schema_compat_id`를 갱신한다.
 2. **버전 감시 노드(Version Sentinel)** : Gateway가 DAG를 수신한 직후 **자동으로 1개의 메타 노드**를 삽입해 "버전 경계"를 표시한다. SDK·전략 작성자는 이를 직접 선언하거나 관리할 필요가 없으며, 오로지 **운영·배포 레이어**에서 롤백·카나리아 트래픽 분배, 큐 정합성 검증을 용이하게 하기 위한 인프라 내부 기능이다. Node‑hash만으로도 큐 재사용 판단은 가능하므로, 소규모·저빈도 배포 환경에서는 Sentinel 삽입을 비활성화(옵션)할 수 있다.
+   - 목적: 전략 코드 변경 없이 배포·롤백·트래픽 분할을 제어하기 위한 운영용 버전 경계 제공.
+   - 운영 지침: 기본 활성화, `insert_sentinel=false`는 저빈도·저위험 환경에서만 사용. 가중치 변경은 ControlBus 이벤트로 동기화한다.
    자세한 카나리아 트래픽 조절 방법은 [Canary Rollout Guide](../operations/canary_rollout.md)에서 설명한다.
 3. **CloudEvents 기반 이벤트 스펙 도입** : 표준 이벤트 정의를 통해 시스템 확장성과 언어 독립성을 확보
+   - 목적: Activation/Policy/Queue 업데이트를 버전 가능한 표준으로 통일해 상호 운용성과 진화 안전성을 높인다. 기존 페이로드는 호환 래퍼로 이전한다.
 4. **상태 머신 기반 실행 제어(xState)** : 전략 상태 흐름을 Finite-State-Machine으로 모델링하여 이론 검증 가능성과 시각화 용이성 확보
 5. **Ray 기반 병렬 처리** : 병렬 실행 시 Python multiprocessing을 Ray로 대체하여 메모리 격리성과 클러스터 확장성을 보장
 6. **관측성(Observability) 강화** : Prometheus, Grafana, Kafka Exporter, Neo4j APOC 프로파일러 기반의 지표 수집 및 병목 분석

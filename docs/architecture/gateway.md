@@ -209,6 +209,11 @@ Clarifications
 
 Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
 
+!!! note "Design intent"
+- TagQuery canonicalization keeps `NodeID` stable; dynamic queue discovery is a runtime concern (ControlBus → SDK TagQueryManager), not part of canonical hashing.
+- Execution domains are derived centrally by Gateway from WorldService decisions (see §S0) and propagated via the shared `ComputeContext`; SDK treats the result as input only.
+- VersionSentinel is default-on to enable rollout/rollback/traffic-split without strategy changes; disable only in low‑risk, low‑frequency environments.
+
 Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
 
 When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**

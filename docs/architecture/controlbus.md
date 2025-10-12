@@ -22,6 +22,9 @@ Non‑Goals
 - Not a source of truth (SSOT); decisions/activation live in WorldService, queues in DAG Manager
 - Not a general data bus; market/indicator/trade data remain on data topics managed by DAG Manager
 
+!!! note "Design intent"
+- ControlBus is opaque to SDKs by default. Clients consume control events only via the Gateway’s tokenized WebSocket bridge (`/events/subscribe`). This keeps the bus private, centralizes authN/Z, and allows initial snapshot/state_hash reconciliation without exposing internal topics.
+
 ---
 
 ## 1. Topology & Semantics
