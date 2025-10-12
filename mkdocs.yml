@@ -65,6 +65,9 @@ nav:
       - DAG Snapshot: operations/dag_snapshot.md
       - Release: operations/release.md
       - CI: operations/ci.md
+  - Design:
+      - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
+      - Seamless Data Provider: design/seamless_data_provider.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
