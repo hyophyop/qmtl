@@ -560,3 +560,21 @@ async def test_create_app_without_redis_uses_in_memory_storage():
     async with app.router.lifespan_context(app):
         assert isinstance(app.state.storage, Storage)
         assert app.state.storage is app.state.world_service.store
+
+
+def test_create_app_loads_config_from_explicit_path(tmp_path):
+    config_path = tmp_path / "worldservice.yml"
+    config_path.write_text(
+        """
+worldservice:
+  server:
+    dsn: sqlite+aiosqlite:///worlds.db
+""".strip()
+    )
+
+    app = create_app(config_path=config_path)
+
+    assert isinstance(app.state.storage, Storage)
+    assert app.state.worldservice_config is not None
+    assert app.state.worldservice_config.dsn == "sqlite+aiosqlite:///worlds.db"
+    assert app.state.worldservice_config.redis is None
