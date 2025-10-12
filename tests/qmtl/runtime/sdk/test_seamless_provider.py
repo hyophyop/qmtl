@@ -284,14 +284,89 @@ def test_legacy_mode_allows_publish_override(
         )
     )
 
-    monkeypatch.setenv("QMTL_CONFIG_FILE", str(config_path))
+    monkeypatch.chdir(tmp_path)
     reset_runtime_config_cache()
     try:
         provider = _DummyProvider()
         assert provider._publish_fingerprint is True
     finally:
         reset_runtime_config_cache()
-        monkeypatch.delenv("QMTL_CONFIG_FILE", raising=False)
+
+
+def test_coordinator_url_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            seamless:
+              coordinator_url: https://coordinator.internal
+            """
+        )
+    )
+
+    created: dict[str, str] = {}
+
+    class DummyCoordinator:
+        def __init__(self, url: str) -> None:
+            created["url"] = url
+
+    monkeypatch.setattr(
+        "qmtl.runtime.sdk.seamless_data_provider.DistributedBackfillCoordinator",
+        DummyCoordinator,
+    )
+    monkeypatch.chdir(tmp_path)
+    reset_runtime_config_cache()
+    try:
+        provider = _DummyProvider()
+        assert created["url"] == "https://coordinator.internal"
+        assert isinstance(provider._coordinator, DummyCoordinator)
+    finally:
+        reset_runtime_config_cache()
+
+
+def test_presets_file_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    presets_path = tmp_path / "presets.yaml"
+    presets_path.write_text(
+        textwrap.dedent(
+            """
+            sla_presets:
+              custom:
+                policy:
+                  max_lag_seconds: 120
+            conformance_presets:
+              strict:
+                partial_ok: false
+                schema:
+                  fields:
+                    - ts
+                interval_ms: 60000
+            """
+        )
+    )
+
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        textwrap.dedent(
+            f"""
+            seamless:
+              presets_file: {presets_path.name}
+              sla_preset: custom
+              conformance_preset: strict
+            """
+        )
+    )
+
+    monkeypatch.chdir(tmp_path)
+    reset_runtime_config_cache()
+    try:
+        provider = _DummyProvider(storage_source=_StaticSource([], DataSourcePriority.STORAGE))
+        assert provider._sla is not None
+        assert provider._sla.max_lag_seconds == 120
+        assert provider._partial_ok is False
+        assert provider._conformance_schema == {"fields": ["ts"]}
+        assert provider._conformance_interval == 60
+    finally:
+        reset_runtime_config_cache()
 
 
 @pytest.mark.asyncio
