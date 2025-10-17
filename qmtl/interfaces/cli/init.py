@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 from pathlib import Path
 from typing import List
 
-from ..scaffold import TEMPLATES, create_project
+from ..scaffold import create_project
+from ..layers import Layer, LayerComposer, PresetLoader, LayerValidator
 
 
 def run(argv: List[str] | None = None) -> None:
@@ -14,39 +16,186 @@ def run(argv: List[str] | None = None) -> None:
         prog="qmtl project init",
         description="Initialize new project (see docs/guides/strategy_workflow.md)",
     )
-    parser.add_argument("--path", required=True, help="Project directory to create scaffolding")
+    parser.add_argument(
+        "--path",
+        help="Project directory to create scaffolding",
+    )
+    
+    # Preset/layer options (new system)
+    parser.add_argument(
+        "--preset",
+        help="Preset configuration to use (see docs/architecture/layered_template_system.md)",
+    )
+    parser.add_argument(
+        "--layers",
+        help="Comma-separated list of layers to include (e.g., data,signal)",
+    )
+    parser.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="List available presets and exit",
+    )
+    parser.add_argument(
+        "--list-layers",
+        action="store_true",
+        help="List available layers and exit",
+    )
+    
+    # Legacy options (deprecated)
     parser.add_argument(
         "--strategy",
-        default="general",
-        help="Strategy template to use (see docs/reference/templates.md)",
+        help="(Deprecated: use --preset) Strategy template to use",
     )
     parser.add_argument(
         "--list-templates",
         action="store_true",
-        help="List available templates and exit (see docs/reference/templates.md)",
+        help="(Deprecated: use --list-presets) List available templates and exit",
     )
+    
+    # Additional options
     parser.add_argument(
         "--with-sample-data",
         action="store_true",
-        help="Include sample OHLCV CSV and notebook (see docs/guides/strategy_workflow.md)",
+        help="Include sample OHLCV CSV and notebook",
     )
     parser.add_argument("--with-docs", action="store_true", help="Include docs/ directory template")
     parser.add_argument("--with-scripts", action="store_true", help="Include scripts/ directory template")
     parser.add_argument("--with-pyproject", action="store_true", help="Include pyproject.toml template")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing directory")
 
     args = parser.parse_args(argv)
 
-    if args.list_templates:
-        for name in TEMPLATES:
-            print(name)
+    # Initialize systems
+    preset_loader = PresetLoader()
+    composer = LayerComposer()
+    validator = LayerValidator()
+
+    # Handle list commands
+    if args.list_presets or args.list_templates:
+        if args.list_templates:
+            warnings.warn(
+                "--list-templates is deprecated, use --list-presets instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        print("Available presets:")
+        for preset_name in preset_loader.list_presets():
+            preset = preset_loader.get_preset(preset_name)
+            if preset:
+                print(f"  {preset_name:15} - {preset.description}")
         return
 
+    if args.list_layers:
+        print("Available layers:")
+        for layer in Layer:
+            print(f"  {layer.value:15} - {layer.name}")
+        return
+
+    # Check that --path is provided for actual project creation
+    if not args.path:
+        parser.error("the following arguments are required: --path")
+
+    # Determine if using new layer system or legacy
+    use_legacy = False
+    
+    if args.strategy:
+        warnings.warn(
+            "--strategy is deprecated, use --preset instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        use_legacy = True
+    
+    # Use legacy system if --strategy is provided and no new options
+    if use_legacy and not args.preset and not args.layers:
+        _run_legacy(args)
+        return
+    
+    # Use new layer system
+    if args.preset:
+        _run_with_preset(args, preset_loader, composer)
+    elif args.layers:
+        _run_with_layers(args, composer, validator)
+    else:
+        # Default to minimal preset
+        print("No preset or layers specified, using 'minimal' preset")
+        args.preset = "minimal"
+        _run_with_preset(args, preset_loader, composer)
+
+
+def _run_legacy(args) -> None:
+    """Run using legacy template system."""
     create_project(
         Path(args.path),
-        template=args.strategy,
+        template=args.strategy or "general",
         with_sample_data=args.with_sample_data,
         with_docs=args.with_docs,
         with_scripts=args.with_scripts,
         with_pyproject=args.with_pyproject,
     )
+    print(f"Project created at {args.path} using legacy template '{args.strategy or 'general'}'")
+
+
+def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer) -> None:
+    """Run using preset configuration."""
+    preset = preset_loader.get_preset(args.preset)
+    if not preset:
+        print(f"Error: Unknown preset '{args.preset}'")
+        print("\nAvailable presets:")
+        for name in preset_loader.list_presets():
+            p = preset_loader.get_preset(name)
+            if p:
+                print(f"  {name:15} - {p.description}")
+        raise SystemExit(1)
+
+    # Compose project from preset
+    result = composer.compose(
+        layers=preset.layers,
+        dest=Path(args.path),
+        template_choices=preset.template_choices,
+        force=args.force,
+    )
+
+    if not result.valid:
+        print(f"Error creating project:")
+        for error in result.errors:
+            print(f"  - {error}")
+        raise SystemExit(1)
+
+    print(f"Project created at {args.path} using preset '{preset.name}'")
+    print(f"Layers included: {', '.join(layer.value for layer in preset.layers)}")
+
+
+def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -> None:
+    """Run with explicit layer selection."""
+    layer_names = [name.strip() for name in args.layers.split(",")]
+    
+    try:
+        layers = [Layer(name) for name in layer_names]
+    except ValueError as e:
+        print(f"Error: Invalid layer name - {e}")
+        print("\nAvailable layers:")
+        for layer in Layer:
+            print(f"  {layer.value}")
+        raise SystemExit(1)
+
+    # Get minimal layer set with dependencies
+    layers = validator.get_minimal_layer_set(layers)
+
+    # Compose project
+    result = composer.compose(
+        layers=layers,
+        dest=Path(args.path),
+        force=args.force,
+    )
+
+    if not result.valid:
+        print("Error creating project:")
+        for error in result.errors:
+            print(f"  - {error}")
+        raise SystemExit(1)
+
+    print(f"Project created at {args.path}")
+    print(f"Layers included: {', '.join(layer.value for layer in layers)}")
+
 

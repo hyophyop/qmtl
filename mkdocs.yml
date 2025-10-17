@@ -5,6 +5,7 @@ nav:
   - Architecture:
       - Overview: architecture/README.md
       - Architecture & World ID Flow: architecture/architecture.md
+      - Layered Template System: architecture/layered_template_system.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
       - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
       - Glossary: architecture/glossary.md
@@ -21,6 +22,7 @@ nav:
       - Portfolio & Position API: reference/api/portfolio.md
   - Guides:
       - Overview: guides/README.md
+      - Layered Templates Quick Start: guides/layered_templates_quickstart.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Seamless Data Provider Setup: guides/seamless_data_provider_setup.md
