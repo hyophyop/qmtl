@@ -26,18 +26,31 @@ See also: Architecture Glossary (architecture/glossary.md) for canonical terms s
 - [ControlBus](controlbus.md): Internal control bus (opaque to SDK).
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
 
-## 빠른 시작: 설정 검증 → 환경 등록 → 서비스 기동
+## Architectural Layers at a Glance
 
-아키텍처 전반을 이해하기 전에 구성 파일을 검증하고 서비스를 띄워보면 흐름을
-빠르게 익힐 수 있다. 아래 순서는 [Operations/Config CLI](../operations/config-cli.md)
-와 [Backend Quickstart](../operations/backend_quickstart.md)를 요약한 것이다.
+QMTL's control plane is composed of a small set of layered services. Each layer narrows
+the concerns of the layer beneath it and exposes a specific contract to clients and
+operators.
 
-1. `uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline`
-   으로 게이트웨이/다그매니저 설정을 검증한다. 오류가 발생하면 아키텍처 설계
-   문서를 참고해 빠진 요소를 보완한다.
-2. 동일한 파일을 서비스 실행 시 `--config qmtl/examples/qmtl.yml` 로 넘기거나,
-   작업 디렉터리에 `qmtl.yml` 이름으로 복사해 자동으로 찾도록 한다.
-3. `qmtl service gateway --config qmtl/examples/qmtl.yml` 와 `qmtl service dagmanager server --config qmtl/examples/qmtl.yml`
-   를 실행한다. 로그에 경고가 나오면 아키텍처 상 의존하는 외부 리소스를 점검한다.
+1. **Gateway** – Edge ingress for SDKs and automations. Normalises client requests,
+   enforces authentication, and proxies to downstream domain services.
+2. **DAG Manager** – System of record for orchestration DAGs. Owns versioned plan
+   storage, dependency resolution, execution queueing, and topic namespace policy.
+3. **WorldService** – Domain policy execution. Manages world state, activation windows,
+   and strategy-to-world bindings surfaced through the Gateway.
+4. **ControlBus** – Internal event fabric that delivers control-plane signals between
+   Gateway, DAG Manager, and operators. Generally opaque to SDK consumers.
+5. **Integrations Layer** – Adapters for brokerages, exchanges, and observability
+   sinks. Extends the core services without modifying their contracts.
+
+Diagram-style deep dives for each component live in the linked documents above.
+
+## Operations Quickstart
+
+서비스 기동과 설정 검증 절차는 운영 문서에 정리되어 있다. 실습이 필요하다면
+아래 링크를 통해 단계별 안내를 따라가라.
+
+- [Backend Quickstart](../operations/backend_quickstart.md#fast-start-validate-and-launch)
+- [Operations Config CLI](../operations/config-cli.md)
 
 {{ nav_links() }}

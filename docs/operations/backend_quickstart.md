@@ -33,6 +33,9 @@ Follow this quick validation and launch loop when an operations YAML is ready:
    uv run qmtl config validate --config <path-to-config> --offline
    ```
 
+   For a canonical starting point use `qmtl/examples/qmtl.yml`. Adjust paths or copy the
+   file into your working directory as `qmtl.yml` so service commands auto-discover it.
+
 2. **Gateway** – start the public entrypoint with the validated config.
 
    ```bash
