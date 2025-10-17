@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -178,6 +179,28 @@ class TestLayerComposer:
             layers=[Layer.DATA],
             dest=temp_project,
         )
+
+        result = composer.add_layer(
+            dest=temp_project,
+            layer=Layer.BROKERAGE,
+            force=True,
+        )
+
+        assert not result.valid
+        assert "execution" in str(result.errors).lower()
+
+    def test_force_readd_detects_missing_dependency(self, temp_project: Path):
+        """Re-adding an existing layer with force still validates dependencies."""
+        composer = LayerComposer()
+        compose_result = composer.compose(
+            layers=[Layer.DATA, Layer.SIGNAL, Layer.EXECUTION, Layer.BROKERAGE],
+            dest=temp_project,
+        )
+
+        assert compose_result.valid
+
+        # Simulate a project missing a required dependency by removing EXECUTION
+        shutil.rmtree(temp_project / "layers" / "execution")
 
         result = composer.add_layer(
             dest=temp_project,
