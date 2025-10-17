@@ -23,6 +23,31 @@ end-to-end tests in [E2E Testing](e2e_testing.md).
 - Python environment managed by uv: `uv venv && uv pip install -e .[dev]`
 - Optional: Docker/Compose for infra services
 
+## Fast start: validate and launch
+
+Follow this quick validation and launch loop when an operations YAML is ready:
+
+1. **Static validation** – confirm the structure before booting services.
+
+   ```bash
+   uv run qmtl config validate --config <path-to-config> --offline
+   ```
+
+2. **Gateway** – start the public entrypoint with the validated config.
+
+   ```bash
+   qmtl service gateway --config <path-to-config>
+   ```
+
+3. **DAG Manager** – launch orchestration services with the same settings.
+
+   ```bash
+   qmtl service dagmanager server --config <path-to-config>
+   ```
+
+For long-lived processes, copy the file to `qmtl.yml` in the working directory so the
+service commands auto-discover it.
+
 ## Option A — Run locally (no Docker)
 
 1) Start WorldService (SQLite + Redis example)

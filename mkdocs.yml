@@ -17,9 +17,6 @@ nav:
       - Exchange Node Sets: architecture/exchange_node_sets.md
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
-      - Brokerage API: reference/api/brokerage.md
-      - Live & Brokerage Connectors: reference/api/connectors.md
-      - Portfolio & Position API: reference/api/portfolio.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -78,7 +75,6 @@ nav:
       - Schema Registry: reference/schema_registry.md
       - Schemas: reference/schemas.md
       - Templates: reference/templates.md
-      - World API: reference/api_world.md
       - Enhanced Validation: reference/enhanced_validation.md
       - Node Schema Validation: reference/node_schema_validation.md
       - Node Identity Validation: reference/node_validation.md
@@ -86,12 +82,16 @@ nav:
       - Report CLI: reference/report_cli.md
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
-      - Brokerage API: reference/api/brokerage.md
       - Brokerage Assumptions: reference/brokerage_assumptions.md
-      - Order & Fill Events: reference/api/order_events.md
-      - Fills Webhook: reference/api/fills_webhook.md
       - Bracket Order Helper: reference/bracket_order.md
-      - Portfolio & Position API: reference/api/portfolio.md
+      - APIs:
+          - Overview: reference/apis.md
+          - World API: reference/api_world.md
+          - Brokerage API: reference/api/brokerage.md
+          - Live & Brokerage Connectors: reference/api/connectors.md
+          - Portfolio & Position API: reference/api/portfolio.md
+          - Order & Fill Events: reference/api/order_events.md
+          - Fills Webhook: reference/api/fills_webhook.md
       - Inventory: reference/_inventory.md
       - Changelog: reference/CHANGELOG.md
   - World:
