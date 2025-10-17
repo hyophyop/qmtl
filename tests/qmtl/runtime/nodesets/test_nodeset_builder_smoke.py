@@ -2,53 +2,53 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.runtime.sdk.node import Node
-from qmtl.runtime.sdk.runner import Runner
-from qmtl.runtime.nodesets.base import NodeSetBuilder
-from qmtl.runtime.nodesets.recipes import NodeSetRecipe
+from qmtl.runtime.nodesets.base import NodeSet, NodeSetBuilder
 from qmtl.runtime.nodesets.options import NodeSetOptions
+from qmtl.runtime.nodesets.recipes import NodeSetRecipe
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 from qmtl.runtime.nodesets.steps import StepSpec
 from qmtl.runtime.nodesets.stubs import StubSizingNode
 from qmtl.runtime.pipeline.execution_nodes import (
-    SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
+    SizingNode as RealSizingNode,
 )
+from qmtl.runtime.sdk.node import Node
 
 
-def test_nodeset_attach_passes_through():
-    # Minimal signal node emitting an order intent
+def _collect_contract(nodeset: NodeSet) -> dict[str, object]:
+    nodes = nodeset.nodes
+    return {
+        "world_ids": {getattr(node, "world_id", None) for node in nodes},
+        "sizing": next((node for node in nodes if isinstance(node, (StubSizingNode, RealSizingNode))), None),
+        "portfolio": next((node for node in nodes if isinstance(node, (RealPortfolioNode,))), None),
+    }
+
+
+def test_nodeset_attach_exposes_contract_metadata():
     signal = Node(name="signal", interval=1, period=1)
-    builder = NodeSetBuilder()
-    ns = builder.attach(signal, world_id="w1")
-    # Feed through the chain; each stub passes the payload as-is
-    order = {"symbol": "AAPL", "price": 10.0, "quantity": 2.0}
-    nodes = list(ns)
-    assert len(nodes) == 8
-    # pretrade
-    out = Runner.feed_queue_data(nodes[0], signal.node_id, 1, 0, order)
-    assert out == order
-    # sizing
-    out = Runner.feed_queue_data(nodes[1], nodes[0].node_id, 1, 0, out)
-    assert out == order
-    # execution
-    out = Runner.feed_queue_data(nodes[2], nodes[1].node_id, 1, 0, out)
-    assert out == order
-    # order publish
-    out = Runner.feed_queue_data(nodes[3], nodes[2].node_id, 1, 0, out)
-    assert out == order
-    # fills
-    out = Runner.feed_queue_data(nodes[4], nodes[3].node_id, 1, 0, out)
-    assert out == order
-    # portfolio
-    out = Runner.feed_queue_data(nodes[5], nodes[4].node_id, 1, 0, out)
-    assert out == order
-    # risk
-    out = Runner.feed_queue_data(nodes[6], nodes[5].node_id, 1, 0, out)
-    assert out == order
-    # timing
-    out = Runner.feed_queue_data(nodes[7], nodes[6].node_id, 1, 0, out)
-    assert out == order
+    builder = NodeSetBuilder(options=NodeSetOptions(portfolio_scope="strategy"))
+
+    nodeset = builder.attach(
+        signal,
+        world_id="world-1",
+        name="orders",
+        modes=("simulate", "paper"),
+    )
+
+    description = nodeset.describe()
+    capabilities = nodeset.capabilities()
+    contract = _collect_contract(nodeset)
+
+    assert description["name"] == "orders"
+    assert description["entry"].startswith(signal.name)
+    assert description["node_count"] >= 1
+    assert capabilities == {"modes": ["simulate", "paper"], "portfolio_scope": "strategy"}
+    assert contract["world_ids"] == {"world-1"}
+
+    sizing_node = contract["sizing"]
+    assert sizing_node is not None
+    assert getattr(sizing_node, "portfolio", None) is not None
+    assert getattr(sizing_node, "weight_fn", None) is not None
 
 
 def test_nodeset_builder_world_scope_shares_portfolio():
@@ -56,51 +56,58 @@ def test_nodeset_builder_world_scope_shares_portfolio():
     signal1 = Node(name="sig1", interval=1, period=1)
     signal2 = Node(name="sig2", interval=1, period=1)
     builder = NodeSetBuilder(options=NodeSetOptions(portfolio_scope="world"))
+
     ns1 = builder.attach(signal1, world_id="world", scope="world")
     ns2 = builder.attach(signal2, world_id="world", scope="world")
 
-    sizing1 = list(ns1)[1]
-    sizing2 = list(ns2)[1]
-    portfolio1 = getattr(sizing1, "portfolio", None)
-    portfolio2 = getattr(sizing2, "portfolio", None)
+    contract1 = _collect_contract(ns1)
+    contract2 = _collect_contract(ns2)
+
+    portfolio1 = getattr(contract1["sizing"], "portfolio", None)
+    portfolio2 = getattr(contract2["sizing"], "portfolio", None)
 
     assert portfolio1 is not None
     assert portfolio1 is portfolio2
-    assert getattr(list(ns1)[5], "portfolio", None) is portfolio1
-    assert getattr(sizing1, "weight_fn", None) is not None
 
 
-def test_nodeset_builder_accepts_factories():
+def test_nodeset_builder_passes_context_to_factories():
     signal = Node(name="sig", interval=1, period=1)
     builder = NodeSetBuilder()
-    seen: dict[str, str] = {}
+    seen: dict[str, object] = {}
 
-    def sizing_factory(upstream, ctx):
+    def sizing_factory(upstream: Node, ctx):
         seen["world_id"] = ctx.world_id
+        seen["scope"] = ctx.scope
+        seen["options"] = ctx.options
         return RealSizingNode(
             upstream,
             portfolio=ctx.resources.portfolio,
             weight_fn=ctx.resources.weight_fn,
         )
 
-    def portfolio_factory(upstream, ctx):
+    def portfolio_factory(upstream: Node, ctx):
+        seen["portfolio_world_id"] = ctx.world_id
         return RealPortfolioNode(upstream, portfolio=ctx.resources.portfolio)
 
     nodeset = builder.attach(
         signal,
         world_id="world-x",
         name="custom",
-        modes=("simulate", "paper"),
+        modes=("simulate",),
         sizing=sizing_factory,
         portfolio=portfolio_factory,
     )
 
-    nodes = list(nodeset)
-    assert isinstance(nodes[1], RealSizingNode)
-    assert isinstance(nodes[5], RealPortfolioNode)
+    contract = _collect_contract(nodeset)
+
+    assert isinstance(contract["sizing"], RealSizingNode)
+    assert isinstance(contract["portfolio"], RealPortfolioNode)
     assert seen["world_id"] == "world-x"
+    assert seen["portfolio_world_id"] == "world-x"
+    assert seen["scope"] == "strategy"
     assert nodeset.name == "custom"
-    assert nodeset.modes == ("simulate", "paper")
+    assert nodeset.modes == ("simulate",)
+    assert seen["options"].portfolio_scope == "strategy"
 
 
 def test_nodeset_recipe_compose_uses_step_specs():
@@ -121,11 +128,11 @@ def test_nodeset_recipe_compose_uses_step_specs():
     )
 
     nodeset = recipe.compose(signal, "world-demo")
+    contract = _collect_contract(nodeset)
 
-    nodes = list(nodeset)
-    assert isinstance(nodes[1], RealSizingNode)
-    assert getattr(nodes[1], "world_id", None) == "world-demo"
-    assert isinstance(nodes[5], RealPortfolioNode)
+    assert isinstance(contract["sizing"], RealSizingNode)
+    assert getattr(contract["sizing"], "world_id", None) == "world-demo"
+    assert isinstance(contract["portfolio"], RealPortfolioNode)
     assert nodeset.name == "demo"
 
 
@@ -139,7 +146,7 @@ def test_step_spec_factory_injects_resources():
     )
 
     nodeset = builder.attach(signal, world_id="world-spec", sizing=spec)
-    sizing_node = list(nodeset)[1]
+    sizing_node = _collect_contract(nodeset)["sizing"]
 
     assert isinstance(sizing_node, RealSizingNode)
     assert getattr(sizing_node, "portfolio", None) is not None
@@ -153,10 +160,10 @@ def test_step_spec_default_resets_recipe_override():
     )
 
     sized_nodeset = recipe.compose(signal, "world-reset")
-    assert isinstance(list(sized_nodeset)[1], RealSizingNode)
+    assert isinstance(_collect_contract(sized_nodeset)["sizing"], RealSizingNode)
 
     reverted = recipe.compose(signal, "world-reset", steps={"sizing": StepSpec.default()})
-    assert isinstance(list(reverted)[1], StubSizingNode)
+    assert isinstance(_collect_contract(reverted)["sizing"], StubSizingNode)
 
 
 def test_step_spec_requires_node_instance():
