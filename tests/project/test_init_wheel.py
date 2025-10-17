@@ -3,6 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.qmtl.interfaces._cli_tokens import resolve_cli_tokens
+
+
+PROJECT_INIT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.init")
+
 
 def _repo_root() -> Path:
     current = Path(__file__).resolve()
@@ -58,7 +63,7 @@ def test_init_wheel(tmp_path: Path) -> None:
         extra_paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(extra_paths)
     subprocess.run(
-        [str(qmtl), "init", "--with-sample-data", "--path", str(dest)],
+        [str(qmtl), *PROJECT_INIT_TOKENS, "--with-sample-data", "--path", str(dest)],
         check=True,
         env=env,
     )
