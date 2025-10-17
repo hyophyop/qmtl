@@ -38,9 +38,13 @@ def test_cli_subcommand_help(args, expected):
         "init",
     ],
 )
-def test_unknown_top_level_commands_fail(cmd):
-    result = subprocess.run([sys.executable, "-m", "qmtl", cmd], capture_output=True, text=True)
-    assert result.returncode == 2
+def test_removed_top_level_aliases_show_top_level_usage(cmd):
+    result = subprocess.run(
+        [sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert result.stdout
+    assert result.stdout.splitlines()[0].startswith("usage: qmtl")
     assert "error: unknown command" in result.stderr
     assert cmd in result.stderr
 
