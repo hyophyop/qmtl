@@ -10,6 +10,7 @@
 - `TagQueryNode.resolve()` has been removed. Use `TagQueryManager.resolve_tags()` to fetch queue mappings before execution.
 - Added `Node.add_tag()` to attach tags after node creation.
 - Added migration guide for removing legacy Runner/CLI/Gateway surfaces. See [docs/guides/migration_bc_removal.md](docs/guides/migration_bc_removal.md).
+- **Breaking:** Removed the deprecated top-level CLI aliases (`qmtl dagmanager`, `qmtl gw`, etc.); use the hierarchical subcommands (`qmtl dag manager`, `qmtl gateway`, and related) instead.
 - **Breaking:** Removed the flattened compatibility packages (`qmtl.brokerage`, `qmtl.sdk`, `qmtl.pipeline`, etc.). Import from the layered namespaces under `qmtl.runtime`, `qmtl.foundation`, `qmtl.interfaces`, or `qmtl.services` instead.
 - NodeID now uses BLAKE3 with a `blake3:` prefix and no longer includes `world_id`. Legacy SHA-based IDs remain temporarily supported. See [docs/guides/migration_nodeid_blake3.md](docs/guides/migration_nodeid_blake3.md).
 - Live connectors: added standard `BrokerageClient` and `LiveDataFeed` SDK interfaces with reference implementations (`HttpBrokerageClient`, `CcxtBrokerageClient`, `WebSocketFeed`) and a `FakeBrokerageClient` for demos. See [docs/reference/api/connectors.md](docs/reference/api/connectors.md) and example `qmtl/examples/strategies/dryrun_live_switch_strategy.py`.
