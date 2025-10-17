@@ -44,14 +44,12 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ### Test Design Strategy
 
-- Bias new and refactored suites toward contract-focused coverage that keeps implementation details flexible while protecting observable behavior.
-- Favor the following patterns when planning assertions and fixtures:
-  - **Contract Testing:** verify public interfaces continue to satisfy their documented guarantees regardless of internal changes.
-  - **Interface Contract Tests:** focus CLI/module surface areas—tokens, arguments, return payloads—without relying on internal helpers.
-  - **Consumer-Driven Contract Testing:** let downstream consumer expectations drive the interaction contract; pin call shapes and required side effects between collaborating services/tools.
-  - **Interaction/Collaboration Tests:** assert dispatch chains and collaborator invocations (`dispatch -> run(create_project)` style) using spies/fakes rather than full integrations.
-  - **Black-Box Behavioral Tests:** validate outputs, file system effects, and error reporting observable from outside the component.
-  - **Smoke Tests:** keep a minimal set of fast end-to-end checks (e.g., command discovery, `--help`, happy-path scaffolds) to catch regressions quickly.
+Frame suites around three complementary lenses so coverage stays purposeful while the implementation remains free to evolve.
+
+- **Contract Fidelity:** Anchor new and refactored suites in contract-style tests that lock observable guarantees—API signatures, CLI surfaces, return payloads, validation rules—without depending on internal helpers.
+- **Collaboration Dynamics:** Exercise dispatch chains and service boundaries with consumer-driven expectations. Prefer spies/fakes to confirm orchestration (`dispatch -> run(create_project)`), required side effects, and cross-component message shapes.
+- **Experience Guardrails:** Protect end-user flows with black-box behavioral checks and a slim smoke layer (command discovery, `--help`, happy-path scaffolds) to catch regressions quickly while keeping the suite fast.
+- **Risk-Weighted Depth:** Lean into deeper scenario coverage for high-volatility or high-impact areas, mark serial or slow cases explicitly, and keep fixtures hermetic so tests compose cleanly under `-n auto`.
 
 ### Hang Detection Preflight (required in CI and recommended locally)
 
