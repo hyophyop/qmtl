@@ -100,10 +100,14 @@ class LayerComposer:
         existing_layers = self._detect_existing_layers(dest)
 
         # Validate addition
-        if not force:
-            validation = self.validator.validate_add_layer(existing_layers, layer)
-            if not validation.valid:
-                return validation
+        validation_layers = existing_layers
+        if force:
+            # Allow overwriting an existing layer but still validate dependencies
+            validation_layers = [existing for existing in existing_layers if existing != layer]
+
+        validation = self.validator.validate_add_layer(validation_layers, layer)
+        if not validation.valid:
+            return validation
 
         # Add the layer
         self._add_layer_to_project(dest, layer, template_name)

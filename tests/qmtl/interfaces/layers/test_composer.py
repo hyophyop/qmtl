@@ -171,6 +171,23 @@ class TestLayerComposer:
 
         assert result.valid
 
+    def test_add_layer_force_requires_dependencies(self, temp_project: Path):
+        """Force overwrite should still enforce dependency validation."""
+        composer = LayerComposer()
+        composer.compose(
+            layers=[Layer.DATA],
+            dest=temp_project,
+        )
+
+        result = composer.add_layer(
+            dest=temp_project,
+            layer=Layer.BROKERAGE,
+            force=True,
+        )
+
+        assert not result.valid
+        assert "execution" in str(result.errors).lower()
+
     def test_add_layer_fails_missing_dependencies(self, temp_project: Path):
         """Test that adding layer with missing dependencies fails."""
         composer = LayerComposer()
