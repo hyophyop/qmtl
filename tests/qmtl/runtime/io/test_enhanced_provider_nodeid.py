@@ -79,6 +79,44 @@ async def test_enhanced_provider_settings_apply_policies(monkeypatch):
         _QuestDBLoaderStub,
     )
 
+    recorded_calls: list[dict[str, object]] = []
+
+    def _seamless_init_stub(
+        self,
+        *,
+        strategy,
+        cache_source=None,
+        storage_source=None,
+        backfiller=None,
+        live_feed=None,
+        conformance=None,
+        partial_ok=None,
+        registrar=None,
+        **kwargs,
+    ):
+        recorded_calls.append(
+            {
+                "conformance": conformance,
+                "sla": kwargs.get("sla"),
+                "publish_fingerprint": kwargs.get("publish_fingerprint"),
+                "early_fingerprint": kwargs.get("early_fingerprint"),
+            }
+        )
+
+        # Minimal attribute initialization expected by tests and downstream usage.
+        self.strategy = strategy
+        self.cache_source = cache_source
+        self.storage_source = storage_source
+        self.backfiller = backfiller
+        self.live_feed = live_feed
+        self.partial_ok = partial_ok
+        self.registrar = registrar
+
+    monkeypatch.setattr(
+        "qmtl.runtime.sdk.seamless_data_provider.SeamlessDataProvider.__init__",
+        _seamless_init_stub,
+    )
+
     custom_conformance = ConformancePipeline()
     custom_sla = SLAPolicy(total_deadline_ms=5000)
 
@@ -92,10 +130,10 @@ async def test_enhanced_provider_settings_apply_policies(monkeypatch):
     provider = EnhancedQuestDBProvider("memory://", settings=settings)
 
     assert provider.strategy == settings.strategy
-    assert provider._conformance is custom_conformance
-    assert provider._sla is custom_sla
-    assert provider._publish_fingerprint is True
-    assert provider._early_fingerprint is False
+    assert recorded_calls[-1]["conformance"] is custom_conformance
+    assert recorded_calls[-1]["sla"] is custom_sla
+    assert recorded_calls[-1]["publish_fingerprint"] is True
+    assert recorded_calls[-1]["early_fingerprint"] is False
 
     provider_override = EnhancedQuestDBProvider(
         "memory://",
@@ -104,5 +142,5 @@ async def test_enhanced_provider_settings_apply_policies(monkeypatch):
         early_fingerprint=True,
     )
 
-    assert provider_override._publish_fingerprint is False
-    assert provider_override._early_fingerprint is True
+    assert recorded_calls[-1]["publish_fingerprint"] is False
+    assert recorded_calls[-1]["early_fingerprint"] is True
