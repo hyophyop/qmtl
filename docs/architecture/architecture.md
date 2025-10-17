@@ -20,11 +20,10 @@ last_modified: 2025-09-22
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 
-!!! tip "빠른 시작: 검증 → 기동"
-    운영용 YAML을 작성했다면 `uv run qmtl config validate --config <파일> --offline`
-    으로 구조를 확인하고, 동일한 파일을 `qmtl service gateway --config <파일>` 및
-    `qmtl service dagmanager server --config <파일>` 인자로 넘겨라. 장기 실행
-    프로세스에서는 작업 디렉터리에 `qmtl.yml` 이름으로 복사해 자동으로 읽게 할 수 있다.
+---
+
+운영 환경에서의 초기 부트스트랩 절차와 실행 방법은 [Backend Quickstart](../operations/backend_quickstart.md#fast-start-validate-and-launch)
+문서에서 다룬다.
 
 ---
 
