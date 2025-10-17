@@ -2,6 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.qmtl.interfaces._cli_tokens import resolve_cli_tokens
 from qmtl.interfaces.tools.taglint import (
     REQUIRED_KEYS,
     RECOMMENDED_KEYS,
@@ -11,8 +12,11 @@ from qmtl.interfaces.tools.taglint import (
 )
 
 
+TAGLINT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.tools", "qmtl.interfaces.cli.taglint")
+
+
 def run(path: Path, fix: bool = False):
-    args = [sys.executable, "-m", "qmtl", "taglint"]
+    args = [sys.executable, "-m", "qmtl", *TAGLINT_TOKENS]
     if fix:
         args.append("--fix")
     args.append(str(path))
