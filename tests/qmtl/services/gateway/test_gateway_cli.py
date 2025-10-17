@@ -25,24 +25,24 @@ def test_cli_subcommand_help(args, expected):
 
 
 @pytest.mark.parametrize(
-    ("alias", "forward"),
+    "cmd",
     [
-        ("gw", "service gateway"),
-        ("gateway", "service gateway"),
-        ("dagmanager", "service dagmanager"),
-        ("dagmanager-server", "service dagmanager server"),
-        ("dagmanager-metrics", "service dagmanager metrics"),
-        ("sdk", "tools sdk"),
-        ("taglint", "tools taglint"),
-        ("report", "tools report"),
-        ("init", "project init"),
+        "gw",
+        "gateway",
+        "dagmanager",
+        "dagmanager-server",
+        "dagmanager-metrics",
+        "sdk",
+        "taglint",
+        "report",
+        "init",
     ],
 )
-def test_legacy_aliases_forward(alias, forward):
-    result = subprocess.run([sys.executable, "-m", "qmtl", alias, "--help"], capture_output=True, text=True)
-    assert result.returncode == 0
-    assert f"usage: qmtl {forward}" in result.stdout
-    assert "deprecated" in result.stderr
+def test_unknown_top_level_commands_fail(cmd):
+    result = subprocess.run([sys.executable, "-m", "qmtl", cmd], capture_output=True, text=True)
+    assert result.returncode == 2
+    assert "error: unknown command" in result.stderr
+    assert cmd in result.stderr
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):
