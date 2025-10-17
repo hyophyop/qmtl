@@ -31,7 +31,7 @@ qmtl service dagmanager --help
 qmtl tools sdk --help
 ```
 
-Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Legacy aliases like `qmtl gw` continue to function but emit deprecation warnings to ease migration.
+Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Only the hierarchical commands are supported.
 
 The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
 
