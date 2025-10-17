@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import List, Tuple
 
 import sys
@@ -50,6 +51,8 @@ def _warmup_window_strategy() -> st.SearchStrategy[WarmupWindow]:
         st.integers(min_value=-1_000, max_value=1_000),
         _interval_strategy(),
     )
+
+
 class _PropertyProvider(SeamlessDataProvider):
     """Concrete SeamlessDataProvider for property-based testing."""
 
@@ -107,17 +110,43 @@ def test_compute_missing_ranges_partitions_window(
     window=_warmup_window_strategy(),
 )
 def test_find_missing_ranges_matches_history_utilities(
-    ranges: list[tuple[int, int]], window: WarmupWindow
+    monkeypatch, ranges: list[tuple[int, int]], window: WarmupWindow
 ) -> None:
     _sanitize_sys_modules()
     provider = _PropertyProvider()
-    expected = compute_missing_ranges(ranges, window)
-    actual = provider._find_missing_ranges(  # type: ignore[attr-defined]
-        window.start,
-        window.end,
-        list(ranges),
-        window.interval,
+
+    expected = [(gap.start, gap.end) for gap in compute_missing_ranges(ranges, window)]
+
+    async def fake_coverage(*, node_id: str, interval: int) -> list[tuple[int, int]]:
+        assert node_id == "node"
+        assert interval == window.interval
+        return list(ranges)
+
+    class DummyBackfiller:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        async def can_backfill(
+            self, start: int, end: int, *, node_id: str, interval: int
+        ) -> bool:
+            assert node_id == "node"
+            assert interval == window.interval
+            self.calls.append((start, end))
+            return False
+
+    dummy_backfiller = DummyBackfiller()
+    monkeypatch.setattr(provider, "coverage", fake_coverage)
+    provider.backfiller = dummy_backfiller
+
+    result = asyncio.run(
+        provider.ensure_data_available(
+            window.start,
+            window.end,
+            node_id="node",
+            interval=window.interval,
+        )
     )
 
-    assert actual == [(gap.start, gap.end) for gap in expected]
+    assert dummy_backfiller.calls == expected
+    assert result == (len(expected) == 0)
 
