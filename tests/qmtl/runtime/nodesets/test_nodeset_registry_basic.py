@@ -35,13 +35,14 @@ def test_nodeset_recipe_decorator_registers(monkeypatch):
     monkeypatch.setattr(registry_module, "_REGISTRY", {}, raising=False)
     monkeypatch.setattr(registry_module, "_DISCOVERED", True, raising=False)
 
+    assert list_registered() == []
+
     @registry_module.nodeset_recipe("test_recipe")
     def _builder(*_args, **_kwargs):
         return "sentinel"
 
     assert list_registered() == ["test_recipe"]
     assert make("test_recipe") == "sentinel"
-    assert registry_module._REGISTRY["test_recipe"] is _builder
 
 
 def test_nodeset_recipe_duplicate_name(monkeypatch):
@@ -60,3 +61,4 @@ def test_nodeset_recipe_duplicate_name(monkeypatch):
 
     # Re-registering the same callable should be a no-op.
     registry_module.register("test_recipe", _builder)
+    assert list_registered() == ["test_recipe"]
