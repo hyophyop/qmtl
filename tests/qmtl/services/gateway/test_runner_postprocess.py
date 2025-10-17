@@ -4,9 +4,7 @@ import pytest
 
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
-from qmtl.runtime.sdk.services import RunnerServices
 from qmtl.runtime.sdk.strategy import Strategy
-from qmtl.runtime.sdk.optional_services import RayExecutor
 
 from tests.qmtl.services.service_doubles import (
     NullFeaturePlane,
@@ -48,23 +46,37 @@ def _trigger(strategy: DummyStrategy) -> None:
 
 @pytest.fixture
 def runner_harness():
-    previous = Runner.services()
+    services = Runner.services()
+    original_history = services.history_service
+    original_plane = services.feature_plane
+    original_dispatcher = services.trade_dispatcher
+    original_execution_service = services.trade_execution_service
+    original_http_url = services.trade_order_http_url
+    original_kafka_producer = services.kafka_producer
+    original_kafka_topic = services.trade_order_kafka_topic
     history = SpyHistoryService()
     dispatcher = SpyTradeDispatcher()
     plane = NullFeaturePlane()
-    services = RunnerServices(
-        history_service=history,
-        trade_dispatcher=dispatcher,
-        feature_plane=plane,
-        ray_executor=RayExecutor(disabled=True),
-    )
-    Runner.set_services(services)
+    services.history_service = history
+    services.set_feature_plane(plane)
+    services._trade_dispatcher = dispatcher
+    services.set_trade_execution_service(None)
+    services.set_trade_order_http_url(None)
+    services.set_kafka_producer(None)
+    services.set_trade_order_kafka_topic(None)
+    services.reset_trade_order_dedup()
     Runner.set_enable_trade_submission(True)
     try:
         yield {"history": history, "dispatcher": dispatcher, "plane": plane}
     finally:
         Runner.set_enable_trade_submission(True)
-        Runner.set_services(previous)
+        services.history_service = original_history
+        services.set_feature_plane(original_plane)
+        services._trade_dispatcher = original_dispatcher
+        services.set_trade_execution_service(original_execution_service)
+        services.set_trade_order_http_url(original_http_url)
+        services.set_kafka_producer(original_kafka_producer)
+        services.set_trade_order_kafka_topic(original_kafka_topic)
 
 
 def test_offline_run_invokes_history_service(runner_harness):
