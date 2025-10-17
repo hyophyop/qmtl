@@ -42,6 +42,17 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - For suites with shared resources, prefer `--dist loadscope` or cap workers
   (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
 
+### Test Design Strategy
+
+- Bias new and refactored suites toward contract-focused coverage that keeps implementation details flexible while protecting observable behavior.
+- Favor the following patterns when planning assertions and fixtures:
+  - **Contract Testing:** verify public interfaces continue to satisfy their documented guarantees regardless of internal changes.
+  - **Interface Contract Tests:** focus CLI/module surface areas—tokens, arguments, return payloads—without relying on internal helpers.
+  - **Consumer-Driven Contract Testing:** let downstream consumer expectations drive the interaction contract; pin call shapes and required side effects between collaborating services/tools.
+  - **Interaction/Collaboration Tests:** assert dispatch chains and collaborator invocations (`dispatch -> run(create_project)` style) using spies/fakes rather than full integrations.
+  - **Black-Box Behavioral Tests:** validate outputs, file system effects, and error reporting observable from outside the component.
+  - **Smoke Tests:** keep a minimal set of fast end-to-end checks (e.g., command discovery, `--help`, happy-path scaffolds) to catch regressions quickly.
+
 ### Hang Detection Preflight (required in CI and recommended locally)
 
 To prevent a single hanging test from blocking the entire suite, we run a fast
