@@ -15,6 +15,7 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and build distributable wheels via `uv pip wheel .`.
 - When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
+- Before assuming external tools or services are unavailable, run a quick capability check for whichever CLI or API you plan to use (e.g., `gh auth status`, `aws sts get-caller-identity`, `docker info`). If the probe succeeds, leverage the tool immediately; if it fails, guide the user through re-auth or configuration and retry. Repeat this verification for each new session since tokens can expire or reset.
 
 ## Architecture
 
