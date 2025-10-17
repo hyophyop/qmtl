@@ -27,18 +27,6 @@ PRIMARY_DISPATCH = {
     "project": "qmtl.interfaces.cli.project",
 }
 
-LEGACY_ALIASES = {
-    "gateway": ("service", ["gateway"]),
-    "gw": ("service", ["gateway"]),
-    "dagmanager": ("service", ["dagmanager"]),
-    "dagmanager-server": ("service", ["dagmanager", "server"]),
-    "dagmanager-metrics": ("service", ["dagmanager", "metrics"]),
-    "sdk": ("tools", ["sdk"]),
-    "taglint": ("tools", ["taglint"]),
-    "report": ("tools", ["report"]),
-    "init": ("project", ["init"]),
-}
-
 
 def _build_top_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl", add_help=True)
@@ -49,9 +37,6 @@ def _build_top_help_parser() -> argparse.ArgumentParser:
           service   Manage long-running services such as Gateway and DAG Manager.
           tools     Developer tooling including SDK runners and linters.
           project   Project scaffolding and template helpers.
-
-        Legacy aliases (e.g. ``qmtl dagmanager``, ``qmtl gw``, or ``qmtl init``) remain available but emit a
-        deprecation warning and forward to the new hierarchy.
         """
     ).strip()
     parser.description = description
@@ -81,18 +66,9 @@ def main(argv: List[str] | None = None) -> None:
         module.run(rest)
         return
 
-    if cmd in LEGACY_ALIASES:
-        target, injected = LEGACY_ALIASES[cmd]
-        module = import_module(PRIMARY_DISPATCH[target])
-        new_args = injected + rest
-        print(
-            f"[qmtl] '{cmd}' is deprecated; use 'qmtl {target} {' '.join(injected)}' instead.",
-            file=sys.stderr,
-        )
-        module.run(new_args)
-        return
-
-    _build_top_help_parser().print_help()
+    parser = _build_top_help_parser()
+    parser.print_help()
+    print(f"\nerror: unknown command '{cmd}'", file=sys.stderr)
     raise SystemExit(2)
 
 
