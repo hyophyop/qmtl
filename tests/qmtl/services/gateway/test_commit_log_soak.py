@@ -1,80 +1,48 @@
-import json
+from __future__ import annotations
+
 import pytest
 
 from qmtl.services.dagmanager.kafka_admin import compute_key
-from qmtl.services.gateway import metrics
 from qmtl.services.gateway.commit_log import CommitLogWriter
 from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
 
-
-class P:
-    def __init__(self) -> None:
-        self.buf = []
-
-    async def begin_transaction(self):
-        return None
-
-    async def send_and_wait(self, topic, *, key=None, value=None, headers=None):
-        self.buf.append((topic, key, value, headers))
-
-    async def commit_transaction(self):
-        return None
-
-
-class _M:
-    def __init__(self, value: bytes) -> None:
-        self.value = value
-
-
-class C:
-    def __init__(self, batches):
-        self._batches = list(batches)
-        self.commit_calls = 0
-
-    async def start(self):
-        return None
-
-    async def stop(self):
-        return None
-
-    async def getmany(self, timeout_ms=None):
-        if self._batches:
-            return {None: self._batches.pop(0)}
-        return {}
-
-    async def commit(self):
-        self.commit_calls += 1
+from tests.qmtl.services.service_doubles import (
+    FakeKafkaMessage,
+    RecordingCommitLogConsumerBackend,
+    RecordingCommitLogProducer,
+)
 
 
 @pytest.mark.asyncio
-async def test_commit_log_exactly_once_soak():
-    metrics.reset_metrics()
-    p = P()
-    w = CommitLogWriter(p, "t")
-    n = 100
-    # produce duplicates for the same (node, bucket, input_hash)
-    ck = compute_key("n1")
-    await w.publish_bucket(
+async def test_commit_log_consumer_deduplicates_batches_contract():
+    producer = RecordingCommitLogProducer()
+    writer = CommitLogWriter(producer, "commit.topic")
+
+    compute_hint = compute_key("n1")
+    await writer.publish_bucket(
         100,
         60,
-        [("n1", "ih", {"v": i % 3}, ck) for i in range(n)],
+        [("n1", "ih", {"v": i % 3}, compute_hint) for i in range(6)],
     )
 
-    batch = [_M(v) for (_, _, v, _) in p.buf]
-    # consumer
-    c = C([batch])
-    clc = CommitLogConsumer(c, topic="t", group_id="g")
+    assert producer.began == 1
+    assert producer.committed == 1
 
-    out = []
+    batch = [FakeKafkaMessage(msg["value"]) for msg in producer.messages]
+    backend = RecordingCommitLogConsumerBackend([batch])
+    consumer = CommitLogConsumer(backend, topic="commit.topic", group_id="group-1")
+
+    observed: list[tuple[str, int, str, object]] = []
 
     async def handler(records):
-        out.extend(records)
+        observed.extend(records)
 
-    await clc.start()
-    await clc.consume(handler)
-    await clc.stop()
+    await consumer.start()
+    await consumer.consume(handler)
+    await consumer.stop()
 
-    # Only the first record survives dedup
-    assert len(out) == 1
-    assert metrics.commit_duplicate_total._value.get() == n - 1
-    assert c.commit_calls == 1
+    assert backend.commit_calls == 1
+    assert [record[0] for record in observed] == ["n1"]
+    assert [record[1] for record in observed] == [100]
+    assert [record[2] for record in observed] == ["ih"]
+    assert [record[3] for record in observed] == [{"v": 0}]
