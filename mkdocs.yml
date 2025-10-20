@@ -29,7 +29,6 @@ nav:
       - Build NodeSet (SDK): guides/build_nodeset_sdk.md
       - CCXT Spot Recipe: guides/ccxt_spot_recipe.md
       - CCXT Futures Recipe: guides/ccxt_futures_recipe.md
-      - CCXT × QuestDB (IO): io/ccxt-questdb.md
       - Node Set Adapters: guides/nodeset_adapters.md
       - Advanced:
           - Node Set Portfolio Scope: guides/nodeset_portfolio_scope.md
@@ -42,6 +41,9 @@ nav:
       - Prometheus Metric Helper: guides/prometheus_metrics_helper.md
       - HTTPX Usage: guides/httpx_usage.md
       - HTTP Health Checks: guides/http_health_checks.md
+  - IO & Integrations:
+      - Overview: io/README.md
+      - CCXT × QuestDB: io/ccxt-questdb.md
   - Operations:
       - Overview: operations/README.md
       - Backend Quickstart: operations/backend_quickstart.md
