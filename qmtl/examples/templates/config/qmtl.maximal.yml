@@ -1,0 +1,180 @@
+# Example configuration for production-style deployments.
+# Replace placeholder endpoints and credentials with your infrastructure values.
+
+worldservice:
+  url: https://worldservice.example.com
+  timeout: 1.5
+  retries: 5
+  enable_proxy: true
+  enforce_live_guard: true
+  cache_ttl_seconds: 900
+  cache_max_entries: 2048
+  dsn: postgresql://worldsvc:CHANGE_ME@worlds-db.example.com:5432/worlds
+  redis: redis://cache.example.com:6379/4
+  bind:
+    host: 0.0.0.0
+    port: 8443
+  auth:
+    header: Authorization
+    tokens:
+      - ${WORLDSERVICE_TOKEN}
+  tls:
+    enabled: true
+    certfile: /etc/qmtl/tls/worldservice.crt
+    keyfile: /etc/qmtl/tls/worldservice.key
+
+backends:
+  redis:
+    gateway_state: redis://cache.example.com:6379/1
+    dagmanager_state: redis://cache.example.com:6379/2
+  sql:
+    gateway_dsn: postgresql://gateway:CHANGE_ME@gateway-db.example.com:5432/gateway
+    dagmanager_dsn: postgresql://dagmgr:CHANGE_ME@dag-db.example.com:5432/dagmgr
+  kafka:
+    bootstrap_servers:
+      - kafka-1.example.com:9092
+      - kafka-2.example.com:9092
+    sasl:
+      mechanism: SCRAM-SHA-512
+      username: ${KAFKA_USERNAME}
+      password: ${KAFKA_PASSWORD}
+    security_protocol: SASL_SSL
+
+secrets:
+  vault_url: https://vault.example.com
+  auth_token: ${VAULT_TOKEN}
+  gateway_event_secret: ${GATEWAY_EVENTS_SECRET}
+  dagmanager_graph_secret: ${DAGMANAGER_GRAPH_SECRET}
+
+gateway:
+  host: 0.0.0.0
+  port: 8444
+  redis_dsn: ${backends.redis.gateway_state}
+  database_backend: postgres
+  database_dsn: ${backends.sql.gateway_dsn}
+  insert_sentinel: true
+  controlbus_topics:
+    - activation
+    - policy
+    - queue
+  controlbus_group: gateway
+  commitlog_topic: gateway.prod.ingest
+  commitlog_group: gateway-prod-commit
+  commitlog_transactional_id: gateway-prod-writer
+  commitlog_bootstrap_servers: ${backends.kafka.bootstrap_servers}
+  events:
+    secret: ${secrets.gateway_event_secret}
+    ttl: 600
+    jwt_issuer: https://auth.example.com/issuer
+    jwt_audience: qmtl-gateway
+  websocket:
+    rate_limit_per_sec: 50
+    allowed_origins:
+      - https://app.example.com
+      - https://admin.example.com
+  worldservice_url: ${worldservice.url}
+  telemetry:
+    otel_endpoint: https://otel-collector.example.com:4318/v1/traces
+    prometheus_pushgateway: https://prometheus-pushgateway.example.com
+
+dagmanager:
+  memory_repo_path: null
+  neo4j_dsn: neo4j+s://neo4j.example.com:7687
+  neo4j_user: dagmanager
+  neo4j_password: ${NEO4J_PASSWORD}
+  kafka_dsn: kafka-broker.example.com:9092
+  kafka_security:
+    sasl_mechanism: SCRAM-SHA-512
+    sasl_username: ${KAFKA_USERNAME}
+    sasl_password: ${KAFKA_PASSWORD}
+    security_protocol: SASL_SSL
+  grpc_host: 0.0.0.0
+  grpc_port: 5443
+  http_host: 0.0.0.0
+  http_port: 8545
+  controlbus_dsn: kafka-control.example.com:9093
+  controlbus_queue_topic: queue
+  enable_topic_namespace: true
+  repositories:
+    neo4j:
+      tls_enabled: true
+      ca_file: /etc/qmtl/tls/neo4j-ca.pem
+  telemetry:
+    otel_endpoint: https://otel-collector.example.com:4318/v1/traces
+    prometheus_pushgateway: https://prometheus-pushgateway.example.com
+
+seamless:
+  coordinator_url: https://seamless.example.com/api
+  artifacts_enabled: true
+  artifact_dir: /var/lib/qmtl/seamless/artifacts
+  fingerprint_mode: canonical
+  publish_fingerprint: true
+  preview_fingerprint: true
+  early_fingerprint: true
+  sla_preset: enterprise
+  conformance_preset: strict-blocking
+  auth:
+    client_id: ${SEAMLESS_CLIENT_ID}
+    client_secret: ${SEAMLESS_CLIENT_SECRET}
+    token_url: https://idp.example.com/oauth/token
+
+connectors:
+  ccxt_rate_limiter_redis: ${backends.redis.gateway_state}
+  schema_registry_url: https://schema-registry.example.com
+  worker_id: worker-prod-01
+  seamless_worker_id: seam-prod-01
+  strategy_id: prod-strategy
+  execution_domain: live
+  broker_url: https://broker.example.com/api/orders
+  trade_max_retries: 10
+  trade_backoff: 0.5
+  ws_url: wss://gateway.example.com/ws
+  credentials:
+    api_key: ${BROKER_API_KEY}
+    api_secret: ${BROKER_API_SECRET}
+
+telemetry:
+  otel_exporter_endpoint: https://otel-collector.example.com:4318/v1/traces
+  enable_fastapi_otel: true
+  prometheus_url: https://prometheus.example.com
+  grafana_url: https://grafana.example.com
+
+cache:
+  arrow_cache_enabled: true
+  cache_evict_interval: 120
+  feature_artifacts_enabled: true
+  feature_artifact_dir: /var/lib/qmtl/cache/features
+  feature_artifact_versions: 20
+  feature_artifact_write_domains:
+    - equities.live
+    - futures.live
+  tagquery_cache_path: /var/lib/qmtl/cache/tagquery.json
+  snapshot_dir: /var/lib/qmtl/cache/snapshots
+  snapshot_url: s3://qmtl-snapshots/prod
+  snapshot_strict_runtime: true
+  snapshot_format: parquet
+  snapshot_auth:
+    access_key: ${SNAPSHOT_ACCESS_KEY}
+    secret_key: ${SNAPSHOT_SECRET_KEY}
+
+runtime:
+  http_timeout_seconds: 5.0
+  http_timeout_seconds_test: 2.5
+  ws_recv_timeout_seconds: 60.0
+  ws_recv_timeout_seconds_test: 15.0
+  ws_max_total_time_seconds: 600.0
+  ws_max_total_time_seconds_test: 30.0
+  poll_interval_seconds: 5.0
+  poll_interval_seconds_test: 1.0
+  retry_backoff_seconds: 2.0
+  retry_backoff_seconds_test: 0.5
+
+test:
+  test_mode: false
+  fail_on_history_gap: true
+  fixed_now: null
+  history_start: 2020-01-01T00:00:00Z
+  history_end: null
+  fixtures:
+    orders_path: /etc/qmtl/test/orders.json
+    quotes_path: /etc/qmtl/test/quotes.json

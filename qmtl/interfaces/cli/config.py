@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 import textwrap
+from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
 from qmtl.foundation.config import find_config_file, load_config
@@ -13,6 +14,10 @@ from qmtl.foundation.config_validation import (
     validate_config_structure,
     validate_dagmanager_config,
     validate_gateway_config,
+)
+from qmtl.interfaces.config_templates import (
+    available_profiles,
+    write_template,
 )
 
 _STATUS_LABELS = {
@@ -30,12 +35,13 @@ def _build_help_parser() -> argparse.ArgumentParser:
 
         Subcommands:
           validate  Check connectivity and readiness for Gateway and DAG Manager.
+          generate  Scaffold configuration files from packaged templates.
         """
     ).strip()
     parser.add_argument(
         "cmd",
         nargs="?",
-        choices=["validate"],
+        choices=["validate", "generate"],
         help="Subcommand to run",
     )
     return parser
@@ -62,6 +68,28 @@ def _build_validate_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit validation report as JSON in addition to the table",
+    )
+    return parser
+
+
+def _build_generate_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="qmtl config generate")
+    profiles = sorted(available_profiles())
+    parser.add_argument(
+        "--profile",
+        choices=profiles,
+        default="minimal",
+        help="Configuration template profile to write",
+    )
+    parser.add_argument(
+        "--output",
+        default="qmtl.yml",
+        help="Destination path for the generated configuration",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing files",
     )
     return parser
 
@@ -151,6 +179,25 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
     return results
 
 
+def _execute_generate(args: argparse.Namespace) -> Path:
+    output = Path(args.output)
+
+    try:
+        write_template(args.profile, output, force=args.force)
+    except FileExistsError:
+        print(
+            f"[qmtl] Output file '{output}' already exists. Use --force to overwrite.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    except FileNotFoundError as exc:  # pragma: no cover - defensive guard
+        print(f"[qmtl] {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+    print(f"[qmtl] Wrote {args.profile} configuration template to {output}")
+    return output
+
+
 def run(argv: List[str] | None = None) -> None:
     argv = list(argv) if argv is not None else []
 
@@ -165,6 +212,12 @@ def run(argv: List[str] | None = None) -> None:
         parser = _build_validate_parser()
         args = parser.parse_args(rest)
         asyncio.run(_execute_validate(args))
+        return
+
+    if cmd == "generate":
+        parser = _build_generate_parser()
+        args = parser.parse_args(rest)
+        _execute_generate(args)
         return
 
     _build_help_parser().print_help()
