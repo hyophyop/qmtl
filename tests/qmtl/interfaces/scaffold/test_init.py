@@ -59,14 +59,39 @@ def test_create_project_with_optionals(tmp_path: Path):
 @pytest.mark.parametrize(
     ("extra_args", "expected_flags"),
     [
-        ([], {"with_sample_data": False, "with_docs": False, "with_scripts": False, "with_pyproject": False}),
+        (
+            [],
+            {
+                "with_sample_data": False,
+                "with_docs": False,
+                "with_scripts": False,
+                "with_pyproject": False,
+                "config_profile": "minimal",
+            },
+        ),
         (
             ["--with-docs", "--with-scripts", "--with-pyproject"],
-            {"with_sample_data": False, "with_docs": True, "with_scripts": True, "with_pyproject": True},
+            {
+                "with_sample_data": False,
+                "with_docs": True,
+                "with_scripts": True,
+                "with_pyproject": True,
+                "config_profile": "minimal",
+            },
         ),
-        (["--with-sample-data"], {"with_sample_data": True, "with_docs": False, "with_scripts": False, "with_pyproject": False}),
+        (
+            ["--with-sample-data"],
+            {
+                "with_sample_data": True,
+                "with_docs": False,
+                "with_scripts": False,
+                "with_pyproject": False,
+                "config_profile": "minimal",
+            },
+        ),
     ],
 )
+
 def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_flags):
     dest = tmp_path / "cli_proj"
     calls: dict[str, object] = {}
@@ -79,6 +104,7 @@ def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_fla
         with_docs: bool = False,
         with_scripts: bool = False,
         with_pyproject: bool = False,
+        config_profile: str = "minimal",
     ) -> None:
         calls["path"] = path
         calls["kwargs"] = {
@@ -87,6 +113,7 @@ def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_fla
             "with_docs": with_docs,
             "with_scripts": with_scripts,
             "with_pyproject": with_pyproject,
+            "config_profile": config_profile,
         }
 
     monkeypatch.setattr("qmtl.interfaces.cli.init.create_project", fake_create_project)
@@ -115,12 +142,21 @@ def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.Captur
             return preset if name == "minimal" else None
 
     class DummyComposer:
-        def compose(self, *, layers, dest, template_choices=None, force=False):
+        def compose(
+            self,
+            *,
+            layers,
+            dest,
+            template_choices=None,
+            force=False,
+            config_profile: str = "minimal",
+        ):
             calls["compose"] = {
                 "layers": layers,
                 "dest": dest,
                 "template_choices": template_choices,
                 "force": force,
+                "config_profile": config_profile,
             }
             return ValidationResult(valid=True)
 
@@ -133,6 +169,7 @@ def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.Captur
     assert calls["preset"] == "minimal"
     assert calls["compose"]["dest"] == dest
     assert calls["compose"]["layers"] == [Layer.DATA, Layer.SIGNAL]
+    assert calls["compose"]["config_profile"] == "minimal"
     assert "Project created at" in out
 
 
@@ -159,12 +196,21 @@ def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.Captur
         def __init__(self):
             self.validator = DummyValidator()
 
-        def compose(self, *, layers, dest, template_choices=None, force=False):
+        def compose(
+            self,
+            *,
+            layers,
+            dest,
+            template_choices=None,
+            force=False,
+            config_profile: str = "minimal",
+        ):
             calls["compose"] = {
                 "layers": layers,
                 "dest": dest,
                 "template_choices": template_choices,
                 "force": force,
+                "config_profile": config_profile,
             }
             return ValidationResult(valid=True)
 
@@ -178,6 +224,7 @@ def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.Captur
 
     assert dummy_validator.seen["target"] == [Layer.EXECUTION]
     assert calls["compose"]["layers"] == [Layer.DATA, Layer.SIGNAL, Layer.EXECUTION]
+    assert calls["compose"]["config_profile"] == "minimal"
     assert "Project created at" in out
 
 
