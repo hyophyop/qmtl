@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import argparse
-import warnings
+import sys
 from pathlib import Path
 from typing import List
 
-from ..scaffold import create_project
+from ..scaffold import (
+    TEMPLATES,
+    copy_docs,
+    copy_pyproject,
+    copy_sample_data,
+    copy_scripts,
+    create_project,
+)
 from ..layers import Layer, LayerComposer, PresetLoader, LayerValidator
 
 
@@ -16,11 +23,12 @@ def run(argv: List[str] | None = None) -> None:
         prog="qmtl project init",
         description="Initialize new project (see docs/guides/strategy_workflow.md)",
     )
+    parser.epilog = "More docs: docs/reference/templates.md"
     parser.add_argument(
         "--path",
         help="Project directory to create scaffolding",
     )
-    
+
     # Preset/layer options (new system)
     parser.add_argument(
         "--preset",
@@ -40,7 +48,7 @@ def run(argv: List[str] | None = None) -> None:
         action="store_true",
         help="List available layers and exit",
     )
-    
+
     # Legacy options (deprecated)
     parser.add_argument(
         "--strategy",
@@ -51,7 +59,7 @@ def run(argv: List[str] | None = None) -> None:
         action="store_true",
         help="(Deprecated: use --list-presets) List available templates and exit",
     )
-    
+
     # Additional options
     parser.add_argument(
         "--with-sample-data",
@@ -73,12 +81,15 @@ def run(argv: List[str] | None = None) -> None:
     # Handle list commands
     if args.list_presets or args.list_templates:
         if args.list_templates:
-            warnings.warn(
-                "--list-templates is deprecated, use --list-presets instead",
-                DeprecationWarning,
-                stacklevel=2,
+            print(
+                "Warning: --list-templates is deprecated, use --list-presets instead",
+                file=sys.stderr,
             )
-        print("Available presets:")
+            print("Available templates:")
+            for template_name in sorted(TEMPLATES):
+                print(template_name)
+        if args.list_presets:
+            print("Available presets:")
         for preset_name in preset_loader.list_presets():
             preset = preset_loader.get_preset(preset_name)
             if preset:
@@ -97,30 +108,36 @@ def run(argv: List[str] | None = None) -> None:
 
     # Determine if using new layer system or legacy
     use_legacy = False
-    
+
     if args.strategy:
-        warnings.warn(
-            "--strategy is deprecated, use --preset instead",
-            DeprecationWarning,
-            stacklevel=2,
+        print(
+            "Warning: --strategy is deprecated, use --preset instead",
+            file=sys.stderr,
         )
         use_legacy = True
-    
-    # Use legacy system if --strategy is provided and no new options
-    if use_legacy and not args.preset and not args.layers:
+
+    # Use legacy system when no layer/preset selection is provided
+    if use_legacy or (not args.preset and not args.layers):
         _run_legacy(args)
         return
-    
+
     # Use new layer system
     if args.preset:
         _run_with_preset(args, preset_loader, composer)
-    elif args.layers:
-        _run_with_layers(args, composer, validator)
     else:
-        # Default to minimal preset
-        print("No preset or layers specified, using 'minimal' preset")
-        args.preset = "minimal"
-        _run_with_preset(args, preset_loader, composer)
+        _run_with_layers(args, composer, validator)
+
+
+def _apply_optional_components(dest: Path, args: argparse.Namespace) -> None:
+    """Apply optional scaffold pieces that are shared across init flows."""
+    if args.with_sample_data:
+        copy_sample_data(dest)
+    if args.with_docs:
+        copy_docs(dest)
+    if args.with_scripts:
+        copy_scripts(dest)
+    if args.with_pyproject:
+        copy_pyproject(dest)
 
 
 def _run_legacy(args) -> None:
@@ -164,6 +181,7 @@ def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer)
 
     print(f"Project created at {args.path} using preset '{preset.name}'")
     print(f"Layers included: {', '.join(layer.value for layer in preset.layers)}")
+    _apply_optional_components(Path(args.path), args)
 
 
 def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -> None:
@@ -197,5 +215,4 @@ def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -
 
     print(f"Project created at {args.path}")
     print(f"Layers included: {', '.join(layer.value for layer in layers)}")
-
-
+    _apply_optional_components(Path(args.path), args)
