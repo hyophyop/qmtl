@@ -14,6 +14,7 @@ from ..scaffold import (
     create_project,
 )
 from ..layers import Layer, LayerComposer, PresetLoader, LayerValidator
+from ..config_templates import available_profiles
 
 
 def run(argv: List[str] | None = None) -> None:
@@ -70,6 +71,12 @@ def run(argv: List[str] | None = None) -> None:
     parser.add_argument("--with-scripts", action="store_true", help="Include scripts/ directory template")
     parser.add_argument("--with-pyproject", action="store_true", help="Include pyproject.toml template")
     parser.add_argument("--force", action="store_true", help="Overwrite existing directory")
+    parser.add_argument(
+        "--config-profile",
+        choices=sorted(available_profiles()),
+        default="minimal",
+        help="Select configuration template for qmtl.yml",
+    )
 
     args = parser.parse_args(argv)
 
@@ -149,6 +156,7 @@ def _run_legacy(args) -> None:
         with_docs=args.with_docs,
         with_scripts=args.with_scripts,
         with_pyproject=args.with_pyproject,
+        config_profile=args.config_profile,
     )
     print(f"Project created at {args.path} using legacy template '{args.strategy or 'general'}'")
 
@@ -171,6 +179,7 @@ def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer)
         dest=Path(args.path),
         template_choices=preset.template_choices,
         force=args.force,
+        config_profile=args.config_profile,
     )
 
     if not result.valid:
@@ -205,6 +214,7 @@ def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -
         layers=layers,
         dest=Path(args.path),
         force=args.force,
+        config_profile=args.config_profile,
     )
 
     if not result.valid:

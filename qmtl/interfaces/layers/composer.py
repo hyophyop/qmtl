@@ -6,6 +6,8 @@ import importlib.resources as resources
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from qmtl.interfaces.config_templates import write_template
+
 from .metadata import Layer, load_layer_metadata
 from .validator import LayerValidator, ValidationResult
 
@@ -28,6 +30,7 @@ class LayerComposer:
         *,
         template_choices: Optional[Dict[Layer, str]] = None,
         force: bool = False,
+        config_profile: str = "minimal",
     ) -> ValidationResult:
         """Compose layers into a project at dest.
 
@@ -36,6 +39,7 @@ class LayerComposer:
             dest: Destination directory
             template_choices: Optional mapping of layer to template name
             force: Force overwrite if destination exists
+            config_profile: Name of base configuration template to seed
 
         Returns:
             ValidationResult indicating success or failure
@@ -58,7 +62,7 @@ class LayerComposer:
         dest.mkdir(parents=True, exist_ok=True)
 
         # Create base structure
-        self._create_base_structure(dest)
+        self._create_base_structure(dest, config_profile=config_profile)
 
         # Add each layer
         template_choices = template_choices or {}
@@ -148,7 +152,7 @@ class LayerComposer:
         # Validate layer combination
         return self.validator.validate_layers(existing_layers)
 
-    def _create_base_structure(self, dest: Path) -> None:
+    def _create_base_structure(self, dest: Path, *, config_profile: str = "minimal") -> None:
         """Create base project structure.
 
         Creates:
@@ -203,30 +207,8 @@ if __name__ == "__main__":
 '''
         (dest / "strategy.py").write_text(strategy_template)
 
-        # Create basic qmtl.yml (will be enhanced by layers)
-        qmtl_config = """# QMTL Configuration
-# See docs/reference/configuration.md for details
-
-worldservice:
-  url: http://localhost:8080
-  timeout: 0.3
-  retries: 2
-
-gateway:
-  host: 0.0.0.0
-  port: 8000
-  redis_dsn: redis://localhost:6379
-  database_backend: sqlite
-  database_dsn: ./qmtl.db
-
-dagmanager:
-  memory_repo_path: memrepo.gpickle
-  neo4j_dsn: bolt://localhost:7687
-  kafka_dsn: localhost:9092
-  grpc_host: 0.0.0.0
-  grpc_port: 50051
-"""
-        (dest / "qmtl.yml").write_text(qmtl_config)
+        # Create qmtl.yml from packaged templates
+        write_template(config_profile, dest / "qmtl.yml", force=True)
 
         # Create .gitignore
         gitignore = """# Python
