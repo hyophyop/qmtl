@@ -11,7 +11,7 @@ import sys
 from collections import OrderedDict
 from typing import Any, Dict, List, Tuple
 
-from qmtl.utils.i18n import _
+from qmtl.utils.i18n import _, language_source, set_language
 
 REQUIRED_KEYS = ["scope", "family", "interval", "asset"]
 RECOMMENDED_KEYS = ["window", "price", "side", "target_horizon", "label"]
@@ -164,6 +164,8 @@ def iter_py_files(path: str):
 
 
 def main(argv: list[str] | None = None):
+    if language_source() is None:
+        set_language(None)
     argparse._ = _
     parser = argparse.ArgumentParser(description=_("Lint TAGS dictionaries"))
     parser._ = _

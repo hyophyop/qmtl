@@ -111,8 +111,7 @@ def test_taglint_help_respects_language_env():
     assert "Attempt to fix issues" in res_en.stdout
     assert "Attempt to fix issues" not in res_ko.stdout
     assert "문제를 자동으로 수정합니다" not in res_en.stdout
-    encoded = res_ko.stdout.encode("unicode_escape").decode()
-    assert "\\xeb\\xac\\xb8\\xec\\xa0\\x9c" in encoded
+    assert "문제를 자동으로 수정합니다" in res_ko.stdout
 
 
 def test_taglint_errors_localized(tmp_path):
@@ -126,5 +125,4 @@ def test_taglint_errors_localized(tmp_path):
     assert res_ko.returncode != 0
     assert "missing required key: scope" in res_en.stderr
     assert "missing required key: scope" not in res_ko.stderr
-    encoded = res_ko.stderr.encode("unicode_escape").decode()
-    assert "\\xed\\x95\\x84\\xec\\x88\\x98" in encoded
+    assert "필수 키 누락" in res_ko.stderr
