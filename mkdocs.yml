@@ -127,6 +127,17 @@ plugins:
             Architecture: 아키텍처
             Guides: 가이드
             Docs Internationalization: 문서 국제화
+            "Layered Template System": "레이어드 템플릿 시스템"
+            "Seamless Data Provider v2": "심리스 데이터 프로바이더 v2"
+            "CCXT × Seamless Integrated (High + Codex)": "CCXT × Seamless 통합 (High + Codex)"
+            "Exchange Node Sets": "거래소 노드 세트"
+            "Execution Nodes": "실행 노드"
+            "Execution State": "실행 상태"
+            "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
+            "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
+            "Testing & Pytest": "테스트 & Pytest"
+            "Python Environment": "Python 환경"
+            "CCXT Seamless Data Provider": "CCXT 심리스 데이터 프로바이더"
             "IO & Integrations": "IO & 통합"
             Operations: 운영
             Design: 설계
