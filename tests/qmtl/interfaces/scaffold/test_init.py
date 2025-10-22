@@ -79,6 +79,7 @@ def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_fla
         with_docs: bool = False,
         with_scripts: bool = False,
         with_pyproject: bool = False,
+        config_profile: str = "minimal",
     ) -> None:
         calls["path"] = path
         calls["kwargs"] = {
@@ -87,6 +88,7 @@ def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_fla
             "with_docs": with_docs,
             "with_scripts": with_scripts,
             "with_pyproject": with_pyproject,
+            "config_profile": config_profile,
         }
 
     monkeypatch.setattr("qmtl.interfaces.cli.init.create_project", fake_create_project)
@@ -94,7 +96,7 @@ def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_fla
     cli_main([*PROJECT_INIT_TOKENS, "--path", str(dest), "--strategy", "general", *extra_args])
 
     assert calls["path"] == dest
-    assert calls["kwargs"] == {"template": "general", **expected_flags}
+    assert calls["kwargs"] == {"template": "general", "config_profile": "minimal", **expected_flags}
 
 
 def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture):
@@ -115,12 +117,21 @@ def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.Captur
             return preset if name == "minimal" else None
 
     class DummyComposer:
-        def compose(self, *, layers, dest, template_choices=None, force=False):
+        def compose(
+            self,
+            *,
+            layers,
+            dest,
+            template_choices=None,
+            force=False,
+            config_profile: str = "minimal",
+        ):
             calls["compose"] = {
                 "layers": layers,
                 "dest": dest,
                 "template_choices": template_choices,
                 "force": force,
+                "config_profile": config_profile,
             }
             return ValidationResult(valid=True)
 
@@ -133,6 +144,7 @@ def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.Captur
     assert calls["preset"] == "minimal"
     assert calls["compose"]["dest"] == dest
     assert calls["compose"]["layers"] == [Layer.DATA, Layer.SIGNAL]
+    assert calls["compose"]["config_profile"] == "minimal"
     assert "Project created at" in out
 
 
@@ -159,12 +171,21 @@ def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.Captur
         def __init__(self):
             self.validator = DummyValidator()
 
-        def compose(self, *, layers, dest, template_choices=None, force=False):
+        def compose(
+            self,
+            *,
+            layers,
+            dest,
+            template_choices=None,
+            force=False,
+            config_profile: str = "minimal",
+        ):
             calls["compose"] = {
                 "layers": layers,
                 "dest": dest,
                 "template_choices": template_choices,
                 "force": force,
+                "config_profile": config_profile,
             }
             return ValidationResult(valid=True)
 
@@ -178,6 +199,7 @@ def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.Captur
 
     assert dummy_validator.seen["target"] == [Layer.EXECUTION]
     assert calls["compose"]["layers"] == [Layer.DATA, Layer.SIGNAL, Layer.EXECUTION]
+    assert calls["compose"]["config_profile"] == "minimal"
     assert "Project created at" in out
 
 

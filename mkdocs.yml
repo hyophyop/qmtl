@@ -110,11 +110,35 @@ nav:
       - Backend Stack Config: templates/backend_stack.md
       - Local Stack Config: templates/local_stack.md
 plugins:
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: ko
+          name: 한국어
+          build: true
+          nav_translations:
+            Home: 홈
+            Maintenance Schedule: 유지보수 일정
+            Architecture: 아키텍처
+            Guides: 가이드
+            "IO & Integrations": "IO & 통합"
+            Operations: 운영
+            Design: 설계
+            Reference: 레퍼런스
+            World: 월드
+            Archive: 보관
+            Tags: 태그
+            Templates: 템플릿
   - search
   - macros
   - tags
 theme:
   name: material
+  language: en
   features:
     - navigation.top
     - navigation.expand

@@ -42,6 +42,7 @@ dev = [
     "mkdocs-material",
     "mkdocs-macros-plugin",
     "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
     "websocket-client",
 ]
 
@@ -66,6 +67,7 @@ dev = [
     "mkdocs-material",
     "mkdocs-macros-plugin",
     "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
     "websocket-client",
 ]
 
