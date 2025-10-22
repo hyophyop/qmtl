@@ -12,7 +12,7 @@ def _repo_root() -> Path:
     raise RuntimeError("Could not locate repository root from test path")
 
 
-SCHEMAS_DIR = _repo_root() / "docs" / "reference" / "schemas"
+SCHEMAS_DIR = _repo_root() / "docs" / "en" / "reference" / "schemas"
 
 
 def _load_schema(name: str) -> dict:
