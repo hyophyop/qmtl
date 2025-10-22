@@ -2,6 +2,7 @@ import subprocess
 import sys
 
 import pytest
+from qmtl.utils.i18n import set_language
 
 
 @pytest.mark.parametrize(
@@ -47,6 +48,21 @@ def test_removed_top_level_aliases_show_top_level_usage(cmd):
     assert result.stdout.splitlines()[0].startswith("usage: qmtl")
     assert "error: unknown command" in result.stderr
     assert cmd in result.stderr
+
+
+def test_gateway_cli_help_respects_locale(monkeypatch, capsys):
+    from qmtl.services.gateway import cli
+
+    monkeypatch.setenv("QMTL_LANG", "ko")
+
+    try:
+        with pytest.raises(SystemExit):
+            cli.main(["--help"])
+        captured = capsys.readouterr()
+    finally:
+        set_language("en")
+
+    assert "구성 파일 경로" in captured.out
 
 
 def test_gateway_cli_config_file(monkeypatch, tmp_path):

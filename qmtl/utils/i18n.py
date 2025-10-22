@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import gettext
 import os
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Optional
 
 
 _translator: object = gettext.NullTranslations()
+_current_language: Optional[str] = None
+_language_source: Optional[str] = None  # "explicit" or "auto"
 
 
 def _locale_dir() -> str:
@@ -42,9 +45,12 @@ def _try_load_po(domain: str, localedir: str, lang: str | None) -> Optional[_PoT
         current_str = None
 
     def _unquote(s: str) -> str:
-        if s.startswith('"') and s.endswith('"'):
-            s = s[1:-1]
-        return s.encode('utf-8').decode('unicode_escape')
+        try:
+            return ast.literal_eval(s)
+        except (SyntaxError, ValueError):
+            if s.startswith('"') and s.endswith('"'):
+                s = s[1:-1]
+            return s
 
     for raw in po_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -80,6 +86,7 @@ def set_language(lang: Optional[str]) -> None:
     """
     global _translator
 
+    source = "explicit" if lang else "auto"
     if not lang:
         lang = detect_language()
 
@@ -100,11 +107,27 @@ def set_language(lang: Optional[str]) -> None:
         # Be resilient; always provide a translator
         po_fallback = _try_load_po("qmtl", _locale_dir(), lang)
         _translator = po_fallback or gettext.NullTranslations()
+    finally:
+        # Track the active language so downstream callers can decide whether to
+        # reinstall translations without clobbering explicit selections.
+        global _current_language, _language_source
+        _current_language = lang
+        _language_source = source
 
 
 def _(message: str) -> str:
     """Translate a message using the currently installed translator."""
     return _translator.gettext(message)
+
+
+def current_language() -> Optional[str]:
+    """Return the currently installed language code, if any."""
+    return _current_language
+
+
+def language_source() -> Optional[str]:
+    """Return how the current language was chosen ("explicit" or "auto")."""
+    return _language_source
 
 
 def detect_language() -> str:

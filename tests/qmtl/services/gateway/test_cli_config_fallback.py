@@ -86,7 +86,9 @@ def test_gateway_cli_discovers_default_file(tmp_path, monkeypatch, caplog, gatew
     )
 
 
-def test_gateway_cli_errors_when_section_missing(tmp_path, monkeypatch, caplog, gateway_testbed):
+def test_gateway_cli_errors_when_section_missing(
+    tmp_path, monkeypatch, caplog, capfd, gateway_testbed
+):
     config_path = tmp_path / "no_gateway.yml"
     config_path.write_text("dagmanager:\n  grpc_port: 1234\n")
 
@@ -98,3 +100,6 @@ def test_gateway_cli_errors_when_section_missing(tmp_path, monkeypatch, caplog, 
     assert any(
         "does not define the 'gateway' section" in record.message for record in caplog.records
     )
+    stderr = capfd.readouterr().err
+    assert "error:" in stderr
+    assert "does not define the 'gateway' section" in stderr

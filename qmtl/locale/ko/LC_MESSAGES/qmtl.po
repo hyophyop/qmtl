@@ -15,6 +15,40 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+# gateway cli
+msgid "Gateway configuration loaded from %(path)s (--config)"
+msgstr "Gateway 구성은 %(path)s (--config)에서 로드되었습니다"
+
+msgid "Gateway configuration loaded from %(path)s"
+msgstr "Gateway 구성은 %(path)s에서 로드되었습니다"
+
+msgid "Gateway configuration file not provided; using built-in defaults"
+msgstr "Gateway 구성 파일이 제공되지 않았습니다. 내장 기본값을 사용합니다"
+
+msgid "Run the Gateway HTTP server."
+msgstr "Gateway HTTP 서버를 실행합니다."
+
+msgid "Path to configuration file"
+msgstr "구성 파일 경로"
+
+msgid "Disable automatic VersionSentinel insertion"
+msgstr "자동 VersionSentinel 삽입 비활성화"
+
+msgid "Disable live trading guard requiring X-Allow-Live header"
+msgstr "X-Allow-Live 헤더가 필요한 라이브 트레이딩 가드를 비활성화"
+
+msgid "Gateway configuration file {path} does not define the 'gateway' section."
+msgstr "Gateway 구성 파일 {path}에 'gateway' 섹션이 없습니다."
+
+msgid "Commit-log writer is disabled; production deployments must set commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+msgstr "커밋 로그 기록기가 비활성화되었습니다. 운영 배포에서는 gateway.ingest 이벤트를 기록하려면 commitlog_bootstrap과 commitlog_topic을 설정해야 합니다."
+
+msgid "Failed to connect to database"
+msgstr "데이터베이스 연결에 실패했습니다"
+
+msgid "Failed to close database connection"
+msgstr "데이터베이스 연결을 닫지 못했습니다"
+
 # CLI top-level
 msgid "Subcommand to run"
 msgstr "실행할 하위 명령"

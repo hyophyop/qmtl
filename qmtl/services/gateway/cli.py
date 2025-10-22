@@ -18,6 +18,7 @@ from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
 from .commit_log import create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
+from qmtl.utils.i18n import _, language_source, set_language
 
 
 def _log_config_source(
@@ -26,13 +27,21 @@ def _log_config_source(
     cli_override: str | None,
 ) -> None:
     if cli_override:
-        logging.info("Gateway configuration loaded from %s (--config)", cli_override)
+        logging.info(
+            _("Gateway configuration loaded from %(path)s (--config)"),
+            {"path": cli_override},
+        )
         return
 
     if cfg_path:
-        logging.info("Gateway configuration loaded from %s", cfg_path)
+        logging.info(
+            _("Gateway configuration loaded from %(path)s"),
+            {"path": cfg_path},
+        )
     else:
-        logging.info("Gateway configuration file not provided; using built-in defaults")
+        logging.info(
+            _("Gateway configuration file not provided; using built-in defaults")
+        )
 
 
 try:  # pragma: no cover - aiokafka optional
@@ -43,20 +52,26 @@ except Exception:  # pragma: no cover - import guard
 
 async def _main(argv: list[str] | None = None) -> None:
     """Run the Gateway HTTP server."""
-    parser = argparse.ArgumentParser(prog="qmtl service gateway")
-    parser.add_argument("--config", help="Path to configuration file")
+    if language_source() != "explicit":
+        set_language(None)
+
+    parser = argparse.ArgumentParser(
+        prog="qmtl service gateway",
+        description=_("Run the Gateway HTTP server."),
+    )
+    parser.add_argument("--config", help=_("Path to configuration file"))
     parser.add_argument(
         "--no-sentinel",
         dest="insert_sentinel",
         action="store_false",
-        help="Disable automatic VersionSentinel insertion",
+        help=_("Disable automatic VersionSentinel insertion"),
         default=None,
     )
     parser.add_argument(
         "--allow-live",
         dest="enforce_live_guard",
         action="store_false",
-        help="Disable live trading guard requiring X-Allow-Live header",
+        help=_("Disable live trading guard requiring X-Allow-Live header"),
         default=None,
     )
     args = parser.parse_args(argv)
@@ -70,11 +85,11 @@ async def _main(argv: list[str] | None = None) -> None:
     if cfg_path:
         unified = load_config(cfg_path)
         if "gateway" not in unified.present_sections:
-            logging.error(
-                "Gateway configuration file %s does not define the 'gateway' section.",
-                cfg_path,
-            )
-            raise SystemExit(2)
+            message = _(
+                "Gateway configuration file {path} does not define the 'gateway' section."
+            ).format(path=cfg_path)
+            logging.error(message)
+            parser.error(message)
         config = unified.gateway
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
         telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
@@ -113,8 +128,10 @@ async def _main(argv: list[str] | None = None) -> None:
 
     if not config.commitlog_bootstrap or not config.commitlog_topic:
         logging.warning(
-            "Commit-log writer is disabled; production deployments must set "
-            "commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+            _(
+                "Commit-log writer is disabled; production deployments must set "
+                "commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+            )
         )
 
     commit_consumer = None
@@ -171,8 +188,9 @@ async def _main(argv: list[str] | None = None) -> None:
         try:
             await db.connect()  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - exception path tested separately
-            logging.exception("Failed to connect to database")
-            raise SystemExit("Failed to connect to database") from exc
+            message = _("Failed to connect to database")
+            logging.exception(message)
+            raise SystemExit(message) from exc
 
     import uvicorn
 
@@ -183,7 +201,7 @@ async def _main(argv: list[str] | None = None) -> None:
             try:
                 await db.close()  # type: ignore[attr-defined]
             except Exception:  # pragma: no cover - exception path tested separately
-                logging.exception("Failed to close database connection")
+                logging.exception(_("Failed to close database connection"))
 
 
 def main(argv: list[str] | None = None) -> None:
