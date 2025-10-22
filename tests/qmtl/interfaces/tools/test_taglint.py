@@ -1,8 +1,10 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from tests.qmtl.interfaces._cli_tokens import resolve_cli_tokens
+
 from qmtl.interfaces.tools.taglint import (
     REQUIRED_KEYS,
     RECOMMENDED_KEYS,
@@ -15,12 +17,14 @@ from qmtl.interfaces.tools.taglint import (
 TAGLINT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.tools", "qmtl.interfaces.cli.taglint")
 
 
-def run(path: Path, fix: bool = False):
+def run(path: Path | None, *extra: str, fix: bool = False, env: dict[str, str] | None = None):
     args = [sys.executable, "-m", "qmtl", *TAGLINT_TOKENS]
+    args.extend(extra)
     if fix:
         args.append("--fix")
-    args.append(str(path))
-    return subprocess.run(args, capture_output=True, text=True)
+    if path is not None:
+        args.append(str(path))
+    return subprocess.run(args, capture_output=True, text=True, env=env)
 
 
 def test_taglint_valid(tmp_path):
@@ -95,3 +99,32 @@ def test_apply_fixes_adds_placeholders(tmp_path):
         assert key in new_tags
     for key in RECOMMENDED_KEYS:
         assert key not in new_tags
+
+
+def test_taglint_help_respects_language_env():
+    env = os.environ.copy()
+    env["QMTL_LANG"] = "ko"
+    res_en = run(None, "--help")
+    res_ko = run(None, "--help", env=env)
+    assert res_en.returncode == 0
+    assert res_ko.returncode == 0
+    assert "Attempt to fix issues" in res_en.stdout
+    assert "Attempt to fix issues" not in res_ko.stdout
+    assert "문제를 자동으로 수정합니다" not in res_en.stdout
+    encoded = res_ko.stdout.encode("unicode_escape").decode()
+    assert "\\xeb\\xac\\xb8\\xec\\xa0\\x9c" in encoded
+
+
+def test_taglint_errors_localized(tmp_path):
+    file = tmp_path / "bad.py"
+    file.write_text("TAGS = {}\n")
+    env = os.environ.copy()
+    env["QMTL_LANG"] = "ko"
+    res_en = run(file)
+    res_ko = run(file, env=env)
+    assert res_en.returncode != 0
+    assert res_ko.returncode != 0
+    assert "missing required key: scope" in res_en.stderr
+    assert "missing required key: scope" not in res_ko.stderr
+    encoded = res_ko.stderr.encode("unicode_escape").decode()
+    assert "\\xed\\x95\\x84\\xec\\x88\\x98" in encoded
