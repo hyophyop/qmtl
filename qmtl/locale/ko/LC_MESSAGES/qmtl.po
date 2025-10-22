@@ -194,6 +194,118 @@ msgstr "프로젝트 생성 위치: {path}"
 msgid "Project created at {path} using legacy template '{template}'"
 msgstr "레거시 템플릿 '{template}'으로 {path}에 프로젝트를 생성했습니다"
 
+# dagmanager cli
+msgid "Failed to read file '{path}': {error}"
+msgstr "파일 '{path}'을(를) 읽지 못했습니다: {error}"
+
+msgid "gRPC error: {error}"
+msgstr "gRPC 오류: {error}"
+
+msgid "GC triggered for sentinel: {sentinel}"
+msgstr "센티넬 {sentinel}에 대해 GC가 실행되었습니다"
+
+msgid "Invalid DAG JSON: {error}"
+msgstr "잘못된 DAG JSON: {error}"
+
+msgid "Failed to read snapshot '{path}': {error}"
+msgstr "스냅샷 '{path}'을(를) 읽지 못했습니다: {error}"
+
+msgid "Snapshot mismatch"
+msgstr "스냅샷 불일치"
+
+msgid "Snapshot OK"
+msgstr "스냅샷 정상"
+
+msgid "Operate DAG Manager services and utilities."
+msgstr "DAG Manager 서비스와 유틸리티를 실행합니다."
+
+msgid "Run diff"
+msgstr "diff 실행"
+
+msgid "Path to DAG JSON file"
+msgstr "DAG JSON 파일 경로"
+
+msgid "Run locally without gRPC"
+msgstr "gRPC 없이 로컬에서 실행"
+
+msgid "gRPC service target"
+msgstr "gRPC 서비스 대상"
+
+msgid "Create or verify DAG snapshot"
+msgstr "DAG 스냅샷 생성 또는 검증"
+
+msgid "Snapshot file path"
+msgstr "스냅샷 파일 경로"
+
+msgid "Write snapshot file"
+msgstr "스냅샷 파일 작성"
+
+msgid "Verify against snapshot file"
+msgstr "스냅샷 파일과 비교하여 검증"
+
+msgid "Get queue statistics"
+msgstr "큐 통계를 가져옵니다"
+
+msgid "Filter tag"
+msgstr "필터 태그"
+
+msgid "Time interval filter"
+msgstr "시간 구간 필터"
+
+msgid "Trigger GC for sentinel"
+msgstr "센티넬에 대한 GC 실행"
+
+msgid "Sentinel identifier"
+msgstr "센티넬 식별자"
+
+msgid "Redo diff for sentinel"
+msgstr "센티넬에 대해 diff 재실행"
+
+msgid "Export Neo4j schema"
+msgstr "Neo4j 스키마 내보내기"
+
+msgid "Neo4j connection URI"
+msgstr "Neo4j 연결 URI"
+
+msgid "Neo4j username"
+msgstr "Neo4j 사용자 이름"
+
+msgid "Neo4j password"
+msgstr "Neo4j 비밀번호"
+
+msgid "Output file path"
+msgstr "출력 파일 경로"
+
+msgid "Initialize Neo4j schema"
+msgstr "Neo4j 스키마 초기화"
+
+msgid "Drop Neo4j constraints/indexes created by init"
+msgstr "init가 생성한 Neo4j 제약/인덱스 삭제"
+
+msgid "Run DAG Manager gRPC/HTTP services"
+msgstr "DAG Manager gRPC/HTTP 서비스를 실행"
+
+msgid "Path to configuration file"
+msgstr "구성 파일 경로"
+
+msgid "DAG Manager configuration loaded from %s (--config)"
+msgstr "DAG Manager 구성을 %s에서 불러왔습니다 (--config)"
+
+msgid "DAG Manager configuration loaded from %s"
+msgstr "DAG Manager 구성을 %s에서 불러왔습니다"
+
+msgid "DAG Manager configuration file not provided; using built-in defaults"
+msgstr "DAG Manager 구성 파일이 제공되지 않아 기본값을 사용합니다"
+
+msgid "DAG Manager configuration file %s does not define the 'dagmanager' section."
+msgstr "DAG Manager 구성 파일 %s에 'dagmanager' 섹션이 없습니다."
+
+msgid "Expose DAG Manager metrics"
+msgstr "DAG Manager 메트릭을 노출"
+
+msgid "Port to expose metrics on"
+msgstr "메트릭을 노출할 포트"
+
 # taglint tool
 msgid "Lint TAGS dictionaries"
 msgstr "TAGS 사전을 검사합니다"
