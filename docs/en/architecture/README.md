@@ -16,7 +16,7 @@ last_modified: 2025-08-21
 
 Design documents describing core QMTL components.
 
-See also: Architecture Glossary (architecture/glossary.md) for canonical terms such as DecisionEnvelope, ActivationEnvelope, ControlBus, and EventStreamDescriptor.
+See also: Architecture Glossary (../architecture/glossary.md) for canonical terms such as DecisionEnvelope, ActivationEnvelope, ControlBus, and EventStreamDescriptor.
 
 ## 관련 문서
 - [Architecture Overview](architecture.md): High-level system design.
