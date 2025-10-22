@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
 from qmtl.foundation.config import find_config_file, load_config
+from qmtl.utils.i18n import _
 from qmtl.foundation.config_validation import (
     ValidationIssue,
     validate_config_structure,
@@ -30,19 +31,21 @@ _STATUS_LABELS = {
 def _build_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl config", add_help=True)
     parser.description = textwrap.dedent(
-        """
-        Configuration utilities.
+        _(
+            """
+            Configuration utilities.
 
-        Subcommands:
-          validate  Check connectivity and readiness for Gateway and DAG Manager.
-          generate  Scaffold configuration files from packaged templates.
-        """
+            Subcommands:
+              validate  Check connectivity and readiness for Gateway and DAG Manager.
+              generate  Scaffold configuration files from packaged templates.
+            """
+        )
     ).strip()
     parser.add_argument(
         "cmd",
         nargs="?",
         choices=["validate", "generate"],
-        help="Subcommand to run",
+        help=_("Subcommand to run"),
     )
     return parser
 
@@ -51,23 +54,23 @@ def _build_validate_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl config validate")
     parser.add_argument(
         "--config",
-        help="Path to configuration file (defaults to qmtl.yml in CWD)",
+        help=_("Path to configuration file (defaults to qmtl.yml in CWD)"),
     )
     parser.add_argument(
         "--target",
         choices=["schema", "gateway", "dagmanager", "all"],
         default="all",
-        help="Limit validation to a specific service",
+        help=_("Limit validation to a specific service"),
     )
     parser.add_argument(
         "--offline",
         action="store_true",
-        help="Skip network-dependent checks (assume services are offline)",
+        help=_("Skip network-dependent checks (assume services are offline)"),
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit validation report as JSON in addition to the table",
+        help=_("Emit validation report as JSON in addition to the table"),
     )
     return parser
 
@@ -79,17 +82,17 @@ def _build_generate_parser() -> argparse.ArgumentParser:
         "--profile",
         choices=profiles,
         default="minimal",
-        help="Configuration template profile to write",
+        help=_("Configuration template profile to write"),
     )
     parser.add_argument(
         "--output",
         default="qmtl.yml",
-        help="Destination path for the generated configuration",
+        help=_("Destination path for the generated configuration"),
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing files",
+        help=_("Overwrite existing files"),
     )
     return parser
 
@@ -109,17 +112,17 @@ def _issues_to_json(results: Mapping[str, Mapping[str, ValidationIssue]]) -> Dic
 
 def _format_checks(checks: Mapping[str, ValidationIssue]) -> Iterable[str]:
     if not checks:
-        return ["  (no checks executed)"]
+        return [_("  (no checks executed)")]
     width = max(len(name) for name in checks)
     for name, issue in checks.items():
         label = _STATUS_LABELS.get(issue.severity, issue.severity.upper())
-        yield f"  {name.ljust(width)}  {label:<5}  {issue.hint}"
+        yield _("  {name}  {label:<5}  {hint}").format(name=name.ljust(width), label=label, hint=issue.hint)
 
 
 def _render_table(results: Mapping[str, Mapping[str, ValidationIssue]]) -> str:
     lines: List[str] = []
     for target, checks in results.items():
-        lines.append(f"{target}:")
+        lines.append(_("{target}:").format(target=target))
         lines.extend(_format_checks(checks))
         lines.append("")
     return "\n".join(lines).strip()
@@ -128,16 +131,16 @@ def _render_table(results: Mapping[str, Mapping[str, ValidationIssue]]) -> str:
 async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[str, ValidationIssue]]:
     cfg_path = args.config or find_config_file()
     if not cfg_path:
-        print("[qmtl] Configuration file not found. Specify --config.", file=sys.stderr)
+        print(_("[qmtl] Configuration file not found. Specify --config."), file=sys.stderr)
         raise SystemExit(2)
 
     try:
         unified = load_config(cfg_path)
     except FileNotFoundError:
-        print(f"[qmtl] Configuration file '{cfg_path}' does not exist.", file=sys.stderr)
+        print(_("[qmtl] Configuration file '{path}' does not exist.").format(path=cfg_path), file=sys.stderr)
         raise SystemExit(2)
     except Exception as exc:  # pragma: no cover - defensive catch
-        print(f"[qmtl] Failed to load configuration: {exc}", file=sys.stderr)
+        print(_("[qmtl] Failed to load configuration: {exc}").format(exc=exc), file=sys.stderr)
         raise SystemExit(2) from exc
 
     results: Dict[str, Dict[str, ValidationIssue]] = {}
@@ -154,7 +157,7 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
     if missing:
         for section in missing:
             print(
-                f"[qmtl] Configuration file '{cfg_path}' does not define the '{section}' section.",
+                _("[qmtl] Configuration file '{path}' does not define the '{section}' section.").format(path=cfg_path, section=section),
                 file=sys.stderr,
             )
         raise SystemExit(2)
@@ -186,15 +189,15 @@ def _execute_generate(args: argparse.Namespace) -> Path:
         write_template(args.profile, output, force=args.force)
     except FileExistsError:
         print(
-            f"[qmtl] Output file '{output}' already exists. Use --force to overwrite.",
+            _("[qmtl] Output file '{path}' already exists. Use --force to overwrite.").format(path=output),
             file=sys.stderr,
         )
         raise SystemExit(2)
     except FileNotFoundError as exc:  # pragma: no cover - defensive guard
-        print(f"[qmtl] {exc}", file=sys.stderr)
+        print(_("[qmtl] {exc}").format(exc=exc), file=sys.stderr)
         raise SystemExit(2)
 
-    print(f"[qmtl] Wrote {args.profile} configuration template to {output}")
+    print(_("[qmtl] Wrote {profile} configuration template to {path}").format(profile=args.profile, path=output))
     return output
 
 

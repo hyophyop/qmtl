@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from typing import List
+from qmtl.utils.i18n import _
 
 from ..scaffold import (
     TEMPLATES,
@@ -22,60 +23,60 @@ def run(argv: List[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="qmtl project init",
-        description="Initialize new project (see docs/guides/strategy_workflow.md)",
+        description=_("Initialize new project (see docs/guides/strategy_workflow.md)"),
     )
-    parser.epilog = "More docs: docs/reference/templates.md"
+    parser.epilog = _("More docs: docs/reference/templates.md")
     parser.add_argument(
         "--path",
-        help="Project directory to create scaffolding",
+        help=_("Project directory to create scaffolding"),
     )
 
     # Preset/layer options (new system)
     parser.add_argument(
         "--preset",
-        help="Preset configuration to use (see docs/architecture/layered_template_system.md)",
+        help=_("Preset configuration to use (see docs/architecture/layered_template_system.md)"),
     )
     parser.add_argument(
         "--layers",
-        help="Comma-separated list of layers to include (e.g., data,signal)",
+        help=_("Comma-separated list of layers to include (e.g., data,signal)"),
     )
     parser.add_argument(
         "--list-presets",
         action="store_true",
-        help="List available presets and exit",
+        help=_("List available presets and exit"),
     )
     parser.add_argument(
         "--list-layers",
         action="store_true",
-        help="List available layers and exit",
+        help=_("List available layers and exit"),
     )
 
     # Legacy options (deprecated)
     parser.add_argument(
         "--strategy",
-        help="(Deprecated: use --preset) Strategy template to use",
+        help=_("(Deprecated: use --preset) Strategy template to use"),
     )
     parser.add_argument(
         "--list-templates",
         action="store_true",
-        help="(Deprecated: use --list-presets) List available templates and exit",
+        help=_("(Deprecated: use --list-presets) List available templates and exit"),
     )
 
     # Additional options
     parser.add_argument(
         "--with-sample-data",
         action="store_true",
-        help="Include sample OHLCV CSV and notebook",
+        help=_("Include sample OHLCV CSV and notebook"),
     )
-    parser.add_argument("--with-docs", action="store_true", help="Include docs/ directory template")
-    parser.add_argument("--with-scripts", action="store_true", help="Include scripts/ directory template")
-    parser.add_argument("--with-pyproject", action="store_true", help="Include pyproject.toml template")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing directory")
+    parser.add_argument("--with-docs", action="store_true", help=_("Include docs/ directory template"))
+    parser.add_argument("--with-scripts", action="store_true", help=_("Include scripts/ directory template"))
+    parser.add_argument("--with-pyproject", action="store_true", help=_("Include pyproject.toml template"))
+    parser.add_argument("--force", action="store_true", help=_("Overwrite existing directory"))
     parser.add_argument(
         "--config-profile",
         choices=sorted(available_profiles()),
         default="minimal",
-        help="Select configuration template for qmtl.yml",
+        help=_("Select configuration template for qmtl.yml"),
     )
 
     args = parser.parse_args(argv)
@@ -88,25 +89,22 @@ def run(argv: List[str] | None = None) -> None:
     # Handle list commands
     if args.list_presets or args.list_templates:
         if args.list_templates:
-            print(
-                "Warning: --list-templates is deprecated, use --list-presets instead",
-                file=sys.stderr,
-            )
-            print("Available templates:")
+            print(_("Warning: --list-templates is deprecated, use --list-presets instead"), file=sys.stderr)
+            print(_("Available templates:"))
             for template_name in sorted(TEMPLATES):
                 print(template_name)
         if args.list_presets:
-            print("Available presets:")
+            print(_("Available presets:"))
         for preset_name in preset_loader.list_presets():
             preset = preset_loader.get_preset(preset_name)
             if preset:
-                print(f"  {preset_name:15} - {preset.description}")
+                print(_("  {name:15} - {desc}").format(name=preset_name, desc=preset.description))
         return
 
     if args.list_layers:
-        print("Available layers:")
+        print(_("Available layers:"))
         for layer in Layer:
-            print(f"  {layer.value:15} - {layer.name}")
+            print(_("  {value:15} - {name}").format(value=layer.value, name=layer.name))
         return
 
     # Check that --path is provided for actual project creation
@@ -117,10 +115,7 @@ def run(argv: List[str] | None = None) -> None:
     use_legacy = False
 
     if args.strategy:
-        print(
-            "Warning: --strategy is deprecated, use --preset instead",
-            file=sys.stderr,
-        )
+        print(_("Warning: --strategy is deprecated, use --preset instead"), file=sys.stderr)
         use_legacy = True
 
     # Use legacy system when no layer/preset selection is provided
@@ -158,19 +153,19 @@ def _run_legacy(args) -> None:
         with_pyproject=args.with_pyproject,
         config_profile=args.config_profile,
     )
-    print(f"Project created at {args.path} using legacy template '{args.strategy or 'general'}'")
+    print(_("Project created at {path} using legacy template '{template}'").format(path=args.path, template=(args.strategy or 'general')))
 
 
 def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer) -> None:
     """Run using preset configuration."""
     preset = preset_loader.get_preset(args.preset)
     if not preset:
-        print(f"Error: Unknown preset '{args.preset}'")
-        print("\nAvailable presets:")
+        print(_("Error: Unknown preset '{preset}'").format(preset=args.preset))
+        print(_("\nAvailable presets:"))
         for name in preset_loader.list_presets():
             p = preset_loader.get_preset(name)
             if p:
-                print(f"  {name:15} - {p.description}")
+                print(_("  {name:15} - {desc}").format(name=name, desc=p.description))
         raise SystemExit(1)
 
     # Compose project from preset
@@ -183,13 +178,13 @@ def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer)
     )
 
     if not result.valid:
-        print(f"Error creating project:")
+        print(_("Error creating project:"))
         for error in result.errors:
-            print(f"  - {error}")
+            print(_("  - {error}").format(error=error))
         raise SystemExit(1)
 
-    print(f"Project created at {args.path} using preset '{preset.name}'")
-    print(f"Layers included: {', '.join(layer.value for layer in preset.layers)}")
+    print(_("Project created at {path} using preset '{preset}'").format(path=args.path, preset=preset.name))
+    print(_("Layers included: {layers}").format(layers=', '.join(layer.value for layer in preset.layers)))
     _apply_optional_components(Path(args.path), args)
 
 
@@ -200,10 +195,10 @@ def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -
     try:
         layers = [Layer(name) for name in layer_names]
     except ValueError as e:
-        print(f"Error: Invalid layer name - {e}")
-        print("\nAvailable layers:")
+        print(_("Error: Invalid layer name - {error}").format(error=e))
+        print(_("\nAvailable layers:"))
         for layer in Layer:
-            print(f"  {layer.value}")
+            print(_("  {value}").format(value=layer.value))
         raise SystemExit(1)
 
     # Get minimal layer set with dependencies
@@ -218,11 +213,11 @@ def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -
     )
 
     if not result.valid:
-        print("Error creating project:")
+        print(_("Error creating project:"))
         for error in result.errors:
-            print(f"  - {error}")
+            print(_("  - {error}").format(error=error))
         raise SystemExit(1)
 
-    print(f"Project created at {args.path}")
-    print(f"Layers included: {', '.join(layer.value for layer in layers)}")
+    print(_("Project created at {path}").format(path=args.path))
+    print(_("Layers included: {layers}").format(layers=', '.join(layer.value for layer in layers)))
     _apply_optional_components(Path(args.path), args)

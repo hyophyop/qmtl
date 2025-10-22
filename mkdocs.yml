@@ -22,6 +22,7 @@ nav:
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Docs Internationalization: guides/docs_internationalization.md
       - Seamless Data Provider Setup: guides/seamless_data_provider_setup.md
       - Seamless Migration to v2: guides/seamless_migration_v2.md
       - CCXT Seamless Data Provider: guides/ccxt_seamless_usage.md
@@ -125,6 +126,7 @@ plugins:
             Maintenance Schedule: 유지보수 일정
             Architecture: 아키텍처
             Guides: 가이드
+            Docs Internationalization: 문서 국제화
             "IO & Integrations": "IO & 통합"
             Operations: 운영
             Design: 설계

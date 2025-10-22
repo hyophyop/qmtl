@@ -4,12 +4,42 @@ import re
 import sys
 from pathlib import Path
 from typing import Iterable
+import yaml
 
 
 LINK_RE = re.compile(r"!??\[[^\]]*\]\(([^)]+)\)")
 
 
-def _iter_markdown_files(docs_dir: Path) -> Iterable[Path]:
+def _load_i18n_locales(repo_root: Path) -> tuple[set[str], str]:
+    """Load locales from mkdocs.yml i18n config.
+
+    Returns a tuple of (locales, default_locale). Falls back to ({}, 'en') on error.
+    """
+    mkdocs_path = repo_root / "mkdocs.yml"
+    try:
+        data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8"))
+        plugins = data.get("plugins", []) or []
+        i18n_cfg = None
+        for p in plugins:
+            if isinstance(p, dict) and "i18n" in p:
+                i18n_cfg = p.get("i18n")
+                break
+        locales: set[str] = set()
+        default_locale = "en"
+        if isinstance(i18n_cfg, dict):
+            for ent in i18n_cfg.get("languages", []) or []:
+                if isinstance(ent, dict):
+                    loc = ent.get("locale")
+                    if loc:
+                        locales.add(str(loc))
+                        if ent.get("default") is True:
+                            default_locale = str(loc)
+        return locales, default_locale
+    except Exception:
+        return set(), "en"
+
+
+def _iter_markdown_files(repo_root: Path, docs_dir: Path) -> Iterable[Path]:
     """Yield Markdown files to validate.
 
     We intentionally skip locale-specific trees (e.g. docs/ko) and archived
@@ -18,11 +48,12 @@ def _iter_markdown_files(docs_dir: Path) -> Iterable[Path]:
     build (mkdocs with i18n) handles these safely, but our static checker
     should focus on the canonical docs that gate CI.
     """
+    locales, default_locale = _load_i18n_locales(repo_root)
     for p in docs_dir.rglob("*.md"):
         rel = p.relative_to(docs_dir)
         parts = rel.parts
-        # Skip locale trees and archived docs
-        if parts and parts[0] in {"ko"}:
+        # Skip non-default locale trees and archived docs
+        if parts and parts[0] in locales and parts[0] != default_locale:
             continue
         if "archive" in parts:
             continue
@@ -83,7 +114,7 @@ def _validate_tests_paths(md_file: Path, text: str) -> list[str]:
 
 def check_docs_links(repo_root: Path, docs_dir: Path) -> list[str]:
     errors: list[str] = []
-    for md in _iter_markdown_files(docs_dir):
+    for md in _iter_markdown_files(repo_root, docs_dir):
         text = md.read_text(encoding="utf-8", errors="ignore")
 
         # Markdown link targets

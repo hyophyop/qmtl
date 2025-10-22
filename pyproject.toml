@@ -44,6 +44,7 @@ dev = [
     "mkdocs-breadcrumbs-plugin",
     "mkdocs-static-i18n",
     "websocket-client",
+    "Babel>=2.13",
 ]
 
 ray = ["ray"]
@@ -69,6 +70,7 @@ dev = [
     "mkdocs-breadcrumbs-plugin",
     "mkdocs-static-i18n",
     "websocket-client",
+    "Babel>=2.13",
 ]
 
 [project.scripts]
@@ -102,4 +104,8 @@ include = ["qmtl*"]
 ]
 "qmtl.foundation.schema" = [
   "schemas/*.json",
+]
+"qmtl" = [
+  "locale/*/LC_MESSAGES/*.mo",
+  "locale/*/LC_MESSAGES/*.po",
 ]

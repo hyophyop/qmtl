@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import List
+from qmtl.utils.i18n import _
 
 from ..layers import LayerComposer
 
@@ -14,12 +15,12 @@ def run(argv: List[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="qmtl project validate",
-        description="Validate a project created with layered templates",
+        description=_("Validate a project created with layered templates"),
     )
     parser.add_argument(
         "--path",
         default=".",
-        help="Project directory to validate (default: current directory)",
+        help=_("Project directory to validate (default: current directory)"),
     )
     args = parser.parse_args(argv)
 
@@ -27,14 +28,14 @@ def run(argv: List[str] | None = None) -> None:
     result = composer.validate_project(Path(args.path))
 
     if result.valid:
-        print(f"Project at {args.path} is valid.")
+        print(_("Project at {path} is valid.").format(path=args.path))
         return
 
-    print(f"Validation failed for project at {args.path}:")
+    print(_("Validation failed for project at {path}:").format(path=args.path))
     for error in result.errors:
-        print(f"  - {error}")
+        print(_("  - {error}").format(error=error))
     if result.warnings:
-        print("Warnings:")
+        print(_("Warnings:"))
         for warning in result.warnings:
-            print(f"  - {warning}")
+            print(_("  - {warning}").format(warning=warning))
     raise SystemExit(1)
