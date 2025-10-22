@@ -4,6 +4,7 @@ import argparse
 import textwrap
 from importlib import import_module
 from typing import List
+from qmtl.utils.i18n import _
 
 
 SERVICE_DISPATCH = {
@@ -15,19 +16,21 @@ SERVICE_DISPATCH = {
 def _build_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl service", add_help=True)
     parser.description = textwrap.dedent(
-        """
-        Manage long-running runtime services.
+        _(
+            """
+            Manage long-running runtime services.
 
-        Available services:
-          gateway     Run the Gateway HTTP API.
-          dagmanager  Operate DAG Manager utilities and daemons.
-        """
+            Available services:
+              gateway     Run the Gateway HTTP API.
+              dagmanager  Operate DAG Manager utilities and daemons.
+            """
+        )
     ).strip()
     parser.add_argument(
         "cmd",
         nargs="?",
         choices=sorted(SERVICE_DISPATCH.keys()),
-        help="Service to manage",
+        help=_("Service to manage"),
     )
     return parser
 

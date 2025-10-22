@@ -1,0 +1,162 @@
+# Korean translations for qmtl.
+# Copyright (C)
+# This file is distributed under the same license as the qmtl project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: qmtl\n"
+"POT-Creation-Date: 2025-10-22 00:00+0000\n"
+"PO-Revision-Date: 2025-10-22 00:00+0000\n"
+"Last-Translator: qmtl\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# CLI top-level
+msgid "Subcommand to run"
+msgstr "실행할 하위 명령"
+
+msgid "\nerror: unknown command '{cmd}'"
+msgstr "\n오류: 알 수 없는 명령 '{cmd}'"
+
+msgid """
+            Subcommands:
+              config    Validate gateway and DAG Manager configuration files.
+              service   Manage long-running services such as Gateway and DAG Manager.
+              tools     Developer tooling including SDK runners and linters.
+              project   Project scaffolding and template helpers.
+
+            Global options:
+              --lang {en,ko}  Override CLI language (default: auto)
+            """
+msgstr """
+            하위 명령:
+              config    Gateway 및 DAG Manager 설정 파일을 검증합니다.
+              service   Gateway/DAG Manager 등 장기 실행 서비스를 관리합니다.
+              tools     SDK 실행기와 린터 등 개발자 도구입니다.
+              project   프로젝트 스캐폴딩과 템플릿 도우미입니다.
+
+            전역 옵션:
+              --lang {en,ko}  CLI 언어를 지정합니다 (기본: 자동)
+            """
+
+# project.py
+msgid "Project command to run"
+msgstr "프로젝트 명령 선택"
+
+msgid """
+            Project scaffolding utilities.
+
+            Available commands:
+              init         Create a new strategy project from templates or presets.
+              add-layer    Add a layer to an existing project.
+              list-layers  List available layers and metadata.
+              validate     Validate an existing layered project.
+            """
+msgstr """
+            프로젝트 스캐폴딩 유틸리티.
+
+            사용 가능한 명령:
+              init         템플릿 또는 프리셋으로 새 프로젝트를 생성합니다.
+              add-layer    기존 프로젝트에 레이어를 추가합니다.
+              list-layers  사용 가능한 레이어와 메타데이터를 표시합니다.
+              validate     기존 레이어드 프로젝트를 검증합니다.
+            """
+
+# init.py options
+msgid "Initialize new project (see docs/guides/strategy_workflow.md)"
+msgstr "새 프로젝트를 초기화합니다 (docs/guides/strategy_workflow.md 참조)"
+
+msgid "More docs: docs/reference/templates.md"
+msgstr "추가 문서: docs/reference/templates.md"
+
+msgid "Project directory to create scaffolding"
+msgstr "스캐폴딩을 생성할 프로젝트 디렉터리"
+
+msgid "Preset configuration to use (see docs/architecture/layered_template_system.md)"
+msgstr "사용할 프리셋 구성 (docs/architecture/layered_template_system.md 참조)"
+
+msgid "Comma-separated list of layers to include (e.g., data,signal)"
+msgstr "포함할 레이어의 쉼표-구분 목록 (예: data,signal)"
+
+msgid "List available presets and exit"
+msgstr "사용 가능한 프리셋을 표시하고 종료"
+
+msgid "List available layers and exit"
+msgstr "사용 가능한 레이어를 표시하고 종료"
+
+msgid "(Deprecated: use --preset) Strategy template to use"
+msgstr "(폐기 예정: --preset 사용) 사용할 전략 템플릿"
+
+msgid "(Deprecated: use --list-presets) List available templates and exit"
+msgstr "(폐기 예정: --list-presets 사용) 템플릿 목록을 표시하고 종료"
+
+msgid "Include sample OHLCV CSV and notebook"
+msgstr "샘플 OHLCV CSV 및 노트북 포함"
+
+msgid "Include docs/ directory template"
+msgstr "docs/ 디렉터리 템플릿 포함"
+
+msgid "Include scripts/ directory template"
+msgstr "scripts/ 디렉터리 템플릿 포함"
+
+msgid "Include pyproject.toml template"
+msgstr "pyproject.toml 템플릿 포함"
+
+msgid "Overwrite existing directory"
+msgstr "기존 디렉터리 덮어쓰기"
+
+msgid "Select configuration template for qmtl.yml"
+msgstr "qmtl.yml에 사용할 구성 템플릿 선택"
+
+msgid "Warning: --list-templates is deprecated, use --list-presets instead"
+msgstr "경고: --list-templates는 폐기 예정입니다. 대신 --list-presets를 사용하세요."
+
+msgid "Available templates:"
+msgstr "사용 가능한 템플릿:"
+
+msgid "Available presets:"
+msgstr "사용 가능한 프리셋:"
+
+msgid "  {name:15} - {desc}"
+msgstr "  {name:15} - {desc}"
+
+msgid "Available layers:"
+msgstr "사용 가능한 레이어:"
+
+msgid "  {value:15} - {name}"
+msgstr "  {value:15} - {name}"
+
+msgid "Warning: --strategy is deprecated, use --preset instead"
+msgstr "경고: --strategy는 폐기 예정입니다. 대신 --preset를 사용하세요."
+
+msgid "Error: Unknown preset '{preset}'"
+msgstr "오류: 알 수 없는 프리셋 '{preset}'"
+
+msgid "Error creating project:"
+msgstr "프로젝트 생성 오류:"
+
+msgid "  - {error}"
+msgstr "  - {error}"
+
+msgid "Project created at {path} using preset '{preset}'"
+msgstr "'{preset}' 프리셋으로 {path}에 프로젝트를 생성했습니다"
+
+msgid "Layers included: {layers}"
+msgstr "포함된 레이어: {layers}"
+
+msgid "Error: Invalid layer name - {error}"
+msgstr "오류: 잘못된 레이어 이름 - {error}"
+
+msgid "  {value}"
+msgstr "  {value}"
+
+msgid "Project created at {path}"
+msgstr "프로젝트 생성 위치: {path}"
+
+msgid "Project created at {path} using legacy template '{template}'"
+msgstr "레거시 템플릿 '{template}'으로 {path}에 프로젝트를 생성했습니다"
+
