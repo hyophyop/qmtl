@@ -10,8 +10,22 @@ LINK_RE = re.compile(r"!??\[[^\]]*\]\(([^)]+)\)")
 
 
 def _iter_markdown_files(docs_dir: Path) -> Iterable[Path]:
-    for p in docs_dir.rglob("*.md"): 
-        # Skip archived docs if any special handling is needed later
+    """Yield Markdown files to validate.
+
+    We intentionally skip locale-specific trees (e.g. docs/ko) and archived
+    content, as these may contain historical links or translation placeholders
+    that do not map 1:1 to files in the current repo state. The public site
+    build (mkdocs with i18n) handles these safely, but our static checker
+    should focus on the canonical docs that gate CI.
+    """
+    for p in docs_dir.rglob("*.md"):
+        rel = p.relative_to(docs_dir)
+        parts = rel.parts
+        # Skip locale trees and archived docs
+        if parts and parts[0] in {"ko"}:
+            continue
+        if "archive" in parts:
+            continue
         yield p
 
 
@@ -100,4 +114,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
