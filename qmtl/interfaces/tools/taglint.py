@@ -7,8 +7,11 @@ import argparse
 import ast
 import json
 import os
+import sys
 from collections import OrderedDict
 from typing import Any, Dict, List, Tuple
+
+from qmtl.utils.i18n import _
 
 REQUIRED_KEYS = ["scope", "family", "interval", "asset"]
 RECOMMENDED_KEYS = ["window", "price", "side", "target_horizon", "label"]
@@ -68,7 +71,7 @@ def validate_tags(tags: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     for key, val in tags.items():
         key_l = str(key).lower()
         if isinstance(val, list):
-            errors.append(f"{key}: lists are not allowed")
+            errors.append(_("{key}: lists are not allowed").format(key=key))
             continue
         if isinstance(val, str):
             val_l = val.lower()
@@ -77,18 +80,24 @@ def validate_tags(tags: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         if key_l == "interval":
             norm, ok = normalize_interval(val_l)
             if not ok:
-                errors.append(f"interval value '{val}' is invalid")
+                errors.append(_("interval value '{value}' is invalid").format(value=val))
             elif norm != val_l:
-                errors.append(f"interval '{val}' not normalized (expected {norm})")
+                errors.append(
+                    _("interval '{value}' not normalized (expected {expected})").format(
+                        value=val, expected=norm
+                    )
+                )
                 val_l = norm
         if key_l == "scope" and isinstance(val_l, str) and val_l not in VALID_SCOPES:
-            errors.append(f"scope '{val_l}' is invalid")
+            errors.append(_("scope '{value}' is invalid").format(value=val_l))
         fixed_tags[key_l] = val_l
         if key != key_l or (isinstance(val, str) and val != val_l):
-            errors.append(f"{key}: keys and string values must be lowercase")
+            errors.append(
+                _("{key}: keys and string values must be lowercase").format(key=key)
+            )
     for req in REQUIRED_KEYS:
         if req not in fixed_tags:
-            errors.append(f"missing required key: {req}")
+            errors.append(_("missing required key: {key}").format(key=req))
     return fixed_tags, errors
 
 
@@ -134,7 +143,7 @@ def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
         if fix:
             apply_fixes(path, {}, tree, None)
             return True, ""
-        return False, "missing TAGS dict"
+        return False, _("missing TAGS dict")
 
     fixed_tags, errors = validate_tags(tags)
     if fix:
@@ -155,9 +164,11 @@ def iter_py_files(path: str):
 
 
 def main(argv: list[str] | None = None):
-    parser = argparse.ArgumentParser(description="Lint TAGS dictionaries")
-    parser.add_argument("files", nargs="+", help="Files or directories to lint")
-    parser.add_argument("--fix", action="store_true", help="Attempt to fix issues")
+    argparse._ = _
+    parser = argparse.ArgumentParser(description=_("Lint TAGS dictionaries"))
+    parser._ = _
+    parser.add_argument("files", nargs="+", help=_("Files or directories to lint"))
+    parser.add_argument("--fix", action="store_true", help=_("Attempt to fix issues"))
     args = parser.parse_args(argv)
 
     ok = True
@@ -166,7 +177,14 @@ def main(argv: list[str] | None = None):
             valid, msg = lint_file(file, fix=args.fix)
             if not valid:
                 ok = False
-                print(f"{file}: {msg}")
+                if msg:
+                    for line in msg.splitlines():
+                        print(
+                            _("{path}: {message}").format(path=file, message=line),
+                            file=sys.stderr,
+                        )
+                else:
+                    print(_("{path}: error").format(path=file), file=sys.stderr)
     raise SystemExit(0 if ok else 1)
 
 

@@ -160,3 +160,55 @@ msgstr "프로젝트 생성 위치: {path}"
 msgid "Project created at {path} using legacy template '{template}'"
 msgstr "레거시 템플릿 '{template}'으로 {path}에 프로젝트를 생성했습니다"
 
+# taglint tool
+msgid "Lint TAGS dictionaries"
+msgstr "TAGS 사전을 검사합니다"
+
+msgid "Files or directories to lint"
+msgstr "검사할 파일 또는 디렉터리"
+
+msgid "Attempt to fix issues"
+msgstr "문제를 자동으로 수정합니다"
+
+msgid "{key}: lists are not allowed"
+msgstr "{key}: 목록은 허용되지 않습니다"
+
+msgid "interval value '{value}' is invalid"
+msgstr "interval 값 '{value}'이(가) 잘못되었습니다"
+
+msgid "interval '{value}' not normalized (expected {expected})"
+msgstr "interval '{value}'이(가) 정규화되지 않았습니다 (기대값 {expected})"
+
+msgid "scope '{value}' is invalid"
+msgstr "scope '{value}'이(가) 잘못되었습니다"
+
+msgid "{key}: keys and string values must be lowercase"
+msgstr "{key}: 키와 문자열 값은 소문자여야 합니다"
+
+msgid "missing required key: {key}"
+msgstr "필수 키 누락: {key}"
+
+msgid "missing TAGS dict"
+msgstr "TAGS 사전이 없습니다"
+
+msgid "{path}: {message}"
+msgstr "{path}: {message}"
+
+msgid "{path}: error"
+msgstr "{path}: 오류"
+
+msgid "show this help message and exit"
+msgstr "이 도움말을 표시하고 종료합니다"
+
+msgid "usage: "
+msgstr "사용법: "
+
+msgid "positional arguments:"
+msgstr "위치 인수:"
+
+msgid "options:"
+msgstr "옵션:"
+
+msgid "optional arguments:"
+msgstr "선택적 인수:"
+
