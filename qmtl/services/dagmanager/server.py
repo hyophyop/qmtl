@@ -2,8 +2,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sys
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from qmtl.foundation.common import AsyncCircuitBreaker
 
@@ -14,6 +15,7 @@ from .config import DagManagerConfig
 from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
+from qmtl.utils.i18n import _, set_language
 
 
 def _log_config_source(
@@ -22,13 +24,17 @@ def _log_config_source(
     cli_override: str | None,
 ) -> None:
     if cli_override:
-        logging.info("DAG Manager configuration loaded from %s (--config)", cli_override)
+        logging.info(
+            _("DAG Manager configuration loaded from %s (--config)"), cli_override
+        )
         return
 
     if cfg_path:
-        logging.info("DAG Manager configuration loaded from %s", cfg_path)
+        logging.info(_("DAG Manager configuration loaded from %s"), cfg_path)
     else:
-        logging.info("DAG Manager configuration file not provided; using built-in defaults")
+        logging.info(
+            _("DAG Manager configuration file not provided; using built-in defaults")
+        )
 
 
 from .api import create_app
@@ -145,13 +151,45 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
         await bus.stop()
 
 
+def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
+    rest: list[str] = []
+    lang: str | None = None
+
+    i = 0
+    tokens = list(argv)
+    while i < len(tokens):
+        token = tokens[i]
+        if token.startswith("--lang="):
+            lang = token.split("=", 1)[1]
+            i += 1
+            continue
+        if token in {"--lang", "-L"}:
+            if i + 1 < len(tokens):
+                lang = tokens[i + 1]
+                i += 2
+                continue
+            i += 1
+            continue
+        rest.append(token)
+        i += 1
+    return rest, lang
+
+
 def main(argv: list[str] | None = None) -> None:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    original_is_none = argv is None
+    raw_argv, lang = _extract_lang(raw_argv)
+    if lang is not None:
+        set_language(lang)
+    elif original_is_none:
+        set_language(None)
+
     parser = argparse.ArgumentParser(
         prog="qmtl service dagmanager server",
-        description="Run DAG Manager gRPC and HTTP servers",
+        description=_("Run DAG Manager gRPC and HTTP servers"),
     )
-    parser.add_argument("--config", help="Path to configuration file")
-    args = parser.parse_args(argv)
+    parser.add_argument("--config", help=_("Path to configuration file"))
+    args = parser.parse_args(raw_argv)
 
     cfg_path = args.config or find_config_file()
     _log_config_source(cfg_path, cli_override=args.config)
@@ -163,7 +201,9 @@ def main(argv: list[str] | None = None) -> None:
         unified = load_config(cfg_path)
         if "dagmanager" not in unified.present_sections:
             logging.error(
-                "DAG Manager configuration file %s does not define the 'dagmanager' section.",
+                _(
+                    "DAG Manager configuration file %s does not define the 'dagmanager' section."
+                ),
                 cfg_path,
             )
             raise SystemExit(2)

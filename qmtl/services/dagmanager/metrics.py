@@ -2,11 +2,12 @@ from __future__ import annotations
 
 """Prometheus metrics for DAG Manager."""
 
-from collections import deque
-from typing import Deque, List
-import time
-import threading
 import argparse
+import sys
+import threading
+import time
+from collections import deque
+from typing import Deque, Sequence
 
 from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
 from qmtl.foundation.common.metrics_shared import (
@@ -15,6 +16,7 @@ from qmtl.foundation.common.metrics_shared import (
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
     get_cross_context_cache_hit_counter,
 )
+from qmtl.utils.i18n import _, set_language
 
 # Metrics defined in documentation
 # 95th percentile diff duration in milliseconds
@@ -201,15 +203,47 @@ def _run_forever(stop_event: threading.Event | None = None) -> None:
         pass
 
 
-def main(argv: List[str] | None = None) -> None:
+def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
+    rest: list[str] = []
+    lang: str | None = None
+
+    i = 0
+    tokens = list(argv)
+    while i < len(tokens):
+        token = tokens[i]
+        if token.startswith("--lang="):
+            lang = token.split("=", 1)[1]
+            i += 1
+            continue
+        if token in {"--lang", "-L"}:
+            if i + 1 < len(tokens):
+                lang = tokens[i + 1]
+                i += 2
+                continue
+            i += 1
+            continue
+        rest.append(token)
+        i += 1
+    return rest, lang
+
+
+def main(argv: list[str] | None = None) -> None:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    original_is_none = argv is None
+    raw_argv, lang = _extract_lang(raw_argv)
+    if lang is not None:
+        set_language(lang)
+    elif original_is_none:
+        set_language(None)
+
     parser = argparse.ArgumentParser(
         prog="qmtl service dagmanager metrics",
-        description="Expose DAG Manager metrics",
+        description=_("Expose DAG Manager metrics"),
     )
     parser.add_argument(
-        "--port", type=int, default=8000, help="Port to expose metrics on"
+        "--port", type=int, default=8000, help=_("Port to expose metrics on")
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_argv)
     start_metrics_server(args.port)
     _run_forever()
 

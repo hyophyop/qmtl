@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import hashlib
+import json
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, Sequence
 
 import grpc
-import sys
 
 from .diff_service import (
     DiffRequest,
@@ -24,6 +24,7 @@ from .neo4j_export import export_schema, connect
 from .neo4j_init import init_schema, rollback as neo4j_rollback
 from ..gateway.dagmanager_client import DagManagerClient
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.utils.i18n import _, set_language
 
 
 class _MemRepo(NodeRepository):
@@ -103,7 +104,10 @@ def _read_file(path: str) -> str:
     try:
         return Path(path).read_text()
     except (OSError, UnicodeDecodeError) as e:
-        print(f"Failed to read file '{path}': {e}", file=sys.stderr)
+        print(
+            _("Failed to read file '{path}': {error}").format(path=path, error=e),
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 
 
@@ -111,7 +115,7 @@ async def _grpc_call(coro):
     try:
         return await coro
     except grpc.RpcError as e:
-        print(f"gRPC error: {e}", file=sys.stderr)
+        print(_("gRPC error: {error}").format(error=e), file=sys.stderr)
         raise SystemExit(1)
 
 
@@ -162,7 +166,7 @@ async def _cmd_gc(args: argparse.Namespace) -> None:
     try:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
         await _grpc_call(stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id=args.sentinel)))
-        print(f"GC triggered for sentinel: {args.sentinel}")
+        print(_("GC triggered for sentinel: {sentinel}").format(sentinel=args.sentinel))
     finally:
         await channel.close()
 
@@ -192,10 +196,36 @@ def _dag_hash(dag_json: str) -> str:
     try:
         data = json.loads(dag_json)
     except json.JSONDecodeError as e:
-        print(f"Invalid DAG JSON: {e}", file=sys.stderr)
+        print(_("Invalid DAG JSON: {error}").format(error=e), file=sys.stderr)
         raise SystemExit(1)
     canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
+    """Return remaining argv and detected --lang/-L value."""
+
+    rest: list[str] = []
+    lang: str | None = None
+
+    i = 0
+    tokens = list(argv)
+    while i < len(tokens):
+        token = tokens[i]
+        if token.startswith("--lang="):
+            lang = token.split("=", 1)[1]
+            i += 1
+            continue
+        if token in {"--lang", "-L"}:
+            if i + 1 < len(tokens):
+                lang = tokens[i + 1]
+                i += 2
+                continue
+            i += 1
+            continue
+        rest.append(token)
+        i += 1
+    return rest, lang
 
 
 _LEGACY_TARGET_COMMANDS = {"diff", "queue-stats", "gc", "redo-diff"}
@@ -256,12 +286,17 @@ def _cmd_snapshot(args: argparse.Namespace) -> None:
         try:
             existing = json.loads(snap_path.read_text())
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
-            print(f"Failed to read snapshot '{snap_path}': {e}", file=sys.stderr)
+            print(
+                _("Failed to read snapshot '{path}': {error}").format(
+                    path=snap_path, error=e
+                ),
+                file=sys.stderr,
+            )
             raise SystemExit(1)
         if existing.get("dag_hash") != digest:
-            print("Snapshot mismatch", file=sys.stderr)
+            print(_("Snapshot mismatch"), file=sys.stderr)
             raise SystemExit(1)
-        print("Snapshot OK")
+        print(_("Snapshot OK"))
         return
     print(digest)
 
@@ -284,58 +319,115 @@ def _cmd_neo4j_init(args: argparse.Namespace) -> None:
 
 
 async def _main(argv: list[str] | None = None) -> None:
-    normalized_argv = _normalize_argv(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    original_is_none = argv is None
+    raw_argv, lang = _extract_lang(raw_argv)
+    if lang is not None:
+        set_language(lang)
+    elif original_is_none:
+        set_language(None)
 
-    parser = argparse.ArgumentParser(prog="qmtl service dagmanager")
+    normalized_argv = _normalize_argv(raw_argv)
+
+    parser = argparse.ArgumentParser(
+        prog="qmtl service dagmanager",
+        description=_("Operate DAG Manager services and utilities."),
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_diff = sub.add_parser("diff", help="Run diff")
-    p_diff.add_argument("--file", required=True)
-    p_diff.add_argument("--dry-run", action="store_true")
-    p_diff.add_argument("--target", help="gRPC service target", default="localhost:50051")
+    p_diff = sub.add_parser("diff", help=_("Run diff"))
+    p_diff.add_argument("--file", required=True, help=_("Path to DAG JSON file"))
+    p_diff.add_argument("--dry-run", action="store_true", help=_("Run locally without gRPC"))
+    p_diff.add_argument(
+        "--target",
+        help=_("gRPC service target"),
+        default="localhost:50051",
+    )
 
-    p_snap = sub.add_parser("snapshot", help="Create or verify DAG snapshot")
-    p_snap.add_argument("--file", required=True)
-    p_snap.add_argument("--snapshot", default="dag.snapshot.json")
+    p_snap = sub.add_parser("snapshot", help=_("Create or verify DAG snapshot"))
+    p_snap.add_argument("--file", required=True, help=_("Path to DAG JSON file"))
+    p_snap.add_argument(
+        "--snapshot",
+        default="dag.snapshot.json",
+        help=_("Snapshot file path"),
+    )
     g = p_snap.add_mutually_exclusive_group()
-    g.add_argument("--freeze", action="store_true", help="Write snapshot file")
-    g.add_argument("--verify", action="store_true", help="Verify against snapshot file")
+    g.add_argument("--freeze", action="store_true", help=_("Write snapshot file"))
+    g.add_argument(
+        "--verify", action="store_true", help=_("Verify against snapshot file")
+    )
 
-    p_stats = sub.add_parser("queue-stats", help="Get queue statistics")
-    p_stats.add_argument("--tag", default="")
-    p_stats.add_argument("--interval", default="1h")
-    p_stats.add_argument("--target", help="gRPC service target", default="localhost:50051")
+    p_stats = sub.add_parser("queue-stats", help=_("Get queue statistics"))
+    p_stats.add_argument("--tag", default="", help=_("Filter tag"))
+    p_stats.add_argument("--interval", default="1h", help=_("Time interval filter"))
+    p_stats.add_argument(
+        "--target",
+        help=_("gRPC service target"),
+        default="localhost:50051",
+    )
 
-    p_gc = sub.add_parser("gc", help="Trigger GC for sentinel")
-    p_gc.add_argument("--sentinel", required=True)
-    p_gc.add_argument("--target", help="gRPC service target", default="localhost:50051")
+    p_gc = sub.add_parser("gc", help=_("Trigger GC for sentinel"))
+    p_gc.add_argument("--sentinel", required=True, help=_("Sentinel identifier"))
+    p_gc.add_argument(
+        "--target",
+        help=_("gRPC service target"),
+        default="localhost:50051",
+    )
 
-    p_rdiff = sub.add_parser("redo-diff", help="Redo diff for sentinel")
-    p_rdiff.add_argument("--sentinel", required=True)
-    p_rdiff.add_argument("--file", required=True)
-    p_rdiff.add_argument("--target", help="gRPC service target", default="localhost:50051")
+    p_rdiff = sub.add_parser("redo-diff", help=_("Redo diff for sentinel"))
+    p_rdiff.add_argument(
+        "--sentinel", required=True, help=_("Sentinel identifier")
+    )
+    p_rdiff.add_argument("--file", required=True, help=_("Path to DAG JSON file"))
+    p_rdiff.add_argument(
+        "--target",
+        help=_("gRPC service target"),
+        default="localhost:50051",
+    )
 
-    p_exp = sub.add_parser("export-schema", help="Export Neo4j schema")
-    p_exp.add_argument("--uri", default="bolt://localhost:7687")
-    p_exp.add_argument("--user", default="neo4j")
-    p_exp.add_argument("--password", default="neo4j")
-    p_exp.add_argument("--out")
+    p_exp = sub.add_parser("export-schema", help=_("Export Neo4j schema"))
+    p_exp.add_argument(
+        "--uri",
+        default="bolt://localhost:7687",
+        help=_("Neo4j connection URI"),
+    )
+    p_exp.add_argument("--user", default="neo4j", help=_("Neo4j username"))
+    p_exp.add_argument("--password", default="neo4j", help=_("Neo4j password"))
+    p_exp.add_argument("--out", help=_("Output file path"))
 
-    p_init = sub.add_parser("neo4j-init", help="Initialize Neo4j schema")
-    p_init.add_argument("--uri", default="bolt://localhost:7687", help="Neo4j connection URI")
-    p_init.add_argument("--user", default="neo4j", help="Neo4j username")
-    p_init.add_argument("--password", default="neo4j", help="Neo4j password")
+    p_init = sub.add_parser("neo4j-init", help=_("Initialize Neo4j schema"))
+    p_init.add_argument(
+        "--uri",
+        default="bolt://localhost:7687",
+        help=_("Neo4j connection URI"),
+    )
+    p_init.add_argument("--user", default="neo4j", help=_("Neo4j username"))
+    p_init.add_argument("--password", default="neo4j", help=_("Neo4j password"))
 
-    p_rb = sub.add_parser("neo4j-rollback", help="Drop Neo4j constraints/indexes created by init")
-    p_rb.add_argument("--uri", default="bolt://localhost:7687", help="Neo4j connection URI")
-    p_rb.add_argument("--user", default="neo4j", help="Neo4j username")
-    p_rb.add_argument("--password", default="neo4j", help="Neo4j password")
+    p_rb = sub.add_parser(
+        "neo4j-rollback",
+        help=_("Drop Neo4j constraints/indexes created by init"),
+    )
+    p_rb.add_argument(
+        "--uri",
+        default="bolt://localhost:7687",
+        help=_("Neo4j connection URI"),
+    )
+    p_rb.add_argument("--user", default="neo4j", help=_("Neo4j username"))
+    p_rb.add_argument("--password", default="neo4j", help=_("Neo4j password"))
 
-    p_server = sub.add_parser("server", help="Run DAG Manager gRPC/HTTP services")
-    p_server.add_argument("--config", help="Path to configuration file")
+    p_server = sub.add_parser("server", help=_("Run DAG Manager gRPC/HTTP services"))
+    p_server.add_argument("--config", help=_("Path to configuration file"))
 
-    p_metrics = sub.add_parser("metrics", help="Expose DAG Manager Prometheus metrics")
-    p_metrics.add_argument("--port", type=int, default=8000, help="Port to expose metrics on")
+    p_metrics = sub.add_parser(
+        "metrics", help=_("Expose DAG Manager Prometheus metrics")
+    )
+    p_metrics.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help=_("Port to expose metrics on"),
+    )
 
     args = parser.parse_args(normalized_argv)
 
