@@ -33,6 +33,11 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
   and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
 - Diagrams: Use Mermaid fenced code blocks (```mermaid) for all diagrams. Avoid PlantUML/DOT or binary diagram files; prefer text-based Mermaid for reviewability and versioning.
+- When adding or modifying documentation utility scripts (e.g., `scripts/check_docs_links.py`),
+  ensure that any new Python dependencies are reflected in both the developer installation
+  instructions and the CI workflows (notably `.github/workflows/docs-link-check.yml`).
+  Add an explicit installation step or shared requirements file in the workflow so the CI job
+  installs packages such as `pyyaml` before running the script.
 
 ## Testing
 
