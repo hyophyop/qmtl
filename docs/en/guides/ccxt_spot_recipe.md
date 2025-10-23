@@ -56,7 +56,8 @@ nodeset = adapter.build({"signal": signal_node}, world_id="demo-world")
 
 ## Branching example: add market data to execution
 
-CCXT 레시피를 확장해 시세 스트림을 실행 단계에 합류시키는 예시입니다. DSL의 `compose()` 대신 직접 노드를 생성해 합류를 구현합니다.
+Extend the CCXT recipe by joining a quote stream at the execution step. Build
+nodes directly rather than using the DSL `compose()`.
 
 ```python
 from qmtl.runtime.sdk import Node
@@ -75,7 +76,7 @@ def ccxt_exec_with_quote(view):
     _, q = db[-1]
     order = dict(order)
     order.setdefault("price", q.get("best_ask") or q.get("close"))
-    # client.post_order(order)  # 실운영 시 클라이언트 주입 후 주문 전송
+    # client.post_order(order)  # inject client and send order in production
     return order
 
 exe = Node(input=[siz, quotes], compute_fn=ccxt_exec_with_quote, name=f"{siz.name}_exec", interval=siz.interval, period=1)
@@ -89,7 +90,8 @@ strategy.add_nodes([price, alpha, history, signal_node, quotes, nodeset])
 ```
 
 Note
-- NodeSet은 블랙박스로 사용하세요. 내부는 레시피나 어댑터에서 조합하되, 전략에서는 NodeSet 단위로만 추가/관리합니다.
+- Treat the NodeSet as a black box. Compose internals via recipes/adapters and
+  add/manage it as a single unit in strategies.
 
 - When `apiKey`/`secret` are omitted, a `FakeBrokerageClient` is used so the strategy can run in simulate mode.
 - In sandbox mode credentials are required; missing values raise a `RuntimeError`.

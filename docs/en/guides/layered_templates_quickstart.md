@@ -13,116 +13,119 @@ last_modified: 2025-10-18
 
 # Layer-Based Template System Quick Start Guide
 
-이 가이드는 QMTL의 새로운 레이어 기반 템플릿 시스템을 빠르게 시작하는 방법을 설명합니다.
+This guide explains how to get started quickly with QMTL's new layer‑based
+template system.
 
-## 개요
+## Overview
 
-레이어 기반 시스템을 사용하면 전략의 각 단계(데이터 공급, 신호 생성, 실행, 브로커리지)를 독립적으로 구성하고 조합할 수 있습니다.
+The layer system lets you assemble each stage of a strategy (data supply,
+signal generation, execution, brokerage) independently and compose them as
+needed.
 
-### 사용 가능한 레이어
+### Available layers
 
-| 레이어 | 설명 | 의존성 |
+| Layer | Description | Depends |
 |--------|------|--------|
-| **data** | 데이터 공급 및 수집 | 없음 |
-| **signal** | 알파 생성 및 신호 변환 | data |
-| **execution** | 주문 실행 및 관리 | signal |
-| **brokerage** | 거래소 통합 | execution |
-| **monitoring** | 관측 및 메트릭 수집 | 없음 |
+| **data** | Data ingestion/sourcing | none |
+| **signal** | Alpha generation and transforms | data |
+| **execution** | Order execution and management | signal |
+| **brokerage** | Exchange integration | execution |
+| **monitoring** | Observability and metrics | none |
 
-### 사용 가능한 프리셋
+### Presets
 
-| 프리셋 | 레이어 | 용도 |
+| Preset | Layers | Use |
 |--------|--------|------|
-| **minimal** | data, signal | 백테스팅, 연구 |
-| **research** | data, signal, monitoring | 알파 연구 및 분석 |
-| **production** | data, signal, execution, brokerage, monitoring | 실전 트레이딩 |
-| **execution** | execution, brokerage | 외부 신호 기반 실행 |
+| **minimal** | data, signal | backtesting, research |
+| **research** | data, signal, monitoring | alpha research and analysis |
+| **production** | data, signal, execution, brokerage, monitoring | live trading |
+| **execution** | execution, brokerage | execution for external signals |
 
 ---
 
-## 빠른 시작
+## Quick start
 
-### 1. 프리셋으로 프로젝트 생성
+### 1. Create a project from a preset
 
 ```bash
-# 사용 가능한 프리셋 확인
+# List available presets
 qmtl project init --list-presets
 
-# 최소 구성으로 프로젝트 생성
+# Create a minimal project
 qmtl project init --path my_strategy --preset minimal
 
-# 프로덕션 구성으로 프로젝트 생성
+# Create a production project
 qmtl project init --path my_prod --preset production
 ```
 
-### 2. 생성된 프로젝트 구조
+### 2. Generated project layout
 
 ```
 my_strategy/
-├── .gitignore              # Git 제외 파일
-├── qmtl.yml                # QMTL 설정
-├── strategy.py             # 전략 진입점
-├── layers/                 # 레이어 디렉토리
+├── .gitignore              # git ignores
+├── qmtl.yml                # QMTL config
+├── strategy.py             # strategy entry point
+├── layers/                 # layers directory
 │   ├── __init__.py
-│   ├── data/               # 데이터 레이어
+│   ├── data/               # data layer
 │   │   ├── __init__.py
-│   │   ├── providers.py    # 데이터 제공자 export
-│   │   └── stream_input.py # StreamInput 구현
-│   └── signal/             # 신호 레이어
+│   │   ├── providers.py    # data provider export
+│   │   └── stream_input.py # StreamInput implementation
+│   └── signal/             # signal layer
 │       ├── __init__.py
-│       ├── strategy.py     # 전략 export
-│       └── single_indicator.py  # 단일 지표 전략
-└── tests/                  # 테스트 디렉토리
+│       ├── strategy.py     # strategy export
+│       └── single_indicator.py  # single-indicator strategy
+└── tests/                  # tests directory
     └── test_strategy.py
 ```
 
-### 3. 레이어 추가
+### 3. Add layers
 
-기존 프로젝트에 레이어를 추가할 수 있습니다:
+You can add layers to an existing project:
 
 ```bash
 cd my_strategy
 
-# 모니터링 레이어 추가
+# Add monitoring layer
 qmtl project add-layer monitoring
 
-# 실행 레이어 추가 (signal 레이어가 있어야 함)
+# Add execution layer (requires signal layer)
 qmtl project add-layer execution
 ```
 
-### 4. 레이어 메타데이터와 구조 검증
+### 4. Inspect metadata and validate structure
 
 ```bash
-# 사용 가능한 레이어와 템플릿 확인
+# Show available layers and templates
 qmtl project list-layers --show-templates
 
-# 프로젝트 구조 검증
+# Validate project structure
 qmtl project validate --path my_strategy
 ```
 
 ---
 
-## 레이어별 상세 가이드
+## Layer details
 
-### Data 레이어
+### Data layer
 
-데이터 공급을 담당합니다.
+Provides data inputs.
 
-**템플릿:**
-- `stream_input.py`: 기본 StreamInput
-- `ccxt_provider.py`: CCXT 데이터 제공자
+**Templates:**
+- `stream_input.py`: basic StreamInput
+- `ccxt_provider.py`: CCXT data provider
 
-**사용 예시:**
+**Usage:**
 
 ```python
-# layers/data/providers.py에서 import
+# import from layers/data/providers.py
 from layers.data.providers import get_data_provider
 
-# 데이터 스트림 생성
+# create data stream
 data_stream = get_data_provider()
 ```
 
-**커스터마이징:**
+**Customizing:**
 
 ```python
 # layers/data/custom_provider.py
@@ -136,27 +139,27 @@ def create_custom_stream():
     )
 ```
 
-### Signal 레이어
+### Signal layer
 
-신호 생성을 담당합니다.
+Generates signals.
 
-**템플릿:**
-- `single_indicator.py`: 단일 지표 전략
-- `multi_indicator.py`: 복수 지표 전략
+**Templates:**
+- `single_indicator.py`: single‑indicator strategy
+- `multi_indicator.py`: multi‑indicator strategy
 
-**사용 예시:**
+**Usage:**
 
 ```python
-# layers/signal/strategy.py에서 import
+# import from layers/signal/strategy.py
 from layers.signal.strategy import create_strategy
 
-# 전략 생성
+# build strategy
 strategy = create_strategy()
 ```
 
-**커스터마이징:**
+**Customizing:**
 
-signal 레이어 템플릿을 수정하여 원하는 지표와 로직을 추가:
+Modify template(s) to add indicators and logic:
 
 ```python
 # layers/signal/my_strategy.py
@@ -171,47 +174,47 @@ class MyStrategy(Strategy):
         ema_node = ema(price, period=20)
         rsi_node = rsi(price, period=14)
         
-        # 커스텀 신호 로직
+        # custom signal logic
         def my_signal(view):
-            # ... 신호 생성 로직
+            # ... signal generation logic ...
             pass
         
         signal = Node(input=[ema_node, rsi_node], compute_fn=my_signal)
         self.add_nodes([price, ema_node, rsi_node, signal])
 ```
 
-### Execution 레이어
+### Execution layer
 
-주문 실행을 담당합니다.
+Handles order execution.
 
-**템플릿:**
-- `nodeset.py`: NodeSet 기반 실행 파이프라인
+**Templates:**
+- `nodeset.py`: NodeSet‑based execution pipeline
 
-**사용 예시:**
+**Usage:**
 
 ```python
 from layers.execution.nodeset import attach_execution_to_strategy
 
-# 전략에 실행 레이어 연결
+# attach execution layer to strategy
 attach_execution_to_strategy(strategy, signal_node)
 ```
 
-### Brokerage 레이어
+### Brokerage layer
 
-거래소 통합을 담당합니다.
+Handles exchange integration.
 
-**템플릿:**
-- `ccxt_binance.py`: Binance 통합
+**Templates:**
+- `ccxt_binance.py`: Binance integration
 
-**사용 예시:**
+**Usage:**
 
 ```python
 from layers.brokerage.ccxt_binance import create_broker
 
-# 브로커 생성 (testnet)
+# Create broker (testnet)
 broker = create_broker(testnet=True)
 
-# 주문 실행
+# Place an order
 broker.place_order(
     symbol="BTC/USDT",
     side="buy",
@@ -219,82 +222,82 @@ broker.place_order(
 )
 ```
 
-### Monitoring 레이어
+### Monitoring layer
 
-메트릭 수집을 담당합니다.
+Collects metrics.
 
-**템플릿:**
-- `metrics.py`: 기본 메트릭 수집
+**Templates:**
+- `metrics.py`: basic metrics collection
 
-**사용 예시:**
+**Usage:**
 
 ```python
 from layers.monitoring.metrics import get_metrics_collector
 
 collector = get_metrics_collector()
 
-# 신호 기록
+# Record a signal
 collector.record_signal("BUY", strength=0.8)
 
-# 거래 기록
+# Record a trade
 collector.record_trade("BTC/USDT", "buy", 0.001, 50000)
 
-# 성과 기록
+# Record performance
 collector.record_performance("sharpe_ratio", 1.5)
 
-# 메트릭 조회
+# Retrieve metrics
 metrics = collector.get_metrics()
 ```
 
 ---
 
-## 고급 사용법
+## Advanced usage
 
-### 1. 레이어 직접 선택
+### 1. Select layers explicitly
 
-프리셋 대신 레이어를 직접 선택할 수 있습니다:
+Choose layers directly instead of presets:
 
 ```bash
-# 데이터와 신호만
+# Data + signal only
 qmtl project init --path my_custom --layers data,signal
 
-# 의존성 자동 해결 (execution 선택 시 data, signal 자동 포함)
+# Dependency auto‑resolution (execution includes data,signal)
 qmtl project init --path my_exec --layers execution
 ```
 
-### 2. 사용 가능한 레이어 확인
+### 2. List available layers
 
 ```bash
 qmtl project init --list-layers
 ```
 
-### 3. 프로젝트 검증
+### 3. Validate the project
 
-프로젝트 구조가 올바른지 검증:
+Verify that the generated structure is correct:
 
 ```bash
-# TODO: 향후 추가 예정
+# TODO: to be added later
 qmtl project validate
 ```
 
 ---
 
-## 기존 템플릿에서 마이그레이션
+## Migration from legacy templates
 
-기존 `--strategy` 옵션은 계속 작동하지만 deprecated되었습니다:
+The legacy `--strategy` switch still works but is deprecated:
 
 ```bash
-# 기존 방식 (deprecated)
+# Legacy (deprecated)
 qmtl project init --path old_style --strategy general
 # Warning: --strategy is deprecated, use --preset instead
 
-# 새 방식 (권장)
+# New (recommended)
 qmtl project init --path new_style --preset minimal
 ```
 
-### 템플릿 → 프리셋 매핑
+### Template → preset mapping
 
-| 기존 템플릿 | 새 프리셋 |
+| Legacy template | New preset |
 |-------------|-----------|
 | `general` | `minimal` |
 | `single_indicator` | `minimal` |
@@ -304,59 +307,59 @@ qmtl project init --path new_style --preset minimal
 
 ---
 
-## 전략 실행
+## Running the strategy
 
-생성된 프로젝트의 `strategy.py`를 실행:
+Execute the generated `strategy.py`:
 
 ```bash
 cd my_strategy
 
-# 오프라인 모드 (Gateway 불필요)
+# Offline mode (no Gateway)
 python strategy.py
 
-# 프로덕션 모드 (Gateway 필요)
-# strategy.py에서 Runner.run() 사용하도록 수정 후:
+# Production mode (requires Gateway)
+# after changing strategy.py to call Runner.run():
 python strategy.py
 ```
 
 ---
 
-## 문제 해결
+## Troubleshooting
 
-### Import 에러
+### Import errors
 
-레이어 간 import가 실패하는 경우 PYTHONPATH 설정:
+If imports between layers fail, update PYTHONPATH:
 
 ```bash
 export PYTHONPATH=/path/to/my_strategy:$PYTHONPATH
 python strategy.py
 ```
 
-### 레이어 의존성 에러
+### Layer dependency errors
 
-레이어 추가 시 의존성 에러가 발생하면, 필요한 레이어를 먼저 추가:
+If an add‑layer command fails due to missing dependencies, add the required layers first:
 
 ```bash
-# EXECUTION은 SIGNAL을 요구
-qmtl project add-layer signal  # 먼저 추가
-qmtl project add-layer execution  # 그 다음 추가
+# EXECUTION requires SIGNAL
+qmtl project add-layer signal
+qmtl project add-layer execution
 ```
 
-### 템플릿 파일 수정
+### Editing templates
 
-생성된 템플릿 파일은 수정 가능하며, 프로젝트에 맞게 커스터마이징하세요.
-
----
-
-## 다음 단계
-
-- [레이어 템플릿 시스템 아키텍처](../architecture/layered_template_system.md)에서 상세 설계 확인
-- [전략 개발 워크플로우](strategy_workflow.md)에서 전략 개발 프로세스 학습
-- [SDK 튜토리얼](sdk_tutorial.md)에서 SDK 사용법 학습
+Templates are intended to be modified—customize them as needed for your project.
 
 ---
 
-## 참고 자료
+## Next steps
+
+- Review [Layered Template System Architecture](../architecture/layered_template_system.md)
+- Learn the [Strategy Development Workflow](strategy_workflow.md)
+- Follow the [SDK Tutorial](sdk_tutorial.md)
+
+---
+
+## References
 
 - [Architecture Overview](../architecture/README.md)
 - [Layered Template System Architecture](../architecture/layered_template_system.md)
@@ -365,5 +368,5 @@ qmtl project add-layer execution  # 그 다음 추가
 
 ---
 
-**문서 버전**: 1.0  
-**최종 검토**: 2025-10-18
+**Document version**: 1.0  
+**Last reviewed**: 2025-10-18
