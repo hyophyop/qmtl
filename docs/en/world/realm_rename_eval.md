@@ -4,7 +4,7 @@ This note reviews replacing the term **World** with **Realm** across QMTL.
 
 ## Domain Fit
 
-"World" currently denotes a top‑level portfolio boundary that groups related strategies and policies.  "Realm" carries a similar sense of an autonomous domain while sounding less overloaded with geographic or market connotations.  The term reads naturally in English and Korean ("렐름") and avoids confusion with external "world" naming found in third‑party tools.
+"World" currently denotes a top‑level portfolio boundary that groups related strategies and policies.  "Realm" carries a similar sense of an autonomous domain while sounding less overloaded with geographic or market connotations.  The term reads naturally and avoids confusion with external "world" naming found in third‑party tools.
 
 ## Impact Scope
 

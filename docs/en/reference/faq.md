@@ -9,21 +9,33 @@ last_modified: 2025-09-05
 
 # FAQ
 
-## 태그 기반 노드는 월드 주도 실행에서 어떻게 동작하나요?
+## How do tag-based nodes behave under world-driven execution?
 
-`TagQueryNode`는 Runner가 생성하는 `TagQueryManager`가 Gateway와 통신하여 큐 목록을 갱신합니다. 월드 주도 실행에서 전략은 `Runner.run(world_id=..., gateway_url=...)`로 시작하며, 이때 TagQueryManager가 초기 큐 조회와 WebSocket 구독을 설정합니다. Gateway/WorldService가 연결되지 않으면 전략은 안전기본(compute‑only, 주문 게이트 OFF)으로 유지됩니다. `Runner.offline()` 은 Gateway 없이 로컬 실행으로, 태그 기반 노드는 빈 큐 목록으로 초기화됩니다.
+`TagQueryNode` refreshes its queue list through the `TagQueryManager` that the
+Runner spawns. When a strategy runs in world-driven mode
+(`Runner.run(world_id=..., gateway_url=...)`) the manager performs the initial
+queue lookup and establishes the WebSocket subscription. If Gateway or
+WorldService are unreachable the strategy remains in the safe baseline
+(compute-only, order gate OFF). `Runner.offline()` runs locally without the
+Gateway; tag-based nodes start with an empty queue list in that mode.
 
 See [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md) for guidance on updating code that previously used `Runner.backtest` or CLI `--mode`.
 
-## 테스트가 가끔 hang 되거나 자원이 해제되지 않는 것 같습니다. 어떻게 방지하나요?
+## My tests sometimes hang or leak resources. How can I prevent that?
 
-- 테스트 종료 시 백그라운드 서비스 정리:
-  - `async with Runner.session(...):`을 사용하면 `TagQueryManager`/`ActivationManager`가 자동으로 정리됩니다.
-  - 또는 `Runner.shutdown(strategy)`나 `await Runner.shutdown_async(strategy)`를 호출해 수동으로 정리하세요.
-- 보수적인 타임아웃 적용:
-  - 테스트 실행 전에 `qmtl.yml`의 `test.test_mode`를 `true`로 설정하면 SDK의 기본 HTTP/WS 타임아웃이 짧게 설정되어 hang 가능성이 줄어듭니다.
-- ASGI/Transport 자원 정리:
-  - FastAPI 수명 주기를 적용하려면 `async with httpx.ASGITransport(app) as transport:` 블록을 사용하고, 그 안에서 `async with httpx.AsyncClient(transport=transport, ...)`으로 호출을 수행하세요.
-  - Gateway 앱은 백그라운드 태스크를 시작하지 않도록 `create_app(enable_background=False)` 옵션을 제공합니다. 단위 테스트에서는 이 플래그를 끄면 리소스 경합과 경고를 줄일 수 있습니다.
+- Clean up background services at the end of each test:
+  - `async with Runner.session(...):` automatically disposes the `TagQueryManager`
+    and `ActivationManager`.
+  - Otherwise call `Runner.shutdown(strategy)` or
+    `await Runner.shutdown_async(strategy)` manually.
+- Apply conservative timeouts:
+  - Setting `test.test_mode: true` in `qmtl.yml` shrinks the SDK's default HTTP/WS
+    timeouts, which reduces the chance of hangs.
+- Release ASGI/transport resources explicitly:
+  - Wrap FastAPI apps with `async with httpx.ASGITransport(app) as transport:` and
+    perform calls through `async with httpx.AsyncClient(transport=transport, ...)`.
+  - The Gateway app offers `create_app(enable_background=False)` to avoid spawning
+    background tasks. Disabling them in unit tests helps minimize contention and
+    warnings.
 
 {{ nav_links() }}
