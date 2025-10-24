@@ -1,3 +1,10 @@
+---
+title: "실행 레이어 노드"
+tags: [architecture, execution, nodes]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # 실행 레이어 노드
 
 프리트레이드 점검, 주문 사이징, 실행, 체결 수집, 포트폴리오 업데이트, 리스크 제어, 타이밍 게이트 등을 담당하는 래퍼 노드 집합입니다. 이 클래스들은 전략 신호를 [exchange_node_sets.md](exchange_node_sets.md)에 설명된 거래소 노드 세트와 연결하며 `qmtl/runtime/sdk` 하위 모듈을 활용합니다.

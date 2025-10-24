@@ -1,3 +1,10 @@
+---
+title: "CCXT × Seamless 통합 아키텍처"
+tags: [architecture, ccxt, seamless]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # CCXT × Seamless 통합 아키텍처 (High + Codex)
 
 ## 관련 문서

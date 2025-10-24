@@ -1,3 +1,10 @@
+---
+title: "Seamless Data Provider 구성 가이드"
+tags: [guide, seamless, data]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # Seamless Data Provider 구성 가이드
 
 이 가이드는 Seamless Data Provider(SDP)를 실제 운영 환경에서 사용하기 위한 단계별 구성 방법, 운영 복잡도 평가, 개선 제안을 제공합니다.

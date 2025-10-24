@@ -1,5 +1,5 @@
 ---
-title: "QMTL Gateway — Comprehensive Technical Specification"
+title: "QMTL Gateway — 종합 기술 명세서"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-09-22
@@ -8,7 +8,7 @@ spec_version: v1.2
 
 {{ nav_links() }}
 
-# QMTL Gateway — Comprehensive Technical Specification
+# QMTL Gateway — 종합 기술 명세서
 
 *Research‑Driven Draft v1.2 — 2025‑06‑10*
 
@@ -24,29 +24,29 @@ spec_version: v1.2
 - 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
 - 레퍼런스: [Brokerage API](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
 
-> This extended edition enlarges the previous document by ≈ 75 % and adopts an explicit, graduate‑level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
-> Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
+> 이 확장판은 기존 문서 대비 약 75% 분량이 늘었으며, 연구 중심의 엄밀한 기술 명세 형식을 채택했습니다. 모든 위협 모델, 공식 API 계약, 지연 분포, CI/CD 의미론을 완전하게 기술합니다.
+> 표기: **Sx** = 섹션, **Rx** = 요구사항, **Ax** = 가정.
 
 ---
 
-## S0 · System Context & Goals
+## S0 · 시스템 컨텍스트와 목표
 
-Gateway sits at the **operational boundary** between *ephemeral* strategy submissions and the *persistent* graph state curated by DAG Manager. Its design objectives are:
+Gateway는 일시적인 전략 제출과 DAG Manager가 관리하는 영속적 그래프 상태 사이의 **운영 경계**에 위치합니다. 설계 목표는 다음과 같습니다:
 
 | ID     | Goal                                                         | Metric                    |
 | ------ | ------------------------------------------------------------ | ------------------------- |
 |  G‑01  | Diff submission queuing **loss‑free** under 1 k req/s burst  | `lost_requests_total = 0` |
 |  G‑02  | **≤ 150 ms** p95 end‑to‑end latency (SDK POST → Warm‑up ack) | `gateway_e2e_latency_p95` |
-|  G‑03  | Zero duplicated Kafka topics across concurrent submissions   | invariants §S3            |
-|  G‑04  | Line‑rate WebSocket streaming of state updates (≥ 500 msg/s) | WS load test              |
+|  G‑03  | 동시 제출 간 Kafka 토픽 중복 0                              | 불변 조건 §S3             |
+|  G‑04  | 상태 업데이트 WebSocket 선형 전송(≥ 500 msg/s)              | WS 부하 테스트            |
 
-**Ax‑1** SDK nodes adhere to canonical hashing rules (see Architecture doc §1.1).
-**Ax‑2** Neo4j causal cluster exposes single‑leader consistency; read replicas may lag.
-**Ax‑3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain‑Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/foundation/common/compute_context.py` and is wrapped by `StrategyComputeContext` (`qmtl/services/gateway/submission/context_service.py`) which owns commit-log serialization, downgrade tracking, and Redis mapping for ingestion flows.
+**Ax‑1** SDK 노드는 정규 해싱 규칙을 준수합니다(Architecture §1.1 참조).
+**Ax‑2** Neo4j causal 클러스터는 단일 리더 일관성을 노출하며, 리드 리플리카는 지연될 수 있습니다.
+**Ax‑3** Gateway는 `{ world_id, execution_domain, as_of, partition }` 컴퓨트 컨텍스트를 구성해 하위 서비스로 전달합니다. SDK는 이 컨텍스트를 선택하지 않으며, Gateway가 WorldService 결정(및 필요 시 제출 메타데이터)에서 도출합니다. DAG Manager는 이를 통해 도메인 스코프 ComputeKey를 파생하고, WorldService는 정책 권한/적용에 사용합니다. 이 계약의 정식 구현은 `qmtl/foundation/common/compute_context.py`에 있으며, 커밋 로그 직렬화/다운그레이드 추적/인제스트 흐름용 Redis 매핑을 담당하는 `StrategyComputeContext`(`qmtl/services/gateway/submission/context_service.py`)로 래핑됩니다.
 
-### Non‑Goals
-- Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
-- Gateway does not manage brokerage execution; it only mediates requests and relays control events.
+### 비목표
+- Gateway는 월드 정책 결정을 계산하지 않으며, 월드/큐의 SSOT가 아닙니다.
+- Gateway는 브로커리지 실행을 관리하지 않고, 요청 중재와 제어 이벤트 중계만 담당합니다.
 
 ---
 
@@ -74,7 +74,7 @@ Worker -->|topic map| SDK
 DAGM-.->|queue events|Ingest
 ```
 
-Note: WorldService and ControlBus are omitted in this decomposition for brevity. See §S6 for the Worlds proxy and opaque event stream handoff. In the full system, Gateway subscribes to ControlBus and proxies WorldService APIs.
+참고: 간결성을 위해 이 분해도에서 WorldService와 ControlBus는 생략했습니다. 월드 프록시와 불투명 이벤트 스트림 인계는 §S6을 참고하세요. 전체 시스템에서는 Gateway가 ControlBus를 구독하고 WorldService API를 프록시합니다.
 
 ---
 
@@ -205,16 +205,16 @@ The architecture document (§3) defines the deterministic NodeID used across Gat
 Clarifications
 - NodeID MUST NOT include `world_id`. World isolation is enforced at the WVG layer and via world-scoped queue namespaces (e.g., `topic_prefix`), not in the global ID.
 - TagQueryNode canonicalization: do not include the dynamically resolved upstream queue set in `dependencies`. Instead, capture the query spec in `params_canon` (normalized `query_tags` sorted, `match_mode`, and `interval`). Runtime queue discovery and growth are delivered via ControlBus → SDK TagQueryManager; NodeID remains stable across discoveries.
-- Gateway rejects any node submission missing `node_type`, `code_hash`, `config_hash`, `schema_hash`, or `schema_compat_id` with `E_NODE_ID_FIELDS` and returns `E_NODE_ID_MISMATCH` when the provided `node_id` does not equal the canonical `compute_node_id()` output. Both errors include actionable hints so SDK clients can regenerate DAGs with the BLAKE3 contract.
+- Gateway는 `node_type`, `code_hash`, `config_hash`, `schema_hash`, `schema_compat_id`가 빠진 제출을 `E_NODE_ID_FIELDS`로 거부하며, 제공된 `node_id`가 정규 `compute_node_id()` 출력과 다를 경우 `E_NODE_ID_MISMATCH`를 반환합니다. 두 오류 모두 SDK 클라이언트가 BLAKE3 계약에 따라 DAG를 재생성할 수 있도록 실행 가능한 힌트를 포함합니다.
 
-Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
+인제스트 직후, Gateway는 전략 코드 변경 없이 롤백과 카나리아 트래픽 제어를 조율할 수 있도록 DAG에 `VersionSentinel` 노드를 삽입합니다. 이 동작은 기본 활성화되어 있으며 ``insert_sentinel`` 구성으로 제어합니다. ``--no-sentinel`` 플래그로 비활성화할 수 있습니다.
 
 !!! note "Design intent"
 - TagQuery canonicalization keeps `NodeID` stable; dynamic queue discovery is a runtime concern (ControlBus → SDK TagQueryManager), not part of canonical hashing.
 - Execution domains are derived centrally by Gateway from WorldService decisions (see §S0) and propagated via the shared `ComputeContext`; SDK treats the result as input only.
 - VersionSentinel is default-on to enable rollout/rollback/traffic-split without strategy changes; disable only in low‑risk, low‑frequency environments.
 
-Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (§2).
+Gateway는 AOF가 활성화된 Redis에 FSM을 영속화하고, 중요한 이벤트를 PostgreSQL WAL(Write-Ahead Log)에도 미러링합니다. 이는 아키텍처(§2)에서 설명한 Redis 장애 시나리오를 완화합니다.
 
 When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**
 invokes ``resolve_tags()`` which issues a ``/queues/by_tag`` request. Gateway
@@ -237,31 +237,25 @@ Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted 
   테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 `sentinel_skew_seconds`
   지표로 측정한다.
 
-### Gateway CLI Options
+### Gateway CLI 옵션
 
-Run the Gateway service. The ``--config`` flag is optional:
+Gateway 서비스를 실행합니다. ``--config`` 플래그는 선택입니다:
 
 ```bash
-# start with built-in defaults
+# 기본값으로 시작
 qmtl service gateway
 
-# specify a configuration file
+# 구성 파일 지정
 qmtl service gateway --config qmtl/examples/qmtl.yml
 ```
 
-When provided, the command reads the ``gateway`` section of
-``qmtl/examples/qmtl.yml`` for all server parameters. Omitting ``--config``
-starts the service with built-in defaults that use SQLite and an in-memory
-Redis substitute. The sample file illustrates how to set ``redis_dsn`` to point
-to a real cluster. If ``redis_dsn`` is omitted, Gateway automatically uses the
-in-memory substitute. See the file for a fully annotated configuration template.
-Setting ``insert_sentinel: false`` disables automatic ``VersionSentinel`` insertion.
+제공하면, 명령은 모든 서버 파라미터를 위해 ``qmtl/examples/qmtl.yml``의 ``gateway`` 섹션을 읽습니다. ``--config``를 생략하면 SQLite와 인메모리 Redis 대체를 사용하는 기본값으로 서비스가 시작됩니다. 샘플 파일에는 실제 클러스터를 가리키도록 ``redis_dsn``을 설정하는 방법이 예시되어 있습니다. ``redis_dsn``이 없으면 인메모리 대체를 자동 사용합니다. 주석이 풍부한 구성 템플릿은 파일을 참고하세요. ``insert_sentinel: false`` 설정은 자동 ``VersionSentinel`` 삽입을 비활성화합니다.
 
-Available flags:
+사용 가능한 플래그:
 
-- ``--config`` – optional path to configuration file.
-- ``--no-sentinel`` – disable automatic ``VersionSentinel`` insertion.
-- ``--allow-live`` – disable the live trading guard requiring ``X-Allow-Live: true``.
+- ``--config`` – 구성 파일 경로(선택)
+- ``--no-sentinel`` – 자동 ``VersionSentinel`` 삽입 비활성화
+- ``--allow-live`` – 라이브 거래 가드 비활성화(``X-Allow-Live: true`` 요구 해제)
 
 ---
 
@@ -288,17 +282,17 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - Circuit breakers & budgets: Gateway periodically polls WorldService and DAG Manager status to drive circuit breakers.
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
-- Strategy submission and worlds:
-  - Clients may include `world_id` (single) **or** `world_ids[]` (multiple). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
-  - When `gateway.worldservice_url` is set (or a `WorldServiceClient` is injected), the submission helper mirrors each binding to WorldService via `POST /worlds/{world_id}/bindings`. Duplicate bindings return HTTP 409 and are treated as success; transient errors are logged but do not block ingestion.
-  - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context and writes it to envelopes it relays: `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. The same mapping is applied to proxied ActivationEnvelope payloads so clients receive an explicit `execution_domain` even though WorldService omits it. `shadow` is reserved and must be explicitly requested by operators. SDK/Runner treats this mapping as input only.
-  - Gateway forwards a compute context `{ world_id, execution_domain, as_of (if backtest), partition }` with diff/ingest requests so DAG Manager derives a Domain‑Scoped ComputeKey and isolates caches per domain. When a caller does not supply backtest metadata, Gateway either derives the context from WS or omits optional fields; DAG Manager then applies safe defaults and context‑scoped isolation.
-  - The HTTP `/strategies` flow is implemented by the composable services in `qmtl/services/gateway/submission/` (see `SubmissionPipeline`). Each stage—DAG decoding/validation, node identity verification, compute-context normalization, diff execution, and TagQuery fallback—has focused coverage so future changes only affect the relevant module.
-  - Backtest/dryrun submissions MUST include `as_of` (dataset commit) and MAY include `dataset_fingerprint`; when absent Gateway rejects or falls back to compute-only mode to avoid mixing datasets.
+- 전략 제출과 월드:
+  - 클라이언트는 `world_id`(단일) 또는 `world_ids[]`(다중)를 포함할 수 있습니다. Gateway는 각 월드에 대해 **WorldStrategyBinding(WSB)**을 upsert하고, WVG에서 해당 `WorldNodeRef(root)`가 존재하도록 보장합니다. 실행 모드는 여전히 WorldService 결정만으로 정해집니다.
+  - `gateway.worldservice_url`이 설정되어 있거나 `WorldServiceClient`가 주입된 경우, 제출 헬퍼는 `POST /worlds/{world_id}/bindings`로 각 바인딩을 WorldService에 미러링합니다. 중복 바인딩은 HTTP 409를 반환하며 성공으로 간주합니다. 일시 오류는 로깅되지만 인제스트를 차단하지 않습니다.
+  - Gateway는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑해 중계하는 봉투에 기록합니다: `validate → backtest(주문 게이트 기본 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. 동일 매핑은 프록시된 ActivationEnvelope에도 적용되어, WorldService가 필드를 생략하더라도 클라이언트가 명시적 `execution_domain`을 받도록 합니다. `shadow`는 예약된 값으로 운영자가 명시적으로 요청해야 합니다. SDK/Runner는 이 매핑을 입력으로만 취급합니다.
+  - Gateway는 diff/ingest 요청과 함께 `{ world_id, execution_domain, as_of(백테스트 시), partition }` 컴퓨트 컨텍스트를 전달하여 DAG Manager가 도메인 스코프 ComputeKey를 파생하고 캐시를 도메인별로 격리하도록 합니다. 호출자가 백테스트 메타데이터를 제공하지 않으면, Gateway는 WS에서 컨텍스트를 도출하거나 선택 필드를 생략합니다. DAG Manager는 안전한 기본값과 컨텍스트 스코프 격리를 적용합니다.
+  - HTTP `/strategies` 플로우는 `qmtl/services/gateway/submission/`의 합성 가능한 서비스들(예: `SubmissionPipeline`)로 구현됩니다. DAG 디코딩/검증, 노드 ID 검증, 컴퓨트 컨텍스트 정규화, diff 실행, TagQuery 폴백 각 단계는 집중 커버리지를 가지며, 향후 변경이 관련 모듈에만 영향을 주도록 의도되었습니다.
+  - 백테스트/드라이런 제출은 `as_of`(데이터셋 커밋)를 반드시 포함해야 하며, `dataset_fingerprint`를 포함할 수 있습니다. 누락 시 Gateway는 요청을 거부하거나 데이터셋 혼합을 피하기 위해 compute‑only 모드로 강등합니다.
 
-### Event Stream Descriptor
+### 이벤트 스트림 디스크립터(Event Stream Descriptor)
 
-SDKs obtain an opaque WebSocket descriptor from Gateway and subscribe to real‑time control updates without learning about ControlBus.
+SDK는 Gateway로부터 불투명(opaque) WebSocket 디스크립터를 받아 ControlBus 세부를 알지 못한 채 실시간 제어 업데이트를 구독합니다.
 
 ```
 POST /events/subscribe
@@ -306,39 +300,39 @@ POST /events/subscribe
 → { "stream_url": "wss://gateway/ws/evt?ticket=...", "token": "<jwt>", "topics": ["activation"], "expires_at": "..." }
 ```
 
-- Gateway subscribes to internal ControlBus and relays events to SDK over the descriptor URL.
-- Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot or carry a `state_hash`.
+- Gateway는 내부 ControlBus를 구독하고 디스크립터 URL을 통해 SDK로 이벤트를 중계합니다.
+- 순서는 키(월드 또는 태그+인터벌) 단위로 보장됩니다. 컨슈머는 ``etag``/``run_id``로 중복 제거합니다. 각 토픽의 첫 메시지는 전체 스냅샷이거나 `state_hash`를 포함하는 것이 바람직합니다.
 
-Token (JWT) claims (delegated WS or future use):
+토큰(JWT) 클레임(위임 WS 또는 향후 용도):
 - `aud`: `controlbus`
 - `sub`: user/service identity
 - `world_id`, `strategy_id`, `topics`: subscription scope
 - `jti`, `iat`, `exp`: idempotency and keying. Key ID (`kid`) is conveyed in the JWT header.
 
-Token refresh
-- Clients may refresh an expiring token on the same connection by sending `{ "type": "refresh", "token": "<jwt>" }`.
-- On success Gateway updates scopes/topics in-place and returns `{ "type": "refresh_ack" }`.
-- Failures emit `ws_refresh_failed` and close the socket with policy code 1008.
+토큰 갱신
+- 클라이언트는 동일 연결에서 `{ "type": "refresh", "token": "<jwt>" }`를 보내 만료 임박 토큰을 갱신할 수 있습니다.
+- 성공 시 Gateway는 스코프/토픽을 제자리에서 업데이트하고 `{ "type": "refresh_ack" }`을 반환합니다.
+- 실패 시 `ws_refresh_failed` 이벤트를 내보내고 정책 코드 1008로 소켓을 종료합니다.
 
-### Degrade & Fail‑Safe Policy (Summary)
+### 강등 및 페일세이프 정책(요약)
 
-- WorldService unavailable:
-  - ``/decide`` → cached DecisionEnvelope if fresh; else safe default (compute‑only)
-  - ``/activation`` → inactive
-- Event stream unavailable:
-  - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP
-- Live guard: Gateway rejects live trading unless consent is given.
-  - When enabled, callers must include header ``X-Allow-Live: true``.
-  - Starting Gateway with ``--allow-live`` disables the guard for testing.
-- 2‑Phase apply handshake: during `Freeze/Drain`, Gateway MUST gate all order publications (OrderPublishNode outputs are suppressed). Gateway unblocks only after an `ActivationUpdated` event reflecting `freeze=false` post‑switch.
-- Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.
+- WorldService 비가용:
+  - ``/decide`` → 캐시된 DecisionEnvelope이 신선하면 사용, 아니면 안전 기본값(compute‑only)
+  - ``/activation`` → 비활성
+- 이벤트 스트림 비가용:
+  - 제공된 ``fallback_url``로 재연결; SDK는 주기적으로 HTTP 동기화를 수행할 수 있습니다.
+- 라이브 가드: 명시적 동의 없이는 라이브 거래를 거부합니다.
+  - 활성화 시 호출자는 헤더 ``X-Allow-Live: true``를 포함해야 합니다.
+  - ``--allow-live``로 Gateway를 시작하면 테스트용으로 가드가 비활성화됩니다.
+- 2‑단계 Apply 핸드셰이크: `Freeze/Drain` 동안 Gateway는 모든 주문 발행을 차단해야 합니다(OrderPublishNode 출력 억제). 스위치 후 `freeze=false`가 반영된 `ActivationUpdated` 이벤트를 수신한 뒤에만 차단을 해제합니다.
+- 아이덴티티 전파: Gateway는 호출자 아이덴티티(JWT subject/claims)를 WorldService로 전달하고, WorldService는 감사 로그에 기록합니다.
 
-See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).
+참고: World API 레퍼런스(reference/api_world.md) 및 스키마(reference/schemas.md).
 
 {{ nav_links() }}
-- Status (2025-09):
-  - Partition key is defined in `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)` and used by the commit‑log writer.
-  - Transactional commit‑log writer/consumer are implemented (`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`) with deduplication and metrics.
-  - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`), and `owner_reassign_total` is recorded on handoff.
-  - SDK/Gateway integration skips local execution when queues are globally owned (see `qmtl/services/gateway/worker.py`).
-  - Chaos/soak style dedup tests exist under `tests/qmtl/services/gateway/test_commit_log_soak.py`.
+- 상태 (2025‑09):
+  - 파티션 키는 `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)`에 정의되어 커밋 로그 라이터에서 사용됩니다.
+  - 트랜잭셔널 커밋 로그 라이터/컨슈머가 구현되어 있으며(`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`), 중복 제거와 메트릭을 제공합니다.
+  - OwnershipManager는 Postgres 어드바이저리 락을 폴백으로 사용해 Kafka 소유권을 조정하며(`qmtl/services/gateway/ownership.py`), 핸드오프 시 `owner_reassign_total`을 기록합니다.
+  - 큐가 전역 소유인 경우 SDK/Gateway 통합은 로컬 실행을 건너뜁니다(`qmtl/services/gateway/worker.py` 참조).
+  - 카오스/소크 스타일의 중복 제거 테스트가 `tests/qmtl/services/gateway/test_commit_log_soak.py`에 존재합니다.

@@ -1,5 +1,5 @@
 ---
-title: "Documentation Inventory"
+title: "문서 목록"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-26
@@ -7,12 +7,12 @@ last_modified: 2025-08-26
 
 {{ nav_links() }}
 
-# Documentation Inventory
+# 문서 목록
 
-> **Reminder:** Whenever you add a Markdown document anywhere in this repository, update this inventory so the catalog stays accurate.
+> **알림:** 저장소에 Markdown 문서를 추가할 때마다 이 인벤토리를 업데이트해 목록의 정확성을 유지하세요.
 
-## Governance
-*Owner: Core Maintainers*
+## 거버넌스(Governance)
+*소유자: Core Maintainers*
 
 - `AGENTS.md`
 - `CHANGELOG.md`
@@ -22,14 +22,14 @@ last_modified: 2025-08-26
 - `docs/index.md`
 - `docs/tags.md`
 
-## GitHub Workflows
-*Owner: Dev Productivity Guild*
+## GitHub 워크플로
+*소유자: Dev Productivity Guild*
 
 - `.github/copilot-instructions.md`
 - `.github/issues/README.md`
 
-## Architecture
-*Owner: Architecture Guild*
+## 아키텍처
+*소유자: Architecture Guild*
 
 - `docs/architecture/README.md`
 - `docs/architecture/architecture.md`
@@ -46,20 +46,20 @@ last_modified: 2025-08-26
 - `docs/architecture/seamless_data_provider_v2.md`
 - `docs/architecture/worldservice.md`
 
-## Archive
-*Owner: Records Steward*
+## 보관(Archive)
+*소유자: Records Steward*
 
 - `docs/archive/README.md`
 - `docs/archive/ccxt-seamless-legacy-audit.md`
 
-## Design
-*Owner: Design Council*
+## 설계(Design)
+*소유자: Design Council*
 
 - `docs/design/seamless_data_provider.md`
 - `docs/design/yaml_config_overhaul.md`
 
-## Guides
-*Owner: Developer Enablement*
+## 가이드(Guides)
+*소유자: Developer Enablement*
 
 - `docs/guides/README.md`
 - `docs/guides/build_nodeset_sdk.md`
@@ -85,13 +85,13 @@ last_modified: 2025-08-26
 - `docs/guides/testing.md`
 
 ## IO
-*Owner: Data IO Team*
+*소유자: Data IO Team*
 
 - `docs/io/README.md`
 - `docs/io/ccxt-questdb.md`
 
-## Operations
-*Owner: Operations Guild*
+## 운영(Operations)
+*소유자: Operations Guild*
 
 - `docs/operations/README.md`
 - `docs/operations/activation.md`
@@ -120,8 +120,8 @@ last_modified: 2025-08-26
 - `docs/operations/ws_resilience.md`
 - `operations/seamless/README.md`
 
-## Reference
-*Owner: Reference Librarians*
+## 레퍼런스(Reference)
+*소유자: Reference Librarians*
 
 - `BACKTEST_ENHANCEMENTS_SUMMARY.md`
 - `docs/reference/CHANGELOG.md`
@@ -152,16 +152,16 @@ last_modified: 2025-08-26
 - `docs/reference/tagquery.md`
 - `docs/reference/templates.md`
 
-## Templates
-*Owner: Template Stewards*
+## 템플릿(Templates)
+*소유자: Template Stewards*
 
 - `docs/templates/backend_stack.md`
 - `docs/templates/index.md`
 - `docs/templates/local_stack.md`
 - `docs/templates/template.md`
 
-## World
-*Owner: World Council*
+## 월드(World)
+*소유자: World Council*
 
 - `docs/world/index.md`
 - `docs/world/policy_engine.md`
@@ -170,23 +170,23 @@ last_modified: 2025-08-26
 - `docs/world/world_refined.md`
 - `docs/world/world_todo.md`
 
-## Examples
-*Owner: Examples Guild*
+## 예제(Examples)
+*소유자: Examples Guild*
 
 - `qmtl/examples/README.md`
 - `qmtl/examples/brokerage_demo/README.md`
 - `qmtl/examples/docs/README.md`
 - `qmtl/examples/docs/worldservice_gating.md`
 
-## Runtime
-*Owner: Runtime Maintainers*
+## 런타임(Runtime)
+*소유자: Runtime Maintainers*
 
 - `qmtl/runtime/generators/README.md`
 - `qmtl/runtime/indicators/README.md`
 - `qmtl/runtime/transforms/README.md`
 
-## Kiro Program
-*Owner: Kiro Steering Group*
+## Kiro 프로그램
+*소유자: Kiro Steering Group*
 
 - `.kiro/README.md`
 - `.kiro/specs/dag-strategy-execution/design.md`
@@ -196,10 +196,9 @@ last_modified: 2025-08-26
 - `.kiro/steering/structure.md`
 - `.kiro/steering/tech.md`
 
-## Tests
-*Owner: Quality Assurance*
+## 테스트(Tests)
+*소유자: Quality Assurance*
 
 - `tests/e2e/world_smoke/README.md`
 
 {{ nav_links() }}
-

@@ -1,3 +1,10 @@
+---
+title: "Python 환경 가이드"
+tags: [guide, python, environment]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # Python 환경 가이드
 
 본 프로젝트는 개발 환경과 CI 간 일관성을 위해 Python 3.11과 `uv` 패키지 관리자를 표준으로 사용합니다.

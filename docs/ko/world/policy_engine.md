@@ -1,10 +1,17 @@
-# Policy Engine
+---
+title: "정책 엔진"
+tags: [world, policy]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
 
-This guide describes how to define and apply world policies.
+# 정책 엔진
 
-## Sample Policy
+이 가이드는 월드 정책을 정의하고 적용하는 방법을 설명합니다.
 
-A sample policy is provided in [`sample_policy.yml`](./sample_policy.yml):
+## 샘플 정책
+
+샘플 정책은 [`sample_policy.yml`](./sample_policy.yml)에 포함되어 있습니다:
 
 ```yaml
 thresholds:
@@ -25,9 +32,9 @@ hysteresis:
   exit: 0.4
 ```
 
-## Applying a Policy
+## 정책 적용
 
-Use the WorldService API to apply a policy and evaluate strategies:
+WorldService API를 사용해 정책을 적용하고 전략을 평가합니다:
 
 ```bash
 curl -X POST /worlds/alpha/apply \
@@ -35,7 +42,7 @@ curl -X POST /worlds/alpha/apply \
   -d '{"policy": { ... }, "metrics": { ... }}'
 ```
 
-The response contains the active strategies after evaluation.
+응답에는 평가 이후 활성화된 전략 목록이 포함됩니다.
 
 ```json
 {
@@ -46,4 +53,4 @@ The response contains the active strategies after evaluation.
 }
 ```
 
-`ok` defaults to `true`, `active` mirrors the persisted strategy roster (empty when nothing is active), and `phase` is optional—`completed` for successful runs, or another stage while the 2‑Phase apply is still progressing.
+`ok`는 기본적으로 `true`이며, `active`는 저장된 전략 목록을 반영합니다(활성 항목이 없으면 빈 배열). `phase`는 선택 항목으로, 성공 시 `completed`이며 2‑단계 Apply가 진행 중이면 해당 단계가 표시될 수 있습니다.

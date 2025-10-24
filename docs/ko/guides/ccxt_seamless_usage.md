@@ -1,3 +1,10 @@
+---
+title: "CCXT Seamless Data Provider 사용 가이드"
+tags: [guide, ccxt, seamless]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # CCXT Seamless Data Provider 사용 가이드
 
 CCXT 기반 거래소 데이터를 QMTL의 Seamless Data Provider와 결합하면 자동 백필·라이브 전환·커버리지 관리를 단일 인터페이스에서 처리할 수 있습니다. 이 문서는 `CcxtOHLCVFetcher`를 `EnhancedQuestDBProvider`에 연결해 실전 전략에 적용하는 절차를 정리합니다.

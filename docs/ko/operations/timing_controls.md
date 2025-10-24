@@ -1,5 +1,5 @@
 ---
-title: "Timing Controls"
+title: "타이밍 제어"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
@@ -7,13 +7,13 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
-# Timing Controls
+# 타이밍 제어
 
-This document outlines the timing utilities available in QMTL for managing market sessions and validating timestamp data.
+이 문서는 QMTL에서 제공하는 타이밍 유틸리티를 소개합니다. 시장 세션을 관리하고 타임스탬프 데이터의 유효성을 검증하는 데 사용합니다.
 
 ## MarketHours
 
-`MarketHours` describes the boundaries of each trading session. It accepts the start and end times for pre-market, regular, and post-market sessions.
+`MarketHours`는 각 거래 세션의 경계를 정의합니다. 프리마켓, 정규장, 애프터마켓의 시작/종료 시간을 전달받습니다.
 
 ```python
 from qmtl.runtime.sdk.timing_controls import MarketHours, MarketSession
@@ -35,19 +35,17 @@ session = hours.get_session(ts)
 assert session is MarketSession.REGULAR
 ```
 
-Lunch breaks and one-off early closes can be configured using `lunch_start`,
-`lunch_end`, and the `early_closes` mapping. See [Exchange Calendars](exchange_calendars.md)
-for example hours across major markets.
+점심 시간과 특정일 조기 마감은 `lunch_start`, `lunch_end`, `early_closes` 매핑으로 설정할 수 있습니다. 주요 시장별 예시는 [거래소 캘린더](exchange_calendars.md)를 참고하세요.
 
 ## TimingController
 
-`TimingController` coordinates session checks and execution delays.
+`TimingController`는 세션 검증과 실행 지연을 조정합니다.
 
-- `allow_pre_post_market`: permit trading in pre/post-market sessions.
-- `require_regular_hours`: only allow trading during the regular session.
-- `validate_timing(timestamp)`: returns `(is_valid, reason, session)`.
-- `calculate_execution_delay(...)`: estimates realistic execution delay.
-- `get_next_valid_execution_time(...)`: finds the next allowable time if the current timestamp is invalid.
+- `allow_pre_post_market`: 프리/애프터마켓에서의 거래 허용 여부
+- `require_regular_hours`: 정규장 시간에만 거래 허용
+- `validate_timing(timestamp)`: `(is_valid, reason, session)` 반환
+- `calculate_execution_delay(...)`: 현실적인 실행 지연 추정
+- `get_next_valid_execution_time(...)`: 현재 타임스탬프가 유효하지 않을 때 다음 허용 시각 계산
 
 ```python
 from qmtl.runtime.sdk.timing_controls import TimingController
@@ -60,7 +58,7 @@ if not valid:
 
 ## validate_backtest_timing
 
-`validate_backtest_timing` scans all `StreamInput` nodes in a strategy and reports timestamps that fall outside the configured trading sessions. Each issue includes the timestamp, reason, and the detected market session. Set `fail_on_invalid_timing=True` to raise an exception when invalid data is found.
+`validate_backtest_timing`은 전략의 모든 `StreamInput` 노드를 검사하여 설정된 거래 세션 범위를 벗어나는 타임스탬프를 보고합니다. 각 항목에는 타임스탬프, 사유, 감지된 시장 세션이 포함됩니다. `fail_on_invalid_timing=True`로 설정하면 유효하지 않은 데이터가 발견될 때 예외를 발생시킵니다.
 
 ```python
 from qmtl.runtime.sdk.timing_controls import validate_backtest_timing
@@ -72,4 +70,3 @@ for node, node_issues in issues.items():
 ```
 
 {{ nav_links() }}
-

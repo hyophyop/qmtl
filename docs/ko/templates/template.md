@@ -1,11 +1,10 @@
 ---
-title: "Document Title"
+title: "문서 제목"
 tags: []
-author: "Author Name"
+author: "작성자 이름"
 last_modified: 2025-08-21
 ---
 
-# Document Title
+# 문서 제목
 
-Write your content here.
-
+여기에 문서 내용을 작성하세요.

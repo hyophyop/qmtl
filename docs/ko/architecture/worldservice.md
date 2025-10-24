@@ -1,5 +1,5 @@
 ---
-title: "WorldService — World Policy, Decisions, and Activation"
+title: "WorldService — 월드 정책, 결정, 활성화"
 tags: [architecture, world, policy]
 author: "QMTL Team"
 last_modified: 2025-09-22
@@ -7,27 +7,27 @@ last_modified: 2025-09-22
 
 {{ nav_links() }}
 
-# WorldService — World Policy, Decisions, and Activation
+# WorldService — 월드 정책, 결정, 활성화
 
-## 0. Role & Scope
+## 0. 역할과 범위
 
-WorldService is the system of record (SSOT) for Worlds. It owns:
-- World/Policy registry: CRUD, versioning, defaults, rollback
-- Decision engine: data-currency, sample sufficiency, gates/score/constraints, hysteresis → effective_mode (policy string). Gateway derives the downstream execution_domain from this mode when relaying decisions/activations.
-- Activation control: per-world activation set for strategies/sides with weights
-- ExecutionDomain as a first-class concept: `backtest | dryrun | live | shadow` per world
-- 2‑Phase apply: Freeze/Drain → Switch → Unfreeze, idempotent with run_id
-- Audit & RBAC: every policy/update/decision/apply event is logged and authorized
-- Events: emits activation/policy updates to the internal ControlBus
+WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유합니다:
+- 월드/정책 레지스트리: CRUD, 버저닝, 기본값, 롤백
+- 결정 엔진: 데이터 신선도(data-currency), 표본 충분성, 게이트/점수/제약, 히스테리시스 → `effective_mode`(정책 문자열). Gateway는 결정/활성화 중계 시 이 모드에서 하위 `execution_domain`을 도출합니다.
+- 활성화 제어: 전략/사이드별 가중치를 포함한 월드 단위 활성화 집합
+- 일급 개념으로서의 ExecutionDomain: 월드별 `backtest | dryrun | live | shadow`
+- 2‑단계 Apply: Freeze/Drain → Switch → Unfreeze, `run_id`로 멱등성 보장
+- 감사 및 RBAC: 각 정책/업데이트/결정/적용 이벤트를 로깅하고 권한을 검사
+- 이벤트: 내부 ControlBus로 활성화/정책 업데이트 발행
 
-!!! note "Design intent"
-- WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute‑only with order gates OFF.
+!!! note "설계 의도"
+- WS는 `effective_mode`(정책 문자열)를 산출하고, Gateway는 이를 `execution_domain`으로 매핑해 공유 컴퓨트 컨텍스트로 전파합니다. SDK/Runner는 모드를 선택하지 않으며 입력으로만 취급합니다. 오래되었거나 알 수 없는 결정은 기본적으로 compute‑only(주문 게이트 OFF)로 처리합니다.
 
-Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
+비목표: 전략 인제스트, DAG diff, 큐/태그 디스커버리(각각 Gateway/DAG Manager 소유). 주문 I/O는 여기에서 다루지 않습니다.
 
 ---
 
-## 1. Data Model (normative)
+## 1. 데이터 모델(규범)
 
 Worlds (DB)
 - world_id (pk, slug), name, description, owner, labels[]
@@ -40,50 +40,48 @@ WorldPolicies (DB)
 
 WorldActivation (Redis)
 - Key: world:<id>:active → { strategy_id|side : { active, weight, etag, run_id, ts } }
-- Snapshots periodically persisted to DB for audit
+- 스냅샷은 주기적으로 DB에 영속화되어 감사에 사용됩니다.
 
 WorldAuditLog (DB)
 - id, world_id, actor, event (create/update/apply/evaluate/activate/override)
 - request, result, created_at, correlation_id
 
-Implementation note: the reference service now ships with a persistent backend
-(`qmtl.services.worldservice.storage.PersistentStorage`) that stores these relational
-surfaces in SQL (SQLite or Postgres) and activation state in Redis. Production
-deployments wire this backend by default, while unit tests can continue using
-the in-memory façade for lightweight fixtures. All APIs described below operate
-against this durable adapter.
+구현 메모: 레퍼런스 서비스는 지속형 백엔드(`qmtl.services.worldservice.storage.PersistentStorage`)
+를 포함하며, 관계형 표면은 SQL(SQLite/Postgres)에, 활성화 상태는 Redis에 저장합니다.
+프로덕션 배포는 기본적으로 이 백엔드를 사용하고, 단위 테스트는 여전히 인메모리 파사드를 활용할 수 있습니다.
+아래 API는 이 내구성 어댑터를 대상으로 동작합니다.
 
-### 1‑A. WVG Data Model (normative)
+### 1‑A. WVG 데이터 모델(규범)
 
-WorldService is the SSOT for the World View Graph (WVG), a per‑world overlay referencing global GSG nodes (Global Strategy Graph=GSG):
+WorldService는 World View Graph(WVG)의 SSOT입니다. 이는 전역 GSG 노드(Global Strategy Graph=GSG)를 참조하는 월드‑별 오버레이입니다:
 
 - WorldNodeRef (DB): `(world_id, node_id, execution_domain)` → `status` (`unknown|validating|valid|invalid|running|paused|stopped|archived`), `last_eval_key`, `annotations{}`
-- Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' prefix required**), `result`, `metrics{}`, `timestamp`
-- DecisionsRequest (DB/API): `strategies` (ordered, deduplicated list of strategy identifiers) stored per-world via `/worlds/{world_id}/decisions`
+- Validation (DB): `eval_key = blake3:(NodeID||WorldID||ContractID||DatasetFingerprint||CodeVersion||ResourcePolicy)` (**'blake3:' 접두사 필수**), `result`, `metrics{}`, `timestamp`
+- DecisionsRequest (DB/API): `strategies`(정렬 및 중복 제거된 전략 식별자 리스트)를 `/worlds/{world_id}/decisions` 경로로 월드 단위 저장
 - **EdgeOverride (DB, WVG scope):** 월드-로컬 도달성 제어 레코드. `(world_id, src_node_id, dst_node_id, active=false, reason)` 형태로 특정 월드에서 비활성화할 에지를 명시한다. 구현은 [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }})와 WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) 라우트가 저장·노출한다.
 
-SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycle and emits changes via ControlBus.
+SSOT 경계: WVG 객체는 DAG Manager가 저장하지 않습니다. WS가 수명주기를 소유하고 ControlBus로 변경을 발행합니다.
 
 ---
 
-## 2. API Surface (summary)
+## 2. API 표면(요약)
 
 CRUD
 - POST /worlds | GET /worlds | GET /worlds/{id} | PUT /worlds/{id} | DELETE /worlds/{id}
 
-Policies
+정책(Policies)
 - POST /worlds/{id}/policies  (upload new version)
 - GET /worlds/{id}/policies   (list) | GET /worlds/{id}/policies/{v}
 - POST /worlds/{id}/set-default?v=V
 
-Bindings
+바인딩(Bindings)
 - POST /worlds/{id}/bindings        (upsert WSB: bind `strategy_id` to world)
 - GET  /worlds/{id}/bindings        (list; filter by `strategy_id`)
 
-Purpose
-- WSB ensures a `(world_id, strategy_id)` root exists in the WVG for each submission. For operational isolation and resource control, running separate processes per world is recommended when strategies target multiple worlds.
+목적
+- WSB는 각 제출마다 WVG에 `(world_id, strategy_id)` 루트가 존재하도록 보장합니다. 다중 월드를 대상으로 할 경우, 운영 격리와 자원 제어를 위해 월드별 별도 프로세스를 권장합니다.
 
-Decisions & Control
+결정 및 제어
 - GET /worlds/{id}/decide?as_of=... → DecisionEnvelope
 - POST /worlds/{id}/decisions       (replace world strategy set via DecisionsRequest)
 - GET /worlds/{id}/activation?strategy_id=...&side=... → ActivationEnvelope
@@ -92,7 +90,7 @@ Decisions & Control
 - POST /worlds/{id}/apply              (2‑Phase apply; requires run_id)
 - GET /worlds/{id}/audit               (paginated stream)
 
-RBAC: world-scope roles (owner, reader, operator). Sensitive ops (`apply`, `activation PUT`) require operator.
+RBAC: 월드 범위 롤(owner, reader, operator). 민감 작업(`apply`, `activation PUT`)은 operator 권한이 필요합니다.
 
 ---
 
@@ -143,11 +141,11 @@ Field semantics and precedence
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 
-Idempotency: consumers must treat older etag/run_id as no‑ops. Unknown or expired decisions/activations should default to “inactive/safe”.
+아이템포턴시(Idempotency): 컨슈머는 오래된 `etag`/`run_id` 이벤트를 무시해야 합니다(no‑op). 알 수 없거나 만료된 결정/활성화는 “비활성/안전” 상태로 간주합니다.
 
-TTL & Staleness
-- DecisionEnvelope includes a TTL (default 300s if unspecified). After TTL, Gateway must treat the decision as stale and enforce a safe default: compute‑only (orders gated OFF) until a fresh decision is obtained.
-- Activation has no TTL but carries `etag` (and optional `state_hash`). Unknown/expired activation → orders gated OFF.
+TTL 및 신선도(Staleness)
+- DecisionEnvelope에는 TTL이 포함됩니다(미지정 시 기본 300초). TTL 경과 후 Gateway는 결정을 오래된 상태로 간주하고, 새 결정을 받을 때까지 안전 기본값인 compute‑only(주문 게이트 OFF)를 강제해야 합니다.
+- Activation에는 TTL이 없지만 `etag`(선택적으로 `state_hash`)가 포함됩니다. 알 수 없거나 만료된 활성화 → 주문 게이트 OFF.
 
 ---
 
@@ -170,30 +168,30 @@ TTL & Staleness
 
 ---
 
-## 4. Decision Semantics
+## 4. 결정 의미론(Decision Semantics)
 
-- Data Currency: now − data_end ≤ max_lag → near‑real‑time; else compute‑only replay until caught up (orders remain gated OFF)
-- Sample Sufficiency: metric‑specific minimums (days, trades, bars) gate before scoring
-- Gates: AND/OR of thresholds; Score: weighted function; Constraints: correlation/exposure
-- Hysteresis: promote_after, demote_after, min_dwell to avoid flapping
+- 데이터 신선도(Data Currency): `now − data_end ≤ max_lag`이면 근실시간, 아니면 따라잡을 때까지 compute‑only 리플레이(주문 게이트 OFF 유지)
+- 표본 충분성: 메트릭별 최소 일수/체결수/바 수 등을 기준으로 스코어링 전 게이트 적용
+- 게이트/스코어/제약: 임계값 AND/OR, 가중 스코어, 상관/익스포저 제약
+- 히스테리시스: `promote_after`, `demote_after`, `min_dwell`로 플래핑 방지
 
-The evaluation returns DecisionEnvelope and an optional plan for apply.
+평가 결과는 DecisionEnvelope과(선택적으로) Apply 계획을 반환합니다.
 
-### 4‑A. DecisionsRequest Updates (WVG)
+### 4‑A. DecisionsRequest 업데이트(WVG)
 
-- `/worlds/{world_id}/decisions` accepts a `DecisionsRequest` and replaces the stored strategy list atomically for that world (MUST).
-- Entries are validated as non-empty strings, deduplicated, and preserved in request order before being persisted (SHALL).
-- Clearing the list removes all active strategies for the world; subsequent `/decide` calls return `validate` mode until strategies are restored (SHOULD).
+- `/worlds/{world_id}/decisions`는 `DecisionsRequest`를 받아 해당 월드의 저장된 전략 목록을 원자적으로 교체합니다(MUST).
+- 항목은 비어있지 않은 문자열인지 검증하고, 중복 제거 후 요청 순서를 보존해 영속화합니다(SHALL).
+- 목록을 비우면 해당 월드의 모든 활성 전략이 제거되며, 이후 `/decide` 호출은 전략이 복원될 때까지 `validate` 모드를 반환합니다(SHOULD).
 
-### 4‑B. EvalKey and Validation Caching
+### 4‑B. EvalKey와 검증 캐싱
 
 - EvalKey = `blake3(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`
-- ExecutionDomain is normalised (case-insensitive) before hashing and storage so cache keys remain domain-scoped and comparable.
-- Any change in the components invalidates cache and triggers re‑validation. Invalidation removes the scoped domain entry (and empties the node/world bucket when last entry is purged) to prevent stale re-use.
+- ExecutionDomain은 해싱/저장 전 정규화(대소문자 무시)하여 도메인 스코프 캐시 키가 안정적으로 비교되도록 합니다.
+- 구성 요소가 변경되면 캐시 무효화 및 재검증을 트리거합니다. 무효화는 스코프 도메인 엔트리를 제거하고(마지막 엔트리 제거 시 버킷 비움) 오래된 재사용을 방지합니다.
 
-### 4‑C. Gating Policy Specification (normative)
+### 4‑C. 게이팅 정책 명세(규범)
 
-Reference YAML structure enforced by policy tooling:
+정책 도구가 강제하는 참조 YAML 구조:
 
 ```yaml
 gating_policy:
@@ -228,58 +226,58 @@ gating_policy:
     audit_topic: "gating.alerts"
 ```
 
-- Policies MUST specify `dataset_fingerprint`, explicit `share_policy`, and edge overrides for pre/post promotion. 누락 시 Apply는 compute-only로 강등되거나 거부된다.
-- `observability.slo.cross_context_cache_hit`는 0이어야 하며(SHALL), 위반 시 실행이 차단된다. Gateway/SDK는 ControlBus 이벤트와 메트릭으로 이를 감시한다.
-- `snapshot`/`share_policy` 조합은 Feature Artifact Plane(§1.4) 규칙과 일치해야 한다. Strategy Plane은 Copy-on-Write, Feature Plane은 읽기 전용 복제로만 공유한다.
-- `risk_limits`, `divergence_guards`, `execution_model`은 프로모션 전 검증에서 평가되며, 실패 시 Apply가 거부되고 freeze 상태가 유지된다.
+- 정책은 반드시 `dataset_fingerprint`, 명시적 `share_policy`, 승격 전/후 엣지 오버라이드를 지정해야 합니다. 누락 시 Apply는 compute‑only로 강등되거나 거부됩니다.
+- `observability.slo.cross_context_cache_hit`는 0이어야 하며(SHALL), 위반 시 실행이 차단됩니다. Gateway/SDK는 ControlBus 이벤트와 메트릭으로 이를 감시합니다.
+- `snapshot`/`share_policy` 조합은 Feature Artifact Plane(§1.4) 규칙과 일치해야 합니다. Strategy Plane은 Copy‑on‑Write, Feature Plane은 읽기 전용 복제로만 공유합니다.
+- `risk_limits`, `divergence_guards`, `execution_model`은 프로모션 전 검증에서 평가되며, 실패 시 Apply가 거부되고 freeze 상태가 유지됩니다.
 
 ---
 
-## 5. Security & RBAC
+## 5. 보안 & RBAC
 
-- Auth: service‑to‑service tokens (mTLS/JWT); user tokens at Gateway → propagated to WS
-- World‑scope RBAC enforced at WS; Gateway only proxies
-- Audit: all write ops and evaluations are logged with correlation_id
+- 인증: 서비스 간 토큰(mTLS/JWT); 사용자 토큰은 Gateway에서 WS로 전달
+- 권한: 월드 스코프 RBAC는 WS에서 강제; Gateway는 프록시 역할만 수행
+- 감사: 모든 쓰기 작업과 평가에 correlation_id를 포함해 로깅
 
-Clock Discipline
-- Decisions depend on time. WS uses a monotonic server clock and enforces NTP health. Maximum tolerated client skew should be documented (e.g., ≤ 2s).
-
----
-
-## 6. Observability & SLOs
-
-Metrics example
-- world_decide_latency_ms_p95, world_apply_duration_ms_p95
-- activation_skew_seconds, promotion_fail_total, demotion_fail_total
-- registry_write_fail_total, audit_backlog_depth
-- cross_context_cache_hit_total (target=0; violation blocks promotions)
-
-Skew Metrics
-- `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
-
-Alerts
-- Decision failures, explicit status polling failures, stale activation cache at Gateway
-- cross_context_cache_hit_total > 0 (CRIT): investigate domain mixing before re-enabling apply
+클록 규율(Clock Discipline)
+- 결정은 시간에 의존합니다. WS는 단조 증가 서버 클록과 NTP 상태를 강제하며, 허용 가능한 클라이언트 스큐(예: ≤ 2초)를 문서화해야 합니다.
 
 ---
 
-## 7. Failure Modes & Recovery
+## 6. 관측(Observability) & SLO
 
-- WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute‑only/inactive). Activation defaults to inactive.
-- Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
-- Policy parse errors: reject version; keep prior default.
+메트릭 예시
+- `world_decide_latency_ms_p95`, `world_apply_duration_ms_p95`
+- `activation_skew_seconds`, `promotion_fail_total`, `demotion_fail_total`
+- `registry_write_fail_total`, `audit_backlog_depth`
+- `cross_context_cache_hit_total`(목표=0; 위반 시 프로모션 차단)
+
+Skew 메트릭
+- `activation_skew_seconds`는 이벤트 `ts`와 SDK 처리 시각의 차이를 월드별 p95로 집계합니다.
+
+알림
+- 결정 실패, 명시적 상태 폴링 실패, Gateway의 오래된 활성화 캐시
+- `cross_context_cache_hit_total > 0`(치명): Apply 재개 전 도메인 혼합 조사
 
 ---
 
-## 8. Integration & Events
+## 7. 장애 모드 & 복구
 
-- Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
-- DAG Manager: no dependency for decisions; only for queue/graph metadata
-- ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
+- WS 다운: Gateway는 캐시된 DecisionEnvelope이 신선할 경우 이를 반환, 아니면 안전 기본값(compute‑only/inactive). Activation은 기본 비활성.
+- Redis 손실: 최신 스냅샷에서 Activation을 재구성; 일관성 회복 전까지 주문 게이트 유지.
+- 정책 파싱 오류: 해당 버전 거부, 이전 기본값 유지.
 
-Runner & SDK Integration (clarification)
-- SDK/Runner do not expose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
-- `effective_mode` in DecisionEnvelope is computed by WS and treated as input by SDK. Unknown or stale decisions default to compute-only with order gates OFF.
+---
+
+## 8. 통합 & 이벤트
+
+- Gateway: `/worlds/*` 프록시, TTL 기반 결정 캐시, `--allow-live` 가드 적용
+- DAG Manager: 결정과는 독립, 큐/그래프 메타데이터만 연계
+- ControlBus: WS는 ActivationUpdated/PolicyUpdated 발행; Gateway가 구독 후 WS를 통해 SDK로 중계
+
+Runner & SDK 통합(명확화)
+- SDK/Runner는 실행 모드를 노출하지 않습니다. 호출자는 전략 시작 시 `world_id`만 제공하며, Runner는 WorldService 결정과 활성화 이벤트를 따릅니다.
+- DecisionEnvelope의 `effective_mode`는 WS가 계산하며 SDK는 입력으로 취급합니다. 알 수 없거나 오래된 결정은 compute‑only(주문 게이트 OFF)로 처리합니다.
 - 제출 시 Gateway는 각 `world_id`에 대해 **WSB upsert**를 보장하며, WVG에 `WorldNodeRef(root)`를 생성/갱신한다.
 
 ---

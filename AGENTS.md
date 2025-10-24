@@ -39,6 +39,14 @@ For general contribution and testing policies, see the repository root [AGENTS.m
   Add an explicit installation step or shared requirements file in the workflow so the CI job
   installs packages such as `pyyaml` before running the script.
 
+### Internationalization Policy
+
+- Baseline language: Korean (`ko`). All other locales (including English) are translations of the Korean source documents.
+- New or updated documentation should treat `docs/ko/...` as the canonical content; non‑Korean versions must not introduce normative content that does not exist in Korean.
+- When introducing or updating documentation across 3 or more supported locales, ensure both Korean and English pages exist before completing the work. Other locales may follow subsequently, but `ko` and `en` must ship together in that change.
+- Keep file paths mirrored by locale (e.g., `docs/ko/guides/foo.md` ↔ `docs/en/guides/foo.md`) and maintain the same heading structure and relative links.
+- Validate builds for all affected locales with `uv run mkdocs build` and fix broken or missing links as part of the change. For broader i18n workflow details, see `docs/ko/guides/docs_internationalization.md`.
+
 ## Testing
 
 - Always run tests in parallel with `pytest-xdist` for faster feedback:

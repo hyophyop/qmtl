@@ -1,5 +1,5 @@
 ---
-title: "Lean Brokerage Model — Integration Guide"
+title: "Lean 브로커리지 모델 — 통합 가이드"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
@@ -7,7 +7,7 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
-# Lean Brokerage Model — Integration Guide
+# Lean 브로커리지 모델 — 통합 가이드
 
 ## 관련 문서
 - [Architecture Overview](README.md)
@@ -213,30 +213,30 @@ Lean의 브로커리지 모델은 \*\*“브로커별 현실 모델 번들 + 사
 
 > 참고: 각 항목의 상세 동작·예제·사전구현 모델 목록은 Lean 공식 문서의 **Reality Modeling** 섹션(매수력/체결/슬리피지/수수료/정산/공매도)과 **Brokerages** 섹션(IBKR 등)을 보시면 신속히 구현 스펙을 확정할 수 있습니다. ([[QuantConnect](https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling/key-concepts?utm_source=chatgpt.com)][26])
 
-If you want, I can sketch a minimal **IBKR-like BrokerageProfile POC**(파이썬 의사코드)로 실행 순서(Pre→Fill→Slip→Fee→Settle)를 보여드릴게요.
+원하시면 최소한의 **IBKR‑유사 BrokerageProfile POC**(파이썬 의사코드)로 실행 순서(Pre→Fill→Slip→Fee→Settle)를 스케치해 드릴 수 있습니다.
 
 ---
 
-## Integration Note: Worlds and Brokerage
+## 통합 노트: 월드와 브로커리지
 
-- Activation vs. Execution: WorldService decides whether a strategy/side may trade (activation set). Brokerage models define how orders are validated and executed once allowed.
-- Separation of concerns: Gateway/SDK enforce world activation via an order gate before invoking brokerage logic. Brokerage does not determine activation and remains broker‑specific.
-- Safety: If activation is stale/unknown, orders are gated OFF regardless of brokerage model outcomes.
+- Activation vs Execution: WorldService는 전략/사이드의 거래 가능 여부(활성화 집합)를 결정합니다. 브로커리지는 허용된 이후 주문 검증/체결 방식을 정의합니다.
+- 관심사 분리: Gateway/SDK는 브로커리지 로직 호출 전에 주문 게이트로 월드 활성화를 강제합니다. 브로커리지는 활성화를 판단하지 않으며 브로커별로 독립합니다.
+- 안전장치: 활성화가 오래되었거나 알 수 없는 경우, 브로커리지 결과와 무관하게 주문은 게이트 OFF입니다.
 
-### QMTL Module Mapping (Implementation Pointers)
+### QMTL 모듈 매핑(구현 포인터)
 
-- Orders & TIF: `qmtl/runtime/brokerage/order.py` (`OrderType`, `TimeInForce`, extended `Order`)
-- Fill: `qmtl/runtime/brokerage/fill_models.py` (market/limit/stop/stop-limit + IOC/FOK)
-- Slippage: `qmtl/runtime/brokerage/slippage.py` (null/constant/spread/volume-share)
-- Fees: `qmtl/runtime/brokerage/fees.py` (percent/per-share/composite)
-- Symbol properties: `qmtl/runtime/brokerage/symbols.py` (tick/lot/min validation)
-- Exchange hours: `qmtl/runtime/brokerage/exchange_hours.py` (regular/pre/post; holiday support is incremental)
-- Shortable: `qmtl/runtime/brokerage/shortable.py` (default static provider)
+- Orders & TIF: `qmtl/runtime/brokerage/order.py` (`OrderType`, `TimeInForce`, 확장 `Order`)
+- Fill: `qmtl/runtime/brokerage/fill_models.py` (market/limit/stop/stop‑limit + IOC/FOK)
+- Slippage: `qmtl/runtime/brokerage/slippage.py` (null/constant/spread/volume‑share)
+- Fees: `qmtl/runtime/brokerage/fees.py` (percent/per‑share/composite)
+- Symbol properties: `qmtl/runtime/brokerage/symbols.py` (tick/lot/min 검증)
+- Exchange hours: `qmtl/runtime/brokerage/exchange_hours.py` (정규/프리/애프터; 휴일 지원은 점진적)
+- Shortable: `qmtl/runtime/brokerage/shortable.py` (기본 정적 프로바이더)
 - Profiles/Initializer: `qmtl/runtime/brokerage/profile.py` (`ibkr_equities_like_profile()`)
-- Settlement & Interest: `qmtl/runtime/brokerage/settlement.py`, `qmtl/runtime/brokerage/interest.py` (skeletons)
-- SDK Gate: `qmtl/runtime/sdk/order_gate.py` (activation gate helper)
+- Settlement & Interest: `qmtl/runtime/brokerage/settlement.py`, `qmtl/runtime/brokerage/interest.py` (스켈레톤)
+- SDK Gate: `qmtl/runtime/sdk/order_gate.py` (활성화 게이트 헬퍼)
 
-See also: Reference API at `docs/reference/api/brokerage.md`.
+참고: 레퍼런스 API `docs/reference/api/brokerage.md`.
 
 [1]: https://www.quantconnect.com/docs/v2/writing-algorithms/universes/settings?utm_source=chatgpt.com "Settings"
 [2]: https://www.lean.io/docs/v2/lean-engine/class-reference/IBrokerageModel_8cs_source.html?utm_source=chatgpt.com "Common/Brokerages/IBrokerageModel.cs Source File"

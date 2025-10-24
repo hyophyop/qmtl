@@ -1,5 +1,5 @@
 ---
-title: "ControlBus — Internal Control Bus (Opaque to SDK)"
+title: "ControlBus — 내부 제어 버스 (SDK에 비공개)"
 tags: [architecture, events, control]
 author: "QMTL Team"
 last_modified: 2025-08-29
@@ -7,41 +7,41 @@ last_modified: 2025-08-29
 
 {{ nav_links() }}
 
-# ControlBus — Internal Control Bus
+# ControlBus — 내부 제어 버스
 
-ControlBus distributes control‑plane updates (not data) from core services to Gateways. It is an internal component and not a public API; SDKs never connect directly in the default deployment. All control events are versioned envelopes and include `type` and `version` fields.
+ControlBus는 핵심 서비스에서 Gateway로 제어 플레인 업데이트(데이터가 아닌)를 배포합니다. 내부 전용 컴포넌트이며 공개 API가 아닙니다. 기본 배포에서는 SDK가 직접 연결하지 않습니다. 모든 제어 이벤트는 버전이 명시된 봉투 형태이며 `type`, `version` 필드를 포함합니다.
 
-## 0. Role & Non‑Goals
+## 0. 역할과 비목표(Non‑Goals)
 
-Role
-- Fan‑out of ActivationUpdated, PolicyUpdated, QueueUpdated events
-- Partitioned streams per world_id or (tags, interval) to preserve per‑key ordering
-- Bounded retention with compacted history for late subscribers
+역할
+- ActivationUpdated, PolicyUpdated, QueueUpdated 이벤트의 팬아웃 전달
+- 키 보존 순서를 위해 `world_id` 또는 `(tags, interval)` 단위의 파티션 스트림
+- 지연 구독자를 위한 압축(compaction) 기반 제한 보관(retention)
 
-Non‑Goals
-- Not a source of truth (SSOT); decisions/activation live in WorldService, queues in DAG Manager
-- Not a general data bus; market/indicator/trade data remain on data topics managed by DAG Manager
+비목표
+- 단일 진실 소스(SSOT)가 아님: 의사결정/활성화는 WorldService, 큐는 DAG Manager가 보유
+- 범용 데이터 버스가 아님: 시세/인디케이터/체결 데이터는 DAG Manager가 관리하는 데이터 토픽에 남김
 
-!!! note "Design intent"
-- ControlBus is opaque to SDKs by default. Clients consume control events only via the Gateway’s tokenized WebSocket bridge (`/events/subscribe`). This keeps the bus private, centralizes authN/Z, and allows initial snapshot/state_hash reconciliation without exposing internal topics.
-
----
-
-## 1. Topology & Semantics
-
-- Transport: Kafka/Redpanda recommended, or equivalent pub/sub; namespaces `control.*`
-- Topics (example)
-  - `control.activation` partitioned by `world_id`
-  - `control.queues` partitioned by `hash(tags, interval)`
-  - `control.policy` partitioned by `world_id`
-- Ordering: guaranteed within partition only; consumers must handle duplicates and gaps
-- Delivery: at‑least‑once; idempotent consumers via `etag`/`run_id`
+!!! note "설계 의도"
+- 기본적으로 SDK에는 불투명(opaque)합니다. 클라이언트는 Gateway의 토큰화된 WebSocket 브리지(`/events/subscribe`)를 통해서만 제어 이벤트를 구독합니다. 이를 통해 버스를 사설로 유지하고 인증/인가를 중앙화하며, 내부 토픽을 노출하지 않고도 초기 스냅샷/`state_hash` 동기화를 수행할 수 있습니다.
 
 ---
 
-## 2. Event Schemas
+## 1. 토폴로지와 의미론
 
-ActivationUpdated (versioned)
+- 전송: Kafka/Redpanda 권장, 동등한 pub/sub 가능; 네임스페이스는 `control.*`
+- 토픽(예)
+  - `control.activation` — 파티션 키: `world_id`
+  - `control.queues` — 파티션 키: `hash(tags, interval)`
+  - `control.policy` — 파티션 키: `world_id`
+- 순서 보장: 파티션 내부에서만 보장; 컨슈머는 중복 및 간헐적 공백을 처리해야 함
+- 전달 보장: 적어도 한 번(at‑least‑once); `etag`/`run_id`로 아이템포턴시 구현
+
+---
+
+## 2. 이벤트 스키마
+
+ActivationUpdated (버전 관리됨)
 ```json
 {
   "type": "ActivationUpdated",
@@ -58,7 +58,7 @@ ActivationUpdated (versioned)
 }
 ```
 
-QueueUpdated (versioned)
+QueueUpdated (버전 관리됨)
 ```json
 {
   "type": "QueueUpdated",
@@ -71,7 +71,7 @@ QueueUpdated (versioned)
 }
 ```
 
-PolicyUpdated (versioned)
+PolicyUpdated (버전 관리됨)
 ```json
 {
   "type": "PolicyUpdated",
@@ -86,47 +86,47 @@ PolicyUpdated (versioned)
 
 ---
 
-## 3. Retention & QoS
+## 3. 보관 정책과 QoS
 
-- Retention: short (e.g., 1–24h) with compaction by key; enough for reconnection/replay
-- QoS isolation: keep `control.*` topics separate from data topics; enforce quotas
-- Rate limiting: backpressure to slow consumers; metrics exported for lag
-
----
-
-## 4. Security
-
-- Private to the cluster; no direct SDK access by default
-- Service authentication (mTLS/JWT) for publishers/consumers
-- Authorization by topic namespace and consumer group; tenant/world scoping enforced in consumer groups
+- 보관: 짧게(예: 1–24시간), 키 기준 compaction 적용; 재연결/재생(replay)에 충분한 수준
+- QoS 분리: `control.*` 토픽을 데이터 토픽과 분리하고, 적절한 쿼터를 강제
+- 속도 제한: 느린 컨슈머에 백프레셔 적용; 지연(lag) 지표를 노출
 
 ---
 
-## 5. Observability
+## 4. 보안
 
-Metrics
-- controlbus_publish_latency_ms, fanout_lag_ms, dropped_subscribers_total
-- replay_queue_depth, partition_skew_seconds
-
-Runbooks
-- Recreate consumer groups, increase partitions per world count, backfill via HTTP reconcile endpoints at Gateway/WorldService/DAG Manager
+- 클러스터 사설; 기본적으로 SDK의 직접 접근 금지
+- 퍼블리셔/컨슈머에 서비스 인증(mTLS/JWT)
+- 토픽 네임스페이스 및 컨슈머 그룹 단위의 인가; 테넌트/월드 범위를 컨슈머 그룹으로 강제
 
 ---
 
-## 6. Integration Pattern
+## 5. 가시성(Observability)
 
-- WorldService publishes ActivationUpdated/PolicyUpdated.
-- DAG Manager publishes QueueUpdated.
-- Gateway instances subscribe to ControlBus and relay updates to SDK via an opaque WebSocket stream (`/events/subscribe`).
+메트릭
+- `controlbus_publish_latency_ms`, `fanout_lag_ms`, `dropped_subscribers_total`
+- `replay_queue_depth`, `partition_skew_seconds`
+
+런북
+- 컨슈머 그룹 재생성, 월드 수 증가에 따른 파티션 증설, Gateway/WorldService/DAG Manager의 HTTP 동기화(reconcile) 엔드포인트를 통한 백필
 
 ---
 
-## 7. Initial Snapshot & Delegated WS (Optional)
+## 6. 통합 패턴
 
-- Initial snapshot: first message per topic SHOULD be a full snapshot or include a `state_hash` so clients can confirm convergence without a full GET.
-- Clients MAY probe `/worlds/{id}/{topic}/state_hash` via Gateway to check for divergence before fetching a snapshot.
-- Delegated WS (feature‑flagged): Gateway may return an alternate `alt_stream_url` that points to a dedicated event streamer tier sitting in front of ControlBus.
-  - Tokens are short‑lived JWTs with claims: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. Key ID (`kid`) is conveyed in the JWT header.
-  - Streamer verifies JWKS/claims and bridges to ControlBus; default deployment keeps this disabled.
+- WorldService는 ActivationUpdated/PolicyUpdated를 발행합니다.
+- DAG Manager는 QueueUpdated를 발행합니다.
+- Gateway 인스턴스는 ControlBus를 구독하고 업데이트를 불투명(opaque) WebSocket 스트림(`/events/subscribe`)을 통해 SDK로 중계합니다.
+
+---
+
+## 7. 초기 스냅샷과 위임 WS(선택)
+
+- 초기 스냅샷: 각 토픽의 첫 메시지는 전체 스냅샷이거나 `state_hash`를 포함해야 합니다. 클라이언트는 전체 GET 없이도 수렴 여부를 확인할 수 있습니다.
+- 클라이언트는 스냅샷을 가져오기 전 Gateway의 `/worlds/{id}/{topic}/state_hash`로 분기(divergence) 여부를 점검할 수 있습니다.
+- 위임 WebSocket(피처 플래그): Gateway는 ControlBus 앞단의 전용 이벤트 스트리머 계층을 가리키는 `alt_stream_url`을 반환할 수 있습니다.
+  - 토큰은 단수명의 JWT이며 다음 클레임을 가집니다: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. 키 식별자(`kid`)는 JWT 헤더에 포함됩니다.
+  - 스트리머는 JWKS/클레임을 검증하고 ControlBus에 브릿지합니다. 기본 배포에서는 비활성화 상태입니다.
 
 {{ nav_links() }}
