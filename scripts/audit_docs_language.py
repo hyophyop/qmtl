@@ -16,6 +16,7 @@ inflate Latin counts, so treat results as a starting point, not a verdict.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -27,6 +28,9 @@ class FileFinding:
     hang_ratio: float
     latin_ratio: float
     lines: List[Tuple[int, str]]
+
+
+LINK_IN_SAMPLE_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
 def char_stats(text: str) -> tuple[int, int, int]:
@@ -105,11 +109,14 @@ def write_report(base_dir: str, findings: List[FileFinding]) -> None:
             )
             if f.lines:
                 fh.write("Sample lines:\n")
+                fh.write("{% raw %}\n")
                 for n, line in f.lines:
+                    line = LINK_IN_SAMPLE_RE.sub(r"\1 (\2)", line)
                     # truncate long lines for readability
                     if len(line) > 180:
-                        line = line[:180] + " …"
+                        line = line[:180] + "..."
                     fh.write(f"- L{n}: {line}\n")
+                fh.write("{% endraw %}\n")
             fh.write("\n")
     print(f"Wrote report: {out}")
 
@@ -125,4 +132,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

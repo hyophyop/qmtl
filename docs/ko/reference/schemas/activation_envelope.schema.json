@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/activation_envelope.schema.json",
+  "title": "ActivationEnvelope",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "world_id": { "type": "string" },
+    "strategy_id": { "type": "string" },
+    "side": { "type": "string", "enum": ["long", "short"] },
+    "active": { "type": "boolean" },
+    "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+    "freeze": { "type": "boolean" },
+    "drain": { "type": "boolean" },
+    "effective_mode": { "type": "string", "enum": ["validate", "compute-only", "paper", "live"] },
+    "etag": { "type": "string" },
+    "run_id": { "type": "string" },
+    "ts": { "type": "string", "format": "date-time" },
+    "state_hash": { "type": "string" }
+  },
+  "required": ["world_id", "strategy_id", "side", "active", "weight", "etag", "ts"]
+}

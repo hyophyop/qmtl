@@ -13,10 +13,10 @@ spec_version: v1.1
 > **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
 
 ## 관련 문서
-- [Architecture Overview](README.md)
-- [QMTL Architecture](architecture.md)
-- [Gateway](gateway.md)
-- [Lean Brokerage Model](lean_brokerage_model.md)
+- [아키텍처 개요](README.md)
+- [QMTL 아키텍처](architecture.md)
+- [게이트웨이](gateway.md)
+- [린 브로커리지 모델](lean_brokerage_model.md)
 
 추가 참고
 - 레퍼런스: [Commit‑Log 설계](../reference/commit_log.md), [TagQuery 사양](../reference/tagquery.md)
@@ -39,12 +39,12 @@ spec_version: v1.1
 
 ---
 
-## 0-A. Ownership & Commit-Log Design
+## 0-A. 소유권 및 커밋 로그 설계
 
 - **Ownership** — DAG Manager는 ComputeNode와 Queue 메타데이터의 단일 소스로서 토픽 생성·버전 롤아웃·GC를 전담한다. Gateway는 제출 파이프라인을 조정하지만 그래프 상태를 소유하지 않으며, WorldService는 월드·결정 상태를 유지한다.
 - **Commit Log** — 모든 큐는 Redpanda/Kafka의 append-only 토픽으로 구현되며, DAG Manager는 `QueueUpdated` 등 제어 이벤트를 ControlBus 토픽에 발행한다. 토픽 생성·삭제 이력도 관리 로그에 기록되어 장애 시점 복원과 감사(audit)을 지원한다.
 
-> Terminology / SSOT boundary: Global Strategy Graph(GSG, 전역 DAG)의 SSOT는 DAG Manager이며 불변(append‑only)이다. 월드‑로컬 객체(World View Graph=WVG: WorldNodeRef, Validation, DecisionsRequest)는 WorldService의 SSOT이며 DAG Manager는 저장하지 않는다(읽기/쓰기 금지). 용어 정의는 Architecture Glossary(architecture/glossary.md) 참고.
+> 용어/SSOT 경계: 전역 전략 그래프(GSG, Global Strategy Graph)의 SSOT는 DAG Manager이며 불변(append‑only)입니다. 월드 로컬 객체(World View Graph=WVG: WorldNodeRef, Validation, DecisionsRequest)의 SSOT는 WorldService이고, DAG Manager는 이를 저장하지 않습니다(읽기/쓰기 금지). 용어 정의는 Architecture Glossary(architecture/glossary.md)를 참고하세요.
 
 ### 0-A.1 커밋 로그 메시지 키와 파티셔닝
 
@@ -119,29 +119,29 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
   - 큐의 동적 발견/확장은 ControlBus 이벤트로 처리되며 NodeID에는 영향을 주지 않습니다.
 - `schema_compat_id`를 사용합니다(`schema_hash`가 아님). 경미한 스키마 변경은 새 NodeID를 강제하지 않고 버퍼링되며, 호환 불가일 때만 새 ID가 생성됩니다.
 - 표시 전용 메타데이터(표시 이름 `name`, 분류 태그 `tags`)는 NodeID에 포함되지 않습니다. 기능적 파라미터만 `params_canon`에 포함됩니다.
-- Use BLAKE3; on collision-hardening use **BLAKE3 XOF** (longer output) with domain separation. All IDs must carry the `blake3:` prefix.
-- Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
+- BLAKE3를 사용합니다. 충돌 대비가 필요할 때는 도메인 분리를 적용한 **BLAKE3 XOF**(더 긴 출력)를 사용하세요. 모든 ID는 `blake3:` 접두사를 가져야 합니다.
+- 고유성은 `compute_pk` 제약으로 보장합니다. `schema_compat_id`는 노드 메시지 포맷의 Schema Registry 주요 호환 식별자(major‑compat)를 참조합니다.
 - **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
 
-### 1.4 Domain‑Scoped ComputeKey (new)
+### 1.4 도메인 범위 ComputeKey (신규)
 
-- Rationale: NodeID is global and world‑agnostic by design. To prevent accidental cross‑world/domain reuse in caches and runtime de‑duplication, a separate ComputeKey is used for execution/caching.
-- Definition:
+- 배경: NodeID는 설계상 전역이며 월드에 무관합니다. 캐시 및 런타임 중복 제거에서 월드/도메인 간 재사용이 실수로 발생하지 않도록, 실행/캐싱에는 별도의 ComputeKey를 사용합니다.
+- 정의:
 
   `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`
 
-  - `NodeHash` is the canonical hash used by NodeID (§1.3).
-  - `world_id` scopes execution to a world; `execution_domain ∈ {backtest,dryrun,live,shadow}` ensures backtest/live separation.
-  - `as_of` binds backtests to a dataset snapshot/commit; required for deterministic replay.
-  - `partition` optionally scopes multi‑tenant or strategy/portfolio partitions.
-- Usage:
-  - NodeCache and any compute de‑duplication MUST key on `ComputeKey` (not solely on `node_id`).
-  - Cross‑context cache hits (same `node_id`, different `(world_id|execution_domain|as_of|partition)`) MUST be treated as violations and reported via a metric `cross_context_cache_hit_total` and blocked by policy (SLO: 0).
-  - Queue topics and NodeID remain unchanged; ComputeKey does not alter topic naming. Operators MAY additionally deploy namespace prefixes `{world_id}.{execution_domain}.<topic>` at the broker level for operational isolation (see WorldService doc).
-  - Instrumentation: DAG Manager and SDK MUST emit `cross_context_cache_hit_total` and alert when >0 (critical). Promotion workflows must halt until cleared.
-  - Completeness: `as_of` MUST be non-empty for backtests/dryruns; Gateway supplies the value. When missing, the shared `ComputeContext.evaluate_safe_mode()` helpers (see `qmtl/foundation/common/compute_context.py`) downgrade the request to the compute-only/backtest domain, flip the safe-mode flags, and block reuse without ever emitting a "live" sentinel.
+  - `NodeHash`는 NodeID(§1.3)가 사용하는 정준 해시입니다.
+  - `world_id`는 실행 범위를 특정 월드로 한정합니다. `execution_domain ∈ {backtest,dryrun,live,shadow}`는 백테스트/라이브 분리를 보장합니다.
+  - `as_of`는 백테스트를 특정 데이터셋 스냅샷/커밋에 묶으며, 결정적 재현을 위해 필요합니다.
+  - `partition`은 멀티 테넌시 또는 전략/포트폴리오 파티션을 위해 선택적으로 사용됩니다.
+- 사용:
+  - NodeCache 및 모든 계산 중복 제거는 반드시 `node_id`만이 아니라 `ComputeKey`를 키로 사용해야 합니다.
+  - 교차 컨텍스트 캐시 히트(동일 `node_id`이지만 `(world_id|execution_domain|as_of|partition)`가 다른 경우)는 위반으로 간주해야 하며, 메트릭 `cross_context_cache_hit_total`로 보고하고 정책에 의해 차단해야 합니다(SLO: 0).
+  - 큐 토픽과 NodeID는 변경되지 않습니다. ComputeKey는 토픽 명명에 영향을 주지 않습니다. 운영자는 운영적 격리를 위해 브로커 수준에서 네임스페이스 프리픽스 `{world_id}.{execution_domain}.<topic>`를 추가로 도입할 수 있습니다(WorldService 문서 참조).
+  - 계측: DAG Manager와 SDK는 `cross_context_cache_hit_total`을 반드시 내보내야 하며, 값이 0 초과일 경우(치명) 경보를 발송합니다. 해소될 때까지 프로모션 워크플로우는 중단해야 합니다.
+  - 완전성: `as_of`는 백테스트/드라이런에서 반드시 비어 있지 않아야 합니다. 이 값은 Gateway가 제공합니다. 값이 없으면 공유 헬퍼 `ComputeContext.evaluate_safe_mode()`(경로: `qmtl/foundation/common/compute_context.py`)가 요청을 compute-only/백테스트 도메인으로 강등하고, 세이프 모드 플래그를 전환하며, 'live' 센티널을 절대 생성하지 않은 채 재사용을 차단합니다.
 
-Note: This design preserves NodeID stability while providing strong execution isolation across worlds and domains.
+참고: 이 설계는 NodeID의 안정성을 유지하면서, 월드와 도메인 전반에 걸친 강력한 실행 격리를 제공합니다.
 
 ---
 
@@ -168,7 +168,7 @@ Note: This design preserves NodeID stability while providing strong execution is
 4. **Sentinel 삽입** `CREATE (:VersionSentinel{...})‑[:HAS]->(new_nodes)` (옵션)
 5. **Queue Upsert**
 
-   * Kafka Admin API must run with idempotent topic creation enabled as noted in the architecture (section 2).
+   * Kafka Admin API는 아키텍처(§2)에 명시된 대로 멱등 토픽 생성이 활성화된 상태로 실행되어야 합니다.
    * gRPC Bulk `CreateTopicsRequest` idempotent.
    * 실패 시 `CREATE_TOPICS→VERIFY→WAIT→BACKOFF` 5단계 재시도를 수행하고,
      VERIFY 단계에서 broker metadata를 조회하여 유사 이름 충돌 여부를 확인한다.
@@ -182,7 +182,7 @@ Note: This design preserves NodeID stability while providing strong execution is
 
 ---
 
-### 2‑A. Gateway ↔ DAG Manager Interface (확장)
+### 2‑A. Gateway ↔ DAG Manager 인터페이스 (확장)
 
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
@@ -193,11 +193,11 @@ Note: This design preserves NodeID stability while providing strong execution is
 | G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
 | G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
 | D→G | CB    | `queue` topic                 | queue_update/gc | at-least-once      | –                  | 큐 이벤트         |
-|     |       |                               |                 |     |                    | 자세한 절차는 [Canary Rollout Guide](../operations/canary_rollout.md) 참조 |
+|     |       |                               |                 |     |                    | 자세한 절차는 [카나리아 롤아웃 가이드](../operations/canary_rollout.md) 참조 |
 
-### 2-B. Sentinel Traffic
+### 2‑B. 센티널 트래픽
 
-Sentinel weight updates are published as `sentinel_weight` events on the ControlBus. See the [Canary Rollout Guide](../operations/canary_rollout.md) for details.
+센티널 가중치 업데이트는 ControlBus의 `sentinel_weight` 이벤트로 게시됩니다. 자세한 내용은 [카나리아 롤아웃 가이드](../operations/canary_rollout.md)를 참조하세요.
 
 ---
 
@@ -223,7 +223,7 @@ Sentinel weight updates are published as `sentinel_weight` events on the Control
 
 ---
 
-### 3‑A. End‑to‑End Interaction Scenarios (확장)
+### 3‑A. 엔드투엔드 상호작용 시나리오 (확장)
 
 *(이전 표 + `RedoDiff` & 카나리아 포함)*
 
@@ -260,7 +260,7 @@ DAG Manager는 큐 가용성 및 태그 해상도에 대한 제어‑플레인 �
 sequenceDiagram
     participant G as Gateway
     participant D as DAG Manager
-    Note over G,D: Canary traffic 10% → 50%
+    Note over G,D: 카나리아 트래픽 10% → 50%
         D-->>G: 202 OK
 ```
 
