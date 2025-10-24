@@ -1,5 +1,5 @@
 ---
-title: "Changelog"
+title: "변경 이력"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
@@ -9,7 +9,7 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
-# Changelog
+# 변경 이력
 
 ## Unreleased
 

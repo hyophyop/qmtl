@@ -1,14 +1,26 @@
-# CCXT × Seamless Legacy Audit
+---
+title: "CCXT × Seamless 레거시 감사"
+tags: [archive, ccxt, seamless]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
 
-## Summary
-This inventory supports the migration tracked in [#1162](https://github.com/hyophyop/qmtl/issues/1162) by cataloging the remaining content inside the legacy CCXT × Seamless design notes. The audit compares each document against the consolidated [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md) blueprint and highlights external links that still point at the deprecated files. With the legacy drafts now removed from the repository, the tables below remain as a historical record of what was merged where.
+# CCXT × Seamless 레거시 감사
 
-## Outstanding Content by Source Document
-The following tables list sections, diagrams, or code samples that have no equivalent in the integrated specification. Each row includes migration guidance so that the legacy files can be retired once their content is ported.
+## 요약
+이 인벤토리는 레거시 CCXT × Seamless 설계 노트에 남아 있는 내용을 분류하여
+[#1162](https://github.com/hyophyop/qmtl/issues/1162)에서 추적되는 마이그레이션을 지원합니다.
+감사는 각 문서를 통합 청사진인 [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md)와 비교하고,
+여전히 폐기된 파일을 가리키는 외부 링크를 강조합니다. 레거시 초안이 저장소에서 제거됨에 따라,
+아래 표는 어떤 내용이 어디로 병합되었는지에 대한 역사적 기록으로 남습니다.
+
+## 원문서별 남은 콘텐츠
+아래 표는 통합 사양에 해당 항목이 없는 섹션, 다이어그램, 코드 샘플을 나열합니다.
+각 행에는 마이그레이션 가이드가 포함되어 있어, 콘텐츠가 이관되면 레거시 파일을 은퇴시킬 수 있습니다.
 
 ### `ccxt-seamless-gpt5high.md`
 
-| Legacy section | Migration status | Notes |
+| 레거시 섹션 | 마이그레이션 상태 | 비고 |
 | --- | --- | --- |
 | **Data Model** (`ts, open, high, low, close, volume` schema + interval semantics) | ✅ Migrated | Documented under “Data Model & Interval Semantics” in `ccxt-seamless-integrated.md`. |
 | **Control Planes → Rate Limiting** (Redis/process split description) | ✅ Migrated | Expanded rate-limiter reference table and environment variable guidance now live in the integrated doc. |
@@ -19,7 +31,7 @@ The following tables list sections, diagrams, or code samples that have no equiv
 
 ### `ccxt-seamless-gpt5codex.md`
 
-| Legacy topic | Migration status | Notes |
+| 레거시 주제 | 마이그레이션 상태 | 비고 |
 | --- | --- | --- |
 | **Feature Artifact Plane guardrails** (dataset_fingerprint-as_of discipline preventing domain bleed) | ✅ Migrated | Integrated doc now details read-only sharing, provenance, and the reproducibility contract under "Feature Artifact Plane". |
 | **CCXT worker metadata workflow** (computing dataset_fingerprint/as_of at snapshot time) | ✅ Migrated | Publication workflow pseudo-code specifies when workers conform, fingerprint, and publish manifests. |
@@ -29,7 +41,7 @@ The following tables list sections, diagrams, or code samples that have no equiv
 
 ### `ccxt-seamless-hybrid.md`
 
-| Legacy element | Migration status | Notes |
+| 레거시 요소 | 마이그레이션 상태 | 비고 |
 | --- | --- | --- |
 | **Comprehensive configuration schema** (retry tuning, metrics catalog, partitioning, fingerprint options) | ✅ Migrated | Configuration blueprint now includes retry knobs, observability thresholds, and artifact partition templates. |
 | **Reference implementation snippets** (`conform_frame`, `compute_fingerprint`, `maybe_publish_artifact`, domain gating helper) | ✅ Migrated | Publication workflow pseudo-code replaces the hybrid draft’s snippets. |
@@ -37,12 +49,12 @@ The following tables list sections, diagrams, or code samples that have no equiv
 | **Storage strategy (Hot vs. Cold) and stabilization workflow** | ✅ Migrated | Dedicated storage strategy section documents QuestDB vs artifact responsibilities and promotion sequencing. |
 | **Migration pathway & acceptance criteria** | ✅ Migrated | Migration Path and Validation Benchmarks capture the seven-step rollout and readiness checks. |
 
-## External Links that Depend on the Legacy Docs
-- ✅ `mkdocs.yml` navigation now routes readers directly to the integrated blueprint (the GPT5-High entry was removed).
-- ✅ [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md) inlines the former GPT5-High material and no longer links out to the archived file.
-- Historical `ccxt-seamless-hybrid.md` references have been excised from the tree; consumers should link directly to the integrated blueprint going forward.
+## 레거시 문서에 의존하는 외부 링크
+- ✅ `mkdocs.yml` 내비게이션은 이제 통합 청사진으로 직접 이동합니다(GPT5-High 항목 제거).
+- ✅ [`ccxt-seamless-integrated.md`](../architecture/ccxt-seamless-integrated.md)는 기존 GPT5-High 자료를 인라인으로 포함하며 더 이상 보관 파일을 참조하지 않습니다.
+- 과거의 `ccxt-seamless-hybrid.md` 참조는 트리에서 제거되었습니다. 앞으로는 통합 청사진으로 직접 연결하세요.
 
-## Recommended Follow-Up
-1. Confirm the integrated blueprint remains the single source of truth when future updates land; avoid re-introducing split narratives.
-2. Keep navigation entries pointing at the integrated document and remove residual references to the archived files across the docset if new links surface.
-3. Post migration notes in [#1162](https://github.com/hyophyop/qmtl/issues/1162) summarizing consolidation status for any future follow-on work (Fixes #1163).
+## 권장 후속 작업
+1. 향후 업데이트 시에도 통합 청사진이 단일 SSOT로 남도록 확인하고, 분리된 서술 재도입을 피하세요.
+2. 내비게이션 항목은 통합 문서를 가리키도록 유지하고, 새 링크가 생기면 보관 파일에 대한 잔여 참조를 제거하세요.
+3. 향후 후속 작업을 위해 통합 상태를 요약한 마이그레이션 노트를 [#1162](https://github.com/hyophyop/qmtl/issues/1162)에 남기세요(Fixes #1163).

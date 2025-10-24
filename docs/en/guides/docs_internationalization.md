@@ -2,15 +2,15 @@
 
 This project publishes multilingual docs using MkDocs Material and the `mkdocs-static-i18n` plugin.
 
-- Default locale: `en`
-- Additional locales: `ko`
-- Structure: `docs/<locale>/...` (e.g., `docs/en/guides/...`)
+- Default locale (site default): `ko`
+- Additional locales: `en` (and more as needed)
+- Structure: `docs/<locale>/...` (e.g., `docs/ko/guides/...`, `docs/en/guides/...`)
 
 ## Add or Update a Translation
 
 1) Add files under the target locale folder
 
-- Mirror the English file path: for `docs/en/guides/foo.md`, add `docs/ko/guides/foo.md`.
+- Mirror the Korean (canonical) file path: start from `docs/ko/guides/foo.md` and add `docs/en/guides/foo.md`.
 - Keep headings consistent and use relative links.
 
 2) Update navigation titles (optional)
@@ -34,7 +34,7 @@ This project publishes multilingual docs using MkDocs Material and the `mkdocs-s
 
 ## Link Checking Policy
 
-Our static link checker intentionally validates only the canonical (default) locale to avoid false positives from in‑progress translations:
+Our static link checker intentionally validates only the canonical (default) locale (ko) to avoid false positives from in‑progress translations:
 
 - It reads the i18n configuration from `mkdocs.yml` and skips non‑default locales.
 - Archived docs are also skipped.

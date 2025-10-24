@@ -1,5 +1,5 @@
 ---
-title: "Backfilling Historical Data"
+title: "과거 데이터 백필"
 tags: []
 author: "QMTL Team"
 last_modified: 2025-08-21
@@ -7,42 +7,35 @@ last_modified: 2025-08-21
 
 {{ nav_links() }}
 
-# Backfilling Historical Data
+# 과거 데이터 백필
 
-This guide explains how to populate node caches with past values before a strategy starts processing live data.
+이 가이드는 전략이 실시간 데이터 처리를 시작하기 전에 노드 캐시를 과거 값으로 채우는 방법을 설명합니다.
 
-## Configuring a HistoryProvider
+## HistoryProvider 구성
 
-A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It
-must implement an asynchronous
-`fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame`
-where each row contains a timestamp column `ts` and any payload fields.  The
-method signature mirrors that of :py:meth:`DataFetcher.fetch` which providers may
-delegate to when retrieving rows from external services.  Advanced providers can
-optionally expose asynchronous helpers:
+`HistoryProvider`는 `(node_id, interval)` 쌍에 대한 과거 데이터를 제공합니다. 
+비동기 `fetch(start, end, *, node_id, interval)` 메서드를 구현해야 하며, 
+타임스탬프 컬럼 `ts`와 페이로드 필드를 포함하는 `pandas.DataFrame`을 반환합니다. 
+메서드 시그니처는 :py:meth:`DataFetcher.fetch`를 반영하며, 프로바이더는 외부 서비스에서 
+행을 가져올 때 이를 위임할 수 있습니다. 고급 프로바이더는 선택적으로 비동기 헬퍼를 노출할 수 있습니다:
 
-- `coverage(node_id, interval)` returning a list of `(start, end)` timestamp
-  ranges already present in the underlying store. This must be an
-  asynchronous coroutine.
-- `fill_missing(start, end, node_id, interval)` instructing the provider to
-  populate gaps within the given range and is also a coroutine.
-- `ensure_range(start, end, *, node_id, interval)` which performs any automatic
-  backfill the provider supports. When present the runtime will prefer this
-  helper over manual coverage checks.
+- `coverage(node_id, interval)` - 기본 저장소에 이미 존재하는 `(start, end)` 타임스탬프 
+  범위 목록을 반환합니다. 비동기 코루틴이어야 합니다.
+- `fill_missing(start, end, node_id, interval)` - 주어진 범위 내의 갭을 채우도록 
+  프로바이더에 지시합니다. 역시 코루틴입니다.
+- `ensure_range(start, end, *, node_id, interval)` - 프로바이더가 지원하는 자동 백필을 
+  수행합니다. 이것이 있으면 런타임은 수동 커버리지 검사보다 이 헬퍼를 우선합니다.
 
-`coverage()` should return contiguous, inclusive ranges that already exist in
-the storage backend. When `fill_missing()` is implemented the provider is
-responsible for inserting real rows for any missing timestamps in a requested
-range. A runner can use these APIs to determine what portions of history need to
-be fetched or created before loading data into a strategy.
+`coverage()`는 저장소 백엔드에 이미 존재하는 연속적이고 포괄적인 범위를 반환해야 합니다. 
+`fill_missing()`이 구현되면 프로바이더는 요청된 범위에서 누락된 타임스탬프에 대한 실제 행을 
+삽입할 책임이 있습니다. 러너는 이러한 API를 사용하여 전략에 데이터를 로드하기 전에 
+어떤 과거 부분을 가져오거나 생성해야 하는지 결정할 수 있습니다.
 
-In some cases a provider may rely on a separate **DataFetcher** object to
-retrieve missing rows.  A ``DataFetcher`` exposes a single **asynchronous**
-``fetch(start, end, *, node_id, interval)`` coroutine returning the same frame
-structure.  When a provider is created without a fetcher, calling
-``fill_missing`` will raise a ``RuntimeError``.
+어떤 경우에는 프로바이더가 누락된 행을 검색하기 위해 별도의 **DataFetcher** 객체에 의존할 수 있습니다. 
+``DataFetcher``는 동일한 프레임 구조를 반환하는 단일 **비동기** ``fetch(start, end, *, node_id, interval)`` 
+코루틴을 노출합니다. 프로바이더가 페처 없이 생성되면 ``fill_missing``을 호출할 때 ``RuntimeError``가 발생합니다.
 
-The SDK ships with `QuestDBHistoryProvider` which reads from a QuestDB instance:
+SDK는 QuestDB 인스턴스에서 읽는 `QuestDBHistoryProvider`를 제공합니다:
 
 ```python
 from qmtl.runtime.sdk import QuestDBHistoryProvider
@@ -59,10 +52,10 @@ source = QuestDBHistoryProvider(
 # )
 ```
 
-### Example `DataFetcher`
+### 예제 `DataFetcher`
 
-When historical rows are missing, the loader can query any external service.
-Below is a minimal fetcher that reads candlesticks from Binance:
+과거 행이 누락되면 로더는 외부 서비스를 쿼리할 수 있습니다.
+아래는 Binance에서 캔들스틱을 읽는 최소한의 페처입니다:
 
 ```python
 import httpx
@@ -92,32 +85,28 @@ loader = QuestDBHistoryProvider(
 )
 ```
 
-Custom providers can implement `HistoryProvider` or provide an object with the same interface.
+커스텀 프로바이더는 `HistoryProvider`를 구현하거나 동일한 인터페이스를 가진 객체를 제공할 수 있습니다.
 
-An accompanying **EventRecorder** persists processed rows. A recorder must
-implement the asynchronous ``persist(node_id, interval, timestamp, payload)``
-method which receives each node payload exactly as emitted. Like providers,
-recorders may implement ``bind_stream()`` to infer a table name from
-``stream.node_id``.
+함께 제공되는 **EventRecorder**는 처리된 행을 유지합니다. 레코더는 방출된 그대로 각 노드 페이로드를 
+수신하는 비동기 ``persist(node_id, interval, timestamp, payload)`` 메서드를 구현해야 합니다. 
+프로바이더처럼 레코더도 ``stream.node_id``에서 테이블 이름을 추론하기 위해 ``bind_stream()``을 구현할 수 있습니다.
 
-When building custom providers or fetchers simply follow these method
-signatures and return ``pandas.DataFrame`` objects with a ``ts`` column.
-Subclasses are optional—any object adhering to the protocol works with the
-SDK.
+커스텀 프로바이더나 페처를 빌드할 때는 이러한 메서드 시그니처를 따르고 ``ts`` 컬럼이 있는 
+``pandas.DataFrame`` 객체를 반환하기만 하면 됩니다. 서브클래스는 선택 사항입니다 - 프로토콜을 
+준수하는 모든 객체가 SDK와 함께 작동합니다.
 
-## Auto Backfill Strategies
+## 자동 백필 전략
 
-The SDK ships with :class:`AugmentedHistoryProvider`, a facade that wraps a
-`HistoryBackend` and coordinates optional auto backfill helpers. When
-constructed with an :class:`AutoBackfillStrategy`, the facade exposes
-``ensure_range`` which populates missing data before history is fetched.  The
-simplest strategy delegates to an existing :class:`DataFetcher`:
+SDK는 :class:`AugmentedHistoryProvider` 파사드를 제공합니다. 이는 내부의
+`HistoryBackend`를 감싸며 선택적인 자동 백필 헬퍼들을 조정합니다. 
+:class:`AutoBackfillStrategy`를 함께 전달하면, 과거 데이터를 읽기 전에 누락된
+범위를 채우는 ``ensure_range`` API가 노출됩니다. 가장 단순한 전략은 기존의
+:class:`DataFetcher`에 위임하는 방식입니다.
 
 !!! note
-    Every :class:`HistoryProvider` exposes an ``ensure_range`` helper. When a
-    provider does not override it, the default implementation simply proxies to
-    :meth:`fill_missing`, so adapters written before auto backfill support keep
-    working unchanged.
+    모든 :class:`HistoryProvider`는 ``ensure_range`` 헬퍼를 노출합니다. 프로바이더가
+    이를 오버라이드하지 않으면 기본 구현은 :meth:`fill_missing`으로 프록시합니다.
+    따라서 자동 백필 도입 이전에 작성된 어댑터도 변경 없이 동작을 유지합니다.
 
 ```python
 from qmtl.runtime.sdk import AugmentedHistoryProvider, FetcherBackfillStrategy
@@ -135,15 +124,14 @@ await provider.ensure_range(1700000000, 1700001800, node_id="BTC", interval=60)
 frame = await provider.fetch(1700000000, 1700001860, node_id="BTC", interval=60)
 ```
 
-``FetcherBackfillStrategy`` computes coverage gaps, delegates each gap to the
-fetcher, writes the normalized rows back to the backend and refreshes cached
-coverage metadata. Other strategies such as
-``LiveReplayBackfillStrategy`` can ingest live buffers instead of hitting an
-external API.
+``FetcherBackfillStrategy``는 커버리지 갭을 계산하고, 각 갭을 페처에 위임하여
+정규화한 행을 백엔드에 기록하고 캐시된 커버리지 메타데이터를 갱신합니다. 
+외부 API 호출 대신 라이브 버퍼를 활용하는 ``LiveReplayBackfillStrategy`` 같은
+대안 전략도 사용할 수 있습니다.
 
-### Injecting into `StreamInput`
+### `StreamInput`에 주입하기
 
-Historical data and event recording can be supplied when creating a `StreamInput`:
+`StreamInput`을 생성할 때 과거 데이터와 이벤트 기록 서비스를 함께 전달할 수 있습니다:
 
 ```python
 from qmtl.runtime.sdk import (
@@ -167,7 +155,7 @@ stream = StreamInput(
 )
 ```
 
-When the QuestDB history provider (also exported as ``QuestDBLoader`` for
+QuestDB 히스토리 프로바이더는
 backwards compatibility) or recorder is created without a ``table`` argument it
 automatically uses ``stream.node_id`` as the table name.  Pass ``table="name"``
 explicitly to override this behaviour.
@@ -176,44 +164,41 @@ explicitly to override this behaviour.
 then treats them as read-only. Attempting to modify ``history_provider`` or
 ``event_service`` after creation will raise an ``AttributeError``.
 
-## Distributed Coordinator Observability
+## 분산 코디네이터 관측(Observability)
 
-Backfill workers that rely on the distributed coordinator should monitor the
-structured lifecycle logs emitted by the SDK. Each successful transition now
-produces a log entry under the `seamless.backfill` namespace:
+분산 코디네이터에 의존하는 백필 워커는 SDK가 내보내는 구조화된 라이프사이클 로그를 모니터링해야 합니다.
+각 성공적인 전이는 `seamless.backfill` 네임스페이스로 로그 항목을 생성합니다:
 
 ```text
 seamless.backfill.coordinator_claimed {"coordinator_id": "coordinator.local", "lease_key": "nodeA:60:1700:1760:world-1:2024-01-01T00:00:00Z", "node_id": "nodeA", "interval": 60, "batch_start": 1700, "batch_end": 1760, "world": "world-1", "requested_as_of": "2024-01-01T00:00:00Z", "worker": "worker-42", "lease_token": "abc", "lease_until_ms": 2000, "completion_ratio": 0.5}
 ```
 
-Three events are emitted:
+다음의 세 가지 이벤트가 방출됩니다:
 
-- `seamless.backfill.coordinator_claimed` – a worker successfully acquired a lease.
-- `seamless.backfill.coordinator_completed` – a backfill window finished and the lease was released cleanly.
-- `seamless.backfill.coordinator_failed` – a lease was failed intentionally (for example when a backfill attempt raises).
+- `seamless.backfill.coordinator_claimed` – 워커가 리스를 성공적으로 획득
+- `seamless.backfill.coordinator_completed` – 백필 윈도우 완료 및 리스 정상 해제
+- `seamless.backfill.coordinator_failed` – 의도적 실패(예: 백필 시도에서 예외 발생)
 
-All events carry the fields called out in the operations checklist:
+모든 이벤트는 운영 체크리스트의 필드를 포함합니다:
 
-- **`coordinator_id`** – derived from the distributed coordinator URL host.
-- **`lease_key`** – the canonical lease identifier (`node:interval:start:end:world:requested_as_of`).
-- **`node_id`**, **`interval`**, **`batch_start`**, **`batch_end`** – partition identifiers that drive dashboards.
-- **`world`** and **`requested_as_of`** – present when the request context supplies world governance metadata.
-- **`worker`** – populated from `connectors.seamless_worker_id`, `connectors.worker_id`, the legacy `QMTL_SEAMLESS_WORKER`/`QMTL_WORKER_ID` variables, or the container hostname. Configure one of these values in production to keep dashboards consistent.
-- **`lease_token`** and **`lease_until_ms`** – useful when recovering stuck leases via `scripts/lease_recover.py`.
-- **`completion_ratio`** – mirrors the gauge recorded in Prometheus to track progress per lease.
-- **`reason`** – included on the failed event to annotate why the lease was abandoned.
+- **`coordinator_id`** – 분산 코디네이터 URL 호스트에서 파생
+- **`lease_key`** – 표준 리스 식별자(`node:interval:start:end:world:requested_as_of`)
+- **`node_id`**, **`interval`**, **`batch_start`**, **`batch_end`** – 대시보드를 구동하는 파티션 식별자
+- **`world`**, **`requested_as_of`** – 요청 컨텍스트가 월드 거버넌스 메타데이터를 제공할 때 포함
+- **`worker`** – `connectors.seamless_worker_id`/`connectors.worker_id`/레거시 env 또는 컨테이너 호스트명에서 채움(프로덕션에서는 일관성 유지를 위해 하나 설정 권장)
+- **`lease_token`**, **`lease_until_ms`** – `scripts/lease_recover.py`로 리스 복구 시 유용
+- **`completion_ratio`** – Prometheus 게이지와 동일, 리스당 진행률 추적
+- **`reason`** – 실패 이벤트에서 리스 중단 사유 주석
 
 Dashboards in `operations/monitoring/seamless_v2.jsonnet` already chart
 `backfill_completion_ratio`. Combine those panels with the lifecycle logs above
 to understand which worker handled a batch and whether the lease progressed or
 required manual recovery.
 
-## Auto Backfill Batch Lifecycle Logs
+## 자동 백필 배치 라이프사이클 로그
 
-When `DataFetcherAutoBackfiller` repairs gaps without a coordinator, the
-runtime records a structured lifecycle for each batch. These events surface in
-the same namespace so dashboards can correlate coordinator-driven and direct
-repairs:
+코디네이터 없이 `DataFetcherAutoBackfiller`가 갭을 복구할 때, 런타임은 배치별 구조화된
+라이프사이클을 기록합니다. 동일 네임스페이스에서 노출되어 코디네이터 기반/직접 복구를 대시보드가 상호 참조할 수 있습니다:
 
 ```text
 seamless.backfill.attempt {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 1, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "storage"}
@@ -221,32 +206,23 @@ seamless.backfill.succeeded {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", 
 seamless.backfill.failed {"batch_id": "ohlcv:binance:BTC/USDT:60:1700:1760", "attempt": 2, "node_id": "ohlcv:binance:BTC/USDT:60", "interval": 60, "start": 1700, "end": 1760, "source": "fetcher", "error": "timeout"}
 ```
 
-- **`batch_id`** – canonical identifier `node_id:interval:start:end` generated
-  by the SDK so retries can be grouped.
-- **`attempt`** – the attempt counter supplied by the retry engine. A value of
-  `1` indicates the first try; additional attempts increment monotonically.
-- **`source`** – `storage` when the batch was materialized through
-  `fill_missing`/`fetch`, or `fetcher` when data was pulled directly from the
-  external provider.
-- **`error`** – present on failure events with the string representation of the
-  raised exception.
+- **`batch_id`** – SDK가 생성한 표준 ID `node_id:interval:start:end`(재시도 그룹화 목적)
+- **`attempt`** – 재시도 엔진이 제공하는 시도 카운터(1부터 증가)
+- **`source`** – 저장소(`fill_missing`/`fetch`) 또는 외부 프로바이더(`fetcher`)
+- **`error`** – 실패 이벤트에서 예외 문자열
 
 Dashboards can aggregate on `batch_id` and `attempt` to expose retry rates while
 keeping coordinator-driven telemetry untouched.
 
-## Priming History for Warmup
+## 워머프를 위한 히스토리 준비(Priming)
 
-When executing a strategy, the SDK ensures each `StreamInput` has enough history
-to satisfy its `period × interval` warmup window. For providers that implement
-`ensure_range()`, auto backfill occurs before any gaps are inspected. Providers
-without that helper fall back to the `coverage()` plus `fill_missing()` loop so
-existing adapters continue to work.
+전략을 실행할 때 SDK는 각 `StreamInput`이 `period × interval` 워머프 윈도를 만족할 만큼의
+히스토리를 갖추도록 보장합니다. `ensure_range()`를 구현한 프로바이더는 갭 검사 전에 자동 백필을 수행하고,
+그렇지 않은 경우 `coverage()` + `fill_missing()` 루프로 폴백합니다.
 
-Both :func:`Runner.run` and :func:`Runner.offline` execute the same warmup
-pipeline: ranges are reconciled via the provider, the `BackfillEngine` fetches
-rows into the node caches and the runtime replays those events through the
-strategy graph. This guarantees that local dry runs exercise the identical
-bootstrap logic used in production.
+`Runner.run`/`Runner.offline` 모두 동일한 워머프 파이프라인을 실행합니다: 프로바이더로 범위를 조정하고,
+`BackfillEngine`이 노드 캐시에 행을 적재하며, 런타임은 전략 그래프를 통해 이벤트를 리플레이합니다.
+이로써 로컬 드라이런이 프로덕션과 동일한 부트스트랩 로직을 수행함이 보장됩니다.
 
 Integrated run (world‑driven):
 

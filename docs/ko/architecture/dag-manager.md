@@ -46,15 +46,15 @@ spec_version: v1.1
 
 > Terminology / SSOT boundary: Global Strategy Graph(GSG, 전역 DAG)의 SSOT는 DAG Manager이며 불변(append‑only)이다. 월드‑로컬 객체(World View Graph=WVG: WorldNodeRef, Validation, DecisionsRequest)는 WorldService의 SSOT이며 DAG Manager는 저장하지 않는다(읽기/쓰기 금지). 용어 정의는 Architecture Glossary(architecture/glossary.md) 참고.
 
-### 0-A.1 Commit-Log Message Keys and Partitioning
+### 0-A.1 커밋 로그 메시지 키와 파티셔닝
 
-- Partitioning key derives from `partition_key(node_id, interval, bucket_ts)`; the full Kafka message key used by Gateway is:
+- 파티션 키는 `partition_key(node_id, interval, bucket_ts)`에서 파생되며, Gateway가 사용하는 전체 Kafka 메시지 키는 다음과 같습니다:
 
   `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"`
 
-  This allows log compaction across all input windows for the same execution key while keeping per‑window uniqueness.
+  동일 실행 키에 대해 모든 입력 윈도우를 가로지르는 로그 컴팩션을 허용하면서, 윈도우별 고유성을 유지합니다.
 
-- Consumers must deduplicate based on `(node_id, bucket_ts, input_window_hash)`.
+- 컨슈머는 `(node_id, bucket_ts, input_window_hash)` 삼중 항목으로 중복을 제거해야 합니다.
 
 
 ---
@@ -102,22 +102,23 @@ qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --pa
 # 현재 스키마 내보내기
 qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
-### 1.3 NodeID Generation
-- NodeID = `blake3:<digest>` of the **canonical serialization** of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
-- Non-deterministic fields (timestamps, RNG seeds, environment variables) are **excluded** from the input. All separable parameters must be split into individual fields and serialized in canonical JSON with sorted keys and fixed numeric precision.
-- NodeID MUST NOT include `world_id`. World-local isolation belongs to the World View Graph (WVG) and queue namespaces (e.g., world `topic_prefix`).
-- Canonicalization guarantees:
-  - Parameter maps with equivalent content (regardless of insertion/key order) hash to the same NodeID.
-  - Dependency identifiers are sorted lexicographically before hashing so upload order cannot perturb the digest.
-  - Presentation metadata (`name`, `tags`, `metadata`, etc.) and other non-deterministic inputs are stripped prior to hashing.
-  - NodeIDs that do not begin with the required `blake3:` namespace are rejected by Gateway validation.
-  - Collision hardening uses deterministic BLAKE3 re-hashing with domain-separated suffixes when `existing_ids` already contain the digest (mirrors the XOF guidance in §3.1).
-- TagQueryNode canonicalization:
-  - Do not include the runtime-resolved upstream queue set in `dependencies`.
-  - Include the query spec in `params_canon` instead (normalized `query_tags` sorted, `match_mode`, and `interval`).
-  - Dynamic queue discovery/expansion is handled via ControlBus events and does not affect NodeID.
-- `schema_compat_id` is used (not raw `schema_hash`) so that minor schema changes can be buffered without forcing a brand-new NodeID; full schema incompatibility still produces a new ID.
-- Presentation-only metadata (display `name`, classification `tags`) are not part of NodeID. Only functional parameters belong in `params_canon`.
+### 1.3 NodeID 생성 규칙
+- NodeID = `blake3:<digest>`이며, 다음의 정규 직렬화 입력을 해시합니다: 
+  `(node_type, interval, period, params(분리·정규화), dependencies(node_id 기준 정렬), schema_compat_id, code_hash)`
+- 비결정적 필드(타임스탬프, RNG 시드, 환경변수)는 입력에서 제외합니다. 분리 가능한 파라미터는 개별 필드로 나누고, 키 정렬·숫자 정밀도 고정의 정규 JSON으로 직렬화합니다.
+- NodeID에는 `world_id`가 포함되면 안 됩니다. 월드 격리는 WVG(World View Graph)와 큐 네임스페이스(예: world `topic_prefix`)의 책임입니다.
+- 정규화 보장:
+  - 내용이 동일한 파라미터 맵은(삽입/키 순서 무관) 동일한 NodeID로 해시됩니다.
+  - 의존성 식별자는 해시 전 사전식으로 정렬하여 업로드 순서가 다이제스트에 영향을 주지 않도록 합니다.
+  - 표시용 메타데이터(`name`, `tags`, `metadata` 등)와 비결정적 입력은 해시 전에 제거합니다.
+  - `blake3:` 접두사가 없는 NodeID는 Gateway 검증에서 거부됩니다.
+  - 충돌 완화: `existing_ids`에 이미 동일 다이제스트가 있을 때 도메인 분리 접미사를 사용한 결정적 재해시(BLAKE3)를 적용합니다(§3.1의 XOF 권고 반영).
+- TagQueryNode 정규화:
+  - 런타임에 해석된 업스트림 큐 집합은 `dependencies`에 포함하지 않습니다.
+  - 대신 질의 명세를 `params_canon`에 포함합니다(정규화된 `query_tags` 정렬, `match_mode`, `interval`).
+  - 큐의 동적 발견/확장은 ControlBus 이벤트로 처리되며 NodeID에는 영향을 주지 않습니다.
+- `schema_compat_id`를 사용합니다(`schema_hash`가 아님). 경미한 스키마 변경은 새 NodeID를 강제하지 않고 버퍼링되며, 호환 불가일 때만 새 ID가 생성됩니다.
+- 표시 전용 메타데이터(표시 이름 `name`, 분류 태그 `tags`)는 NodeID에 포함되지 않습니다. 기능적 파라미터만 `params_canon`에 포함됩니다.
 - Use BLAKE3; on collision-hardening use **BLAKE3 XOF** (longer output) with domain separation. All IDs must carry the `blake3:` prefix.
 - Uniqueness enforced via `compute_pk` constraint. `schema_compat_id` references the Schema Registry’s major‑compat identifier for the node's message format.
 - **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
@@ -234,10 +235,10 @@ Sentinel weight updates are published as `sentinel_weight` events on the Control
 
 ### 3‑B. Control Events (QueueUpdated) (New)
 
-DAG Manager publishes control‑plane updates about queue availability and tag resolution so that Gateways can update SDKs in real time without polling.
+DAG Manager는 큐 가용성 및 태그 해상도에 대한 제어‑플레인 업데이트를 발행하여 Gateway가 폴링 없이 실시간으로 SDK를 갱신할 수 있게 합니다.
 
-- Publisher: DAG Manager → ControlBus (internal)
-- Event: ``QueueUpdated`` with schema
+- 발행자: DAG Manager → ControlBus(내부)
+- 이벤트: ``QueueUpdated`` 스키마
 
 ```json
 {
@@ -250,10 +251,10 @@ DAG Manager publishes control‑plane updates about queue availability and tag r
 }
 ```
 
-Semantics
-- Partition key: ``hash(tags, interval)``; ordering within partition only
-- At‑least‑once delivery; consumers must deduplicate by ``etag``
-- Gateways subscribe and rebroadcast via WS to SDK; SDK TagQueryManager heals via periodic HTTP reconcile on divergence
+의미론(Semantics)
+- 파티션 키: ``hash(tags, interval)``; 파티션 내부에서만 순서 보장
+- 최소 1회 전달; 컨슈머는 ``etag``로 중복 제거
+- Gateway는 구독 후 WS로 SDK에 재브로드캐스트; 분기 시 SDK TagQueryManager가 주기적 HTTP 리컨실로 복구
 
 ```mermaid
 sequenceDiagram
@@ -265,22 +266,21 @@ sequenceDiagram
 
 ---
 
-Note: Control updates (e.g., queue/tag changes, traffic weights) are published to the internal ControlBus. Gateways relay these updates to SDKs via WebSocket; no callback interface is supported.
+참고: 큐/태그 변경, 트래픽 가중치 등 제어 업데이트는 내부 ControlBus에 게시되며, Gateway가 WebSocket으로 SDK에 중계합니다. 별도의 콜백 인터페이스는 제공하지 않습니다.
 
 ## 4. Garbage Collection (Orphan Queue GC) (확장)
 
-* **Policy Matrix:**
+* **정책 매트릭스:**
 
   | Queue Tag   | TTL  | Grace Period | GC Action  |
   | ----------- | ---- | ------------ | ---------- |
-  | `raw`       | 7d   | 1d           | drop       |
-  | `indicator` | 30d  | 3d           | drop       |
-  | `sentinel`  | 180d | 30d          | archive S3 |
+| `raw`       | 7d   | 1d           | 삭제       |
+| `indicator` | 30d  | 3d           | 삭제       |
+| `sentinel`  | 180d | 30d          | S3 보관    |
 
-* **Archive Implementation:** sentinel queues are uploaded to S3 using
-  `S3ArchiveClient` before deletion.
+* **보관 구현:** 삭제 전에 `S3ArchiveClient`로 센티널 큐를 S3에 업로드합니다.
 
-* **Dynamic Rate Limiter:** Prometheus `kafka_server_BrokerTopicMetrics_MessagesInPerSec` > 80% → GC batch size halve.
+* **동적 레이트 리미터:** Prometheus `kafka_server_BrokerTopicMetrics_MessagesInPerSec`가 80%를 넘으면 GC 배치 크기를 절반으로 줄입니다.
 
 ---
 
@@ -288,9 +288,9 @@ Note: Control updates (e.g., queue/tag changes, traffic weights) are published t
 
 | 장애                    | 영향              | 탐지 메트릭                        | 복구 절차                                  | 알림         |
 | --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
-| Neo4j leader down     | Diff 거절         | `raft_leader_is_null`         | Automat. leader election               | PagerDuty  |
-| Kafka ZK session loss | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | Retry exponential, fallback admin node | Slack #ops |
-| Diff Stream stall     | Gateway status polling failure | `ack_status=timeout`          | Resume from last ACK offset            | Opsgenie |
+| Neo4j 리더 다운       | Diff 거절         | `raft_leader_is_null`         | 자동 리더 선출                           | PagerDuty |
+| Kafka ZK 세션 손실    | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | 지수형 재시도, 관리자 노드 폴백              | Slack #ops |
+| Diff 스트림 정체      | 게이트웨이 상태 폴링 실패 | `ack_status=timeout`          | 마지막 ACK 오프셋부터 재개                 | Opsgenie  |
 ---
 
 각 행은 Runbook 마크다운 파일과 대응되는 ID를 가지며, Grafana Dashboard URL과
@@ -298,26 +298,25 @@ Note: Control updates (e.g., queue/tag changes, traffic weights) are published t
 
 ## 6. 관측 & 메트릭 (확장)
 
-| Metric                     | Target | Alert Rule               |
+| 메트릭                     | 목표   | 알림 규칙                 |
 | -------------------------- | ------ | ------------------------ |
-| `diff_duration_ms_p95`     | <80 ms | `>200ms for 5m → WARN`   |
-| `queue_create_error_total` | =0     | `>0 in 15m → CRIT`       |
-| `sentinel_gap_count`       | <1     | `>=1 → WARN`             |
-| `nodecache_resident_bytes` | stable | `>5e9 for 5m → WARN`     |
-| `orphan_queue_total`       | ↓      | trend up 3h → GC inspect |
-| `compute_nodes_total`      | <50k   | `>50k for 10m → WARN`    |
-| `queues_total`             | <100k  | `>100k for 10m → WARN`   |
+| `diff_duration_ms_p95`     | <80 ms | `>200ms 5분 지속 → 경고` |
+| `queue_create_error_total` | =0     | `15분 내 >0 → 치명`      |
+| `sentinel_gap_count`       | <1     | `>=1 → 경고`             |
+| `nodecache_resident_bytes` | 안정   | `5e9 5분 초과 → 경고`     |
+| `orphan_queue_total`       | 감소   | `3시간 상승 추세 → GC 점검` |
+| `compute_nodes_total`      | <50k   | `10분 >50k → 경고`       |
+| `queues_total`             | <100k  | `10분 >100k → 경고`      |
 
-Clusters should scale before approaching these limits: expand Neo4j memory or
-add Kafka brokers to sustain ingest throughput.
+이 한계에 근접하기 전에 클러스터 규모를 확장해야 합니다. 예: Neo4j 메모리 증설, Kafka 브로커 추가 등으로 인제스트 처리량을 유지하세요.
 
 ---
 
 ## 7. 보안 (확장)
 
-* **Authn:** mTLS + JWT assertion. Key rotation 12h.
-* **Authz:** Neo4j RBAC + Kafka ACL (`READ_TOPIC`, `WRITE_TOPIC`).
-* **Audit:** 모든 Diff req/res → OpenTelemetry trace + hash.
+* **인증(Authn):** mTLS + JWT 어서션, 키 교체 주기 12시간.
+* **인가(Authz):** Neo4j RBAC + Kafka ACL (`READ_TOPIC`, `WRITE_TOPIC`).
+* **감사:** 모든 Diff req/res → OpenTelemetry 트레이스 + 해시.
 
 ---
 
@@ -325,20 +324,20 @@ add Kafka brokers to sustain ingest throughput.
 
 | 취약점                  | 레벨     | 설명                           | 완화                                       |
 | -------------------- | ------ | ---------------------------- | ---------------------------------------- |
-| Graph Bloat          | Medium | 수천 version 누적                | Sentinel TTL·archive, offline compaction |
-| Hash Collision       | Low    | BLAKE3 collision improbable  | Strengthen via **BLAKE3 XOF** (longer digest) + domain separation + audit log |
-| Queue Name collision | Low    | broker lower-case uniqueness | Append `_v{n}` suffix                    |
-| Stats Flood          | Medium | GetQueueStats abuse          | rate‑limit (5/s), authz scope            |
+| 그래프 팽창           | 보통    | 수천 버전 누적                   | Sentinel TTL/보관, 오프라인 컴팩션          |
+| 해시 충돌             | 낮음    | BLAKE3 충돌 가능성 매우 낮음      | BLAKE3 XOF(더 긴 다이제스트) + 도메인 분리 + 감사 로그 강화 |
+| 큐 이름 충돌          | 낮음    | 브로커 소문자 고유성              | `_v{n}` 접미사 추가                         |
+| 통계 과다             | 보통    | GetQueueStats 남용               | 레이트 리밋(5/s), 인가 범위 축소              |
 
 ---
 
 ## 9. Service Level Objectives (SLO)
 
-| SLO ID | Target                     | Measurement    | Window |
+| SLO ID | 목표                        | 측정             | 윈도우 |
 | ------ | -------------------------- | -------------- | ------ |
-| SLO‑1  | Diff p95 <100 ms           | Prom histogram | 28d    |
-| SLO‑2  | Queue create success 99.9% | success/total  | 30d    |
-| SLO‑3  | Sentinel gap =0            | gauge          | 90d    |
+| SLO‑1  | Diff p95 <100 ms           | Prom 히스토그램 | 28d    |
+| SLO‑2  | 큐 생성 성공률 99.9%        | 성공/전체        | 30d    |
+| SLO‑3  | Sentinel gap =0            | 게이지           | 90d    |
 
 ---
 
@@ -355,18 +354,17 @@ add Kafka brokers to sustain ingest throughput.
 ## 11. Admin CLI Snippets (예)
 
 ```shell
-# Diff example (non-destructive read)
+# Diff 예시(비파괴 읽기)
 qmtl service dagmanager diff --file dag.json
-# queue stats
+# 큐 통계 조회
 qmtl service dagmanager queue-stats --tag indicator --interval 1h
-# trigger GC for a sentinel
+# 센티널 GC 트리거
 qmtl service dagmanager gc --sentinel v1.2.3
-# export schema DDL
+# 스키마 DDL 내보내기
 qmtl service dagmanager export-schema --out schema.cypher
 ```
 
-For canary deployment steps see
-[`docs/canary_rollout.md`](../operations/canary_rollout.md).
+카나리아 배포 단계는 [`docs/canary_rollout.md`](../operations/canary_rollout.md)를 참고하세요.
 
 ## 12. 서버 설정 파일 사용법
 
@@ -382,9 +380,7 @@ neo4j_password: secret
 kafka_dsn: localhost:9092
 ```
 
-The sample file installed by ``qmtl project init`` instead defaults to in-memory
-repositories and queues for local development. Uncommenting the DSN lines above
-enables Neo4j and Kafka integrations respectively.
+``qmtl project init``가 설치하는 샘플 파일은 로컬 개발을 위해 인메모리 레포지토리와 큐를 기본값으로 사용합니다. 위 DSN 주석을 해제하면 Neo4j/Kafka 연동이 활성화됩니다.
 
 ```
 # 기본값으로 실행
@@ -398,8 +394,8 @@ qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 ``--config`` 옵션을 생략하면 DSN이 제공되지 않으므로 메모리 레포지토리와 큐가
 사용된다. 샘플 파일에는 모든 필드를 주석과 함께 설명한다.
 
-Available flags:
+사용 가능한 플래그:
 
-- ``--config`` – optional path to configuration file.
+- ``--config`` – 구성 파일 경로(선택)
 
 {{ nav_links() }}

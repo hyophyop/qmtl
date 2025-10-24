@@ -1,5 +1,5 @@
 ---
-title: "Architecture Glossary"
+title: "아키텍처 용어집"
 tags: [architecture, glossary]
 author: "QMTL Team"
 last_modified: 2025-09-22
@@ -7,51 +7,51 @@ last_modified: 2025-09-22
 
 {{ nav_links() }}
 
-# Architecture Glossary
+# 아키텍처 용어집
 
-- DecisionEnvelope: World decision result containing `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`.
-- effective_mode: Policy output string in DecisionEnvelope. Values: `validate | compute-only | paper | live`. Consumers MUST map to an ExecutionDomain for compute/routing; see mapping below.
-- execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs.
-- ActivationEnvelope: Activation state for a `(world_id, strategy_id, side)` with `active`, `weight`, `etag`, `run_id`, `ts` and optional `state_hash`.
-- ControlBus: Internal control bus (Kafka/Redpanda) carrying versioned control events (ActivationUpdated, QueueUpdated, PolicyUpdated); not a public API.
-- EventStreamDescriptor: Opaque WS descriptor from Gateway (`stream_url`, `token`, `topics`, `expires_at`, optional `fallback_url`, `alt_stream_url`).
-- etag: Monotonic version identifier used for deduplication and concurrent update checks.
-- run_id: Idempotency token for 2‑phase apply operations.
-- TTL: Time‑to‑Live; cache validity horizon for DecisionEnvelope.
-- data_currency: Freshness policy comparing `now` and `data_end` to choose initial mode.
-- state_hash: Optional hash of an activation set snapshot, used to detect divergence cheaply.
+- DecisionEnvelope: 월드 결정 결과로 `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`를 포함합니다.
+- effective_mode: DecisionEnvelope의 정책 결과 문자열. 값: `validate | compute-only | paper | live`. 소비자는 계산/라우팅을 위해 ExecutionDomain으로 매핑해야 합니다(아래 규범 참조).
+- execution_domain: Gateway/SDK가 `effective_mode`를 매핑한 파생 필드 (`backtest | dryrun | live | shadow`). SDK로 중계되는 봉투(envelope)에 유지됩니다.
+- ActivationEnvelope: `(world_id, strategy_id, side)`에 대한 활성화 상태. `active`, `weight`, `etag`, `run_id`, `ts`, 선택적 `state_hash` 포함.
+- ControlBus: 버전이 명시된 제어 이벤트(ActivationUpdated, QueueUpdated, PolicyUpdated)를 운반하는 내부 제어 버스(Kafka/Redpanda). 공개 API가 아닙니다.
+- EventStreamDescriptor: Gateway가 발급하는 불투명(opaque) WS 디스크립터 (`stream_url`, `token`, `topics`, `expires_at`, 선택적 `fallback_url`, `alt_stream_url`).
+- etag: 중복 제거 및 동시 업데이트 검증에 사용되는 단조 증가 버전 식별자.
+- run_id: 2‑단계 Apply 작업의 멱등성 토큰.
+- TTL: 캐시 유효 기간(DecisionEnvelope 기준).
+- data_currency: `now`와 `data_end` 비교로 초기 모드를 선택하는 신선도 정책.
+- state_hash: 활성화 스냅샷의 해시(선택). 저비용으로 분기(divergence) 감지.
 
 - Global Strategy Graph (GSG): Content‑addressed, deduplicated global DAG of strategies and nodes; immutable/append‑only SSOT owned by DAG Manager.
-- World View Graph (WVG): Per‑world overlay referencing GSG nodes with world‑local metadata (status, validation, decisions); mutable SSOT owned by WorldService.
-- NodeID: Deterministic BLAKE3 hash of a node’s canonical form: `(node_type, interval, period, params(canonical, split), dependencies(sorted), schema_compat_id, code_hash)`. `schema_compat_id` is the Schema Registry’s major‑compat identifier; minor/patch compatible changes keep the same `schema_compat_id` and thus preserve `node_id`.
-- schema_compat_id: Major‑compatibility identifier used in NodeID canonicalization. Distinct from `schema_id`.
-- schema_id: Concrete schema registry identifier for lookup/resolution; may change across minor/patch versions without affecting `schema_compat_id`.
-- EvalKey: BLAKE3 hash for world‑local validation cache: `(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`; domain‑scopes validation so backtest/live caches never mix.
+- World View Graph (WVG): 월드‑로컬 메타데이터(상태, 검증, 결정)를 가진 GSG 참조 오버레이. 변이 가능한 SSOT이며 WorldService 소유.
+- NodeID: 노드의 정규 형태에 대한 결정적 BLAKE3 해시: `(node_type, interval, period, params(canonical, split), dependencies(sorted), schema_compat_id, code_hash)`. `schema_compat_id`는 스키마 레지스트리의 메이저 호환 식별자이며, 마이너/패치 호환 변경은 동일 식별자를 유지해 `node_id`를 보존합니다.
+- schema_compat_id: NodeID 정규화에 사용되는 메이저 호환 식별자. `schema_id`와는 구분됩니다.
+- schema_id: 조회/해결을 위한 구체적 스키마 레지스트리 식별자. 마이너/패치 변경으로 바뀔 수 있으나 `schema_compat_id`에는 영향 없음.
+- EvalKey: 월드‑로컬 검증 캐시 키용 BLAKE3 해시: `(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)`; 도메인 스코프 검증으로 백테스트/라이브 캐시 혼합을 방지.
 - WorldNodeRef: `(world_id, node_id, execution_domain)` scoped record storing world‑/도메인‑로컬 `status`, `last_eval_key`, and annotations.
 - DecisionsRequest: API payload replacing the per-world strategy set; contains an ordered list of unique, non-empty strategy identifiers persisted by WorldService.
 - SSOT boundary: DAG Manager owns GSG only; WorldService owns WVG only. Gateway proxies/caches; it is not an SSOT.
 
-## Execution Domain & Isolation
+## 실행 도메인과 격리(Execution Domain & Isolation)
 
-- ExecutionDomain: Compute/run context of a world. One of `backtest | dryrun | live | shadow`. Drives gating, queue routing, and validation scope.
-- Domain‑Scoped ComputeKey: Internal dedup/cache key used by DAG Manager and runtimes: `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`. NodeID remains world‑agnostic; ComputeKey enforces cross‑domain/world isolation.
+- ExecutionDomain: 월드의 실행 컨텍스트. `backtest | dryrun | live | shadow` 중 하나이며, 게이팅/큐 라우팅/검증 범위를 좌우합니다.
+- 도메인 스코프 ComputeKey: DAG Manager/런타임에서 사용하는 내부 중복 제거/캐시 키: `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`. NodeID는 월드 무관성을 유지하며, ComputeKey가 도메인/월드 격리를 보장합니다.
 - EdgeOverride (WVG scope): World‑local reachability control per edge; used to disable cross‑domain paths (e.g., backtest graph → live queues) until policy‑driven enablement. Implemented by [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }}) and surfaced via the WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) API.
 - 2‑Phase Apply: WorldService operation ensuring safe domain switches: `Freeze/Drain → Switch(domain) → Unfreeze`. Orders are gated OFF while `freeze=true`.
 - Feature Artifact: Immutable output of the Feature Plane identified by `(factor, interval, params, instrument, t, dataset_fingerprint)`. Shared read-only across ExecutionDomains.
-- dataset_fingerprint: Token representing the data snapshot used for validation/promotion; policies and EvalKey MUST include it.
-- share_policy: Policy flag controlling how artifacts are reused. `feature-artifacts-only` forbids runtime cache sharing and mandates read-only artifact consumption.
-- cross_context_cache_hit_total: Counter emitted by SDK/DAG Manager when a cache hit occurs with mismatched `(world_id, execution_domain, as_of, partition)`; MUST stay at 0.
+- dataset_fingerprint: 검증/프로모션에 사용된 데이터 스냅샷을 나타내는 토큰. 정책과 EvalKey에 반드시 포함됩니다.
+- share_policy: 아티팩트 재사용 방식을 제어하는 정책 플래그. `feature-artifacts-only`는 런타임 캐시 공유를 금지하고 읽기 전용 소비를 강제합니다.
+- cross_context_cache_hit_total: 라벨이 다른 `(world_id, execution_domain, as_of, partition)` 조합으로 캐시 히트가 발생했을 때 증가하는 카운터. 반드시 0을 유지해야 합니다.
 
-Execution mode → ExecutionDomain mapping (normative)
-- `validate` → same as `compute-only` with orders gated OFF; defaults to `backtest` unless operators request `shadow` explicitly
+실행 모드 → ExecutionDomain 매핑(규범)
+- `validate` → `compute-only`와 동일하며 오더 게이트 OFF; 기본은 `backtest`(운영자가 명시적으로 `shadow`를 요청하지 않는 한)
 - `compute-only` → `backtest`
 - `paper` → `dryrun`
 - `live` → `live`
 
-Auxiliary terms
-- as_of: Dataset snapshot timestamp or commit identifier that binds backtests to a fixed input view for deterministic replay.
-- partition: Optional tenant/portfolio/strategy partitioning key included in ComputeKey to scope multi‑tenant execution.
-- NodeHash: Canonical hash input used to derive NodeID (blake3 digest of the canonical node form).
-- WSB (WorldStrategyBinding): `(world_id, strategy_id)` association created by Gateway on submission to ensure the root `WorldNodeRef` exists.
+보조 용어
+- as_of: 결정적 리플레이를 위해 백테스트를 고정 입력 뷰에 묶는 데이터 스냅샷 타임스탬프 또는 커밋 ID.
+- partition: 멀티테넌트 실행 범위를 지정하기 위해 ComputeKey에 포함되는 선택적 파티션 키(테넌트/포트폴리오/전략).
+- NodeHash: NodeID 파생에 사용되는 정규 해시 입력(정규 노드 형식의 blake3 다이제스트).
+- WSB (WorldStrategyBinding): 제출 시 Gateway가 생성하는 `(world_id, strategy_id)` 연관으로 루트 `WorldNodeRef` 존재를 보장.
 
 {{ nav_links() }}

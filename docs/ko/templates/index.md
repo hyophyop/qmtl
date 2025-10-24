@@ -1,3 +1,10 @@
+---
+title: "템플릿 색인"
+tags: [templates]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # 템플릿 색인
 
 - [문서 스켈레톤](template.md)

@@ -1,3 +1,10 @@
+---
+title: "CCXT × QuestDB (IO)"
+tags: [io, ccxt, questdb]
+author: "QMTL Team"
+last_modified: 2025-08-21
+---
+
 # CCXT × QuestDB (IO)
 
 이 문서는 CCXT 기반 DataFetcher와 QuestDB 백엔드를 조합해, 요청 시 자동 백필되는 시계열을 제공하는 방법을 설명합니다. 구현은 정식 패키지(`qmtl/runtime/io/`)로 제공되며, 예제가 아닌 실사용 구성에 적합합니다.
