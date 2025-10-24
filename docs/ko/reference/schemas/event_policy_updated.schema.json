@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/event_policy_updated.schema.json",
+  "title": "PolicyUpdated",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "PolicyUpdated" },
+    "version": { "type": "integer", "minimum": 1 },
+    "world_id": { "type": "string" },
+    "policy_version": { "type": "integer", "minimum": 0 },
+    "checksum": { "type": "string" },
+    "status": { "type": "string", "enum": ["DRAFT", "ACTIVE", "DEPRECATED"] },
+    "ts": { "type": "string", "format": "date-time" }
+  },
+  "required": ["type", "version", "world_id", "policy_version", "checksum", "status", "ts"]
+}
+

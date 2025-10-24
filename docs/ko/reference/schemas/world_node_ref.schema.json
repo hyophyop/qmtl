@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/world_node_ref.schema.json",
+  "title": "WorldNodeRef",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "world_id": { "type": "string" },
+    "node_id": { "type": "string", "pattern": "^blake3:.*$" },
+    "execution_domain": {
+      "type": "string",
+      "enum": ["backtest", "dryrun", "live", "shadow"]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "unknown","validating","valid","invalid","running","paused","stopped","archived"
+      ]
+    },
+    "last_eval_key": { "type": ["string","null"], "pattern": "^blake3:.*$" },
+    "annotations": { "type": ["object","null"] }
+  },
+  "required": ["world_id", "node_id", "execution_domain", "status"]
+}
