@@ -23,6 +23,12 @@ jobs:
         id: start
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure qmtl-subtree remote
+        run: |
+          if ! git remote get-url qmtl-subtree >/dev/null 2>&1; then
+            git remote add qmtl-subtree https://github.com/hyophyop/qmtl.git
+          fi
+
       - name: Sync qmtl subtree
         run: scripts/sync_qmtl.sh
 
