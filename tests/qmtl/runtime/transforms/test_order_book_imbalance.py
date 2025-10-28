@@ -1,4 +1,11 @@
-from qmtl.runtime.transforms import order_book_imbalance_node, rate_of_change
+import math
+
+from qmtl.runtime.transforms import (
+    order_book_imbalance_node,
+    logistic_order_book_imbalance_node,
+    imbalance_to_weight,
+    rate_of_change,
+)
 from qmtl.runtime.sdk.node import SourceNode
 from qmtl.runtime.sdk.cache_view import CacheView
 
@@ -35,3 +42,32 @@ def test_order_book_imbalance_derivative():
 
     roc_view = CacheView({obi.node_id: {1: [(0, obi0), (1, obi1)]}})
     assert derivative.compute_fn(roc_view) == (obi1 - obi0) / obi0
+
+
+def test_logistic_order_book_weight_node():
+    bid = SourceNode(interval="1s", period=1, config={"id": "bid"})
+    ask = SourceNode(interval="1s", period=1, config={"id": "ask"})
+    node = logistic_order_book_imbalance_node(bid, ask, slope=3.0)
+    data = {
+        bid.node_id: {1: [(0, 12.0)]},
+        ask.node_id: {1: [(0, 8.0)]},
+    }
+    view = CacheView(data)
+    imbalance = (12.0 - 8.0) / (12.0 + 8.0)
+    expected = imbalance_to_weight(imbalance, mode="logistic", slope=3.0)
+    assert node.compute_fn(view) == expected
+
+
+def test_logistic_order_book_weight_clamp():
+    bid = SourceNode(interval="1s", period=1, config={"id": "bid"})
+    ask = SourceNode(interval="1s", period=1, config={"id": "ask"})
+    node = logistic_order_book_imbalance_node(bid, ask, clamp=0.5, slope=10.0)
+    data = {
+        bid.node_id: {1: [(0, 1000.0)]},
+        ask.node_id: {1: [(0, 1.0)]},
+    }
+    view = CacheView(data)
+    imbalance = (1000.0 - 1.0) / (1000.0 + 1.0)
+    expected = imbalance_to_weight(imbalance, mode="logistic", slope=10.0, clamp=0.5)
+    result = node.compute_fn(view)
+    assert math.isclose(result, expected)
