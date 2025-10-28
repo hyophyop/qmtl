@@ -44,7 +44,7 @@ class RunnerServices:
     ) -> None:
         self.gateway_client = gateway_client or GatewayClient()
         self.history_service = history_service or HistoryWarmupService()
-        self.feature_plane = feature_plane or FeatureArtifactPlane.from_env()
+        self.feature_plane = feature_plane or FeatureArtifactPlane.from_config()
         self.ray_executor = ray_executor or RayExecutor()
         self.kafka_factory = kafka_factory or KafkaConsumerFactory()
         self._activation_manager_factory = (

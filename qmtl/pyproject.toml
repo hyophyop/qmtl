@@ -42,13 +42,36 @@ dev = [
     "mkdocs-material",
     "mkdocs-macros-plugin",
     "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
     "websocket-client",
+    "Babel>=2.13",
 ]
 
 ray = ["ray"]
 io = ["pandas"]
 ccxt = ["ccxt"]
 questdb = ["asyncpg"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis>=6.100",
+    "jsonschema>=4.0.0",
+    "fakeredis",
+    "grpcio-tools>=1.74.0",
+    "pyarrow",
+    "mkdocs-material",
+    "mkdocs-macros-plugin",
+    "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
+    "websocket-client",
+    "Babel>=2.13",
+]
 
 [project.scripts]
 qmtl = "qmtl.interfaces.cli:main"
@@ -69,13 +92,20 @@ include = ["qmtl*"]
 "qmtl.examples" = [
   "*.py",
   "*.yml",
+  "*.yaml",
   "templates/*.yml",
   "gitignore",
   "README.md",
   "data/*.csv",
   "*.csv",
+  "seamless/*.yaml",
+  "seamless/*.yml",
   "notebooks/*.ipynb",
 ]
 "qmtl.foundation.schema" = [
   "schemas/*.json",
+]
+"qmtl" = [
+  "locale/*/LC_MESSAGES/*.mo",
+  "locale/*/LC_MESSAGES/*.po",
 ]

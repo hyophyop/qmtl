@@ -4,14 +4,58 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import warnings
+from dataclasses import replace
 from typing import Any, Iterable, Sequence
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 from .base import FeatureArtifactKey, FeatureStoreBackend
 from .filesystem import FileSystemFeatureStore
+from .. import configuration
+from qmtl.foundation.config import CacheConfig as _CacheConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_env_bool(value: str) -> bool | None:
+    text = value.strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off", ""}:
+        return False
+    return None
+
+
+def _from_cache_config(cfg: _CacheConfig) -> "FeatureArtifactPlane | None":
+    enabled = bool(cfg.feature_artifacts_enabled)
+    if not enabled:
+        return None
+
+    base = cfg.feature_artifact_dir
+    max_versions = cfg.feature_artifact_versions
+    write_domains = list(cfg.feature_artifact_write_domains)
+
+    if isinstance(max_versions, str):
+        text = max_versions.strip()
+        if not text:
+            max_versions = None
+        else:
+            try:
+                max_versions = int(text)
+            except ValueError:  # pragma: no cover - defensive
+                logger.warning(
+                    "invalid feature_artifact_versions value in configuration: %s",
+                    max_versions,
+                )
+                max_versions = None
+
+    backend = FileSystemFeatureStore(base, max_versions=max_versions)
+    domains: Sequence[str] | None = None
+    if write_domains:
+        domains = [str(d).strip() for d in write_domains if str(d).strip()]
+    return FeatureArtifactPlane(backend, write_domains=domains)
 
 
 def _infer_instrument(payload: Any) -> str:
@@ -44,29 +88,62 @@ class FeatureArtifactPlane:
 
     # ------------------------------------------------------------------
     @classmethod
+    def from_config(cls) -> FeatureArtifactPlane | None:
+        unified = configuration.get_runtime_config()
+        cfg = unified.cache if unified is not None else _CacheConfig()
+        return _from_cache_config(cfg)
+
+    @classmethod
     def from_env(cls) -> FeatureArtifactPlane | None:
-        disabled = str(os.getenv("QMTL_FEATURE_ARTIFACTS", "")).strip().lower() in {
-            "0",
-            "false",
-            "off",
-            "no",
-        }
-        if disabled:
-            return None
-        base = os.getenv("QMTL_FEATURE_ARTIFACT_DIR", ".qmtl_feature_artifacts")
-        max_versions_env = os.getenv("QMTL_FEATURE_ARTIFACT_VERSIONS")
-        max_versions = None
-        if max_versions_env:
-            try:
-                max_versions = int(max_versions_env)
-            except ValueError:
-                logger.warning("invalid QMTL_FEATURE_ARTIFACT_VERSIONS value: %s", max_versions_env)
-        backend = FileSystemFeatureStore(base, max_versions=max_versions)
-        domains_env = os.getenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS")
-        domains: Sequence[str] | None = None
-        if domains_env:
-            domains = [d.strip() for d in domains_env.split(",") if d.strip()]
-        return cls(backend, write_domains=domains)
+        warnings.warn(
+            "FeatureArtifactPlane.from_env is deprecated; use from_config() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        overrides: dict[str, Any] = {}
+
+        raw_enabled = os.getenv("QMTL_FEATURE_ARTIFACTS")
+        if raw_enabled is not None:
+            enabled = _coerce_env_bool(raw_enabled)
+            if enabled is None:
+                logger.warning(
+                    "invalid boolean for QMTL_FEATURE_ARTIFACTS: %s", raw_enabled
+                )
+            else:
+                overrides["feature_artifacts_enabled"] = enabled
+
+        raw_dir = os.getenv("QMTL_FEATURE_ARTIFACT_DIR")
+        if raw_dir is not None:
+            overrides["feature_artifact_dir"] = raw_dir
+
+        raw_versions = os.getenv("QMTL_FEATURE_ARTIFACT_VERSIONS")
+        if raw_versions is not None:
+            text = raw_versions.strip()
+            if not text:
+                overrides["feature_artifact_versions"] = None
+            else:
+                try:
+                    overrides["feature_artifact_versions"] = int(text)
+                except ValueError:
+                    logger.warning(
+                        "invalid integer for QMTL_FEATURE_ARTIFACT_VERSIONS: %s",
+                        raw_versions,
+                    )
+
+        raw_domains = os.getenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS")
+        if raw_domains is not None:
+            tokens = [token.strip() for token in re.split(r"[,\s]+", raw_domains)]
+            overrides["feature_artifact_write_domains"] = [
+                token for token in tokens if token
+            ]
+
+        if not overrides:
+            return cls.from_config()
+
+        unified = configuration.get_runtime_config()
+        base_cfg = unified.cache if unified is not None else _CacheConfig()
+        cfg = replace(base_cfg, **overrides)
+        return _from_cache_config(cfg)
 
     # ------------------------------------------------------------------
     def configure(
@@ -191,4 +268,3 @@ class FeatureArtifactPlane:
             self.backend.write(key, payload)
         except Exception:
             logger.exception("failed to write feature artifact for factor %s", factor_id)
-

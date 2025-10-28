@@ -48,15 +48,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["qmtl", "service", "dagmanager", "server"]
+    command:
+      ["qmtl", "service", "dagmanager", "server", "--config", "/app/operations/docker-compose.qmtl.yml"]
     depends_on:
       - kafka
       - neo4j
       - postgres
-    environment:
-      QMTL__DAGMANAGER__NEO4J_DSN: bolt://neo4j:7687
-      QMTL__DAGMANAGER__KAFKA_DSN: kafka:9092
-      QMTL__DAGMANAGER__DATABASE_DSN: postgresql://qmtl:qmtl@postgres:5432/qmtl
     volumes:
       - .:/app
     ports:
@@ -66,13 +63,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["qmtl", "service", "gateway"]
+    command:
+      ["qmtl", "service", "gateway", "--config", "/app/operations/docker-compose.qmtl.yml"]
     depends_on:
       - dagmanager
       - redis
-    environment:
-      QMTL__GATEWAY__REDIS_DSN: redis://redis:6379/0
-      QMTL__GATEWAY__DAGMANAGER_DSN: dagmanager:50051
     volumes:
       - .:/app
     ports:

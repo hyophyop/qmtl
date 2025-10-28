@@ -1,40 +1,82 @@
-"""Shared runtime flags for SDK features."""
+"""Shared runtime flags for SDK features sourced from configuration."""
 
-import os
+from __future__ import annotations
+
+from typing import Any
+
+from . import configuration
 
 # Global flag to disable Ray usage across SDK components.
 NO_RAY: bool = False
 
-# Enable conservative time budgets in tests to avoid hangs.
-# Set QMTL_TEST_MODE=1 (or true/yes/on) to activate.
-TEST_MODE: bool = str(os.getenv("QMTL_TEST_MODE", "")).strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+TEST_MODE: bool = False
+FIXED_NOW: int | None = None
+HTTP_TIMEOUT_SECONDS: float = 2.0
+WS_RECV_TIMEOUT_SECONDS: float = 30.0
+WS_MAX_TOTAL_TIME_SECONDS: float | None = None
+FAIL_ON_HISTORY_GAP: bool = False
+POLL_INTERVAL_SECONDS: float = 10.0
 
-# When set, override wall-clock 'now' used by history warm-up.
-_fixed_now = os.getenv("QMTL_FIXED_NOW", "").strip()
-try:
-    FIXED_NOW: int | None = int(_fixed_now) if _fixed_now else None
-except ValueError:
-    FIXED_NOW = None
 
-# Default client-side timeouts used by SDK components. These are intentionally
-# small under TEST_MODE to surface issues quickly and prevent hangs.
-HTTP_TIMEOUT_SECONDS: float = 1.5 if TEST_MODE else 2.0
-WS_RECV_TIMEOUT_SECONDS: float = 5.0 if TEST_MODE else 30.0
-WS_MAX_TOTAL_TIME_SECONDS: float | None = 5.0 if TEST_MODE else None
+def _maybe_int(value: Any) -> int | None:
+    if value in {"", None}:
+        return None
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
 
-# Strict gap handling (opt-in). When enabled, Runner will raise if
-# pre_warmup remains after history reconciliation.
-FAIL_ON_HISTORY_GAP: bool = str(os.getenv("QMTL_FAIL_ON_HISTORY_GAP", "")).strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
 
-# Default poll interval for explicit status queries (seconds).
-POLL_INTERVAL_SECONDS: float = 2.0 if TEST_MODE else 10.0
+def _select(default: float | None, test_override: float | None) -> float | None:
+    if TEST_MODE and test_override is not None:
+        return test_override
+    return default
+
+
+def _reload_from_config(cfg: Any | None = None) -> None:
+    global TEST_MODE, FIXED_NOW, HTTP_TIMEOUT_SECONDS, WS_RECV_TIMEOUT_SECONDS
+    global WS_MAX_TOTAL_TIME_SECONDS, FAIL_ON_HISTORY_GAP, POLL_INTERVAL_SECONDS
+
+    unified = cfg or configuration.get_unified_config()
+    test_cfg = unified.test
+    runtime_cfg = unified.runtime
+
+    TEST_MODE = bool(test_cfg.test_mode)
+    FAIL_ON_HISTORY_GAP = bool(test_cfg.fail_on_history_gap)
+    FIXED_NOW = _maybe_int(test_cfg.fixed_now)
+
+    HTTP_TIMEOUT_SECONDS = float(
+        _select(runtime_cfg.http_timeout_seconds, runtime_cfg.http_timeout_seconds_test)
+    )
+    WS_RECV_TIMEOUT_SECONDS = float(
+        _select(runtime_cfg.ws_recv_timeout_seconds, runtime_cfg.ws_recv_timeout_seconds_test)
+    )
+    WS_MAX_TOTAL_TIME_SECONDS = _select(
+        runtime_cfg.ws_max_total_time_seconds, runtime_cfg.ws_max_total_time_seconds_test
+    )
+    POLL_INTERVAL_SECONDS = float(
+        _select(runtime_cfg.poll_interval_seconds, runtime_cfg.poll_interval_seconds_test)
+    )
+
+
+def reload() -> None:
+    """Reload runtime settings from the unified configuration."""
+
+    cfg = configuration.reload()
+    _reload_from_config(cfg)
+
+
+_reload_from_config()
+
+
+__all__ = [
+    "FAIL_ON_HISTORY_GAP",
+    "FIXED_NOW",
+    "HTTP_TIMEOUT_SECONDS",
+    "NO_RAY",
+    "POLL_INTERVAL_SECONDS",
+    "TEST_MODE",
+    "WS_MAX_TOTAL_TIME_SECONDS",
+    "WS_RECV_TIMEOUT_SECONDS",
+    "reload",
+]

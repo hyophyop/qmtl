@@ -7,6 +7,9 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+# NOTE: Architecture spec (§3) requires NodeID inputs to exclude non-deterministic
+# fields such as timestamps, random seeds, and environment payloads to preserve
+# global stability across worlds/domains.
 _PARAM_EXCLUDE_KEYS = {
     "world",
     "world_id",
@@ -18,7 +21,13 @@ _PARAM_EXCLUDE_KEYS = {
     "as_of",
     "partition",
     "dataset_fingerprint",
+    "timestamp",
+    "seed",
+    "random_state",
+    "env",
 }
+
+_PARAM_EXCLUDE_PREFIXES = ("env_",)
 
 
 def _safe_deepcopy(value: Any) -> Any:
@@ -53,11 +62,25 @@ def _sorted_deps(node: Mapping[str, Any]) -> list[str]:
 
 def _canonicalize_params(value: Any) -> Any:
     if isinstance(value, Mapping):
-        canonical: dict[str, Any] = {}
-        for key in sorted(value.keys()):
-            if key in _PARAM_EXCLUDE_KEYS:
+        canonical_items: list[tuple[str, Any]] = []
+        for raw_key, raw_value in value.items():
+            key_name = str(raw_key)
+            lowered = key_name.lower()
+            if lowered in _PARAM_EXCLUDE_KEYS:
                 continue
-            canonical[key] = _canonicalize_params(value[key])
+            if any(lowered.startswith(prefix) for prefix in _PARAM_EXCLUDE_PREFIXES):
+                continue
+            canonical_items.append((key_name, _canonicalize_params(raw_value)))
+        # Sort using the normalized string form to guarantee deterministic output
+        # even when heterogeneous key types are supplied (e.g., integers mixed with
+        # strings). ``json.dumps(..., sort_keys=True)`` will take care of the final
+        # ordering, but normalising here prevents ``TypeError`` from unsortable key
+        # combinations before reaching the serializer.
+        canonical: dict[str, Any] = {}
+        for key_name, normalized_value in sorted(
+            canonical_items, key=lambda item: item[0]
+        ):
+            canonical[key_name] = normalized_value
         return canonical
     if isinstance(value, set):
         items = [_canonicalize_params(item) for item in value]

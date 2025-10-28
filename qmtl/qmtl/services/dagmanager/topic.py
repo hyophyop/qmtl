@@ -4,26 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, Mapping
-import os
 
 
-_NAMESPACE_FLAG_ENV = "QMTL_ENABLE_TOPIC_NAMESPACE"
+_NAMESPACE_ENABLED: bool = True
+
+
+def set_topic_namespace_enabled(enabled: bool) -> None:
+    """Set the global topic-namespace guard flag."""
+
+    global _NAMESPACE_ENABLED
+    _NAMESPACE_ENABLED = bool(enabled)
 
 
 def topic_namespace_enabled() -> bool:
     """Return ``True`` when topic namespace prefixing is enabled."""
 
-    flag = os.getenv(_NAMESPACE_FLAG_ENV)
-    if flag is None:
-        return True
-
-    normalized = flag.strip().lower()
-    if normalized in {"0", "false", "no", "off", "disable", "disabled"}:
-        return False
-
-    # Any other value (including "1", "true", "yes", etc.) keeps the namespace
-    # guard enabled so production deployments honour the required prefixes.
-    return True
+    return _NAMESPACE_ENABLED
 
 
 def _sanitize_namespace_segment(value: object) -> str:
@@ -165,6 +161,7 @@ __all__ = [
     "TopicConfig",
     "topic_name",
     "get_config",
+    "set_topic_namespace_enabled",
     "topic_namespace_enabled",
     "build_namespace",
     "normalize_namespace",

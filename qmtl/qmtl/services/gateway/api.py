@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import secrets
 import asyncio
 from contextlib import asynccontextmanager, suppress
@@ -13,7 +12,6 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry import trace
 
 from qmtl.foundation.common import AsyncCircuitBreaker
-from qmtl.foundation.common.tracing import setup_tracing
 
 from . import metrics as gw_metrics
 from .controlbus_consumer import ControlBusConsumer
@@ -62,7 +60,6 @@ def create_app(
     enable_otel: bool | None = None,
     enable_background: bool = True,
 ) -> FastAPI:
-    setup_tracing("gateway")
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     if database is not None:
         database_obj = database
@@ -117,10 +114,10 @@ def create_app(
     if event_config is not None:
         event_cfg = event_config
     else:
-        secret = os.getenv("QMTL_EVENT_SECRET")
-        if not secret:
-            secret = secrets.token_hex(32)
-            logger.warning("QMTL_EVENT_SECRET is not set; using a generated secret")
+        secret = secrets.token_hex(32)
+        logger.warning(
+            "Gateway events.secret not configured; using a generated secret"
+        )
         event_cfg = EventDescriptorConfig(
             keys={"default": secret},
             active_kid="default",
@@ -196,11 +193,7 @@ def create_app(
     app = FastAPI(lifespan=lifespan)
     # Opt-in FastAPI OpenTelemetry instrumentation to avoid resource warnings in tests
     # Default is disabled unless explicitly enabled via argument or env var
-    _otel_enabled = (
-        enable_otel
-        if enable_otel is not None
-        else os.getenv("QMTL_ENABLE_FASTAPI_OTEL", "0").lower() in {"1", "true", "yes"}
-    )
+    _otel_enabled = bool(enable_otel)
     if _otel_enabled:
         FastAPIInstrumentor().instrument_app(app)
     app.state.database = database_obj

@@ -1,4 +1,9 @@
-from .policy_engine import Policy, evaluate_policy, parse_policy
-from .api import create_app
+"""WorldService package.
 
-__all__ = ["Policy", "evaluate_policy", "parse_policy", "create_app"]
+Avoid importing the ASGI application at import time to prevent cycles.
+Import ``create_app`` from ``qmtl.services.worldservice.api`` where needed.
+"""
+
+from .policy_engine import Policy, evaluate_policy, parse_policy
+
+__all__ = ["Policy", "evaluate_policy", "parse_policy"]

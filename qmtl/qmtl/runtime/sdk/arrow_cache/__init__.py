@@ -2,13 +2,22 @@
 from __future__ import annotations
 
 from .backend import NodeCacheArrow
-from .dependencies import (
-    ARROW_AVAILABLE,
-    ARROW_CACHE_ENABLED,
-    RAY_AVAILABLE,
-    pa,
-    ray,
-)
+from . import dependencies as _dependencies
+
+ARROW_AVAILABLE = _dependencies.ARROW_AVAILABLE
+RAY_AVAILABLE = _dependencies.RAY_AVAILABLE
+pa = _dependencies.pa
+ray = _dependencies.ray
+ARROW_CACHE_ENABLED = _dependencies.ARROW_CACHE_ENABLED
+
+
+def reload_arrow_cache() -> bool:
+    """Refresh configuration-driven availability flags."""
+
+    global ARROW_CACHE_ENABLED
+    result = _dependencies.reload()
+    ARROW_CACHE_ENABLED = _dependencies.ARROW_CACHE_ENABLED
+    return result
 from .eviction import (
     EvictionStrategy,
     RayEvictionStrategy,
@@ -36,4 +45,5 @@ __all__ = [
     "ARROW_CACHE_ENABLED",
     "pa",
     "ray",
+    "reload_arrow_cache",
 ]

@@ -11,10 +11,34 @@ from typing import Any, MutableMapping, Protocol
 
 import pandas as pd
 
+from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.io.artifact import (
     ArtifactRegistrar as _IOArtifactRegistrar,
     ArtifactPublication,
 )
+from qmtl.runtime.sdk.configuration import get_seamless_config
+
+from .. import configuration
+
+
+def _resolve_strategy_id() -> str | None:
+    try:
+        cfg = configuration.get_connectors_config()
+        value = getattr(cfg, "strategy_id", None)
+    except Exception:  # pragma: no cover - defensive cache access
+        value = None
+
+    if value:
+        text = str(value).strip()
+        if text:
+            return text
+
+    raw = os.getenv("QMTL_STRATEGY_ID")
+    if raw:
+        text = raw.strip()
+        if text:
+            return text
+    return None
 
 
 @dataclass(slots=True)
@@ -77,7 +101,7 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         partition_template: str = "exchange={exchange}/symbol={symbol}/timeframe={timeframe}",
         producer: str | None = "seamless@qmtl",
     ) -> None:
-        self.base_dir = Path(base_dir)
+        self.base_dir = Path(base_dir).expanduser()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._partition_template = partition_template
         self._producer_identity = producer or None
@@ -89,27 +113,23 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         )
 
     @classmethod
-    def from_env(cls) -> "FileSystemArtifactRegistrar | None":
-        """Create a registrar from environment configuration.
+    def from_runtime_config(
+        cls, config: SeamlessConfig | None = None
+    ) -> "FileSystemArtifactRegistrar | None":
+        """Create a registrar when artifacts are enabled in configuration."""
 
-        Registrars are opt-in so that optional parquet dependencies are not
-        required for every seamless fetch. A registrar will only be created
-        when ``QMTL_SEAMLESS_ARTIFACTS`` is explicitly enabled or when a
-        custom artifact directory is provided.
-        """
-
-        flag = os.getenv("QMTL_SEAMLESS_ARTIFACTS")
-        dir_override = os.getenv("QMTL_SEAMLESS_ARTIFACT_DIR")
-
-        if flag is None and not dir_override:
+        cfg = config or get_seamless_config()
+        if not bool(cfg.artifacts_enabled):
             return None
 
-        normalized = str(flag or "").strip().lower()
-        if normalized in {"0", "false", "off", "no"}:
-            return None
-
-        base = dir_override or ".qmtl_seamless_artifacts"
+        base = cfg.artifact_dir or ".qmtl_seamless_artifacts"
         return cls(base)
+
+    @classmethod
+    def from_env(cls) -> "FileSystemArtifactRegistrar | None":
+        """Backward-compatible alias for :meth:`from_runtime_config`."""
+
+        return cls.from_runtime_config()
 
     # ------------------------------------------------------------------
     def _target_dir(self, manifest: MutableMapping[str, Any]) -> Path:
@@ -202,7 +222,7 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
             node_id=str(manifest.get("node_id", "unknown")),
             interval=int(manifest.get("interval", 0)),
             world_id=os.getenv("WORLD_ID", "default"),
-            strategy_id=os.getenv("QMTL_STRATEGY_ID"),
+            strategy_id=_resolve_strategy_id(),
         )
         producer_payload = producer.as_dict()
         if self._producer_identity:

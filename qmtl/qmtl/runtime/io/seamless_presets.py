@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
+from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
 from qmtl.runtime.io.historyprovider import QuestDBLoader
 from qmtl.runtime.io.seamless_provider import (
-    CacheDataSource,
     DataFetcherAutoBackfiller,
     LiveDataFeedImpl,
-    StorageDataSource,
+    HistoryProviderDataSource,
 )
 from qmtl.runtime.io.ccxt_fetcher import (
     CcxtBackfillConfig,
@@ -141,7 +141,7 @@ def _register_ccxt_questdb_preset() -> None:
         def storage_factory():
             fetcher = make_fetcher()
             provider = QuestDBLoader(dsn, table=table, fetcher=fetcher)
-            return StorageDataSource(provider)
+            return HistoryProviderDataSource(provider, DataSourcePriority.STORAGE)
 
         def backfill_factory():
             return DataFetcherAutoBackfiller(make_fetcher())
@@ -152,7 +152,7 @@ def _register_ccxt_questdb_preset() -> None:
                 provider = cache_provider_factory()
                 if provider is None:
                     raise RuntimeError("cache_provider factory returned None")
-                return CacheDataSource(provider)
+                return HistoryProviderDataSource(provider, DataSourcePriority.CACHE)
 
             builder.with_cache(cache_factory)
         builder.with_backfill(backfill_factory)
@@ -203,7 +203,7 @@ def _register_ccxt_trades_preset() -> None:
         def storage_factory():
             fetcher = make_fetcher()
             provider = QuestDBLoader(dsn, table=table, fetcher=fetcher)
-            return StorageDataSource(provider)
+            return HistoryProviderDataSource(provider, DataSourcePriority.STORAGE)
 
         builder.with_storage(storage_factory)
         builder.with_backfill(lambda: DataFetcherAutoBackfiller(make_fetcher()))

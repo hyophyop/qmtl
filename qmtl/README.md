@@ -31,7 +31,7 @@ qmtl service dagmanager --help
 qmtl tools sdk --help
 ```
 
-Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Legacy aliases like `qmtl gw` continue to function but emit deprecation warnings to ease migration.
+Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Only the hierarchical commands are supported.
 
 The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
 
@@ -102,26 +102,19 @@ Bring services up in three steps. This mirrors the detailed guidance in
    uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
    ```
 
-2. **Export and load environment variables** – persist overrides so Gateway
-   and DAG Manager pick them up without repeating `--config` flags.
+2. **Share the YAML with services** – either keep the path handy for `--config`
+   or copy it to `qmtl.yml` in your working directory so discovery works
+   automatically.
+
+3. **Launch services** – point both Gateway and DAG Manager at the same file.
 
    ```bash
-   uv run qmtl config env export --config qmtl/examples/qmtl.yml > .env.qmtl
-   source .env.qmtl
-   export QMTL_CONFIG_FILE=$PWD/qmtl/examples/qmtl.yml
+   qmtl service gateway --config qmtl/examples/qmtl.yml
+   qmtl service dagmanager server --config qmtl/examples/qmtl.yml
    ```
 
-3. **Launch services** – with the environment in place you can start Gateway
-   and DAG Manager directly; each service falls back to `QMTL_CONFIG_FILE` if
-   no `--config` flag is provided.
-
-   ```bash
-   qmtl service gateway
-   qmtl service dagmanager server
-   ```
-
-If `QMTL_CONFIG_FILE` is invalid the services log a warning and continue with
-default settings, preventing silent misconfigurations.
+When no configuration file is discovered the services fall back to built-in
+defaults, preventing silent misconfigurations.
 
 ## Trading Node Enhancements
 
@@ -243,10 +236,22 @@ stand‑alone FastAPI app and enable the Gateway proxy when needed.
 1) Start WorldService (SQLite + Redis example)
 
 ```bash
-export QMTL_WORLDSERVICE_DB_DSN=sqlite:///worlds.db
-export QMTL_WORLDSERVICE_REDIS_DSN=redis://localhost:6379/0
+cat > worldservice.yml <<'EOF'
+worldservice:
+  dsn: sqlite:///worlds.db
+  redis: redis://localhost:6379/0
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
+EOF
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
+
+Run the command from the directory containing `worldservice.yml` so the server
+discovers the file automatically.
 
 2) Point Gateway at WorldService (optional proxy)
 
@@ -300,6 +305,9 @@ Resolved mappings are cached to `.qmtl_tagmap.json` (override with
 `QMTL_TAGQUERY_CACHE`) along with a CRC so dry-runs and backtests can
 reproduce the live mapping deterministically. `resolve_tags(offline=True)`
 hydrates nodes from this snapshot when the Gateway is unavailable.
+
+Purpose & guidance
+- The snapshot exists to make offline runs reproducible. When a snapshot is stale or its CRC no longer matches, prefer re‑resolving via Gateway when online, or fail fast/skip according to your policy when offline. `resolve_tags(offline=True)` SHOULD rely only on the snapshot and MUST NOT invent mappings.
 
 `ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
 

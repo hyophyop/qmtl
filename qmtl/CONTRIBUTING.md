@@ -88,3 +88,4 @@ When adding new markdown files under `docs/`, copy `docs/templates/template.md` 
   - Or use `{{ code_link('qmtl/runtime/transforms/execution_nodes.py#L80', text='SizingNode') }}` for brevity.
   - Do not link directly to files outside `docs/` via relative paths (e.g., `../../qmtl/...`), as MkDocs treats those as missing documentation files in `--strict` mode.
 - When linking to a docs directory (index), point to the explicit file: `../operations/README.md` or `../reference/README.md`.
+- Record every new or relocated Markdown document in `docs/reference/_inventory.md` so the shared catalog stays current.

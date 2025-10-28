@@ -2,26 +2,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import datetime
 import json
-import os
-import shlex
 import sys
 import textwrap
-from typing import Dict, Iterable, List, Mapping, Sequence
+from pathlib import Path
+from typing import Dict, Iterable, List, Mapping
 
 from qmtl.foundation.config import find_config_file, load_config
-from qmtl.foundation.config_env import (
-    ConfigEnvVar,
-    collect_managed_keys,
-    is_secret_key,
-    mask_value,
-    unified_to_env,
-)
+from qmtl.utils.i18n import _
 from qmtl.foundation.config_validation import (
     ValidationIssue,
+    validate_config_structure,
     validate_dagmanager_config,
     validate_gateway_config,
+)
+from qmtl.interfaces.config_templates import (
+    available_profiles,
+    write_template,
 )
 
 _STATUS_LABELS = {
@@ -34,19 +31,21 @@ _STATUS_LABELS = {
 def _build_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl config", add_help=True)
     parser.description = textwrap.dedent(
-        """
-        Configuration utilities.
+        _(
+            """
+            Configuration utilities.
 
-        Subcommands:
-          validate  Check connectivity and readiness for Gateway and DAG Manager.
-          env       Environment variable helpers for Gateway and DAG Manager config.
-        """
+            Subcommands:
+              validate  Check connectivity and readiness for Gateway and DAG Manager.
+              generate  Scaffold configuration files from packaged templates.
+            """
+        )
     ).strip()
     parser.add_argument(
         "cmd",
         nargs="?",
-        choices=["validate", "env"],
-        help="Subcommand to run",
+        choices=["validate", "generate"],
+        help=_("Subcommand to run"),
     )
     return parser
 
@@ -55,77 +54,46 @@ def _build_validate_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl config validate")
     parser.add_argument(
         "--config",
-        help="Path to configuration file (defaults to qmtl.yml in CWD)",
+        help=_("Path to configuration file (defaults to qmtl.yml in CWD)"),
     )
     parser.add_argument(
         "--target",
-        choices=["gateway", "dagmanager", "all"],
+        choices=["schema", "gateway", "dagmanager", "all"],
         default="all",
-        help="Limit validation to a specific service",
+        help=_("Limit validation to a specific service"),
     )
     parser.add_argument(
         "--offline",
         action="store_true",
-        help="Skip network-dependent checks (assume services are offline)",
+        help=_("Skip network-dependent checks (assume services are offline)"),
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit validation report as JSON in addition to the table",
+        help=_("Emit validation report as JSON in addition to the table"),
     )
     return parser
 
 
-def _build_env_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="qmtl config env")
-    subparsers = parser.add_subparsers(dest="subcmd")
-    subparsers.required = True
-
-    export = subparsers.add_parser(
-        "export",
-        help="Render environment assignments for the active configuration",
+def _build_generate_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="qmtl config generate")
+    profiles = sorted(available_profiles())
+    parser.add_argument(
+        "--profile",
+        choices=profiles,
+        default="minimal",
+        help=_("Configuration template profile to write"),
     )
-    export.add_argument(
-        "--config",
-        help="Path to configuration file (defaults to qmtl.yml in CWD)",
+    parser.add_argument(
+        "--output",
+        default="qmtl.yml",
+        help=_("Destination path for the generated configuration"),
     )
-    export.add_argument(
-        "--shell",
-        choices=["posix", "powershell"],
-        default="posix",
-        help="Output format for the generated script",
-    )
-    export.add_argument(
-        "--include-secret",
+    parser.add_argument(
+        "--force",
         action="store_true",
-        help="Include secrets in the output instead of omitting them",
+        help=_("Overwrite existing files"),
     )
-
-    show = subparsers.add_parser(
-        "show", help="Show relevant QMTL environment variables"
-    )
-    show.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit JSON payload in addition to the table",
-    )
-    show.add_argument(
-        "--include-secret",
-        action="store_true",
-        help="Show secret values without masking",
-    )
-
-    clear = subparsers.add_parser(
-        "clear",
-        help="Generate commands to clear QMTL configuration environment variables",
-    )
-    clear.add_argument(
-        "--shell",
-        choices=["posix", "powershell"],
-        default="posix",
-        help="Output format for the generated script",
-    )
-
     return parser
 
 
@@ -144,17 +112,17 @@ def _issues_to_json(results: Mapping[str, Mapping[str, ValidationIssue]]) -> Dic
 
 def _format_checks(checks: Mapping[str, ValidationIssue]) -> Iterable[str]:
     if not checks:
-        return ["  (no checks executed)"]
+        return [_("  (no checks executed)")]
     width = max(len(name) for name in checks)
     for name, issue in checks.items():
         label = _STATUS_LABELS.get(issue.severity, issue.severity.upper())
-        yield f"  {name.ljust(width)}  {label:<5}  {issue.hint}"
+        yield _("  {name}  {label:<5}  {hint}").format(name=name.ljust(width), label=label, hint=issue.hint)
 
 
 def _render_table(results: Mapping[str, Mapping[str, ValidationIssue]]) -> str:
     lines: List[str] = []
     for target, checks in results.items():
-        lines.append(f"{target}:")
+        lines.append(_("{target}:").format(target=target))
         lines.extend(_format_checks(checks))
         lines.append("")
     return "\n".join(lines).strip()
@@ -163,17 +131,21 @@ def _render_table(results: Mapping[str, Mapping[str, ValidationIssue]]) -> str:
 async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[str, ValidationIssue]]:
     cfg_path = args.config or find_config_file()
     if not cfg_path:
-        print("[qmtl] Configuration file not found. Specify --config.", file=sys.stderr)
+        print(_("[qmtl] Configuration file not found. Specify --config."), file=sys.stderr)
         raise SystemExit(2)
 
     try:
         unified = load_config(cfg_path)
     except FileNotFoundError:
-        print(f"[qmtl] Configuration file '{cfg_path}' does not exist.", file=sys.stderr)
+        print(_("[qmtl] Configuration file '{path}' does not exist.").format(path=cfg_path), file=sys.stderr)
         raise SystemExit(2)
     except Exception as exc:  # pragma: no cover - defensive catch
-        print(f"[qmtl] Failed to load configuration: {exc}", file=sys.stderr)
+        print(_("[qmtl] Failed to load configuration: {exc}").format(exc=exc), file=sys.stderr)
         raise SystemExit(2) from exc
+
+    results: Dict[str, Dict[str, ValidationIssue]] = {}
+    # Always include schema validation for structure/type checks
+    results["schema"] = validate_config_structure(unified)
 
     targets: List[str] = []
     if args.target in {"gateway", "all"}:
@@ -181,7 +153,15 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
     if args.target in {"dagmanager", "all"}:
         targets.append("dagmanager")
 
-    results: Dict[str, Dict[str, ValidationIssue]] = {}
+    missing = [section for section in targets if section not in unified.present_sections]
+    if missing:
+        for section in missing:
+            print(
+                _("[qmtl] Configuration file '{path}' does not define the '{section}' section.").format(path=cfg_path, section=section),
+                file=sys.stderr,
+            )
+        raise SystemExit(2)
+
     if "gateway" in targets:
         results["gateway"] = await validate_gateway_config(unified.gateway, offline=args.offline)
     if "dagmanager" in targets:
@@ -199,152 +179,26 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
 
     if any(issue.severity == "error" for checks in results.values() for issue in checks.values()):
         raise SystemExit(1)
-
     return results
 
 
-def _comment(shell: str, text: str) -> str:
-    return f"# {text}" if text else ""
-
-
-def _quote_value(shell: str, value: str) -> str:
-    if shell == "posix":
-        return shlex.quote(value)
-    escaped = value.replace("\"", '""')
-    return f'"{escaped}"'
-
-
-def _format_assignment(shell: str, key: str, value: str) -> str:
-    if shell == "posix":
-        return f"export {key}={_quote_value(shell, value)}"
-    return f"$Env:{key}={_quote_value(shell, value)}"
-
-
-def _format_clear(shell: str, key: str) -> str:
-    if shell == "posix":
-        return f"unset {key}"
-    return f"Remove-Item Env:{key} -ErrorAction SilentlyContinue"
-
-
-def _render_env_table(entries: Sequence[Dict[str, object]]) -> str:
-    if not entries:
-        return "(no QMTL config environment variables found)"
-
-    width = max(len("KEY"), *(len(entry["key"]) for entry in entries))
-    lines: List[str] = []
-    lines.append(f"{'KEY'.ljust(width)}  VALUE")
-    lines.append(f"{'-' * width}  {'-' * 5}")
-    for entry in entries:
-        value = entry.get("value", "")
-        lines.append(f"{entry['key'].ljust(width)}  {value}")
-    return "\n".join(lines)
-
-
-def _execute_env_export(args: argparse.Namespace) -> List[ConfigEnvVar]:
-    cfg_path = args.config or find_config_file()
-    if not cfg_path:
-        print("[qmtl] Configuration file not found. Specify --config.", file=sys.stderr)
-        raise SystemExit(2)
+def _execute_generate(args: argparse.Namespace) -> Path:
+    output = Path(args.output)
 
     try:
-        unified = load_config(cfg_path)
-    except FileNotFoundError:
-        print(f"[qmtl] Configuration file '{cfg_path}' does not exist.", file=sys.stderr)
+        write_template(args.profile, output, force=args.force)
+    except FileExistsError:
+        print(
+            _("[qmtl] Output file '{path}' already exists. Use --force to overwrite.").format(path=output),
+            file=sys.stderr,
+        )
         raise SystemExit(2)
-    except Exception as exc:  # pragma: no cover - defensive catch
-        print(f"[qmtl] Failed to load configuration: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
+    except FileNotFoundError as exc:  # pragma: no cover - defensive guard
+        print(_("[qmtl] {exc}").format(exc=exc), file=sys.stderr)
+        raise SystemExit(2)
 
-    env_vars = unified_to_env(unified)
-    secrets = [var for var in env_vars if var.secret]
-    include_secret = getattr(args, "include_secret", False)
-    shell = getattr(args, "shell", "posix")
-
-    if not include_secret:
-        env_vars = [var for var in env_vars if not var.secret]
-
-    cfg_abs = os.path.abspath(cfg_path)
-    timestamp = (
-        datetime.datetime.now(datetime.UTC)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-    metadata = {
-        "generated_at": timestamp,
-        "include_secret": include_secret,
-        "shell": shell,
-        "secrets_omitted": bool(secrets and not include_secret),
-        "variables": len(env_vars),
-    }
-
-    lines: List[str] = []
-    lines.append(_format_assignment(shell, "QMTL_CONFIG_SOURCE", cfg_abs))
-    lines.append(
-        _format_assignment(
-            shell,
-            "QMTL_CONFIG_EXPORT",
-            json.dumps(metadata, sort_keys=True),
-        )
-    )
-
-    if secrets and not include_secret:
-        skipped_keys = ", ".join(var.key for var in secrets)
-        lines.append(
-            _comment(
-                shell,
-                f"Secrets omitted ({skipped_keys}). Re-run with --include-secret to include them.",
-            )
-        )
-
-    for var in env_vars:
-        lines.append(_format_assignment(shell, var.key, var.value))
-
-    print("\n".join(line for line in lines if line))
-    return env_vars
-
-
-def _execute_env_show(args: argparse.Namespace) -> List[Dict[str, object]]:
-    include_secret = getattr(args, "include_secret", False)
-    env_keys = collect_managed_keys(os.environ)
-    entries: List[Dict[str, object]] = []
-    for key in env_keys:
-        raw = os.environ.get(key)
-        if raw is None:
-            continue
-        secret = is_secret_key(key)
-        value = raw if include_secret or not secret else mask_value(raw)
-        entries.append(
-            {
-                "key": key,
-                "value": value,
-                "secret": secret,
-                "masked": secret and not include_secret,
-            }
-        )
-
-    table = _render_env_table(entries)
-    print(table)
-    if getattr(args, "json", False):
-        if entries:
-            print()
-        print(json.dumps(entries, indent=2, sort_keys=True))
-
-    return entries
-
-
-def _execute_env_clear(args: argparse.Namespace) -> List[str]:
-    shell = getattr(args, "shell", "posix")
-    env_keys = collect_managed_keys(os.environ, include_missing_meta=True)
-    if not env_keys:
-        msg = _comment(shell, "No QMTL config environment variables found.")
-        if msg:
-            print(msg)
-        return []
-
-    lines = [_format_clear(shell, key) for key in env_keys]
-    print("\n".join(lines))
-    return env_keys
+    print(_("[qmtl] Wrote {profile} configuration template to {path}").format(profile=args.profile, path=output))
+    return output
 
 
 def run(argv: List[str] | None = None) -> None:
@@ -362,18 +216,12 @@ def run(argv: List[str] | None = None) -> None:
         args = parser.parse_args(rest)
         asyncio.run(_execute_validate(args))
         return
-    if cmd == "env":
-        parser = _build_env_parser()
+
+    if cmd == "generate":
+        parser = _build_generate_parser()
         args = parser.parse_args(rest)
-        if args.subcmd == "export":
-            _execute_env_export(args)
-            return
-        if args.subcmd == "show":
-            _execute_env_show(args)
-            return
-        if args.subcmd == "clear":
-            _execute_env_clear(args)
-            return
+        _execute_generate(args)
+        return
 
     _build_help_parser().print_help()
     raise SystemExit(2)

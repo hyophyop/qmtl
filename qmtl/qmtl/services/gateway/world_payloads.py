@@ -8,6 +8,8 @@ from qmtl.foundation.common.compute_context import (
     build_worldservice_compute_context,
 )
 
+from .compute_context import resolve_execution_domain
+
 from . import metrics as gw_metrics
 
 
@@ -35,7 +37,22 @@ def augment_decision_payload(world_id: str, payload: Any) -> Any:
     return payload
 
 
+def augment_activation_payload(payload: Any) -> Any:
+    """Attach derived execution-domain metadata to activation envelopes."""
+
+    if not isinstance(payload, dict):
+        return payload
+
+    domain = resolve_execution_domain(payload.get("effective_mode"))
+    if domain is not None:
+        payload["execution_domain"] = domain
+    else:
+        payload.pop("execution_domain", None)
+    return payload
+
+
 __all__ = [
     "assemble_compute_context",
     "augment_decision_payload",
+    "augment_activation_payload",
 ]

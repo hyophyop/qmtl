@@ -1,13 +1,13 @@
-"""Sample strategy runnable in dryrun or live domains via env/YAML.
+"""Sample strategy runnable in dryrun or live domains via YAML configuration.
 
-Environment variables
----------------------
-- QMTL_EXECUTION_DOMAIN: "dryrun" (default) or "live"
-- QMTL_TRADE_MODE: legacy alias ("paper" → "dryrun")
-- QMTL_BROKER_URL: HTTP endpoint for live order submission
-- QMTL_TRADE_MAX_RETRIES: integer (optional)
-- QMTL_TRADE_BACKOFF: float seconds (optional)
-- QMTL_WS_URL: WebSocket endpoint for live data/control (optional)
+Configuration excerpt::
+
+    connectors:
+      execution_domain: dryrun  # or "live"
+      broker_url: https://broker/api/orders
+      trade_max_retries: 3
+      trade_backoff: 0.1
+      ws_url: wss://gateway/ws
 
 Execution domains mirror WorldService decisions. When the policy engine
 emits ``effective_mode="validate"`` the SDK maps it to the ``backtest``
@@ -19,40 +19,43 @@ real order placement unless explicitly enabled.
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
-from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner, TradeExecutionService
+from qmtl.runtime.sdk import (
+    Strategy,
+    StreamInput,
+    Node,
+    Runner,
+    TradeExecutionService,
+)
+from qmtl.runtime.sdk import configuration as sdk_configuration
+from qmtl.runtime.sdk import runtime
+from qmtl.runtime.sdk.live_data_feed import WebSocketFeed
 from qmtl.runtime.transforms import (
     alpha_history_node,
     TradeSignalGeneratorNode,
     TradeOrderPublisherNode,
 )
-from qmtl.runtime.sdk.live_data_feed import WebSocketFeed
-
 
 DEFAULT_EXECUTION_DOMAIN = "dryrun"
-EXECUTION_DOMAIN_ENV = "QMTL_EXECUTION_DOMAIN"
-LEGACY_MODE_ENV = "QMTL_TRADE_MODE"
+
+
+def _connectors_config():
+    return sdk_configuration.get_unified_config().connectors
 
 
 def _resolve_execution_domain() -> str:
     """Return the configured execution domain with legacy compatibility."""
 
-    raw = os.getenv(EXECUTION_DOMAIN_ENV)
-    if raw is None:
-        raw = os.getenv(LEGACY_MODE_ENV)
-    if raw is None:
-        raw = DEFAULT_EXECUTION_DOMAIN
+    cfg = _connectors_config()
+    raw = (cfg.execution_domain or DEFAULT_EXECUTION_DOMAIN).strip().lower()
+    if raw == "paper":
+        raw = "dryrun"
 
-    domain = raw.strip().lower()
-    if domain == "paper":
-        domain = "dryrun"
-
-    if domain not in {"dryrun", "live"}:
+    if raw not in {"dryrun", "live"}:
         raise ValueError("Execution domain must be 'dryrun' or 'live'")
 
-    return domain
+    return raw
 
 
 class SwitchableStrategy(Strategy):
@@ -93,23 +96,25 @@ async def _maybe_run_ws(url: str) -> None:
 
 
 def _configure_live() -> None:
-    url = os.getenv("QMTL_BROKER_URL", "").strip()
+    cfg = _connectors_config()
+    url = (cfg.broker_url or "").strip()
     if not url:
-        raise RuntimeError("QMTL_BROKER_URL must be set for the live domain")
-    max_retries = int(os.getenv("QMTL_TRADE_MAX_RETRIES", "3"))
-    try:
-        backoff = float(os.getenv("QMTL_TRADE_BACKOFF", "0.1"))
-    except ValueError:
-        backoff = 0.1
-    Runner.set_trade_execution_service(TradeExecutionService(url, max_retries=max_retries, backoff=backoff))
+        raise RuntimeError("connectors.broker_url must be set for the live domain")
+    max_retries = int(cfg.trade_max_retries)
+    backoff = float(cfg.trade_backoff)
+    Runner.set_trade_execution_service(
+        TradeExecutionService(url, max_retries=max_retries, backoff=backoff)
+    )
 
 
 def main() -> None:
+    sdk_configuration.reload()
+    runtime.reload()
     domain = _resolve_execution_domain()
 
     if domain == "live":
         _configure_live()
-        ws_url = os.getenv("QMTL_WS_URL", "").strip()
+        ws_url = (_connectors_config().ws_url or "").strip()
         if ws_url:
             # Run a short-lived WS demo in parallel with the offline pass
             try:
@@ -126,4 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

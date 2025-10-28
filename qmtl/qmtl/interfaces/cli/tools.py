@@ -4,6 +4,7 @@ import argparse
 import textwrap
 from importlib import import_module
 from typing import List
+from qmtl.utils.i18n import _
 
 
 TOOLS_DISPATCH = {
@@ -16,20 +17,22 @@ TOOLS_DISPATCH = {
 def _build_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl tools", add_help=True)
     parser.description = textwrap.dedent(
-        """
-        Developer tooling for working with strategies and project assets.
+        _(
+            """
+            Developer tooling for working with strategies and project assets.
 
-        Available tools:
-          sdk      Execute strategies in run/offline modes.
-          taglint  Validate TAGS dictionaries in project code.
-          report   Generate performance reports from JSON returns.
-        """
+            Available tools:
+              sdk      Execute strategies in run/offline modes.
+              taglint  Validate TAGS dictionaries in project code.
+              report   Generate performance reports from JSON returns.
+            """
+        )
     ).strip()
     parser.add_argument(
         "cmd",
         nargs="?",
         choices=sorted(TOOLS_DISPATCH.keys()),
-        help="Tool to invoke",
+        help=_("Tool to invoke"),
     )
     return parser
 

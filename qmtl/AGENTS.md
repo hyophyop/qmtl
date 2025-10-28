@@ -15,6 +15,7 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Manage the Python environment using **uv**. Install dependencies with
   `uv pip install -e .[dev]` and build distributable wheels via `uv pip wheel .`.
 - When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
+- Before assuming external tools or services are unavailable, run a quick capability check for whichever CLI or API you plan to use (e.g., `gh auth status`, `aws sts get-caller-identity`, `docker info`). If the probe succeeds, leverage the tool immediately; if it fails, guide the user through re-auth or configuration and retry. Repeat this verification for each new session since tokens can expire or reset.
 
 ## Architecture
 
@@ -32,6 +33,19 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
   and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
 - Diagrams: Use Mermaid fenced code blocks (```mermaid) for all diagrams. Avoid PlantUML/DOT or binary diagram files; prefer text-based Mermaid for reviewability and versioning.
+- When adding or modifying documentation utility scripts (e.g., `scripts/check_docs_links.py`),
+  ensure that any new Python dependencies are reflected in both the developer installation
+  instructions and the CI workflows (notably `.github/workflows/docs-link-check.yml`).
+  Add an explicit installation step or shared requirements file in the workflow so the CI job
+  installs packages such as `pyyaml` before running the script.
+
+### Internationalization Policy
+
+- Baseline language: Korean (`ko`). All other locales (including English) are translations of the Korean source documents.
+- New or updated documentation should treat `docs/ko/...` as the canonical content; non‑Korean versions must not introduce normative content that does not exist in Korean.
+- When introducing or updating documentation across 3 or more supported locales, ensure both Korean and English pages exist before completing the work. Other locales may follow subsequently, but `ko` and `en` must ship together in that change.
+- Keep file paths mirrored by locale (e.g., `docs/ko/guides/foo.md` ↔ `docs/en/guides/foo.md`) and maintain the same heading structure and relative links.
+- Validate builds for all affected locales with `uv run mkdocs build` and fix broken or missing links as part of the change. For broader i18n workflow details, see `docs/ko/guides/docs_internationalization.md`.
 
 ## Testing
 
@@ -41,6 +55,15 @@ For general contribution and testing policies, see the repository root [AGENTS.m
   `uv pip install pytest-xdist` (or add it to your local extras).
 - For suites with shared resources, prefer `--dist loadscope` or cap workers
   (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
+
+### Test Design Strategy
+
+Frame suites around three complementary lenses so coverage stays purposeful while the implementation remains free to evolve.
+
+- **Contract Fidelity:** Anchor new and refactored suites in contract-style tests that lock observable guarantees—API signatures, CLI surfaces, return payloads, validation rules—without depending on internal helpers.
+- **Collaboration Dynamics:** Exercise dispatch chains and service boundaries with consumer-driven expectations. Prefer spies/fakes to confirm orchestration (`dispatch -> run(create_project)`), required side effects, and cross-component message shapes.
+- **Experience Guardrails:** Protect end-user flows with black-box behavioral checks and a slim smoke layer (command discovery, `--help`, happy-path scaffolds) to catch regressions quickly while keeping the suite fast.
+- **Risk-Weighted Depth:** Lean into deeper scenario coverage for high-volatility or high-impact areas, mark serial or slow cases explicitly, and keep fixtures hermetic so tests compose cleanly under `-n auto`.
 
 ### Hang Detection Preflight (required in CI and recommended locally)
 

@@ -14,9 +14,25 @@ from qmtl.services.gateway.models import (
     StrategySubmit,
 )
 from qmtl.services.gateway.strategy_manager import StrategyManager
-from qmtl.services.gateway.strategy_submission import StrategySubmissionConfig, StrategySubmissionHelper
+from qmtl.services.gateway.strategy_submission import (
+    StrategySubmissionConfig,
+    StrategySubmissionHelper,
+    StrategySubmissionResult,
+)
 
 from .dependencies import GatewayDependencyProvider
+
+
+def _ack_from_result(result: StrategySubmissionResult) -> StrategyAck:
+    return StrategyAck(
+        strategy_id=result.strategy_id,
+        queue_map=result.queue_map,
+        sentinel_id=result.sentinel_id,
+        node_ids_crc32=result.node_ids_crc32,
+        downgraded=result.downgraded,
+        downgrade_reason=result.downgrade_reason,
+        safe_mode=result.safe_mode,
+    )
 
 
 def create_router(deps: GatewayDependencyProvider) -> APIRouter:
@@ -41,15 +57,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 diff_timeout=0.1,
             ),
         )
-        resp = StrategyAck(
-            strategy_id=result.strategy_id,
-            queue_map=result.queue_map,
-            sentinel_id=result.sentinel_id,
-            node_ids_crc32=result.node_ids_crc32,
-            downgraded=result.downgraded,
-            downgrade_reason=result.downgrade_reason,
-            safe_mode=result.safe_mode,
-        )
+        resp = _ack_from_result(result)
         duration_ms = (time.perf_counter() - start) * 1000
         gw_metrics.observe_gateway_latency(duration_ms)
         return resp
@@ -77,15 +85,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 use_crc_sentinel_fallback=True,
             ),
         )
-        return StrategyAck(
-            strategy_id=result.strategy_id,
-            queue_map=result.queue_map,
-            sentinel_id=result.sentinel_id,
-            node_ids_crc32=result.node_ids_crc32,
-            downgraded=result.downgraded,
-            downgrade_reason=result.downgrade_reason,
-            safe_mode=result.safe_mode,
-        )
+        return _ack_from_result(result)
 
     @router.get(
         "/strategies/{strategy_id}/status", response_model=StatusResponse

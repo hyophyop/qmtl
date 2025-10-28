@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import importlib.resources as resources
 
+from .config_templates import write_template
+
 
 _EXAMPLES_PKG = "qmtl.examples"
 
@@ -129,11 +131,11 @@ def copy_backend_templates(dest: Path) -> None:
             (templates_dest / name).write_bytes(src.read_bytes())
 
 
-def copy_base_files(dest: Path) -> None:
+def copy_base_files(dest: Path, *, config_profile: str = "minimal") -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     examples = resources.files(_EXAMPLES_PKG)
-    (dest / "qmtl.yml").write_bytes(examples.joinpath("qmtl.yml").read_bytes())
+    write_template(config_profile, dest / "qmtl.yml", force=True)
     (dest / "config.example.yml").write_bytes(
         examples.joinpath("config.example.yml").read_bytes()
     )
@@ -164,6 +166,8 @@ def create_project(
     with_docs: bool = False,
     with_scripts: bool = False,
     with_pyproject: bool = False,
+    *,
+    config_profile: str = "minimal",
 ) -> None:
     """Create a new project scaffold under *path*.
 
@@ -177,7 +181,7 @@ def create_project(
 
     copy_nodes(dest)
     copy_dags(dest, template)
-    copy_base_files(dest)
+    copy_base_files(dest, config_profile=config_profile)
     if with_docs:
         copy_docs(dest)
     if with_scripts:

@@ -11,15 +11,32 @@ import httpx
 
 from . import metrics as sdk_metrics
 from . import runtime
+from . import configuration
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_COORDINATOR_URL_ENV = "QMTL_SEAMLESS_COORDINATOR_URL"
 _WORKER_ID_ENV_VARS: tuple[str, ...] = (
     "QMTL_SEAMLESS_WORKER",
     "QMTL_WORKER_ID",
     "HOSTNAME",
 )
+
+
+def _connectors_worker_ids() -> tuple[str, ...]:
+    cfg = None
+    try:
+        cfg = configuration.get_connectors_config()
+    except Exception:  # pragma: no cover - defensive cache access
+        return ()
+
+    values: list[str] = []
+    for attr in ("seamless_worker_id", "worker_id"):
+        value = getattr(cfg, attr, None)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            values.append(text)
+    return tuple(values)
 
 
 def _maybe_int(value: str | None) -> int | None:
@@ -41,6 +58,10 @@ def _maybe_float(value: Any) -> float | None:
 
 
 def _resolve_worker_id() -> str | None:
+    for candidate in _connectors_worker_ids():
+        if candidate:
+            return candidate
+
     for env in _WORKER_ID_ENV_VARS:
         candidate = os.getenv(env, "").strip()
         if candidate:
@@ -152,7 +173,7 @@ class DistributedBackfillCoordinator:
         *,
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
     ) -> None:
-        url = (base_url or os.getenv(_DEFAULT_COORDINATOR_URL_ENV, "")).strip()
+        url = (base_url or "").strip()
         if not url:
             raise ValueError("DistributedBackfillCoordinator requires a base URL")
         self._base_url = url.rstrip("/")
@@ -295,4 +316,3 @@ __all__ = [
     "InMemoryBackfillCoordinator",
     "Lease",
 ]
-

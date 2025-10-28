@@ -71,66 +71,54 @@ class EnhancedQuestDBProviderSettings:
     fingerprint: FingerprintPolicy = field(default_factory=FingerprintPolicy)
 
 
-class CacheDataSource:
-    """In-memory cache data source implementation."""
-    
-    def __init__(self, cache_provider: HistoryProvider):
-        self.cache_provider = cache_provider
-        self.priority = DataSourcePriority.CACHE
-    
+class HistoryProviderDataSource:
+    """HistoryProvider-backed :class:`DataSource` with configurable priority."""
+
+    def __init__(self, provider: HistoryProvider, priority: DataSourcePriority):
+        self.provider = provider
+        self.priority = priority
+
+        # Preserve legacy attribute names for downstream compatibility.
+        if priority is DataSourcePriority.CACHE:
+            self.cache_provider = provider
+        elif priority is DataSourcePriority.STORAGE:
+            self.storage_provider = provider
+
     async def is_available(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> bool:
         try:
-            coverage = await self.cache_provider.coverage(node_id=node_id, interval=interval)
-            # Check if requested range is fully covered
+            coverage = await self.provider.coverage(node_id=node_id, interval=interval)
             for range_start, range_end in coverage:
                 if range_start <= start and end <= range_end:
                     return True
             return False
         except Exception:
             return False
-    
+
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> pd.DataFrame:
-        return await self.cache_provider.fetch(start, end, node_id=node_id, interval=interval)
-    
+        return await self.provider.fetch(start, end, node_id=node_id, interval=interval)
+
     async def coverage(
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
-        return await self.cache_provider.coverage(node_id=node_id, interval=interval)
+        return await self.provider.coverage(node_id=node_id, interval=interval)
 
 
-class StorageDataSource:
-    """Historical storage data source implementation."""
-    
-    def __init__(self, storage_provider: HistoryProvider):
-        self.storage_provider = storage_provider
-        self.priority = DataSourcePriority.STORAGE
-    
-    async def is_available(
-        self, start: int, end: int, *, node_id: str, interval: int
-    ) -> bool:
-        try:
-            coverage = await self.storage_provider.coverage(node_id=node_id, interval=interval)
-            # Check if requested range is fully covered
-            for range_start, range_end in coverage:
-                if range_start <= start and end <= range_end:
-                    return True
-            return False
-        except Exception:
-            return False
-    
-    async def fetch(
-        self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
-        return await self.storage_provider.fetch(start, end, node_id=node_id, interval=interval)
-    
-    async def coverage(
-        self, *, node_id: str, interval: int
-    ) -> list[tuple[int, int]]:
-        return await self.storage_provider.coverage(node_id=node_id, interval=interval)
+class CacheDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures cache priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.CACHE)
+
+
+class StorageDataSource(HistoryProviderDataSource):
+    """Compatibility wrapper that configures storage priority for a provider."""
+
+    def __init__(self, provider: HistoryProvider):
+        super().__init__(provider, DataSourcePriority.STORAGE)
 
 
 class DataFetcherAutoBackfiller:
@@ -201,11 +189,11 @@ class DataFetcherAutoBackfiller:
         batch_identifier = self._build_batch_id(
             batch_id=batch_id, node_id=node_id, interval=interval, start=start, end=end
         )
-        planned_source = (
-            "storage"
-            if target_storage and hasattr(target_storage, "storage_provider")
-            else "fetcher"
+        is_storage_target = (
+            target_storage is not None
+            and getattr(target_storage, "priority", None) is DataSourcePriority.STORAGE
         )
+        planned_source = "storage" if is_storage_target else "fetcher"
         logger.info(
             "seamless.backfill.attempt",
             extra=self._build_log_extra(
@@ -220,9 +208,11 @@ class DataFetcherAutoBackfiller:
         )
 
         # Prefer materializing directly into storage to avoid double-fetch
-        if target_storage and hasattr(target_storage, "storage_provider"):
-            storage_provider = target_storage.storage_provider
-            if hasattr(storage_provider, "fill_missing") and hasattr(storage_provider, "fetch"):
+        if is_storage_target:
+            storage_provider = getattr(target_storage, "provider", None) if target_storage else None
+            if storage_provider is None and target_storage is not None:
+                storage_provider = getattr(target_storage, "storage_provider", None)
+            if storage_provider and hasattr(storage_provider, "fill_missing") and hasattr(storage_provider, "fetch"):
                 try:
                     await storage_provider.fill_missing(
                         start, end, node_id=node_id, interval=interval
@@ -450,9 +440,11 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         )
 
         # Create data sources via builder to support future adapter swaps
-        storage_source = StorageDataSource(self.storage_provider)
+        storage_source = HistoryProviderDataSource(
+            self.storage_provider, DataSourcePriority.STORAGE
+        )
         cache_source = (
-            CacheDataSource(resolved_cache_provider)
+            HistoryProviderDataSource(resolved_cache_provider, DataSourcePriority.CACHE)
             if resolved_cache_provider
             else None
         )
@@ -473,7 +465,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
         registrar_obj: ArtifactRegistrar | None = resolved_registrar
         if registrar_obj is None:
-            registrar_obj = FileSystemArtifactRegistrar.from_env()
+            registrar_obj = FileSystemArtifactRegistrar.from_runtime_config()
         if registrar_obj is None:
             registrar_obj = IOArtifactRegistrar(stabilization_bars=2)
 
@@ -514,8 +506,12 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         self.storage_provider.bind_stream(stream)
 
         # Also bind cache if available
-        if self.cache_source and hasattr(self.cache_source.cache_provider, 'bind_stream'):
-            self.cache_source.cache_provider.bind_stream(stream)
+        if self.cache_source:
+            cache_provider = getattr(self.cache_source, "provider", None)
+            if cache_provider is None:
+                cache_provider = getattr(self.cache_source, "cache_provider", None)
+            if cache_provider and hasattr(cache_provider, "bind_stream"):
+                cache_provider.bind_stream(stream)
 
     def _validate_node_id(self, node_id: str) -> None:
         super()._validate_node_id(node_id)
@@ -539,6 +535,7 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
 
 __all__ = [
+    "HistoryProviderDataSource",
     "CacheDataSource",
     "StorageDataSource",
     "DataFetcherAutoBackfiller",

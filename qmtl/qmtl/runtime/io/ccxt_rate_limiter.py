@@ -13,6 +13,7 @@ import time
 from typing import Dict, Any
 
 from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.configuration import get_connectors_config
 
 try:  # Optional at runtime; required for cluster scope
     from redis import asyncio as aioredis  # type: ignore
@@ -236,9 +237,10 @@ async def get_limiter(
         if cache_key in _CLUSTER_CACHE:
             return _CLUSTER_CACHE[cache_key]
 
-        # Resolve Redis DSN from argument or environment
-        import os  # local import to avoid global dependency at import time
-        dsn = redis_dsn or os.getenv("QMTL_CCXT_RATE_LIMITER_REDIS") or "redis://localhost:6379/0"
+        connectors_cfg = get_connectors_config()
+        default_dsn = connectors_cfg.ccxt_rate_limiter_redis or "redis://localhost:6379/0"
+        dsn = redis_dsn or default_dsn
+        
 
         client = aioredis.from_url(dsn, encoding=None, decode_responses=False)
         limiter = _RedisTokenBucketLimiter(
@@ -254,8 +256,6 @@ async def get_limiter(
     return await get_shared_limiter(
         key, max_concurrency=max_concurrency, min_interval_s=min_interval_s
     )
-
-
 __all__ = [
     "get_limiter",
 ]
