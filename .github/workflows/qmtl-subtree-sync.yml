@@ -52,6 +52,8 @@ jobs:
 
       - name: Create pull request
         if: steps.diff.outputs.changed == 'true'
+        id: cpr
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
           branch: chore/qmtl-subtree-sync
@@ -61,6 +63,31 @@ jobs:
           body: |
             Automated sync of the `qmtl/` subtree via `scripts/sync_qmtl.sh`.
             Review upstream changes and merge when ready.
+
+      - name: PR summary
+        if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'success'
+        run: |
+          echo "Opened PR #${{ steps.cpr.outputs.pull-request-number }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push fallback branch
+        if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'failure'
+        env:
+          SYNC_BRANCH: chore/qmtl-subtree-sync
+        run: |
+          git branch -D "$SYNC_BRANCH" 2>/dev/null || true
+          git switch -c "$SYNC_BRANCH"
+          git add -A
+          git commit -m "chore: sync qmtl subtree"
+          git push --force-with-lease origin "$SYNC_BRANCH"
+
+      - name: Fallback summary
+        if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'failure'
+        env:
+          SYNC_BRANCH: chore/qmtl-subtree-sync
+          REPO: ${{ github.repository }}
+        run: |
+          echo "GitHub Actions could not open a PR automatically. Branch $SYNC_BRANCH was pushed instead. Please open a PR manually." >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/$REPO/tree/$SYNC_BRANCH" >> "$GITHUB_STEP_SUMMARY"
 
       - name: No changes summary
         if: steps.diff.outputs.changed != 'true'
