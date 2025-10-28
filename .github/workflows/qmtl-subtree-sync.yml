@@ -40,7 +40,7 @@ jobs:
       - name: Detect changes
         id: diff
         run: |
-          if [ "$(git rev-parse HEAD)" = "${{ steps.start.outputs.sha }}" ]; then
+          if git diff --quiet "${{ steps.start.outputs.sha }}" HEAD; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -71,17 +71,25 @@ jobs:
 
       - name: Push fallback branch
         if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'failure'
+        id: fallback
         env:
           SYNC_BRANCH: chore/qmtl-subtree-sync
         run: |
-          git branch -D "$SYNC_BRANCH" 2>/dev/null || true
-          git switch -c "$SYNC_BRANCH"
-          git add -A
-          git commit -m "chore: sync qmtl subtree"
-          git push --force-with-lease origin "$SYNC_BRANCH"
+          pushed=false
+          if git status --porcelain | grep -q .; then
+            git branch -D "$SYNC_BRANCH" 2>/dev/null || true
+            git switch -c "$SYNC_BRANCH"
+            git add -A
+            git commit -m "chore: sync qmtl subtree"
+            git push --force-with-lease origin "$SYNC_BRANCH"
+            pushed=true
+          else
+            echo "No subtree changes were detected after reset; skipping push." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
 
       - name: Fallback summary
-        if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'failure'
+        if: steps.diff.outputs.changed == 'true' && steps.cpr.outcome == 'failure' && steps.fallback.outputs.pushed == 'true'
         env:
           SYNC_BRANCH: chore/qmtl-subtree-sync
           REPO: ${{ github.repository }}
