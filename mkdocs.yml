@@ -22,6 +22,7 @@ nav:
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Microstructure Signals: guides/microstructure_signals.md
       - Docs Internationalization: guides/docs_internationalization.md
       - Seamless Data Provider Setup: guides/seamless_data_provider_setup.md
       - Seamless Migration to v2: guides/seamless_migration_v2.md
@@ -138,6 +139,7 @@ plugins:
             "Testing & Pytest": "테스트 & Pytest"
             "Python Environment": "Python 환경"
             "CCXT Seamless Data Provider": "CCXT 심리스 데이터 프로바이더"
+            "Microstructure Signals": "마이크로스트럭처 신호"
             "IO & Integrations": "IO & 통합"
             Operations: 운영
             Design: 설계

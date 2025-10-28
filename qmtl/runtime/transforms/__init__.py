@@ -5,7 +5,13 @@ from .stochastic import stochastic
 from .angle import angle
 from .order_book_depth import depth_change_node, depth_node
 from .price_change import price_change, price_delta
-from .order_book_imbalance import order_book_imbalance_node, order_book_imbalance
+from .order_book_imbalance import (
+    order_book_imbalance_node,
+    order_book_imbalance,
+    logistic_order_book_imbalance_node,
+    logistic_order_book_weight,
+    imbalance_to_weight,
+)
 from .volume_features import volume_features, avg_volume_node, volume_stats
 from .execution_imbalance import execution_imbalance_node, execution_imbalance
 from .alpha_history import alpha_history_node
@@ -26,6 +32,11 @@ from .microstructure import (
     order_flow_imbalance_node,
     spread_zscore_node,
     hazard_node,
+)
+from .micro_price import (
+    micro_price,
+    micro_price_from_imbalance,
+    micro_price_node,
 )
 from .acceptable_price_band import estimate_band, overshoot, volume_surprise
 from .hazard_utils import direction_signal, execution_cost
@@ -67,6 +78,9 @@ __all__ = [
     "price_delta",
     "order_book_imbalance_node",
     "order_book_imbalance",
+    "logistic_order_book_imbalance_node",
+    "logistic_order_book_weight",
+    "imbalance_to_weight",
     "execution_imbalance_node",
     "execution_imbalance",
     "alpha_history_node",
@@ -87,6 +101,9 @@ __all__ = [
     "order_flow_imbalance_node",
     "spread_zscore_node",
     "hazard_node",
+    "micro_price",
+    "micro_price_from_imbalance",
+    "micro_price_node",
     "hazard_probability",
     "direction_gating",
     "execution_cost",
