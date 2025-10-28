@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+import importlib
+import importlib.util
+import logging
 import os
 import time
-import logging
+from dataclasses import dataclass
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
 import httpx
 
 from . import metrics as sdk_metrics
 from . import runtime
-from . import configuration
 
 logger = logging.getLogger(__name__)
 _WORKER_ID_ENV_VARS: tuple[str, ...] = (
@@ -22,9 +23,16 @@ _WORKER_ID_ENV_VARS: tuple[str, ...] = (
 
 
 def _connectors_worker_ids() -> tuple[str, ...]:
+    spec = importlib.util.find_spec("qmtl.runtime.sdk.configuration")
+    if spec is None:
+        return ()
+
     cfg = None
     try:
-        cfg = configuration.get_connectors_config()
+        configuration = importlib.import_module("qmtl.runtime.sdk.configuration")
+        get_connectors_config = getattr(configuration, "get_connectors_config", None)
+        if callable(get_connectors_config):
+            cfg = get_connectors_config()
     except Exception:  # pragma: no cover - defensive cache access
         return ()
 
