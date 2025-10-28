@@ -1,0 +1,56 @@
+name: Sync QMTL Subtree
+
+on:
+  schedule:
+    - cron: "0 2 * * MON"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    if: github.repository == 'hyophyop/qmtl-strategies'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record starting point
+        id: start
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Sync qmtl subtree
+        run: scripts/sync_qmtl.sh
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if [ "$(git rev-parse HEAD)" = "${{ steps.start.outputs.sha }}" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare changes for PR
+        if: steps.diff.outputs.changed == 'true'
+        run: git reset --mixed "${{ steps.start.outputs.sha }}"
+
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/qmtl-subtree-sync
+          delete-branch: true
+          commit-message: "chore: sync qmtl subtree"
+          title: "chore: sync qmtl subtree"
+          body: |
+            Automated sync of the `qmtl/` subtree via `scripts/sync_qmtl.sh`.
+            Review upstream changes and merge when ready.
+
+      - name: No changes summary
+        if: steps.diff.outputs.changed != 'true'
+        run: echo "qmtl subtree already up to date." >> "$GITHUB_STEP_SUMMARY"
