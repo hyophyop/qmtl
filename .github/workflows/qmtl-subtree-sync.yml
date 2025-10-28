@@ -50,6 +50,14 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: git reset --mixed "${{ steps.start.outputs.sha }}"
 
+      - name: Snapshot diff
+        if: steps.diff.outputs.changed == 'true'
+        id: patch
+        run: |
+          PATCH_FILE="$RUNNER_TEMP/qmtl-sync.patch"
+          git diff --binary > "$PATCH_FILE"
+          echo "path=$PATCH_FILE" >> "$GITHUB_OUTPUT"
+
       - name: Create pull request
         if: steps.diff.outputs.changed == 'true'
         id: cpr
@@ -74,9 +82,11 @@ jobs:
         id: fallback
         env:
           SYNC_BRANCH: chore/qmtl-subtree-sync
+          PATCH_FILE: ${{ steps.patch.outputs.path }}
         run: |
           pushed=false
-          if git status --porcelain | grep -q .; then
+          if [ -n "$PATCH_FILE" ] && [ -s "$PATCH_FILE" ]; then
+            git apply "$PATCH_FILE"
             git branch -D "$SYNC_BRANCH" 2>/dev/null || true
             git switch -c "$SYNC_BRANCH"
             git add -A
