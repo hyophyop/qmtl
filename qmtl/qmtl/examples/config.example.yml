@@ -1,4 +1,0 @@
-# Example configuration for running example strategies via Gateway and WorldService
-world_id: "example_world"
-gateway_url: "http://localhost:8000"
-

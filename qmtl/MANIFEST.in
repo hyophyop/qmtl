@@ -1,2 +1,0 @@
-recursive-include qmtl/examples *.yml *.yaml *.py *.md *.csv *.ipynb
-recursive-include qmtl/examples/data *.csv
