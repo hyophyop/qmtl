@@ -1,3 +1,10 @@
+# from qmtl.examples.dags.example_strategy import *  # noqa: F403,F401
+
+import sys
+
+# Create qmtl.examples.dags.example_strategy module
+sys.modules['qmtl.examples.dags.example_strategy'] = sys.modules[__name__]
+
 try:
     from qmtl.dag_manager import DAGManager  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover

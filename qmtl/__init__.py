@@ -2,33 +2,21 @@
 
 from __future__ import annotations
 
-from . import foundation, interfaces, runtime, services
-from .runtime.pipeline import Pipeline
-from .runtime.sdk import (
-    CacheView,
-    EventRecorderService,
-    InvalidIntervalError,
-    InvalidNameError,
-    InvalidParameterError,
-    InvalidPeriodError,
-    InvalidTagError,
-    MatchMode,
-    Node,
-    NodeValidationError,
-    ProcessingNode,
-    Runner,
-    SourceNode,
-    Strategy,
-    StreamInput,
-    TagQueryNode,
-    TradeExecutionService,
-    metrics,
-    parse_interval,
-    parse_period,
-    validate_name,
-    validate_tag,
-    QMTLValidationError,
+from . import foundation, interfaces, runtime, services, examples
+from .runtime import io
+from .runtime.io import (
+    QuestDBLoader,
+    QuestDBRecorder,
+    BinanceFetcher,
+    DataFetcher,
+    HistoryProvider,
+    EventRecorder,
 )
+from .runtime.pipeline import Pipeline
+
+# Create io alias
+import sys
+sys.modules[__name__ + '.io'] = io
 
 # Ensure ASGI transports from httpx are properly closed when garbage collected.
 try:  # pragma: no cover - best effort cleanup helper
@@ -68,6 +56,13 @@ __all__ = [
     "EventRecorderService",
     "TradeExecutionService",
     "metrics",
+    # io
+    "QuestDBLoader",
+    "QuestDBRecorder",
+    "BinanceFetcher",
+    "DataFetcher",
+    "HistoryProvider",
+    "EventRecorder",
     # helpers
     "parse_interval",
     "parse_period",
@@ -86,4 +81,5 @@ __all__ = [
     "interfaces",
     "runtime",
     "services",
+    "examples",
 ]
