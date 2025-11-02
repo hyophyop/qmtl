@@ -1,265 +1,258 @@
-# QMTL Strategies Development Instructions
+# QMTL Development Instructions
 
-**ALWAYS follow these instructions first and fallback to additional search and context gathering only if the information here is incomplete or found to be in error.**
+Always follow these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
-## Project Overview
+## Architecture Overview
 
-This repository hosts strategy experiments built on top of the QMTL (Quantitative Market Trading Library) subtree. QMTL is a Python SDK for building quantitative trading strategies with DAG-based processing pipelines. The project uses `uv` for package management and includes a critical subtree synchronization workflow.
+architecture.md, gateway.md, dag-manager.md 파일을 참조하여 시스템 아키텍처를 이해합니다. 이 문서는 각각 시스템의 주요 구성 요소인 SDK, gateway, dag-manager와 그 상호작용을 설명합니다.
 
-## Bootstrap, Build, and Test the Repository
+QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The system consists of three main components: SDK for building strategy DAGs, Gateway (HTTP server) for handling requests, and DAG Manager (gRPC server) for orchestration.
 
-**CRITICAL: NEVER CANCEL builds or tests. Set timeouts to 60+ minutes.**
+## SOC (Separation of Concerns)
 
-### 1. Environment Setup (Required First)
-```bash
-# Install uv package manager
-pip install uv
+- 각 모듈은 단일 책임 원칙을 준수해야 합니다.
+- 각 모듈은 명확한 책임을 가지고 있으며, 다른 모듈과의 의존성을 최소화해야 합니다.
+- 모듈 간의 의존성은 인터페이스를 통해 관리해야 합니다.
+- 각 모듈은 독립적으로 테스트 가능해야 합니다.
+- 모든 모듈은 문서화되어야 하며, 변경 사항은 즉시 반영해야 합니다.
+- 작업 중 기존 코드베이스에서 SoC를 위반하는 부분을 발견하면, 해당 부분을 리팩토링하여 SoC를 준수하도록 수정하는 것을 우선시해야 합니다.
 
-# Create virtual environment
-uv venv
+## Development Cycle
 
-# Install QMTL with development dependencies - takes ~15 seconds
-uv pip install -e qmtl[dev]
+- 구현 후에 반드시 대응하는 테스트를 작성 및 실행해야 합니다.
+- 테스트는 가능한 한 독립적이어야 하며, 다른 테스트에 의존하지 않아야 합니다.
+- 테스트는 명확하고 이해하기 쉬워야 하며, 실패 시 원인을 쉽게 파악할 수 있어야 합니다.
+- 테스트 실패 시 즉시 원인을 파악하고 수정해야 합니다.
 
-# Install additional dependencies for documentation sync
-uv pip install pyyaml
+## Environment Setup
 
-# Install pre-commit for linting
-pip install pre-commit
-```
+**CRITICAL**: Always use these exact commands in order. Do not skip steps.
 
-### 2. QMTL Subtree Synchronization (CRITICAL - ALWAYS DO THIS FIRST)
-**NEVER skip this step. The qmtl/ subtree must always be synchronized with upstream before any work.**
+1. **Check Python version** (must be 3.11+):
+   ```bash
+   python --version  # Should show 3.11+, we tested with 3.12.3
+   ```
 
-```bash
-# Add the QMTL subtree remote (one-time setup)
-git remote add qmtl-subtree https://github.com/hyophyop/qmtl.git
+2. **Install uv package manager** (if not available):
+   ```bash
+   pip install uv
+   ```
 
-# Sync subtree with upstream - ALWAYS run before starting work
-git fetch qmtl-subtree main
-git subtree pull --prefix=qmtl qmtl-subtree main --squash
+3. **Create virtual environment**:
+   ```bash
+   uv venv
+   ```
 
-# If changes were pulled, commit them to the root repository
-git add qmtl
-git commit -m "chore: bump qmtl subtree to latest"
+4. **Install development dependencies** (takes ~30 seconds):
+   ```bash
+   uv pip install -e .[dev]
+   ```
 
-# After making any changes to qmtl/, push back to upstream
-git subtree push --prefix=qmtl qmtl-subtree main
-```
+5. **Optional: Install additional extensions** (takes ~15 seconds each):
+   ```bash
+   # For additional data modules
+   uv pip install -e .[io]
+   
+   # For technical indicators, data generators, transforms
+   uv pip install -e .[indicators,generators,transforms]
+   
+   # For distributed execution support
+   uv pip install -e .[ray]
+   ```
 
-### 3. Run Tests
-**NEVER CANCEL: Test suite takes ~60 seconds. Set timeout to 90+ minutes.**
-```bash
-# Run full test suite with warnings as errors
-uv run -m pytest -W error
+6. **Generate protobuf files** (REQUIRED before testing):
+   ```bash
+   uv run python -m grpc_tools.protoc \
+     --proto_path=qmtl/foundation/proto \
+     --python_out=qmtl/foundation/proto \
+     --grpc_python_out=qmtl/foundation/proto \
+     qmtl/foundation/proto/dagmanager.proto
+   ```
 
-# Run only strategy tests (faster)
-uv run -m pytest strategies/tests -W error
+## Testing
 
-# Run only QMTL core tests
-uv run -m pytest qmtl/tests -W error
-```
+**CRITICAL TIMING**: NEVER CANCEL test commands. Set timeouts appropriately.
 
-### 4. Linting and Validation
-```bash
-# Run pre-commit linting - fast (~1 second)
-uv run pre-commit run --files $(git ls-files '*.py')
+- **Run full test suite** (takes ~70 seconds, NEVER CANCEL):
+  ```bash
+  uv run pytest -W error
+  ```
+  Set timeout to 120+ seconds. Expected: 445+ tests pass, 12 known failures.
 
-# Check documentation synchronization
-uv run scripts/check_doc_sync.py
-uv run qmtl/scripts/check_doc_sync.py
+- **Run specific test categories** (takes ~10-30 seconds each):
+  ```bash
+  # Gateway tests
+  uv run pytest tests/gateway -v
+  
+  # E2E tests (requires Docker)  
+  uv run pytest tests/e2e -v
+  
+  # Quick CLI tests
+  uv run pytest tests/test_cli.py -v
+  ```
 
-# Verify no strategies imports in qmtl
-uv run python scripts/check_no_strategies_import.py
+- **Known test failures**: Tests fail for missing modules (qmtl.interfaces.tools, some Runner methods). These are development artifacts and do not affect core functionality.
 
-# Check import dependencies (requires ripgrep)
-uv run qmtl check-imports
-```
+## Building and Running
 
-## Working with Strategies
+### Core CLI Commands
 
-### Create New Strategy Projects
-```bash
-# List available templates
-uv run qmtl init --list-templates
-# Available: general, single_indicator, multi_indicator, branching, state_machine
+- **Check available commands**:
+  ```bash
+  uv run qmtl --help
+  ```
 
-# Create new project with template and sample data
-uv run qmtl init --path my_strategy --strategy branching --with-sample-data
-cd my_strategy
+- **Initialize new project**:
+  ```bash
+  qmtl init --path my_project
+  cd my_project
+  ```
 
-# Install QMTL dependencies in the new project
-uv venv
-uv pip install -e ../qmtl[dev]
+- **List available templates**:
+  ```bash
+  qmtl init --path dummy --list-templates
+  ```
+  Available templates: general, single_indicator, multi_indicator, branching, state_machine
 
-# Run the strategy
-python strategy.py
-```
+### Running Services
 
-### Run Existing Strategies
-**Note: Strategy execution requires proper Python path setup.**
-```bash
-# Set PYTHONPATH and run strategy
-PYTHONPATH=$(pwd) uv run python strategies/strategy.py
+**Services start successfully and run indefinitely. Use separate terminals.**
 
-# Or use the QMTL CLI (may have module import issues)
-uv run qmtl strategies
+- **Start Gateway HTTP server** (runs on port 8000):
+  ```bash
+  uv run qmtl gw
+  # Or with custom config:
+  uv run qmtl gw --config qmtl/examples/qmtl.yml
+  ```
 
-# For new projects created with qmtl init, run directly:
-cd /path/to/new/project
-python strategy.py
-```
+- **Start DAG Manager server** (runs on port 50051):
+  ```bash
+  uv run qmtl dagmanager-server
+  # Or with custom config:
+  uv run qmtl dagmanager-server --config qmtl/examples/qmtl.yml
+  ```
+
+- **Run example strategies**:
+  ```bash
+  # Basic strategy execution (takes ~1 second)
+  uv run python -m qmtl.examples.general_strategy
+  
+  # Strategy with indicators (takes ~1 second)
+  uv run python -m qmtl.examples.indicators_strategy
+  
+  # Multi-asset lag strategy
+  uv run python -m qmtl.examples.multi_asset_lag_strategy
+  ```
+
+## End-to-End Testing with Docker
+
+**CRITICAL**: E2E tests require Docker and take 5-10 minutes to start. NEVER CANCEL.
+
+1. **Pull Docker images** (takes ~10 seconds with good internet):
+   ```bash
+   docker compose -f tests/docker-compose.e2e.yml pull
+   ```
+
+2. **Start E2E infrastructure** (takes ~120 seconds to build and start, NEVER CANCEL):
+   ```bash
+   docker compose -f tests/docker-compose.e2e.yml up --build -d
+   ```
+   Set timeout to 300+ seconds. Services include PostgreSQL, Redis, Neo4j, Kafka, and Zookeeper.
+
+3. **Run E2E tests** (takes ~60 seconds):
+   ```bash
+   uv run pytest tests/e2e
+   ```
+
+4. **Stop E2E infrastructure**:
+   ```bash
+   docker compose -f tests/docker-compose.e2e.yml down
+   ```
 
 ## Validation Scenarios
 
 **ALWAYS run these validation scenarios after making changes:**
 
-### 1. Environment Validation
-```bash
-# Verify QMTL CLI is available
-uv run qmtl --help
+### Basic Functionality Test
+1. Run environment setup commands
+2. Generate protobuf files
+3. Run a subset of tests: `uv run pytest tests/test_cli.py -v`
+4. Initialize a test project: `qmtl init --path /tmp/test_validation`
+5. Check CLI help works: `uv run qmtl --help`
 
-# Test template creation and execution
-cd /tmp
-uv run qmtl init --path test_project --strategy general
-cd test_project && ls -la
+### Service Integration Test
+1. Start DAG Manager in background: `uv run qmtl dagmanager-server &`
+2. Verify it's running on port 8000 (shows startup messages)
+3. Run example strategy: `uv run python -m qmtl.examples.general_strategy`
+4. Stop services
 
-# Set up environment in new project
-uv venv
-# If your QMTL repo is in the parent directory, use:
-uv pip install -e ../qmtl[dev]
-# Otherwise, replace '../qmtl[dev]' with the correct relative or absolute path to your QMTL repo.
+### Full System Test
+1. Start E2E infrastructure with Docker
+2. Run E2E test suite
+3. Verify all services are healthy
+4. Stop infrastructure
 
-# Test strategy execution
-python strategy.py
+## Known Issues and Workarounds
+
+- **Gateway service startup error**: The command `uv run qmtl gw` may fail with asyncio errors in some environments. Use DAG Manager for basic testing instead.
+
+- **Missing modules**: Tests for `qmtl.interfaces.tools.taglint` and some `Runner` methods fail due to incomplete implementation. Skip these tests when validating changes.
+
+- **Import errors in scaffolded projects**: When running scaffolded project strategies directly, ensure PYTHONPATH includes the QMTL source: `PYTHONPATH=/path/to/qmtl python strategy.py`
+
+## Project Structure Reference
+
+```
+qmtl/                    # Main package
+├── sdk/                 # Strategy building SDK
+├── gateway/             # HTTP server implementation  
+├── dagmanager/          # DAG orchestration service
+├── examples/            # Example strategies and configs
+├── proto/               # gRPC protocol definitions
+└── transforms/          # Data transformation utilities
+
+tests/                   # Test suite
+├── e2e/                # End-to-end integration tests
+├── gateway/            # Gateway component tests  
+├── dagmanager/         # DAG manager tests
+└── docker-compose.e2e.yml # E2E infrastructure
+
+docs/                   # Documentation
+├── strategy_workflow.md # Strategy development guide
+├── e2e_testing.md      # E2E testing guide
+└── sdk_tutorial.md     # SDK usage tutorial
 ```
 
-### 2. Code Quality Validation
+## Configuration Standards
+
+- Use `*_dsn` suffix for all connection strings (redis_dsn, database_dsn, neo4j_dsn)
+- YAML configuration files follow the pattern in `qmtl/examples/qmtl.yml`
+- Support both SQLite (development) and PostgreSQL (production) backends
+
+## Command Reference
+
+Common validated commands with expected execution times:
+
 ```bash
-# Ensure all linting passes
-uv run pre-commit run --all-files
+# Environment (30 seconds)
+uv venv && uv pip install -e .[dev]
 
-# Verify documentation is synchronized
-uv run scripts/check_doc_sync.py
+# Testing (70 seconds, NEVER CANCEL)  
+uv run pytest -W error
 
-# Check that tests pass (some failures are expected)
-uv run -m pytest -W error --tb=short
+# Services (run indefinitely)
+uv run qmtl dagmanager-server
+
+# Examples (1 second each)
+uv run python -m qmtl.examples.general_strategy
+
+# E2E setup (120 seconds build + 10 seconds pull, NEVER CANCEL)
+docker compose -f tests/docker-compose.e2e.yml pull
+docker compose -f tests/docker-compose.e2e.yml up --build -d
 ```
 
-### 3. Subtree Validation
-```bash
-# Verify subtree is synchronized
-git log -n 3 --oneline qmtl/
-git log -n 3 --oneline qmtl-subtree/main
-
-# These should show matching commits
-```
-
-## Build Timing Expectations
-
-**CRITICAL: Set appropriate timeouts and NEVER CANCEL these operations:**
-
-- **Environment setup**: 15-30 seconds
-- **Test suite**: 60-90 seconds (NEVER CANCEL - set 120+ minute timeout)
-- **Linting**: 1-5 seconds
-- **Doc sync checks**: 1-2 seconds
-- **Strategy creation**: 2-5 seconds
-
-## Key File Locations
-
-### Core Configuration
-- `pyproject.toml` - Root project configuration (minimal, refers to qmtl/)
-- `qmtl/pyproject.toml` - QMTL package configuration with full dependencies
-- `strategies/qmtl.yml` - Strategy configuration file
-- `.github/workflows/ci.yml` - CI pipeline (manual trigger only)
-
-### Strategy Development
-- `strategies/` - Strategy implementations and DAGs
-- `strategies/nodes/` - Custom node processors (indicators, transforms, generators)
-- `strategies/dags/` - DAG definitions for strategy pipelines
-- `strategies/tests/` - Strategy-specific tests
-
-### Documentation
-- `docs/alphadocs/` - Research documents and alpha ideas
-- `docs/alphadocs_registry.yml` - Documentation registry
-- `CONTRIBUTING.md` - Canonical development policies (subtree workflow, testing, AlphaDocs)
-- `AGENTS.md` - Brief summary pointing to the canonical `CONTRIBUTING.md`
-- `qmtl/AGENTS.md` - Development guidelines for QMTL subtree
-
-### Key Scripts
-- `scripts/check_doc_sync.py` - Verify documentation synchronization
-- `scripts/select_alpha.py` - Select alpha documents for implementation
-- `qmtl/scripts/check_doc_sync.py` - QMTL documentation sync check
-
-## Common Issues and Solutions
-
-### Strategy Import Errors
-**Problem**: `ModuleNotFoundError: No module named 'strategies'`
-**Solution**: Set `PYTHONPATH=$(pwd)` before running strategy commands (run this from the repository root directory). If your working directory is not the repo root, set `PYTHONPATH` to the absolute path of the repository root.
-
-### Test Failures
-**Expected**: Some tests may fail due to missing dependencies (rg command, specific features)
-**Action**: Focus on tests related to your changes, ignore unrelated failures
-
-### Subtree Sync Issues
-**Problem**: Conflicts during subtree pull
-**Solution**: Resolve conflicts manually, commit, then push to subtree
-
-### Missing Dependencies
-**Problem**: Commands fail due to missing tools
-**Solutions**:
-- Install `rg` (ripgrep): `apt-get install ripgrep` or use alternative grep
-- Missing Python packages: Install with `uv pip install <package>`
-- **Note**: `uv run qmtl check-imports` requires `rg` and will fail if not installed
-
-## PR Validation Checklist
-
-**Always complete this checklist before submitting PRs:**
-
-- [ ] Tests pass locally: `uv run -m pytest -W error`
-- [ ] Linting passes: `uv run pre-commit run --all-files`
-- [ ] Documentation synchronized: `uv run scripts/check_doc_sync.py`
-- [ ] If qmtl/ changed: `git subtree push --prefix=qmtl qmtl-subtree main` executed
-- [ ] If qmtl/ changed: Verification that upstream changes were pushed included in PR
-- [ ] Strategy functionality tested manually if applicable
-
-## Development Guidelines
-
-### Code Organization
-- **QMTL modifications**: Only for bug fixes or general features that can be upstreamed
-- **Strategy-specific code**: Place in `strategies/`, never in `qmtl/`
-- **Feature implementation**: Always implement in `qmtl` extension first, then reference from strategy
-
-### AlphaDocs Workflow
-- Research documents go in `docs/alphadocs/`
-- Update `docs/alphadocs_registry.yml` when adding documents
-- GPT-5-Pro refined ideas in `docs/alphadocs/ideas/gpt5pro/` are priority targets
-- Always include `# Source: docs/alphadocs/<doc>.md` comments in implementation
-
-### Testing Requirements
-- All new features require tests in `tests/` or `qmtl/tests/`
-- Strategy tests go in `strategies/tests/`
-- Run `uv run -m pytest -W error` - warnings are treated as errors
-
-## Architecture References
-
-For deep understanding of the codebase:
-- `qmtl/architecture.md` - Overall system design
-- `qmtl/gateway.md` - Gateway service architecture  
-- `qmtl/dag-manager.md` - DAG management system
-- `strategies/README.md` - Strategy development guide
-
-## Emergency Procedures
-
-### If Build Hangs
-**NEVER CANCEL** - builds may take 45+ minutes. Wait at least 60 minutes before considering alternatives.
-
-### If Tests Fail
-1. Check if failures are related to your changes
-2. Run subset tests: `uv run -m pytest path/to/specific/test`
-3. Some failures are expected (missing external tools)
-
-### If Subtree Push Fails
-1. Ensure you have latest changes: `git subtree pull --prefix=qmtl qmtl-subtree main --squash`
-2. Resolve conflicts and commit
-3. Retry push: `git subtree push --prefix=qmtl qmtl-subtree main`
+**CRITICAL REMINDERS:**
+- NEVER CANCEL builds or test commands that take more than 2 minutes
+- Always generate protobuf files before testing
+- Set timeouts of 120+ seconds for test commands and 600+ seconds for Docker builds
+- 12 test failures are expected and do not indicate problems with core functionality

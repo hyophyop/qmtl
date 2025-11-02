@@ -2,45 +2,100 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      run_bootstrap:
-        description: 'Run bootstrap smoke test'
-        required: false
-        default: false
-        type: boolean
+    branches: [ main, master ]
 
 jobs:
-  lint-test-doc:
+  docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install dependencies
+          python-version: '3.11'
+
+      - name: Install uv
         run: |
-          pip install uv pre-commit
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Prepare Python and venv
+        run: |
+          uv python install 3.11
           uv venv
-          uv pip install -e qmtl[dev]
-          uv pip install pyyaml
-      - name: "Optional: Run bootstrap smoke-test"
-        if: ${{ github.event.inputs.run_bootstrap == 'true' }}
+
+      - name: Install dependencies (docs)
+        run: uv pip install -e .[dev]
+
+      - name: Build documentation (en/ko)
+        run: uv run mkdocs build
+
+      - name: Run docs link check
+        run: uv run python scripts/check_docs_links.py
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
         run: |
-          chmod +x scripts/bootstrap.sh
-          ./scripts/bootstrap.sh
-      - name: Lint
-        run: uv run pre-commit run --files $(git ls-files '*.py')
-      - name: Pytest
-        run: uv run -m pytest -W error
-      - name: Doc sync
-        run: uv run scripts/check_doc_sync.py
-      - name: Build agent instructions
-        run: uv run python scripts/build_agent_instructions.py
-      - name: QMTL doc sync
-        run: uv run qmtl/scripts/check_doc_sync.py
-      - name: No strategies imports in qmtl
-        run: uv run python scripts/check_no_strategies_import.py
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Prepare Python and venv
+        run: |
+          uv python install 3.11
+          uv venv
+
+      - name: Install dependencies (dev)
+        run: uv pip install -e .[dev]
+
+      - name: Build docs (mkdocs)
+        run: uv run mkdocs build --strict
+
+      - name: Check design drift (docs ↔ code)
+        run: uv run python scripts/check_design_drift.py
+
+      - name: Lint DSN keys (canonical *_dsn)
+        run: uv run python scripts/lint_dsn_keys.py
+
+      - name: Seamless runtime health verification
+        if: ${{ vars.RUN_SEAMLESS_HEALTH_CHECK == '1' }}
+        env:
+          QMTL_SEAMLESS_COORDINATOR_URL: ${{ secrets.QMTL_SEAMLESS_COORDINATOR_URL }}
+          QMTL_PROMETHEUS_URL: ${{ secrets.QMTL_PROMETHEUS_URL }}
+        run: |
+          uv run python scripts/seamless_health_check.py \
+            --prometheus-metric backfill_completion_ratio \
+            --prometheus-metric seamless_sla_deadline_seconds
+
+      - name: Preflight – import/collection
+        run: uv run -m pytest --collect-only -q
+
+      - name: Preflight – hang detection
+        run: |
+          PYTHONFAULTHANDLER=1 \
+          uv run --with pytest-timeout -m pytest -q \
+            --timeout=60 --timeout-method=thread --maxfail=1 -k 'not slow'
+
+      - name: Run tests (warnings are errors)
+        run: PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
+
+      - name: WorldService in-process smoke
+        env:
+          USE_INPROC_WS_STACK: "1"
+          WS_MODE: service
+        run: |
+          uv run -m pytest -q tests/e2e/world_smoke -q

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/decision_envelope.schema.json",
+  "title": "DecisionEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "world_id": { "type": "string" },
+    "policy_version": { "type": "integer", "minimum": 0 },
+    "effective_mode": { "type": "string", "enum": ["validate", "compute-only", "paper", "live"] },
+    "reason": { "type": "string" },
+    "as_of": { "type": "string", "format": "date-time" },
+    "ttl": { "type": "string" },
+    "etag": { "type": "string" }
+  },
+  "required": ["world_id", "policy_version", "effective_mode", "as_of", "ttl", "etag"]
+}

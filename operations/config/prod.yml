@@ -1,0 +1,78 @@
+# Production baseline configuration.
+worldservice:
+  url: https://worldservice.prod.internal
+  timeout: 0.4
+  retries: 3
+  enable_proxy: true
+  enforce_live_guard: true
+
+gateway:
+  host: 0.0.0.0
+  port: 8080
+  redis_dsn: redis://redis.prod.internal:6379/0
+  database_backend: postgres
+  database_dsn: postgresql://qmtl:{{ secrets.GATEWAY_DB_PASSWORD }}@postgres.prod.internal:5432/qmtl
+  controlbus_brokers:
+    - kafka-a.prod.internal:9092
+    - kafka-b.prod.internal:9092
+  controlbus_topics:
+    - activation
+    - policy
+    - queue
+  commitlog_topic: prod.gateway.ingest
+  commitlog_group: prod-gateway-commit
+  commitlog_transactional_id: prod-gateway-writer
+  events:
+    secret: {{ secrets.GATEWAY_EVENT_SECRET }}
+    ttl: 300
+    stream_url: wss://gateway.prod.internal/ws/evt
+    fallback_url: wss://gateway.prod.internal/ws
+  websocket:
+    rate_limit_per_sec: 250
+
+dagmanager:
+  neo4j_dsn: neo4j://neo4j.prod.internal:7687
+  neo4j_user: neo4j
+  neo4j_password: {{ secrets.NEO4J_PASSWORD }}
+  kafka_dsn: kafka-a.prod.internal:9092
+  grpc_host: 0.0.0.0
+  grpc_port: 50051
+  http_host: 0.0.0.0
+  http_port: 8101
+  controlbus_dsn: kafka-a.prod.internal:9092
+  controlbus_queue_topic: queue
+  enable_topic_namespace: true
+
+seamless:
+  coordinator_url: https://seamless-coordinator.prod.internal
+  artifacts_enabled: true
+  artifact_dir: /var/lib/qmtl/seamless-artifacts
+  fingerprint_mode: canonical
+  publish_fingerprint: true
+  preview_fingerprint: false
+  early_fingerprint: false
+  sla_preset: baseline
+  conformance_preset: strict-blocking
+  presets_file: ../seamless/presets.yaml
+
+connectors:
+  ccxt_rate_limiter_redis: redis://redis.prod.internal:6379/2
+  schema_registry_url: https://schema-registry.prod.internal
+  worker_id: prod-worker
+  strategy_id: {{ env.STRATEGY_ID | default('unset') }}
+
+telemetry:
+  otel_exporter_endpoint: https://otel-collector.prod.internal:4318/v1/traces
+  enable_fastapi_otel: true
+  prometheus_url: https://prometheus.prod.internal
+
+cache:
+  arrow_cache_enabled: true
+  cache_evict_interval: 30
+  feature_artifacts_enabled: true
+  feature_artifact_dir: /var/lib/qmtl/feature-artifacts
+  feature_artifact_versions: 20
+
+test:
+  test_mode: false
+  fail_on_history_gap: true

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Verify alignment between AlphaDocs, registry, and module annotations."""
+"""Verify alignment between AlphaDocs, registry, and QMTL module annotations."""
 
 from pathlib import Path
 import re
-import os
 import sys
 
 try:
@@ -15,14 +14,14 @@ except Exception as exc:  # pragma: no cover - dependency error
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs" / "alphadocs_registry.yml"
 DOC_DIR = ROOT / "docs" / "alphadocs"
-MODULE_GLOB = "strategies/nodes/**/*.py"
+MODULE_ROOT = ROOT / "qmtl"
 
 
 def check_doc_sync(
     root: Path = ROOT,
     registry: Path = REGISTRY,
     doc_dir: Path = DOC_DIR,
-    module_glob: str = MODULE_GLOB,
+    module_root: Path = MODULE_ROOT,
 ) -> list[str]:
     """Return list of doc-sync errors for the given root."""
     errors: list[str] = []
@@ -31,15 +30,11 @@ def check_doc_sync(
         registry_data = yaml.safe_load(registry.read_text())
     except FileNotFoundError:
         errors.append(f"Registry file missing: {registry}")
-        registry_data = []
+        return errors
 
-    # normalize registry doc paths to posix relative paths
-    def _norm(p: str) -> str:
-        return Path(p).as_posix()
+    registry_docs = {entry["doc"]: entry.get("modules", []) for entry in registry_data}
 
-    registry_docs = {_norm(entry["doc"]): entry.get("modules", []) for entry in registry_data}
-    registry_status = {_norm(entry["doc"]): entry.get("status") for entry in registry_data}
-
+    # Check docs present in registry
     actual_docs = sorted(
         rel
         for p in doc_dir.rglob("*.md")
@@ -57,41 +52,34 @@ def check_doc_sync(
     if missing_doc_files:
         errors.append("Docs listed but missing: " + ", ".join(missing_doc_files))
 
+    # Validate module annotations
     source_pattern = re.compile(r"^# Source: (?P<path>.+)$", re.MULTILINE)
     for doc_path, modules in registry_docs.items():
-        status = registry_status.get(doc_path)
-        if status == "implemented" and not modules:
-            errors.append(f"{doc_path} status 'implemented' but modules list empty")
-        if modules and status != "implemented":
-            errors.append(f"{doc_path} has modules but status {status}")
-
         for module in modules or []:
             mod_file = root / module
             if not mod_file.exists():
                 errors.append(f"Module listed but missing: {module}")
                 continue
-            head = mod_file.read_text().splitlines()[:8]
+            head = mod_file.read_text().splitlines()[:5]
             match = None
             for line in head:
                 m = source_pattern.match(line.strip())
                 if m:
-                    # normalize the matched path
-                    match = _norm(os.path.normpath(m.group("path")))
+                    match = m.group("path")
                     break
             if match != doc_path:
-                suggestion = f"Suggestion: update module {module} Source to '{doc_path}' or update registry to match '{match or '<none>'}'"
-                errors.append(f"{module} missing Source comment for {doc_path} -- {suggestion}")
+                errors.append(f"{module} missing Source comment for {doc_path}")
 
-    for mod_file in root.glob(module_glob):
-        text = mod_file.read_text().splitlines()[:8]
+    # Check modules with Source comment but not in registry
+    for mod_file in module_root.rglob("*.py"):
+        text = mod_file.read_text().splitlines()[:5]
         rel_mod = mod_file.relative_to(root).as_posix()
         for line in text:
             m = source_pattern.match(line.strip())
             if m:
-                doc = _norm(os.path.normpath(m.group("path")))
+                doc = m.group("path")
                 if doc not in registry_docs or rel_mod not in registry_docs.get(doc, []):
-                    suggestion = f"Suggestion: add '{rel_mod}' to registry entry for '{doc}' using manage_alphadocs.register_module"
-                    errors.append(f"{rel_mod} annotation not registered -- {suggestion}")
+                    errors.append(f"{rel_mod} annotation not registered")
                 break
 
     return errors

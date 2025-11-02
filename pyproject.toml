@@ -1,70 +1,111 @@
 [project]
-name = "qmtl-strategies"
+name = "qmtl"
 version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = ["qmtl"]
+requires-python = ">=3.11"
+dependencies = [
+    "prometheus-client",
+    "boto3",
+    "xarray",
+    "networkx",
+    "numpy",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+    "redis",
+    "asyncpg",
+    "aiosqlite",
+    "websockets",
+    "grpcio>=1.75.0",
+    "grpcio",
+    "PyYAML",
+    "psutil",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-httpx",
+    "opentelemetry-instrumentation-grpc",
+    "cachetools",
+    "blake3",
+    "pytest-asyncio>=0.23",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis>=6.100",
+    "jsonschema>=4.0.0",
+    "fakeredis",
+    "grpcio-tools>=1.74.0",
+    "pyarrow",
+    "mkdocs-material",
+    "mkdocs-macros-plugin",
+    "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
+    "websocket-client",
+    "Babel>=2.13",
+]
+
+ray = ["ray"]
+io = ["pandas"]
+ccxt = ["ccxt"]
+questdb = ["asyncpg"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis>=6.100",
+    "jsonschema>=4.0.0",
+    "fakeredis",
+    "grpcio-tools>=1.74.0",
+    "pyarrow",
+    "mkdocs-material",
+    "mkdocs-macros-plugin",
+    "mkdocs-breadcrumbs-plugin",
+    "mkdocs-static-i18n",
+    "websocket-client",
+    "Babel>=2.13",
+]
+
+[project.scripts]
+qmtl = "qmtl.interfaces.cli:main"
+qmtl-commitlog-consumer = "qmtl.services.gateway.commit_log_cli:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-package = false
-default-groups = ["dev"]
+[tool.setuptools]
+include-package-data = true
 
-[tool.uv.sources]
-qmtl = { path = "qmtl", editable = true }
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qmtl*"]
 
-[dependency-groups]
-dev = ["qmtl[dev]", "pytest-cov", "python-dotenv"]
-test = ["pytest", "pytest-cov", "pytest-xdist", "pytest-mock"]
-lint = ["black", "isort", "flake8", "mypy", "pre-commit"]
-docs = ["mkdocs", "mkdocs-material", "mkdocstrings"]
-security = ["safety", "bandit", "pip-audit"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests", "strategies/tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-report=xml",
-    "--cov-fail-under=80"
+[tool.setuptools.package-data]
+"qmtl.examples" = [
+  "*.py",
+  "*.yml",
+  "*.yaml",
+  "templates/*.yml",
+  "gitignore",
+  "README.md",
+  "data/*.csv",
+  "*.csv",
+  "seamless/*.yaml",
+  "seamless/*.yml",
+  "notebooks/*.ipynb",
 ]
-filterwarnings = [
-    "error",
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning"
+"qmtl.foundation.schema" = [
+  "schemas/*.json",
 ]
-
-[tool.coverage.run]
-source = ["."]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/venv/*",
-    "*/.venv/*",
-    "*/__pycache__/*",
-    "*/build/*",
-    "*/dist/*",
-    "*.egg-info/*"
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
+"qmtl" = [
+  "locale/*/LC_MESSAGES/*.mo",
+  "locale/*/LC_MESSAGES/*.po",
 ]

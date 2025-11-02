@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/decisions_request.schema.json",
+  "title": "DecisionsRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "strategies": {
+      "type": "array",
+      "description": "Ordered list of strategy identifiers used when replacing a world's decisions.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!\\s*$).+"
+      }
+    }
+  },
+  "required": ["strategies"]
+}

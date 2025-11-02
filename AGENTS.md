@@ -1,46 +1,111 @@
 ---
-scope: repository root
+scope: qmtl subtree
 last-reviewed: 2025-08-24
-canonical-guidelines: CONTRIBUTING.md
+canonical-guidelines: ../CONTRIBUTING.md
 ---
 
 # Development Guidelines
 
-This repository hosts strategy experiments built on top of the [QMTL](qmtl/README.md) subtree. For comprehensive policies—such as the QMTL subtree workflow, testing commands, and the AlphaDocs process—see [CONTRIBUTING.md](CONTRIBUTING.md).
+**Applies to files under `qmtl/`.**
 
-Key reminders:
+For general contribution and testing policies, see the repository root [AGENTS.md](../AGENTS.md).
 
-- Always synchronize the `qmtl/` subtree before starting work and push upstream after making changes.
-- Strategy-specific code lives under `strategies/`; keep reusable utilities only in `qmtl/`.
-  - Exception: thin, strategy-local convenience wrappers (e.g., lightweight shims under `strategies/utils/`) are acceptable when they adapt QMTL APIs for strategy ergonomics. Promote broadly reusable helpers to `qmtl/` via the subtree process.
-- When implementing a strategy, deliver both the core logic and a QMTL node that consumes it so it can be used in DAGs. Place node processors under `strategies/<strategy>/nodes/` and follow naming/I-O conventions in `strategies/AGENTS.md`.
-- When modifying the subtree itself, follow `qmtl/AGENTS.md`. For strategy conventions, refer to `strategies/AGENTS.md`.
-- If any `AGENTS.md` files change, run `uv run python scripts/build_agent_instructions.py` to refresh `docs/agents-instructions.md` before committing. CI already runs this when relevant, so running it locally avoids surprises.
+## Environment
 
-QMTL subtree boundaries
+- Manage the Python environment using **uv**. Install dependencies with
+  `uv pip install -e .[dev]` and build distributable wheels via `uv pip wheel .`.
+- When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
+- Before assuming external tools or services are unavailable, run a quick capability check for whichever CLI or API you plan to use (e.g., `gh auth status`, `aws sts get-caller-identity`, `docker info`). If the probe succeeds, leverage the tool immediately; if it fails, guide the user through re-auth or configuration and retry. Repeat this verification for each new session since tokens can expire or reset.
 
-- Keep changes under `qmtl/` limited to upstream‑worthy, reusable logic (APIs, libraries, specs, bug fixes). Do not place repository‑specific documentation, dashboards, configs, or strategy experiments under `qmtl/`.
-- Operational docs such as Grafana dashboards guidance must live outside the subtree (e.g., `docs/operations/...`) and may link to `qmtl/docs/...` as references.
-- Before merging any PR, verify unintended subtree drift:
-  - Sync and review: `scripts/sync_qmtl.sh` then `git diff --name-only qmtl/`
-  - If non‑upstreamable changes slipped into `qmtl/`, move them out or revert them before merge.
+## Architecture
 
-Terminology note: follow the repository’s terminology style guide in `CONTRIBUTING.md` (DAG, AlphaDocs vs `docs/alphadocs/`, Strategy vs strategy, etc.).
+- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
+  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
+- Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
+  data-processing utilities belong here. All alpha logic should live in the root project's
+  `strategies/` directory.
 
-Automation helpers
+## Documentation Management
 
-- A pair of helper scripts are provided under `scripts/` to standardize common tasks:
-	- `scripts/bootstrap.sh` — create `uv` venv, install editable `qmtl[dev]` deps and run a fast smoke test (strategies tests if present).
-	- `scripts/sync_qmtl.sh` — fetch and pull the `qmtl` subtree from the `qmtl-subtree` remote and print recent commits for verification.
+- Store documentation in the `docs/` directory with descriptive filenames.
+- Each Markdown file should start with a single `#` heading and use relative links to other docs.
+- Update `mkdocs.yml` navigation when adding or moving files.
+- Validate docs with `uv run mkdocs build` before committing. Ensure `mkdocs-macros-plugin`
+  and `mkdocs-breadcrumbs-plugin` are installed via `uv pip install -e .[dev]`.
+- Diagrams: Use Mermaid fenced code blocks (```mermaid) for all diagrams. Avoid PlantUML/DOT or binary diagram files; prefer text-based Mermaid for reviewability and versioning.
+- When adding or modifying documentation utility scripts (e.g., `scripts/check_docs_links.py`),
+  ensure that any new Python dependencies are reflected in both the developer installation
+  instructions and the CI workflows (notably `.github/workflows/docs-link-check.yml`).
+  Add an explicit installation step or shared requirements file in the workflow so the CI job
+  installs packages such as `pyyaml` before running the script.
 
-Please run `scripts/bootstrap.sh` when setting up a dev environment. Note: bootstrap performs a minimal setup and a quick smoke test; if you use pre-commit locally, also install and enable hooks with `uv run pre-commit install`. If you modify any files under `qmtl/`, run `scripts/sync_qmtl.sh` to pull upstream changes before making edits and follow subtree push instructions when pushing changes back upstream.
+### Internationalization Policy
 
-CI / Docs triggers
+- Baseline language: Korean (`ko`). All other locales (including English) are translations of the Korean source documents.
+- New or updated documentation should treat `docs/ko/...` as the canonical content; non‑Korean versions must not introduce normative content that does not exist in Korean.
+- When introducing or updating documentation across 3 or more supported locales, ensure both Korean and English pages exist before completing the work. Other locales may follow subsequently, but `ko` and `en` must ship together in that change.
+- Keep file paths mirrored by locale (e.g., `docs/ko/guides/foo.md` ↔ `docs/en/guides/foo.md`) and maintain the same heading structure and relative links.
+- Validate builds for all affected locales with `uv run mkdocs build` and fix broken or missing links as part of the change. For broader i18n workflow details, see `docs/ko/guides/docs_internationalization.md`.
 
-- The CI workflow will run the agent docs build step when `AGENTS.md` changes. If you update `AGENTS.md`, ensure `docs/agents-instructions.md` is refreshed by running (the builder scans the entire repo for `AGENTS.md` files):
+## Testing
 
-```bash
-uv run python scripts/build_agent_instructions.py
+- Always run tests in parallel with `pytest-xdist` for faster feedback:
+  `uv run -m pytest -W error -n auto`
+- If `pytest-xdist` is not installed, add it temporarily with
+  `uv pip install pytest-xdist` (or add it to your local extras).
+- For suites with shared resources, prefer `--dist loadscope` or cap workers
+  (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
+
+### Test Design Strategy
+
+Frame suites around three complementary lenses so coverage stays purposeful while the implementation remains free to evolve.
+
+- **Contract Fidelity:** Anchor new and refactored suites in contract-style tests that lock observable guarantees—API signatures, CLI surfaces, return payloads, validation rules—without depending on internal helpers.
+- **Collaboration Dynamics:** Exercise dispatch chains and service boundaries with consumer-driven expectations. Prefer spies/fakes to confirm orchestration (`dispatch -> run(create_project)`), required side effects, and cross-component message shapes.
+- **Experience Guardrails:** Protect end-user flows with black-box behavioral checks and a slim smoke layer (command discovery, `--help`, happy-path scaffolds) to catch regressions quickly while keeping the suite fast.
+- **Risk-Weighted Depth:** Lean into deeper scenario coverage for high-volatility or high-impact areas, mark serial or slow cases explicitly, and keep fixtures hermetic so tests compose cleanly under `-n auto`.
+
+### Hang Detection Preflight (required in CI and recommended locally)
+
+To prevent a single hanging test from blocking the entire suite, we run a fast
+"preflight" that auto‑fails long runners before the full test job:
+
+- Quick hang scan (no install step needed in CI/local):
+  - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1`
+  - Rationale: `pytest-timeout` turns hangs into failures with a traceback; `faulthandler` ensures a stack dump is emitted.
+- Optional: collection sanity check to catch import‑time blocks early:
+  - `uv run -m pytest --collect-only -q`
+- After preflight passes, run the full suite:
+  - `uv run -m pytest -W error -n auto`
+
+Guidance for authors:
+- If a test is expected to exceed 60s, add a per‑test timeout override: `@pytest.mark.timeout(180)`.
+- Mark intentionally long or external‑dependency tests as `slow` and exclude them from preflight via `-k 'not slow'` if necessary.
+- Prefer deterministic, dependency‑free tests; avoid unbounded network waits.
+
+## Example Projects
+
+Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
+project:
+
+- Run tests with `uv run -m pytest -W error -n auto`.
+- Place node processors under `nodes/` and tests under `tests/`.
+- Keep functions pure and free of side effects.
+
+## Issue & PR Linking
+
+- When work starts from a GitHub issue, include a closing keyword in both your final result message and the PR description so the issue auto‑closes on merge.
+- Use one of: `Fixes #<number>`, `Closes #<number>`, or `Resolves #<number>` (e.g., `Fixes #123`).
+- If referencing multiple issues, list each on its own line.
+- For cross-repo issues, use `owner/repo#<number>` (e.g., `openai/qmtl#123`).
+- If the change is partial and should not close the issue, prefer `Refs #<number>` instead of a closing keyword.
+- Prefer placing the closing keyword in the PR body; commit messages on the default branch also work but are less visible.
+
+Example PR snippet:
+
 ```
+Summary: Implement data loader fallback path
 
-This repository's maintainers aim to keep the doc build step in CI to prevent stale agent instructions.
+Fixes #123
+Also Refs #119 for broader tracking
+```

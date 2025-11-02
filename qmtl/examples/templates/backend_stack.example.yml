@@ -1,0 +1,135 @@
+# QMTL backend stack configuration template
+#
+# This file aggregates configuration for Gateway, DAG Manager, and WorldService
+# along with the shared infrastructure services they depend on. Replace
+# placeholders with deployment-specific values before using in production.
+version: 1
+metadata:
+  environment: production
+  maintained_by:
+    - ops@example.com
+  description: >-
+    Template for running the core QMTL backend services with durable storage,
+    messaging, and observability backends.
+
+backends:
+  redis:
+    # Dedicated logical databases per service prevent key collisions.
+    gateway_state: redis://redis:6379/0
+    worldservice_activation: redis://redis:6379/1
+    cache_ttl_seconds: 86400
+  sql:
+    # Use separate schemas or databases for Gateway and WorldService.
+    gateway_dsn: postgresql://qmtl_gw:CHANGE_ME@postgres:5432/qmtl_gw
+    worldservice_dsn: postgresql://qmtl_ws:CHANGE_ME@postgres:5432/qmtl_ws
+    pool_min_size: 5
+    pool_max_size: 20
+  neo4j:
+    dsn: bolt://neo4j:7687
+    user: neo4j
+    password: CHANGE_ME
+    database: neo4j
+  kafka:
+    brokers: &kafka_brokers
+      - redpanda-0:9092
+      - redpanda-1:9092
+      - redpanda-2:9092
+    security_protocol: SASL_SSL
+    sasl_mechanism: SCRAM-SHA-256
+    sasl_username: CHANGE_ME
+    sasl_password: CHANGE_ME
+    controlbus_topics:
+      activation: activation
+      policy: policy
+      queue: queue
+    commitlog_topic: gateway.ingest
+    replication_factor: 3
+  observability:
+    prometheus_pushgateway: http://prometheus-pushgateway:9091
+    tempo_collector: http://tempo:9411
+    loki_endpoint: http://loki:3100
+  object_storage:
+    artifacts_bucket: s3://qmtl-artifacts
+    region: us-east-1
+
+worldservice:
+  dsn: ${backends.sql.worldservice_dsn}
+  redis: ${backends.redis.worldservice_activation}
+  bind:
+    host: 0.0.0.0
+    port: 8080
+  auth:
+    header: Authorization
+    tokens: []
+  controlbus:
+    brokers: *kafka_brokers
+    topic: ${backends.kafka.controlbus_topics.policy}
+    consumer_group: worldservice
+  notes:
+    - >-
+      Place this YAML on disk (e.g. /etc/qmtl/backend.yml) and run WorldService
+      from that directory so uvicorn discovers it automatically.
+    - >-
+      Start the service with:
+      uv run uvicorn qmtl.services.worldservice.api:create_app --factory \
+        --host ${worldservice.bind.host} --port ${worldservice.bind.port}
+    - "Ensure aiokafka is installed if ControlBus publishing is required."
+
+# Gateway section matches qmtl.services.gateway.config.GatewayConfig.
+gateway:
+  host: 0.0.0.0
+  port: 8000
+  redis_dsn: ${backends.redis.gateway_state}
+  database_backend: postgres
+  database_dsn: ${backends.sql.gateway_dsn}
+  insert_sentinel: true
+  controlbus_brokers: *kafka_brokers
+  controlbus_topics:
+    - ${backends.kafka.controlbus_topics.activation}
+    - ${backends.kafka.controlbus_topics.policy}
+    - ${backends.kafka.controlbus_topics.queue}
+  controlbus_group: gateway
+  commitlog_bootstrap: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
+  commitlog_topic: ${backends.kafka.commitlog_topic}
+  commitlog_group: gateway-commit
+  commitlog_transactional_id: gateway-commit-writer
+  worldservice_url: http://worldservice:8080
+  worldservice_timeout: 0.5
+  worldservice_retries: 3
+  enable_worldservice_proxy: true
+  enforce_live_guard: true
+  events:
+    secret: CHANGE_ME_EVENT_SECRET
+    ttl: 300
+    stream_url: wss://gateway/ws/evt
+    fallback_url: wss://gateway/ws
+  websocket:
+    rate_limit_per_sec: 0
+
+# DAG Manager section matches qmtl.services.dagmanager.config.DagManagerConfig.
+dagmanager:
+  memory_repo_path: /var/lib/qmtl/services/dagmanager/memrepo.gpickle
+  neo4j_dsn: ${backends.neo4j.dsn}
+  neo4j_user: ${backends.neo4j.user}
+  neo4j_password: ${backends.neo4j.password}
+  kafka_dsn: redpanda-0:9092
+  grpc_host: 0.0.0.0
+  grpc_port: 50051
+  http_host: 0.0.0.0
+  http_port: 8001
+  controlbus_dsn: redpanda-0:9092
+  controlbus_queue_topic: ${backends.kafka.controlbus_topics.queue}
+  enable_topic_namespace: true
+  notes:
+    - >-
+      After provisioning Neo4j, initialise schema with:
+      qmtl service dagmanager neo4j-init --uri ${backends.neo4j.dsn} \
+        --user ${backends.neo4j.user} --password <secret>
+
+# Additional operational hints for the full stack.
+notes:
+  - "Set dagmanager.enable_topic_namespace: true to keep Kafka topics partitioned by world/domain."
+  - "Provision alerts for gateway_e2e_latency_p95, dagmanager_diff_errors_total, and worldservice_decision_stale_total."
+  - "Store secrets (passwords, SASL credentials) in your secrets manager instead of committing them."
+  - "Validate config before launch: uv run qmtl config validate --config /etc/qmtl/backend.yml"
+  - "Launch qmtl service gateway/dagmanager server with --config /etc/qmtl/backend.yml so they reuse the same YAML."

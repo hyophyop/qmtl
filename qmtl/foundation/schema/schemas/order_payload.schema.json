@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/order_payload.schema.json",
+  "title": "OrderPayload",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "world_id": { "type": "string" },
+    "strategy_id": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "symbol": { "type": "string" },
+    "side": { "type": "string", "enum": ["BUY", "SELL"] },
+    "type": { "type": "string", "enum": ["market", "limit", "stop", "stop_limit"] },
+    "quantity": { "type": "number" },
+    "limit_price": { "type": ["number", "null"] },
+    "stop_price": { "type": ["number", "null"] },
+    "time_in_force": { "type": "string", "enum": ["DAY", "GTC", "IOC", "FOK"] },
+    "client_order_id": { "type": "string" },
+    "timestamp": { "type": "integer" },
+    "reduce_only": { "type": "boolean" },
+    "position_side": { "type": ["string", "null"] },
+    "metadata": { "type": "object" }
+  },
+  "required": [
+    "world_id",
+    "strategy_id",
+    "correlation_id",
+    "symbol",
+    "side",
+    "type",
+    "quantity",
+    "time_in_force",
+    "timestamp"
+  ]
+}

@@ -1,0 +1,360 @@
+# Korean translations for qmtl.
+# Copyright (C)
+# This file is distributed under the same license as the qmtl project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: qmtl\n"
+"POT-Creation-Date: 2025-10-22 00:00+0000\n"
+"PO-Revision-Date: 2025-10-22 00:00+0000\n"
+"Last-Translator: qmtl\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# gateway cli
+msgid "Gateway configuration loaded from %(path)s (--config)"
+msgstr "Gateway 구성은 %(path)s (--config)에서 로드되었습니다"
+
+msgid "Gateway configuration loaded from %(path)s"
+msgstr "Gateway 구성은 %(path)s에서 로드되었습니다"
+
+msgid "Gateway configuration file not provided; using built-in defaults"
+msgstr "Gateway 구성 파일이 제공되지 않았습니다. 내장 기본값을 사용합니다"
+
+msgid "Run the Gateway HTTP server."
+msgstr "Gateway HTTP 서버를 실행합니다."
+
+msgid "Path to configuration file"
+msgstr "구성 파일 경로"
+
+msgid "Disable automatic VersionSentinel insertion"
+msgstr "자동 VersionSentinel 삽입 비활성화"
+
+msgid "Disable live trading guard requiring X-Allow-Live header"
+msgstr "X-Allow-Live 헤더가 필요한 라이브 트레이딩 가드를 비활성화"
+
+msgid "Gateway configuration file {path} does not define the 'gateway' section."
+msgstr "Gateway 구성 파일 {path}에 'gateway' 섹션이 없습니다."
+
+msgid "Commit-log writer is disabled; production deployments must set commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+msgstr "커밋 로그 기록기가 비활성화되었습니다. 운영 배포에서는 gateway.ingest 이벤트를 기록하려면 commitlog_bootstrap과 commitlog_topic을 설정해야 합니다."
+
+msgid "Failed to connect to database"
+msgstr "데이터베이스 연결에 실패했습니다"
+
+msgid "Failed to close database connection"
+msgstr "데이터베이스 연결을 닫지 못했습니다"
+
+# CLI top-level
+msgid "Subcommand to run"
+msgstr "실행할 하위 명령"
+
+msgid "\nerror: unknown command '{cmd}'"
+msgstr "\n오류: 알 수 없는 명령 '{cmd}'"
+
+msgid """
+            Subcommands:
+              config    Validate gateway and DAG Manager configuration files.
+              service   Manage long-running services such as Gateway and DAG Manager.
+              tools     Developer tooling including SDK runners and linters.
+              project   Project scaffolding and template helpers.
+
+            Global options:
+              --lang {en,ko}  Override CLI language (default: auto)
+            """
+msgstr """
+            하위 명령:
+              config    Gateway 및 DAG Manager 설정 파일을 검증합니다.
+              service   Gateway/DAG Manager 등 장기 실행 서비스를 관리합니다.
+              tools     SDK 실행기와 린터 등 개발자 도구입니다.
+              project   프로젝트 스캐폴딩과 템플릿 도우미입니다.
+
+            전역 옵션:
+              --lang {en,ko}  CLI 언어를 지정합니다 (기본: 자동)
+            """
+
+# project.py
+msgid "Project command to run"
+msgstr "프로젝트 명령 선택"
+
+msgid """
+            Project scaffolding utilities.
+
+            Available commands:
+              init         Create a new strategy project from templates or presets.
+              add-layer    Add a layer to an existing project.
+              list-layers  List available layers and metadata.
+              validate     Validate an existing layered project.
+            """
+msgstr """
+            프로젝트 스캐폴딩 유틸리티.
+
+            사용 가능한 명령:
+              init         템플릿 또는 프리셋으로 새 프로젝트를 생성합니다.
+              add-layer    기존 프로젝트에 레이어를 추가합니다.
+              list-layers  사용 가능한 레이어와 메타데이터를 표시합니다.
+              validate     기존 레이어드 프로젝트를 검증합니다.
+            """
+
+# init.py options
+msgid "Initialize new project (see docs/guides/strategy_workflow.md)"
+msgstr "새 프로젝트를 초기화합니다 (docs/guides/strategy_workflow.md 참조)"
+
+msgid "More docs: docs/reference/templates.md"
+msgstr "추가 문서: docs/reference/templates.md"
+
+msgid "Project directory to create scaffolding"
+msgstr "스캐폴딩을 생성할 프로젝트 디렉터리"
+
+msgid "Preset configuration to use (see docs/architecture/layered_template_system.md)"
+msgstr "사용할 프리셋 구성 (docs/architecture/layered_template_system.md 참조)"
+
+msgid "Comma-separated list of layers to include (e.g., data,signal)"
+msgstr "포함할 레이어의 쉼표-구분 목록 (예: data,signal)"
+
+msgid "List available presets and exit"
+msgstr "사용 가능한 프리셋을 표시하고 종료"
+
+msgid "List available layers and exit"
+msgstr "사용 가능한 레이어를 표시하고 종료"
+
+msgid "(Deprecated: use --preset) Strategy template to use"
+msgstr "(폐기 예정: --preset 사용) 사용할 전략 템플릿"
+
+msgid "(Deprecated: use --list-presets) List available templates and exit"
+msgstr "(폐기 예정: --list-presets 사용) 템플릿 목록을 표시하고 종료"
+
+msgid "Include sample OHLCV CSV and notebook"
+msgstr "샘플 OHLCV CSV 및 노트북 포함"
+
+msgid "Include docs/ directory template"
+msgstr "docs/ 디렉터리 템플릿 포함"
+
+msgid "Include scripts/ directory template"
+msgstr "scripts/ 디렉터리 템플릿 포함"
+
+msgid "Include pyproject.toml template"
+msgstr "pyproject.toml 템플릿 포함"
+
+msgid "Overwrite existing directory"
+msgstr "기존 디렉터리 덮어쓰기"
+
+msgid "Select configuration template for qmtl.yml"
+msgstr "qmtl.yml에 사용할 구성 템플릿 선택"
+
+msgid "Warning: --list-templates is deprecated, use --list-presets instead"
+msgstr "경고: --list-templates는 폐기 예정입니다. 대신 --list-presets를 사용하세요."
+
+msgid "Available templates:"
+msgstr "사용 가능한 템플릿:"
+
+msgid "Available presets:"
+msgstr "사용 가능한 프리셋:"
+
+msgid "  {name:15} - {desc}"
+msgstr "  {name:15} - {desc}"
+
+msgid "Available layers:"
+msgstr "사용 가능한 레이어:"
+
+msgid "  {value:15} - {name}"
+msgstr "  {value:15} - {name}"
+
+msgid "Warning: --strategy is deprecated, use --preset instead"
+msgstr "경고: --strategy는 폐기 예정입니다. 대신 --preset를 사용하세요."
+
+msgid "Error: Unknown preset '{preset}'"
+msgstr "오류: 알 수 없는 프리셋 '{preset}'"
+
+msgid "Error creating project:"
+msgstr "프로젝트 생성 오류:"
+
+msgid "  - {error}"
+msgstr "  - {error}"
+
+msgid "Project created at {path} using preset '{preset}'"
+msgstr "'{preset}' 프리셋으로 {path}에 프로젝트를 생성했습니다"
+
+msgid "Layers included: {layers}"
+msgstr "포함된 레이어: {layers}"
+
+msgid "Error: Invalid layer name - {error}"
+msgstr "오류: 잘못된 레이어 이름 - {error}"
+
+msgid "  {value}"
+msgstr "  {value}"
+
+msgid "Project created at {path}"
+msgstr "프로젝트 생성 위치: {path}"
+
+msgid "Project created at {path} using legacy template '{template}'"
+msgstr "레거시 템플릿 '{template}'으로 {path}에 프로젝트를 생성했습니다"
+
+# dagmanager cli
+msgid "Failed to read file '{path}': {error}"
+msgstr "파일 '{path}'을(를) 읽지 못했습니다: {error}"
+
+msgid "gRPC error: {error}"
+msgstr "gRPC 오류: {error}"
+
+msgid "GC triggered for sentinel: {sentinel}"
+msgstr "센티넬 {sentinel}에 대해 GC가 실행되었습니다"
+
+msgid "Invalid DAG JSON: {error}"
+msgstr "잘못된 DAG JSON: {error}"
+
+msgid "Failed to read snapshot '{path}': {error}"
+msgstr "스냅샷 '{path}'을(를) 읽지 못했습니다: {error}"
+
+msgid "Snapshot mismatch"
+msgstr "스냅샷 불일치"
+
+msgid "Snapshot OK"
+msgstr "스냅샷 정상"
+
+msgid "Operate DAG Manager services and utilities."
+msgstr "DAG Manager 서비스와 유틸리티를 실행합니다."
+
+msgid "Run diff"
+msgstr "diff 실행"
+
+msgid "Path to DAG JSON file"
+msgstr "DAG JSON 파일 경로"
+
+msgid "Run locally without gRPC"
+msgstr "gRPC 없이 로컬에서 실행"
+
+msgid "gRPC service target"
+msgstr "gRPC 서비스 대상"
+
+msgid "Create or verify DAG snapshot"
+msgstr "DAG 스냅샷 생성 또는 검증"
+
+msgid "Snapshot file path"
+msgstr "스냅샷 파일 경로"
+
+msgid "Write snapshot file"
+msgstr "스냅샷 파일 작성"
+
+msgid "Verify against snapshot file"
+msgstr "스냅샷 파일과 비교하여 검증"
+
+msgid "Get queue statistics"
+msgstr "큐 통계를 가져옵니다"
+
+msgid "Filter tag"
+msgstr "필터 태그"
+
+msgid "Time interval filter"
+msgstr "시간 구간 필터"
+
+msgid "Trigger GC for sentinel"
+msgstr "센티넬에 대한 GC 실행"
+
+msgid "Sentinel identifier"
+msgstr "센티넬 식별자"
+
+msgid "Redo diff for sentinel"
+msgstr "센티넬에 대해 diff 재실행"
+
+msgid "Export Neo4j schema"
+msgstr "Neo4j 스키마 내보내기"
+
+msgid "Neo4j connection URI"
+msgstr "Neo4j 연결 URI"
+
+msgid "Neo4j username"
+msgstr "Neo4j 사용자 이름"
+
+msgid "Neo4j password"
+msgstr "Neo4j 비밀번호"
+
+msgid "Output file path"
+msgstr "출력 파일 경로"
+
+msgid "Initialize Neo4j schema"
+msgstr "Neo4j 스키마 초기화"
+
+msgid "Drop Neo4j constraints/indexes created by init"
+msgstr "init가 생성한 Neo4j 제약/인덱스 삭제"
+
+msgid "Run DAG Manager gRPC/HTTP services"
+msgstr "DAG Manager gRPC/HTTP 서비스를 실행"
+
+msgid "Path to configuration file"
+msgstr "구성 파일 경로"
+
+msgid "DAG Manager configuration loaded from %s (--config)"
+msgstr "DAG Manager 구성을 %s에서 불러왔습니다 (--config)"
+
+msgid "DAG Manager configuration loaded from %s"
+msgstr "DAG Manager 구성을 %s에서 불러왔습니다"
+
+msgid "DAG Manager configuration file not provided; using built-in defaults"
+msgstr "DAG Manager 구성 파일이 제공되지 않아 기본값을 사용합니다"
+
+msgid "DAG Manager configuration file %s does not define the 'dagmanager' section."
+msgstr "DAG Manager 구성 파일 %s에 'dagmanager' 섹션이 없습니다."
+
+msgid "Expose DAG Manager metrics"
+msgstr "DAG Manager 메트릭을 노출"
+
+msgid "Port to expose metrics on"
+msgstr "메트릭을 노출할 포트"
+
+# taglint tool
+msgid "Lint TAGS dictionaries"
+msgstr "TAGS 사전을 검사합니다"
+
+msgid "Files or directories to lint"
+msgstr "검사할 파일 또는 디렉터리"
+
+msgid "Attempt to fix issues"
+msgstr "문제를 자동으로 수정합니다"
+
+msgid "{key}: lists are not allowed"
+msgstr "{key}: 목록은 허용되지 않습니다"
+
+msgid "interval value '{value}' is invalid"
+msgstr "interval 값 '{value}'이(가) 잘못되었습니다"
+
+msgid "interval '{value}' not normalized (expected {expected})"
+msgstr "interval '{value}'이(가) 정규화되지 않았습니다 (기대값 {expected})"
+
+msgid "scope '{value}' is invalid"
+msgstr "scope '{value}'이(가) 잘못되었습니다"
+
+msgid "{key}: keys and string values must be lowercase"
+msgstr "{key}: 키와 문자열 값은 소문자여야 합니다"
+
+msgid "missing required key: {key}"
+msgstr "필수 키 누락: {key}"
+
+msgid "missing TAGS dict"
+msgstr "TAGS 사전이 없습니다"
+
+msgid "{path}: {message}"
+msgstr "{path}: {message}"
+
+msgid "{path}: error"
+msgstr "{path}: 오류"
+
+msgid "show this help message and exit"
+msgstr "이 도움말을 표시하고 종료합니다"
+
+msgid "usage: "
+msgstr "사용법: "
+
+msgid "positional arguments:"
+msgstr "위치 인수:"
+
+msgid "options:"
+msgstr "옵션:"
+
+msgid "optional arguments:"
+msgstr "선택적 인수:"
+
