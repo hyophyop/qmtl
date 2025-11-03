@@ -26,6 +26,7 @@ from .order_book_obi import (
     priority_index,
 )
 from .obi_regime import obi_regime_node
+from .microprice_priority import microprice_imbalance
 # Optional alpha indicator; may not be available in all deployments
 try:  # pragma: no cover - fallback for missing alpha module
     from .gap_amplification_alpha import gap_amplification_node
@@ -59,6 +60,7 @@ __all__ = [
     "order_book_obiL_and_slope",
     "priority_index",
     "obi_regime_node",
+    "microprice_imbalance",
     "alpha_indicator_with_history",
 ]
 

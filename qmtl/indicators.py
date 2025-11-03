@@ -1,5 +1,7 @@
-"""Indicators module alias for qmtl.runtime.indicators"""
+"""Indicators module alias for :mod:`qmtl.runtime.indicators`."""
 
 from qmtl.runtime.indicators import *  # noqa: F403,F401
+from qmtl.runtime.indicators import __all__ as _runtime_all
 
-__all__ = []  # Will be populated by the import above
+__all__ = list(_runtime_all)
+
