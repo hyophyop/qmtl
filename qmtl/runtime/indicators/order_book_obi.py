@@ -16,6 +16,7 @@ __all__ = [
     "order_book_imbalance_levels",
     "order_book_depth_slope",
     "order_book_obiL_and_slope",
+    "priority_index",
 ]
 
 
@@ -136,6 +137,53 @@ def _compute_obi(
     return (bid_total - ask_total) / denominator
 
 
+def _is_sequence(value: Any) -> bool:
+    """Return ``True`` when *value* is a non-string sequence."""
+
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+
+
+def _normalize_priority_value(rank: Any, size: Any) -> float | None:
+    """Return normalized priority for a single queue entry."""
+
+    try:
+        rank_value = float(rank)
+        size_value = float(size)
+    except (TypeError, ValueError):
+        return None
+
+    if size_value <= 0:
+        return None
+
+    capped_rank = max(0.0, min(rank_value, size_value))
+    normalized = 1.0 - (capped_rank / size_value)
+    return max(0.0, min(1.0, normalized))
+
+
+def _normalize_priority(rank: Any, size: Any) -> float | list[float | None] | None:
+    """Normalize queue priority for scalar or sequence inputs."""
+
+    rank_is_seq = _is_sequence(rank)
+    size_is_seq = _is_sequence(size)
+
+    if rank_is_seq or size_is_seq:
+        if not (rank_is_seq and size_is_seq):
+            return None
+
+        try:
+            rank_list = list(rank)  # type: ignore[arg-type]
+            size_list = list(size)  # type: ignore[arg-type]
+        except TypeError:
+            return None
+
+        if len(rank_list) != len(size_list):
+            return None
+
+        return [_normalize_priority_value(r, s) for r, s in zip(rank_list, size_list)]
+
+    return _normalize_priority_value(rank, size)
+
+
 def order_book_obi(
     source: Node,
     *,
@@ -178,6 +226,42 @@ def order_book_obi(
         name=name or "order_book_obi",
         interval=source.interval,
         period=max(1, period),
+    )
+
+
+def priority_index(source: Node, *, name: str | None = None) -> Node:
+    """Return a node computing normalized queue priority metadata.
+
+    Snapshots emitted by ``source`` **must** provide ``queue_rank`` and
+    ``queue_size`` keys. The values can be scalars or sequences with matching
+    lengths. Ranks are assumed to be zero-indexed (``0`` means the front of the
+    queue), and sizes must be positive. Missing keys raise ``ValueError``
+    exceptions. When rank or size values cannot be parsed, or sizes are
+    non-positive, the node returns ``None`` (or per-entry ``None`` values for
+    batched inputs).
+    """
+
+    def compute(view: CacheView) -> float | list[float | None] | None:
+        snapshot = _extract_snapshot(view, source)
+        if snapshot is None:
+            return None
+
+        if "queue_rank" not in snapshot:
+            raise ValueError("priority_index requires 'queue_rank' in the snapshot")
+        if "queue_size" not in snapshot:
+            raise ValueError("priority_index requires 'queue_size' in the snapshot")
+
+        rank = snapshot["queue_rank"]
+        size = snapshot["queue_size"]
+
+        return _normalize_priority(rank, size)
+
+    return Node(
+        input=source,
+        compute_fn=compute,
+        name=name or "priority_index",
+        interval=source.interval,
+        period=source.period or 1,
     )
 
 
