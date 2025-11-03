@@ -193,7 +193,7 @@ def priority_index(source: Node, *, name: str | None = None) -> Node:
     """
 
     def compute(view: CacheView) -> float | list[float | None] | None:
-        snapshot = _extract_snapshot(view, source)
+        snapshot = extract_order_book_snapshot(view, source)
         if snapshot is None:
             return None
 
