@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.node import Node
 
 from .ema import ema
+from .helpers import (
+    extract_order_book_snapshot,
+    iter_order_book_level_sizes,
+    sum_order_book_levels,
+)
 
 __all__ = [
     "order_book_obi",
@@ -17,60 +22,6 @@ __all__ = [
     "order_book_depth_slope",
     "order_book_obiL_and_slope",
 ]
-
-
-def _extract_snapshot(view: CacheView, source: Node) -> Mapping[str, Any] | None:
-    """Return the latest order-book snapshot from ``source`` if available."""
-
-    series = view[source][source.interval]
-    latest = series.latest()
-    if latest is None:
-        return None
-
-    snapshot = latest[1]
-    if snapshot is None or not isinstance(snapshot, Mapping):
-        return None
-    return snapshot
-
-
-def _normalize_level_size(level: Any) -> float | None:
-    """Extract the size component from a level entry."""
-
-    if isinstance(level, (list, tuple)):
-        if not level:
-            return None
-        raw_size = level[1] if len(level) > 1 else level[0]
-    else:
-        raw_size = level
-    try:
-        return float(raw_size)
-    except (TypeError, ValueError):
-        return None
-
-
-def _iter_level_sizes(levels_data: Sequence[Any] | None, levels: int) -> list[float]:
-    """Return parsed sizes for up to ``levels`` order-book entries."""
-
-    if not levels_data or levels <= 0:
-        return []
-
-    values: list[float] = []
-    for level in levels_data:
-        if len(values) >= levels:
-            break
-        size = _normalize_level_size(level)
-        if size is None:
-            continue
-        values.append(size)
-    return values
-
-
-def _sum_levels(levels_data: Sequence[Any] | None, levels: int) -> float:
-    """Return the summed depth over ``levels`` entries from ``levels_data``."""
-
-    if levels <= 0:
-        return 0.0
-    return sum(_iter_level_sizes(levels_data, levels))
 
 
 def _compute_linear_slope(values: Sequence[float]) -> float:
@@ -105,7 +56,7 @@ def _depth_slope(levels_data: Sequence[Any] | None, levels: int, method: str) ->
             f"Unsupported depth slope method '{method}'. Only 'linear' is available."
         )
 
-    sizes = _iter_level_sizes(levels_data, levels)
+    sizes = iter_order_book_level_sizes(levels_data, levels)
     if not sizes:
         return 0.0
 
@@ -126,8 +77,8 @@ def _compute_obi(
 ) -> float:
     """Helper returning the normalized imbalance across ``levels`` tiers."""
 
-    bid_total = _sum_levels(bids, levels)
-    ask_total = _sum_levels(asks, levels)
+    bid_total = sum_order_book_levels(bids, levels)
+    ask_total = sum_order_book_levels(asks, levels)
 
     if bid_total == 0.0 and ask_total == 0.0:
         return 0.0
@@ -163,7 +114,7 @@ def order_book_obi(
     """
 
     def compute(view: CacheView) -> float | None:
-        snapshot = _extract_snapshot(view, source)
+        snapshot = extract_order_book_snapshot(view, source)
         if snapshot is None:
             return None
 
@@ -213,7 +164,7 @@ def order_book_imbalance_levels(
     """Return an ``OBI_L`` node aggregating the top ``levels`` depth tiers."""
 
     def compute(view: CacheView) -> float | None:
-        snapshot = _extract_snapshot(view, source)
+        snapshot = extract_order_book_snapshot(view, source)
         if snapshot is None:
             return None
 
@@ -239,7 +190,7 @@ def order_book_depth_slope(
     """Return a node emitting the bid/ask depth slope across ``levels`` tiers."""
 
     def compute(view: CacheView) -> dict[str, float] | None:
-        snapshot = _extract_snapshot(view, source)
+        snapshot = extract_order_book_snapshot(view, source)
         if snapshot is None:
             return None
 
@@ -272,7 +223,7 @@ def order_book_obiL_and_slope(
     """Return a combined node exposing ``OBI_L`` and depth slope features."""
 
     def compute(view: CacheView) -> dict[str, float] | None:
-        snapshot = _extract_snapshot(view, source)
+        snapshot = extract_order_book_snapshot(view, source)
         if snapshot is None:
             return None
 
