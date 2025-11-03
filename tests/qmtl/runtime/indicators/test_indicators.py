@@ -26,6 +26,7 @@ from qmtl.runtime.indicators import (
     rough_bergomi,
     stoch_rsi,
     kdj,
+    poa,
 )
 
 
@@ -209,3 +210,45 @@ def test_kdj_compute():
     view = CacheView(data)
     result = node.compute_fn(view)
     assert result["K"] == result["D"] == result["J"]
+
+
+def test_poa_positive_slippage_raw_ratio():
+    fill = SourceNode(interval="1s", period=1, config={"id": "fill"})
+    arrival = SourceNode(interval="1s", period=1, config={"id": "arrival"})
+    node = poa(fill, arrival, normalize="raw")
+    data = {
+        fill.node_id: {1: [(0, 101.5)]},
+        arrival.node_id: {1: [(0, 100.0)]},
+    }
+    view = CacheView(data)
+    result = node.compute_fn(view)
+    assert result == {"abs_slippage": 1.5, "rel_slippage": 0.015}
+
+
+def test_poa_negative_slippage_bps():
+    fill = SourceNode(interval="1s", period=1, config={"id": "fill"})
+    arrival = SourceNode(interval="1s", period=1, config={"id": "arrival"})
+    node = poa(fill, arrival, normalize="bps")
+    data = {
+        fill.node_id: {1: [(0, 99.0)]},
+        arrival.node_id: {1: [(0, 100.0)]},
+    }
+    view = CacheView(data)
+    result = node.compute_fn(view)
+    assert result == {"abs_slippage": -1.0, "rel_slippage": -100.0}
+
+
+def test_poa_missing_or_zero_arrival():
+    fill = SourceNode(interval="1s", period=1, config={"id": "fill"})
+    arrival = SourceNode(interval="1s", period=1, config={"id": "arrival"})
+    node = poa(fill, arrival)
+    data_missing = {
+        fill.node_id: {1: [(0, 100.0)]},
+        arrival.node_id: {1: []},
+    }
+    data_zero = {
+        fill.node_id: {1: [(0, 100.0)]},
+        arrival.node_id: {1: [(0, 0.0)]},
+    }
+    assert node.compute_fn(CacheView(data_missing)) is None
+    assert node.compute_fn(CacheView(data_zero)) is None

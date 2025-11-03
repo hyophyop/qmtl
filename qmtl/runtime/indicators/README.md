@@ -72,6 +72,20 @@ logic when upstream noise is excessive.
 nonlinear alpha value combining momentum and mean-reversion effects driven by
 price overshoots and volume surprises.
 
+## Price over arrival (POA)
+
+`poa` compares realized fill prices against the arrival reference price to
+quantify execution quality. Feed it any two price streams (typically the actual
+fill and the decision-time arrival quote) and it emits a mapping with:
+
+- `abs_slippage`: the raw price difference `fill - arrival`.
+- `rel_slippage`: the relative slippage. By default this is returned as a raw
+  ratio (e.g. `0.0015` for 15 bps). Pass ``normalize="bps"`` to express the
+  relative component directly in basis points.
+
+The node returns `None` when either side is missing or the arrival price is
+zero, allowing downstream analytics to handle data gaps explicitly.
+
 ## Custom indicators with history
 
 Wrap any function returning an ``{"alpha": value}`` mapping with
