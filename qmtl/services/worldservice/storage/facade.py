@@ -265,6 +265,35 @@ class Storage:
                 best_entry = value
         return dict(best_entry) if best_entry else None
 
+    async def record_rebalance_plan(self, payload: Dict[str, Any]) -> None:
+        """Record a rebalancing plan into audit logs per world.
+
+        Expected payload shape:
+        {
+            "per_world": { world_id: { ... plan ... } },
+            "global_deltas": [ {symbol, delta_qty, venue?}, ... ],
+        }
+        """
+        per_world = dict(payload.get("per_world", {}))
+        for wid, plan in per_world.items():
+            self._audit.append(
+                wid,
+                {
+                    "event": "rebalancing_planned",
+                    "world_id": wid,
+                    "plan": plan,
+                },
+            )
+        # Also append a summary entry under a virtual world id 'GLOBAL' for easy retrieval
+        self._audit.append(
+            "GLOBAL",
+            {
+                "event": "rebalancing_planned_global",
+                "per_world_ids": sorted(per_world.keys()),
+                "global_deltas": payload.get("global_deltas", []),
+            },
+        )
+
     async def upsert_world_node(
         self,
         world_id: str,

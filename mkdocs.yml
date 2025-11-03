@@ -62,6 +62,7 @@ nav:
       - Seamless Stack Templates: operations/seamless_stack.md
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md
+      - Rebalancing Execution: operations/rebalancing_execution.md
       - Schema Registry Governance: operations/schema_registry_governance.md
       - Risk Management: operations/risk_management.md
       - Timing Controls: operations/timing_controls.md
@@ -81,6 +82,7 @@ nav:
       - Schemas: reference/schemas.md
       - Templates: reference/templates.md
       - Enhanced Validation: reference/enhanced_validation.md
+      - Intent API: reference/intent.md
       - Node Schema Validation: reference/node_schema_validation.md
       - Node Identity Validation: reference/node_validation.md
       - Backtest Validation: reference/backtest_validation.md
@@ -103,6 +105,7 @@ nav:
       - Spec: world/world.md
       - Realm Terminology Evaluation: world/realm_rename_eval.md
       - Policy Engine: world/policy_engine.md
+      - Centralized Rebalancing: world/rebalancing.md
   - Archive:
       - Overview: archive/README.md
       - CCXT × Seamless Legacy Audit: archive/ccxt-seamless-legacy-audit.md

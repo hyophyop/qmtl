@@ -824,6 +824,23 @@ class PersistentStorage:
             return None
         return json.loads(row[0])
 
+    async def record_rebalance_plan(self, payload: Dict[str, Any]) -> None:
+        """Record a rebalancing plan into audit logs per world (best-effort)."""
+        per_world = dict(payload.get("per_world", {}))
+        for wid, plan in per_world.items():
+            await self._append_audit(
+                wid,
+                {"event": "rebalancing_planned", "world_id": wid, "plan": plan},
+            )
+        await self._append_audit(
+            "GLOBAL",
+            {
+                "event": "rebalancing_planned_global",
+                "per_world_ids": sorted(per_world.keys()),
+                "global_deltas": payload.get("global_deltas", []),
+            },
+        )
+
     def _compute_eval_key(
         self,
         *,

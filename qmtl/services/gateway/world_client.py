@@ -379,5 +379,17 @@ class WorldServiceClient:
             json=payload,
         )
 
+    async def post_rebalance_plan(self, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
+        """Request a multi-world rebalance plan from WorldService.
+
+        This proxies to the WorldService endpoint at ``/rebalancing/plan``.
+        """
+        return await self._request_json(
+            "POST",
+            "/rebalancing/plan",
+            headers=headers,
+            json=payload,
+        )
+
 
 __all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]

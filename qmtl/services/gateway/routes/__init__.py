@@ -18,6 +18,7 @@ from .observability import create_router as create_observability_router
 from .status import create_router as create_status_router
 from .strategies import create_router as create_strategies_router
 from .worlds import create_router as create_worlds_router
+from .rebalancing import create_router as create_rebalancing_router
 
 
 def create_api_router(
@@ -49,6 +50,7 @@ def create_api_router(
     router.include_router(create_status_router(deps))
     router.include_router(create_strategies_router(deps))
     router.include_router(create_worlds_router(deps))
+    router.include_router(create_rebalancing_router(deps))
     router.include_router(create_fills_router(deps))
     router.include_router(create_observability_router())
     return router
