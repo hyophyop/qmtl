@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a Participation of Volume (POV) indicator with helper utilities for
+  aggregating recent cache samples.
 - Added contract tests covering all registered Node Set recipes to verify chain length, descriptors, modes, and portfolio/weight injection.
 - Updated exchange Node Set architecture and CCXT guides to document the NodeSetRecipe/RecipeAdapterSpec workflow and reference the new tests.
 - Added logistic order-book imbalance weights, micro-price transforms, and supporting documentation/examples for microstructure signals.

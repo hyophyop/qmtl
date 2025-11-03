@@ -14,6 +14,7 @@ __all__ = [
     "iter_order_book_level_sizes",
     "sum_order_book_levels",
     "best_order_book_level",
+    "sum_recent_values",
 ]
 
 
@@ -105,6 +106,32 @@ def sum_order_book_levels(levels_data: Sequence[Any] | None, levels: int) -> flo
     if levels <= 0:
         return 0.0
     return sum(iter_order_book_level_sizes(levels_data, levels))
+
+
+def sum_recent_values(view: CacheView, node: Node, period: int) -> float | None:
+    """Return the sum of the latest ``period`` values emitted by ``node``.
+
+    The helper reads the data from ``view`` respecting the node's interval and
+    ensures that ``period`` samples exist and are numerically coercible. When
+    values are missing, malformed, or cannot be converted to ``float`` the
+    helper returns ``None`` to signal that downstream indicators should skip
+    the computation for that bar.
+    """
+
+    if period <= 0:
+        return 0.0
+
+    series = view[node][node.interval][-period:]
+    if len(series) < period:
+        return None
+
+    total = 0.0
+    for _, value in series:
+        numeric = _to_float(value)
+        if numeric is None:
+            return None
+        total += numeric
+    return total
 
 
 def alpha_indicator_with_history(

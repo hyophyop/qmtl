@@ -65,6 +65,34 @@ it with a raw or smoothed imbalance node and tune ``hi``/``lo`` thresholds,
 latency. Set ``ema_span`` to apply lightweight smoothing before the regime
 logic when upstream noise is excessive.
 
+## Participation of Volume (POV)
+
+`pov(executed_volume, market_volume, period, target=None)` aggregates the
+latest `period` samples from the executed and market volume feeds and returns a
+mapping containing the realized participation ratio. If ``target`` is supplied
+the mapping also includes ``"target_deviation"`` which expresses the difference
+between the realized participation and the requested target ratio.
+
+- `executed_volume`: node emitting the strategy's own fills.
+- `market_volume`: node emitting aggregate market volume for the same interval
+  as `executed_volume`.
+- `period`: number of samples to aggregate from each feed.
+- `target` *(optional)*: desired participation ratio. When provided the output
+  includes ``participation - target``.
+
+Both input nodes must retain at least ``period`` samples in their cache. The
+indicator returns ``None`` when either feed lacks sufficient data, contains
+non-numeric values, or when the aggregated market volume equals zero.
+
+```python
+from qmtl.runtime.indicators import pov
+
+strategy_exec = build_execution_node(...)
+market_volume = build_market_volume_node(...)
+
+pov_node = pov(strategy_exec, market_volume, period=20, target=0.15)
+```
+
 ## Acceptable price band alpha
 
 `acceptable_price_band_node` adapts a dynamic mean and volatility band using

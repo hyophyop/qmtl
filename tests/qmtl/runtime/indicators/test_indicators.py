@@ -26,6 +26,7 @@ from qmtl.runtime.indicators import (
     rough_bergomi,
     stoch_rsi,
     kdj,
+    pov,
 )
 
 
@@ -209,3 +210,41 @@ def test_kdj_compute():
     view = CacheView(data)
     result = node.compute_fn(view)
     assert result["K"] == result["D"] == result["J"]
+
+
+def test_pov_participation_ratio():
+    executed = SourceNode(interval="1s", period=3, config={"id": "exec"})
+    market = SourceNode(interval="1s", period=3, config={"id": "mkt"})
+    node = pov(executed, market, period=2)
+    data = {
+        executed.node_id: {1: [(0, 0.5), (1, 1.5), (2, 1.5)]},
+        market.node_id: {1: [(0, 2), (1, 2), (2, 2)]},
+    }
+    view = CacheView(data)
+    result = node.compute_fn(view)
+    assert result == {"participation": 0.75}
+
+
+def test_pov_handles_zero_market_volume():
+    executed = SourceNode(interval="1s", period=2, config={"id": "exec"})
+    market = SourceNode(interval="1s", period=2, config={"id": "mkt"})
+    node = pov(executed, market, period=2)
+    data = {
+        executed.node_id: {1: [(0, 1), (1, 1)]},
+        market.node_id: {1: [(0, 0), (1, 0)]},
+    }
+    view = CacheView(data)
+    assert node.compute_fn(view) is None
+
+
+def test_pov_includes_target_deviation():
+    executed = SourceNode(interval="1s", period=2, config={"id": "exec"})
+    market = SourceNode(interval="1s", period=2, config={"id": "mkt"})
+    node = pov(executed, market, period=2, target=0.5)
+    data = {
+        executed.node_id: {1: [(0, 1), (1, 1)]},
+        market.node_id: {1: [(0, 2), (1, 2)]},
+    }
+    view = CacheView(data)
+    result = node.compute_fn(view)
+    assert result == {"participation": 0.5, "target_deviation": 0.0}
