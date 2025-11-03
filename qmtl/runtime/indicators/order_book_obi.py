@@ -135,6 +135,24 @@ def _normalize_priority(rank: Any, size: Any) -> float | list[float | None] | No
     return _normalize_priority_value(rank, size)
 
 
+def _extract_snapshot(view: CacheView, source: Node) -> dict[str, Any] | None:
+    """Return the most recent snapshot for ``source`` from ``view``."""
+
+    try:
+        series = view[source][source.interval]
+    except (KeyError, AttributeError, TypeError):
+        return None
+
+    latest = series.latest()
+    if not latest:
+        return None
+
+    _, payload = latest
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
 def order_book_obi(
     source: Node,
     *,

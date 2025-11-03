@@ -26,7 +26,7 @@ from .order_book_obi import (
     priority_index,
 )
 from .obi_regime import obi_regime_node
-from .microprice_priority import microprice_imbalance
+from .microprice_priority import microprice_imbalance, conditional_entry_filter
 # Optional alpha indicator; may not be available in all deployments
 try:  # pragma: no cover - fallback for missing alpha module
     from .gap_amplification_alpha import gap_amplification_node
@@ -61,6 +61,7 @@ __all__ = [
     "priority_index",
     "obi_regime_node",
     "microprice_imbalance",
+    "conditional_entry_filter",
     "alpha_indicator_with_history",
 ]
 
