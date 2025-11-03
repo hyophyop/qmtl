@@ -1,3 +1,5 @@
+import pytest
+
 from qmtl.runtime.indicators import sma
 from qmtl.runtime.sdk.node import SourceNode
 from qmtl.runtime.sdk.cache_view import CacheView
@@ -26,6 +28,7 @@ from qmtl.runtime.indicators import (
     rough_bergomi,
     stoch_rsi,
     kdj,
+    twap,
 )
 
 
@@ -96,6 +99,34 @@ def test_vwap_compute():
     }
     view = CacheView(data)
     assert node.compute_fn(view) == 2.25
+
+
+def test_twap_compute():
+    price = SourceNode(interval="1s", period=5, config={"id": "price"})
+    node = twap(price, period=3)
+
+    uniform = {
+        price.node_id: {1: [(0, 1.0), (1, 3.0), (2, 5.0), (3, 7.0)]}
+    }
+    uniform_view = CacheView(uniform)
+    assert node.compute_fn(uniform_view) == pytest.approx(3.0)
+
+    irregular = {
+        price.node_id: {1: [(0, 10.0), (1, 20.0), (3, 40.0), (6, 80.0)]}
+    }
+    irregular_view = CacheView(irregular)
+    expected_irregular = (10.0 * 1 + 20.0 * 2 + 40.0 * 3) / (1 + 2 + 3)
+    assert node.compute_fn(irregular_view) == pytest.approx(expected_irregular)
+
+    insufficient = {price.node_id: {1: [(0, 1.0), (1, 2.0), (2, 3.0)]}}
+    insufficient_view = CacheView(insufficient)
+    assert node.compute_fn(insufficient_view) is None
+
+    zero_weight = {
+        price.node_id: {1: [(0, 1.0), (0, 2.0), (0, 3.0), (0, 4.0)]}
+    }
+    zero_view = CacheView(zero_weight)
+    assert node.compute_fn(zero_view) is None
 
 
 def test_anchored_vwap_compute():

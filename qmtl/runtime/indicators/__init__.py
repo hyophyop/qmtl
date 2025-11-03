@@ -13,6 +13,7 @@ from .keltner_channel import keltner_channel
 from .obv import obv
 from .vwap import vwap
 from .anchored_vwap import anchored_vwap
+from .twap import twap
 from .kalman_trend import kalman_trend
 from .rough_bergomi import rough_bergomi
 from .stoch_rsi import stoch_rsi
@@ -47,6 +48,7 @@ __all__ = [
     "keltner_channel",
     "obv",
     "vwap",
+    "twap",
     "anchored_vwap",
     "kalman_trend",
     "rough_bergomi",
