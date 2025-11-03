@@ -14,6 +14,23 @@ from qmtl.runtime.indicators import sma
 from qmtl.runtime.indicators import acceptable_price_band_node
 ```
 
+## Time Weighted Average Price (TWAP)
+
+`twap` computes the time-weighted average of a price stream by pairing each
+sample with the elapsed time until the next observation. The node emits `None`
+when history is too short or all time gaps collapse to zero.
+
+```python
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.indicators import twap
+
+price_node = SourceNode(interval="1s", period=10)
+twap_node = twap(price_node, period=5)
+```
+
+The node respects the interval of its price input and retains ``period + 1``
+observations to cover the trailing ``period`` time spans.
+
 ## Order-book imbalance (OBI)
 
 `order_book_obi` consumes raw order-book snapshots containing bid and ask

@@ -14,6 +14,8 @@ __all__ = [
     "iter_order_book_level_sizes",
     "sum_order_book_levels",
     "best_order_book_level",
+    "weighted_average",
+    "timestamp_weighted_average",
 ]
 
 
@@ -105,6 +107,67 @@ def sum_order_book_levels(levels_data: Sequence[Any] | None, levels: int) -> flo
     if levels <= 0:
         return 0.0
     return sum(iter_order_book_level_sizes(levels_data, levels))
+
+
+def weighted_average(
+    series: Sequence[tuple[Any, Any]] | None,
+    weights: Sequence[Any] | None,
+) -> float | None:
+    """Return the weighted average for ``series`` using ``weights``.
+
+    The helper safely skips entries that cannot be converted to ``float`` and
+    ignores non-positive weights. ``None`` is returned when no valid
+    contributions remain or the total weight collapses to zero.
+    """
+
+    if not series or not weights:
+        return None
+
+    total = 0.0
+    total_weight = 0.0
+    for (_, raw_value), raw_weight in zip(series, weights):
+        value = _to_float(raw_value)
+        weight = _to_float(raw_weight)
+        if value is None or weight is None or weight <= 0:
+            continue
+        total += value * weight
+        total_weight += weight
+
+    if total_weight == 0:
+        return None
+    return total / total_weight
+
+
+def timestamp_weighted_average(series: Sequence[tuple[Any, Any]] | None) -> float | None:
+    """Return the time-weighted average over ``series``.
+
+    Adjacent timestamp differences supply the weights, aligning each value with
+    the following timestamp. When all gaps vanish or the sequence is shorter
+    than two entries the function emits ``None``.
+    """
+
+    if not series or len(series) < 2:
+        return None
+
+    aligned: list[tuple[Any, Any]] = []
+    weights: list[float] = []
+
+    for current, nxt in zip(series, series[1:]):
+        curr_ts, _ = current
+        next_ts, _ = nxt
+        delta = next_ts - curr_ts
+        if hasattr(delta, "total_seconds"):
+            delta = delta.total_seconds()
+        weight = _to_float(delta)
+        if weight is None or weight <= 0:
+            continue
+        aligned.append(current)
+        weights.append(weight)
+
+    if not aligned:
+        return None
+
+    return weighted_average(aligned, weights)
 
 
 def alpha_indicator_with_history(

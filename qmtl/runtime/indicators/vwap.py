@@ -3,6 +3,8 @@
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
 
+from .helpers import weighted_average
+
 
 def vwap(price: Node, volume: Node, period: int, *, name: str | None = None) -> Node:
     """Return a Node computing VWAP."""
@@ -12,11 +14,8 @@ def vwap(price: Node, volume: Node, period: int, *, name: str | None = None) -> 
         vols = view[volume][volume.interval][-period:]
         if len(prices) < period or len(vols) < period:
             return None
-        num = sum(p[1] * v[1] for p, v in zip(prices, vols))
-        den = sum(v[1] for v in vols)
-        if den == 0:
-            return None
-        return num / den
+        weights = [entry[1] for entry in vols]
+        return weighted_average(prices, weights)
 
     return Node(
         input=[price, volume],
