@@ -23,6 +23,7 @@ from .order_book_obi import (
     order_book_imbalance_levels,
     order_book_depth_slope,
     order_book_obiL_and_slope,
+    priority_index,
 )
 from .obi_regime import obi_regime_node
 # Optional alpha indicator; may not be available in all deployments
@@ -56,6 +57,7 @@ __all__ = [
     "order_book_imbalance_levels",
     "order_book_depth_slope",
     "order_book_obiL_and_slope",
+    "priority_index",
     "obi_regime_node",
     "alpha_indicator_with_history",
 ]
