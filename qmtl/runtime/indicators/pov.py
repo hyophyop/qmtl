@@ -44,9 +44,9 @@ def pov(
             result["target_deviation"] = participation - target
         return result
 
-    config: dict[str, float] = {}
+    config: dict[str, float] | None = None
     if target is not None:
-        config["target"] = target
+        config = {"target": target}
 
     return Node(
         input=[executed_volume, market_volume],
