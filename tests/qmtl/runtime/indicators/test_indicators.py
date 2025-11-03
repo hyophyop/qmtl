@@ -248,3 +248,13 @@ def test_pov_includes_target_deviation():
     view = CacheView(data)
     result = node.compute_fn(view)
     assert result == {"participation": 0.5, "target_deviation": 0.0}
+
+
+def test_pov_node_identity_includes_target():
+    executed = SourceNode(interval="1s", period=2, config={"id": "exec"})
+    market = SourceNode(interval="1s", period=2, config={"id": "mkt"})
+
+    lower_target = pov(executed, market, period=2, target=0.1)
+    higher_target = pov(executed, market, period=2, target=0.2)
+
+    assert lower_target.node_id != higher_target.node_id
