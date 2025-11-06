@@ -9,6 +9,7 @@ from ..rebalancing_executor import (
     OrderOptions,
     orders_from_world_plan,
     orders_from_strategy_deltas,
+    orders_from_symbol_deltas,
 )
 from ..routes.dependencies import GatewayDependencyProvider
 from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest
@@ -49,8 +50,9 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             )
             per_world_orders[wid] = orders
 
-        # 3) Shared account global netting (optional)
+        # 3) Shared account global netting (optional) or overlay mode
         shared_account = request.query_params.get("shared_account", "false").lower() in {"1", "true", "yes"}
+        mode = (payload.mode or 'scaling').lower() if hasattr(payload, 'mode') else 'scaling'
         orders_global: List[dict] | None = None
         if shared_account:
             global_deltas = plan_resp.get("global_deltas", [])
@@ -62,6 +64,17 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 })
                 for d in global_deltas
             ])
+        elif mode in ('overlay', 'hybrid'):
+            overlay_deltas = plan_resp.get("overlay_deltas", [])
+            if overlay_deltas:
+                orders_global = orders_from_symbol_deltas([
+                    type("_Delta", (), {
+                        "symbol": d.get("symbol"),
+                        "delta_qty": float(d.get("delta_qty", 0.0)),
+                        "venue": d.get("venue"),
+                    })
+                    for d in overlay_deltas
+                ])
 
         # 4) Optionally split into per-strategy orders when requested (query param)
         per_strategy = request.query_params.get("per_strategy", "false").lower() in {"1", "true", "yes"}

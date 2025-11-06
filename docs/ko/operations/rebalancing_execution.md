@@ -47,6 +47,10 @@ for payload in orders:
     - `shared_account=true|false` (기본 false, 전월드 넷팅 시 `orders_global` 포함)
   - 응답: `{ orders_per_world: { world_id: [order_dict...] }, orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
 
+모드 선택
+- 요청 바디에 `mode`를 지정하세요(`scaling` 기본, `overlay`, `hybrid`).
+- 오버레이/하이브리드 모드에서 `overlay_deltas`가 응답에 포함되며, 게이트웨이는 이를 `orders_global`로 변환합니다.
+
 공유계정 모드가 아닌 경우에는 **월드별** `per_world` 결과만 실행하고, `global_deltas`는 분석용으로만 사용하세요.
 
 {{ nav_links() }}

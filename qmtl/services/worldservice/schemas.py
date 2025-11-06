@@ -254,11 +254,21 @@ class MultiWorldRebalanceRequest(BaseModel):
     strategy_alloc_after_total: Dict[str, Dict[str, float]] | None = None
     min_trade_notional: float | None = None
     lot_size_by_symbol: Dict[str, float] | None = None
+    mode: str | None = None  # 'scaling' (default), 'overlay', or 'hybrid'
+    overlay: 'OverlayConfigModel' | None = None
 
 
 class MultiWorldRebalanceResponse(BaseModel):
     per_world: Dict[str, RebalancePlanModel]
     global_deltas: List[SymbolDeltaModel]
+    overlay_deltas: List[SymbolDeltaModel] | None = None
+
+
+class OverlayConfigModel(BaseModel):
+    instrument_by_world: Dict[str, str] | None = None
+    price_by_symbol: Dict[str, float] | None = None
+    min_order_notional: float | None = None
+
     execution_domain: str | None = None
     updated_at: str | None = None
     artifact: SeamlessArtifactPayload | None = None

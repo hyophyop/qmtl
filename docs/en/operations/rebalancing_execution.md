@@ -42,6 +42,10 @@ for payload in orders:
     - `shared_account=true|false` (default false; include `orders_global` using cross-world net deltas)
   - Response: `{ orders_per_world: { world_id: [order_dict...] }, orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
 
+Mode selection
+- Set `mode` in the request body (`scaling` default, `overlay`, `hybrid`).
+- In overlay/hybrid, the response includes `overlay_deltas` which the Gateway converts to `orders_global`.
+
 Use `per_world` for execution unless running in a shared-account mode; treat `global_deltas` as an analytical net view otherwise.
 
 {{ nav_links() }}

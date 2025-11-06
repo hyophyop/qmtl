@@ -17,6 +17,8 @@ from ..schemas import (
     SymbolDeltaModel,
 )
 from ..services import WorldService
+from . import rebalancing as _unused  # ensure package init
+from .overlay import OverlayPlanner
 from ..services import WorldService
 
 
@@ -74,7 +76,26 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
             SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
             for d in result.global_deltas
         ]
-        return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
+        overlay_deltas: List[SymbolDeltaModel] | None = None
+        mode = (payload.mode or 'scaling').lower()
+        if mode in ('overlay', 'hybrid') and payload.overlay is not None:
+            ov = OverlayPlanner()
+            od = ov.plan(
+                positions=_convert_positions(payload.positions),
+                world_alloc_before=payload.world_alloc_before,
+                world_alloc_after=payload.world_alloc_after,
+                overlay=payload.overlay,
+            )
+            overlay_deltas = [
+                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
+                for d in od
+            ]
+
+        return MultiWorldRebalanceResponse(
+            per_world=per_world,
+            global_deltas=global_deltas,
+            overlay_deltas=overlay_deltas,
+        )
 
     @router.post('/rebalancing/apply', response_model=MultiWorldRebalanceResponse)
     async def post_rebalance_apply(payload: MultiWorldRebalanceRequest) -> MultiWorldRebalanceResponse:
@@ -98,11 +119,28 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
             for d in result.global_deltas
         ]
 
+        # Compute overlay if requested
+        overlay_deltas: List[SymbolDeltaModel] | None = None
+        mode = (payload.mode or 'scaling').lower()
+        if mode in ('overlay', 'hybrid') and payload.overlay is not None:
+            ov = OverlayPlanner()
+            od = ov.plan(
+                positions=_convert_positions(payload.positions),
+                world_alloc_before=payload.world_alloc_before,
+                world_alloc_after=payload.world_alloc_after,
+                overlay=payload.overlay,
+            )
+            overlay_deltas = [
+                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
+                for d in od
+            ]
+
         # Persist a compact audit entry per world (and a summary)
         try:
             await service.store.record_rebalance_plan({
                 "per_world": {wid: per_world[wid].model_dump() for wid in per_world.keys()},
                 "global_deltas": [g.model_dump() for g in global_deltas],
+                **({"overlay_deltas": [d.model_dump() for d in overlay_deltas]} if overlay_deltas else {}),
             })
         except Exception:
             # Storage is best-effort for apply
@@ -126,6 +164,10 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
                 # Non-fatal if bus is unavailable
                 pass
 
-        return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
+        return MultiWorldRebalanceResponse(
+            per_world=per_world,
+            global_deltas=global_deltas,
+            overlay_deltas=overlay_deltas,
+        )
 
     return router
