@@ -50,6 +50,7 @@ Example:
   - Output includes aggregated `delta_qty` per (venue, symbol) and scaling meta
 - Default: `ProportionalRebalancer`
   - Implements the proportional rule with netting, dust suppression, and rounding
+  - Combination rule: when per-strategy allocations are provided on a total-equity basis, apply `g_s = after_total / before_total` directly (scale the strategy vector). If missing, cascade the world scale `g_w = world_after / world_before`.
 
 ## Multi-World Planning
 

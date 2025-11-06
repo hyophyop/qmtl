@@ -58,3 +58,25 @@ def test_multi_world_netting_global():
     # Global deltas could be 1 item (BTCUSDT/binance). We just check it's present.
     assert any(d.symbol == "BTCUSDT" for d in mplan.global_deltas)
 
+
+def test_strategy_override_world_scale_no_change_when_after_equals_before():
+    # World a downscales (0.3->0.2; gw=2/3) but strategy b increases share so
+    # that its total-equity allocation remains the same (before=0.1, after=0.1).
+    # Expected: b's positions are not scaled (factor=1.0), so delta ~ 0.
+    positions = [
+        PositionSlice(world_id="a", strategy_id="b", symbol="BTCUSDT", qty=1.0, mark=60000.0, venue="binance"),
+    ]
+
+    ctx = RebalanceContext(
+        total_equity=1_000_000.0,
+        world_id="a",
+        world_alloc_before=0.3,
+        world_alloc_after=0.2,
+        strategy_alloc_before={"b": 0.1},
+        strategy_alloc_after={"b": 0.1},  # stays at 10% of total equity
+        positions=positions,
+        min_trade_notional=0.0,
+        lot_size_by_symbol={"BTCUSDT": 0.001},
+    )
+    plan = ProportionalRebalancer().plan(ctx)
+    assert len(plan.deltas) == 0 or abs(plan.deltas[0].delta_qty) < 1e-6

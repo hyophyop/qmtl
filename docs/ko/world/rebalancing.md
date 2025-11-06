@@ -52,6 +52,7 @@ last_modified: 2025-11-04
 - 기본 구현: `ProportionalRebalancer`
   - 위 비례 스케일 규칙을 적용
   - 넷팅 및 소액 제거/라운딩 지원
+  - 결합 규칙: 전략 비중이 총자산 기준으로 주어지면 `g_s = after_total/ before_total`을 그대로 적용(전략 벡터 스케일). 전략 비중이 없으면 월드 스케일을 캐스케이드(`g_w = world_after/world_before`).
 
 ## 다중 월드 동시 계획(Multi‑World Planning)
 

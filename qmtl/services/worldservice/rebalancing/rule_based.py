@@ -38,9 +38,6 @@ class ProportionalRebalancer(Rebalancer):
         else:
             gw = ctx.world_alloc_after / ctx.world_alloc_before
 
-        # Determine if this is net up or down adjustment (affects combining rule)
-        downscale = gw < 1.0
-
         # Precompute strategy scaling
         gs: Dict[str, float] = {}
         for sid, after in ctx.strategy_alloc_after.items():
@@ -56,9 +53,12 @@ class ProportionalRebalancer(Rebalancer):
         venue_symbol_delta_notional: Dict[tuple[str | None, str], float] = {}
 
         for pos in ctx.positions:
+            # Scaling semantics: preserve each strategy sleeve's relative structure
+            # and apply a single scalar to its entire vector. When explicit
+            # strategy totals are provided, use the ratio (after/before).
+            # Otherwise, cascade the world factor.
             s_factor = gs.get(pos.strategy_id, gw)
-            eff = min(gw, s_factor) if downscale else max(gw, s_factor)
-            target_notional = pos.notional * eff
+            target_notional = pos.notional * s_factor
             delta_notional = target_notional - pos.notional
             key = (pos.venue, pos.symbol)
             venue_symbol_delta_notional[key] = venue_symbol_delta_notional.get(key, 0.0) + delta_notional
@@ -89,4 +89,3 @@ class ProportionalRebalancer(Rebalancer):
             scale_by_strategy=gs,
             deltas=deltas,
         )
-
