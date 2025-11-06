@@ -16,7 +16,9 @@ Differences
 
 Selecting in QMTL
 - Set `mode` in `POST /rebalancing/plan|apply`.
-  - `scaling` (default), `overlay`, or `hybrid` (both)
+  - `scaling` (default)
+  - `overlay` (not implemented — raises NotImplementedError)
+  - `hybrid` (not implemented — raises NotImplementedError)
 
 Overlay request extension
 ```json
@@ -30,22 +32,14 @@ Overlay request extension
 }
 ```
 
-Response extension
-- `overlay_deltas`: proxy instrument deltas sized for overlay mode
-- Scaling results remain in `per_world` and `global_deltas`
+Status
+- Overlay/Hybrid are currently disabled; calling them raises NotImplementedError. Scaling is supported.
 
 Gateway execution
-- `POST /rebalancing/execute` honors `mode` and `shared_account`:
-  - Scaling (default): `orders_per_world`
-  - Shared-account netting: `orders_global` (global_deltas)
-  - Overlay/hybrid: `orders_global` (overlay_deltas)
+- `POST /rebalancing/execute` honors `mode` and `shared_account`, but `overlay`/`hybrid` are not implemented and raise NotImplementedError.
 
 Pluggability
-- WorldService chooses an engine per mode.
-  - Scaling: `MultiWorldProportionalRebalancer`
-  - Overlay: `OverlayPlanner`
-  - Hybrid: both
-- API schemas stay stable, enabling module replacement or call-time selection.
+- Scaling engine is active (`MultiWorldProportionalRebalancer`).
+- Overlay/Hybrid have interfaces only and are disabled (raise NotImplementedError) until further design is complete.
 
 {{ nav_links() }}
-

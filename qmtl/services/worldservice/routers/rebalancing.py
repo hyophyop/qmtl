@@ -76,26 +76,12 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
             SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
             for d in result.global_deltas
         ]
-        overlay_deltas: List[SymbolDeltaModel] | None = None
         mode = (payload.mode or 'scaling').lower()
-        if mode in ('overlay', 'hybrid') and payload.overlay is not None:
-            ov = OverlayPlanner()
-            od = ov.plan(
-                positions=_convert_positions(payload.positions),
-                world_alloc_before=payload.world_alloc_before,
-                world_alloc_after=payload.world_alloc_after,
-                overlay=payload.overlay,
+        if mode in ('overlay', 'hybrid'):
+            raise NotImplementedError(
+                "Overlay mode is not implemented yet. Use mode='scaling'."
             )
-            overlay_deltas = [
-                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
-                for d in od
-            ]
-
-        return MultiWorldRebalanceResponse(
-            per_world=per_world,
-            global_deltas=global_deltas,
-            overlay_deltas=overlay_deltas,
-        )
+        return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
 
     @router.post('/rebalancing/apply', response_model=MultiWorldRebalanceResponse)
     async def post_rebalance_apply(payload: MultiWorldRebalanceRequest) -> MultiWorldRebalanceResponse:
@@ -119,21 +105,11 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
             for d in result.global_deltas
         ]
 
-        # Compute overlay if requested
-        overlay_deltas: List[SymbolDeltaModel] | None = None
         mode = (payload.mode or 'scaling').lower()
-        if mode in ('overlay', 'hybrid') and payload.overlay is not None:
-            ov = OverlayPlanner()
-            od = ov.plan(
-                positions=_convert_positions(payload.positions),
-                world_alloc_before=payload.world_alloc_before,
-                world_alloc_after=payload.world_alloc_after,
-                overlay=payload.overlay,
+        if mode in ('overlay', 'hybrid'):
+            raise NotImplementedError(
+                "Overlay mode is not implemented yet. Use mode='scaling'."
             )
-            overlay_deltas = [
-                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
-                for d in od
-            ]
 
         # Persist a compact audit entry per world (and a summary)
         try:
@@ -164,10 +140,6 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
                 # Non-fatal if bus is unavailable
                 pass
 
-        return MultiWorldRebalanceResponse(
-            per_world=per_world,
-            global_deltas=global_deltas,
-            overlay_deltas=overlay_deltas,
-        )
+        return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
 
     return router

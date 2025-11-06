@@ -65,16 +65,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 for d in global_deltas
             ])
         elif mode in ('overlay', 'hybrid'):
-            overlay_deltas = plan_resp.get("overlay_deltas", [])
-            if overlay_deltas:
-                orders_global = orders_from_symbol_deltas([
-                    type("_Delta", (), {
-                        "symbol": d.get("symbol"),
-                        "delta_qty": float(d.get("delta_qty", 0.0)),
-                        "venue": d.get("venue"),
-                    })
-                    for d in overlay_deltas
-                ])
+            raise NotImplementedError("Overlay mode is not implemented yet. Use mode='scaling'.")
 
         # 4) Optionally split into per-strategy orders when requested (query param)
         per_strategy = request.query_params.get("per_strategy", "false").lower() in {"1", "true", "yes"}

@@ -17,8 +17,8 @@ last_modified: 2025-11-04
 QMTL에서의 선택
 - `POST /rebalancing/plan|apply` 요청에 `mode`를 지정합니다.
   - `mode: scaling` (기본): 스케일링 플래너 사용
-  - `mode: overlay`: 오버레이 플래너 사용(하위 포지션 무개입)
-  - `mode: hybrid`: 두 결과를 함께 반환(overlay_deltas + per_world)
+  - `mode: overlay`: (현재 미구현 — 호출 시 NotImplementedError)
+  - `mode: hybrid`: (현재 미구현 — 호출 시 NotImplementedError)
 
 요청 확장(오버레이)
 ```json
@@ -32,22 +32,14 @@ QMTL에서의 선택
 }
 ```
 
-응답 확장
-- `overlay_deltas`: 오버레이 방식으로 산출된 대리 종목 델타(수량)
-- 스케일링 결과는 기존 필드(`per_world`, `global_deltas`)에 제공
+상태
+- 오버레이/하이브리드는 현재 설계 논의가 필요한 단계이며, 호출 시 NotImplementedError가 발생합니다. 스케일링만 지원합니다.
 
 게이트웨이 실행
-- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라
-  - 스케일링(기본): `orders_per_world` 생성
-  - 공유계정 전역 넷팅: `orders_global`(global_deltas)
-  - 오버레이/하이브리드: `orders_global`(overlay_deltas)
+- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라 동작하지만, `overlay`/`hybrid`는 현재 미구현(NotImplementedError)입니다.
 
 모듈 교체(플러그형)
-- WorldService는 모드에 따라 엔진을 선택해 호출합니다.
-  - Scaling: `MultiWorldProportionalRebalancer`
-  - Overlay: `OverlayPlanner`
-  - Hybrid: 둘 다 실행하여 결합 응답 구성
-- 동일 인터페이스(`MultiWorldRebalanceRequest/Response`)로 교체 가능하므로 API/클라이언트는 그대로 재사용됩니다.
+- 스케일링 엔진은 활성화되어 있습니다(`MultiWorldProportionalRebalancer`).
+- 오버레이/하이브리드는 인터페이스만 정의되었고 비활성(호출 시 NotImplementedError)입니다. 후속 설계 논의 후 활성화됩니다.
 
 {{ nav_links() }}
-
