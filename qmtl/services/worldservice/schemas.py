@@ -218,6 +218,57 @@ class SeamlessHistoryRequest(BaseModel):
     conformance_warnings: List[str] | None = None
     dataset_fingerprint: str | None = None
     as_of: str | None = None
+
+
+# --- Rebalancing (multi-world) payloads ---
+
+class PositionSliceModel(BaseModel):
+    world_id: str
+    strategy_id: str
+    symbol: str
+    qty: float
+    mark: float
+    venue: str | None = None
+
+
+class SymbolDeltaModel(BaseModel):
+    symbol: str
+    delta_qty: float
+    venue: str | None = None
+
+
+class RebalancePlanModel(BaseModel):
+    world_id: str
+    scale_world: float
+    scale_by_strategy: Dict[str, float]
+    deltas: List[SymbolDeltaModel]
+
+
+class MultiWorldRebalanceRequest(BaseModel):
+    total_equity: float
+    world_alloc_before: Dict[str, float]
+    world_alloc_after: Dict[str, float]
+    positions: List[PositionSliceModel]
+    # Optional strategy allocations (total-equity basis). If omitted, cascade world scale only.
+    strategy_alloc_before_total: Dict[str, Dict[str, float]] | None = None
+    strategy_alloc_after_total: Dict[str, Dict[str, float]] | None = None
+    min_trade_notional: float | None = None
+    lot_size_by_symbol: Dict[str, float] | None = None
+    mode: str | None = None  # 'scaling' (default), 'overlay', or 'hybrid'
+    overlay: OverlayConfigModel | None = None
+
+
+class MultiWorldRebalanceResponse(BaseModel):
+    per_world: Dict[str, RebalancePlanModel]
+    global_deltas: List[SymbolDeltaModel]
+    overlay_deltas: List[SymbolDeltaModel] | None = None
+
+
+class OverlayConfigModel(BaseModel):
+    instrument_by_world: Dict[str, str] | None = None
+    price_by_symbol: Dict[str, float] | None = None
+    min_order_notional: float | None = None
+
     execution_domain: str | None = None
     updated_at: str | None = None
     artifact: SeamlessArtifactPayload | None = None

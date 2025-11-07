@@ -89,5 +89,19 @@ class ControlBusProducer:
             body["sequence"] = sequence
         await self._publish("activation_updated", world_id, body)
 
+    async def publish_rebalancing_plan(
+        self,
+        world_id: str,
+        plan: Dict[str, Any],
+        *,
+        version: int = 1,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "world_id": world_id,
+            "plan": plan,
+            "version": version,
+        }
+        await self._publish("rebalancing_planned", world_id, payload)
+
 
 __all__ = ["ControlBusProducer"]
