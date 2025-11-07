@@ -255,7 +255,7 @@ class MultiWorldRebalanceRequest(BaseModel):
     min_trade_notional: float | None = None
     lot_size_by_symbol: Dict[str, float] | None = None
     mode: str | None = None  # 'scaling' (default), 'overlay', or 'hybrid'
-    overlay: 'OverlayConfigModel' | None = None
+    overlay: OverlayConfigModel | None = None
 
 
 class MultiWorldRebalanceResponse(BaseModel):
