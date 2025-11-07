@@ -35,11 +35,15 @@ def _hysteresis(prev: float | None, value: float, th: Thresholds) -> float:
         # stay long until exit falls below long_exit (if provided)
         if th.long_exit is not None and value < th.long_exit:
             return 0.0
-        return 1.0 if value >= th.short_enter else 1.0  # remain long unless inversion
+        if value <= th.short_enter:
+            return -1.0
+        return 1.0  # remain long unless inversion
     # prev < 0
     if th.short_exit is not None and value > th.short_exit:
         return 0.0
-    return -1.0 if value <= th.long_enter else -1.0
+    if value >= th.long_enter:
+        return 1.0
+    return -1.0
 
 
 class PositionTargetNode(ProcessingNode):
