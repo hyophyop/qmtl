@@ -107,3 +107,46 @@ async def test_persistent_storage_persists_state(tmp_path, fake_redis):
         assert overrides and overrides[0]["reason"] == "auto:block"
     finally:
         await storage2.close()
+
+
+@pytest.mark.asyncio
+async def test_persistent_storage_allocation_state(tmp_path, fake_redis):
+    db_path = tmp_path / "alloc.db"
+    storage = await PersistentStorage.create(
+        db_dsn=f"sqlite:///{db_path}",
+        redis_client=fake_redis,
+    )
+    try:
+        await storage.set_world_allocations(
+            {"w1": 0.55},
+            run_id="alloc-run",
+            etag="etag-1",
+            strategy_allocations={"w1": {"s1": 0.55}},
+        )
+        await storage.record_allocation_run(
+            "alloc-run",
+            "etag-1",
+            {"plan": {"per_world": {}, "global_deltas": []}, "request": {"world_alloc_after": {"w1": 0.55}}},
+            executed=False,
+        )
+    finally:
+        await storage.close()
+
+    storage2 = await PersistentStorage.create(
+        db_dsn=f"sqlite:///{db_path}",
+        redis_client=fake_redis,
+    )
+    try:
+        state = await storage2.get_world_allocation_state("w1")
+        assert state is not None
+        assert state.allocation == pytest.approx(0.55)
+        assert state.etag == "etag-1"
+        run = await storage2.get_allocation_run("alloc-run")
+        assert run is not None
+        assert run["etag"] == "etag-1"
+        assert run["payload"]["plan"]["per_world"] == {}
+        await storage2.mark_allocation_run_executed("alloc-run")
+        run_after = await storage2.get_allocation_run("alloc-run")
+        assert run_after is not None and run_after["executed"] is True
+    finally:
+        await storage2.close()
