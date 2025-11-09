@@ -47,6 +47,7 @@ def gateway_app_factory(
         app_kwargs: dict[str, Any] | None = None,
         client_kwargs: dict[str, Any] | None = None,
         world_client_kwargs: dict[str, Any] | None = None,
+        commit_log_writer: Any | None = None,
     ) -> AsyncIterator[GatewayTestContext]:
         transport = mock_world_service(handler)
         return gateway_app(
@@ -57,6 +58,7 @@ def gateway_app_factory(
             world_client_kwargs=world_client_kwargs,
             create_app_kwargs=app_kwargs,
             transport=transport,
+            commit_log_writer=commit_log_writer,
         )
 
     return factory

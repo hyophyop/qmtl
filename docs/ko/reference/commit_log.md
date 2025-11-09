@@ -40,3 +40,12 @@ gateway:
 | ``submitted_at`` | Gateway가 생성한 ISO-8601 타임스탬프 |
 
 다운스트림 컨슈머는 이 레코드를 사용해 제출 상태를 복구하거나 재큐잉 전에 클라이언트 메타데이터를 감사(audit)할 수 있습니다.
+
+## `gateway.rebalance` 주문 배치
+
+리밸런싱 제출도 커밋 로그를 재사용하며 튜플 형태는
+``["gateway.rebalance", <timestamp_ms>, <batch_id>, <payload>]`` 입니다.
+페이로드에는 배치 범위(`per_world`, `global`, `per_strategy`), 관련 월드 ID,
+생성된 주문 목록, reduce-only 비율 등의 메트릭이 포함됩니다. 공유 계정
+모드일 경우 `shared_account` 플래그가 `true`로 설정되어 다운스트림 서비스가
+공유 계정 배치를 구분할 수 있습니다.

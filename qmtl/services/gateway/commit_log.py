@@ -78,6 +78,49 @@ class CommitLogWriter:
                 logger.exception("Commit-log abort failed")
             raise
 
+    async def publish_rebalance_batch(
+        self,
+        batch_id: str,
+        payload: dict[str, Any],
+        *,
+        timestamp_ms: int | None = None,
+    ) -> None:
+        """Publish a rebalancing batch record to the commit log."""
+
+        ts_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000)
+        value = json.dumps(
+            [
+                "gateway.rebalance",
+                ts_ms,
+                batch_id,
+                payload,
+            ]
+        ).encode()
+        key = f"rebalance:{batch_id}".encode()
+        headers = [("rfp", runtime_fingerprint().encode())]
+        await self._producer.begin_transaction()
+        try:
+            try:
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                    headers=headers,
+                )
+            except TypeError:  # pragma: no cover - producer without header support
+                await self._producer.send_and_wait(
+                    self._topic,
+                    key=key,
+                    value=value,
+                )
+            await self._producer.commit_transaction()
+        except Exception:
+            try:
+                await self._producer.abort_transaction()
+            except Exception:  # pragma: no cover - double failure
+                logger.exception("Commit-log abort failed")
+            raise
+
     async def publish_bucket(
         self,
         bucket_ts: int,
