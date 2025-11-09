@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 import httpx
@@ -26,8 +26,11 @@ class GatewayTestContext:
     database: Database
 
 
+@dataclass(slots=True)
 class StubGatewayDatabase(Database):
-    """No-op database implementation for Gateway API tests."""
+    """In-memory database implementation for Gateway API tests."""
+
+    events: list[tuple[str, str]] = field(default_factory=list)
 
     async def insert_strategy(self, strategy_id: str, meta: dict | None) -> None:
         return None
@@ -39,7 +42,35 @@ class StubGatewayDatabase(Database):
         return None
 
     async def append_event(self, strategy_id: str, event: str) -> None:
+        self.events.append((strategy_id, event))
+
+
+@dataclass(slots=True)
+class _ProducerStub:
+    async def stop(self) -> None:  # pragma: no cover - simple stub
         return None
+
+
+@dataclass(slots=True)
+class StubCommitLogWriter:
+    """Commit log writer stub capturing published payloads."""
+
+    published: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    submissions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    _producer: _ProducerStub = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._producer = _ProducerStub()
+
+    async def publish_submission(
+        self, strategy_id: str, payload: dict[str, Any], *, timestamp_ms: int | None = None
+    ) -> None:
+        self.submissions.append((strategy_id, payload))
+
+    async def publish_rebalance_batch(
+        self, batch_id: str, payload: dict[str, Any], *, timestamp_ms: int | None = None
+    ) -> None:
+        self.published.append((batch_id, payload))
 
 
 @asynccontextmanager
@@ -54,6 +85,7 @@ async def gateway_app(
     world_client_kwargs: dict[str, Any] | None = None,
     create_app_kwargs: dict[str, Any] | None = None,
     transport: httpx.BaseTransport | None = None,
+    commit_log_writer: Any | None = None,
 ) -> AsyncIterator[GatewayTestContext]:
     """Spin up a Gateway ASGI app wired to a mocked WorldService client."""
 
@@ -71,6 +103,8 @@ async def gateway_app(
         "world_client": world_client,
         "enable_background": False,
     }
+    if commit_log_writer is not None:
+        kwargs["commit_log_writer"] = commit_log_writer
     if create_app_kwargs:
         kwargs.update(create_app_kwargs)
 

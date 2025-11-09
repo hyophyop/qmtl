@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Sequence
-from typing import Deque
+from typing import Any, Deque, Mapping
 import time
 
 from prometheus_client import (
@@ -206,6 +206,33 @@ sentinel_skew_seconds = _gauge(
     "sentinel_skew_seconds",
     "Seconds between sentinel weight update and observed traffic ratio",
     ["sentinel_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+# ---------------------------------------------------------------------------
+# Rebalancing execution metrics
+# ---------------------------------------------------------------------------
+rebalance_batches_submitted_total = _counter(
+    "rebalance_batches_submitted_total",
+    "Total number of rebalancing order batches submitted",
+    ["world_id", "scope"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+rebalance_last_batch_size = _gauge(
+    "rebalance_last_batch_size",
+    "Number of orders in the last submitted rebalancing batch",
+    ["world_id", "scope"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+rebalance_reduce_only_ratio = _gauge(
+    "rebalance_reduce_only_ratio",
+    "Reduce-only ratio for the last submitted rebalancing batch",
+    ["world_id", "scope"],
     test_value_attr="_vals",
     test_value_factory=dict,
 )
@@ -489,9 +516,31 @@ def collect_metrics() -> str:
     return generate_latest(global_registry).decode()
 
 
+def record_rebalance_submission(
+    world_id: str, scope: str, orders: Sequence[Mapping[str, Any]]
+) -> None:
+    """Record metrics for a submitted rebalancing batch."""
+
+    rebalance_batches_submitted_total.labels(world_id=world_id, scope=scope).inc()
+    total = len(orders)
+    rebalance_last_batch_size.labels(world_id=world_id, scope=scope).set(total)
+    reduce_only = sum(1 for order in orders if order.get("reduce_only"))
+    ratio = float(reduce_only) / float(total) if total else 0.0
+    rebalance_reduce_only_ratio.labels(world_id=world_id, scope=scope).set(ratio)
+
+
 def reset_metrics() -> None:
     """Reset all metric values for tests."""
     reset_registered_metrics(_REGISTERED_METRICS)
     _e2e_samples.clear()
     _worlds_samples.clear()
     _sentinel_weight_updates.clear()
+    for metric in (
+        rebalance_batches_submitted_total,
+        rebalance_last_batch_size,
+        rebalance_reduce_only_ratio,
+    ):
+        if hasattr(metric, "_metrics"):
+            metric._metrics.clear()  # type: ignore[attr-defined]
+        if hasattr(metric, "_vals"):
+            metric._vals.clear()  # type: ignore[attr-defined]

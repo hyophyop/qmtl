@@ -115,3 +115,25 @@ async def test_publish_submission_formats_payload() -> None:
     assert record[1] == 1690000000000
     assert record[2] == "strategy-1"
     assert record[3] == {"dag_hash": "h", "node_ids_crc32": 123}
+
+
+@pytest.mark.asyncio
+async def test_publish_rebalance_batch_formats_payload() -> None:
+    producer = FakeProducer()
+    writer = CommitLogWriter(producer, "commit-log")
+
+    await writer.publish_rebalance_batch(
+        "batch-1",
+        {"orders": [{"symbol": "BTCUSDT", "quantity": -0.5}]},
+        timestamp_ms=1690000005000,
+    )
+
+    assert producer.messages, "rebalance submission should emit a commit-log record"
+    topic, key, value = producer.messages[0]
+    assert topic == "commit-log"
+    assert key == b"rebalance:batch-1"
+    record = json.loads(value.decode())
+    assert record[0] == "gateway.rebalance"
+    assert record[1] == 1690000005000
+    assert record[2] == "batch-1"
+    assert record[3]["orders"][0]["symbol"] == "BTCUSDT"

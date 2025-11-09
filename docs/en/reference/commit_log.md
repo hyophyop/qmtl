@@ -54,3 +54,13 @@ The payload object contains all data required to replay an ingestion event:
 
 Downstream consumers can rely on this record to rebuild the submission state or
 audit client metadata before requeueing.
+
+## `gateway.rebalance` Order Batches
+
+Rebalancing submissions reuse the commit log via the tuple
+``["gateway.rebalance", <timestamp_ms>, <batch_id>, <payload>]``. Each payload
+contains the batch scope (`per_world`, `global`, or `per_strategy`), the
+associated world identifier, the generated orders, and derived metrics such as
+the reduce-only ratio. When shared-account netting is active the payload sets
+``shared_account`` to `true` so downstream services can distinguish shared
+orders from per-world execution flows.
