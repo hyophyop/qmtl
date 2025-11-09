@@ -18,7 +18,6 @@ from ..schemas import (
 )
 from ..services import WorldService
 from . import rebalancing as _unused  # ensure package init
-from .overlay import OverlayPlanner
 from ..services import WorldService
 
 

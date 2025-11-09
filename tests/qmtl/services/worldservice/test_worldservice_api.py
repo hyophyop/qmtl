@@ -1,11 +1,15 @@
 from pathlib import Path
 
+import asyncio
+
 import httpx
 import pytest
 
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 from qmtl.services.worldservice.config import WorldServiceServerConfig
+from qmtl.services.worldservice.schemas import AllocationUpsertRequest
+from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
 
 
@@ -64,8 +68,17 @@ class DummyBus(ControlBusProducer):
                     "requires_ack": requires_ack,
                     "sequence": sequence,
                 },
-            )
         )
+        )
+
+
+class DummyExecutor:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def execute(self, payload: dict) -> dict:
+        self.calls.append(dict(payload))
+        return {"ok": True}
 
 
 @pytest.mark.asyncio
@@ -197,6 +210,135 @@ async def test_apply_rejects_invalid_gating_policy():
 
             r = await client.post("/worlds/w2/apply", json=payload)
             assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_allocations_endpoint_execute_and_idempotency():
+    bus = DummyBus()
+    executor = DummyExecutor()
+    app = create_app(bus=bus, storage=Storage(), rebalance_executor=executor)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "w1"})
+            await client.post("/worlds", json={"id": "w2"})
+
+            payload = {
+                "run_id": "alloc-run-1",
+                "total_equity": 1000.0,
+                "world_allocations": {"w1": 0.6, "w2": 0.4},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                    },
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s2",
+                        "symbol": "ETH",
+                        "qty": 2.0,
+                        "mark": 50.0,
+                    },
+                    {
+                        "world_id": "w2",
+                        "strategy_id": "s3",
+                        "symbol": "BTC",
+                        "qty": 0.5,
+                        "mark": 100.0,
+                    },
+                ],
+                "strategy_alloc_after_total": {
+                    "w1": {"s1": 0.36, "s2": 0.24},
+                    "w2": {"s3": 0.4},
+                },
+                "execute": True,
+            }
+
+            resp = await client.post("/allocations", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["run_id"] == "alloc-run-1"
+            assert body["executed"] is True
+            assert executor.calls and executor.calls[0]["world_alloc_after"]["w1"] == 0.6
+
+            conflict = dict(payload)
+            conflict["world_allocations"] = {"w1": 0.7, "w2": 0.3}
+            r_conflict = await client.post("/allocations", json=conflict)
+            assert r_conflict.status_code == 409
+
+            repeat = dict(payload)
+            repeat["execute"] = False
+            r_repeat = await client.post("/allocations", json=repeat)
+            assert r_repeat.status_code == 200
+            assert r_repeat.json()["executed"] is True
+            assert len(executor.calls) == 1
+
+            followup = {
+                "run_id": "alloc-run-2",
+                "total_equity": 1000.0,
+                "world_allocations": {"w1": 0.7, "w2": 0.3},
+                "positions": payload["positions"],
+            }
+            r_follow = await client.post("/allocations", json=followup)
+            assert r_follow.status_code == 200
+            follow_body = r_follow.json()
+            scale = follow_body["per_world"]["w1"]["scale_by_strategy"]
+            assert scale["s1"] == pytest.approx(scale["s2"], rel=1e-3)
+            assert scale["s1"] == pytest.approx(0.7 / 0.6, rel=1e-3)
+
+
+@pytest.mark.asyncio
+async def test_allocation_lock_prevents_overlap():
+    service = WorldService(store=Storage())
+
+    base_payload = {
+        "total_equity": 100.0,
+        "world_allocations": {"w1": 0.5},
+        "positions": [
+            {
+                "world_id": "w1",
+                "strategy_id": "s1",
+                "symbol": "BTC",
+                "qty": 1.0,
+                "mark": 100.0,
+            }
+        ],
+        "strategy_alloc_after_total": {"w1": {"s1": 0.5}},
+    }
+
+    payload1 = AllocationUpsertRequest(run_id="lock-1", **base_payload)
+    payload2 = AllocationUpsertRequest(
+        run_id="lock-2",
+        total_equity=100.0,
+        world_allocations={"w1": 0.6},
+        positions=base_payload["positions"],
+    )
+
+    event_ready = asyncio.Event()
+    release = asyncio.Event()
+
+    original_set = service.store.set_world_allocations
+
+    async def blocking_set(*args, **kwargs):
+        event_ready.set()
+        await release.wait()
+        return await original_set(*args, **kwargs)
+
+    service.store.set_world_allocations = blocking_set  # type: ignore[assignment]
+
+    task1 = asyncio.create_task(service.upsert_allocations(payload1))
+    await event_ready.wait()
+    task2 = asyncio.create_task(service.upsert_allocations(payload2))
+    await asyncio.sleep(0.05)
+    assert not task2.done()
+    release.set()
+    result1 = await task1
+    result2 = await task2
+    assert result1.run_id == "lock-1"
+    assert result2.run_id == "lock-2"
 
 
 @pytest.mark.asyncio

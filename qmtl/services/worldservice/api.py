@@ -16,6 +16,7 @@ from .controlbus_producer import ControlBusProducer
 from .config import WorldServiceServerConfig
 from .routers import (
     create_activation_router,
+    create_allocations_router,
     create_bindings_router,
     create_policies_router,
     create_rebalancing_router,
@@ -122,6 +123,7 @@ def create_app(
     storage_factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = None,
     config: WorldServiceServerConfig | None = None,
     config_path: str | Path | None = None,
+    rebalance_executor: Any | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
@@ -134,7 +136,7 @@ def create_app(
             factory = _config_storage_factory(resolved_config)
 
     store = storage or Storage()
-    service = WorldService(store=store, bus=bus)
+    service = WorldService(store=store, bus=bus, rebalance_executor=rebalance_executor)
     storage_handle: StorageHandle | None = None
 
     @asynccontextmanager
@@ -161,6 +163,15 @@ def create_app(
                         await _maybe_await(close())
                     except Exception:  # pragma: no cover - defensive cleanup
                         logger.exception("Failed to close WorldService storage")
+            if rebalance_executor is not None:
+                closer = getattr(rebalance_executor, "aclose", None) or getattr(
+                    rebalance_executor, "close", None
+                )
+                if closer is not None:
+                    try:
+                        await _maybe_await(closer())
+                    except Exception:  # pragma: no cover - defensive cleanup
+                        logger.exception("Failed to close WorldService rebalance executor")
 
     app = FastAPI(lifespan=lifespan)
     app.state.apply_locks = service.apply_locks
@@ -172,6 +183,7 @@ def create_app(
     app.include_router(create_policies_router(service))
     app.include_router(create_bindings_router(service))
     app.include_router(create_activation_router(service))
+    app.include_router(create_allocations_router(service))
     app.include_router(create_rebalancing_router(service))
     app.include_router(create_validations_router(service))
     return app

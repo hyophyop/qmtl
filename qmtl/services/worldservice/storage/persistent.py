@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import aiosqlite
 import asyncpg
@@ -16,7 +16,7 @@ from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.worldservice.policy_engine import Policy
 
 from .constants import DEFAULT_EDGE_OVERRIDES
-from .models import WorldActivation
+from .models import AllocationRun, AllocationState, WorldActivation
 from .repositories import (
     _REASON_UNSET,
     _normalize_execution_domain,
@@ -271,6 +271,29 @@ class PersistentStorage:
                 updated_at TEXT NOT NULL,
                 payload JSON NOT NULL,
                 PRIMARY KEY (world_id, strategy_id)
+            )
+            """
+        )
+        await self._driver.execute(
+            """
+            CREATE TABLE IF NOT EXISTS world_allocations (
+                world_id TEXT PRIMARY KEY,
+                allocation REAL NOT NULL,
+                run_id TEXT,
+                etag TEXT,
+                strategy_alloc_total JSON,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        await self._driver.execute(
+            """
+            CREATE TABLE IF NOT EXISTS allocation_runs (
+                run_id TEXT PRIMARY KEY,
+                etag TEXT NOT NULL,
+                payload JSON NOT NULL,
+                executed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -840,6 +863,153 @@ class PersistentStorage:
                 "global_deltas": payload.get("global_deltas", []),
             },
         )
+
+    async def record_allocation_run(
+        self,
+        run_id: str,
+        etag: str,
+        payload: Dict[str, Any],
+        *,
+        executed: bool = False,
+    ) -> None:
+        created_at = _utc_now()
+        await self._driver.execute(
+            """
+            INSERT INTO allocation_runs(run_id, etag, payload, executed, created_at)
+            VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                etag=excluded.etag,
+                payload=excluded.payload,
+                executed=excluded.executed,
+                created_at=excluded.created_at
+            """,
+            run_id,
+            etag,
+            json.dumps(payload),
+            1 if executed else 0,
+            created_at,
+        )
+
+    async def get_allocation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        row = await self._driver.fetchone(
+            "SELECT run_id, etag, payload, executed, created_at FROM allocation_runs WHERE run_id = ?",
+            run_id,
+        )
+        if not row:
+            return None
+        payload = json.loads(row[2])
+        return AllocationRun(
+            run_id=row[0],
+            etag=row[1],
+            payload=payload,
+            executed=bool(row[3]),
+            created_at=row[4],
+        ).to_dict()
+
+    async def mark_allocation_run_executed(self, run_id: str) -> None:
+        await self._driver.execute(
+            "UPDATE allocation_runs SET executed = 1 WHERE run_id = ?",
+            run_id,
+        )
+
+    async def set_world_allocations(
+        self,
+        allocations: Mapping[str, float],
+        *,
+        run_id: str,
+        etag: str,
+        strategy_allocations: Mapping[str, Mapping[str, float]] | None = None,
+        updated_at: str | None = None,
+    ) -> None:
+        ts = updated_at or _utc_now()
+        for wid, ratio in allocations.items():
+            strat_total = None
+            if strategy_allocations and wid in strategy_allocations:
+                strat_total = json.dumps(strategy_allocations[wid])
+            await self._driver.execute(
+                """
+                INSERT INTO world_allocations(world_id, allocation, run_id, etag, strategy_alloc_total, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(world_id) DO UPDATE SET
+                    allocation=excluded.allocation,
+                    run_id=excluded.run_id,
+                    etag=excluded.etag,
+                    strategy_alloc_total=excluded.strategy_alloc_total,
+                    updated_at=excluded.updated_at
+                """,
+                wid,
+                float(ratio),
+                run_id,
+                etag,
+                strat_total,
+                ts,
+            )
+            await self._append_audit(
+                wid,
+                {
+                    "event": "world_allocation_upserted",
+                    "allocation": float(ratio),
+                    "run_id": run_id,
+                    "etag": etag,
+                    "updated_at": ts,
+                    "strategy_alloc_total": json.loads(strat_total) if strat_total else None,
+                },
+            )
+
+    async def get_world_allocation_state(self, world_id: str) -> Optional[AllocationState]:
+        row = await self._driver.fetchone(
+            """
+            SELECT allocation, run_id, etag, strategy_alloc_total, updated_at
+            FROM world_allocations
+            WHERE world_id = ?
+            """,
+            world_id,
+        )
+        if not row:
+            return None
+        strat_total = json.loads(row[3]) if row[3] else None
+        return AllocationState(
+            world_id=world_id,
+            allocation=float(row[0]),
+            run_id=row[1],
+            etag=row[2],
+            strategy_alloc_total=strat_total,
+            updated_at=row[4],
+        )
+
+    async def get_world_allocation_states(
+        self, world_ids: Iterable[str] | None = None
+    ) -> Dict[str, AllocationState]:
+        if world_ids is None:
+            rows = await self._driver.fetchall(
+                """
+                SELECT world_id, allocation, run_id, etag, strategy_alloc_total, updated_at
+                FROM world_allocations
+                """,
+            )
+        else:
+            ids = list(world_ids)
+            if not ids:
+                return {}
+            placeholders = ", ".join(["?" for _ in ids])
+            query = (
+                "SELECT world_id, allocation, run_id, etag, strategy_alloc_total, updated_at "
+                "FROM world_allocations WHERE world_id IN (" + placeholders + ")"
+            )
+            rows = await self._driver.fetchall(query, *ids)
+
+        result: Dict[str, AllocationState] = {}
+        for row in rows:
+            strat_total = json.loads(row[4]) if row[4] else None
+            result[row[0]] = AllocationState(
+                world_id=row[0],
+                allocation=float(row[1]),
+                run_id=row[2],
+                etag=row[3],
+                strategy_alloc_total=strat_total,
+                updated_at=row[5],
+            )
+        return result
 
     def _compute_eval_key(
         self,

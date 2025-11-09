@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from .models import ValidationCacheEntry, WorldActivation, WorldAuditLog
+from .models import AllocationRun, AllocationState, ValidationCacheEntry, WorldActivation, WorldAuditLog
 from .repositories import (
     ActivationRepository,
     AuditLogRepository,
@@ -35,6 +36,8 @@ class Storage:
         self._world_nodes = WorldNodeRepository(self._audit)
         self._validation_cache = ValidationCacheRepository(self._audit)
         self._edge_overrides = EdgeOverrideRepository(self._audit)
+        self._world_allocations: Dict[str, AllocationState] = {}
+        self._allocation_runs: Dict[str, AllocationRun] = {}
 
         # Compatibility accessors for legacy tests that inspect the raw state.
         self.audit: Dict[str, WorldAuditLog] = self._audit.logs
@@ -44,6 +47,8 @@ class Storage:
         self.world_nodes = self._world_nodes.nodes
         self.apply_runs: Dict[str, Dict[str, Any]] = {}
         self._history_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.world_allocations: Dict[str, AllocationState] = self._world_allocations
+        self.allocation_runs: Dict[str, AllocationRun] = self._allocation_runs
 
     async def create_world(self, world: Dict[str, Any]) -> None:
         record = self._worlds.create(world)
@@ -293,6 +298,87 @@ class Storage:
                 "global_deltas": payload.get("global_deltas", []),
             },
         )
+
+    async def get_allocation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        record = self._allocation_runs.get(run_id)
+        return None if record is None else record.to_dict()
+
+    async def record_allocation_run(
+        self,
+        run_id: str,
+        etag: str,
+        payload: Dict[str, Any],
+        *,
+        executed: bool = False,
+    ) -> None:
+        record = AllocationRun(
+            run_id=run_id,
+            etag=etag,
+            payload=payload,
+            executed=executed,
+            created_at=datetime_now(),
+        )
+        self._allocation_runs[run_id] = record
+
+    async def mark_allocation_run_executed(self, run_id: str) -> None:
+        record = self._allocation_runs.get(run_id)
+        if record is not None:
+            self._allocation_runs[run_id] = AllocationRun(
+                run_id=record.run_id,
+                etag=record.etag,
+                payload=deepcopy(record.payload),
+                executed=True,
+                created_at=record.created_at,
+            )
+
+    async def get_world_allocation_state(self, world_id: str) -> Optional[AllocationState]:
+        state = self._world_allocations.get(world_id)
+        return None if state is None else AllocationState(**state.to_dict())
+
+    async def get_world_allocation_states(
+        self, world_ids: Iterable[str] | None = None
+    ) -> Dict[str, AllocationState]:
+        targets = self._world_allocations if world_ids is None else {
+            wid: self._world_allocations[wid]
+            for wid in world_ids
+            if wid in self._world_allocations
+        }
+        return {wid: AllocationState(**state.to_dict()) for wid, state in targets.items()}
+
+    async def set_world_allocations(
+        self,
+        allocations: Mapping[str, float],
+        *,
+        run_id: str,
+        etag: str,
+        strategy_allocations: Mapping[str, Mapping[str, float]] | None = None,
+        updated_at: str | None = None,
+    ) -> None:
+        ts = updated_at or datetime_now()
+        for wid, ratio in allocations.items():
+            strat_total = None
+            if strategy_allocations and wid in strategy_allocations:
+                strat_total = dict(strategy_allocations[wid])
+            state = AllocationState(
+                world_id=wid,
+                allocation=float(ratio),
+                run_id=run_id,
+                etag=etag,
+                strategy_alloc_total=strat_total,
+                updated_at=ts,
+            )
+            self._world_allocations[wid] = state
+            self._audit.append(
+                wid,
+                {
+                    "event": "world_allocation_upserted",
+                    "allocation": float(ratio),
+                    "run_id": run_id,
+                    "etag": etag,
+                    "updated_at": ts,
+                    "strategy_alloc_total": strat_total,
+                },
+            )
 
     async def upsert_world_node(
         self,

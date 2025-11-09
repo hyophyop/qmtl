@@ -154,6 +154,55 @@ class WorldAuditLog:
 
 
 @dataclass
+class AllocationState:
+    """Last known allocation ratios for a world."""
+
+    world_id: str
+    allocation: float
+    run_id: Optional[str] = None
+    etag: Optional[str] = None
+    strategy_alloc_total: Dict[str, float] | None = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "world_id": self.world_id,
+            "allocation": self.allocation,
+        }
+        if self.run_id is not None:
+            data["run_id"] = self.run_id
+        if self.etag is not None:
+            data["etag"] = self.etag
+        if self.updated_at is not None:
+            data["updated_at"] = self.updated_at
+        if self.strategy_alloc_total is not None:
+            data["strategy_alloc_total"] = dict(self.strategy_alloc_total)
+        return data
+
+
+@dataclass
+class AllocationRun:
+    """Recorded allocation computation keyed by run identifier."""
+
+    run_id: str
+    etag: str
+    payload: Dict[str, Any]
+    executed: bool = False
+    created_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "run_id": self.run_id,
+            "etag": self.etag,
+            "payload": deepcopy(self.payload),
+            "executed": self.executed,
+        }
+        if self.created_at is not None:
+            data["created_at"] = self.created_at
+        return data
+
+
+@dataclass
 class ValidationCacheEntry:
     """Cached validation result scoped by ExecutionDomain."""
 

@@ -218,6 +218,7 @@ class SeamlessHistoryRequest(BaseModel):
     conformance_warnings: List[str] | None = None
     dataset_fingerprint: str | None = None
     as_of: str | None = None
+    artifact: SeamlessArtifactPayload | None = None
 
 
 # --- Rebalancing (multi-world) payloads ---
@@ -274,9 +275,37 @@ class OverlayConfigModel(BaseModel):
     artifact: SeamlessArtifactPayload | None = None
 
 
+class AllocationUpsertRequest(BaseModel):
+    """Payload for coordinated world allocation updates."""
+
+    run_id: str
+    total_equity: float
+    world_allocations: Dict[str, float]
+    positions: List[PositionSliceModel]
+    strategy_alloc_after_total: Dict[str, Dict[str, float]] | None = None
+    strategy_alloc_before_total: Dict[str, Dict[str, float]] | None = None
+    min_trade_notional: float | None = None
+    lot_size_by_symbol: Dict[str, float] | None = None
+    execute: bool = False
+    etag: str | None = None
+    mode: str | None = None
+    overlay: OverlayConfigModel | None = None
+
+
+class AllocationUpsertResponse(MultiWorldRebalanceResponse):
+    """Response emitted after applying world allocation updates."""
+
+    run_id: str
+    etag: str
+    executed: bool = False
+    execution_response: Dict[str, Any] | None = None
+
+
 __all__ = [
     'ActivationEnvelope',
     'ActivationRequest',
+    'AllocationUpsertRequest',
+    'AllocationUpsertResponse',
     'ApplyAck',
     'ApplyPlan',
     'ApplyRequest',
