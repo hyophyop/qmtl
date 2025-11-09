@@ -224,6 +224,8 @@ upstream queues execute locally.
 
 Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
+Rebalancing plans from WorldService are delivered on the `rebalancing_planned` ControlBus topic. Gateway deduplicates the events, broadcasts them over the WebSocket `rebalancing` topic (CloudEvent type `rebalancing.planned`), and records metrics capturing plan volume and automatic execution (`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`).
+
 ### S5 - Reliability Checklist
 
 * **NodeID CRC pipeline** - Gateway recomputes each `node_id` and cross-checks it with the SDK value via the `crc32` field on diff requests/responses. A mismatch returns HTTP 400.

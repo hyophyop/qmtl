@@ -237,6 +237,38 @@ rebalance_reduce_only_ratio = _gauge(
     test_value_factory=dict,
 )
 
+rebalance_plans_observed_total = _counter(
+    "rebalance_plans_observed_total",
+    "Total number of rebalancing plans observed via ControlBus",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+rebalance_plan_last_delta_count = _gauge(
+    "rebalance_plan_last_delta_count",
+    "Number of deltas included in the last observed rebalancing plan",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+rebalance_plan_execution_attempts_total = _counter(
+    "rebalance_plan_execution_attempts_total",
+    "Total number of automatic rebalancing execution attempts",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
+rebalance_plan_execution_failures_total = _counter(
+    "rebalance_plan_execution_failures_total",
+    "Total number of automatic rebalancing execution failures",
+    ["world_id"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 # ---------------------------------------------------------------------------
 # Fills webhook metrics
 # ---------------------------------------------------------------------------
@@ -529,6 +561,21 @@ def record_rebalance_submission(
     rebalance_reduce_only_ratio.labels(world_id=world_id, scope=scope).set(ratio)
 
 
+def record_rebalance_plan(world_id: str, delta_count: int) -> None:
+    """Record metrics for an observed rebalancing plan."""
+
+    rebalance_plans_observed_total.labels(world_id=world_id).inc()
+    rebalance_plan_last_delta_count.labels(world_id=world_id).set(delta_count)
+
+
+def record_rebalance_plan_execution(world_id: str, *, success: bool) -> None:
+    """Record metrics for automatic rebalancing execution attempts."""
+
+    rebalance_plan_execution_attempts_total.labels(world_id=world_id).inc()
+    if not success:
+        rebalance_plan_execution_failures_total.labels(world_id=world_id).inc()
+
+
 def reset_metrics() -> None:
     """Reset all metric values for tests."""
     reset_registered_metrics(_REGISTERED_METRICS)
@@ -539,6 +586,10 @@ def reset_metrics() -> None:
         rebalance_batches_submitted_total,
         rebalance_last_batch_size,
         rebalance_reduce_only_ratio,
+        rebalance_plans_observed_total,
+        rebalance_plan_last_delta_count,
+        rebalance_plan_execution_attempts_total,
+        rebalance_plan_execution_failures_total,
     ):
         if hasattr(metric, "_metrics"):
             metric._metrics.clear()  # type: ignore[attr-defined]

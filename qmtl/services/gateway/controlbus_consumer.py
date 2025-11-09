@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 from pydantic import ValidationError
 from qmtl.foundation.common.tagquery import MatchMode
@@ -13,9 +14,17 @@ from qmtl.foundation.common.tagquery import MatchMode
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
-from .event_models import SentinelWeightData
+from .event_models import RebalancingPlannedData, SentinelWeightData
 
 logger = logging.getLogger(__name__)
+
+
+class RebalancingExecutionPolicy(Protocol):
+    async def should_execute(self, event: RebalancingPlannedData) -> bool:
+        ...
+
+    async def execute(self, event: RebalancingPlannedData) -> None:
+        ...
 
 
 @dataclass
@@ -40,11 +49,13 @@ class ControlBusConsumer:
         group: str,
         *,
         ws_hub: WebSocketHub | None = None,
+        rebalancing_policy: RebalancingExecutionPolicy | None = None,
     ) -> None:
         self.brokers = brokers or []
         self.topics = topics
         self.group = group
         self.ws_hub = ws_hub
+        self._rebalancing_policy = rebalancing_policy
         self._queue: asyncio.Queue[ControlBusMessage | None] = asyncio.Queue()
         self._task: asyncio.Task | None = None
         self._broker_task: asyncio.Task | None = None
@@ -197,8 +208,73 @@ class ControlBusConsumer:
             timestamp_ms=timestamp_ms,
         )
 
+    def _marker_for_plan(self, payload: RebalancingPlannedData) -> tuple[Any, ...]:
+        serialized = json.dumps(
+            payload.plan.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha256(serialized.encode()).hexdigest()
+        marker = payload.run_id or digest
+        return (payload.version, marker, digest)
+
     async def _handle_message(self, msg: ControlBusMessage) -> None:
         key = (msg.topic, msg.key)
+        if msg.topic == "rebalancing_planned":
+            try:
+                payload = RebalancingPlannedData.model_validate(msg.data)
+            except ValidationError as exc:
+                logger.warning("invalid rebalancing_planned payload: %s", exc)
+                return
+
+            marker = self._marker_for_plan(payload)
+            if self._last_seen.get(key) == marker:
+                gw_metrics.record_event_dropped(msg.topic)
+                return
+            self._last_seen[key] = marker
+
+            gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
+            gw_metrics.record_rebalance_plan(
+                payload.world_id, len(payload.plan.deltas)
+            )
+
+            if self.ws_hub:
+                await self.ws_hub.send_rebalancing_planned(
+                    world_id=payload.world_id,
+                    plan=payload.plan.model_dump(mode="json"),
+                    version=payload.version,
+                    policy=payload.policy,
+                    run_id=payload.run_id,
+                )
+
+            if self._rebalancing_policy is not None:
+                try:
+                    should_execute = await self._rebalancing_policy.should_execute(
+                        payload
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to evaluate rebalancing execution policy",
+                        extra={"world_id": payload.world_id},
+                    )
+                else:
+                    if should_execute:
+                        try:
+                            await self._rebalancing_policy.execute(payload)
+                        except Exception:
+                            gw_metrics.record_rebalance_plan_execution(
+                                payload.world_id, success=False
+                            )
+                            logger.exception(
+                                "Failed to execute rebalancing plan",
+                                extra={"world_id": payload.world_id},
+                            )
+                        else:
+                            gw_metrics.record_rebalance_plan_execution(
+                                payload.world_id, success=True
+                            )
+            return
+
         if msg.topic == "sentinel_weight":
             try:
                 payload = SentinelWeightData.model_validate(msg.data)
@@ -268,4 +344,8 @@ class ControlBusConsumer:
             logger.warning("Unhandled ControlBus topic %s", msg.topic)
 
 
-__all__ = ["ControlBusConsumer", "ControlBusMessage"]
+__all__ = [
+    "ControlBusConsumer",
+    "ControlBusMessage",
+    "RebalancingExecutionPolicy",
+]

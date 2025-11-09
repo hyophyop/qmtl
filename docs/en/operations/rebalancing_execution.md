@@ -54,6 +54,7 @@ Use `per_world` for execution unless running in a shared-account mode; treat `gl
 - **Live guard:** when `submit=true` the request must include header `X-Allow-Live: true` (unless `enforce_live_guard` is disabled in configuration). Requests without the header are rejected with HTTP 403.
 - **Venue policies:** lot sizes, minimum trade notional and venue capabilities are applied before submission. Reduce-only flags are omitted for venues that do not support them and venues that require IOC will have `time_in_force="IOC"` set automatically.
 - **Metrics:** each submitted batch increments Prometheus counters/gauges (`rebalance_batches_submitted_total`, `rebalance_last_batch_size`, `rebalance_reduce_only_ratio`) labelled by `world_id` and `scope`.
+- **ControlBus fan-out:** WorldService publishes `rebalancing_planned` events that Gateway relays via the WebSocket `rebalancing` topic (`rebalancing.planned`) while updating plan-level metrics (`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`).
 - **Audit trail:** the Gateway records an `append_event` entry under `rebalance:<world_id>` summarising order counts and reduce-only ratios for each batch.
 - **Commit log:** submitted batches are written to the commit log as `("gateway.rebalance", timestamp_ms, batch_id, payload)` where `payload` contains the batch scope, orders and metadata (shared-account flag, reduce-only ratio, mode).
 
