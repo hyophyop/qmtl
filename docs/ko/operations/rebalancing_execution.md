@@ -59,6 +59,7 @@ for payload in orders:
 - **라이브 가드:** `submit=true` 요청은 `X-Allow-Live: true` 헤더가 필요합니다(`enforce_live_guard` 비활성화 시 제외). 헤더가 없으면 403 응답을 반환합니다.
 - **거래소 정책:** 로트 사이즈, 최소 거래 노미널, 거래소별 지원 여부를 고려해 주문을 보정합니다. reduce-only를 지원하지 않는 거래소에는 플래그를 제거하고, IOC가 필요한 거래소에는 `time_in_force="IOC"`가 자동으로 지정됩니다.
 - **메트릭:** 제출된 각 배치는 `rebalance_batches_submitted_total`, `rebalance_last_batch_size`, `rebalance_reduce_only_ratio` Prometheus 지표(world_id, scope 라벨)를 갱신합니다.
+- **ControlBus 팬아웃:** WorldService가 발행하는 `rebalancing_planned` 이벤트는 Gateway가 WebSocket `rebalancing` 토픽(`rebalancing.planned`)으로 전달하며, 계획 수준 지표(`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`)를 함께 갱신합니다.
 - **감사 로그:** 각 배치는 `rebalance:<world_id>` 키로 `append_event`에 기록되어 주문 수와 reduce-only 비율을 남깁니다.
 - **Commit Log:** 배치는 `("gateway.rebalance", timestamp_ms, batch_id, payload)` 형태로 Commit Log에 기록되며 `payload`에는 scope, 주문 목록, 공유 계정 여부, reduce-only 비율, 모드 등이 포함됩니다.
 

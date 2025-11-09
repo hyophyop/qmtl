@@ -1,6 +1,8 @@
 import asyncio
 import time
 from contextlib import asynccontextmanager
+from typing import Any
+
 import pytest
 from fastapi import FastAPI
 
@@ -15,6 +17,10 @@ class FakeHub:
         self.events: list[tuple[str, dict]] = []
         self._done = done
 
+    def _note_event(self) -> None:
+        if self._done and len(self.events) >= 4:
+            self._done.set()
+
     async def start(self) -> None:
         """Start method required by lifespan context."""
         pass
@@ -25,13 +31,11 @@ class FakeHub:
 
     async def send_activation_updated(self, data: dict) -> None:
         self.events.append(("activation_updated", data))
-        if self._done and len(self.events) == 4:
-            self._done.set()
+        self._note_event()
 
     async def send_policy_updated(self, data: dict) -> None:
         self.events.append(("policy_updated", data))
-        if self._done and len(self.events) == 4:
-            self._done.set()
+        self._note_event()
 
     async def send_sentinel_weight(self, sentinel_id: str, weight: float) -> None:
         self.events.append(
@@ -40,8 +44,7 @@ class FakeHub:
                 {"sentinel_id": sentinel_id, "weight": weight, "version": 1},
             )
         )
-        if self._done and len(self.events) == 4:
-            self._done.set()
+        self._note_event()
 
     async def send_queue_update(
         self,
@@ -67,8 +70,7 @@ class FakeHub:
                 },
             )
         )
-        if self._done and len(self.events) == 4:
-            self._done.set()
+        self._note_event()
 
     async def send_tagquery_upsert(self, tags, interval, queues) -> None:
         self.events.append(
@@ -77,8 +79,38 @@ class FakeHub:
                 {"tags": tags, "interval": interval, "queues": queues, "version": 1},
             )
         )
-        if self._done and len(self.events) == 4:
-            self._done.set()
+        self._note_event()
+
+    async def send_rebalancing_planned(
+        self,
+        *,
+        world_id: str,
+        plan: dict,
+        version: int,
+        policy: str | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        payload = {"world_id": world_id, "plan": plan, "version": version}
+        if policy:
+            payload["policy"] = policy
+        if run_id:
+            payload["run_id"] = run_id
+        self.events.append(("rebalancing.planned", payload))
+        self._note_event()
+
+
+class RecordingPolicy:
+    def __init__(self, *, allow: bool = True) -> None:
+        self.allow = allow
+        self.checked: list[Any] = []
+        self.executed: list[Any] = []
+
+    async def should_execute(self, event: Any) -> bool:
+        self.checked.append(event)
+        return self.allow
+
+    async def execute(self, event: Any) -> None:
+        self.executed.append(event)
 
 
 class DummyDB(Database):
@@ -204,6 +236,92 @@ async def test_sentinel_weight_updates_metrics_and_ws():
     assert "v1" in metrics._sentinel_weight_updates
     assert (
         metrics.event_relay_events_total.labels(topic="sentinel_weight")._value.get()
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_broadcasts_and_triggers_policy():
+    metrics.reset_metrics()
+    hub = FakeHub()
+    policy = RecordingPolicy()
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["rebalancing_planned"],
+        group="g",
+        ws_hub=hub,
+        rebalancing_policy=policy,
+    )
+    await consumer.start()
+    ts = time.time() * 1000
+    plan_payload = {
+        "world_id": "world-1",
+        "plan": {
+            "scale_world": 1.0,
+            "scale_by_strategy": {"s1": 0.5},
+            "deltas": [
+                {"symbol": "BTC", "delta_qty": 1.25, "venue": "coinbase"},
+                {"symbol": "ETH", "delta_qty": -0.5, "venue": None},
+            ],
+        },
+        "version": 1,
+        "policy": "auto",
+        "run_id": "run-1",
+    }
+    msg = ControlBusMessage(
+        topic="rebalancing_planned",
+        key="world-1",
+        etag="",
+        run_id="",
+        data=plan_payload,
+        timestamp_ms=ts,
+    )
+    dup = ControlBusMessage(
+        topic="rebalancing_planned",
+        key="world-1",
+        etag="",
+        run_id="",
+        data=plan_payload,
+        timestamp_ms=ts,
+    )
+
+    await consumer.publish(msg)
+    await consumer.publish(dup)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == [
+        (
+            "rebalancing.planned",
+            {
+                "world_id": "world-1",
+                "plan": plan_payload["plan"],
+                "version": 1,
+                "policy": "auto",
+                "run_id": "run-1",
+            },
+        )
+    ]
+    assert len(policy.checked) == 1
+    assert len(policy.executed) == 1
+    assert (
+        metrics.rebalance_plans_observed_total.labels(world_id="world-1")._value.get()
+        == 1
+    )
+    assert (
+        metrics.rebalance_plan_last_delta_count.labels(world_id="world-1")._value.get()
+        == 2
+    )
+    assert (
+        metrics.rebalance_plan_execution_attempts_total.labels(world_id="world-1")._value.get()
+        == 1
+    )
+    assert (
+        metrics.rebalance_plan_execution_failures_total.labels(world_id="world-1")._value.get()
+        == 0
+    )
+    assert (
+        metrics.event_relay_dropped_total.labels(topic="rebalancing_planned")._value.get()
         == 1
     )
 

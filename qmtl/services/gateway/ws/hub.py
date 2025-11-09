@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-from typing import Any, Optional, Set
+from typing import Any, Mapping, Optional, Set
 
 from fastapi import WebSocket
 
@@ -189,6 +189,26 @@ class WebSocketHub:
     async def send_policy_updated(self, payload: dict) -> None:
         payload.setdefault("version", 1)
         await self._send_event("policy_updated", payload, topic="policy")
+
+    async def send_rebalancing_planned(
+        self,
+        *,
+        world_id: str,
+        plan: Mapping[str, Any],
+        version: int,
+        policy: str | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "world_id": world_id,
+            "plan": dict(plan),
+            "version": version,
+        }
+        if policy:
+            payload["policy"] = policy
+        if run_id:
+            payload["run_id"] = run_id
+        await self._send_event("rebalancing.planned", payload, topic="rebalancing")
 
     async def send_deprecation_notice(self, payload: dict) -> None:
         payload.setdefault("version", 1)

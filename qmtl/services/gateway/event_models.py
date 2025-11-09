@@ -4,7 +4,7 @@ from __future__ import annotations
 # Priority: gpt5pro
 
 from datetime import datetime
-from typing import Any, Generic, List, Literal, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
 
@@ -64,6 +64,26 @@ class PolicyUpdatedData(BaseModel):
     ts: Optional[StrictStr] = None
 
 
+class RebalancingPlanDelta(BaseModel):
+    symbol: StrictStr
+    delta_qty: StrictFloat
+    venue: Optional[StrictStr] = None
+
+
+class RebalancingPlanPayload(BaseModel):
+    scale_world: StrictFloat
+    scale_by_strategy: Dict[StrictStr, StrictFloat]
+    deltas: List[RebalancingPlanDelta]
+
+
+class RebalancingPlannedData(BaseModel):
+    world_id: StrictStr
+    plan: RebalancingPlanPayload
+    version: StrictInt
+    policy: Optional[StrictStr] = None
+    run_id: Optional[StrictStr] = None
+
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -88,5 +108,8 @@ __all__ = [
     "SentinelWeightData",
     "ActivationUpdatedData",
     "PolicyUpdatedData",
+    "RebalancingPlanDelta",
+    "RebalancingPlanPayload",
+    "RebalancingPlannedData",
     "CloudEvent",
 ]
