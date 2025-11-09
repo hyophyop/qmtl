@@ -218,6 +218,7 @@ class SeamlessHistoryRequest(BaseModel):
     conformance_warnings: List[str] | None = None
     dataset_fingerprint: str | None = None
     as_of: str | None = None
+    artifact: SeamlessArtifactPayload | None = None
 
 
 # --- Rebalancing (multi-world) payloads ---
