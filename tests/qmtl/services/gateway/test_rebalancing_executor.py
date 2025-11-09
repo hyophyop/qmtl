@@ -51,6 +51,23 @@ def test_orders_respect_lot_and_notional_filters():
     assert orders[0]["quantity"] == 1.5
 
 
+def test_orders_drop_small_reduce_only_notional():
+    plan = RebalancePlan(
+        world_id="w",
+        scale_world=1.0,
+        scale_by_strategy={},
+        deltas=[SymbolDelta(symbol="BTCUSDT", delta_qty=-0.25, venue="binance")],
+    )
+    orders = orders_from_world_plan(
+        plan,
+        options=OrderOptions(
+            min_trade_notional=200.0,
+            marks_by_symbol={("binance", "BTCUSDT"): 100.0},
+        ),
+    )
+    assert orders == []
+
+
 def test_orders_respect_venue_policies():
     plan = RebalancePlan(
         world_id="w",

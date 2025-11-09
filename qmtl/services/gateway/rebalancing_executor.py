@@ -60,7 +60,7 @@ def _meets_notional_threshold(
     *,
     options: OrderOptions,
 ) -> bool:
-    if qty <= 0:
+    if qty == 0:
         return True
     min_notional = options.min_trade_notional
     if not min_notional or min_notional <= 0:
