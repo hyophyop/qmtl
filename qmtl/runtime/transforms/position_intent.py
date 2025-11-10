@@ -8,7 +8,7 @@ portfolio snapshots (backtest) or world-level rebalancing (live).
 """
 
 from dataclasses import dataclass
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.node import Node, ProcessingNode
@@ -21,6 +21,28 @@ class Thresholds:
     short_enter: float
     long_exit: float | None = None
     short_exit: float | None = None
+
+
+def _latest_entry(series: CacheView | Sequence[Any]):
+    """Return the latest ``(timestamp, value)`` pair from a cache leaf.
+
+    ``CacheView`` instances wrap their underlying sequence in ``_data`` while
+    still presenting a truthy object.  Unwrap to the raw sequence so empty
+    streams can be detected reliably and fall back to ``.latest()`` when the
+    payload offers that API.
+    """
+
+    sequence = getattr(series, "_data", series)
+    if isinstance(sequence, Sequence):
+        try:
+            return sequence[-1]
+        except IndexError:
+            return None
+
+    latest = getattr(series, "latest", None)
+    if callable(latest):
+        return latest()
+    return None
 
 
 def _hysteresis(prev: float | None, value: float, th: Thresholds) -> float:
@@ -66,6 +88,8 @@ class PositionTargetNode(ProcessingNode):
         short_weight: float = -1.0,
         hold_weight: float = 0.0,
         to_order: bool = True,
+        price_node: Node | None = None,
+        price_resolver: Callable[[CacheView], float | None] | None = None,
         name: str | None = None,
     ) -> None:
         self.signal = signal
@@ -75,6 +99,14 @@ class PositionTargetNode(ProcessingNode):
         self.short_weight = float(short_weight)
         self.hold_weight = float(hold_weight)
         self.to_order = to_order
+        if price_node is not None and price_resolver is not None:
+            raise ValueError("provide only one of price_node or price_resolver")
+        if to_order and price_node is None and price_resolver is None:
+            raise ValueError(
+                "price_node or price_resolver is required when to_order=True"
+            )
+        self.price_node = price_node
+        self.price_resolver = price_resolver
         self._last_state: float | None = None
         super().__init__(
             signal,
@@ -86,9 +118,10 @@ class PositionTargetNode(ProcessingNode):
 
     def _compute(self, view: CacheView):
         data = view[self.signal][self.signal.interval]
-        if not data:
+        latest = _latest_entry(data)
+        if latest is None:
             return None
-        _, value = data[-1]
+        _, value = latest
         try:
             x = float(value)
         except Exception:
@@ -105,8 +138,40 @@ class PositionTargetNode(ProcessingNode):
         )
         intent = PositionTarget(symbol=self.symbol, target_percent=target_percent)
         if self.to_order:
-            return to_order_payloads([intent])[0]
+            price = self._resolve_price(view)
+            return to_order_payloads([intent], price_by_symbol={self.symbol: price})[0]
         return intent
+
+    def _resolve_price(self, view: CacheView) -> float:
+        if self.price_resolver is not None:
+            price = self.price_resolver(view)
+            if price is None:
+                raise ValueError(
+                    f"price_resolver returned None for symbol {self.symbol!r}"
+                )
+            try:
+                return float(price)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    f"price_resolver returned non-numeric value for symbol {self.symbol!r}"
+                ) from exc
+
+        if self.price_node is not None:
+            data = view[self.price_node][self.price_node.interval]
+            latest = _latest_entry(data)
+            if latest is None:
+                raise ValueError(
+                    f"no price data available from {self.price_node.name!r} for symbol {self.symbol!r}"
+                )
+            _, value = latest
+            try:
+                return float(value)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    f"price stream {self.price_node.name!r} produced non-numeric value for symbol {self.symbol!r}"
+                ) from exc
+
+        raise ValueError("price source is not configured")
 
 
 __all__ = ["PositionTargetNode", "Thresholds"]

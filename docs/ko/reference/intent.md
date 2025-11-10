@@ -24,7 +24,7 @@ PositionTarget
 ## 노드
 
 `PositionTargetNode`
-: 단일 심볼 신호를 입력받아 `target_percent` 의도를 방출합니다(기본은 주문 형태로 출력). 히스테리시스 기반으로 상태가 바뀔 때만 방출해 체결 과잉을 줄입니다.
+: 단일 심볼 신호를 입력받아 `target_percent` 의도를 방출합니다(기본은 주문 형태로 출력). 히스테리시스 기반으로 상태가 바뀔 때만 방출해 체결 과잉을 줄입니다. `to_order=True`인 경우 `price_node` 또는 `price_resolver`를 제공해 사이징 단계가 명시적인 `price` 값을 받도록 해야 하며, 가격을 확보하지 못하면 노드는 오류를 발생시킵니다.
 
 예시)
 ```python
@@ -36,6 +36,7 @@ intent_node = PositionTargetNode(
     thresholds=Thresholds(long_enter=0.7, short_enter=-0.7),
     long_weight=+0.10,    # +10%
     short_weight=-0.05,   # -5%
+    price_node=price_feed,
 )
 ```
 
