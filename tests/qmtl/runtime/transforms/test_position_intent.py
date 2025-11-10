@@ -15,8 +15,12 @@ from qmtl.runtime.transforms.position_intent import (
 
 
 def test_position_target_node_provides_price_for_sizing():
-    signal = StreamInput(tags=["signal"], interval=60, period=1)
-    price = StreamInput(tags=["price"], interval=60, period=1)
+    signal = StreamInput(
+        tags=["signal"], interval=60, period=1, config={"stream": "signal"}
+    )
+    price = StreamInput(
+        tags=["price"], interval=60, period=1, config={"stream": "price"}
+    )
     node = PositionTargetNode(
         signal=signal,
         symbol="BTCUSDT",
@@ -45,3 +49,29 @@ def test_position_target_node_provides_price_for_sizing():
     assert sized is not None
     assert sized["price"] == pytest.approx(100.0)
     assert sized["quantity"] == pytest.approx(10.0)
+
+
+def test_position_target_node_price_guard_handles_empty_stream():
+    signal = StreamInput(
+        tags=["signal"], interval=60, period=1, config={"stream": "signal"}
+    )
+    price = StreamInput(
+        tags=["price"], interval=60, period=1, config={"stream": "price"}
+    )
+    node = PositionTargetNode(
+        signal=signal,
+        symbol="BTCUSDT",
+        thresholds=Thresholds(long_enter=0.5, short_enter=-0.5),
+        to_order=True,
+        price_node=price,
+    )
+
+    ts = 60
+    signal_view = {signal.node_id: {signal.interval: [(ts, 0.75)]}}
+    price_view = {price.node_id: {price.interval: []}}
+    view = CacheView({**signal_view, **price_view})
+
+    with pytest.raises(ValueError) as excinfo:
+        node._compute(view)
+
+    assert "no price data available" in str(excinfo.value)

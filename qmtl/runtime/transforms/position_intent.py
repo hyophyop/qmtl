@@ -8,7 +8,7 @@ portfolio snapshots (backtest) or world-level rebalancing (live).
 """
 
 from dataclasses import dataclass
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.node import Node, ProcessingNode
@@ -21,6 +21,28 @@ class Thresholds:
     short_enter: float
     long_exit: float | None = None
     short_exit: float | None = None
+
+
+def _latest_entry(series: CacheView | Sequence[Any]):
+    """Return the latest ``(timestamp, value)`` pair from a cache leaf.
+
+    ``CacheView`` instances wrap their underlying sequence in ``_data`` while
+    still presenting a truthy object.  Unwrap to the raw sequence so empty
+    streams can be detected reliably and fall back to ``.latest()`` when the
+    payload offers that API.
+    """
+
+    sequence = getattr(series, "_data", series)
+    if isinstance(sequence, Sequence):
+        try:
+            return sequence[-1]
+        except IndexError:
+            return None
+
+    latest = getattr(series, "latest", None)
+    if callable(latest):
+        return latest()
+    return None
 
 
 def _hysteresis(prev: float | None, value: float, th: Thresholds) -> float:
@@ -96,9 +118,10 @@ class PositionTargetNode(ProcessingNode):
 
     def _compute(self, view: CacheView):
         data = view[self.signal][self.signal.interval]
-        if not data:
+        latest = _latest_entry(data)
+        if latest is None:
             return None
-        _, value = data[-1]
+        _, value = latest
         try:
             x = float(value)
         except Exception:
@@ -135,11 +158,12 @@ class PositionTargetNode(ProcessingNode):
 
         if self.price_node is not None:
             data = view[self.price_node][self.price_node.interval]
-            if not data:
+            latest = _latest_entry(data)
+            if latest is None:
                 raise ValueError(
                     f"no price data available from {self.price_node.name!r} for symbol {self.symbol!r}"
                 )
-            _, value = data[-1]
+            _, value = latest
             try:
                 return float(value)
             except Exception as exc:  # pragma: no cover - defensive guard
