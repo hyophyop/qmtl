@@ -12,6 +12,14 @@ from typing import List, Mapping, Sequence, Tuple
 
 import math
 
+from qmtl.services.gateway.instrument_constraints import (
+    ConstraintViolation,
+    ConstraintViolationError,
+    InstrumentConstraint,
+    InstrumentConstraints,
+    ResolvedInstrument,
+)
+
 from qmtl.services.worldservice.rebalancing import (
     ExecutionDelta,
     RebalancePlan,
@@ -28,6 +36,9 @@ class OrderOptions:
     min_trade_notional: float | None = None
     marks_by_symbol: Mapping[Tuple[str | None, str], float] | None = None
     venue_policies: Mapping[str, "VenuePolicy"] | None = None
+    instrument_constraints: InstrumentConstraints | None = None
+    constraint_violation_sink: List[ConstraintViolation] | None = None
+    raise_on_violation: bool = False
 
 
 @dataclass(frozen=True)
@@ -39,37 +50,167 @@ class VenuePolicy:
     default_time_in_force: str | None = None
 
 
-def _round_to_lot(symbol: str, qty: float, *, options: OrderOptions) -> float:
+def _handle_violation(violation: ConstraintViolation, *, options: OrderOptions) -> None:
+    sink = options.constraint_violation_sink
+    if sink is not None:
+        sink.append(violation)
+    if options.raise_on_violation:
+        raise ConstraintViolationError(violation)
+
+
+def _resolve_instrument(symbol: str, venue: str | None, *, options: OrderOptions) -> ResolvedInstrument:
+    constraints = options.instrument_constraints
+    resolved = (
+        constraints.resolve(venue, symbol)
+        if constraints is not None
+        else ResolvedInstrument(
+            venue=venue,
+            input_symbol=symbol,
+            symbol=symbol,
+            constraint=InstrumentConstraint(),
+        )
+    )
+
+    lot_override = None
+    if options.lot_size_by_symbol:
+        lots = options.lot_size_by_symbol
+        lot_override = lots.get(resolved.symbol) or lots.get(symbol)
+
+    min_notional = resolved.constraint.min_notional
+    if options.min_trade_notional and options.min_trade_notional > 0:
+        if min_notional is None or min_notional < options.min_trade_notional:
+            min_notional = options.min_trade_notional
+
+    constraint = InstrumentConstraint(
+        lot_size=lot_override if lot_override is not None else resolved.constraint.lot_size,
+        min_notional=min_notional,
+        tick_size=resolved.constraint.tick_size,
+    )
+
+    return ResolvedInstrument(
+        venue=resolved.venue,
+        input_symbol=resolved.input_symbol,
+        symbol=resolved.symbol,
+        constraint=constraint,
+    )
+
+
+def _lookup_mark(
+    resolved: ResolvedInstrument, *, options: OrderOptions
+) -> tuple[float | None, object | None]:
+    marks = options.marks_by_symbol or {}
+    symbol = resolved.symbol
+    original = resolved.input_symbol
+    venue = resolved.venue
+    candidates: list[object] = []
+    if venue is not None:
+        candidates.append((venue, symbol))
+        candidates.append((venue, original))
+        venue_lower = venue.lower()
+        if venue_lower != venue:
+            candidates.append((venue_lower, symbol))
+            candidates.append((venue_lower, original))
+    candidates.append((None, symbol))
+    candidates.append((None, original))
+    candidates.append(symbol)
+    if original != symbol:
+        candidates.append(original)
+    getter = getattr(marks, "get", None)
+    for key in candidates:
+        if getter is not None:
+            value = getter(key, None)
+        else:  # pragma: no cover - fallback for exotic mappings without ``get``
+            try:
+                value = marks[key]  # type: ignore[index]
+            except (KeyError, TypeError):
+                continue
+        if value is not None:
+            return value, key
+    return None, None
+
+
+def _round_to_lot(qty: float, lot_size: float | None) -> tuple[float, int]:
     if not qty:
-        return 0.0
-    lots = options.lot_size_by_symbol or {}
-    lot = lots.get(symbol)
-    if not lot or lot <= 0:
-        return qty
-    signed = math.copysign(1.0, qty)
+        return 0.0, 0
+    if lot_size is None or lot_size <= 0:
+        return qty, 0
     abs_qty = abs(qty)
-    steps = math.floor(abs_qty / lot)
-    rounded = steps * lot
-    return signed * rounded
+    steps = math.floor(abs_qty / lot_size + 1e-12)
+    rounded = math.copysign(steps * lot_size, qty)
+    return rounded, steps
 
 
-def _meets_notional_threshold(
-    symbol: str,
-    venue: str | None,
+def _evaluate_notional(
     qty: float,
+    resolved: ResolvedInstrument,
+    mark: float | None,
+    mark_source: object | None,
+) -> tuple[bool, ConstraintViolation | None]:
+    min_notional = resolved.constraint.min_notional
+    if qty == 0:
+        return True, None
+    if min_notional is None or min_notional <= 0:
+        return True, None
+    if mark is None or mark <= 0:
+        return (
+            False,
+            ConstraintViolation(
+                venue=resolved.venue,
+                symbol=resolved.symbol,
+                reason="missing-mark",
+                details={
+                    "min_notional": min_notional,
+                    "mark_source": mark_source,
+                },
+            ),
+        )
+    notional = abs(qty) * mark
+    if notional + 1e-12 < min_notional:
+        return (
+            False,
+            ConstraintViolation(
+                venue=resolved.venue,
+                symbol=resolved.symbol,
+                reason="min-notional",
+                details={
+                    "min_notional": min_notional,
+                    "mark": mark,
+                    "quantity": qty,
+                },
+            ),
+        )
+    return True, None
+
+
+def _apply_constraints(
+    symbol: str,
+    qty: float,
+    venue: str | None,
     *,
     options: OrderOptions,
-) -> bool:
-    if qty == 0:
-        return True
-    min_notional = options.min_trade_notional
-    if not min_notional or min_notional <= 0:
-        return True
-    marks = options.marks_by_symbol or {}
-    mark = marks.get((venue, symbol)) or marks.get((None, symbol))
-    if not mark or mark <= 0:
-        return True
-    return abs(qty) * mark >= min_notional
+) -> tuple[float | None, ResolvedInstrument]:
+    resolved = _resolve_instrument(symbol, venue, options=options)
+    rounded_qty, steps = _round_to_lot(qty, resolved.constraint.lot_size)
+    if qty and resolved.constraint.lot_size and resolved.constraint.lot_size > 0 and steps == 0:
+        violation = ConstraintViolation(
+            venue=resolved.venue,
+            symbol=resolved.symbol,
+            reason="lot-size",
+            details={
+                "requested_qty": qty,
+                "lot_size": resolved.constraint.lot_size,
+            },
+        )
+        _handle_violation(violation, options=options)
+        return None, resolved
+
+    mark, mark_source = _lookup_mark(resolved, options=options)
+    meets_notional, violation = _evaluate_notional(rounded_qty, resolved, mark, mark_source)
+    if not meets_notional:
+        _handle_violation(violation, options=options)
+        return None, resolved
+
+    return rounded_qty, resolved
 
 
 def _resolve_time_in_force(
@@ -122,10 +263,8 @@ def _build_order(
     venue: str | None,
     options: OrderOptions,
 ) -> dict | None:
-    qty_rounded = _round_to_lot(symbol, qty, options=options)
-    if qty_rounded == 0:
-        return None
-    if not _meets_notional_threshold(symbol, venue, qty_rounded, options=options):
+    qty_adjusted, resolved = _apply_constraints(symbol, qty, venue, options=options)
+    if qty_adjusted is None or qty_adjusted == 0:
         return None
     effective_reduce_only = _apply_reduce_only_flag(
         reduce_only=reduce_only, venue=venue, options=options
@@ -136,10 +275,10 @@ def _build_order(
         venue=venue,
         options=options,
     )
-    side = "buy" if qty_rounded >= 0 else "sell"
+    side = "buy" if qty_adjusted >= 0 else "sell"
     payload = {
-        "symbol": symbol,
-        "quantity": qty_rounded,
+        "symbol": resolved.symbol,
+        "quantity": qty_adjusted,
         "side": side,
         "time_in_force": effective_tif,
     }

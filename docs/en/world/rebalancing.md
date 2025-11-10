@@ -26,7 +26,9 @@ This document specifies a pluggable, centralized rebalancer that adjusts positio
   - `world_alloc_before/after`: world allocation ratios (0.0–1.0)
   - `strategy_alloc_before/after`: per-strategy allocation ratios (0.0–1.0)
   - `positions`: flattened rows with optional `venue` (exchange)
-  - `min_trade_notional`, `lot_size_by_symbol`: dust suppression/rounding
+- `min_trade_notional`, `lot_size_by_symbol`: dust suppression/rounding
+- `instrument_constraints`: optional venue/symbol resolver for lot, tick and
+  minimum notional limits (see below)
 
 ## Rule: Proportional Rebalancing
 
@@ -81,6 +83,35 @@ Example:
 - Feed `delta_qty` to execution which converges using position snapshots:
   - Reductions via `reduce-only` (if supported)
   - Open remaining deltas; for flips use "flatten-then-open" or safe "direct-flip"
+
+### Instrument constraint normalization
+
+- `qmtl.services.gateway.instrument_constraints.InstrumentConstraints` merges
+  venue and symbol rules into a canonical identifier plus limits. Rules can be
+  layered globally (`symbol="*"`), per venue and per instrument. Example:
+
+  ```python
+  from qmtl.services.gateway.instrument_constraints import ConstraintRule, InstrumentConstraints
+
+  constraints = InstrumentConstraints([
+      ConstraintRule(symbol="*", min_notional=25),  # global floor
+      ConstraintRule(venue="binance", symbol="*", lot_size=0.001),
+      ConstraintRule(
+          venue="binance",
+          symbol="BTCUSDT",
+          canonical_symbol="BTCUSDT",
+          min_notional=10,
+          tick_size=0.1,
+          aliases=["btc/usdt"],
+      ),
+  ])
+  ```
+
+- Pass the resolver into `OrderOptions.instrument_constraints`. The gateway
+  normalizes symbols before emission and enforces merged limits on each order.
+- Capture constraint failures via
+  `OrderOptions.constraint_violation_sink` or set
+  `OrderOptions.raise_on_violation = True` to surface violations immediately.
 
 ## Pluggability
 

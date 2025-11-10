@@ -26,7 +26,8 @@ last_modified: 2025-11-04
   - `world_alloc_before/after`: 월드 할당 비율(0.0–1.0)
   - `strategy_alloc_before/after`: 전략별 총자산 대비 비율(0.0–1.0)
   - `positions`: 전략 식별자와 선택적 `venue`(거래소)까지 포함한 플래튼 행
-  - `min_trade_notional`, `lot_size_by_symbol`: 소액 트레이드 억제/라운딩
+- `min_trade_notional`, `lot_size_by_symbol`: 소액 트레이드 억제/라운딩
+- `instrument_constraints`: 거래소/심볼별 로트·틱·최소 노티오널 규칙을 합치는 선택적 정규화기(아래 참고)
 
 ## 규칙: 비례 리밸런싱(Proportional)
 
@@ -84,6 +85,32 @@ last_modified: 2025-11-04
   - 감소: `reduce-only` 부분청산(지원 시)
   - 증가: 잔여 델타만 신규 진입
   - 반전 필요 시 "flatten-then-open" 또는 안전장치가 포함된 "direct-flip" 정책 사용(참조: architecture/execution_nodes.md)
+
+### 상품 제약 정규화
+
+- `qmtl.services.gateway.instrument_constraints.InstrumentConstraints`는 전역(`symbol="*"`),
+  거래소별, 종목별 규칙을 순차적으로 병합하여 표준화된 심볼과 로트/틱/최소 주문 금액을 제공합니다. 예시:
+
+  ```python
+  from qmtl.services.gateway.instrument_constraints import ConstraintRule, InstrumentConstraints
+
+  constraints = InstrumentConstraints([
+      ConstraintRule(symbol="*", min_notional=25),  # 전역 최소 주문 금액
+      ConstraintRule(venue="binance", symbol="*", lot_size=0.001),
+      ConstraintRule(
+          venue="binance",
+          symbol="BTCUSDT",
+          canonical_symbol="BTCUSDT",
+          min_notional=10,
+          tick_size=0.1,
+          aliases=["btc/usdt"],
+      ),
+  ])
+  ```
+
+- 이렇게 생성한 정규화기를 `OrderOptions.instrument_constraints`에 전달하면 게이트웨이가 주문을 방출하기 전에 심볼을 정규화하고 제약을 강제합니다.
+- 제약 위반은 `OrderOptions.constraint_violation_sink`로 수집하거나,
+  `OrderOptions.raise_on_violation = True` 설정으로 즉시 예외를 발생시켜 확인할 수 있습니다.
 
 ## 교체 가능한 설계(플러그형)
 
