@@ -66,6 +66,8 @@ class PositionTargetNode(ProcessingNode):
         short_weight: float = -1.0,
         hold_weight: float = 0.0,
         to_order: bool = True,
+        price_node: Node | None = None,
+        price_resolver: Callable[[CacheView], float | None] | None = None,
         name: str | None = None,
     ) -> None:
         self.signal = signal
@@ -75,6 +77,14 @@ class PositionTargetNode(ProcessingNode):
         self.short_weight = float(short_weight)
         self.hold_weight = float(hold_weight)
         self.to_order = to_order
+        if price_node is not None and price_resolver is not None:
+            raise ValueError("provide only one of price_node or price_resolver")
+        if to_order and price_node is None and price_resolver is None:
+            raise ValueError(
+                "price_node or price_resolver is required when to_order=True"
+            )
+        self.price_node = price_node
+        self.price_resolver = price_resolver
         self._last_state: float | None = None
         super().__init__(
             signal,
@@ -105,8 +115,39 @@ class PositionTargetNode(ProcessingNode):
         )
         intent = PositionTarget(symbol=self.symbol, target_percent=target_percent)
         if self.to_order:
-            return to_order_payloads([intent])[0]
+            price = self._resolve_price(view)
+            return to_order_payloads([intent], price_by_symbol={self.symbol: price})[0]
         return intent
+
+    def _resolve_price(self, view: CacheView) -> float:
+        if self.price_resolver is not None:
+            price = self.price_resolver(view)
+            if price is None:
+                raise ValueError(
+                    f"price_resolver returned None for symbol {self.symbol!r}"
+                )
+            try:
+                return float(price)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    f"price_resolver returned non-numeric value for symbol {self.symbol!r}"
+                ) from exc
+
+        if self.price_node is not None:
+            data = view[self.price_node][self.price_node.interval]
+            if not data:
+                raise ValueError(
+                    f"no price data available from {self.price_node.name!r} for symbol {self.symbol!r}"
+                )
+            _, value = data[-1]
+            try:
+                return float(value)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    f"price stream {self.price_node.name!r} produced non-numeric value for symbol {self.symbol!r}"
+                ) from exc
+
+        raise ValueError("price source is not configured")
 
 
 __all__ = ["PositionTargetNode", "Thresholds"]

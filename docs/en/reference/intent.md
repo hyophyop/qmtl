@@ -24,7 +24,7 @@ PositionTarget
 ## Nodes
 
 `PositionTargetNode`
-: Emits `target_percent` intents from a single-symbol signal with hysteresis. Outputs order-shaped dicts by default for backward compatibility.
+: Emits `target_percent` intents from a single-symbol signal with hysteresis. Outputs order-shaped dicts by default for backward compatibility. Provide either `price_node` or `price_resolver` when `to_order=True` so downstream sizing receives an explicit `price`; the node raises an error if it cannot obtain one.
 
 Example:
 ```python
@@ -36,6 +36,7 @@ intent_node = PositionTargetNode(
     thresholds=Thresholds(long_enter=0.7, short_enter=-0.7),
     long_weight=+0.10,
     short_weight=-0.05,
+    price_node=price_feed,
 )
 ```
 
