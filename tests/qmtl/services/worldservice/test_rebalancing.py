@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from qmtl.services.worldservice.rebalancing import (
     ProportionalRebalancer,
     RebalanceContext,
@@ -35,6 +37,36 @@ def test_single_world_proportional_downscale_rounding():
     assert d.symbol == "BTCUSDT"
     assert d.venue == "binance"
     assert round(d.delta_qty, 3) == -0.333
+
+
+def test_lot_rounding_toward_zero_on_upscale():
+    ctx = RebalanceContext(
+        total_equity=1_000_000.0,
+        world_id="x",
+        world_alloc_before=0.1,
+        world_alloc_after=0.11,
+        strategy_alloc_before={"s": 0.1},
+        strategy_alloc_after={"s": 0.11},
+        positions=[
+            PositionSlice(
+                world_id="x",
+                strategy_id="s",
+                symbol="ETHUSDT",
+                qty=1.0,
+                mark=2_000.0,
+                venue="binance",
+            )
+        ],
+        min_trade_notional=0.0,
+        lot_size_by_symbol={"ETHUSDT": 0.07},
+    )
+
+    plan = ProportionalRebalancer().plan(ctx)
+    assert len(plan.deltas) == 1
+    delta = plan.deltas[0]
+    assert delta.symbol == "ETHUSDT"
+    # Raw quantity delta would be 0.1; rounding should move toward zero to 0.07.
+    assert delta.delta_qty == pytest.approx(0.07, abs=1e-9)
 
 
 def test_multi_world_netting_global():
@@ -80,3 +112,94 @@ def test_strategy_override_world_scale_no_change_when_after_equals_before():
     )
     plan = ProportionalRebalancer().plan(ctx)
     assert len(plan.deltas) == 0 or abs(plan.deltas[0].delta_qty) < 1e-6
+
+
+def test_lot_rounding_aggregates_across_slices_on_boundary():
+    positions = [
+        PositionSlice(
+            world_id="w",
+            strategy_id="s1",
+            symbol="ETHUSDT",
+            qty=1.0,
+            mark=100.0,
+            venue="binance",
+        ),
+        PositionSlice(
+            world_id="w",
+            strategy_id="s2",
+            symbol="ETHUSDT",
+            qty=1.0,
+            mark=100.0,
+            venue="binance",
+        ),
+    ]
+    ctx = RebalanceContext(
+        total_equity=1_000_000.0,
+        world_id="w",
+        world_alloc_before=0.2,
+        world_alloc_after=0.1,
+        strategy_alloc_before={"s1": 0.1, "s2": 0.1},
+        strategy_alloc_after={"s1": 0.05, "s2": 0.05},
+        positions=positions,
+        min_trade_notional=0.0,
+        lot_size_by_symbol={"ETHUSDT": 0.25},
+    )
+
+    plan = ProportionalRebalancer().plan(ctx)
+    assert len(plan.deltas) == 1
+    delta = plan.deltas[0]
+    assert delta.symbol == "ETHUSDT"
+    # Aggregate delta notionals (two slices) land exactly on a 0.25 lot boundary.
+    assert delta.delta_qty == pytest.approx(-1.0, abs=1e-9)
+
+
+def test_min_trade_notional_suppresses_small_delta():
+    ctx = RebalanceContext(
+        total_equity=1_000_000.0,
+        world_id="m",
+        world_alloc_before=0.2,
+        world_alloc_after=0.199,
+        strategy_alloc_before={"s": 0.2},
+        strategy_alloc_after={"s": 0.199},
+        positions=[
+            PositionSlice(
+                world_id="m",
+                strategy_id="s",
+                symbol="BTCUSDT",
+                qty=1.0,
+                mark=100.0,
+                venue="binance",
+            )
+        ],
+        min_trade_notional=1.0,
+        lot_size_by_symbol={"BTCUSDT": 0.001},
+    )
+
+    plan = ProportionalRebalancer().plan(ctx)
+    assert plan.deltas == []
+
+
+def test_missing_mark_skips_delta():
+    ctx = RebalanceContext(
+        total_equity=1_000_000.0,
+        world_id="z",
+        world_alloc_before=0.1,
+        world_alloc_after=0.0,
+        strategy_alloc_before={"s": 0.1},
+        strategy_alloc_after={"s": 0.0},
+        positions=[
+            PositionSlice(
+                world_id="z",
+                strategy_id="s",
+                symbol="DOGEUSDT",
+                qty=1.0,
+                mark=-100.0,
+                venue="binance",
+            )
+        ],
+        min_trade_notional=0.0,
+        lot_size_by_symbol={"DOGEUSDT": 1.0},
+    )
+
+    plan = ProportionalRebalancer().plan(ctx)
+    assert plan.deltas == []
