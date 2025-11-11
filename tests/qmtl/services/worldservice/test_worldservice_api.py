@@ -213,6 +213,46 @@ async def test_apply_rejects_invalid_gating_policy():
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_apply_scaling_mode_success():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "mode": "scaling",
+            }
+
+            resp = await client.post("/rebalancing/apply", json=payload)
+            assert resp.status_code == 200
+
+            body = resp.json()
+            assert set(body) >= {"per_world", "global_deltas"}
+            assert "w1" in body["per_world"]
+
+            plan = body["per_world"]["w1"]
+            assert plan["world_id"] == "w1"
+            assert isinstance(plan["deltas"], list)
+            assert plan["scale_world"] == pytest.approx(1.0)
+            assert "s1" in plan["scale_by_strategy"]
+
+            assert body["global_deltas"] == []
+            assert "overlay_deltas" not in body or body["overlay_deltas"] is None
+
+
+@pytest.mark.asyncio
 async def test_allocations_endpoint_execute_and_idempotency():
     bus = DummyBus()
     executor = DummyExecutor()
