@@ -2,7 +2,7 @@
 title: "Strategy Development and Testing Workflow"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-05
 ---
 
 {{ nav_links() }}
@@ -117,6 +117,47 @@ ready for local development but can be adjusted to point at production services.
 > - Split complex logic into functions/classes and document with docstrings.
 > - Update relevant docs and tests alongside code changes.
 
+## 3a. Intent-first pipeline
+
+Rebalancing policies stay most flexible when strategies emit **intents only**. A
+`PositionTargetNode` converts a signal into target allocations and
+`nodesets.recipes.make_intent_first_nodeset` wraps it in the standard execution
+pipeline (pre-trade → sizing → execution → publish). A minimal setup looks like:
+
+```python
+from qmtl.runtime.nodesets.recipes import (
+    INTENT_FIRST_DEFAULT_THRESHOLDS,
+    make_intent_first_nodeset,
+)
+from qmtl.runtime.sdk import Strategy
+from qmtl.runtime.sdk.node import StreamInput
+
+
+class IntentFirstStrategy(Strategy):
+    def setup(self) -> None:
+        signal = StreamInput(tags=["alpha"], interval=60, period=1)
+        price = StreamInput(tags=["price"], interval=60, period=1)
+
+        nodeset = make_intent_first_nodeset(
+            signal,
+            self.world_id,
+            symbol="BTCUSDT",
+            price_node=price,
+            thresholds=INTENT_FIRST_DEFAULT_THRESHOLDS,
+            long_weight=0.25,
+            short_weight=-0.10,
+        )
+
+        self.add_nodes([signal, price])
+        self.add_nodeset(nodeset)
+```
+
+Tune optional parameters such as `thresholds`, `initial_cash`, or
+`execution_model` to match your hysteresis bands and sizing seeds. If you need a
+recipe adapter, expose it via `IntentFirstAdapter` so the DAG Manager can bind
+signal/price inputs externally. See [reference/intent.md](../reference/intent.md)
+for parameter details.
+
 ## 4. Execute with Worlds
 
 Use `Runner.offline()` for local testing without dependencies. For integrated runs,
@@ -145,6 +186,27 @@ Multiple strategies can be executed in parallel by launching separate processes
 or using the `parallel_strategies_example.py` script.
 
 > **Tip:** In production, back up `qmtl.yml` and prepare a rollback plan.
+
+## 4a. Intent → Rebalancing → Execution end-to-end
+
+Intent-first strategies shine when coupled with the world/gateway rebalancing
+stack. The end-to-end flow follows three stages:
+
+1. **Strategy:** The `PositionTargetNode` pipeline above emits intents with
+   `target_percent`/`quantity` payloads.
+2. **World Service:** The centralized rebalancer in
+   [world/rebalancing.md](../world/rebalancing.md) aggregates intents whenever
+   world/strategy allocations shift and computes delta positions.
+3. **Gateway execution:** The adapter described in
+   [operations/rebalancing_execution.md](../operations/rebalancing_execution.md)
+   turns the deltas into orders via `orders_from_world_plan` or the
+   `/rebalancing/execute` endpoint and, if required, submits them to the Commit
+   Log.
+
+For local validation, run the strategy with `Runner.offline()` while posting
+`MultiWorldRebalanceRequest` payloads to the World Service to inspect plans, then
+review the Gateway dry-run response to confirm order shapes. Providing activation
+and Gateway URLs enables the exact same flow in integrated environments.
 
 ## 5. Test Your Implementation
 

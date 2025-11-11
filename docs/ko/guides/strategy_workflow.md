@@ -2,7 +2,7 @@
 title: "전략 개발 및 테스트 워크플로"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-05
 ---
 
 {{ nav_links() }}
@@ -108,6 +108,46 @@ Gateway/WorldService에 도달할 수 없는 상태에서 `Runner.run(...)`을 �
 > - 복잡한 로직은 별도 함수/클래스로 분리하고, 주석과 docstring을 작성하세요.
 > - 변경 시 반드시 관련 문서와 테스트를 함께 수정하세요.
 
+## 3a. 의도 우선(Intent-first) 전략 파이프라인
+
+리밸런싱 정책은 전략이 **의도(intent)** 만 방출할 때 가장 유연합니다. `PositionTargetNode`는 시그널을
+포지션 목표(퍼센트/수량)로 변환하고, `nodesets.recipes.make_intent_first_nodeset` 은 이 노드를 표준 실행
+파이프라인(프리트레이드 → 사이징 → 실행 → 퍼블리시)과 즉시 결합합니다. 다음과 같이 최소 구성을 만들 수
+있습니다:
+
+```python
+from qmtl.runtime.nodesets.recipes import (
+    INTENT_FIRST_DEFAULT_THRESHOLDS,
+    make_intent_first_nodeset,
+)
+from qmtl.runtime.sdk import Strategy
+from qmtl.runtime.sdk.node import StreamInput
+
+
+class IntentFirstStrategy(Strategy):
+    def setup(self) -> None:
+        signal = StreamInput(tags=["alpha"], interval=60, period=1)
+        price = StreamInput(tags=["price"], interval=60, period=1)
+
+        nodeset = make_intent_first_nodeset(
+            signal,
+            self.world_id,
+            symbol="BTCUSDT",
+            price_node=price,
+            thresholds=INTENT_FIRST_DEFAULT_THRESHOLDS,
+            long_weight=0.25,
+            short_weight=-0.10,
+        )
+
+        self.add_nodes([signal, price])
+        self.add_nodeset(nodeset)
+```
+
+`thresholds` 또는 `initial_cash`, `execution_model` 같은 선택 인자를 조정하면 히스테리시스나 사이징 시드 값을
+상황에 맞게 변경할 수 있습니다. `IntentFirstAdapter`를 사용하면 위 레시피를 NodeSet 어댑터로 노출하여 DAG
+Manager 구성이 신호/가격 입력을 바인딩하도록 할 수 있습니다. 자세한 파라미터 설명은
+[reference/intent.md](../reference/intent.md)를 참고하세요.
+
 ## 4. 월드와 함께 실행
 
 의존성 없이 로컬 테스트를 할 때는 `Runner.offline()`을 사용하세요. 통합 실행의 경우
@@ -134,6 +174,22 @@ qmtl service dagmanager server --config qmtl/examples/qmtl.yml
 별도 프로세스를 실행하거나 `parallel_strategies_example.py` 스크립트를 사용하면 여러 전략을 병렬로 실행할 수 있습니다.
 
 > **팁:** 운영 환경에서는 `qmtl.yml` 설정을 반드시 백업하고, 롤백 플랜을 준비하세요.
+
+## 4a. 의도 → 리밸런싱 → 실행 종단 간 흐름
+
+Intent-first 전략은 월드/게이트웨이 리밸런싱 스택과 결합할 때 가장 큰 효과를 발휘합니다. 종단 간 플로우는
+다음 세 단계를 따릅니다:
+
+1. **전략:** 위 `PositionTargetNode` 기반 파이프라인이 `target_percent`/`quantity` 의도를 발행합니다.
+2. **월드 서비스:** [world/rebalancing.md](../world/rebalancing.md)의 중앙집중형 리밸런서가 월드/전략 할당
+   변화에 따라 의도를 합산하고 델타 포지션을 계산합니다.
+3. **게이트웨이 실행:** [operations/rebalancing_execution.md](../operations/rebalancing_execution.md)의 실행
+   어댑터가 `orders_from_world_plan`/`/rebalancing/execute`를 통해 델타를 주문으로 변환하고, 필요 시
+   `submit=true` 옵션으로 Commit Log에 전송합니다.
+
+로컬 검증 시에는 `Runner.offline()`으로 전략을 실행하면서 월드 서비스에 `MultiWorldRebalanceRequest`를 보내어
+계획을 확인하고, 게이트웨이의 드라이런 응답으로 주문 형태를 점검하세요. 활성화/게이트웨이 URL을 지정하면
+동일한 플로우가 실제 환경에서도 그대로 작동합니다.
 
 ## 5. Test Your Implementation
 
