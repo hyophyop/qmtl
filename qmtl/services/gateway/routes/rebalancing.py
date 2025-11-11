@@ -63,6 +63,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         venue_policies = _resolve_venue_policies(request)
         lot_sizes = payload.lot_size_by_symbol or {}
         marks_by_world, marks_global = _collect_mark_snapshots(payload.positions or [])
+        current_net_notional = _aggregate_net_notional(payload.positions or [])
         min_trade_notional = payload.min_trade_notional
         for wid, p in per_world_plans.items():
             plan_obj = type(
@@ -131,6 +132,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 orders_global,
                 marks_by_symbol=marks_global,
                 total_equity=payload.total_equity,
+                current_net_notional=current_net_notional,
             )
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
@@ -252,6 +254,15 @@ def _collect_mark_snapshots(
     finalized_world = {wid: _finalize(bucket) for wid, bucket in world_marks.items()}
     finalized_global = _finalize(aggregate)
     return finalized_world, finalized_global
+
+
+def _aggregate_net_notional(positions: Sequence[PositionSlice]) -> float:
+    net = 0.0
+    for pos in positions:
+        qty = float(getattr(pos, "qty", 0.0) or 0.0)
+        mark = float(getattr(pos, "mark", 0.0) or 0.0)
+        net += qty * mark
+    return net
 
 
 def _resolve_venue_policies(request: Request) -> Mapping[str, VenuePolicy]:

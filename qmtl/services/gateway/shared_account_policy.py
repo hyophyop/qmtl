@@ -67,6 +67,7 @@ class SharedAccountPolicy:
         *,
         marks_by_symbol: Mapping[tuple[str | None, str], float],
         total_equity: float,
+        current_net_notional: float | None = None,
     ) -> SharedAccountPolicyResult:
         """Return whether ``orders`` satisfy configured constraints."""
 
@@ -77,6 +78,9 @@ class SharedAccountPolicy:
         gross = 0.0
         net = 0.0
         missing_marks: list[Mapping[str, str | None]] = []
+        current_net = float(current_net_notional or 0.0)
+        if current_net:
+            metrics["current_net_notional"] = abs(current_net)
 
         for order in orders:
             qty_raw = order.get("quantity", 0.0)
@@ -97,14 +101,17 @@ class SharedAccountPolicy:
             net += qty * mark
 
         net_abs = abs(net)
+        projected_net = current_net + net
+        projected_net_abs = abs(projected_net)
         metrics["gross_notional"] = gross
-        metrics["net_notional"] = net_abs
+        metrics["net_notional_delta"] = net_abs
+        metrics["net_notional"] = projected_net_abs
         if missing_marks:
             metrics["missing_marks"] = missing_marks
 
         margin_headroom = 0.0
         if total_equity > 0:
-            margin_headroom = max(0.0, 1.0 - (gross / total_equity))
+            margin_headroom = max(0.0, 1.0 - (projected_net_abs / total_equity))
         metrics["margin_headroom"] = margin_headroom
 
         if missing_marks:
@@ -126,11 +133,11 @@ class SharedAccountPolicy:
                 context=metrics,
             )
 
-        if cfg.max_net_notional is not None and net_abs - cfg.max_net_notional > eps:
+        if cfg.max_net_notional is not None and projected_net_abs - cfg.max_net_notional > eps:
             return SharedAccountPolicyResult(
                 allowed=False,
                 reason=(
-                    f"net notional {net_abs:.2f} exceeds limit {cfg.max_net_notional:.2f}"
+                    f"net notional {projected_net_abs:.2f} exceeds limit {cfg.max_net_notional:.2f}"
                 ),
                 context=metrics,
             )

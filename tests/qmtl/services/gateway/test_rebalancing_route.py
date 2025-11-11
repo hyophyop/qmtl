@@ -198,6 +198,58 @@ async def test_rebalancing_submit_shared_account_global(gateway_app_factory) -> 
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_shared_account_margin_headroom_allows_unwind(
+    gateway_app_factory,
+) -> None:
+    writer = StubCommitLogWriter()
+    policy = SharedAccountPolicyConfig(
+        enabled=True,
+        max_gross_notional=200000.0,
+        max_net_notional=200000.0,
+        min_margin_headroom=0.1,
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = _plan_response(
+                {
+                    "w1": {
+                        "scale_world": 1.0,
+                        "scale_by_strategy": {},
+                        "deltas": [
+                            {"symbol": "BTCUSDT", "delta_qty": -5.0, "venue": "binance"}
+                        ],
+                    }
+                },
+                global_deltas=[{"symbol": "BTCUSDT", "delta_qty": -5.0, "venue": "binance"}],
+            )
+            return httpx.Response(200, json=body)
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "paper"}})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    payload = _default_payload()
+    payload["total_equity"] = 100000.0
+    payload["positions"][0]["qty"] = 5.0
+    payload["positions"][0]["mark"] = 19000.0
+
+    async with gateway_app_factory(
+        handler,
+        commit_log_writer=writer,
+        app_kwargs={"shared_account_policy_config": policy},
+    ) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute?submit=true&shared_account=true",
+            json=payload,
+            headers={"X-Allow-Live": "true"},
+        )
+
+    assert resp.status_code == 200
+    scopes = {payload["scope"] for _, payload in writer.published}
+    assert "global" in scopes
+
+
+@pytest.mark.asyncio
 async def test_rebalancing_shared_account_policy_violation(
     gateway_app_factory,
 ) -> None:
