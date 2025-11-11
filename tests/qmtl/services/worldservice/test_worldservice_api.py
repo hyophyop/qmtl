@@ -253,6 +253,36 @@ async def test_rebalancing_apply_scaling_mode_success():
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_apply_overlay_mode_rejected():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "mode": "overlay",
+            }
+
+            resp = await client.post("/rebalancing/apply", json=payload)
+            assert resp.status_code == 501
+            assert resp.json() == {
+                "detail": "Overlay mode is not implemented yet. Use mode='scaling'."
+            }
+
+
+@pytest.mark.asyncio
 async def test_allocations_endpoint_execute_and_idempotency():
     bus = DummyBus()
     executor = DummyExecutor()
