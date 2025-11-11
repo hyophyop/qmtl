@@ -29,6 +29,7 @@ from .ws import WebSocketHub
 from .commit_log_consumer import CommitLogConsumer
 from .commit_log import CommitLogWriter
 from .submission import ComputeContextService, SubmissionPipeline
+from .shared_account_policy import SharedAccountPolicyConfig
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -59,6 +60,7 @@ def create_app(
     enforce_live_guard: bool = True,
     enable_otel: bool | None = None,
     enable_background: bool = True,
+    shared_account_policy_config: SharedAccountPolicyConfig | None = None,
 ) -> FastAPI:
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     if database is not None:
@@ -190,6 +192,9 @@ def create_app(
                 except Exception:
                     logger.exception("Failed to close world client")
 
+    policy_config = shared_account_policy_config or SharedAccountPolicyConfig()
+    shared_policy = policy_config.as_policy()
+
     app = FastAPI(lifespan=lifespan)
     # Opt-in FastAPI OpenTelemetry instrumentation to avoid resource warnings in tests
     # Default is disabled unless explicitly enabled via argument or env var
@@ -204,6 +209,7 @@ def create_app(
     app.state.ws_hub = ws_hub_local
     app.state.commit_log_consumer = commit_log_consumer_local
     app.state.commit_log_writer = commit_log_writer_local
+    app.state.shared_account_policy = shared_policy
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):

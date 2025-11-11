@@ -19,6 +19,7 @@ from ..rebalancing_executor import (
     orders_from_symbol_deltas,
 )
 from ..routes.dependencies import GatewayDependencyProvider
+from ..shared_account_policy import SharedAccountPolicy
 from ..strategy_manager import StrategyManager
 from ..world_client import WorldServiceClient
 from qmtl.services.worldservice.rebalancing import allocate_strategy_deltas, PositionSlice
@@ -62,6 +63,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         venue_policies = _resolve_venue_policies(request)
         lot_sizes = payload.lot_size_by_symbol or {}
         marks_by_world, marks_global = _collect_mark_snapshots(payload.positions or [])
+        current_net_notional = _aggregate_net_notional(payload.positions or [])
         min_trade_notional = payload.min_trade_notional
         for wid, p in per_world_plans.items():
             plan_obj = type(
@@ -100,7 +102,18 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         shared_account = request.query_params.get("shared_account", "false").lower() in {"1", "true", "yes"}
         mode = (payload.mode or 'scaling').lower() if hasattr(payload, 'mode') else 'scaling'
         orders_global: List[dict] | None = None
+        policy: SharedAccountPolicy | None = getattr(
+            request.app.state, "shared_account_policy", None
+        )
         if shared_account:
+            if policy is None or not policy.enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "E_SHARED_ACCOUNT_DISABLED",
+                        "message": "shared-account execution is disabled",
+                    },
+                )
             global_deltas = plan_resp.get("global_deltas", [])
             orders_global = orders_from_symbol_deltas([
                 type("_Delta", (), {
@@ -115,6 +128,22 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 marks_by_symbol=marks_global,
                 venue_policies=venue_policies,
             ))
+            evaluation = policy.evaluate(
+                orders_global,
+                marks_by_symbol=marks_global,
+                total_equity=payload.total_equity,
+                current_net_notional=current_net_notional,
+            )
+            if not evaluation.allowed:
+                message = evaluation.reason or "shared-account policy rejected execution"
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "code": "E_SHARED_ACCOUNT_POLICY",
+                        "message": message,
+                        "context": dict(evaluation.context),
+                    },
+                )
         elif mode in ('overlay', 'hybrid'):
             raise NotImplementedError("Overlay mode is not implemented yet. Use mode='scaling'.")
 
@@ -225,6 +254,15 @@ def _collect_mark_snapshots(
     finalized_world = {wid: _finalize(bucket) for wid, bucket in world_marks.items()}
     finalized_global = _finalize(aggregate)
     return finalized_world, finalized_global
+
+
+def _aggregate_net_notional(positions: Sequence[PositionSlice]) -> float:
+    net = 0.0
+    for pos in positions:
+        qty = float(getattr(pos, "qty", 0.0) or 0.0)
+        mark = float(getattr(pos, "mark", 0.0) or 0.0)
+        net += qty * mark
+    return net
 
 
 def _resolve_venue_policies(request: Request) -> Mapping[str, VenuePolicy]:

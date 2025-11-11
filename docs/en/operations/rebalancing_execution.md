@@ -49,6 +49,16 @@ Mode selection
 
 Use `per_world` for execution unless running in a shared-account mode; treat `global_deltas` as an analytical net view otherwise. When `shared_account=true` the Gateway emits a `scope="global"` batch alongside the per-world batches so downstream consumers can decide which aggregation level to honour.
 
+### Shared-account safety policy
+
+The Gateway disables shared-account netting by default. Operators must set `gateway.shared_account_policy.enabled=true` and configure the thresholds below before execution is allowed.
+
+- `max_gross_notional`: upper bound on the summed absolute notional of the global orders.
+- `max_net_notional`: upper bound on the residual notional after netting (absolute value of the signed sum).
+- `min_margin_headroom`: minimum margin buffer ratio (`0.0-1.0`) that must remain after the orders execute.
+
+If a check fails the Gateway responds with HTTP 422 and `E_SHARED_ACCOUNT_POLICY`, including computed metrics (`gross_notional`, `net_notional`, `margin_headroom`, `total_equity`) under the `context` key. Requests made while the toggle is off return HTTP 403 `E_SHARED_ACCOUNT_DISABLED`.
+
 ## Submission semantics
 
 - **Live guard:** when `submit=true` the request must include header `X-Allow-Live: true` (unless `enforce_live_guard` is disabled in configuration). Requests without the header are rejected with HTTP 403.
