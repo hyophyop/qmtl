@@ -48,6 +48,7 @@ from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
 )
+from qmtl.runtime.transforms.execution_shared import apply_sizing
 from qmtl.runtime.transforms.position_intent import PositionTargetNode, Thresholds
 from qmtl.runtime.brokerage import (
     Account,
@@ -325,6 +326,7 @@ def _intent_pretrade_factory(
     initial_cash: float,
 ) -> Node:
     portfolio = getattr(resources, "portfolio", None)
+    weight_fn = getattr(resources, "weight_fn", None)
     if portfolio is not None and getattr(portfolio, "cash", 0.0) <= 0.0:
         portfolio.cash = float(initial_cash)
 
@@ -347,8 +349,15 @@ def _intent_pretrade_factory(
             return None
         _, payload = data[-1]
         order = dict(payload)
-        order.setdefault("quantity", 0.0)
-        return order
+        sized_order: dict | None = order
+        if portfolio is not None and "quantity" not in order:
+            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
+        if sized_order is None:
+            return None
+        if "quantity" not in sized_order:
+            sized_order = dict(sized_order)
+            sized_order.setdefault("quantity", 0.0)
+        return sized_order
 
     guard = Node(
         input=intent,
