@@ -19,6 +19,8 @@ from qmtl.runtime.sdk.brokerage_client import (
     FakeBrokerageClient,
     FuturesCcxtBrokerageClient,
 )
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel
+from qmtl.runtime.sdk.order_gate import Activation
 from qmtl.runtime.nodesets.base import (
     NodeSet,
     NodeSetBuilder,
@@ -40,9 +42,23 @@ from qmtl.runtime.nodesets.steps import (
 )
 from qmtl.runtime.nodesets.registry import nodeset_recipe
 from qmtl.runtime.pipeline.execution_nodes import (
+    ExecutionNode as RealExecutionNode,
+    OrderPublishNode as RealOrderPublishNode,
+    PreTradeGateNode as RealPreTradeNode,
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
 )
+from qmtl.runtime.transforms.execution_shared import apply_sizing
+from qmtl.runtime.transforms.position_intent import PositionTargetNode, Thresholds
+from qmtl.runtime.brokerage import (
+    Account,
+    BrokerageModel,
+    CashBuyingPowerModel,
+    ImmediateFillModel,
+    NullSlippageModel,
+    PercentFeeModel,
+)
+from qmtl.services.gateway.commit_log import CommitLogWriter
 
 
 _MISSING = object()
@@ -292,6 +308,283 @@ def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
     return GeneratedAdapter
 
 
+def _intent_pretrade_factory(
+    upstream: Node,
+    *,
+    symbol: str,
+    thresholds: Thresholds,
+    long_weight: float,
+    short_weight: float,
+    hold_weight: float,
+    price_node: Node | None,
+    price_resolver: Callable[[CacheView], float | None] | None,
+    activation_map: Mapping[str, Activation] | None,
+    brokerage: BrokerageModel | None,
+    account: Account | None,
+    resources: Any,
+    world_id: str,
+    initial_cash: float,
+) -> Node:
+    portfolio = getattr(resources, "portfolio", None)
+    weight_fn = getattr(resources, "weight_fn", None)
+    if portfolio is not None and getattr(portfolio, "cash", 0.0) <= 0.0:
+        portfolio.cash = float(initial_cash)
+
+    intent = PositionTargetNode(
+        upstream,
+        symbol=symbol,
+        thresholds=thresholds,
+        long_weight=long_weight,
+        short_weight=short_weight,
+        hold_weight=hold_weight,
+        to_order=True,
+        price_node=price_node,
+        price_resolver=price_resolver,
+    )
+    setattr(intent, "world_id", world_id)
+
+    def _guard_quantity(view: CacheView) -> dict | None:
+        data = view[intent][intent.interval]
+        if not data:
+            return None
+        _, payload = data[-1]
+        order = dict(payload)
+        sized_order: dict | None = order
+        if portfolio is not None and "quantity" not in order:
+            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
+        if sized_order is None:
+            return None
+        if "quantity" not in sized_order:
+            sized_order = dict(sized_order)
+            sized_order.setdefault("quantity", 0.0)
+        return sized_order
+
+    guard = Node(
+        input=intent,
+        compute_fn=_guard_quantity,
+        name=f"{intent.name}_intent_pretrade_guard",
+        interval=intent.interval,
+        period=1,
+    )
+    setattr(guard, "world_id", world_id)
+
+    resolved_activation = activation_map or _default_activation(symbol)
+    resolved_brokerage = brokerage or _default_brokerage()
+    resolved_account = account or Account(cash=float(initial_cash))
+
+    gate = RealPreTradeNode(
+        guard,
+        activation_map=resolved_activation,
+        brokerage=resolved_brokerage,
+        account=resolved_account,
+    )
+    setattr(gate, "world_id", world_id)
+
+    def _strip_quantity(view: CacheView) -> dict | None:
+        data = view[gate][gate.interval]
+        if not data:
+            return None
+        _, payload = data[-1]
+        order = dict(payload)
+        order.pop("quantity", None)
+        return order
+
+    stage = Node(
+        input=gate,
+        compute_fn=_strip_quantity,
+        name=f"{gate.name}_sanitized",
+        interval=gate.interval,
+        period=1,
+    )
+    setattr(stage, "intent_node", intent)
+    setattr(stage, "pretrade_node", gate)
+    setattr(stage, "_intent_guard_node", guard)
+    return stage
+
+
+INTENT_FIRST_DESCRIPTOR = NodeSetDescriptor(
+    name="intent_first",
+    inputs=(
+        PortSpec("signal", True, "Signal stream driving intent generation"),
+        PortSpec("price", True, "Price stream for pricing intents"),
+    ),
+    outputs=(
+        PortSpec("orders", True, "Sized order stream after publishing"),
+    ),
+)
+
+
+INTENT_FIRST_ADAPTER_PARAMETERS = (
+    AdapterParameter("symbol", annotation=str),
+    AdapterParameter(
+        "thresholds",
+        annotation=Thresholds | Mapping[str, float] | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter("long_weight", annotation=float, default=1.0, required=False),
+    AdapterParameter("short_weight", annotation=float, default=-1.0, required=False),
+    AdapterParameter("hold_weight", annotation=float, default=0.0, required=False),
+    AdapterParameter(
+        "activation_map",
+        annotation=Mapping[str, Activation] | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter(
+        "brokerage",
+        annotation=BrokerageModel | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter(
+        "account",
+        annotation=Account | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter(
+        "execution_model",
+        annotation=ExecutionModel | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter(
+        "commit_log_writer",
+        annotation=CommitLogWriter | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter(
+        "submit_order",
+        annotation=Callable[[Mapping[str, Any]], None] | None,
+        default=None,
+        required=False,
+    ),
+    AdapterParameter("initial_cash", annotation=float | None, default=None, required=False),
+)
+
+
+_INTENT_FIRST_RECIPE = NodeSetRecipe(
+    name="intent_first",
+    modes=("simulate",),
+    descriptor=INTENT_FIRST_DESCRIPTOR,
+    adapter_parameters=INTENT_FIRST_ADAPTER_PARAMETERS,
+)
+
+
+@nodeset_recipe("intent_first")
+def make_intent_first_nodeset(
+    signal_node: Node,
+    world_id: str,
+    *,
+    symbol: str,
+    price_node: Node | None = None,
+    price_resolver: Callable[[CacheView], float | None] | None = None,
+    thresholds: Thresholds | Mapping[str, float] | None = None,
+    long_weight: float = 1.0,
+    short_weight: float = -1.0,
+    hold_weight: float = 0.0,
+    activation_map: Mapping[str, Activation] | None = None,
+    brokerage: BrokerageModel | None = None,
+    account: Account | None = None,
+    execution_model: ExecutionModel | None = None,
+    commit_log_writer: CommitLogWriter | None = None,
+    submit_order: Callable[[dict], None] | None = None,
+    initial_cash: float | None = None,
+    options: NodeSetOptions | None = None,
+    descriptor: Any | None = None,
+) -> NodeSet:
+    if price_node is None and price_resolver is None:
+        raise ValueError("price_node or price_resolver is required")
+
+    resolved_thresholds = _coerce_thresholds(thresholds)
+    cash_seed = float(initial_cash if initial_cash is not None else 100_000.0)
+
+    step_overrides = {
+        "pretrade": StepSpec.from_factory(
+            _intent_pretrade_factory,
+            kwargs={
+                "symbol": symbol,
+                "thresholds": resolved_thresholds,
+                "long_weight": float(long_weight),
+                "short_weight": float(short_weight),
+                "hold_weight": float(hold_weight),
+                "price_node": price_node,
+                "price_resolver": price_resolver,
+                "activation_map": activation_map,
+                "brokerage": brokerage,
+                "account": account,
+                "initial_cash": cash_seed,
+            },
+            inject_resources=True,
+            inject_world_id=True,
+        ),
+        "sizing": StepSpec.from_factory(
+            RealSizingNode,
+            inject_portfolio=True,
+            inject_weight_fn=True,
+        ),
+        "execution": StepSpec.from_factory(
+            RealExecutionNode,
+            kwargs={"execution_model": execution_model},
+        ),
+        "order_publish": StepSpec.from_factory(
+            RealOrderPublishNode,
+            kwargs={
+                "commit_log_writer": commit_log_writer,
+                "submit_order": submit_order,
+            },
+        ),
+        "portfolio": StepSpec.from_factory(
+            RealPortfolioNode,
+            inject_portfolio=True,
+        ),
+    }
+
+    return _INTENT_FIRST_RECIPE.compose(
+        signal_node,
+        world_id,
+        descriptor=descriptor,
+        steps=step_overrides,
+        options=options,
+    )
+
+
+def _compose_intent_first_adapter(
+    inputs: Mapping[str, Node],
+    world_id: str,
+    *,
+    options: NodeSetOptions | None = None,
+    descriptor: Any | None = None,
+    **config: Any,
+) -> NodeSet:
+    signal = inputs["signal"]
+    if "price" not in inputs:
+        raise KeyError("missing required Node Set input port: price")
+    price = inputs["price"]
+    return make_intent_first_nodeset(
+        signal,
+        world_id,
+        price_node=price,
+        options=options,
+        descriptor=descriptor,
+        **config,
+    )
+
+
+INTENT_FIRST_ADAPTER_SPEC = RecipeAdapterSpec(
+    compose=_compose_intent_first_adapter,
+    descriptor=INTENT_FIRST_DESCRIPTOR,
+    parameters=_INTENT_FIRST_RECIPE.adapter_parameters,
+    name="intent_first",
+    class_name="IntentFirstAdapter",
+    doc="Adapter exposing 'signal' and 'price' input ports for the intent-first recipe.",
+    input_port="signal",
+    modes=_INTENT_FIRST_RECIPE.default_modes,
+)
+
+
 CCXT_SPOT_DESCRIPTOR = NodeSetDescriptor(
     name="ccxt_spot",
     inputs=(PortSpec("signal", True, "Trade signal stream"),),
@@ -524,8 +817,42 @@ __all__ = [
     "RecipeAdapterSpec",
     "NodeSetRecipe",
     "build_adapter",
+    "INTENT_FIRST_DEFAULT_THRESHOLDS",
+    "INTENT_FIRST_DESCRIPTOR",
+    "INTENT_FIRST_ADAPTER_PARAMETERS",
+    "INTENT_FIRST_ADAPTER_SPEC",
+    "make_intent_first_nodeset",
     "CCXT_SPOT_DESCRIPTOR",
     "CCXT_SPOT_ADAPTER_SPEC",
     "make_ccxt_spot_nodeset",
     "make_ccxt_futures_nodeset",
 ]
+INTENT_FIRST_DEFAULT_THRESHOLDS = Thresholds(
+    long_enter=0.6,
+    short_enter=-0.6,
+    long_exit=0.2,
+    short_exit=-0.2,
+)
+
+
+def _coerce_thresholds(value: Thresholds | Mapping[str, float] | None) -> Thresholds:
+    if value is None:
+        return INTENT_FIRST_DEFAULT_THRESHOLDS
+    if isinstance(value, Thresholds):
+        return value
+    if isinstance(value, Mapping):
+        return Thresholds(**value)  # type: ignore[arg-type]
+    raise TypeError("thresholds must be a Thresholds instance or mapping")
+
+
+def _default_activation(symbol: str) -> Mapping[str, Activation]:
+    return {symbol: Activation(enabled=True)}
+
+
+def _default_brokerage() -> BrokerageModel:
+    return BrokerageModel(
+        CashBuyingPowerModel(),
+        PercentFeeModel(rate=0.0),
+        NullSlippageModel(),
+        ImmediateFillModel(),
+    )

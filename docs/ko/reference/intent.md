@@ -42,5 +42,34 @@ intent_node = PositionTargetNode(
 
 이 노드는 `{"symbol":"BTCUSDT", "target_percent":0.10}` 형태를 출력하므로, 기존 `SizingNode`와 결합할 수 있습니다.
 
+## Intent-first NodeSet 레시피
+
+`make_intent_first_nodeset` 는 `PositionTargetNode` 뒤에 표준 실행 파이프라인(프리트레이드 → 사이징 → 실행 → 퍼블리싱)을 구성합니다. 시그널 노드와 이에 대응하는 가격 노드를 입력으로 사용하며, 기본 히스테리시스(`long_enter=0.6`, `short_enter=-0.6`, `long_exit=0.2`, `short_exit=-0.2`)를 적용하고 별도의 포트폴리오/계정을 넘기지 않으면 `initial_cash=100_000` 으로 사이징을 초기화합니다.
+
+```python
+from qmtl.runtime.nodesets.recipes import (
+    INTENT_FIRST_DEFAULT_THRESHOLDS,
+    make_intent_first_nodeset,
+)
+from qmtl.runtime.sdk.node import StreamInput
+
+signal = StreamInput(tags=["alpha"], interval=60, period=1)
+price = StreamInput(tags=["price"], interval=60, period=1)
+
+nodeset = make_intent_first_nodeset(
+    signal,
+    world_id="demo",
+    symbol="BTCUSDT",
+    price_node=price,
+    thresholds=INTENT_FIRST_DEFAULT_THRESHOLDS,
+    long_weight=0.25,
+    short_weight=-0.10,
+)
+
+strategy.add_nodes([signal, price, nodeset])  # NodeSet 은 반복 가능
+```
+
+어댑터 형태가 필요하면 `IntentFirstAdapter` 를 사용해 `signal`/`price` 입력 포트를 노출하고 `initial_cash` 나 `execution_model` 같은 선택적 파라미터를 그대로 전달할 수 있습니다.
+
 {{ nav_links() }}
 

@@ -22,6 +22,19 @@ def test_nodeset_registry_has_ccxt_futures():
     assert "ccxt_futures" in list_registered()
 
 
+def test_nodeset_registry_has_intent_first():
+    assert "intent_first" in list_registered()
+
+
+def test_nodeset_registry_make_intent_first_simulate():
+    price = StreamInput(interval="60s", period=1)
+    signal = StreamInput(interval="60s", period=1)
+    ns = make("intent_first", signal, "world", symbol="BTCUSDT", price_node=price)
+    nodes = list(ns)
+    assert ns.head is nodes[0] and ns.tail is nodes[-1]
+    assert len(nodes) == 8
+
+
 def test_nodeset_registry_make_ccxt_futures_simulate():
     price = StreamInput(interval="60s", period=1)
     signal = Node(input=price, compute_fn=lambda v: {"action": "BUY", "size": 1, "symbol": "BTC/USDT"})
