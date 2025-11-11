@@ -104,6 +104,8 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
             for d in result.global_deltas
         ]
 
+        overlay_deltas: list[SymbolDeltaModel] | None = None
+
         mode = (payload.mode or 'scaling').lower()
         if mode in ('overlay', 'hybrid'):
             raise NotImplementedError(
@@ -112,11 +114,14 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
 
         # Persist a compact audit entry per world (and a summary)
         try:
-            await service.store.record_rebalance_plan({
+            payload_to_store = {
                 "per_world": {wid: per_world[wid].model_dump() for wid in per_world.keys()},
                 "global_deltas": [g.model_dump() for g in global_deltas],
-                **({"overlay_deltas": [d.model_dump() for d in overlay_deltas]} if overlay_deltas else {}),
-            })
+            }
+            if overlay_deltas is not None:
+                payload_to_store["overlay_deltas"] = [d.model_dump() for d in overlay_deltas]
+
+            await service.store.record_rebalance_plan(payload_to_store)
         except Exception:
             # Storage is best-effort for apply
             pass
@@ -139,6 +144,13 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
                 # Non-fatal if bus is unavailable
                 pass
 
-        return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
+        response_kwargs: dict[str, object] = {
+            "per_world": per_world,
+            "global_deltas": global_deltas,
+        }
+        if overlay_deltas is not None:
+            response_kwargs["overlay_deltas"] = overlay_deltas
+
+        return MultiWorldRebalanceResponse(**response_kwargs)
 
     return router
