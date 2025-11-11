@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from ..rebalancing import (
     MultiWorldProportionalRebalancer,
@@ -77,8 +77,9 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
         ]
         mode = (payload.mode or 'scaling').lower()
         if mode in ('overlay', 'hybrid'):
-            raise NotImplementedError(
-                "Overlay mode is not implemented yet. Use mode='scaling'."
+            raise HTTPException(
+                status_code=501,
+                detail="Overlay mode is not implemented yet. Use mode='scaling'.",
             )
         return MultiWorldRebalanceResponse(per_world=per_world, global_deltas=global_deltas)
 
@@ -108,8 +109,9 @@ def create_rebalancing_router(service: WorldService) -> APIRouter:
 
         mode = (payload.mode or 'scaling').lower()
         if mode in ('overlay', 'hybrid'):
-            raise NotImplementedError(
-                "Overlay mode is not implemented yet. Use mode='scaling'."
+            raise HTTPException(
+                status_code=501,
+                detail="Overlay mode is not implemented yet. Use mode='scaling'.",
             )
 
         # Persist a compact audit entry per world (and a summary)
