@@ -182,6 +182,7 @@ async def _main(argv: list[str] | None = None) -> None:
         ws_hub=ws_hub,
         event_config=event_descriptor,
         enable_otel=telemetry_enabled,
+        shared_account_policy_config=config.shared_account_policy,
     )
     db = app.state.database
     if hasattr(db, "connect"):

@@ -54,6 +54,16 @@ for payload in orders:
 
 공유계정 모드가 아닌 경우에는 **월드별** `per_world` 결과만 실행하고, `global_deltas`는 분석용으로만 사용하세요. `shared_account=true` 인 경우 Gateway는 `scope="global"` 배치를 `per_world` 배치와 함께 기록해 다운스트림 소비자가 원하는 집계 레벨을 선택할 수 있습니다.
 
+### 공유계정 안전 정책
+
+Gateway는 공유계정 넷팅을 기본적으로 비활성화합니다. 운영자가 `gateway.shared_account_policy.enabled=true`로 명시적으로 토글하고 아래 한도를 설정해야 실행이 허용됩니다.
+
+- `max_gross_notional`: 글로벌 주문의 총 명목 가치 상한 (절대값 합).
+- `max_net_notional`: 넷팅 후 잔존 명목 가치 상한 (부호 포함 합의 절대값).
+- `min_margin_headroom`: 주문 실행 후 유지해야 하는 최소 증거금 버퍼 비율 (`0.0~1.0`).
+
+정책에 위배되면 Gateway는 HTTP 422와 함께 `E_SHARED_ACCOUNT_POLICY` 코드를 반환하며 `context` 필드에 계산된 지표(`gross_notional`, `net_notional`, `margin_headroom`, `total_equity`)를 포함합니다. 토글이 꺼진 상태에서 공유계정 실행을 요청하면 HTTP 403 `E_SHARED_ACCOUNT_DISABLED`가 반환됩니다.
+
 ## 제출 동작
 
 - **라이브 가드:** `submit=true` 요청은 `X-Allow-Live: true` 헤더가 필요합니다(`enforce_live_guard` 비활성화 시 제외). 헤더가 없으면 403 응답을 반환합니다.

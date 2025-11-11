@@ -5,6 +5,7 @@ import logging
 import secrets
 
 from .event_descriptor import EventDescriptorConfig
+from .shared_account_policy import SharedAccountPolicyConfig
 
 
 @dataclass
@@ -34,6 +35,9 @@ class GatewayConfig:
     websocket: "GatewayWebSocketConfig" = field(
         default_factory=lambda: GatewayWebSocketConfig()
     )
+    shared_account_policy: SharedAccountPolicyConfig = field(
+        default_factory=SharedAccountPolicyConfig
+    )
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "GatewayConfig":
@@ -42,6 +46,7 @@ class GatewayConfig:
         base = dict(data)
         events_data = base.pop("events", {}) or {}
         websocket_data = base.pop("websocket", {}) or {}
+        shared_policy_data = base.pop("shared_account_policy", {}) or {}
         cfg = cls(**base)
         if isinstance(events_data, GatewayEventsConfig):
             cfg.events = events_data
@@ -55,6 +60,12 @@ class GatewayConfig:
             cfg.websocket = GatewayWebSocketConfig(**websocket_data)
         else:
             raise TypeError("gateway.websocket must be a mapping")
+        if isinstance(shared_policy_data, SharedAccountPolicyConfig):
+            cfg.shared_account_policy = shared_policy_data
+        elif isinstance(shared_policy_data, dict):
+            cfg.shared_account_policy = SharedAccountPolicyConfig(**shared_policy_data)
+        else:
+            raise TypeError("gateway.shared_account_policy must be a mapping")
         return cfg
 
 
