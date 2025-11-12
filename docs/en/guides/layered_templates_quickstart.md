@@ -49,7 +49,7 @@ needed.
 
 ```bash
 # List available presets
-qmtl project init --list-presets
+qmtl project list-presets
 
 # Create a minimal project
 qmtl project init --path my_strategy --preset minimal
@@ -268,7 +268,7 @@ qmtl project init --path my_exec --layers execution
 ### 2. List available layers
 
 ```bash
-qmtl project init --list-layers
+qmtl project list-layers
 ```
 
 ### 3. Validate the project

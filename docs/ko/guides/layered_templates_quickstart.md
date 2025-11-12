@@ -46,7 +46,7 @@ last_modified: 2025-10-18
 
 ```bash
 # 사용 가능한 프리셋 확인
-qmtl project init --list-presets
+qmtl project list-presets
 
 # 최소 구성으로 프로젝트 생성
 qmtl project init --path my_strategy --preset minimal
@@ -265,7 +265,7 @@ qmtl project init --path my_exec --layers execution
 ### 2. 사용 가능한 레이어 확인
 
 ```bash
-qmtl project init --list-layers
+qmtl project list-layers
 ```
 
 ### 3. 프로젝트 검증

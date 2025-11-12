@@ -17,6 +17,7 @@ def _assert_backend_templates(dest: Path) -> None:
 PROJECT_INIT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.init")
 PROJECT_ADD_LAYER_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.add_layer")
 PROJECT_LIST_LAYERS_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.list_layers")
+PROJECT_LIST_PRESETS_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.presets")
 PROJECT_VALIDATE_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.validate")
 
 
@@ -203,7 +204,7 @@ def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.Captur
     assert "Project created at" in out
 
 
-def test_init_cli_list_presets(monkeypatch, capsys: pytest.CaptureFixture):
+def test_list_presets_cli(monkeypatch, capsys: pytest.CaptureFixture):
     class DummyPresetLoader:
         def list_presets(self):
             return ["minimal", "production"]
@@ -215,9 +216,9 @@ def test_init_cli_list_presets(monkeypatch, capsys: pytest.CaptureFixture):
                 layers=[Layer.DATA, Layer.SIGNAL],
             )
 
-    monkeypatch.setattr("qmtl.interfaces.cli.init.PresetLoader", lambda: DummyPresetLoader())
+    monkeypatch.setattr("qmtl.interfaces.cli.presets.PresetLoader", lambda: DummyPresetLoader())
 
-    cli_main([*PROJECT_INIT_TOKENS, "--list-presets"])
+    cli_main([*PROJECT_LIST_PRESETS_TOKENS])
     out = capsys.readouterr().out
 
     assert "Available presets:" in out
@@ -225,13 +226,17 @@ def test_init_cli_list_presets(monkeypatch, capsys: pytest.CaptureFixture):
     assert "production" in out
 
 
-def test_init_cli_list_layers(capsys: pytest.CaptureFixture):
-    cli_main([*PROJECT_INIT_TOKENS, "--list-layers"])
-    out = capsys.readouterr().out
+def test_init_cli_list_layers_shim(monkeypatch):
+    captured: dict[str, list[str] | None] = {}
 
-    assert "Available layers:" in out
-    assert "data" in out
-    assert "signal" in out
+    def fake_run(argv=None):
+        captured["argv"] = argv
+
+    monkeypatch.setattr("qmtl.interfaces.cli.list_layers.run", fake_run)
+
+    cli_main([*PROJECT_INIT_TOKENS, "--list-layers"])
+
+    assert captured["argv"] == []
 
 
 def test_add_layer_cli(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture):

@@ -21,11 +21,30 @@ def test_cli_init_with_template(tmp_path):
     assert "BranchingStrategy" in contents
 
 
-def test_cli_list_templates(capsys):
-    init_cli.run(["--list-templates", "--path", "foo"])
-    out = capsys.readouterr().out.strip().splitlines()
-    assert "branching" in out
-    assert "general" in out
+def test_cli_list_presets_shim(monkeypatch):
+    captured: dict[str, list[str] | None] = {}
+
+    def fake_run(argv=None):
+        captured["argv"] = argv
+
+    monkeypatch.setattr("qmtl.interfaces.cli.presets.run", fake_run)
+
+    init_cli.run(["--list-presets"])
+
+    assert captured["argv"] == []
+
+
+def test_cli_list_templates_shim(monkeypatch):
+    captured: dict[str, list[str] | None] = {}
+
+    def fake_run(argv=None):
+        captured["argv"] = argv
+
+    monkeypatch.setattr("qmtl.interfaces.cli.presets.run", fake_run)
+
+    init_cli.run(["--list-templates"])
+
+    assert captured["argv"] == ["--show-legacy-templates"]
 
 
 def test_cli_help_contains_doc_links(capsys):

@@ -39,11 +39,12 @@ uv pip install -e .[dev]
 
 ## 1. 프로젝트 초기화
 
-전략을 위한 디렉터리를 만들고 스캐폴드를 생성합니다. 사용 가능한 템플릿을 조회한 후,
-선택한 템플릿과 선택적 샘플 데이터를 사용해 프로젝트를 초기화합니다:
+전략을 위한 디렉터리를 만들고 스캐폴드를 생성합니다. 사용 가능한 프리셋(필요하면 레거시
+템플릿 포함)을 조회한 후, 선택한 템플릿과 선택적 샘플 데이터를 사용해 프로젝트를
+초기화합니다:
 
 ```bash
-qmtl project init --list-templates
+qmtl project list-presets --show-legacy-templates
 qmtl project init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```

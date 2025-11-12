@@ -11,6 +11,7 @@ PROJECT_DISPATCH = {
     "init": "qmtl.interfaces.cli.init",
     "add-layer": "qmtl.interfaces.cli.add_layer",
     "list-layers": "qmtl.interfaces.cli.list_layers",
+    "list-presets": "qmtl.interfaces.cli.presets",
     "validate": "qmtl.interfaces.cli.validate",
 }
 
@@ -23,10 +24,11 @@ def _build_help_parser() -> argparse.ArgumentParser:
             Project scaffolding utilities.
 
             Available commands:
-              init         Create a new strategy project from templates or presets.
-              add-layer    Add a layer to an existing project.
-              list-layers  List available layers and metadata.
-              validate     Validate an existing layered project.
+              init          Create a new strategy project from templates or presets.
+              add-layer     Add a layer to an existing project.
+              list-layers   List available layers and metadata.
+              list-presets  List available presets (and optional legacy templates).
+              validate      Validate an existing layered project.
             """
         )
     ).strip()
