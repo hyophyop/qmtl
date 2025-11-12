@@ -15,7 +15,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     DataAvailabilityStrategy,
     LiveDataFeed,
 )
-from qmtl.runtime.sdk.seamless import SeamlessBuilder
+from qmtl.runtime.sdk.seamless.builder import SeamlessAssembly, SeamlessBuilder
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
@@ -69,6 +69,14 @@ class EnhancedQuestDBProviderSettings:
     node_id_format: str | None = None
     sla: SLAPolicy | None = None
     fingerprint: FingerprintPolicy = field(default_factory=FingerprintPolicy)
+
+
+@dataclass(slots=True)
+class _EnhancedProviderComponents:
+    storage_provider: "QuestDBLoader"
+    assembly: SeamlessAssembly
+    node_id_format: str | None
+    node_id_validator: Callable[[str], None] | None
 
 
 class HistoryProviderDataSource:
@@ -398,9 +406,6 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         node_id_format: str | None = None,
         **kwargs
     ):
-        # Import here to avoid circular imports
-        from qmtl.runtime.io.historyprovider import QuestDBLoader
-
         config = self._resolve_config(
             settings,
             table=table,
@@ -417,44 +422,14 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
 
         self._apply_config_kwargs(config, kwargs)
 
-        strategy_value = (
-            config.strategy or DataAvailabilityStrategy.SEAMLESS
-        )
+        strategy_value = config.strategy or DataAvailabilityStrategy.SEAMLESS
+        components = self._build_components(dsn, config)
 
-        # Create the underlying storage provider
-        self.storage_provider = QuestDBLoader(
-            dsn, table=config.table, fetcher=config.fetcher
-        )
+        self.storage_provider = components.storage_provider
+        self._node_id_format = components.node_id_format
+        self._node_id_validator = components.node_id_validator
 
-        # Create data sources via builder to support future adapter swaps
-        storage_source = HistoryProviderDataSource(
-            self.storage_provider, DataSourcePriority.STORAGE
-        )
-        cache_source = self._build_cache_source(config.cache_provider)
-
-        # Create backfiller if fetcher is available
-        backfiller = self._build_backfiller(config.fetcher)
-
-        # Create live feed if available (prefer explicit LiveDataFeed)
-        live_feed_obj = self._build_live_feed(
-            config.live_feed, config.live_fetcher
-        )
-
-        registrar_obj = self._resolve_registrar(config.registrar)
-
-        (
-            self._node_id_format,
-            self._node_id_validator,
-        ) = self._build_node_id_validator(config.node_id_format)
-
-        assembly = self._build_seamless_assembly(
-            storage_source=storage_source,
-            cache_source=cache_source,
-            backfiller=backfiller,
-            live_feed=live_feed_obj,
-            registrar=registrar_obj,
-        )
-
+        assembly = components.assembly
         super().__init__(
             strategy=strategy_value,
             cache_source=assembly.cache_source,
@@ -498,6 +473,35 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         """Fill missing data using auto-backfill."""
         if not await self.ensure_data_available(start, end, node_id=node_id, interval=interval):
             raise RuntimeError(f"Could not ensure data availability for range [{start}, {end}]")
+
+    @staticmethod
+    def _build_components(dsn: str, config: EnhancedQuestDBProviderSettings) -> _EnhancedProviderComponents:
+        from qmtl.runtime.io.historyprovider import QuestDBLoader
+
+        storage_provider = QuestDBLoader(dsn, table=config.table, fetcher=config.fetcher)
+        storage_source = HistoryProviderDataSource(storage_provider, DataSourcePriority.STORAGE)
+        cache_source = EnhancedQuestDBProvider._build_cache_source(config.cache_provider)
+        backfiller = EnhancedQuestDBProvider._build_backfiller(config.fetcher)
+        live_feed = EnhancedQuestDBProvider._build_live_feed(config.live_feed, config.live_fetcher)
+        registrar = EnhancedQuestDBProvider._resolve_registrar(config.registrar)
+        node_id_format, node_id_validator = EnhancedQuestDBProvider._build_node_id_validator(
+            config.node_id_format
+        )
+
+        assembly = EnhancedQuestDBProvider._build_seamless_assembly(
+            storage_source=storage_source,
+            cache_source=cache_source,
+            backfiller=backfiller,
+            live_feed=live_feed,
+            registrar=registrar,
+        )
+
+        return _EnhancedProviderComponents(
+            storage_provider=storage_provider,
+            assembly=assembly,
+            node_id_format=node_id_format,
+            node_id_validator=node_id_validator,
+        )
 
     @staticmethod
     def _resolve_config(

@@ -17,6 +17,18 @@ from typing import Any
 from .trade_execution_service import TradeExecutionService
 
 
+def _call_exchange_method(target: Any, method_names: tuple[str, ...], *args: Any) -> Any | None:
+    for name in method_names:
+        method = getattr(target, name, None)
+        if not callable(method):
+            continue
+        try:
+            return method(*args)
+        except Exception:
+            continue
+    return None
+
+
 class BrokerageClient(ABC):
     """Abstract brokerage client.
 
@@ -211,20 +223,16 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
         hedge_mode: bool | None = None,
         **kwargs: Any,
     ) -> None:
-        try:
-            import ccxt  # type: ignore
-        except Exception as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError("ccxt is required for FuturesCcxtBrokerageClient") from exc
+        ccxt_module = self._import_ccxt_module()
 
         api_key = kwargs.pop("apiKey", None) or kwargs.pop("api_key", None)
         secret = kwargs.pop("secret", None)
         enable_rate_limit = kwargs.pop("enableRateLimit", True)
         sandbox = bool(kwargs.pop("sandbox", kwargs.pop("testnet", False)))
-        # Ensure default type is future if not explicitly provided
         options = kwargs.pop("options", {}) or {}
         options.setdefault("defaultType", "future")
 
-        klass = getattr(ccxt, exchange)
+        klass = getattr(ccxt_module, exchange)
         self._ex = klass({
             "apiKey": api_key,
             "secret": secret,
@@ -235,35 +243,12 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
         self._default_margin_mode = margin_mode
         self._default_leverage = leverage
         self._symbol_prefs_applied: set[str] = set()
-        # Sandbox / testnet routing
-        try:
-            if sandbox and hasattr(self._ex, "set_sandbox_mode"):
-                self._ex.set_sandbox_mode(True)  # type: ignore[attr-defined]
-        except Exception:
-            try:
-                if sandbox and hasattr(self._ex, "setSandboxMode"):
-                    getattr(self._ex, "setSandboxMode")(True)
-            except Exception:
-                pass
 
-        # Apply position/margin/leverage preferences best-effort
-        try:
-            if hedge_mode is not None and hasattr(self._ex, "set_position_mode"):
-                self._ex.set_position_mode(bool(hedge_mode))  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            if symbol and margin_mode:
-                mode = str(margin_mode).lower()
-                if hasattr(self._ex, "set_margin_mode"):
-                    self._ex.set_margin_mode("ISOLATED" if mode == "isolated" else "CROSS", symbol)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        try:
-            if symbol and leverage is not None and hasattr(self._ex, "set_leverage"):
-                self._ex.set_leverage(int(leverage), symbol)  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        if sandbox:
+            _call_exchange_method(self._ex, ("set_sandbox_mode", "setSandboxMode"), True)
+
+        self._apply_position_mode(hedge_mode)
+        self._apply_symbol_defaults(symbol, margin_mode=margin_mode, leverage=leverage)
 
     def post_order(self, order: dict[str, Any]) -> Any:
         symbol = order.get("symbol")
@@ -271,56 +256,18 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
         typ = (order.get("type") or "market").lower()
         amount = order.get("quantity") or order.get("amount")
         price = order.get("limit_price") or order.get("price")
-        params: dict[str, Any] = {}
-        tif = order.get("time_in_force") or order.get("tif")
-        if tif:
-            params["timeInForce"] = str(tif).upper()
-        reduce_only = order.get("reduce_only") or order.get("reduceOnly")
-        if reduce_only is not None:
-            params["reduceOnly"] = bool(reduce_only)
-        pos_side = order.get("position_side") or order.get("positionSide")
-        if pos_side:
-            params["positionSide"] = str(pos_side).upper()
-        cid = order.get("client_order_id") or order.get("newClientOrderId")
-        if cid:
-            params["newClientOrderId"] = str(cid)
+        params = self._build_order_params(order)
 
-        # Optional on-the-fly leverage change per order if provided
-        try:
-            lev = order.get("leverage")
-            if lev is not None and symbol and hasattr(self._ex, "set_leverage"):
-                self._ex.set_leverage(int(lev), symbol)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-
+        self._apply_order_leverage(order, symbol)
         if symbol:
-            try:
-                if (
-                    getattr(self, "_default_margin_mode", None)
-                    and symbol not in self._symbol_prefs_applied
-                    and hasattr(self._ex, "set_margin_mode")
-                ):
-                    mode = str(self._default_margin_mode).lower()
-                    self._ex.set_margin_mode(  # type: ignore[attr-defined]
-                        "ISOLATED" if mode == "isolated" else "CROSS",
-                        symbol,
-                    )
-            except Exception:
-                pass
-            try:
-                if (
-                    getattr(self, "_default_leverage", None) is not None
-                    and symbol not in self._symbol_prefs_applied
-                    and hasattr(self._ex, "set_leverage")
-                ):
-                    self._ex.set_leverage(int(self._default_leverage), symbol)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            self._symbol_prefs_applied.add(symbol)
+            self._apply_symbol_defaults(
+                symbol,
+                margin_mode=self._default_margin_mode,
+                leverage=self._default_leverage,
+            )
 
         if symbol is None or side not in {"buy", "sell"} or amount is None:
             raise ValueError("symbol, side in {buy,sell}, and quantity are required")
-        # Futures STOP/TP variants vary by exchange; start with market/limit coverage.
         return self._ex.create_order(symbol, typ, side, amount, price, params)
 
     def poll_order_status(self, order: dict[str, Any]) -> Any | None:
@@ -338,6 +285,73 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
             return self._ex.cancel_order(order_id)
         except Exception:
             return None
+
+    @staticmethod
+    def _import_ccxt_module():
+        try:
+            import ccxt  # type: ignore
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError("ccxt is required for FuturesCcxtBrokerageClient") from exc
+        return ccxt
+
+    @staticmethod
+    def _normalize_margin_mode(mode: str | None) -> str | None:
+        if not mode:
+            return None
+        return "ISOLATED" if str(mode).lower() == "isolated" else "CROSS"
+
+    def _apply_position_mode(self, hedge_mode: bool | None) -> None:
+        if hedge_mode is None:
+            return
+        _call_exchange_method(self._ex, ("set_position_mode",), bool(hedge_mode))
+
+    def _apply_symbol_defaults(
+        self,
+        symbol: str | None,
+        *,
+        margin_mode: str | None,
+        leverage: int | None,
+    ) -> None:
+        if not symbol or symbol in self._symbol_prefs_applied:
+            return
+
+        normalized_mode = self._normalize_margin_mode(margin_mode)
+        if normalized_mode:
+            _call_exchange_method(
+                self._ex,
+                ("set_margin_mode",),
+                normalized_mode,
+                symbol,
+            )
+        if leverage is not None:
+            _call_exchange_method(self._ex, ("set_leverage",), int(leverage), symbol)
+
+        self._symbol_prefs_applied.add(symbol)
+
+    def _apply_order_leverage(self, order: dict[str, Any], symbol: str | None) -> None:
+        if not symbol:
+            return
+        lev = order.get("leverage")
+        if lev is None:
+            return
+        _call_exchange_method(self._ex, ("set_leverage",), int(lev), symbol)
+
+    @staticmethod
+    def _build_order_params(order: dict[str, Any]) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        tif = order.get("time_in_force") or order.get("tif")
+        if tif:
+            params["timeInForce"] = str(tif).upper()
+        reduce_only = order.get("reduce_only") or order.get("reduceOnly")
+        if reduce_only is not None:
+            params["reduceOnly"] = bool(reduce_only)
+        pos_side = order.get("position_side") or order.get("positionSide")
+        if pos_side:
+            params["positionSide"] = str(pos_side).upper()
+        cid = order.get("client_order_id") or order.get("newClientOrderId")
+        if cid:
+            params["newClientOrderId"] = str(cid)
+        return params
 
 
 __all__ = [
