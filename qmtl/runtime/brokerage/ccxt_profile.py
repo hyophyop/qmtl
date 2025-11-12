@@ -19,7 +19,7 @@ Notes
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any, Mapping
 import logging
 
 from .brokerage_model import BrokerageModel
@@ -65,6 +65,72 @@ def _instantiate_ccxt_exchange(exchange_id: str, *, product: str, sandbox: bool)
     return ex
 
 
+def _coerce_fee(value: Any) -> float | None:
+    """Best-effort conversion to ``float`` while tolerating bad metadata."""
+
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_maker_taker(candidate: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    """Return maker/taker floats (or ``None``) from CCXT metadata mapping."""
+
+    maker = _coerce_fee(candidate.get("maker"))
+    taker = _coerce_fee(candidate.get("taker"))
+    return maker, taker
+
+
+def _merge_fee_pair(
+    base: tuple[float | None, float | None],
+    candidate: tuple[float | None, float | None],
+) -> tuple[float | None, float | None]:
+    """Fill ``None`` entries in ``base`` using ``candidate`` values."""
+
+    base_maker, base_taker = base
+    cand_maker, cand_taker = candidate
+    maker = base_maker if base_maker is not None else cand_maker
+    taker = base_taker if base_taker is not None else cand_taker
+    return maker, taker
+
+
+def _detect_fees_from_markets(exchange: Any, symbol: str | None) -> tuple[float | None, float | None]:
+    """Inspect ``load_markets`` metadata for maker/taker fees."""
+
+    markets = exchange.load_markets()
+    maker: float | None = None
+    taker: float | None = None
+
+    if symbol and symbol in markets:
+        maker, taker = _extract_maker_taker(markets[symbol])
+        if maker is not None and taker is not None:
+            return maker, taker
+
+    for market in markets.values():
+        maker, taker = _merge_fee_pair((maker, taker), _extract_maker_taker(market))
+        if maker is not None and taker is not None:
+            break
+
+    return maker, taker
+
+
+def _detect_fees_from_trading(exchange: Any, _: str | None) -> tuple[float | None, float | None]:
+    """Inspect exchange-level trading fees for maker/taker values."""
+
+    fees = getattr(exchange, "fees", {}) or {}
+    if not isinstance(fees, Mapping):
+        return None, None
+
+    trading = fees.get("trading", {})
+    if not isinstance(trading, Mapping):
+        return None, None
+
+    return _extract_maker_taker(trading)
+
+
 def _try_detect_fees(
     exchange_id: str,
     *,
@@ -82,37 +148,19 @@ def _try_detect_fees(
     maker: float | None = None
     taker: float | None = None
 
-    # 1) Prefer market['maker'|'taker'] from load_markets
-    try:
-        markets = ex.load_markets()
-        if symbol and symbol in markets:
-            m = markets[symbol]
-            maker = float(m.get("maker")) if m.get("maker") is not None else None
-            taker = float(m.get("taker")) if m.get("taker") is not None else None
-        if maker is None or taker is None:
-            # try any representative market
-            for m in markets.values():
-                mk = m.get("maker")
-                tk = m.get("taker")
-                if mk is not None and tk is not None:
-                    maker = float(mk)
-                    taker = float(tk)
-                    break
-    except Exception:
-        pass
+    detectors = (
+        _detect_fees_from_markets,
+        _detect_fees_from_trading,
+    )
 
-    # 2) Exchange-level trading fees
-    if maker is None or taker is None:
+    for detector in detectors:
+        if maker is not None and taker is not None:
+            break
         try:
-            fees = getattr(ex, "fees", {}) or {}
-            trading = fees.get("trading", {}) if isinstance(fees, dict) else {}
-            mk = trading.get("maker")
-            tk = trading.get("taker")
-            if mk is not None and tk is not None:
-                maker = float(mk)
-                taker = float(tk)
+            detected = detector(ex, symbol)
         except Exception:
-            pass
+            continue
+        maker, taker = _merge_fee_pair((maker, taker), detected)
 
     if maker is None or taker is None:
         return None
