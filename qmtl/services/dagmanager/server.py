@@ -44,6 +44,7 @@ from .monitor import AckStatus
 from .controlbus_producer import ControlBusProducer
 from .queue_store import KafkaQueueStore
 from .metrics_provider import KafkaMetricsProvider
+from .gc_scheduler import GCScheduler
 
 
 class _NullStream(StreamSender):
@@ -116,37 +117,52 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
     )
     store: QueueStore = KafkaQueueStore(kafka_admin, repo)
     gc = GarbageCollector(store, metrics_provider)
+    scheduler = GCScheduler(gc)
 
     bus = None
-    if cfg.controlbus_dsn:
-        bus = ControlBusProducer(brokers=[cfg.controlbus_dsn], topic=cfg.controlbus_queue_topic)
-        await bus.start()
+    try:
+        if cfg.controlbus_dsn:
+            bus = ControlBusProducer(
+                brokers=[cfg.controlbus_dsn], topic=cfg.controlbus_queue_topic
+            )
+            await bus.start()
 
-    grpc_server, _ = serve(
-        driver,
-        admin_client,
-        _NullStream(),
-        host=cfg.grpc_host,
-        port=cfg.grpc_port,
-        gc=gc,
-        repo=repo,
-        queue=queue,
-        bus=bus,
-    )
-    await grpc_server.start()
+        grpc_server, _ = serve(
+            driver,
+            admin_client,
+            _NullStream(),
+            host=cfg.grpc_host,
+            port=cfg.grpc_port,
+            gc=gc,
+            repo=repo,
+            queue=queue,
+            bus=bus,
+        )
+        await grpc_server.start()
+        await scheduler.start()
 
-    app = create_app(
-        gc,
-        driver=driver,
-        bus=bus,
-        enable_otel=enable_otel,
-    )
-    config = uvicorn.Config(app, host=cfg.http_host, port=cfg.http_port, loop="asyncio", log_level="info")
-    http_server = uvicorn.Server(config)
+        app = create_app(
+            gc,
+            driver=driver,
+            bus=bus,
+            enable_otel=enable_otel,
+        )
+        config = uvicorn.Config(
+            app,
+            host=cfg.http_host,
+            port=cfg.http_port,
+            loop="asyncio",
+            log_level="info",
+        )
+        http_server = uvicorn.Server(config)
 
-    await asyncio.gather(http_server.serve(), grpc_server.wait_for_termination())
-    if bus:
-        await bus.stop()
+        await asyncio.gather(
+            http_server.serve(), grpc_server.wait_for_termination()
+        )
+    finally:
+        await scheduler.stop()
+        if bus:
+            await bus.stop()
 
 
 def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
