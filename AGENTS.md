@@ -83,6 +83,51 @@ Guidance for authors:
 - Mark intentionally long or external‑dependency tests as `slow` and exclude them from preflight via `-k 'not slow'` if necessary.
 - Prefer deterministic, dependency‑free tests; avoid unbounded network waits.
 
+## Complexity & Maintainability (radon)
+
+Use radon metrics as a practical signal to guide refactors and keep the codebase healthy. Treat them as guardrails, not absolute rules—exceptions are allowed with a brief rationale and a follow‑up plan.
+
+- Quick full scan (ad‑hoc):
+  - `uv run --with radon -m radon cc -s -a qmtl`
+  - `uv run --with radon -m radon mi -s qmtl`
+  - `uv run --with radon -m radon raw -s qmtl`
+- Diff‑only scan (what changed vs. main):
+  - `git fetch origin`
+  - CC (show C–F only): `git diff --name-only origin/main... | rg '\.py$' | xargs -r uv run --with radon -m radon cc -s -n C`
+  - MI (show B–C only): `git diff --name-only origin/main... | rg '\.py$' | xargs -r uv run --with radon -m radon mi -s -n B`
+- JSON for tooling/artifacts (optional):
+  - `uv run --with radon -m radon cc -j -n C qmtl > .artifacts/radon_cc.json`
+  - `uv run --with radon -m radon mi -j -n B qmtl > .artifacts/radon_mi.json`
+
+Targets and actions:
+- Cyclomatic Complexity (CC):
+  - Target A/B per function/method; keep C rare and justified.
+  - If you touch a C‑graded block, try to bring it to B or better.
+  - D or worse should be refactored before merge unless a waiver is approved.
+- Maintainability Index (MI):
+  - Aim for A at the file level for changed files.
+  - B is acceptable with rationale; C should not be introduced in new/changed files.
+- Raw metrics (soft guardrails, not gates):
+  - Keep functions small (≈ ≤ 50 LOC) and cohesive; split large modules (≈ ≥ 800 LOC).
+  - Maintain docstrings for public APIs; keep comment density healthy (≈ 8–10%+).
+
+Refactoring tips to lower CC / raise MI:
+- Extract helpers to flatten deep nesting; use early returns/guard clauses.
+- Replace long if/elif chains with a dispatch table or strategy objects.
+- Separate error paths from the main happy path; avoid boolean flags controlling many branches.
+- Prefer pure, composable functions; isolate I/O and side effects at the edges.
+
+Exceptions and waivers (when metrics aren’t the right trade‑off):
+- Acceptable reasons include: performance‑critical hot loops validated by profiling, parser/validation logic with inherently high branching, faithful adherence to external specs, or thin glue around third‑party APIs.
+- Process:
+  - Add a short comment near the block: `# complexity: waiver — reason (Refs #<issue>, YYYY‑MM‑DD)`.
+  - Include a “Complexity waiver” section in the PR body listing file:function, metric/grade, reason, and the follow‑up plan.
+  - Open a tracking issue labeled `tech-debt:complexity` if the waiver is not time‑boxed to the current PR.
+
+Notes:
+- Prefer diff‑based checks during development to avoid chasing legacy hotspots unrelated to your change (“leave the campsite cleaner than you found it”).
+- Use `--exclude` or `--ignore` for generated files, examples, or tests when scans would be noisy (e.g., `-e "qmtl/examples/*,tests/*"`).
+
 ## Example Projects
 
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
