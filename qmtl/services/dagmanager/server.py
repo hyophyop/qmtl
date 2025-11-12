@@ -1,20 +1,18 @@
 from __future__ import annotations
+
 import argparse
 import asyncio
+import contextlib
 import logging
 import sys
-from dataclasses import dataclass
-from typing import Iterable, Sequence
-
-from qmtl.foundation.common import AsyncCircuitBreaker
+from dataclasses import dataclass, field
+from typing import Mapping, Sequence
 
 import uvicorn
 
-from .grpc_server import serve
-from .config import DagManagerConfig
+from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
-from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from qmtl.utils.i18n import _, set_language
 
 
@@ -38,7 +36,7 @@ def _log_config_source(
 
 
 from .api import create_app
-from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, QueueStore
+from .garbage_collector import GarbageCollector, MetricsProvider, QueueStore
 from .diff_service import StreamSender
 from .monitor import AckStatus
 from .controlbus_producer import ControlBusProducer
@@ -60,15 +58,152 @@ class _NullStream(StreamSender):
 
 @dataclass
 class _KafkaAdminClient:
-    """Minimal AdminClient placeholder."""
+    """Thin wrapper around :mod:`confluent_kafka` for metadata access."""
 
     bootstrap_servers: str
+    timeout: float = 5.0
+    _client: "AdminClient" | None = field(init=False, default=None, repr=False)
+    _new_topic_cls: type | None = field(init=False, default=None, repr=False)
+    _config_resource_cls: type | None = field(init=False, default=None, repr=False)
+    _kafka_exception_cls: type | None = field(init=False, default=None, repr=False)
+    _kafka_error_cls: type | None = field(init=False, default=None, repr=False)
 
-    def list_topics(self):  # pragma: no cover - noop
-        return {}
+    def __post_init__(self) -> None:
+        try:  # pragma: no cover - optional dependency
+            from confluent_kafka import KafkaException, KafkaError
+            from confluent_kafka.admin import AdminClient, ConfigResource, NewTopic
+        except Exception as exc:  # pragma: no cover - env dependent
+            logging.warning(
+                "confluent-kafka unavailable; DAG Manager GC cannot query broker metadata: %s",
+                exc,
+            )
+            return
 
-    def create_topic(self, name: str, *, num_partitions: int, replication_factor: int, config=None):
-        pass  # pragma: no cover - noop
+        config = {
+            "bootstrap.servers": self.bootstrap_servers,
+            "api.version.request": "true",
+        }
+        try:
+            self._client = AdminClient(config)
+        except Exception as exc:  # pragma: no cover - connection failure
+            logging.warning(
+                "Failed to initialise Kafka AdminClient for %s: %s",
+                self.bootstrap_servers,
+                exc,
+            )
+            return
+
+        self._new_topic_cls = NewTopic
+        self._config_resource_cls = ConfigResource
+        self._kafka_exception_cls = KafkaException
+        self._kafka_error_cls = KafkaError
+
+    # ------------------------------------------------------------------
+    def _ensure_client(self) -> None:
+        if self._client is None:
+            raise RuntimeError(
+                "Kafka AdminClient not available; install confluent-kafka to enable broker metadata access"
+            )
+
+    def list_topics(self) -> Mapping[str, Mapping[str, object]]:
+        if self._client is None:
+            return {}
+
+        metadata = self._client.list_topics(timeout=self.timeout)
+        topics: dict[str, dict[str, object]] = {}
+        for name, topic in metadata.topics.items():
+            error = getattr(topic, "error", None)
+            if error is not None and hasattr(error, "code"):
+                if self._kafka_error_cls is not None and error.code() != self._kafka_error_cls.NO_ERROR:  # type: ignore[attr-defined]
+                    continue
+            partitions = getattr(topic, "partitions", {}) or {}
+            replication = 0
+            if partitions:
+                try:
+                    replication = max(len(p.replicas) for p in partitions.values())
+                except Exception:  # pragma: no cover - defensive
+                    replication = 0
+            topics[name] = {
+                "config": {},
+                "num_partitions": len(partitions),
+                "replication_factor": replication,
+            }
+
+        config_cls = self._config_resource_cls
+        if topics and config_cls is not None:
+            resources = []
+            for name in topics:
+                try:
+                    resource = config_cls(config_cls.Type.TOPIC, name)
+                except AttributeError:  # pragma: no cover - legacy API
+                    resource = config_cls("topic", name)
+                resources.append(resource)
+            try:
+                futures = self._client.describe_configs(resources)
+            except Exception:  # pragma: no cover - broker compatibility
+                futures = {}
+            for resource, future in futures.items():
+                name = getattr(resource, "name", None)
+                if name not in topics:
+                    continue
+                try:
+                    entries = future.result(timeout=self.timeout)
+                except Exception:  # pragma: no cover - partial failure
+                    continue
+                config: dict[str, object] = {}
+                for entry in entries.values():
+                    value = getattr(entry, "value", None)
+                    if value is not None:
+                        config[entry.name] = value
+                topics[name]["config"] = config
+        return topics
+
+    def create_topic(
+        self,
+        name: str,
+        *,
+        num_partitions: int,
+        replication_factor: int,
+        config: Mapping[str, object] | None = None,
+    ) -> None:
+        self._ensure_client()
+        assert self._client is not None  # for type checkers
+        if self._new_topic_cls is None:
+            raise RuntimeError("Kafka NewTopic helper unavailable")
+        topic = self._new_topic_cls(
+            name,
+            num_partitions=int(num_partitions),
+            replication_factor=int(replication_factor),
+            config={k: str(v) for k, v in (config or {}).items()},
+        )
+        futures = self._client.create_topics([topic], request_timeout=int(self.timeout))
+        future = futures.get(name)
+        if future is None:
+            return
+        try:
+            future.result()
+        except Exception as exc:  # pragma: no cover - depends on broker
+            if (
+                self._kafka_exception_cls is not None
+                and isinstance(exc, self._kafka_exception_cls)
+                and self._kafka_error_cls is not None
+            ):
+                err = exc.args[0]
+                if getattr(err, "code", lambda: None)() == self._kafka_error_cls.TOPIC_ALREADY_EXISTS:
+                    from .kafka_admin import TopicExistsError
+
+                    raise TopicExistsError from exc
+            raise
+
+    def delete_topic(self, name: str) -> None:
+        if self._client is None:
+            return
+        futures = self._client.delete_topics([name], operation_timeout=int(self.timeout))
+        future = futures.get(name)
+        if future is None:
+            return
+        with contextlib.suppress(Exception):  # pragma: no cover - optional dependency
+            future.result()
 
 
 async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
@@ -145,6 +280,7 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
             gc,
             driver=driver,
             bus=bus,
+            repo=repo,
             enable_otel=enable_otel,
         )
         config = uvicorn.Config(
