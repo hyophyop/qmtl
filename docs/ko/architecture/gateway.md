@@ -259,6 +259,16 @@ qmtl service gateway --config qmtl/examples/qmtl.yml
 - ``--no-sentinel`` – 자동 ``VersionSentinel`` 삽입 비활성화
 - ``--allow-live`` – 라이브 거래 가드 비활성화(``X-Allow-Live: true`` 요구 해제)
 
+### 구성 검증 흐름
+
+`qmtl config validate` 명령은 `qmtl.foundation.config_validation` 모듈이 제공하는 작은 헬퍼와 함께 섹션별 검사를 순차적으로 수행하여 다층 안정성을 확보합니다.
+
+1. **스키마 검증 (`schema`):** `UnifiedConfig` 데이터 클래스를 기준으로 `validate_config_structure`가 각 섹션과 필드 타입을 확인하고, 설명적인 `ValidationIssue`를 반환합니다. 타입 불일치 메시지는 `list[str]`처럼 사람이 읽기 쉬운 문구를 포함합니다.
+2. **Gateway 연결 검증 (`gateway`):** `_validate_gateway_redis`, `_validate_gateway_database`, `_check_controlbus`, `_validate_gateway_worldservice`와 같은 헬퍼가 Redis, 데이터베이스, ControlBus, WorldService를 순차적으로 점검합니다. `--offline` 플래그가 설정되면 네트워크 의존 검사만 경고로 바꾸고 실제 연결을 시도하지 않습니다.
+3. **DAG Manager 연결 검증 (`dagmanager`):** `_validate_dagmanager_neo4j`, `_validate_dagmanager_kafka`, `_validate_dagmanager_controlbus`가 각각 Neo4j, Kafka, ControlBus를 확인하고, 실패/경고 정보를 모아 반환합니다. helper 분리를 통해 각각의 사이클로매틱 복잡도를 Radon 기준 B 이하로 유지합니다.
+
+각 섹션의 `ValidationIssue`는 표 형식 테이블과 JSON(`--json`) 출력으로 제공되며, `severity="error"`가 하나라도 있으면 CLI가 종료 코드 1로 멈춥니다.
+
 ---
 
 ## S4 · Ownership & Commit‑Log Design

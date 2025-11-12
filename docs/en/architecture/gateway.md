@@ -259,6 +259,16 @@ Available flags:
 - ``--no-sentinel`` - disable automatic ``VersionSentinel`` insertion.
 - ``--allow-live`` - disable the live trading guard requiring ``X-Allow-Live: true``.
 
+### Configuration validation flow
+
+`qmtl config validate` orchestrates the `qmtl.foundation.config_validation` helpers in three stages to keep each dependency check concise.
+
+1. **Schema validation (`schema`)** – `validate_config_structure` walks the `UnifiedConfig` dataclass definitions, ensuring every section key is present and typed correctly. Errors mention readable descriptions such as `list[str]` so operators can quickly identify the offending field.
+2. **Gateway connectivity (`gateway`)** – dedicated helpers like `_validate_gateway_redis`, `_validate_gateway_database`, `_check_controlbus`, and `_validate_gateway_worldservice` sequentially verify Redis, the configured database backend, ControlBus topics, and the proxied WorldService. Passing `--offline` converts these network-bound checks into warnings rather than outbound requests.
+3. **DAG Manager connectivity (`dagmanager`)** – `_validate_dagmanager_neo4j`, `_validate_dagmanager_kafka`, and `_validate_dagmanager_controlbus` independently cover Neo4j, Kafka, and ControlBus connectivity, keeping each helper's cyclomatic complexity beneath the Radon B target.
+
+Each stage emits `ValidationIssue` payloads that are rendered as a CLI table and, when requested, JSON (`--json`). Any error-level severity causes the command to exit with code 1 so automation picks up failing environments.
+
 ---
 
 ## S4 - Ownership & Commit-Log Design
