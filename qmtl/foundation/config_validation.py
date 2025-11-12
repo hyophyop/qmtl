@@ -219,95 +219,126 @@ async def validate_gateway_config(
 async def validate_dagmanager_config(
     config: DagManagerConfig, *, offline: bool = False
 ) -> Dict[str, ValidationIssue]:
-    issues: Dict[str, ValidationIssue] = {}
+    return {
+        "neo4j": await _validate_dagmanager_neo4j(config, offline=offline),
+        "kafka": await _validate_dagmanager_kafka(config, offline=offline),
+        "controlbus": await _validate_dagmanager_controlbus(config, offline=offline),
+    }
 
-    # Neo4j repository
+
+async def _validate_dagmanager_neo4j(
+    config: DagManagerConfig, *, offline: bool
+) -> ValidationIssue:
     if not config.neo4j_dsn:
-        issues["neo4j"] = ValidationIssue(
-            "ok", "Neo4j disabled; using memory repository"
-        )
-    elif offline:
-        issues["neo4j"] = ValidationIssue(
+        return ValidationIssue("ok", "Neo4j disabled; using memory repository")
+    if offline:
+        return ValidationIssue(
             "warning", f"Offline mode: skipped Neo4j check for {config.neo4j_dsn}"
         )
-    else:
+
+    try:
+        from neo4j import GraphDatabase  # type: ignore[import]
+    except ModuleNotFoundError:
+        return ValidationIssue(
+            "warning", "neo4j driver not installed; skipping validation"
+        )
+
+    loop = asyncio.get_running_loop()
+
+    def _probe() -> None:
+        driver = GraphDatabase.driver(
+            config.neo4j_dsn, auth=(config.neo4j_user, config.neo4j_password)
+        )
         try:
-            from neo4j import GraphDatabase  # type: ignore[import]
-        except ModuleNotFoundError:
-            issues["neo4j"] = ValidationIssue(
-                "warning", "neo4j driver not installed; skipping validation"
-            )
-        else:
-            loop = asyncio.get_running_loop()
+            with driver.session() as session:
+                session.run("RETURN 1")
+        finally:
+            driver.close()
 
-            def _probe() -> None:
-                driver = GraphDatabase.driver(
-                    config.neo4j_dsn, auth=(config.neo4j_user, config.neo4j_password)
-                )
-                try:
-                    with driver.session() as session:
-                        session.run("RETURN 1")
-                finally:
-                    driver.close()
+    try:
+        await loop.run_in_executor(None, _probe)
+    except Exception as exc:
+        return ValidationIssue("error", f"Neo4j connection failed: {exc}")
+    return ValidationIssue("ok", f"Neo4j reachable at {config.neo4j_dsn}")
 
-            try:
-                await loop.run_in_executor(None, _probe)
-            except Exception as exc:
-                issues["neo4j"] = ValidationIssue(
-                    "error", f"Neo4j connection failed: {exc}"
-                )
-            else:
-                issues["neo4j"] = ValidationIssue(
-                    "ok", f"Neo4j reachable at {config.neo4j_dsn}"
-                )
 
-    # Kafka queue manager
+async def _validate_dagmanager_kafka(
+    config: DagManagerConfig, *, offline: bool
+) -> ValidationIssue:
     if not config.kafka_dsn:
-        issues["kafka"] = ValidationIssue(
+        return ValidationIssue(
             "ok", "Kafka DSN not configured; using in-memory queue manager"
         )
-    elif offline:
-        issues["kafka"] = ValidationIssue(
+    if offline:
+        return ValidationIssue(
             "warning", f"Offline mode: skipped Kafka admin check for {config.kafka_dsn}"
         )
-    else:
-        try:
-            admin = await _create_kafka_admin(config.kafka_dsn)
-        except ModuleNotFoundError:
-            issues["kafka"] = ValidationIssue(
-                "warning", "confluent-kafka not installed; skipping Kafka validation"
-            )
-        except Exception as exc:
-            issues["kafka"] = ValidationIssue(
-                "error", f"Failed to initialise Kafka admin client: {exc}"
-            )
-        else:
-            loop = asyncio.get_running_loop()
 
-            def _fetch() -> object:
-                return admin.client.list_topics()
+    try:
+        admin = await _create_kafka_admin(config.kafka_dsn)
+    except ModuleNotFoundError:
+        return ValidationIssue(
+            "warning", "confluent-kafka not installed; skipping Kafka validation"
+        )
+    except Exception as exc:
+        return ValidationIssue(
+            "error", f"Failed to initialise Kafka admin client: {exc}"
+        )
 
-            try:
-                metadata = await loop.run_in_executor(None, _fetch)
-            except Exception as exc:
-                issues["kafka"] = ValidationIssue(
-                    "error", f"Kafka metadata fetch failed: {exc}"
-                )
-            else:
-                count = _count_topics(metadata)
-                issues["kafka"] = ValidationIssue(
-                    "ok",
-                    f"Kafka reachable at {config.kafka_dsn} ({count} topics visible)",
-                )
+    loop = asyncio.get_running_loop()
 
-    # ControlBus producer
+    def _fetch() -> object:
+        return admin.client.list_topics()
+
+    try:
+        metadata = await loop.run_in_executor(None, _fetch)
+    except Exception as exc:
+        return ValidationIssue("error", f"Kafka metadata fetch failed: {exc}")
+
+    count = _count_topics(metadata)
+    return ValidationIssue(
+        "ok", f"Kafka reachable at {config.kafka_dsn} ({count} topics visible)"
+    )
+
+
+async def _validate_dagmanager_controlbus(
+    config: DagManagerConfig, *, offline: bool
+) -> ValidationIssue:
     brokers = [config.controlbus_dsn] if config.controlbus_dsn else []
     topics = [config.controlbus_queue_topic] if config.controlbus_queue_topic else []
-    issues["controlbus"] = await _check_controlbus(
+    return await _check_controlbus(
         brokers, topics, f"{config.controlbus_queue_topic}-validator", offline=offline
     )
 
-    return issues
+
+def _describe_collection(args: tuple[Any, ...], label: str) -> str:
+    inner = _type_description(args[0]) if args else "any"
+    return f"{label}[{inner}]"
+
+
+def _describe_mapping(args: tuple[Any, ...]) -> str:
+    key_desc = _type_description(args[0]) if args else "any"
+    value_desc = _type_description(args[1]) if len(args) > 1 else "any"
+    return f"mapping[{key_desc}, {value_desc}]"
+
+
+def _describe_tuple(args: tuple[Any, ...]) -> str:
+    if not args:
+        return "tuple"
+    inner_desc = ", ".join(_type_description(arg) for arg in args)
+    return f"tuple[{inner_desc}]"
+
+
+_TYPE_DESCRIPTION_HANDLERS: Dict[Any, Callable[[tuple[Any, ...]], str]] = {
+    list: lambda args: _describe_collection(args, "list"),
+    Sequence: lambda args: _describe_collection(args, "sequence"),
+    ABCSequence: lambda args: _describe_collection(args, "sequence"),
+    set: lambda args: _describe_collection(args, "set"),
+    tuple: lambda args: _describe_tuple(args),
+    Mapping: _describe_mapping,
+    ABCMapping: _describe_mapping,
+    dict: _describe_mapping,
+}
 
 
 def _type_description(annotation: Any) -> str:
@@ -318,23 +349,12 @@ def _type_description(annotation: Any) -> str:
         if annotation is type(None):  # pragma: no cover - explicit None type
             return "null"
         return getattr(annotation, "__name__", str(annotation))
-    args = get_args(annotation)
-    if origin in {list, Sequence}:
-        inner = _type_description(args[0]) if args else "any"
-        label = "list" if origin is list else "sequence"
-        return f"{label}[{inner}]"
-    if origin in {set, tuple}:
-        inner = _type_description(args[0]) if args else "any"
-        return f"{origin.__name__}[{inner}]"
-    if origin in {dict, Mapping}:
-        key_desc = _type_description(args[0]) if args else "any"
-        value_desc = _type_description(args[1]) if len(args) > 1 else "any"
-        return f"mapping[{key_desc}, {value_desc}]"
-    if origin is tuple:
-        inner_desc = ", ".join(_type_description(arg) for arg in args) if args else ""
-        return f"tuple[{inner_desc}]"
     if origin is type(None):  # pragma: no cover - defensive
         return "null"
+    args = get_args(annotation)
+    handler = _TYPE_DESCRIPTION_HANDLERS.get(origin)
+    if handler is not None:
+        return handler(args)
     return " | ".join(_type_description(arg) for arg in args)
 
 
