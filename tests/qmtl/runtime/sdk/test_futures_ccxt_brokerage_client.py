@@ -85,3 +85,53 @@ def test_futures_ccxt_brokerage_client_builds_order_payload(monkeypatch):
     assert params["newClientOrderId"] == "cid-1"
     assert exchange.margin_calls[-1] == ("ISOLATED", "BTC/USDT")
     assert (3, "BTC/USDT") in exchange.leverage_calls
+
+
+def test_symbol_defaults_retry_after_init_failure(monkeypatch):
+    module = types.SimpleNamespace()
+
+    class _FlakyExchange:
+        def __init__(self, _config: dict[str, Any]) -> None:
+            module.instance = self
+            self.margin_attempts = 0
+            self.margin_calls: list[tuple[str, str]] = []
+            self.leverage_calls: list[tuple[int, str]] = []
+            self.orders_posted = 0
+
+        def set_margin_mode(self, mode: str, symbol: str) -> None:
+            self.margin_attempts += 1
+            if self.margin_attempts == 1:
+                raise RuntimeError("transient failure")
+            self.margin_calls.append((mode, symbol))
+
+        def set_leverage(self, value: int, symbol: str) -> None:
+            self.leverage_calls.append((value, symbol))
+
+        def create_order(
+            self, symbol: str, typ: str, side: str, amount: Any, price: Any, params: dict[str, Any]
+        ) -> dict[str, Any]:
+            self.orders_posted += 1
+            return {"id": str(self.orders_posted), "params": params}
+
+    module.binanceusdm = _FlakyExchange
+    monkeypatch.setitem(sys.modules, "ccxt", module)
+
+    client = FuturesCcxtBrokerageClient(
+        symbol="BTC/USDT",
+        leverage=5,
+        margin_mode="isolated",
+    )
+
+    exchange = module.instance
+    assert exchange.margin_attempts == 1
+    assert "BTC/USDT" not in client._symbol_prefs_applied  # type: ignore[attr-defined]
+
+    client.post_order({
+        "symbol": "BTC/USDT",
+        "side": "buy",
+        "quantity": 1,
+    })
+
+    assert exchange.margin_calls == [("ISOLATED", "BTC/USDT")]
+    assert exchange.leverage_calls == [(5, "BTC/USDT"), (5, "BTC/USDT")]
+    assert "BTC/USDT" in client._symbol_prefs_applied  # type: ignore[attr-defined]

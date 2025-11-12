@@ -17,16 +17,17 @@ from typing import Any
 from .trade_execution_service import TradeExecutionService
 
 
-def _call_exchange_method(target: Any, method_names: tuple[str, ...], *args: Any) -> Any | None:
+def _call_exchange_method(target: Any, method_names: tuple[str, ...], *args: Any) -> bool:
     for name in method_names:
         method = getattr(target, name, None)
         if not callable(method):
             continue
         try:
-            return method(*args)
+            method(*args)
+            return True
         except Exception:
             continue
-    return None
+    return False
 
 
 class BrokerageClient(ABC):
@@ -316,17 +317,31 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
             return
 
         normalized_mode = self._normalize_margin_mode(margin_mode)
+        attempted = False
+        all_succeeded = True
+
         if normalized_mode:
-            _call_exchange_method(
+            attempted = True
+            if not _call_exchange_method(
                 self._ex,
                 ("set_margin_mode",),
                 normalized_mode,
                 symbol,
-            )
-        if leverage is not None:
-            _call_exchange_method(self._ex, ("set_leverage",), int(leverage), symbol)
+            ):
+                all_succeeded = False
 
-        self._symbol_prefs_applied.add(symbol)
+        if leverage is not None:
+            attempted = True
+            if not _call_exchange_method(
+                self._ex,
+                ("set_leverage",),
+                int(leverage),
+                symbol,
+            ):
+                all_succeeded = False
+
+        if not attempted or all_succeeded:
+            self._symbol_prefs_applied.add(symbol)
 
     def _apply_order_leverage(self, order: dict[str, Any], symbol: str | None) -> None:
         if not symbol:
