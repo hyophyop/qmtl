@@ -40,6 +40,8 @@ class WorldServiceClient:
         budget: Budget | None = None,
         client: httpx.AsyncClient | None = None,
         breaker: AsyncCircuitBreaker | None = None,
+        rebalance_schema_version: int = 1,
+        alpha_metrics_capable: bool = False,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._budget = budget or Budget()
@@ -75,6 +77,19 @@ class WorldServiceClient:
             observe_latency=gw_metrics.observe_worlds_proxy_latency,
             on_success=_after_success,
         )
+        self._rebalance_schema_version = max(1, rebalance_schema_version or 1)
+        self._alpha_metrics_capable = bool(alpha_metrics_capable)
+
+    def configure_rebalance_capabilities(
+        self,
+        *,
+        schema_version: int | None = None,
+        alpha_metrics_capable: bool | None = None,
+    ) -> None:
+        if schema_version is not None:
+            self._rebalance_schema_version = max(1, schema_version)
+        if alpha_metrics_capable is not None:
+            self._alpha_metrics_capable = bool(alpha_metrics_capable)
 
     async def _wait_for_service(self, timeout: float = 5.0) -> None:
         """Poll the WorldService health endpoint until it is ready."""
@@ -384,12 +399,50 @@ class WorldServiceClient:
 
         This proxies to the WorldService endpoint at ``/rebalancing/plan``.
         """
-        return await self._request_json(
-            "POST",
-            "/rebalancing/plan",
-            headers=headers,
-            json=payload,
-        )
+        attempts = list(self._iter_rebalance_payloads(payload))
+        last_exc: httpx.HTTPStatusError | None = None
+        for version, body in attempts:
+            try:
+                return await self._request_json(
+                    "POST",
+                    "/rebalancing/plan",
+                    headers=headers,
+                    json=body,
+                )
+            except httpx.HTTPStatusError as exc:
+                if not self._should_retry_rebalance_version(version, exc):
+                    raise
+                last_exc = exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("no payload variants generated for rebalance plan")
+
+    def _iter_rebalance_payloads(self, payload: Any) -> list[tuple[int, dict[str, Any]]]:
+        preferred = max(1, self._rebalance_schema_version or 1)
+        versions: list[int] = []
+        if preferred > 1:
+            versions.append(preferred)
+        if 1 not in versions:
+            versions.append(1)
+        variants: list[tuple[int, dict[str, Any]]] = []
+        for version in versions:
+            body = dict(payload)
+            if version > 1:
+                body["schema_version"] = version
+            else:
+                body.pop("schema_version", None)
+            variants.append((version, body))
+        return variants
+
+    def _should_retry_rebalance_version(
+        self,
+        attempted_version: int,
+        exc: httpx.HTTPStatusError,
+    ) -> bool:
+        if attempted_version <= 1:
+            return False
+        status = exc.response.status_code
+        return status in {400, 404, 415, 422, 501}
 
 
 __all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]

@@ -8,7 +8,10 @@ from fastapi import params as fastapi_params
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.degradation import DegradationManager
-from qmtl.services.gateway.gateway_health import get_health as gateway_health
+from qmtl.services.gateway.gateway_health import (
+    GatewayHealthCapabilities,
+    get_health as gateway_health,
+)
 from qmtl.services.gateway.world_client import WorldServiceClient
 
 from .dependencies import GatewayDependencyProvider
@@ -33,6 +36,9 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         ),
         degradation: DegradationManager = Depends(deps.provide_degradation),
         enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+        health_capabilities: GatewayHealthCapabilities = Depends(
+            deps.provide_health_capabilities
+        ),
     ) -> dict[str, Any]:
         redis_conn = _resolve_dependency(redis_conn, deps.provide_redis_conn)
         database_obj = _resolve_dependency(database_obj, deps.provide_database)
@@ -44,8 +50,15 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         enforce_live_guard = _resolve_dependency(
             enforce_live_guard, deps.provide_enforce_live_guard
         )
+        health_capabilities = _resolve_dependency(
+            health_capabilities, deps.provide_health_capabilities
+        )
         health_data = await gateway_health(
-            redis_conn, database_obj, dagmanager, world_client
+            redis_conn,
+            database_obj,
+            dagmanager,
+            world_client,
+            capabilities=health_capabilities,
         )
         health_data["degrade_level"] = degradation.level.name
         health_data["enforce_live_guard"] = enforce_live_guard
@@ -63,6 +76,9 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         world_client: Optional[WorldServiceClient] = Depends(
             deps.provide_world_client_optional
         ),
+        health_capabilities: GatewayHealthCapabilities = Depends(
+            deps.provide_health_capabilities
+        ),
     ) -> dict[str, Any]:
         redis_conn = _resolve_dependency(redis_conn, deps.provide_redis_conn)
         database_obj = _resolve_dependency(database_obj, deps.provide_database)
@@ -70,7 +86,16 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         world_client = _resolve_dependency(
             world_client, deps.provide_world_client_optional
         )
-        return await gateway_health(redis_conn, database_obj, dagmanager, world_client)
+        health_capabilities = _resolve_dependency(
+            health_capabilities, deps.provide_health_capabilities
+        )
+        return await gateway_health(
+            redis_conn,
+            database_obj,
+            dagmanager,
+            world_client,
+            capabilities=health_capabilities,
+        )
 
     return router
 

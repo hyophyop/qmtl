@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.degradation import DegradationManager
+from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.strategy_submission import StrategySubmissionHelper
 from qmtl.services.gateway.submission import ComputeContextService, SubmissionPipeline
@@ -29,6 +30,7 @@ class GatewayDependencyProvider:
         enforce_live_guard: bool,
         fill_producer: Any | None = None,
         submission_pipeline: SubmissionPipeline | None = None,
+        health_capabilities: GatewayHealthCapabilities | None = None,
     ) -> None:
         self._manager = manager
         self._redis_conn = redis_conn
@@ -53,6 +55,9 @@ class GatewayDependencyProvider:
             database_obj,
             pipeline=self._pipeline,
             world_client=self._world_client,
+        )
+        self._health_capabilities = (
+            health_capabilities or GatewayHealthCapabilities()
         )
 
     # Core dependencies -------------------------------------------------
@@ -94,6 +99,9 @@ class GatewayDependencyProvider:
 
     def provide_enforce_live_guard(self) -> bool:
         return self._enforce_live_guard
+
+    def provide_health_capabilities(self) -> GatewayHealthCapabilities:
+        return self._health_capabilities
 
 
 __all__ = ["GatewayDependencyProvider"]
