@@ -8,7 +8,7 @@ This module exposes a small helper class that composes
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from qmtl.runtime.sdk.auto_backfill import FetcherBackfillStrategy
 from qmtl.runtime.sdk.ohlcv_nodeid import build as _build_ohlcv_node_id
@@ -137,6 +137,55 @@ def _build_questdb_conn(cfg: Mapping[str, Any], *, mode: str) -> QuestDBConn:
     )
 
 
+def _clone_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    return dict(cfg)
+
+
+def _normalize_symbols(cfg: Mapping[str, Any]) -> list[str]:
+    symbols = cfg.get("symbols") or []
+    return [str(symbol) for symbol in symbols if symbol]
+
+
+def _resolve_timeframes(cfg: Mapping[str, Any]) -> list[str]:
+    frames = list(cfg.get("timeframes") or [])
+    timeframe = cfg.get("timeframe")
+    if timeframe is not None:
+        frames.append(timeframe)
+    return [str(frame) for frame in frames if frame]
+
+
+def _iter_provider_specs(
+    cls: type["CcxtQuestDBProvider"], cfg: Mapping[str, Any]
+) -> Iterable[tuple[str, dict[str, Any]]]:
+    mode = str(cfg.get("mode", "ohlcv")).lower()
+    exchange_id = str(cfg.get("exchange") or cfg.get("exchange_id") or "binance")
+    symbols = _normalize_symbols(cfg)
+    if not symbols:
+        return
+
+    if mode == "trades":
+        for symbol in symbols:
+            node_id = cls.make_node_id(exchange_id=exchange_id, symbol=symbol, mode="trades")
+            yield node_id, _clone_config(cfg)
+        return
+
+    timeframes = _resolve_timeframes(cfg)
+    if not timeframes:
+        timeframes = ["1m"]
+
+    for symbol in symbols:
+        for timeframe in timeframes:
+            local_cfg = _clone_config(cfg)
+            local_cfg["timeframe"] = timeframe
+            node_id = cls.make_node_id(
+                exchange_id=exchange_id,
+                symbol=symbol,
+                timeframe=timeframe,
+                mode="ohlcv",
+            )
+            yield node_id, local_cfg
+
+
 class CcxtQuestDBProvider(QuestDBHistoryProvider):
     """QuestDB provider pre-configured with a CCXT OHLCV backfiller.
 
@@ -217,32 +266,10 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
         For mode=ohlcv, returns one per (symbol, timeframe). For trades, one per symbol.
         Keys are constructed via make_node_id.
         """
-        mode = str(cfg.get("mode", "ohlcv")).lower()
-        exchange_id = str(cfg.get("exchange") or cfg.get("exchange_id") or "binance")
-        symbols = list(cfg.get("symbols") or [])
-        timeframes = list(cfg.get("timeframes") or ([] if cfg.get("timeframe") is None else [cfg.get("timeframe")]))
-        if mode == "trades":
-            if not symbols:
-                return {}
-            out: dict[str, CcxtQuestDBProvider] = {}
-            for sym in symbols:
-                node_id = cls.make_node_id(exchange_id=exchange_id, symbol=sym, mode="trades")
-                provider = cls.from_config(cfg, exchange=exchange)
-                out[node_id] = provider
-            return out
-
-        # OHLCV
-        if not timeframes:
-            timeframes = ["1m"]
-        out2: dict[str, CcxtQuestDBProvider] = {}
-        for sym in symbols or []:
-            for tf in timeframes:
-                local_cfg = dict(cfg)
-                local_cfg["timeframe"] = tf
-                node_id = cls.make_node_id(exchange_id=exchange_id, symbol=sym, timeframe=tf, mode="ohlcv")
-                provider = cls.from_config(local_cfg, exchange=exchange)
-                out2[node_id] = provider
-        return out2
+        providers: dict[str, CcxtQuestDBProvider] = {}
+        for node_id, provider_cfg in _iter_provider_specs(cls, cfg):
+            providers[node_id] = cls.from_config(provider_cfg, exchange=exchange)
+        return providers
 
 
 __all__ = ["CcxtQuestDBProvider", "CcxtBackfillConfig", "RateLimiterConfig"]

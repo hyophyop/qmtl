@@ -19,7 +19,7 @@ Notes
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 import logging
 
 from .brokerage_model import BrokerageModel
@@ -97,6 +97,9 @@ def _merge_fee_pair(
     return maker, taker
 
 
+_FeeDetector = Callable[[Any, str | None], tuple[float | None, float | None]]
+
+
 def _detect_fees_from_markets(exchange: Any, symbol: str | None) -> tuple[float | None, float | None]:
     """Inspect ``load_markets`` metadata for maker/taker fees."""
 
@@ -131,6 +134,19 @@ def _detect_fees_from_trading(exchange: Any, _: str | None) -> tuple[float | Non
     return _extract_maker_taker(trading)
 
 
+_DETECTOR_STRATEGIES: tuple[_FeeDetector, ...] = (
+    _detect_fees_from_markets,
+    _detect_fees_from_trading,
+)
+
+
+def _run_detector(detector: _FeeDetector, exchange: Any, symbol: str | None) -> tuple[float | None, float | None] | None:
+    try:
+        return detector(exchange, symbol)
+    except Exception:
+        return None
+
+
 def _try_detect_fees(
     exchange_id: str,
     *,
@@ -148,19 +164,15 @@ def _try_detect_fees(
     maker: float | None = None
     taker: float | None = None
 
-    detectors = (
-        _detect_fees_from_markets,
-        _detect_fees_from_trading,
-    )
-
-    for detector in detectors:
+    for detector in _DETECTOR_STRATEGIES:
         if maker is not None and taker is not None:
             break
-        try:
-            detected = detector(ex, symbol)
-        except Exception:
+        detected = _run_detector(detector, ex, symbol)
+        if detected is None:
             continue
         maker, taker = _merge_fee_pair((maker, taker), detected)
+        if maker is not None and taker is not None:
+            return maker, taker
 
     if maker is None or taker is None:
         return None
@@ -269,4 +281,3 @@ def make_ccxt_spot_brokerage(
 
 
 __all__ = ["make_ccxt_brokerage", "make_ccxt_spot_brokerage"]
-
