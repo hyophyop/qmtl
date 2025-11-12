@@ -2111,9 +2111,9 @@ class SeamlessDataProvider(ABC):
                             duration_ms=elapsed_ms,
                         )
 
-        if publication and self._publish_fingerprint:
+        if publication:
             (
-                fingerprint,
+                publication_fingerprint,
                 coverage_bounds,
                 manifest_uri,
                 as_of,
@@ -2130,6 +2130,8 @@ class SeamlessDataProvider(ABC):
                 approx_bytes=approx_bytes,
                 as_of_ref=as_of,
             )
+            if publication_fingerprint is not None:
+                fingerprint = publication_fingerprint
 
         if fingerprint is None:
             fingerprint = self._compute_fingerprint_value(
