@@ -137,7 +137,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail={
                         "code": "E_SHARED_ACCOUNT_POLICY",
                         "message": message,

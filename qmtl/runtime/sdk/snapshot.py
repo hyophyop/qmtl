@@ -18,7 +18,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -224,115 +224,238 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
 
     Returns ``True`` when hydration was applied, ``False`` otherwise.
     """
-    strict = os.getenv("QMTL_SNAPSHOT_STRICT_RUNTIME", "0") == "1" if strict_runtime is None else strict_runtime
-    key = _node_key(node)
-    base = _snapshot_dir()
-    # Prefer Parquet snapshots when present, fall back to JSON
+    strict = (
+        os.getenv("QMTL_SNAPSHOT_STRICT_RUNTIME", "0") == "1"
+        if strict_runtime is None
+        else strict_runtime
+    )
     remote_url, fs = _remote_base()
-    pq_candidates = []
-    json_candidates = []
-    if remote_url and fs is not None:
-        try:
-            pq_candidates = sorted(
-                fs.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.parquet"), reverse=True  # type: ignore[attr-defined]
-            )
-            json_candidates = sorted(
-                fs.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.json"), reverse=True  # type: ignore[attr-defined]
-            )
-        except Exception:
-            pq_candidates = []
-            json_candidates = []
-    else:
-        pq_candidates = sorted(base.glob(f"{key}_*.snap.parquet"), reverse=True)
-        json_candidates = sorted(base.glob(f"{key}_*.snap.json"), reverse=True)
-    candidates = pq_candidates + json_candidates
+    candidates = _snapshot_candidates(
+        key=_node_key(node),
+        base_dir=_snapshot_dir(),
+        remote_url=remote_url,
+        filesystem=fs,
+    )
     if not candidates:
         return False
     for path in candidates:
         try:
-            if (isinstance(path, str) and path.endswith(".parquet")) or (
-                isinstance(path, Path) and path.suffix == ".parquet"
-            ):
-                if pa is None or pq is None:
-                    continue
-                # Read sidecar meta
-                if remote_url and fs is not None and isinstance(path, str):
-                    meta_path = path.replace(".snap.parquet", ".meta.json")
-                    try:
-                        with fs.open(meta_path, "r") as mf:  # type: ignore[attr-defined]
-                            obj = json.load(mf)
-                    except Exception:
-                        continue
-                else:
-                    meta_path = Path(path).with_suffix(".meta.json")
-                    if not meta_path.exists():
-                        continue
-                    obj = json.loads(meta_path.read_text())
-                meta = obj.get("meta", {})
-                if remote_url and fs is not None and isinstance(path, str):
-                    with fs.open(path, "rb") as fobj:  # type: ignore[attr-defined]
-                        table = pq.read_table(fobj)
-                else:
-                    table = pq.read_table(path)
-                data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
-                u_col = table.column("u").to_pylist()
-                i_col = table.column("i").to_pylist()
-                t_col = table.column("t").to_pylist()
-                v_col = table.column("v").to_pylist()
-                for u, i, t, v in zip(u_col, i_col, t_col, v_col):
-                    data.setdefault(u, {}).setdefault(int(i), []).append((int(t), json.loads(v)))
-            else:
-                if remote_url and fs is not None and isinstance(path, str):
-                    with fs.open(path, "r") as f:  # type: ignore[attr-defined]
-                        obj = json.load(f)
-                else:
-                    obj = json.loads(Path(path).read_text() if isinstance(path, str) else path.read_text())
-                meta = obj.get("meta", {})
-                data = obj.get("data", {})
-            if strict and meta.get("runtime_fingerprint") != runtime_fingerprint():
-                continue
-            if meta.get("schema_hash") != node.schema_hash:
-                continue
-            expected_df = getattr(node, "dataset_fingerprint", None)
-            if expected_df:
-                snap_df = meta.get("dataset_fingerprint")
-                if snap_df != expected_df:
-                    continue
-            # Merge into cache preserving most recent
-            for u, mp in data.items():
-                for interval_s, items in mp.items():
-                    interval = int(interval_s)
-                    decoded = []
-                    for ts, b64 in items:
-                        try:
-                            if isinstance(b64, (bytes, bytearray)):
-                                payload = json.loads(b64.decode())
-                            else:
-                                payload = json.loads(_b64d(b64).decode())
-                        except Exception:
-                            continue
-                        decoded.append((int(ts), payload))
-                    node.cache.backfill_bulk(u, interval, decoded)
-            # Optional state hash validation
-            try:
-                expect_hash = meta.get("state_hash")
-                cur_hash = node.cache.input_window_hash()  # type: ignore[attr-defined]
-                if expect_hash and cur_hash != expect_hash:
-                    # Fallback: drop hydrated state
-                    for u, mp in list(node.cache.last_timestamps().items()):  # type: ignore[attr-defined]
-                        for i in list(mp.keys()):
-                            node.cache.drop(u, i)  # type: ignore[attr-defined]
-                    if hasattr(sdk_metrics, "snapshot_hydration_fallback_total"):
-                        sdk_metrics.snapshot_hydration_fallback_total.inc()  # type: ignore[attr-defined]
-                    continue
-            except Exception:
-                pass
-            if hasattr(sdk_metrics, "snapshot_hydration_success_total"):
-                try:
-                    sdk_metrics.snapshot_hydration_success_total.inc()  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-            return True
+            payload = _load_snapshot_payload(path, remote_url, fs)
         except Exception:
             continue
+        if payload is None:
+            continue
+        meta, data = payload
+        if not _is_snapshot_compatible(meta, node, strict):
+            continue
+        try:
+            _apply_snapshot_data(node, data)
+        except Exception:
+            continue
+        if not _validate_state_hash(node, meta):
+            _handle_hydration_fallback(node)
+            continue
+        _record_hydration_success()
+        return True
     return False
+
+
+def _snapshot_candidates(
+    *,
+    key: str,
+    base_dir: Path,
+    remote_url: str | None,
+    filesystem: Any | None,
+) -> list[Any]:
+    pq_candidates: list[Any] = []
+    json_candidates: list[Any] = []
+    if remote_url and filesystem is not None:
+        try:
+            pq_candidates = sorted(
+                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.parquet"),  # type: ignore[attr-defined]
+                reverse=True,
+            )
+            json_candidates = sorted(
+                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.json"),  # type: ignore[attr-defined]
+                reverse=True,
+            )
+        except Exception:
+            return []
+    else:
+        pq_candidates = sorted(base_dir.glob(f"{key}_*.snap.parquet"), reverse=True)
+        json_candidates = sorted(base_dir.glob(f"{key}_*.snap.json"), reverse=True)
+    return pq_candidates + json_candidates
+
+
+def _load_snapshot_payload(
+    path: Any,
+    remote_url: str | None,
+    filesystem: Any | None,
+) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
+    if _is_parquet_path(path):
+        return _load_parquet_payload(path, remote_url, filesystem)
+    return _load_json_payload(path, remote_url, filesystem)
+
+
+def _is_parquet_path(path: Any) -> bool:
+    if isinstance(path, str):
+        return path.endswith(".parquet")
+    if isinstance(path, Path):
+        return path.suffix == ".parquet"
+    return False
+
+
+def _load_parquet_payload(
+    path: Any,
+    remote_url: str | None,
+    filesystem: Any | None,
+) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
+    if pa is None or pq is None:
+        return None
+    meta = _read_parquet_meta(path, remote_url, filesystem)
+    if meta is None:
+        return None
+    if remote_url and filesystem is not None and isinstance(path, str):
+        with filesystem.open(path, "rb") as handle:  # type: ignore[attr-defined]
+            table = pq.read_table(handle)
+    else:
+        table = pq.read_table(path)
+    data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
+    for u, i, t, v in zip(
+        table.column("u").to_pylist(),
+        table.column("i").to_pylist(),
+        table.column("t").to_pylist(),
+        table.column("v").to_pylist(),
+    ):
+        data.setdefault(u, {}).setdefault(int(i), []).append((int(t), v))
+    return meta, data
+
+
+def _read_parquet_meta(
+    path: Any,
+    remote_url: str | None,
+    filesystem: Any | None,
+) -> Dict[str, Any] | None:
+    if remote_url and filesystem is not None and isinstance(path, str):
+        meta_path = path.replace(".snap.parquet", ".meta.json")
+        try:
+            with filesystem.open(meta_path, "r") as handle:  # type: ignore[attr-defined]
+                obj = json.load(handle)
+        except Exception:
+            return None
+        return obj.get("meta", {})
+    meta_path = Path(path).with_suffix(".meta.json")
+    if not meta_path.exists():
+        return None
+    return json.loads(meta_path.read_text()).get("meta", {})
+
+
+def _load_json_payload(
+    path: Any,
+    remote_url: str | None,
+    filesystem: Any | None,
+) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
+    if remote_url and filesystem is not None and isinstance(path, str):
+        with filesystem.open(path, "r") as handle:  # type: ignore[attr-defined]
+            obj = json.load(handle)
+    else:
+        text = Path(path).read_text() if isinstance(path, (str, Path)) else path.read_text()
+        obj = json.loads(text)
+    meta = obj.get("meta", {})
+    data = obj.get("data", {})
+    return meta, data
+
+
+def _is_snapshot_compatible(meta: Mapping[str, Any], node, strict: bool) -> bool:
+    if strict and meta.get("runtime_fingerprint") != runtime_fingerprint():
+        return False
+    if meta.get("schema_hash") != node.schema_hash:
+        return False
+    expected_df = getattr(node, "dataset_fingerprint", None)
+    if expected_df:
+        snap_df = meta.get("dataset_fingerprint")
+        if snap_df != expected_df:
+            return False
+    return True
+
+
+def _apply_snapshot_data(node, data: Mapping[str, Any]) -> None:
+    cache = getattr(node, "cache", None)
+    if cache is None:
+        return
+    for universe, interval_map in data.items():
+        if not isinstance(interval_map, Mapping):
+            continue
+        for interval_key, items in interval_map.items():
+            interval = int(interval_key)
+            decoded: list[tuple[int, Any]] = []
+            for ts, payload in items:
+                decoded_payload = _decode_snapshot_payload(payload)
+                if decoded_payload is None:
+                    continue
+                decoded.append((int(ts), decoded_payload))
+            if decoded:
+                cache.backfill_bulk(universe, interval, decoded)
+
+
+def _decode_snapshot_payload(payload: Any) -> Any:
+    if isinstance(payload, (dict, list)) or payload is None:
+        return payload
+    if isinstance(payload, (int, float)):
+        return payload
+    if isinstance(payload, (bytes, bytearray)):
+        try:
+            return json.loads(payload.decode())
+        except Exception:
+            return None
+    if isinstance(payload, str):
+        try:
+            return json.loads(_b64d(payload).decode())
+        except Exception:
+            return payload
+    return None
+
+
+def _validate_state_hash(node, meta: Mapping[str, Any]) -> bool:
+    try:
+        expected = meta.get("state_hash")
+        if not expected:
+            return True
+        cache = getattr(node, "cache", None)
+        if cache is None:
+            return True
+        current = cache.input_window_hash()  # type: ignore[attr-defined]
+        return current == expected
+    except Exception:
+        return True
+
+
+def _handle_hydration_fallback(node) -> None:
+    cache = getattr(node, "cache", None)
+    if cache is None:
+        return
+    try:
+        last_ts = cache.last_timestamps()  # type: ignore[attr-defined]
+    except Exception:
+        last_ts = {}
+    items = last_ts.items() if hasattr(last_ts, "items") else []
+    for universe, intervals in list(items):
+        interval_keys = intervals.keys() if hasattr(intervals, "keys") else []
+        for interval in list(interval_keys):
+            try:
+                cache.drop(universe, interval)  # type: ignore[attr-defined]
+            except Exception:
+                continue
+    if hasattr(sdk_metrics, "snapshot_hydration_fallback_total"):
+        try:
+            sdk_metrics.snapshot_hydration_fallback_total.inc()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
+def _record_hydration_success() -> None:
+    if hasattr(sdk_metrics, "snapshot_hydration_success_total"):
+        try:
+            sdk_metrics.snapshot_hydration_success_total.inc()  # type: ignore[attr-defined]
+        except Exception:
+            pass

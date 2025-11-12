@@ -342,6 +342,15 @@ class _DowngradeDecision:
 
 
 @dataclass(slots=True)
+class _PublicationContext:
+    fingerprint: str | None
+    coverage_bounds: tuple[int, int] | None
+    manifest_uri: str | None
+    publication: ArtifactPublication | None
+    as_of: str
+
+
+@dataclass(slots=True)
 class _CacheEntry:
     result: "SeamlessFetchResult"
     report: ConformanceReport | None
@@ -1828,97 +1837,48 @@ class SeamlessDataProvider(ABC):
         if not isinstance(frame, pd.DataFrame):
             frame = pd.DataFrame()
 
-        world_id: str | None = None
-        execution_domain: str | None = None
-        requested_as_of: str | None = None
-        if request_context is not None:
-            world_id = request_context.world_id or None
-            execution_domain = request_context.execution_domain or None
-            requested_as_of = request_context.requested_as_of
+        (
+            world_id,
+            execution_domain,
+            requested_as_of,
+        ) = self._extract_request_details(request_context)
 
         if frame.empty:
-            metadata = SeamlessFetchMetadata(
+            self._last_conformance_report = None
+            return self._build_empty_result(
+                frame,
                 node_id=node_id,
-                interval=int(interval),
-                requested_range=(int(start), int(end)),
-                rows=0,
-                coverage_bounds=None,
-                conformance_flags={},
-                conformance_warnings=(),
-                conformance_version=CONFORMANCE_VERSION,
-                dataset_fingerprint=None,
-                as_of=None,
-                manifest_uri=None,
-                artifact=None,
+                interval=interval,
+                start=start,
+                end=end,
                 world_id=world_id,
                 execution_domain=execution_domain,
                 requested_as_of=requested_as_of,
                 cache_key=cache_key,
+                report=None,
             )
-            self._last_conformance_report = None
-            self._sync_metadata_attrs(frame, metadata)
-            return SeamlessFetchResult(frame, metadata)
 
-        normalized = frame
-        report: ConformanceReport | None = None
-        if self._conformance:
-            try:
-                interval_override = self._conformance_interval or interval
-                normalized, report = self._conformance.normalize(
-                    frame,
-                    schema=self._conformance_schema,
-                    interval=interval_override,
-                )
-            except ConformancePipelineError:
-                raise
-            except Exception:  # pragma: no cover - defensive guard
-                report = ConformanceReport()
-                normalized = frame.copy()
-        else:
-            normalized = frame.copy()
-            report = None
-
-        if report is None:
-            report = ConformanceReport()
+        normalized, report = self._normalize_with_conformance(frame, interval)
         self._last_conformance_report = report
+        self._record_conformance_metrics(report, node_id=node_id, interval=interval)
 
-        if self._conformance:
-            try:
-                sdk_metrics.observe_conformance_report(
-                    node_id=node_id,
-                    interval=interval,
-                    flags=report.flags_counts,
-                    warnings=report.warnings,
-                )
-            except Exception:  # pragma: no cover - best effort metrics
-                pass
-
-        if (report.warnings or report.flags_counts) and not self._partial_ok:
+        if self._should_fail_conformance(report):
             raise ConformancePipelineError(report)
 
         stabilized = self._stabilize_frame(normalized)
-
         if stabilized.empty:
-            metadata = SeamlessFetchMetadata(
+            return self._build_empty_result(
+                stabilized,
                 node_id=node_id,
-                interval=int(interval),
-                requested_range=(int(start), int(end)),
-                rows=0,
-                coverage_bounds=None,
-                conformance_flags=dict(report.flags_counts),
-                conformance_warnings=report.warnings,
-                conformance_version=CONFORMANCE_VERSION,
-                dataset_fingerprint=None,
-                as_of=None,
-                manifest_uri=None,
-                artifact=None,
+                interval=interval,
+                start=start,
+                end=end,
                 world_id=world_id,
                 execution_domain=execution_domain,
                 requested_as_of=requested_as_of,
                 cache_key=cache_key,
+                report=report,
             )
-            self._sync_metadata_attrs(stabilized, metadata)
-            return SeamlessFetchResult(stabilized, metadata)
 
         coverage_bounds = self._coverage_bounds(stabilized)
         canonical_metadata = {
@@ -1931,11 +1891,145 @@ class SeamlessDataProvider(ABC):
             **canonical_metadata,
             "requested_bounds": (int(start), int(end)),
         }
+
+        publication_ctx = await self._handle_artifact_publication(
+            stabilized,
+            report,
+            start=start,
+            end=end,
+            node_id=node_id,
+            interval=interval,
+            coverage_bounds=coverage_bounds,
+            canonical_metadata=canonical_metadata,
+            legacy_metadata=legacy_metadata,
+        )
+
+        metadata = SeamlessFetchMetadata(
+            node_id=node_id,
+            interval=int(interval),
+            requested_range=(int(start), int(end)),
+            rows=int(len(stabilized)),
+            coverage_bounds=publication_ctx.coverage_bounds,
+            conformance_flags=dict(report.flags_counts),
+            conformance_warnings=report.warnings,
+            conformance_version=CONFORMANCE_VERSION,
+            dataset_fingerprint=publication_ctx.fingerprint,
+            as_of=publication_ctx.as_of,
+            manifest_uri=publication_ctx.manifest_uri,
+            artifact=publication_ctx.publication,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            requested_as_of=requested_as_of,
+            cache_key=cache_key,
+        )
+
+        self._finalize_metadata_metrics(metadata, node_id=node_id, interval=interval)
+        self._sync_metadata_attrs(stabilized, metadata)
+        self._last_fetch_metadata = metadata
+        return SeamlessFetchResult(stabilized, metadata)
+
+    @staticmethod
+    def _extract_request_details(
+        request_context: _RequestContext | None,
+    ) -> tuple[str | None, str | None, str | None]:
+        if request_context is None:
+            return None, None, None
+        return (
+            request_context.world_id or None,
+            request_context.execution_domain or None,
+            request_context.requested_as_of,
+        )
+
+    def _build_empty_result(
+        self,
+        frame: pd.DataFrame,
+        *,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        world_id: str | None,
+        execution_domain: str | None,
+        requested_as_of: str | None,
+        cache_key: str | None,
+        report: ConformanceReport | None,
+    ) -> SeamlessFetchResult:
+        metadata = SeamlessFetchMetadata(
+            node_id=node_id,
+            interval=int(interval),
+            requested_range=(int(start), int(end)),
+            rows=0,
+            coverage_bounds=None,
+            conformance_flags=dict(report.flags_counts) if report else {},
+            conformance_warnings=report.warnings if report else (),
+            conformance_version=CONFORMANCE_VERSION,
+            dataset_fingerprint=None,
+            as_of=None,
+            manifest_uri=None,
+            artifact=None,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            requested_as_of=requested_as_of,
+            cache_key=cache_key,
+        )
+        self._sync_metadata_attrs(frame, metadata)
+        return SeamlessFetchResult(frame, metadata)
+
+    def _normalize_with_conformance(
+        self, frame: pd.DataFrame, interval: int
+    ) -> tuple[pd.DataFrame, ConformanceReport]:
+        if not self._conformance:
+            return frame.copy(), ConformanceReport()
+        try:
+            interval_override = self._conformance_interval or interval
+            normalized, report = self._conformance.normalize(
+                frame,
+                schema=self._conformance_schema,
+                interval=interval_override,
+            )
+            return normalized, report
+        except ConformancePipelineError:
+            raise
+        except Exception:  # pragma: no cover - defensive guard
+            return frame.copy(), ConformanceReport()
+
+    def _record_conformance_metrics(
+        self, report: ConformanceReport, *, node_id: str, interval: int
+    ) -> None:
+        if not self._conformance:
+            return
+        try:
+            sdk_metrics.observe_conformance_report(
+                node_id=node_id,
+                interval=interval,
+                flags=report.flags_counts,
+                warnings=report.warnings,
+            )
+        except Exception:  # pragma: no cover - best effort metrics
+            pass
+
+    def _should_fail_conformance(self, report: ConformanceReport) -> bool:
+        if self._partial_ok:
+            return False
+        return bool(report.warnings or report.flags_counts)
+
+    async def _handle_artifact_publication(
+        self,
+        stabilized: pd.DataFrame,
+        report: ConformanceReport,
+        *,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+        coverage_bounds: tuple[int, int] | None,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+    ) -> _PublicationContext:
         fingerprint: str | None = None
         preview_fingerprint: str | None = None
         should_compute_immediate = (
-            not self._publish_fingerprint
-            or self._registrar is None
+            not self._publish_fingerprint or self._registrar is None
         )
         if should_compute_immediate:
             fingerprint = self._compute_fingerprint_value(
@@ -1951,11 +2045,14 @@ class SeamlessDataProvider(ABC):
                 legacy_metadata=legacy_metadata,
                 mode=_FINGERPRINT_MODE_CANONICAL,
             )
+
         as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         manifest_uri: str | None = None
-
-        approx_bytes = int(stabilized.memory_usage(deep=True).sum()) if not stabilized.empty else 0
         publication: ArtifactPublication | None = None
+        approx_bytes = (
+            int(stabilized.memory_usage(deep=True).sum()) if not stabilized.empty else 0
+        )
+
         if self._registrar:
             publish_call: Any | None = None
             publish_started = time.monotonic()
@@ -2007,91 +2104,32 @@ class SeamlessDataProvider(ABC):
                     publication = None
                 else:
                     if self._publish_fingerprint:
-                        publish_elapsed_ms = (time.monotonic() - publish_started) * 1000.0
+                        elapsed_ms = (time.monotonic() - publish_started) * 1000.0
                         sdk_metrics.observe_artifact_publish_latency(
                             node_id=node_id,
                             interval=interval,
-                            duration_ms=publish_elapsed_ms,
+                            duration_ms=elapsed_ms,
                         )
 
         if publication and self._publish_fingerprint:
-            pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
-            if isinstance(pub_fingerprint, str):
-                normalized_fp = pub_fingerprint
-                canonical_normalized: str | None = None
-                if normalized_fp.startswith("lake:sha256:"):
-                    canonical_normalized = normalized_fp.replace("lake:", "", 1)
-                elif normalized_fp.startswith("sha256:"):
-                    canonical_normalized = normalized_fp.lower()
-                elif (
-                    len(normalized_fp) == 64
-                    and all(ch in "0123456789abcdefABCDEF" for ch in normalized_fp)
-                ):
-                    canonical_normalized = f"sha256:{normalized_fp.lower()}"
-
-                if self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
-                    if fingerprint is None:
-                        fingerprint = self._compute_fingerprint_value(
-                            stabilized,
-                            canonical_metadata=canonical_metadata,
-                            legacy_metadata=legacy_metadata,
-                            mode=_FINGERPRINT_MODE_LEGACY,
-                        )
-                    normalized_fp = fingerprint
-                else:
-                    if canonical_normalized:
-                        normalized_fp = canonical_normalized
-                    fingerprint = normalized_fp
-
-                canonical_for_preview = canonical_normalized
-                if canonical_for_preview is None and self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
-                    canonical_for_preview = self._compute_fingerprint_value(
-                        stabilized,
-                        canonical_metadata=canonical_metadata,
-                        legacy_metadata=legacy_metadata,
-                        mode=_FINGERPRINT_MODE_CANONICAL,
-                    )
-
-                try:
-                    publication.dataset_fingerprint = normalized_fp  # type: ignore[misc]
-                except Exception:  # pragma: no cover - defensive guard
-                    pass
-                manifest_obj = getattr(publication, "manifest", None)
-                if isinstance(manifest_obj, dict):
-                    manifest_obj["dataset_fingerprint"] = normalized_fp
-                if (
-                    preview_fingerprint
-                    and canonical_for_preview
-                    and canonical_for_preview != preview_fingerprint
-                ):
-                    logger.warning(
-                        "seamless.fingerprint.preview_mismatch",
-                        canonical=canonical_for_preview,
-                        preview=preview_fingerprint,
-                    )
-            pub_as_of = getattr(publication, "as_of", None)
-            if isinstance(pub_as_of, str):
-                as_of = pub_as_of
-            if hasattr(publication, "start") and hasattr(publication, "end"):
-                coverage_bounds = (int(getattr(publication, "start")), int(getattr(publication, "end")))
-            elif hasattr(publication, "coverage_bounds"):
-                bounds = getattr(publication, "coverage_bounds")
-                if isinstance(bounds, tuple) and len(bounds) == 2:
-                    coverage_bounds = (int(bounds[0]), int(bounds[1]))
-            manifest_uri = getattr(publication, "manifest_uri", None)
-            data_uri = getattr(publication, "uri", None) or getattr(publication, "data_uri", None)
-            bytes_written = approx_bytes
-            if data_uri:
-                try:
-                    bytes_written = max(bytes_written, int(os.path.getsize(data_uri)))
-                except OSError:
-                    pass
-            if bytes_written > 0:
-                sdk_metrics.observe_artifact_bytes_written(
-                    node_id=node_id,
-                    interval=interval,
-                    bytes_written=bytes_written,
-                )
+            (
+                fingerprint,
+                coverage_bounds,
+                manifest_uri,
+                as_of,
+            ) = self._normalize_publication(
+                publication,
+                stabilized,
+                coverage_bounds,
+                canonical_metadata,
+                legacy_metadata,
+                fingerprint,
+                preview_fingerprint,
+                node_id=node_id,
+                interval=interval,
+                approx_bytes=approx_bytes,
+                as_of_ref=as_of,
+            )
 
         if fingerprint is None:
             fingerprint = self._compute_fingerprint_value(
@@ -2101,25 +2139,153 @@ class SeamlessDataProvider(ABC):
                 mode=self._fingerprint_mode,
             )
 
-        metadata = SeamlessFetchMetadata(
-            node_id=node_id,
-            interval=int(interval),
-            requested_range=(int(start), int(end)),
-            rows=int(len(stabilized)),
+        return _PublicationContext(
+            fingerprint=fingerprint,
             coverage_bounds=coverage_bounds,
-            conformance_flags=dict(report.flags_counts),
-            conformance_warnings=report.warnings,
-            conformance_version=CONFORMANCE_VERSION,
-            dataset_fingerprint=fingerprint,
-            as_of=as_of,
             manifest_uri=manifest_uri,
-            artifact=publication,
-            world_id=world_id,
-            execution_domain=execution_domain,
-            requested_as_of=requested_as_of,
-            cache_key=cache_key,
+            publication=publication,
+            as_of=as_of,
         )
 
+    def _normalize_publication(
+        self,
+        publication: ArtifactPublication,
+        stabilized: pd.DataFrame,
+        coverage_bounds: tuple[int, int] | None,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+        fingerprint: str | None,
+        preview_fingerprint: str | None,
+        *,
+        node_id: str,
+        interval: int,
+        approx_bytes: int,
+        as_of_ref: str,
+    ) -> tuple[str | None, tuple[int, int] | None, str | None, str]:
+        pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
+        manifest_uri: str | None = getattr(publication, "manifest_uri", None)
+        as_of = getattr(publication, "as_of", as_of_ref)
+        if isinstance(pub_fingerprint, str):
+            fingerprint = self._resolve_publication_fingerprint(
+                publication,
+                pub_fingerprint,
+                stabilized,
+                canonical_metadata,
+                legacy_metadata,
+                fingerprint,
+                preview_fingerprint,
+            )
+        if hasattr(publication, "start") and hasattr(publication, "end"):
+            coverage_bounds = (
+                int(getattr(publication, "start")),
+                int(getattr(publication, "end")),
+            )
+        elif hasattr(publication, "coverage_bounds"):
+            bounds = getattr(publication, "coverage_bounds")
+            if isinstance(bounds, tuple) and len(bounds) == 2:
+                coverage_bounds = (int(bounds[0]), int(bounds[1]))
+        self._record_artifact_bytes(
+            node_id=node_id,
+            interval=interval,
+            approx_bytes=approx_bytes,
+            publication=publication,
+        )
+        return fingerprint, coverage_bounds, manifest_uri, as_of
+
+    def _resolve_publication_fingerprint(
+        self,
+        publication: ArtifactPublication,
+        pub_fingerprint: str,
+        stabilized: pd.DataFrame,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+        fingerprint: str | None,
+        preview_fingerprint: str | None,
+    ) -> str | None:
+        normalized_fp = pub_fingerprint
+        canonical_normalized: str | None = None
+        if normalized_fp.startswith("lake:sha256:"):
+            canonical_normalized = normalized_fp.replace("lake:", "", 1)
+        elif normalized_fp.startswith("sha256:"):
+            canonical_normalized = normalized_fp.lower()
+        elif (
+            len(normalized_fp) == 64
+            and all(ch in "0123456789abcdefABCDEF" for ch in normalized_fp)
+        ):
+            canonical_normalized = f"sha256:{normalized_fp.lower()}"
+
+        if self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
+            if fingerprint is None:
+                fingerprint = self._compute_fingerprint_value(
+                    stabilized,
+                    canonical_metadata=canonical_metadata,
+                    legacy_metadata=legacy_metadata,
+                    mode=_FINGERPRINT_MODE_LEGACY,
+                )
+            normalized_fp = fingerprint
+        else:
+            if canonical_normalized:
+                normalized_fp = canonical_normalized
+            fingerprint = normalized_fp
+
+        canonical_for_preview = canonical_normalized
+        if (
+            canonical_for_preview is None
+            and self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY
+        ):
+            canonical_for_preview = self._compute_fingerprint_value(
+                stabilized,
+                canonical_metadata=canonical_metadata,
+                legacy_metadata=legacy_metadata,
+                mode=_FINGERPRINT_MODE_CANONICAL,
+            )
+
+        manifest_obj = getattr(publication, "manifest", None)
+        if isinstance(manifest_obj, dict):
+            manifest_obj["dataset_fingerprint"] = normalized_fp
+        if (
+            preview_fingerprint
+            and canonical_for_preview
+            and canonical_for_preview != preview_fingerprint
+        ):
+            logger.warning(
+                "seamless.fingerprint.preview_mismatch",
+                canonical=canonical_for_preview,
+                preview=preview_fingerprint,
+            )
+        try:
+            publication.dataset_fingerprint = normalized_fp  # type: ignore[misc]
+        except Exception:  # pragma: no cover - defensive guard
+            pass
+        return fingerprint
+
+    def _record_artifact_bytes(
+        self,
+        *,
+        node_id: str,
+        interval: int,
+        approx_bytes: int,
+        publication: ArtifactPublication,
+    ) -> None:
+        bytes_written = approx_bytes
+        data_uri = getattr(publication, "uri", None) or getattr(
+            publication, "data_uri", None
+        )
+        if data_uri:
+            try:
+                bytes_written = max(bytes_written, int(os.path.getsize(data_uri)))
+            except OSError:
+                pass
+        if bytes_written > 0:
+            sdk_metrics.observe_artifact_bytes_written(
+                node_id=node_id,
+                interval=interval,
+                bytes_written=bytes_written,
+            )
+
+    def _finalize_metadata_metrics(
+        self, metadata: SeamlessFetchMetadata, *, node_id: str, interval: int
+    ) -> None:
         metadata.coverage_ratio = self._compute_coverage_ratio(metadata)
         metadata.staleness_ms = self._compute_staleness_ms(metadata)
         sdk_metrics.observe_coverage_ratio(
@@ -2135,11 +2301,6 @@ class SeamlessDataProvider(ABC):
             interval=interval,
             staleness_seconds=staleness_seconds,
         )
-        self._sync_metadata_attrs(stabilized, metadata)
-
-        # expose last fetch metadata for callers
-        self._last_fetch_metadata = metadata
-        return SeamlessFetchResult(stabilized, metadata)
 
     def _sync_metadata_attrs(
         self, frame: pd.DataFrame, metadata: SeamlessFetchMetadata

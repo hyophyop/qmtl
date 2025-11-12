@@ -50,13 +50,7 @@ class StrategyBootstrapper:
         gateway_context: Mapping[str, str] | None = None,
         skip_gateway_submission: bool = False,
     ) -> BootstrapResult:
-        # Apply context and schema enforcement on all nodes
-        for node in strategy.nodes:
-            setattr(node, "_schema_enforcement", schema_enforcement)
-            try:
-                node.apply_compute_context(context)
-            except AttributeError:
-                pass
+        self._apply_context(strategy, context, schema_enforcement)
 
         tag_service = TagManagerService(gateway_url)
         sdk_metrics.set_world_id(world_id)
@@ -68,135 +62,281 @@ class StrategyBootstrapper:
         )
 
         dag_meta = dag.setdefault("meta", {}) if isinstance(dag, dict) else {}
+        meta_payload, dataset_fingerprint, execution_domain_override = (
+            self._extract_meta_payload(meta)
+        )
+        dag_meta, meta_payload = self._attach_topic_namespace(
+            dag_meta,
+            meta_payload,
+            world_id=world_id,
+            offline=offline,
+            trade_mode=trade_mode,
+            execution_domain_override=execution_domain_override,
+        )
+        meta_for_gateway = meta_payload if meta_payload is not None else meta
+
+        strategy_id, queue_map = await self._maybe_submit_strategy(
+            gateway_url=gateway_url,
+            skip_gateway_submission=skip_gateway_submission,
+            dag=dag,
+            meta_for_gateway=meta_for_gateway,
+            gateway_context=gateway_context,
+            world_id=world_id,
+            trade_mode=trade_mode,
+        )
+
+        manager = self._init_tag_manager(
+            tag_service, strategy, world_id=world_id, strategy_id=strategy_id
+        )
+        self._propagate_strategy_attrs(
+            strategy, strategy_id=strategy_id, gateway_url=gateway_url
+        )
+        tag_service.apply_queue_map(strategy, queue_map or {})
+
+        offline_mode = self._compute_offline_mode(
+            offline=offline, kafka_available=kafka_available, gateway_url=gateway_url
+        )
+
+        if self._no_executable_nodes(strategy):
+            logger.info("No executable nodes; exiting strategy")
+            strategy.on_finish()
+            return self._make_result(
+                manager=manager,
+                offline_mode=offline_mode,
+                completed=True,
+                dataset_fingerprint=dataset_fingerprint,
+                tag_service=tag_service,
+                dag_meta=dag_meta,
+                strategy_id=strategy_id,
+            )
+
+        await manager.resolve_tags(offline=offline_mode)
+        self._apply_dataset_fingerprint(
+            strategy, dag_meta, dataset_fingerprint=dataset_fingerprint
+        )
+        self._configure_feature_plane(
+            feature_plane,
+            dataset_fingerprint=dataset_fingerprint,
+            execution_domain=context.execution_domain,
+        )
+
+        return self._make_result(
+            manager=manager,
+            offline_mode=offline_mode,
+            completed=False,
+            dataset_fingerprint=dataset_fingerprint,
+            tag_service=tag_service,
+            dag_meta=dag_meta,
+            strategy_id=strategy_id,
+        )
+
+    def _apply_context(
+        self,
+        strategy: Strategy,
+        context: ComputeContext,
+        schema_enforcement: str,
+    ) -> None:
+        for node in strategy.nodes:
+            setattr(node, "_schema_enforcement", schema_enforcement)
+            try:
+                node.apply_compute_context(context)
+            except AttributeError:
+                continue
+
+    def _extract_meta_payload(
+        self, meta: Mapping[str, Any] | None
+    ) -> tuple[dict | None, str | None, str | None]:
         meta_payload = dict(meta) if isinstance(meta, Mapping) else None
+        if not isinstance(meta_payload, dict):
+            return None, None, None
 
         dataset_fingerprint: str | None = None
         execution_domain_override: str | None = None
-        if isinstance(meta_payload, dict):
-            raw_domain = meta_payload.get("execution_domain")
-            if isinstance(raw_domain, str) and raw_domain.strip():
-                execution_domain_override = raw_domain.strip()
-            raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
-                "datasetFingerprint"
-            )
-            if isinstance(raw_fp, str) and raw_fp.strip():
-                dataset_fingerprint = raw_fp.strip()
+        raw_domain = meta_payload.get("execution_domain")
+        if isinstance(raw_domain, str) and raw_domain.strip():
+            execution_domain_override = raw_domain.strip()
+        raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
+            "datasetFingerprint"
+        )
+        if isinstance(raw_fp, str) and raw_fp.strip():
+            dataset_fingerprint = raw_fp.strip()
+        return meta_payload, dataset_fingerprint, execution_domain_override
 
-        if topic_namespace_enabled():
-            effective_domain = execution_domain_override
-            if effective_domain is None:
-                if offline:
-                    effective_domain = "backtest"
-                else:
-                    effective_domain = "live" if trade_mode == "live" else "dryrun"
-            namespace = build_namespace(world_id, effective_domain)
-            if namespace:
-                if isinstance(dag_meta, dict):
-                    dag_meta["topic_namespace"] = {
-                        "world": world_id,
-                        "domain": effective_domain,
-                    }
-                if meta_payload is None:
-                    meta_payload = {}
-                meta_payload.setdefault("execution_domain", effective_domain)
+    def _attach_topic_namespace(
+        self,
+        dag_meta: Any,
+        meta_payload: dict | None,
+        *,
+        world_id: str,
+        offline: bool,
+        trade_mode: str,
+        execution_domain_override: str | None,
+    ) -> tuple[Any, dict | None]:
+        if not topic_namespace_enabled():
+            return dag_meta, meta_payload
 
-        meta_for_gateway = meta_payload if meta_payload is not None else meta
-
-        queue_map: dict[str, Any] | Any
-        queue_map = {}
-        strategy_id: str | None = None
-        if gateway_url and not skip_gateway_submission:
-            ack = await self._gateway_client.post_strategy(
-                gateway_url=gateway_url,
-                dag=dag,
-                meta=meta_for_gateway,
-                context=dict(gateway_context) if gateway_context else None,
-                world_id=world_id,
-            )
-            if isinstance(ack, dict):
-                if "error" in ack:
-                    error_detail = str(ack.get("error") or "unknown error")
-                    raise RuntimeError(
-                        "Gateway rejected strategy submission: "
-                        f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
-                        f"gateway_url={gateway_url})"
-                    )
-                if isinstance(ack.get("strategy_id"), str):
-                    strategy_id = ack["strategy_id"]
-                queue_map = ack.get("queue_map", ack)
-            elif isinstance(ack, StrategyAck):
-                strategy_id = ack.strategy_id
-                queue_map = ack.queue_map
+        effective_domain = execution_domain_override
+        if effective_domain is None:
+            if offline:
+                effective_domain = "backtest"
             else:
-                queue_map = ack
+                effective_domain = "live" if trade_mode == "live" else "dryrun"
+        namespace = build_namespace(world_id, effective_domain)
+        if namespace and isinstance(dag_meta, dict):
+            dag_meta["topic_namespace"] = {
+                "world": world_id,
+                "domain": effective_domain,
+            }
+            if meta_payload is None:
+                meta_payload = {}
+            meta_payload.setdefault("execution_domain", effective_domain)
+        return dag_meta, meta_payload
 
+    async def _maybe_submit_strategy(
+        self,
+        *,
+        gateway_url: str | None,
+        skip_gateway_submission: bool,
+        dag: Any,
+        meta_for_gateway: Any,
+        gateway_context: Mapping[str, str] | None,
+        world_id: str,
+        trade_mode: str,
+    ) -> tuple[str | None, dict[str, Any] | Any]:
+
+        if not gateway_url or skip_gateway_submission:
+            return None, {}
+
+        ack = await self._gateway_client.post_strategy(
+            gateway_url=gateway_url,
+            dag=dag,
+            meta=meta_for_gateway,
+            context=dict(gateway_context) if gateway_context else None,
+            world_id=world_id,
+        )
+
+        strategy_id: str | None = None
+        queue_map: dict[str, Any] | Any = {}
+
+        if isinstance(ack, dict):
+            if "error" in ack:
+                error_detail = str(ack.get("error") or "unknown error")
+                raise RuntimeError(
+                    "Gateway rejected strategy submission: "
+                    f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
+                    f"gateway_url={gateway_url})"
+                )
+            if isinstance(ack.get("strategy_id"), str):
+                strategy_id = ack["strategy_id"]
+            queue_map = ack.get("queue_map", ack)
+        elif isinstance(ack, StrategyAck):
+            strategy_id = ack.strategy_id
+            queue_map = ack.queue_map
+        else:
+            queue_map = ack
+        return strategy_id, queue_map
+
+    def _init_tag_manager(
+        self,
+        tag_service: TagManagerService,
+        strategy: Strategy,
+        *,
+        world_id: str,
+        strategy_id: str | None,
+    ):
         try:
-            manager = tag_service.init(
+            return tag_service.init(
                 strategy, world_id=world_id, strategy_id=strategy_id
             )
         except TypeError:
             manager = tag_service.init(strategy, world_id=world_id)
             if strategy_id is not None and hasattr(manager, "strategy_id"):
                 setattr(manager, "strategy_id", strategy_id)
+            return manager
 
+    def _propagate_strategy_attrs(
+        self,
+        strategy: Strategy,
+        *,
+        strategy_id: str | None,
+        gateway_url: str | None,
+    ) -> None:
         if strategy_id is not None:
             setattr(strategy, "strategy_id", strategy_id)
             for node in strategy.nodes:
                 try:
                     setattr(node, "strategy_id", strategy_id)
                 except Exception:
-                    pass
-
+                    continue
         if gateway_url:
             setattr(strategy, "gateway_url", gateway_url)
             for node in strategy.nodes:
                 try:
                     setattr(node, "gateway_url", gateway_url)
                 except Exception:
-                    pass
+                    continue
 
-        tag_service.apply_queue_map(strategy, queue_map or {})
+    @staticmethod
+    def _compute_offline_mode(
+        *, offline: bool, kafka_available: bool, gateway_url: str | None
+    ) -> bool:
+        return offline or not kafka_available or not gateway_url
 
-        if not any(getattr(node, "execute", False) for node in strategy.nodes):
-            logger.info("No executable nodes; exiting strategy")
-            strategy.on_finish()
-            offline_mode = offline or not kafka_available or not gateway_url
-            return BootstrapResult(
-                manager=manager,
-                offline_mode=offline_mode,
-                completed=True,
-                dataset_fingerprint=dataset_fingerprint,
-                tag_service=tag_service,
-                dag_meta=dag_meta if isinstance(dag_meta, dict) else None,
-                strategy_id=strategy_id,
-            )
+    @staticmethod
+    def _no_executable_nodes(strategy: Strategy) -> bool:
+        return not any(getattr(node, "execute", False) for node in strategy.nodes)
 
-        offline_mode = offline or not kafka_available or not gateway_url
-        await manager.resolve_tags(offline=offline_mode)
-
-        if dataset_fingerprint:
-            if isinstance(dag_meta, dict):
-                dag_meta.setdefault("dataset_fingerprint", dataset_fingerprint)
-            for node in strategy.nodes:
-                try:
-                    node.dataset_fingerprint = dataset_fingerprint
-                except AttributeError:
-                    pass
-
-        if feature_plane is not None:
-            feature_plane.configure(
-                dataset_fingerprint=dataset_fingerprint,
-                execution_domain=context.execution_domain,
-            )
-
+    def _make_result(
+        self,
+        *,
+        manager: Any,
+        offline_mode: bool,
+        completed: bool,
+        dataset_fingerprint: str | None,
+        tag_service: TagManagerService,
+        dag_meta: Any,
+        strategy_id: str | None,
+    ) -> BootstrapResult:
+        dag_meta_dict = dag_meta if isinstance(dag_meta, dict) else None
         return BootstrapResult(
             manager=manager,
             offline_mode=offline_mode,
-            completed=False,
+            completed=completed,
             dataset_fingerprint=dataset_fingerprint,
             tag_service=tag_service,
-            dag_meta=dag_meta if isinstance(dag_meta, dict) else None,
+            dag_meta=dag_meta_dict,
             strategy_id=strategy_id,
+        )
+
+    def _apply_dataset_fingerprint(
+        self,
+        strategy: Strategy,
+        dag_meta: Any,
+        *,
+        dataset_fingerprint: str | None,
+    ) -> None:
+        if not dataset_fingerprint:
+            return
+        if isinstance(dag_meta, dict):
+            dag_meta.setdefault("dataset_fingerprint", dataset_fingerprint)
+        for node in strategy.nodes:
+            try:
+                node.dataset_fingerprint = dataset_fingerprint
+            except AttributeError:
+                continue
+
+    @staticmethod
+    def _configure_feature_plane(
+        feature_plane: FeatureArtifactPlane | None,
+        *,
+        dataset_fingerprint: str | None,
+        execution_domain: str | None,
+    ) -> None:
+        if feature_plane is None:
+            return
+        feature_plane.configure(
+            dataset_fingerprint=dataset_fingerprint,
+            execution_domain=execution_domain,
         )
 
 
