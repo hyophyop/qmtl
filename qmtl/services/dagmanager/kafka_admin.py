@@ -3,6 +3,7 @@ from __future__ import annotations
 """Simple Kafka Admin wrapper for idempotent topic creation."""
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Protocol
 
@@ -104,6 +105,7 @@ class InMemoryAdminClient:
             "num_partitions": num_partitions,
             "replication_factor": replication_factor,
             "size": 0,
+            "created_at": int(time.time()),
         }
 
     def get_size(self, name: str) -> int:
@@ -112,6 +114,9 @@ class InMemoryAdminClient:
     def set_offsets(self, name: str, *, high: int, low: int = 0) -> None:
         if name in self.topics:
             self.topics[name]["offsets"] = {"high": high, "low": low}
+
+    def delete_topic(self, name: str) -> None:
+        self.topics.pop(name, None)
 
 
 @dataclass
@@ -218,6 +223,22 @@ class KafkaAdmin:
             )
 
         asyncio.run(_create())
+
+    def delete_topic(self, name: str) -> None:
+        """Delete topic if supported by the underlying client."""
+
+        client = self.client
+        deleter = getattr(client, "delete_topic", None)
+        if callable(deleter):
+            deleter(name)
+            return
+        delete_topics = getattr(client, "delete_topics", None)
+        if callable(delete_topics):
+            delete_topics([name])
+            return
+        topics = getattr(client, "topics", None)
+        if isinstance(topics, dict):
+            topics.pop(name, None)
 
     def get_topic_sizes(self) -> Dict[str, int]:
         """Return approximate message count per topic."""

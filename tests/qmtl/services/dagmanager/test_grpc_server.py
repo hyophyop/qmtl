@@ -353,6 +353,25 @@ class DummyArchive:
         self.archived.append(queue)
 
 
+class BusStub:
+    def __init__(self) -> None:
+        self.queue_updates: list[tuple[list[str], int, list[object], str]] = []
+
+    async def publish_queue_update(
+        self,
+        tags,
+        interval,
+        queues,
+        match_mode: str = "any",
+        *,
+        version: int = 1,
+    ) -> None:
+        self.queue_updates.append((list(tags), int(interval), list(queues), match_mode))
+
+    async def publish_sentinel_weight(self, *args, **kwargs):  # pragma: no cover - unused
+        pass
+
+
 @pytest.mark.asyncio
 async def test_grpc_cleanup_triggers_gc():
     now = datetime.now(UTC)
@@ -390,6 +409,34 @@ async def test_grpc_cleanup_archives():
 
     assert store.dropped == ["s"]
     assert archive.archived == ["s"]
+
+
+@pytest.mark.asyncio
+async def test_grpc_cleanup_emits_queue_update():
+    now = datetime.now(UTC)
+    store = DummyStore([QueueInfo("q", "raw", now - timedelta(days=10), interval=60)])
+    gc = GarbageCollector(store, DummyMetrics(), batch_size=1)
+    bus = BusStub()
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(
+        driver,
+        admin,
+        stream,
+        host="127.0.0.1",
+        port=0,
+        gc=gc,
+        bus=bus,
+    )
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id="s"))
+    await server.stop(None)
+
+    assert bus.queue_updates == [(["raw"], 60, [], "any")]
 
 
 @pytest.mark.asyncio

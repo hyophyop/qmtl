@@ -42,6 +42,8 @@ from .garbage_collector import GarbageCollector, QueueInfo, MetricsProvider, Que
 from .diff_service import StreamSender
 from .monitor import AckStatus
 from .controlbus_producer import ControlBusProducer
+from .queue_store import KafkaQueueStore
+from .metrics_provider import KafkaMetricsProvider
 
 
 class _NullStream(StreamSender):
@@ -53,19 +55,6 @@ class _NullStream(StreamSender):
 
     def ack(self, status: AckStatus = AckStatus.OK) -> None:  # pragma: no cover - noop
         pass
-
-
-class _EmptyStore(QueueStore):
-    def list_orphan_queues(self) -> Iterable[QueueInfo]:  # pragma: no cover - noop
-        return []
-
-    def drop_queue(self, name: str) -> None:  # pragma: no cover - noop
-        pass
-
-
-class _EmptyMetrics(MetricsProvider):
-    def messages_in_per_sec(self) -> float:  # pragma: no cover - noop
-        return 0.0
 
 
 @dataclass
@@ -87,6 +76,7 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
     repo = None
     admin_client = None
     queue = None
+    kafka_admin = None
 
     if cfg.neo4j_dsn:
         from neo4j import GraphDatabase  # pragma: no cover - external dependency
@@ -94,7 +84,9 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
         driver = GraphDatabase.driver(
             cfg.neo4j_dsn, auth=(cfg.neo4j_user, cfg.neo4j_password)
         )
-        repo = None
+        from .diff_service import Neo4jNodeRepository
+
+        repo = Neo4jNodeRepository(driver)
     else:
         from .node_repository import MemoryNodeRepository
 
@@ -107,7 +99,8 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
         # Manual reset of the breaker is expected after successful operations
         breaker = AsyncCircuitBreaker()
-        queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
+        kafka_admin = KafkaAdmin(admin_client, breaker=breaker)
+        queue = KafkaQueueManager(kafka_admin)
     else:
         from .kafka_admin import InMemoryAdminClient, KafkaAdmin
         from .diff_service import KafkaQueueManager
@@ -115,9 +108,14 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
         admin_client = InMemoryAdminClient()
         # Manual reset of the breaker is expected after successful operations
         breaker = AsyncCircuitBreaker()
-        queue = KafkaQueueManager(KafkaAdmin(admin_client, breaker=breaker))
+        kafka_admin = KafkaAdmin(admin_client, breaker=breaker)
+        queue = KafkaQueueManager(kafka_admin)
 
-    gc = GarbageCollector(_EmptyStore(), _EmptyMetrics())
+    metrics_provider: MetricsProvider = KafkaMetricsProvider(
+        getattr(cfg, "kafka_metrics_url", None)
+    )
+    store: QueueStore = KafkaQueueStore(kafka_admin, repo)
+    gc = GarbageCollector(store, metrics_provider)
 
     bus = None
     if cfg.controlbus_dsn:

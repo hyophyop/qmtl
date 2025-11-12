@@ -228,21 +228,22 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
     ) -> dagmanager_pb2.CleanupResponse:
         if self._gc is not None:
             processed = self._gc.collect()
-            if self._bus:
+            if self._bus and processed:
+                groups: dict[tuple[str, int | None], list[str]] = {}
                 for qi in processed:
-                    if getattr(qi, "interval", None) is not None:
-                        payload = {
-                            "tags": [qi.tag],
-                            "interval": qi.interval,
-                            "queues": [{"queue": qi.name, "global": False}],
-                            "match_mode": "any",
-                        }
-                        await self._bus.publish_queue_update(
-                            payload["tags"],
-                            payload["interval"],
-                            payload["queues"],
-                            payload["match_mode"],
-                        )
+                    key = (qi.tag, getattr(qi, "interval", None))
+                    groups.setdefault(key, []).append(qi.name)
+                for (tag, interval), _queues in groups.items():
+                    if not tag:
+                        continue
+                    if interval is None:
+                        continue
+                    await self._bus.publish_queue_update(
+                        [tag],
+                        int(interval),
+                        [],
+                        "any",
+                    )
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(

@@ -12,6 +12,8 @@ from .completion import QueueCompletionMonitor
 from .metrics import start_metrics_server
 from .api import create_app
 from .lag_monitor import LagMonitor, LagMonitorLoop, QueueLagInfo
+from .queue_store import KafkaQueueStore
+from .metrics_provider import KafkaMetricsProvider
 
 __all__ = [
     "compute_node_id",
@@ -35,4 +37,6 @@ __all__ = [
     "QueueLagInfo",
     "start_metrics_server",
     "create_app",
+    "KafkaQueueStore",
+    "KafkaMetricsProvider",
 ]
