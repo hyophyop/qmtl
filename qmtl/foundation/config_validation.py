@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Mapping, Sequence, get_args, get_origin, get_type_hints
+from collections.abc import Mapping as ABCMapping, Sequence as ABCSequence
+from typing import Any, Callable, Dict, Mapping, Sequence, get_args, get_origin, get_type_hints
 
 import aiosqlite
 import asyncpg
@@ -79,135 +80,138 @@ async def _check_controlbus(
     return ValidationIssue("error", f"ControlBus brokers unreachable ({broker_list})")
 
 
+async def _validate_gateway_redis(dsn: str | None, *, offline: bool) -> ValidationIssue:
+    if not dsn:
+        return ValidationIssue(
+            "warning", "Redis DSN not configured; falling back to in-memory store"
+        )
+    if offline:
+        return ValidationIssue("warning", f"Offline mode: skipped Redis ping for {dsn}")
+
+    client = None
+    try:
+        client = redis.from_url(dsn)
+        await client.ping()
+    except Exception as exc:
+        return ValidationIssue("error", f"Redis connection failed: {exc}")
+    finally:
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.close()
+
+    return ValidationIssue("ok", f"Redis reachable at {dsn}")
+
+
+async def _validate_gateway_database(
+    config: GatewayConfig, *, offline: bool
+) -> ValidationIssue:
+    backend = (config.database_backend or "").lower()
+    if backend == "postgres":
+        return await _validate_gateway_postgres(config.database_dsn, offline=offline)
+    if backend == "sqlite":
+        return await _validate_gateway_sqlite(config.database_dsn)
+    if backend == "memory":
+        return ValidationIssue(
+            "warning", "In-memory database configured; data will not persist"
+        )
+    return ValidationIssue(
+        "error", f"Unsupported database backend '{config.database_backend}'"
+    )
+
+
+async def _validate_gateway_postgres(
+    dsn: str | None, *, offline: bool
+) -> ValidationIssue:
+    dsn = dsn or "postgresql://localhost/qmtl"
+    if offline:
+        return ValidationIssue("warning", f"Offline mode: skipped Postgres check for {dsn}")
+
+    conn = None
+    try:
+        conn = await asyncpg.connect(dsn)
+    except Exception as exc:
+        return ValidationIssue("error", f"Postgres connection failed: {exc}")
+    finally:
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                await conn.close()
+
+    return ValidationIssue("ok", f"Postgres reachable at {dsn}")
+
+
+async def _validate_gateway_sqlite(dsn: str | None) -> ValidationIssue:
+    path = _normalise_sqlite_path(dsn)
+    conn = None
+    try:
+        conn = await aiosqlite.connect(path)
+    except Exception as exc:
+        return ValidationIssue("error", f"SQLite open failed for {path}: {exc}")
+    finally:
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                await conn.close()
+
+    return ValidationIssue("ok", f"SQLite ready at {path}")
+
+
+async def _validate_gateway_worldservice(
+    config: GatewayConfig, *, offline: bool
+) -> ValidationIssue:
+    if not config.enable_worldservice_proxy or not config.worldservice_url:
+        return ValidationIssue("ok", "WorldService proxy disabled")
+    if offline:
+        return ValidationIssue(
+            "warning",
+            f"Offline mode: skipped WorldService health check for {config.worldservice_url}",
+        )
+
+    async def _http_request(method: str, url: str, **kwargs):
+        # Use GET for compatibility with tests that stub AsyncClient.get
+        timeout = kwargs.get("timeout")
+        async with httpx.AsyncClient() as client:
+            if method.upper() == "GET":
+                return await client.get(url, timeout=timeout)
+            return await client.request(method, url, **kwargs)
+
+    health_url = config.worldservice_url.rstrip("/") + "/health"
+    timeout = max(config.worldservice_timeout, 0.1)
+    result = await probe_http_async(
+        health_url,
+        service="worldservice",
+        endpoint="/health",
+        timeout=timeout,
+        request=_http_request,
+    )
+    if result.ok:
+        return ValidationIssue("ok", f"WorldService healthy at {config.worldservice_url}")
+
+    details: list[str] = []
+    if result.status is not None:
+        details.append(f"status={result.status}")
+    if result.err:
+        details.append(f"error={result.err}")
+    if result.latency_ms is not None:
+        details.append(f"latency_ms={result.latency_ms:.1f}")
+    suffix = ", ".join(details) if details else "no additional detail"
+    return ValidationIssue(
+        "error", f"WorldService probe failed ({result.code}): {suffix}"
+    )
+
+
 async def validate_gateway_config(
     config: GatewayConfig, *, offline: bool = False
 ) -> Dict[str, ValidationIssue]:
     issues: Dict[str, ValidationIssue] = {}
 
-    # Redis connectivity
-    if not config.redis_dsn:
-        issues["redis"] = ValidationIssue(
-            "warning", "Redis DSN not configured; falling back to in-memory store"
-        )
-    elif offline:
-        issues["redis"] = ValidationIssue(
-            "warning", f"Offline mode: skipped Redis ping for {config.redis_dsn}"
-        )
-    else:
-        client = None
-        try:
-            client = redis.from_url(config.redis_dsn)
-            await client.ping()
-        except Exception as exc:
-            issues["redis"] = ValidationIssue("error", f"Redis connection failed: {exc}")
-        else:
-            issues["redis"] = ValidationIssue("ok", f"Redis reachable at {config.redis_dsn}")
-        finally:
-            if client is not None:
-                with contextlib.suppress(Exception):
-                    await client.close()
-
-    # Database backend
-    backend = (config.database_backend or "").lower()
-    if backend == "postgres":
-        dsn = config.database_dsn or "postgresql://localhost/qmtl"
-        if offline:
-            issues["database"] = ValidationIssue(
-                "warning", f"Offline mode: skipped Postgres check for {dsn}"
-            )
-        else:
-            conn = None
-            try:
-                conn = await asyncpg.connect(dsn)
-            except Exception as exc:
-                issues["database"] = ValidationIssue(
-                    "error", f"Postgres connection failed: {exc}"
-                )
-            else:
-                issues["database"] = ValidationIssue(
-                    "ok", f"Postgres reachable at {dsn}"
-                )
-            finally:
-                if conn is not None:
-                    with contextlib.suppress(Exception):
-                        await conn.close()
-    elif backend == "sqlite":
-        path = _normalise_sqlite_path(config.database_dsn)
-        conn = None
-        try:
-            conn = await aiosqlite.connect(path)
-        except Exception as exc:
-            issues["database"] = ValidationIssue(
-                "error", f"SQLite open failed for {path}: {exc}"
-            )
-        else:
-            issues["database"] = ValidationIssue("ok", f"SQLite ready at {path}")
-        finally:
-            if conn is not None:
-                with contextlib.suppress(Exception):
-                    await conn.close()
-    elif backend == "memory":
-        issues["database"] = ValidationIssue(
-            "warning", "In-memory database configured; data will not persist"
-        )
-    else:
-        issues["database"] = ValidationIssue(
-            "error", f"Unsupported database backend '{config.database_backend}'"
-        )
-
-    # ControlBus consumer
+    issues["redis"] = await _validate_gateway_redis(config.redis_dsn, offline=offline)
+    issues["database"] = await _validate_gateway_database(config, offline=offline)
     issues["controlbus"] = await _check_controlbus(
         config.controlbus_brokers,
         config.controlbus_topics,
         config.controlbus_group,
         offline=offline,
     )
-
-    # WorldService proxy
-    if not config.enable_worldservice_proxy or not config.worldservice_url:
-        issues["worldservice"] = ValidationIssue(
-            "ok", "WorldService proxy disabled"
-        )
-    elif offline:
-        issues["worldservice"] = ValidationIssue(
-            "warning",
-            f"Offline mode: skipped WorldService health check for {config.worldservice_url}",
-        )
-    else:
-        async def _http_request(method: str, url: str, **kwargs):
-            # Use GET for compatibility with tests that stub AsyncClient.get
-            timeout = kwargs.get("timeout")
-            async with httpx.AsyncClient() as client:
-                if method.upper() == "GET":
-                    return await client.get(url, timeout=timeout)
-                return await client.request(method, url, **kwargs)
-
-        health_url = config.worldservice_url.rstrip("/") + "/health"
-        timeout = max(config.worldservice_timeout, 0.1)
-        result = await probe_http_async(
-            health_url,
-            service="worldservice",
-            endpoint="/health",
-            timeout=timeout,
-            request=_http_request,
-        )
-        if result.ok:
-            issues["worldservice"] = ValidationIssue(
-                "ok", f"WorldService healthy at {config.worldservice_url}"
-            )
-        else:
-            details: list[str] = []
-            if result.status is not None:
-                details.append(f"status={result.status}")
-            if result.err:
-                details.append(f"error={result.err}")
-            if result.latency_ms is not None:
-                details.append(f"latency_ms={result.latency_ms:.1f}")
-            suffix = ", ".join(details) if details else "no additional detail"
-            issues["worldservice"] = ValidationIssue(
-                "error",
-                f"WorldService probe failed ({result.code}): {suffix}",
-            )
+    issues["worldservice"] = await _validate_gateway_worldservice(config, offline=offline)
 
     return issues
 
@@ -355,51 +359,81 @@ def _value_type_name(value: Any) -> str:
 def _type_matches(value: Any, annotation: Any) -> bool:
     if annotation is Any:
         return True
+
     origin = get_origin(annotation)
     if origin is None:
-        if annotation is type(None):
-            return value is None
-        if isinstance(annotation, type):
-            return isinstance(value, annotation)
-        return True
+        return _matches_without_origin(value, annotation)
+
     args = get_args(annotation)
-    if origin in {list, Sequence}:
-        if not isinstance(value, list):
-            return False
-        inner = args[0] if args else Any
-        return all(_type_matches(item, inner) for item in value)
-    if origin is tuple:
-        if not isinstance(value, tuple):
-            return False
-        if not args:
-            return True
-        if len(args) == 2 and args[1] is Ellipsis:
-            return all(_type_matches(item, args[0]) for item in value)
-        if len(value) != len(args):
-            return False
-        return all(_type_matches(item, expected) for item, expected in zip(value, args))
-    if origin is set:
-        if not isinstance(value, set):
-            return False
-        inner = args[0] if args else Any
-        return all(_type_matches(item, inner) for item in value)
-    if origin in {dict, Mapping}:
-        if not isinstance(value, dict):
-            return False
-        key_type = args[0] if args else Any
-        value_type = args[1] if len(args) > 1 else Any
-        return all(
-            _type_matches(k, key_type) and _type_matches(v, value_type)
-            for k, v in value.items()
-        )
-    if origin is Sequence:
-        if isinstance(value, (str, bytes)):
-            return False
-        if not isinstance(value, Sequence):
-            return False
-        inner = args[0] if args else Any
-        return all(_type_matches(item, inner) for item in value)
+    handler = _GENERIC_TYPE_HANDLERS.get(origin)
+    if handler is not None:
+        return handler(value, args)
+
     return any(_type_matches(value, option) for option in args)
+
+
+def _matches_without_origin(value: Any, annotation: Any) -> bool:
+    if annotation is type(None):
+        return value is None
+    if isinstance(annotation, type):
+        return isinstance(value, annotation)
+    return True
+
+
+def _matches_list(value: Any, args: tuple[Any, ...]) -> bool:
+    if not isinstance(value, list):
+        return False
+    inner = args[0] if args else Any
+    return all(_type_matches(item, inner) for item in value)
+
+
+def _matches_tuple(value: Any, args: tuple[Any, ...]) -> bool:
+    if not isinstance(value, tuple):
+        return False
+    if not args:
+        return True
+    if len(args) == 2 and args[1] is Ellipsis:
+        return all(_type_matches(item, args[0]) for item in value)
+    if len(value) != len(args):
+        return False
+    return all(_type_matches(item, expected) for item, expected in zip(value, args))
+
+
+def _matches_set(value: Any, args: tuple[Any, ...]) -> bool:
+    if not isinstance(value, set):
+        return False
+    inner = args[0] if args else Any
+    return all(_type_matches(item, inner) for item in value)
+
+
+def _matches_mapping(value: Any, args: tuple[Any, ...]) -> bool:
+    if not isinstance(value, dict):
+        return False
+    key_type = args[0] if args else Any
+    value_type = args[1] if len(args) > 1 else Any
+    return all(
+        _type_matches(k, key_type) and _type_matches(v, value_type)
+        for k, v in value.items()
+    )
+
+
+def _matches_sequence(value: Any, args: tuple[Any, ...]) -> bool:
+    if isinstance(value, (str, bytes)) or not isinstance(value, ABCSequence):
+        return False
+    inner = args[0] if args else Any
+    return all(_type_matches(item, inner) for item in value)
+
+
+_GENERIC_TYPE_HANDLERS: Dict[Any, Callable[[Any, tuple[Any, ...]], bool]] = {
+    list: _matches_list,
+    Sequence: _matches_sequence,
+    ABCSequence: _matches_sequence,
+    tuple: _matches_tuple,
+    set: _matches_set,
+    dict: _matches_mapping,
+    Mapping: _matches_mapping,
+    ABCMapping: _matches_mapping,
+}
 
 
 def validate_config_structure(unified: UnifiedConfig) -> Dict[str, ValidationIssue]:
