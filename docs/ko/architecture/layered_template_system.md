@@ -81,8 +81,6 @@ qmtl project
   ├── init                  # 새 프로젝트 생성
   │   ├── --preset          # 프리셋 선택 (빠른 시작)
   │   ├── --layers          # 레이어 직접 선택
-  │   ├── --list-presets    # 사용 가능한 프리셋 목록
-  │   ├── --list-layers     # 사용 가능한 레이어 목록
   │   └── --path            # 프로젝트 경로
   ├── add-layer             # 기존 프로젝트에 레이어 추가
   │   ├── <layer>           # 추가할 레이어 (위치 인자)
@@ -91,6 +89,8 @@ qmtl project
   ├── list-layers           # 레이어 및 템플릿 메타데이터 출력
   │   ├── --show-templates  # 템플릿 목록 표시
   │   └── --show-requires   # 템플릿 의존 패키지 표시
+  ├── list-presets          # 프리셋 설명 출력
+  │   └── --show-legacy-templates  # 폐기 예정 템플릿 이름 포함
   └── validate              # 프로젝트 구조 검증
       └── --path            # 검증할 프로젝트 경로 (기본값: 현재 디렉터리)
 ```
@@ -101,7 +101,7 @@ qmtl project
 
 ```bash
 # 사용 가능한 프리셋 확인
-qmtl project init --list-presets
+qmtl project list-presets
 
 # 간단한 백테스팅 전략
 qmtl project init --path my_backtest --preset minimal

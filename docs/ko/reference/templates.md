@@ -17,7 +17,7 @@ last_modified: 2025-08-21
 사용 가능한 템플릿 목록 보기:
 
 ```bash
-qmtl project init --list-templates
+qmtl project list-presets --show-legacy-templates
 ```
 
 `--with-sample-data` 옵션으로 샘플 데이터와 분석 노트북을 함께 추가할 수 있습니다:

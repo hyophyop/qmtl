@@ -6,14 +6,7 @@ from pathlib import Path
 from typing import List
 from qmtl.utils.i18n import _
 
-from ..scaffold import (
-    TEMPLATES,
-    copy_docs,
-    copy_pyproject,
-    copy_sample_data,
-    copy_scripts,
-    create_project,
-)
+from ..scaffold import copy_docs, copy_pyproject, copy_sample_data, copy_scripts, create_project
 from ..layers import Layer, LayerComposer, PresetLoader, LayerValidator
 from ..config_templates import available_profiles
 
@@ -43,12 +36,12 @@ def run(argv: List[str] | None = None) -> None:
     parser.add_argument(
         "--list-presets",
         action="store_true",
-        help=_("List available presets and exit"),
+        help=_("(Deprecated: use 'qmtl project list-presets') List available presets and exit"),
     )
     parser.add_argument(
         "--list-layers",
         action="store_true",
-        help=_("List available layers and exit"),
+        help=_("(Deprecated: use 'qmtl project list-layers') List available layers and exit"),
     )
 
     # Legacy options (deprecated)
@@ -86,25 +79,32 @@ def run(argv: List[str] | None = None) -> None:
     composer = LayerComposer()
     validator = LayerValidator()
 
-    # Handle list commands
-    if args.list_presets or args.list_templates:
-        if args.list_templates:
-            print(_("Warning: --list-templates is deprecated, use --list-presets instead"), file=sys.stderr)
-            print(_("Available templates:"))
-            for template_name in sorted(TEMPLATES):
-                print(template_name)
-        if args.list_presets:
-            print(_("Available presets:"))
-        for preset_name in preset_loader.list_presets():
-            preset = preset_loader.get_preset(preset_name)
-            if preset:
-                print(_("  {name:15} - {desc}").format(name=preset_name, desc=preset.description))
+    # Handle list commands via dedicated subcommands
+    if args.list_templates:
+        print(_("Warning: --list-templates is deprecated, use --list-presets instead"), file=sys.stderr)
+        from . import presets as presets_cli  # Local import to avoid circular dependency
+
+        presets_cli.run(["--show-legacy-templates"])
+        return
+
+    if args.list_presets:
+        print(
+            _("Warning: --list-presets is deprecated, use 'qmtl project list-presets'"),
+            file=sys.stderr,
+        )
+        from . import presets as presets_cli  # Local import to avoid circular dependency
+
+        presets_cli.run([])
         return
 
     if args.list_layers:
-        print(_("Available layers:"))
-        for layer in Layer:
-            print(_("  {value:15} - {name}").format(value=layer.value, name=layer.name))
+        print(
+            _("Warning: --list-layers is deprecated, use 'qmtl project list-layers'"),
+            file=sys.stderr,
+        )
+        from . import list_layers as list_layers_cli  # Local import to avoid circular dependency
+
+        list_layers_cli.run([])
         return
 
     # Check that --path is provided for actual project creation

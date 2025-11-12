@@ -41,11 +41,11 @@ uv pip install -e .[dev]
 ## 1. Initialize a Project
 
 Create a dedicated directory for your strategy and generate the scaffold. List
-available templates, then initialize the project with a chosen template and
-optional sample data:
+available presets (include legacy templates if needed), then initialize the
+project with a chosen template and optional sample data:
 
 ```bash
-qmtl project init --list-templates
+qmtl project list-presets --show-legacy-templates
 qmtl project init --path my_qmtl_project --strategy branching --with-sample-data
 cd my_qmtl_project
 ```

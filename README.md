@@ -58,14 +58,14 @@ uv pip install -e .[io]
 
 Create a new working directory with `qmtl project init`. The command generates a
 project scaffold containing extension packages and a sample strategy.
-Use `--strategy` to select from the built-in templates, `--list-templates` to
-see the choices and `--with-sample-data` to copy an example OHLCV CSV and
-notebook:
+Use `--strategy` to select from the built-in templates, `qmtl project
+list-presets --show-legacy-templates` to see the preset and legacy template
+options, and `--with-sample-data` to copy an example OHLCV CSV and notebook:
 
 ```bash
 qmtl project init --path my_qmtl_project
-# list available templates
-qmtl project init --list-templates
+# list available presets and legacy templates
+qmtl project list-presets --show-legacy-templates
 
 # create project with the branching template
 qmtl project init --path my_qmtl_project --strategy branching

@@ -84,8 +84,6 @@ qmtl project
   +--- init                  # Create a new project
   |   +--- --preset          # Select a preset (fast start)
   |   +--- --layers          # Choose layers explicitly
-  |   +--- --list-presets    # Show available presets
-  |   +--- --list-layers     # Show available layers
   |   `--- --path            # Target project path
   +--- add-layer             # Add a layer to an existing project
   |   +--- <layer>           # Layer to add (positional)
@@ -94,6 +92,8 @@ qmtl project
   +--- list-layers           # Print layer and template metadata
   |   +--- --show-templates  # Display template list
   |   `--- --show-requires   # Display template dependencies
+  +--- list-presets          # Print preset descriptions
+  |   `--- --show-legacy-templates  # Include deprecated template names
   `--- validate              # Validate project structure
       `--- --path            # Project path (defaults to CWD)
 ```
@@ -104,7 +104,7 @@ qmtl project
 
 ```bash
 # Discover available presets
-qmtl project init --list-presets
+qmtl project list-presets
 
 # Minimal backtesting strategy
 qmtl project init --path my_backtest --preset minimal

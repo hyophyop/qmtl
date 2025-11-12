@@ -17,7 +17,7 @@ For a step-by-step introduction and a minimal working example, see the
 List them with:
 
 ```bash
-qmtl project init --list-templates
+qmtl project list-presets --show-legacy-templates
 ```
 
 Add sample data and an analysis notebook with `--with-sample-data`:
