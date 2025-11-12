@@ -2,7 +2,7 @@
 title: "ControlBus — Internal Control Bus (Opaque to SDK)"
 tags: [architecture, events, control]
 author: "QMTL Team"
-last_modified: 2025-08-29
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -51,12 +51,21 @@ ActivationUpdated (versioned)
   "side": "long",
   "active": true,
   "weight": 1.0,
+  "freeze": false,
+  "drain": false,
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z",
-  "state_hash": "blake3:..."
+  "state_hash": "blake3:...",
+  "phase": "unfreeze",
+  "requires_ack": true,
+  "sequence": 17
 }
 ```
+
+- `phase` is either `freeze` or `unfreeze` and is populated by [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}).
+- `requires_ack=true` indicates Gateway MUST confirm receipt via the ControlBus acknowledgement channel before reopening order flow. Until that acknowledgement lands, Gateway/SDK keep order gates closed.
+- `sequence` is the per-run monotonic counter produced by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}). Consumers enforce increasing order and trigger resync when gaps are detected.
 
 QueueUpdated (versioned)
 ```json
@@ -91,6 +100,14 @@ PolicyUpdated (versioned)
 - Retention: short (e.g., 1–24h) with compaction by key; enough for reconnection/replay
 - QoS isolation: keep `control.*` topics separate from data topics; enforce quotas
 - Rate limiting: backpressure to slow consumers; metrics exported for lag
+
+---
+
+## 3-A. Activation acknowledgement channel
+
+- For every Freeze/Unfreeze event, Gateway publishes an acknowledgement containing the latest `sequence` to ControlBus (e.g., `control.activation.ack`) or an equivalent response channel (SHALL). The payload MUST include `world_id`, `run_id`, and `sequence` so operators can reconcile state.
+- WorldService and operational tooling SHOULD monitor the acknowledgement stream for missing sequences or timeouts and pause/rollback apply runs when anomalies surface.
+- Gateway SHOULD delay sending ControlBus acknowledgements if downstream SDK/WebSocket clients have not acknowledged receipt, keeping freeze semantics intact.
 
 ---
 

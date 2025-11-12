@@ -2,7 +2,7 @@
 title: "WorldService — 월드 정책, 결정, 활성화"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -129,7 +129,10 @@ ActivationEnvelope
   "effective_mode": "paper",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
-  "ts": "2025-08-28T09:00:00Z"
+  "ts": "2025-08-28T09:00:00Z",
+  "phase": "unfreeze",
+  "requires_ack": true,
+  "sequence": 17
 }
 ```
 
@@ -140,6 +143,8 @@ Field semantics and precedence
 - `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- ControlBus 팬아웃 시 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})가 `phase`(`freeze|unfreeze`), `requires_ack`, `sequence`를 주입한다. `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 run별 단조 증가 값으로 생성된다.
+- `requires_ack=true`는 Gateway/SDK가 해당 `sequence`까지의 상태 변화를 수신하고 order gate를 계속 잠근 채 ACK를 반환해야 함을 뜻한다(SHALL). Freeze 단계 ACK가 도착하기 전에는 동일 run의 Unfreeze 이벤트를 적용하거나 주문 게이트를 열어서는 안 된다.
 
 아이템포턴시(Idempotency): 컨슈머는 오래된 `etag`/`run_id` 이벤트를 무시해야 합니다(no‑op). 알 수 없거나 만료된 결정/활성화는 “비활성/안전” 상태로 간주합니다.
 
@@ -156,6 +161,10 @@ TTL 및 신선도(Staleness)
   - Cross‑domain edges MUST be disabled by default via `EdgeOverride` until a policy explicitly enables them post‑promotion.
   - Orders are always gated OFF while `freeze=true` during 2‑Phase apply.
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain → Switch(domain) → Unfreeze`.
+  - ActivationUpdated ACK 수렴 절차:
+    - Freeze/Drain 및 Unfreeze 단계 이벤트는 `requires_ack=true`, `phase`, `sequence` 메타데이터가 포함된 ControlBus 메시지로 게시된다.
+    - Gateway는 `sequence` 기준으로 선형 재생을 보장하고, Freeze 이벤트에 대한 ACK가 도착하기 전에는 동일 run의 후속 이벤트(특히 Unfreeze)를 SDK로 전파하거나 주문 게이트를 해제해서는 안 된다(SHALL).
+    - ACK는 ControlBus 또는 동일하게 구성된 응답 채널을 통해 보고되며, payload에는 `world_id`, `run_id`, 마지막으로 적용한 `sequence`와 같은 재동기화 정보를 포함해야 한다. run별로 단조 증가 값을 유지하고, 역순 ACK는 무시하거나 오류로 처리해야 한다(SHOULD).
 - 2‑Phase Apply protocol (SHALL):
   1. **Freeze/Drain** — Activation entries set `active=false, freeze=true`; Gateway/SDK gate all order publications; EdgeOverride keeps live queues disconnected.
   2. **Switch** — ExecutionDomain updated (예: backtest→live), queue/topic bindings refreshed, Feature Artifact snapshot pinned via `dataset_fingerprint`.
