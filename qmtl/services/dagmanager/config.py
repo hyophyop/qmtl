@@ -21,6 +21,7 @@ class DagManagerConfig:
     controlbus_dsn: Optional[str] = None
     controlbus_queue_topic: str = "queue"
     enable_topic_namespace: bool = True
+    kafka_metrics_url: Optional[str] = None
 
 
 def load_dagmanager_config(path: str) -> DagManagerConfig:
