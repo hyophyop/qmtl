@@ -1,4 +1,8 @@
-# Realm Terminology Evaluation
+# Realm Terminology Evaluation _(Archived)_
+
+> **Status (2025-11):** Archived evaluation only. The rename from **World** to
+> **Realm** was not adopted, and **World** remains the canonical term for docs,
+> configuration, APIs, and operational tooling.
 
 This note reviews replacing the term **World** with **Realm** across QMTL.
 

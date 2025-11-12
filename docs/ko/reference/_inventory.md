@@ -50,6 +50,7 @@ last_modified: 2025-08-26
 *소유자: Records Steward*
 
 - `docs/archive/README.md`
+- `docs/archive/realm_rename_eval.md`
 - `docs/archive/ccxt-seamless-legacy-audit.md`
 
 ## 설계(Design)
@@ -165,7 +166,6 @@ last_modified: 2025-08-26
 
 - `docs/world/index.md`
 - `docs/world/policy_engine.md`
-- `docs/world/realm_rename_eval.md`
 - `docs/world/world.md`
 - `docs/world/world_refined.md`
 - `docs/world/world_todo.md`

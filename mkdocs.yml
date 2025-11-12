@@ -103,12 +103,12 @@ nav:
       - Changelog: reference/CHANGELOG.md
   - World:
       - Spec: world/world.md
-      - Realm Terminology Evaluation: world/realm_rename_eval.md
       - Policy Engine: world/policy_engine.md
       - Centralized Rebalancing: world/rebalancing.md
       - Modes: world/rebalancing_modes.md
   - Archive:
       - Overview: archive/README.md
+      - Realm Terminology Evaluation: archive/realm_rename_eval.md
       - CCXT × Seamless Legacy Audit: archive/ccxt-seamless-legacy-audit.md
   - Tags: tags.md
   - Templates:

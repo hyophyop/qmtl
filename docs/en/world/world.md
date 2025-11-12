@@ -5,6 +5,10 @@ disruption. The aim is to reuse existing components (DAG Manager, Gateway, SDK
 Runner, metrics) while enabling policy‑driven automatic evaluation, promotion,
 and demotion.
 
+> **Terminology:** "World" is the authoritative term throughout QMTL. The
+> previously proposed rename to "Realm" was shelved and is retained only as an
+> archived design note for historical context.
+
 - References: `docs/architecture/architecture.md`, `docs/architecture/gateway.md`,
   `docs/architecture/dag-manager.md`
 - Repo boundary: only reusable utilities/nodes/gateway extensions live under
