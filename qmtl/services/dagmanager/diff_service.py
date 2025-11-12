@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Iterable, List, MutableMapping, TYPE_CHECKING
+from typing import Any, Dict, Iterable, List, MutableMapping, TYPE_CHECKING, Mapping
 import math
 from queue import Empty, Queue
 
@@ -265,79 +265,106 @@ class DiffService:
         raw_nodes = data.get("nodes", []) or []
         meta_obj = data.get("meta")
         meta = meta_obj if isinstance(meta_obj, dict) else {}
+        context = self._extract_compute_context(data)
+        namespace = self._resolve_namespace(meta, context)
+        filtered_nodes, sentinel_version, sentinel_weight = (
+            self._separate_sentinel_nodes(raw_nodes)
+        )
+        node_map = {n["node_id"]: n for n in filtered_nodes if "node_id" in n}
+        ordered_ids = self._topologically_order_nodes(node_map)
+        nodes = self._build_node_infos(ordered_ids, node_map, context)
+        version = self._resolve_version_label(data, meta, sentinel_version)
+        sentinel_weight = self._resolve_sentinel_weight(meta, sentinel_weight)
+        return nodes, version, context, namespace, sentinel_weight
+
+    def _resolve_namespace(
+        self, meta: Mapping[str, Any], context: ComputeContext
+    ) -> str | None:
+        if not topic_namespace_enabled():
+            return None
+        raw_namespace = meta.get("topic_namespace")
+        normalized = normalize_namespace(raw_namespace)
+        if normalized:
+            return normalized
+        world_for_ns = context.world_id or stringify(meta.get("world") or meta.get("world_id"))
+        domain_for_ns = context.execution_domain or normalize_execution_domain(
+            meta.get("execution_domain") or meta.get("domain")
+        )
+        if world_for_ns:
+            return build_namespace(world_for_ns, domain_for_ns)
+        return None
+
+    def _separate_sentinel_nodes(
+        self, raw_nodes: Iterable[dict]
+    ) -> tuple[list[dict], str | None, float | None]:
         sentinel_version: str | None = None
         sentinel_weight: float | None = None
-        filtered_nodes: list[dict] = []
-        context = self._extract_compute_context(data)
-        namespace: str | None = None
-        if topic_namespace_enabled():
-            raw_namespace = meta.get("topic_namespace")
-            normalized = normalize_namespace(raw_namespace)
-            if normalized:
-                namespace = normalized
-            else:
-                world_for_ns = context.world_id or stringify(
-                    meta.get("world") or meta.get("world_id")
-                )
-                domain_for_ns = context.execution_domain or normalize_execution_domain(
-                    meta.get("execution_domain") or meta.get("domain")
-                )
-                if world_for_ns:
-                    namespace = build_namespace(world_for_ns, domain_for_ns)
+        filtered: list[dict] = []
         for entry in raw_nodes:
             if not isinstance(entry, dict):
                 continue
-            node_type = str(entry.get("node_type", ""))
-            if node_type == "VersionSentinel":
-                if sentinel_version is None:
-                    for key in ("version", "strategy_version", "build_version"):
-                        if key in entry:
-                            sentinel_version = normalize_version(entry.get(key))
-                            if sentinel_version:
-                                break
-                    if not sentinel_version:
-                        sentinel_version = normalize_version(entry.get("node_id"))
-                if sentinel_weight is None:
-                    for key in ("traffic_weight", "sentinel_weight", "weight"):
-                        if key in entry:
-                            sentinel_weight = self._coerce_weight(entry.get(key))
-                            if sentinel_weight is not None:
-                                break
+            if str(entry.get("node_type", "")) != "VersionSentinel":
+                filtered.append(entry)
                 continue
-            filtered_nodes.append(entry)
+            sentinel_version = sentinel_version or self._extract_sentinel_version(entry)
+            if sentinel_weight is None:
+                sentinel_weight = self._extract_sentinel_weight(entry)
+        return filtered, sentinel_version, sentinel_weight
 
-        node_map = {n["node_id"]: n for n in filtered_nodes if "node_id" in n}
+    @staticmethod
+    def _extract_sentinel_version(entry: Mapping[str, Any]) -> str | None:
+        for key in ("version", "strategy_version", "build_version"):
+            if key in entry:
+                normalized = normalize_version(entry.get(key))
+                if normalized:
+                    return normalized
+        return normalize_version(entry.get("node_id"))
+
+    def _extract_sentinel_weight(self, entry: Mapping[str, Any]) -> float | None:
+        for key in ("traffic_weight", "sentinel_weight", "weight"):
+            if key in entry:
+                weight = self._coerce_weight(entry.get(key))
+                if weight is not None:
+                    return weight
+        return None
+
+    def _topologically_order_nodes(self, node_map: Dict[str, dict]) -> List[str]:
         deps: Dict[str, set[str]] = {
             nid: set(node_map[nid].get("inputs", [])) for nid in node_map
         }
-
         ordered: List[str] = []
-        ready = [nid for nid, d in deps.items() if not d]
+        ready = [nid for nid, incoming in deps.items() if not incoming]
         while ready:
             nid = ready.pop(0)
             ordered.append(nid)
-            for other, d in deps.items():
-                if nid in d:
-                    d.remove(nid)
-                    if not d:
+            for other, incoming in deps.items():
+                if nid in incoming:
+                    incoming.remove(nid)
+                    if not incoming:
                         ready.append(other)
+        if len(ordered) != len(node_map):
+            return list(node_map.keys())
+        return ordered
 
-        if len(ordered) != len(node_map):  # cycle fallback to given order
-            ordered = list(node_map.keys())
-
+    def _build_node_infos(
+        self,
+        ordered_ids: Iterable[str],
+        node_map: Dict[str, dict],
+        context: ComputeContext,
+    ) -> List[NodeInfo]:
         nodes = [
             NodeInfo(
-                node_id=node_map[n]["node_id"],
-                node_type=node_map[n].get("node_type", ""),
-                code_hash=node_map[n]["code_hash"],
-                schema_hash=node_map[n]["schema_hash"],
-                schema_id=node_map[n].get("schema_id", ""),
-                interval=node_map[n].get("interval"),
-                period=node_map[n].get("period"),
-                tags=list(node_map[n].get("tags", [])),
-                bucket=node_map[n].get("bucket"),
+                node_id=node_map[node_id]["node_id"],
+                node_type=node_map[node_id].get("node_type", ""),
+                code_hash=node_map[node_id]["code_hash"],
+                schema_hash=node_map[node_id]["schema_hash"],
+                schema_id=node_map[node_id].get("schema_id", ""),
+                interval=node_map[node_id].get("interval"),
+                period=node_map[node_id].get("period"),
+                tags=list(node_map[node_id].get("tags", [])),
+                bucket=node_map[node_id].get("bucket"),
             )
-            for n in ordered
+            for node_id in ordered_ids
         ]
         for node in nodes:
             node.compute_key = compute_key(
@@ -348,23 +375,37 @@ class DiffService:
                 partition=context.partition or None,
                 dataset_fingerprint=context.dataset_fingerprint or None,
             )
+        return nodes
+
+    @staticmethod
+    def _resolve_version_label(
+        data: Mapping[str, Any],
+        meta: Mapping[str, Any],
+        sentinel_version: str | None,
+    ) -> str:
         if sentinel_version:
-            version = sentinel_version
-        else:
-            version = normalize_version(
-                data.get("strategy_version")
-                or data.get("version")
-                or meta.get("version")
-                or meta.get("strategy_version")
-                or meta.get("build_version")
-            )
-        if sentinel_weight is None:
-            for key in ("traffic_weight", "sentinel_weight", "weight"):
-                if key in meta:
-                    sentinel_weight = self._coerce_weight(meta.get(key))
-                    if sentinel_weight is not None:
-                        break
-        return nodes, version, context, namespace, sentinel_weight
+            return sentinel_version
+        return normalize_version(
+            data.get("strategy_version")
+            or data.get("version")
+            or meta.get("version")
+            or meta.get("strategy_version")
+            or meta.get("build_version")
+        )
+
+    def _resolve_sentinel_weight(
+        self,
+        meta: Mapping[str, Any],
+        sentinel_weight: float | None,
+    ) -> float | None:
+        if sentinel_weight is not None:
+            return sentinel_weight
+        for key in ("traffic_weight", "sentinel_weight", "weight"):
+            if key in meta:
+                coerced = self._coerce_weight(meta.get(key))
+                if coerced is not None:
+                    return coerced
+        return None
 
     # Step 2 ---------------------------------------------------------------
     def _db_fetch(self, node_ids: Iterable[str]) -> Dict[str, NodeRecord]:
