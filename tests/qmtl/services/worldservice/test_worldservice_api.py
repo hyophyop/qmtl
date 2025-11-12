@@ -239,7 +239,8 @@ async def test_rebalancing_apply_scaling_mode_success():
             assert resp.status_code == 200
 
             body = resp.json()
-            assert set(body) >= {"per_world", "global_deltas"}
+            assert set(body) >= {"schema_version", "per_world", "global_deltas"}
+            assert body["schema_version"] == 1
             assert "w1" in body["per_world"]
 
             plan = body["per_world"]["w1"]
@@ -250,6 +251,103 @@ async def test_rebalancing_apply_scaling_mode_success():
 
             assert body["global_deltas"] == []
             assert "overlay_deltas" not in body or body["overlay_deltas"] is None
+            assert body.get("alpha_metrics") is None
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_downgrades_when_v2_disabled():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 1
+            assert body.get("alpha_metrics") is None
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_serves_v2_when_enabled():
+    app = create_app(storage=Storage(), compat_rebalance_v2=True)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 2
+            assert body["alpha_metrics"] == {"per_world": {}, "per_strategy": {}}
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_requires_v2_when_alpha_metrics_required():
+    app = create_app(
+        storage=Storage(),
+        compat_rebalance_v2=True,
+        alpha_metrics_required=True,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            base_payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=base_payload)
+            assert resp.status_code == 400
+            assert "schema_version>=2" in resp.json()["detail"]
+
+            payload_v2 = dict(base_payload, schema_version=2)
+            ok = await client.post("/rebalancing/plan", json=payload_v2)
+            assert ok.status_code == 200
+            assert ok.json()["schema_version"] == 2
 
 
 @pytest.mark.asyncio

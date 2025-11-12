@@ -139,7 +139,7 @@ class WorldService:
         ]
 
     @staticmethod
-    def _serialize_plan(result) -> Dict[str, Any]:
+    def _serialize_plan(result, *, schema_version: int = 1, alpha_metrics: Dict[str, Any] | None = None) -> Dict[str, Any]:
         per_world: Dict[str, Any] = {}
         for wid, plan in result.per_world.items():
             per_world[wid] = {
@@ -159,7 +159,14 @@ class WorldService:
             {"symbol": d.symbol, "delta_qty": d.delta_qty, "venue": d.venue}
             for d in result.global_deltas
         ]
-        return {"per_world": per_world, "global_deltas": global_deltas}
+        payload: Dict[str, Any] = {
+            "schema_version": schema_version,
+            "per_world": per_world,
+            "global_deltas": global_deltas,
+        }
+        if alpha_metrics is not None:
+            payload["alpha_metrics"] = alpha_metrics
+        return payload
 
     async def _execute_rebalance(
         self,
@@ -249,7 +256,7 @@ class WorldService:
             )
 
             plan_result = self._multi_rebalancer.plan(context)
-            plan_payload = self._serialize_plan(plan_result)
+            plan_payload = self._serialize_plan(plan_result, schema_version=1)
 
             await self.store.record_allocation_run(
                 payload.run_id,
@@ -267,6 +274,7 @@ class WorldService:
                         lot_size_by_symbol=payload.lot_size_by_symbol,
                         mode=payload.mode,
                         overlay=payload.overlay,
+                        schema_version=1,
                     ).model_dump(exclude_none=True),
                 },
                 executed=False,
@@ -309,6 +317,7 @@ class WorldService:
                     lot_size_by_symbol=payload.lot_size_by_symbol,
                     mode=payload.mode,
                     overlay=payload.overlay,
+                    schema_version=1,
                 ).model_dump(exclude_none=True)
                 execution_response = await self._execute_rebalance(request_payload)
                 await self.store.mark_allocation_run_executed(payload.run_id)
