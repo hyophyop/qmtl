@@ -11,7 +11,7 @@ class FakeGC:
 
     def collect(self):
         self.calls += 1
-        return [QueueInfo("q1", "raw", datetime.now(UTC), interval="60s")]
+        return [QueueInfo("q1", "raw", datetime.now(UTC), interval=60)]
 
 
 def test_gc_route_triggers_collect():

@@ -23,6 +23,7 @@ from .kafka_admin import KafkaAdmin
 from qmtl.foundation.common import AsyncCircuitBreaker
 from .garbage_collector import GarbageCollector
 from .controlbus_producer import ControlBusProducer
+from .queue_updates import publish_queue_updates
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from .dagmanager_health import get_health
 
@@ -229,21 +230,7 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         if self._gc is not None:
             processed = self._gc.collect()
             if self._bus and processed:
-                groups: dict[tuple[str, int | None], list[str]] = {}
-                for qi in processed:
-                    key = (qi.tag, getattr(qi, "interval", None))
-                    groups.setdefault(key, []).append(qi.name)
-                for (tag, interval), _queues in groups.items():
-                    if not tag:
-                        continue
-                    if interval is None:
-                        continue
-                    await self._bus.publish_queue_update(
-                        [tag],
-                        int(interval),
-                        [],
-                        "any",
-                    )
+                await publish_queue_updates(self._bus, processed, repo=self._repo)
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(

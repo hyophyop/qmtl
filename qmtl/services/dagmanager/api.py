@@ -10,6 +10,8 @@ from .garbage_collector import GarbageCollector
 from .dagmanager_health import get_health
 from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
 from .controlbus_producer import ControlBusProducer
+from .queue_updates import publish_queue_updates
+from .repository import NodeRepository
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
@@ -30,6 +32,7 @@ def create_app(
     *,
     driver: "Driver" | None = None,
     bus: ControlBusProducer | None = None,
+    repo: NodeRepository | None = None,
     enable_otel: bool | None = None,
 ) -> FastAPI:
     """Return a FastAPI app exposing admin routes."""
@@ -63,15 +66,8 @@ def create_app(
         with tracer.start_as_current_span("dagmanager.gc_trigger"):
             infos = gc.collect()
             processed = [q.name for q in infos]
-            if bus:
-                for qi in infos:
-                    if getattr(qi, "interval", None) is not None:
-                        await bus.publish_queue_update(
-                            [qi.tag],
-                            qi.interval,
-                            [qi.name],
-                            "any",
-                        )
+            if bus and infos:
+                await publish_queue_updates(bus, infos, repo=repo)
             return GcResponse(processed=processed)
 
     return app

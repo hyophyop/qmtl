@@ -22,6 +22,7 @@ from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.services.dagmanager.monitor import AckStatus
 from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
 from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
+from qmtl.services.dagmanager.repository import NodeRepository
 
 
 class FakeSession:
@@ -65,6 +66,33 @@ class FakeAdmin:
             "num_partitions": num_partitions,
             "replication_factor": replication_factor,
         }
+
+
+class RepoStub(NodeRepository):
+    def __init__(self, queues: dict[tuple[tuple[str, ...], int], list[dict[str, object]]] | None = None) -> None:
+        self._queues = queues or {}
+
+    def get_nodes(self, node_ids, *, breaker=None):  # pragma: no cover - unused
+        return {}
+
+    def insert_sentinel(self, sentinel_id, node_ids, version, *, breaker=None):  # pragma: no cover - unused
+        raise NotImplementedError
+
+    def get_queues_by_tag(self, tags, interval, match_mode="any", *, breaker=None):
+        key = (tuple(tags), int(interval))
+        return list(self._queues.get(key, []))
+
+    def get_node_by_queue(self, queue, *, breaker=None):  # pragma: no cover - unused
+        return None
+
+    def mark_buffering(self, node_id, *, compute_key=None, timestamp_ms=None, breaker=None):  # pragma: no cover - unused
+        raise NotImplementedError
+
+    def clear_buffering(self, node_id, *, compute_key=None, breaker=None):  # pragma: no cover - unused
+        raise NotImplementedError
+
+    def get_buffering_nodes(self, older_than_ms, *, compute_key=None, breaker=None):  # pragma: no cover - unused
+        return []
 
 
 class FakeStream(StreamSender):
@@ -355,7 +383,9 @@ class DummyArchive:
 
 class BusStub:
     def __init__(self) -> None:
-        self.queue_updates: list[tuple[list[str], int, list[object], str]] = []
+        self.queue_updates: list[
+            tuple[list[str], int, list[dict[str, object]], str]
+        ] = []
 
     async def publish_queue_update(
         self,
@@ -437,6 +467,36 @@ async def test_grpc_cleanup_emits_queue_update():
     await server.stop(None)
 
     assert bus.queue_updates == [(["raw"], 60, [], "any")]
+
+
+@pytest.mark.asyncio
+async def test_grpc_cleanup_emits_queue_update_with_repo():
+    now = datetime.now(UTC)
+    store = DummyStore([QueueInfo("q", "raw", now - timedelta(days=10), interval=60)])
+    gc = GarbageCollector(store, DummyMetrics(), batch_size=1)
+    bus = BusStub()
+    repo = RepoStub({(("raw",), 60): [{"queue": "q_active"}]})
+
+    driver = FakeDriver()
+    admin = FakeAdmin()
+    stream = FakeStream()
+    server, port = serve(
+        driver,
+        admin,
+        stream,
+        host="127.0.0.1",
+        port=0,
+        gc=gc,
+        repo=repo,
+        bus=bus,
+    )
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id="s"))
+    await server.stop(None)
+
+    assert bus.queue_updates == [(["raw"], 60, [{"queue": "q_active"}], "any")]
 
 
 @pytest.mark.asyncio
