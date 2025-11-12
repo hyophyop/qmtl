@@ -2,7 +2,7 @@
 title: "WorldService - World Policy, Decisions, and Activation"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -237,7 +237,37 @@ gating_policy:
 
 ---
 
-## 5. Security & RBAC
+## 5. Allocation & Rebalancing APIs (normative)
+
+WorldService exposes two surfaces for coordinated world allocation changes. All flows operate in `mode='scaling'` by default; `overlay`/`hybrid` modes are unimplemented and return HTTP 501.
+
+### 5-A. `POST /allocations` — world allocation upsert
+
+- **Input schema:** [`AllocationUpsertRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L278') }}). Required fields: `run_id`, `total_equity`, `world_allocations{world_id→ratio}`, and current `positions[]`. Optional knobs include per-world strategy totals (`strategy_alloc_*`), `min_trade_notional`, and symbol lot sizes (`lot_size_by_symbol`).【F:qmtl/services/worldservice/schemas.py†L248-L314】
+- **Validation:** `world_allocations` must be non-empty and ratios must remain within [0,1]. Values outside the band raise 422; unsupported modes raise 501.【F:qmtl/services/worldservice/services.py†L184-L207】
+- **run_id idempotency:** The request body (excluding `run_id`/`execute`/`etag`) is hashed to derive a deterministic `etag`. Reusing a `run_id` with a different payload triggers HTTP 409; matching payloads reuse the stored plan and execution state.【F:qmtl/services/worldservice/services.py†L129-L166】【F:qmtl/services/worldservice/services.py†L207-L236】
+- **Plan computation:** `MultiWorldProportionalRebalancer` applies world- and strategy-level scaling to produce `per_world` and `global_deltas`. When strategy totals are omitted, it infers weights from current exposure to operate in “scale-only” mode.【F:qmtl/services/worldservice/rebalancing/multi.py†L1-L111】【F:qmtl/services/worldservice/rebalancing/rule_based.py†L1-L74】
+- **Persistence & events:** Successful upserts persist the request/plan snapshot and update stored world/strategy allocations. WorldService then emits `rebalancing_planned` ControlBus events (per world) containing `scale_world`, `scale_by_strategy`, and `deltas`, allowing Gateway to broadcast and measure the rebalance.【F:qmtl/services/worldservice/services.py†L237-L311】【F:qmtl/services/worldservice/controlbus_producer.py†L96-L109】
+- **External execution:** When `execute=true` and a rebalance executor is configured, WorldService forwards a normalized `MultiWorldRebalanceRequest` to the executor and stores the response in `execution_response`. Missing executors yield 503; execution failures surface as 502. A successful run marks `executed=true`.【F:qmtl/services/worldservice/services.py†L167-L318】
+- **Response:** [`AllocationUpsertResponse`]({{ code_url('qmtl/services/worldservice/schemas.py#L295') }}) returns the computed plan together with `run_id`, `etag`, `executed`, and the optional executor payload.【F:qmtl/services/worldservice/services.py†L212-L235】【F:qmtl/services/worldservice/services.py†L312-L318】
+
+### 5-B. `POST /rebalancing/plan`
+
+- Accepts the same [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }}) and runs `MultiWorldProportionalRebalancer`. Requests using `overlay`/`hybrid` return 501. The response contains only the per-world scaling/deltas plus aggregated `global_deltas` for analysis.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
+- The endpoint is stateless—no persistence or audit logging—so operators can preview or simulate plans safely.
+
+### 5-C. `POST /rebalancing/apply`
+
+- Mirrors `/rebalancing/plan` for computation, then serializes the per-world plan and global deltas into the audit store (best effort). When a ControlBus is configured, it publishes `rebalancing_planned` events per world.【F:qmtl/services/worldservice/routers/rebalancing.py†L84-L154】【F:qmtl/services/worldservice/storage/persistent.py†L850-L864】
+- `/rebalancing/apply` does not mutate stored allocations. `/allocations` or an external executor perform the actual account changes; this endpoint marks the “approved plan” for observability and audit.
+
+### 5-D. ControlBus integration & metrics
+
+- Gateway’s ControlBus consumer relays `rebalancing_planned` events over the WebSocket `rebalancing` topic and updates Prometheus counters/gauges: `rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`. These metrics expose plan frequency and execution health.【F:qmtl/services/gateway/controlbus_consumer.py†L223-L276】【F:qmtl/services/gateway/metrics.py†L216-L592】
+
+---
+
+## 6. Security & RBAC
 
 - Auth: service-to-service tokens (mTLS/JWT); user tokens at Gateway -> propagated to WS
 - World-scope RBAC enforced at WS; Gateway only proxies
@@ -248,7 +278,7 @@ Clock Discipline
 
 ---
 
-## 6. Observability & SLOs
+## 7. Observability & SLOs
 
 Metrics example
 - world_decide_latency_ms_p95, world_apply_duration_ms_p95
@@ -265,7 +295,7 @@ Alerts
 
 ---
 
-## 7. Failure Modes & Recovery
+## 8. Failure Modes & Recovery
 
 - WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute-only/inactive). Activation defaults to inactive.
 - Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
@@ -273,7 +303,7 @@ Alerts
 
 ---
 
-## 8. Integration & Events
+## 9. Integration & Events
 
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
@@ -286,7 +316,7 @@ Runner & SDK Integration (clarification)
 
 ---
 
-## 9. Testing & Validation
+## 10. Testing & Validation
 
 - Contract tests for envelopes (Decision/Activation) using the JSON Schemas (reference/schemas.md).
 - Idempotency tests: duplicate/out-of-order event handling based on `etag`/`run_id`.

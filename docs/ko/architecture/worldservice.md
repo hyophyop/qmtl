@@ -2,7 +2,7 @@
 title: "WorldService — 월드 정책, 결정, 활성화"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -233,7 +233,37 @@ gating_policy:
 
 ---
 
-## 5. 보안 & RBAC
+## 5. 할당 & 리밸런싱 API (규범)
+
+WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가지 표면을 노출합니다. 모든 경로는 `mode='scaling'`(기본값)을 중심으로 동작하며, `overlay`/`hybrid`는 아직 미구현이므로 501을 반환합니다.
+
+### 5‑A. `POST /allocations` — 월드 비중 업서트
+
+- **입력 스키마:** [`AllocationUpsertRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L278') }}). 필수 필드는 `run_id`, `total_equity`, `world_allocations{world_id→ratio}`, 현재 `positions[]`이며, 선택적으로 전략 총합(`strategy_alloc_*`)·최소 체결 노치(`min_trade_notional`)·심볼별 롯(`lot_size_by_symbol`)을 포함합니다.【F:qmtl/services/worldservice/schemas.py†L248-L314】
+- **유효성 검사:** `world_allocations`는 비어 있을 수 없고 값은 [0,1] 범위여야 합니다. 범위를 벗어나면 422, 미지원 모드면 501을 반환합니다.【F:qmtl/services/worldservice/services.py†L184-L207】
+- **run_id 멱등성:** 요청 본문(`run_id`/`execute`/`etag` 제외)을 해시해 `etag`를 생성합니다. 동일한 `run_id`로 상이한 페이로드를 보내면 409가 발생하고, 동일한 페이로드는 저장된 플랜과 실행 상태를 재사용합니다.【F:qmtl/services/worldservice/services.py†L129-L166】【F:qmtl/services/worldservice/services.py†L207-L236】
+- **플랜 계산:** `MultiWorldProportionalRebalancer`가 월드/전략 수준 스케일링을 적용해 `per_world` 및 `global_deltas`를 산출합니다. 요청에 전략 합계가 없으면 현재 포지션 비중을 추론해 `scale-only` 모드로 동작합니다.【F:qmtl/services/worldservice/rebalancing/multi.py†L1-L111】【F:qmtl/services/worldservice/rebalancing/rule_based.py†L1-L74】
+- **저장 & 이벤트:** 성공 시 `PersistentStorage`가 요청/플랜 스냅샷을 기록하고 최신 월드 비중/전략 비중을 영속화합니다. 이후 ControlBus에 `rebalancing_planned` 이벤트(월드별 `scale_world`, `scale_by_strategy`, `deltas`)를 발행해 Gateway가 재분배 작업을 브로드캐스트/측정할 수 있게 합니다.【F:qmtl/services/worldservice/services.py†L237-L311】【F:qmtl/services/worldservice/controlbus_producer.py†L96-L109】
+- **외부 실행:** `execute=true`일 때 리밸런싱 실행기가 구성되어 있으면(`rebalance_executor`) 동기화된 `MultiWorldRebalanceRequest` 스냅샷으로 실행기를 호출하고 응답을 `execution_response`에 포함합니다. 실행기가 없으면 503, 실패하면 502를 반환하며, 성공 시 `executed=true`로 표시합니다.【F:qmtl/services/worldservice/services.py†L167-L318】
+- **응답:** [`AllocationUpsertResponse`]({{ code_url('qmtl/services/worldservice/schemas.py#L295') }})는 계산된 플랜과 함께 `run_id`, `etag`, `executed`, (선택적) `execution_response`를 제공합니다.【F:qmtl/services/worldservice/services.py†L212-L235】【F:qmtl/services/worldservice/services.py†L312-L318】
+
+### 5‑B. `POST /rebalancing/plan`
+
+- 동일한 [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }})를 받아 `MultiWorldProportionalRebalancer`로 플랜을 산출합니다. `mode`가 `overlay`/`hybrid`면 501을 반환하며, 결과는 월드별 스케일·델타와 다중 월드 합산 뷰(`global_deltas`)만 포함합니다.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
+- 이 엔드포인트는 상태를 저장하지 않고 감사 로그도 남기지 않습니다. 운영자는 플랜을 사전 검토하거나 시뮬레이션 파이프라인에서 사용합니다.
+
+### 5‑C. `POST /rebalancing/apply`
+
+- `/rebalancing/plan`과 동일한 계산을 수행한 뒤, 월드별 플랜과 전역 델타를 직렬화해 감사 스토리지에 기록합니다(베스트 에포트). ControlBus가 연결되어 있으면 월드별 `rebalancing_planned` 이벤트를 발행합니다.【F:qmtl/services/worldservice/routers/rebalancing.py†L84-L154】【F:qmtl/services/worldservice/storage/persistent.py†L850-L864】
+- `/rebalancing/apply`는 월드 비중을 직접 변경하지 않습니다. `/allocations` 업서트 또는 외부 실행기가 실거래 계좌 업데이트를 담당하며, 이 엔드포인트는 “승인된 플랜”을 감사/모니터링 용도로 고정합니다.
+
+### 5‑D. ControlBus 연동 & 지표
+
+- WorldService가 발행하는 `rebalancing_planned` 이벤트는 Gateway Consumer가 받아 WebSocket `rebalancing` 채널로 중계하고 다음 Prometheus 지표를 갱신합니다: `rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`. 이를 통해 운영자는 플랜 생성 빈도와 자동 실행 성공률을 추적할 수 있습니다.【F:qmtl/services/gateway/controlbus_consumer.py†L223-L276】【F:qmtl/services/gateway/metrics.py†L216-L592】
+
+---
+
+## 6. 보안 & RBAC
 
 - 인증: 서비스 간 토큰(mTLS/JWT); 사용자 토큰은 Gateway에서 WS로 전달
 - 권한: 월드 스코프 RBAC는 WS에서 강제; Gateway는 프록시 역할만 수행
@@ -244,7 +274,7 @@ gating_policy:
 
 ---
 
-## 6. 관측(Observability) & SLO
+## 7. 관측(Observability) & SLO
 
 메트릭 예시
 - `world_decide_latency_ms_p95`, `world_apply_duration_ms_p95`
@@ -261,7 +291,7 @@ Skew 메트릭
 
 ---
 
-## 7. 장애 모드 & 복구
+## 8. 장애 모드 & 복구
 
 - WS 다운: Gateway는 캐시된 DecisionEnvelope이 신선할 경우 이를 반환, 아니면 안전 기본값(compute‑only/inactive). Activation은 기본 비활성.
 - Redis 손실: 최신 스냅샷에서 Activation을 재구성; 일관성 회복 전까지 주문 게이트 유지.
@@ -269,7 +299,7 @@ Skew 메트릭
 
 ---
 
-## 8. 통합 & 이벤트
+## 9. 통합 & 이벤트
 
 - Gateway: `/worlds/*` 프록시, TTL 기반 결정 캐시, `--allow-live` 가드 적용
 - DAG Manager: 결정과는 독립, 큐/그래프 메타데이터만 연계
@@ -282,7 +312,7 @@ Runner & SDK 통합(명확화)
 
 ---
 
-## 9. Testing & Validation
+## 10. Testing & Validation
 
 - Contract tests for envelopes (Decision/Activation) using the JSON Schemas (reference/schemas.md).
 - Idempotency tests: duplicate/out‑of‑order event handling based on `etag`/`run_id`.
