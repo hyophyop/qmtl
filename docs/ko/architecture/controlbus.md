@@ -2,7 +2,7 @@
 title: "ControlBus — 내부 제어 버스 (SDK에 비공개)"
 tags: [architecture, events, control]
 author: "QMTL Team"
-last_modified: 2025-08-29
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -51,12 +51,21 @@ ActivationUpdated (버전 관리됨)
   "side": "long",
   "active": true,
   "weight": 1.0,
+  "freeze": false,
+  "drain": false,
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z",
-  "state_hash": "blake3:..."
+  "state_hash": "blake3:...",
+  "phase": "unfreeze",
+  "requires_ack": true,
+  "sequence": 17
 }
 ```
+
+- `phase`는 [`freeze`, `unfreeze`] 중 하나이며 WorldService의 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})에서 설정된다.
+- `requires_ack=true` 이벤트는 Gateway가 동일 run의 Freeze/Unfreeze 상태를 수신했음을 ControlBus 응답 채널을 통해 확인(ack)해야 함을 의미한다(SHALL). ACK가 도착하기 전까지 Gateway/SDK는 주문 게이트를 해제할 수 없다.
+- `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 생성되는 run별 단조 증가 값이다. 컨슈머는 증가 순서를 강제하고 누락된 시퀀스가 감지되면 재동기화를 시도해야 한다(SHOULD).
 
 QueueUpdated (버전 관리됨)
 ```json
@@ -91,6 +100,14 @@ PolicyUpdated (버전 관리됨)
 - 보관: 짧게(예: 1–24시간), 키 기준 compaction 적용; 재연결/재생(replay)에 충분한 수준
 - QoS 분리: `control.*` 토픽을 데이터 토픽과 분리하고, 적절한 쿼터를 강제
 - 속도 제한: 느린 컨슈머에 백프레셔 적용; 지연(lag) 지표를 노출
+
+---
+
+## 3-A. Activation ACK 응답 경로
+
+- Freeze/Unfreeze 이벤트마다 Gateway는 최신 `sequence`와 연관된 ACK 메시지를 ControlBus(예: `control.activation.ack`) 또는 동일하게 구성된 응답 채널로 게시해야 한다(SHALL). 메시지에는 최소한 `world_id`, `run_id`, `sequence`가 포함되어야 하며, 운영팀이 재동기화 상태를 판단할 수 있어야 한다.
+- WorldService 및 운영 도구는 ACK 스트림을 모니터링하여 누락된 시퀀스나 타임아웃을 감지하고 필요 시 Apply를 중단·롤백한다(SHOULD).
+- Gateway는 SDK/WebSocket 구독자로부터 하위 ACK가 누락된 경우 ControlBus ACK 전송을 보류해 freeze 상태가 유지되도록 해야 한다.
 
 ---
 

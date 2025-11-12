@@ -2,7 +2,7 @@
 title: "WorldService - World Policy, Decisions, and Activation"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-12
 ---
 
 {{ nav_links() }}
@@ -133,7 +133,10 @@ ActivationEnvelope
   "effective_mode": "paper",
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
-  "ts": "2025-08-28T09:00:00Z"
+  "ts": "2025-08-28T09:00:00Z",
+  "phase": "unfreeze",
+  "requires_ack": true,
+  "sequence": 17
 }
 ```
 
@@ -144,6 +147,8 @@ Field semantics and precedence
 - `weight` soft-scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
+- `requires_ack=true` signals that Gateway/SDK MUST keep order gates closed and emit an acknowledgement for that `sequence` through the ControlBus response channel before propagating subsequent events. Freeze-phase acks must arrive before the corresponding Unfreeze event is applied.
 
 Idempotency: consumers must treat older etag/run_id as no-ops. Unknown or expired decisions/activations should default to "inactive/safe".
 
@@ -160,6 +165,10 @@ TTL & Staleness
   - Cross-domain edges MUST be disabled by default via `EdgeOverride` until a policy explicitly enables them post-promotion.
   - Orders are always gated OFF while `freeze=true` during 2-Phase apply.
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain -> Switch(domain) -> Unfreeze`.
+  - ActivationUpdated acknowledgement flow:
+    - Freeze/Drain and Unfreeze phases are emitted with `requires_ack=true`, `phase`, and `sequence` metadata on ControlBus events.
+    - Gateway MUST enforce linear replay by `sequence` and MUST NOT relay later events (especially Unfreeze) or reopen gates until the corresponding acknowledgements arrive from downstream subscribers (SHALL).
+    - Acknowledgements are reported via ControlBus or an equivalent response channel and include `world_id`, `run_id`, and the highest applied `sequence`. They MUST advance monotonically per run and discard or flag acknowledgements that arrive out of order (SHOULD).
 - 2-Phase Apply protocol (SHALL):
   1. **Freeze/Drain** - Activation entries set `active=false, freeze=true`; Gateway/SDK gate all order publications; EdgeOverride keeps live queues disconnected.
   2. **Switch** - ExecutionDomain updated (e.g., `backtest -> live`), queue/topic bindings refreshed, Feature Artifact snapshot pinned via `dataset_fingerprint`.
