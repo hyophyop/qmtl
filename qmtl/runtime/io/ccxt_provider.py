@@ -8,7 +8,7 @@ This module exposes a small helper class that composes
 """
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from qmtl.runtime.sdk.auto_backfill import FetcherBackfillStrategy
 from qmtl.runtime.sdk.ohlcv_nodeid import build as _build_ohlcv_node_id
@@ -38,6 +38,103 @@ class QuestDBConn:
         db = self.database or "qdb"
         # asyncpg-compatible DSN
         return f"postgresql://{host}:{port}/{db}"
+
+
+def _resolve_min_interval_s(rl_cfg: Mapping[str, Any]) -> float:
+    min_interval_value: float | None = None
+    min_interval_s_cfg = rl_cfg.get("min_interval_s")
+    if min_interval_s_cfg is not None:
+        min_interval_value = float(min_interval_s_cfg)
+
+    min_interval_ms_cfg = rl_cfg.get("min_interval_ms")
+    if min_interval_ms_cfg is not None:
+        min_interval_from_ms = float(min_interval_ms_cfg) / 1000.0
+        if min_interval_value is not None:
+            if abs(min_interval_value - min_interval_from_ms) > 1e-9:
+                raise ValueError(
+                    "rate_limiter.min_interval_s and rate_limiter.min_interval_ms "
+                    "conflict; provide matching values or only one option"
+                )
+        min_interval_value = min_interval_from_ms
+
+    return float(min_interval_value or 0.0)
+
+
+def _optional_cast(cfg: Mapping[str, Any], key: str, caster: Callable[[Any], Any]) -> Any:
+    value = cfg.get(key)
+    if value is None:
+        return None
+    return caster(value)
+
+
+def _build_rate_limiter_config(cfg: Mapping[str, Any]) -> RateLimiterConfig:
+    min_interval_s = _resolve_min_interval_s(cfg)
+    return RateLimiterConfig(
+        max_concurrency=int(cfg.get("max_concurrency", 1)),
+        min_interval_s=min_interval_s,
+        scope=str(cfg.get("scope", "process")),
+        redis_dsn=cfg.get("redis_dsn"),
+        tokens_per_interval=_optional_cast(cfg, "tokens_per_interval", float),
+        interval_ms=_optional_cast(cfg, "interval_ms", int),
+        burst_tokens=_optional_cast(cfg, "burst_tokens", int),
+        local_semaphore=_optional_cast(cfg, "local_semaphore", int),
+        key_suffix=cfg.get("key_suffix"),
+        key_template=cfg.get("key_template"),
+        penalty_backoff_ms=_optional_cast(cfg, "penalty_backoff_ms", int),
+    )
+
+
+def _shared_backfill_kwargs(cfg: Mapping[str, Any], rate_limiter: RateLimiterConfig) -> dict[str, Any]:
+    return {
+        "window_size": int(cfg.get("window_size", 1000)),
+        "max_retries": int(cfg.get("max_retries", 3)),
+        "retry_backoff_s": float(cfg.get("retry_backoff_s", 0.5)),
+        "rate_limiter": rate_limiter,
+    }
+
+
+def _build_fetcher(
+    *,
+    mode: str,
+    cfg: Mapping[str, Any],
+    exchange_id: str,
+    symbols: list[str] | None,
+    rate_limiter: RateLimiterConfig,
+    exchange: Any | None,
+) -> CcxtOHLCVFetcher | CcxtTradesFetcher:
+    common_kwargs = _shared_backfill_kwargs(cfg, rate_limiter)
+
+    if mode == "trades":
+        trades_cfg = CcxtTradesConfig(
+            exchange_id=exchange_id,
+            symbols=symbols,
+            **common_kwargs,
+        )
+        return CcxtTradesFetcher(trades_cfg, exchange=exchange)
+
+    timeframe = str(cfg.get("timeframe") or "1m")
+    ohlcv_cfg = CcxtBackfillConfig(
+        exchange_id=exchange_id,
+        symbols=symbols,
+        timeframe=timeframe,
+        **common_kwargs,
+    )
+    return CcxtOHLCVFetcher(ohlcv_cfg, exchange=exchange)
+
+
+def _build_questdb_conn(cfg: Mapping[str, Any], *, mode: str) -> QuestDBConn:
+    table = cfg.get("table")
+    table_prefix = cfg.get("table_prefix")
+    if not table and table_prefix:
+        table = f"{table_prefix}_{mode}"
+
+    return QuestDBConn(
+        dsn=cfg.get("dsn"),
+        host=cfg.get("host"),
+        port=cfg.get("port"),
+        database=cfg.get("database") or cfg.get("db"),
+        table=table,
+    )
 
 
 class CcxtQuestDBProvider(QuestDBHistoryProvider):
@@ -81,93 +178,21 @@ class CcxtQuestDBProvider(QuestDBHistoryProvider):
         mode = str(cfg.get("mode", "ohlcv")).lower()
         exchange_id = str(cfg.get("exchange") or cfg.get("exchange_id") or "binance")
         symbols = list(cfg.get("symbols") or []) or None
-        rl_cfg = cfg.get("rate_limiter") or {}
-        min_interval_s_cfg = rl_cfg.get("min_interval_s")
-        min_interval_ms_cfg = rl_cfg.get("min_interval_ms")
-        min_interval_value: float | None = None
-        if min_interval_s_cfg is not None:
-            min_interval_value = float(min_interval_s_cfg)
-        if min_interval_ms_cfg is not None:
-            min_interval_from_ms = float(min_interval_ms_cfg) / 1000.0
-            if min_interval_value is not None:
-                if abs(min_interval_value - min_interval_from_ms) > 1e-9:
-                    raise ValueError(
-                        "rate_limiter.min_interval_s and rate_limiter.min_interval_ms "
-                        "conflict; provide matching values or only one option"
-                    )
-            min_interval_value = min_interval_from_ms
-        effective_min_interval_s = float(min_interval_value or 0.0)
-        rate_limiter = RateLimiterConfig(
-            max_concurrency=int(rl_cfg.get("max_concurrency", 1)),
-            min_interval_s=effective_min_interval_s,
-            scope=str(rl_cfg.get("scope", "process")),
-            redis_dsn=rl_cfg.get("redis_dsn"),
-            tokens_per_interval=(
-                float(rl_cfg["tokens_per_interval"])
-                if rl_cfg.get("tokens_per_interval") is not None
-                else None
-            ),
-            interval_ms=(
-                int(rl_cfg["interval_ms"])
-                if rl_cfg.get("interval_ms") is not None
-                else None
-            ),
-            burst_tokens=(
-                int(rl_cfg["burst_tokens"])
-                if rl_cfg.get("burst_tokens") is not None
-                else None
-            ),
-            local_semaphore=(
-                int(rl_cfg["local_semaphore"])
-                if rl_cfg.get("local_semaphore") is not None
-                else None
-            ),
-            key_suffix=rl_cfg.get("key_suffix"),
-            key_template=rl_cfg.get("key_template"),
-            penalty_backoff_ms=(
-                int(rl_cfg["penalty_backoff_ms"])
-                if rl_cfg.get("penalty_backoff_ms") is not None
-                else None
-            ),
+
+        rate_limiter_cfg = cfg.get("rate_limiter") or {}
+        rate_limiter = _build_rate_limiter_config(rate_limiter_cfg)
+
+        fetcher = _build_fetcher(
+            mode=mode,
+            cfg=cfg,
+            exchange_id=exchange_id,
+            symbols=symbols,
+            rate_limiter=rate_limiter,
+            exchange=exchange,
         )
 
-        fetcher: CcxtOHLCVFetcher | CcxtTradesFetcher
-        if mode == "trades":
-            backfill_t = CcxtTradesConfig(
-                exchange_id=exchange_id,
-                symbols=symbols,
-                window_size=int(cfg.get("window_size", 1000)),
-                max_retries=int(cfg.get("max_retries", 3)),
-                retry_backoff_s=float(cfg.get("retry_backoff_s", 0.5)),
-                rate_limiter=rate_limiter,
-            )
-            fetcher = CcxtTradesFetcher(backfill_t, exchange=exchange)
-        else:
-            timeframe = str(cfg.get("timeframe") or "1m")
-            backfill_o = CcxtBackfillConfig(
-                exchange_id=exchange_id,
-                symbols=symbols,
-                timeframe=timeframe,
-                window_size=int(cfg.get("window_size", 1000)),
-                max_retries=int(cfg.get("max_retries", 3)),
-                retry_backoff_s=float(cfg.get("retry_backoff_s", 0.5)),
-                rate_limiter=rate_limiter,
-            )
-            fetcher = CcxtOHLCVFetcher(backfill_o, exchange=exchange)
-
-        q = cfg.get("questdb") or {}
-        table = q.get("table")
-        table_prefix = q.get("table_prefix")
-        if not table and table_prefix:
-            # Derive a simple table name from prefix and mode
-            table = f"{table_prefix}_{mode}"
-        conn = QuestDBConn(
-            dsn=q.get("dsn"),
-            host=q.get("host"),
-            port=q.get("port"),
-            database=q.get("database") or q.get("db"),
-            table=table,
-        )
+        questdb_cfg = cfg.get("questdb") or {}
+        conn = _build_questdb_conn(questdb_cfg, mode=mode)
         dsn = conn.resolve_dsn()
         return cls(dsn, table=conn.table, fetcher=fetcher)
 
