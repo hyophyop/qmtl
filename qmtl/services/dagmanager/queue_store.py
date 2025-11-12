@@ -132,12 +132,17 @@ class KafkaQueueStore(QueueStore):
                 else:
                     if value.endswith("Z"):
                         value = value[:-1] + "+00:00"
-                    return datetime.fromisoformat(value)
+                    ts = datetime.fromisoformat(value)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    return ts
             if isinstance(value, (int, float)):
                 if value > 10**12:
                     value = float(value) / 1000.0
                 return datetime.fromtimestamp(float(value), tz=timezone.utc)
             if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
                 return value.astimezone(timezone.utc)
         except Exception:  # pragma: no cover - defensive guard
             return None
