@@ -15,6 +15,10 @@ from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.utils.i18n import _, set_language
 
+from .config import DagManagerConfig
+from .grpc_server import serve
+from .topic import set_topic_namespace_enabled
+
 
 def _log_config_source(
     cfg_path: str | None,

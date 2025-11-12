@@ -41,7 +41,7 @@ async def publish_queue_updates(
         grouped[(info.tag, interval)].add(info.name)
 
     for (tag, interval), _dropped in grouped.items():
-        current: list[str] = []
+        current: list[Mapping[str, object]] = []
         if repo is not None:
             try:
                 records = repo.get_queues_by_tag([tag], interval, match_mode=match_mode)
@@ -54,7 +54,9 @@ async def publish_queue_updates(
                 )
             else:
                 current = [
-                    str(entry.get("queue"))
+                    dict(entry)
+                    if not isinstance(entry, dict)
+                    else entry
                     for entry in records
                     if isinstance(entry, Mapping) and entry.get("queue")
                 ]

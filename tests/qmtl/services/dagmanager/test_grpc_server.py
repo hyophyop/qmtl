@@ -383,7 +383,9 @@ class DummyArchive:
 
 class BusStub:
     def __init__(self) -> None:
-        self.queue_updates: list[tuple[list[str], int, list[object], str]] = []
+        self.queue_updates: list[
+            tuple[list[str], int, list[dict[str, object]], str]
+        ] = []
 
     async def publish_queue_update(
         self,
@@ -494,7 +496,7 @@ async def test_grpc_cleanup_emits_queue_update_with_repo():
         await stub.Cleanup(dagmanager_pb2.CleanupRequest(strategy_id="s"))
     await server.stop(None)
 
-    assert bus.queue_updates == [(["raw"], 60, ["q_active"], "any")]
+    assert bus.queue_updates == [(["raw"], 60, [{"queue": "q_active"}], "any")]
 
 
 @pytest.mark.asyncio
