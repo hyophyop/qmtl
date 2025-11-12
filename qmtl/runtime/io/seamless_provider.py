@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Optional
 import pandas as pd
 import asyncio
@@ -401,93 +401,59 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         # Import here to avoid circular imports
         from qmtl.runtime.io.historyprovider import QuestDBLoader
 
-        config = settings or EnhancedQuestDBProviderSettings()
-
-        resolved_table = table if table is not None else config.table
-        resolved_fetcher = fetcher if fetcher is not None else config.fetcher
-        resolved_live_fetcher = (
-            live_fetcher if live_fetcher is not None else config.live_fetcher
-        )
-        resolved_live_feed = live_feed if live_feed is not None else config.live_feed
-        resolved_cache_provider = (
-            cache_provider if cache_provider is not None else config.cache_provider
-        )
-        resolved_strategy = strategy if strategy is not None else config.strategy
-        resolved_conformance = (
-            conformance if conformance is not None else config.conformance
-        )
-        resolved_partial_ok = (
-            partial_ok if partial_ok is not None else config.partial_ok
-        )
-        resolved_registrar = (
-            registrar if registrar is not None else config.registrar
-        )
-        resolved_node_id_format = (
-            node_id_format if node_id_format is not None else config.node_id_format
+        config = self._resolve_config(
+            settings,
+            table=table,
+            fetcher=fetcher,
+            live_fetcher=live_fetcher,
+            live_feed=live_feed,
+            cache_provider=cache_provider,
+            strategy=strategy,
+            conformance=conformance,
+            partial_ok=partial_ok,
+            registrar=registrar,
+            node_id_format=node_id_format,
         )
 
-        if config.sla is not None and "sla" not in kwargs:
-            kwargs["sla"] = config.sla
+        self._apply_config_kwargs(config, kwargs)
 
-        for key, value in config.fingerprint.to_kwargs().items():
-            kwargs.setdefault(key, value)
-
-        strategy_value = resolved_strategy or DataAvailabilityStrategy.SEAMLESS
+        strategy_value = (
+            config.strategy or DataAvailabilityStrategy.SEAMLESS
+        )
 
         # Create the underlying storage provider
         self.storage_provider = QuestDBLoader(
-            dsn, table=resolved_table, fetcher=resolved_fetcher
+            dsn, table=config.table, fetcher=config.fetcher
         )
 
         # Create data sources via builder to support future adapter swaps
         storage_source = HistoryProviderDataSource(
             self.storage_provider, DataSourcePriority.STORAGE
         )
-        cache_source = (
-            HistoryProviderDataSource(resolved_cache_provider, DataSourcePriority.CACHE)
-            if resolved_cache_provider
-            else None
-        )
+        cache_source = self._build_cache_source(config.cache_provider)
 
         # Create backfiller if fetcher is available
-        backfiller = (
-            DataFetcherAutoBackfiller(resolved_fetcher)
-            if resolved_fetcher
-            else None
-        )
+        backfiller = self._build_backfiller(config.fetcher)
 
         # Create live feed if available (prefer explicit LiveDataFeed)
-        live_feed_obj = resolved_live_feed or (
-            LiveDataFeedImpl(resolved_live_fetcher)
-            if resolved_live_fetcher
-            else None
+        live_feed_obj = self._build_live_feed(
+            config.live_feed, config.live_fetcher
         )
 
-        registrar_obj: ArtifactRegistrar | None = resolved_registrar
-        if registrar_obj is None:
-            registrar_obj = FileSystemArtifactRegistrar.from_runtime_config()
-        if registrar_obj is None:
-            registrar_obj = IOArtifactRegistrar(stabilization_bars=2)
+        registrar_obj = self._resolve_registrar(config.registrar)
 
-        fmt = resolved_node_id_format.strip() if resolved_node_id_format else None
-        self._node_id_format = fmt
-        self._node_id_validator: Callable[[str], None] | None = None
-        if fmt:
-            if fmt == "ohlcv:{exchange}:{symbol}:{timeframe}":
-                self._node_id_validator = _validate_ohlcv_node_id
-            else:
-                logger.warning(
-                    "enhanced_provider.node_id_validation.unsupported_format",
-                    extra={"format": fmt},
-                )
+        (
+            self._node_id_format,
+            self._node_id_validator,
+        ) = self._build_node_id_validator(config.node_id_format)
 
-        builder = SeamlessBuilder()
-        builder.with_storage(storage_source)
-        builder.with_cache(cache_source)
-        builder.with_backfill(backfiller)
-        builder.with_live(live_feed_obj)
-        builder.with_registrar(registrar_obj)
-        assembly = builder.build()
+        assembly = self._build_seamless_assembly(
+            storage_source=storage_source,
+            cache_source=cache_source,
+            backfiller=backfiller,
+            live_feed=live_feed_obj,
+            registrar=registrar_obj,
+        )
 
         super().__init__(
             strategy=strategy_value,
@@ -495,8 +461,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
             storage_source=assembly.storage_source,
             backfiller=assembly.backfiller,
             live_feed=assembly.live_feed,
-            conformance=resolved_conformance or ConformancePipeline(),
-            partial_ok=bool(resolved_partial_ok),
+            conformance=config.conformance or ConformancePipeline(),
+            partial_ok=bool(config.partial_ok),
             registrar=assembly.registrar,
             **kwargs
         )
@@ -532,6 +498,96 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         """Fill missing data using auto-backfill."""
         if not await self.ensure_data_available(start, end, node_id=node_id, interval=interval):
             raise RuntimeError(f"Could not ensure data availability for range [{start}, {end}]")
+
+    @staticmethod
+    def _resolve_config(
+        settings: EnhancedQuestDBProviderSettings | None,
+        **overrides: Any,
+    ) -> EnhancedQuestDBProviderSettings:
+        base = settings or EnhancedQuestDBProviderSettings()
+        replacements = {k: v for k, v in overrides.items() if v is not None}
+        return replace(base, **replacements) if replacements else base
+
+    @staticmethod
+    def _apply_config_kwargs(
+        config: EnhancedQuestDBProviderSettings, kwargs: dict[str, Any]
+    ) -> None:
+        if config.sla is not None and "sla" not in kwargs:
+            kwargs["sla"] = config.sla
+
+        for key, value in config.fingerprint.to_kwargs().items():
+            kwargs.setdefault(key, value)
+
+    @staticmethod
+    def _build_cache_source(
+        cache_provider: HistoryProvider | None,
+    ) -> HistoryProviderDataSource | None:
+        if not cache_provider:
+            return None
+        return HistoryProviderDataSource(
+            cache_provider, DataSourcePriority.CACHE
+        )
+
+    @staticmethod
+    def _build_backfiller(
+        fetcher: DataFetcher | None,
+    ) -> DataFetcherAutoBackfiller | None:
+        if not fetcher:
+            return None
+        return DataFetcherAutoBackfiller(fetcher)
+
+    @staticmethod
+    def _build_live_feed(
+        live_feed: LiveDataFeed | None, live_fetcher: DataFetcher | None
+    ) -> LiveDataFeed | None:
+        if live_feed:
+            return live_feed
+        if live_fetcher:
+            return LiveDataFeedImpl(live_fetcher)
+        return None
+
+    @staticmethod
+    def _resolve_registrar(
+        registrar: ArtifactRegistrar | None,
+    ) -> ArtifactRegistrar:
+        if registrar is not None:
+            return registrar
+        runtime_registrar = FileSystemArtifactRegistrar.from_runtime_config()
+        if runtime_registrar is not None:
+            return runtime_registrar
+        return IOArtifactRegistrar(stabilization_bars=2)
+
+    @staticmethod
+    def _build_node_id_validator(
+        node_id_format: str | None,
+    ) -> tuple[str | None, Callable[[str], None] | None]:
+        fmt = node_id_format.strip() if node_id_format else None
+        if not fmt:
+            return None, None
+        if fmt == "ohlcv:{exchange}:{symbol}:{timeframe}":
+            return fmt, _validate_ohlcv_node_id
+        logger.warning(
+            "enhanced_provider.node_id_validation.unsupported_format",
+            extra={"format": fmt},
+        )
+        return fmt, None
+
+    @staticmethod
+    def _build_seamless_assembly(
+        *,
+        storage_source: HistoryProviderDataSource,
+        cache_source: HistoryProviderDataSource | None,
+        backfiller: DataFetcherAutoBackfiller | None,
+        live_feed: LiveDataFeed | None,
+        registrar: ArtifactRegistrar,
+    ):
+        builder = SeamlessBuilder()
+        builder.with_storage(storage_source)
+        builder.with_cache(cache_source)
+        builder.with_backfill(backfiller)
+        builder.with_live(live_feed)
+        builder.with_registrar(registrar)
+        return builder.build()
 
 
 __all__ = [
