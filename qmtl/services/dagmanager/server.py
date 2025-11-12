@@ -117,7 +117,7 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
     )
     store: QueueStore = KafkaQueueStore(kafka_admin, repo)
     gc = GarbageCollector(store, metrics_provider)
-    scheduler = GCScheduler(gc)
+    scheduler = GCScheduler(gc, interval=float(getattr(cfg, "gc_interval_seconds", 60.0)))
 
     bus = None
     try:
