@@ -14,11 +14,10 @@ def _assert_backend_templates(dest: Path) -> None:
     assert (templates_dir / "backend_stack.example.yml").is_file()
 
 
+PROJECT_ROOT_TOKEN = resolve_cli_tokens("qmtl.interfaces.cli.project")
 PROJECT_INIT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.init")
-PROJECT_ADD_LAYER_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.add_layer")
-PROJECT_LIST_LAYERS_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.list_layers")
+PROJECT_LAYER_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.layer")
 PROJECT_LIST_PRESETS_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.presets")
-PROJECT_VALIDATE_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.validate")
 
 
 def test_create_project(tmp_path: Path):
@@ -254,9 +253,9 @@ def test_add_layer_cli(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixtur
             }
             return ValidationResult(valid=True)
 
-    monkeypatch.setattr("qmtl.interfaces.cli.add_layer.LayerComposer", lambda: DummyComposer())
+    monkeypatch.setattr("qmtl.interfaces.cli.layer.LayerComposer", lambda: DummyComposer())
 
-    cli_main([*PROJECT_ADD_LAYER_TOKENS, "--path", str(dest), "monitoring"])
+    cli_main([*PROJECT_LAYER_TOKENS, "add", "--path", str(dest), "monitoring"])
     out = capsys.readouterr().out
 
     assert calls["add_layer"]["dest"] == dest
@@ -265,7 +264,7 @@ def test_add_layer_cli(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixtur
 
 
 def test_list_layers_cli(capsys: pytest.CaptureFixture):
-    cli_main([*PROJECT_LIST_LAYERS_TOKENS])
+    cli_main([*PROJECT_LAYER_TOKENS, "list"])
     out = capsys.readouterr().out
 
     assert "Available layers:" in out
@@ -274,7 +273,7 @@ def test_list_layers_cli(capsys: pytest.CaptureFixture):
 
 
 def test_list_layers_cli_with_templates(capsys: pytest.CaptureFixture):
-    cli_main([*PROJECT_LIST_LAYERS_TOKENS, "--show-templates", "--show-requires"])
+    cli_main([*PROJECT_LAYER_TOKENS, "list", "--show-templates", "--show-requires"])
     out = capsys.readouterr().out
 
     # Expect at least one template line to be printed
@@ -289,7 +288,7 @@ def test_validate_cli_success(tmp_path: Path, capsys: pytest.CaptureFixture):
         dest=dest,
     )
 
-    cli_main([*PROJECT_VALIDATE_TOKENS, "--path", str(dest)])
+    cli_main([*PROJECT_LAYER_TOKENS, "validate", "--path", str(dest)])
     out = capsys.readouterr().out
 
     assert "is valid" in out
@@ -300,7 +299,26 @@ def test_validate_cli_failure(tmp_path: Path, capsys: pytest.CaptureFixture):
     dest.mkdir()
 
     with pytest.raises(SystemExit):
-        cli_main([*PROJECT_VALIDATE_TOKENS, "--path", str(dest)])
+        cli_main([*PROJECT_LAYER_TOKENS, "validate", "--path", str(dest)])
 
     out = capsys.readouterr().out
     assert "Validation failed" in out or "does not exist" in out
+
+
+def test_project_cli_legacy_aliases(monkeypatch):
+    captured: dict[str, list[str]] = {}
+
+    def fake_layer_run(argv):
+        captured.setdefault("calls", []).append(argv)
+
+    monkeypatch.setattr("qmtl.interfaces.cli.layer.run", fake_layer_run)
+
+    cli_main([*PROJECT_ROOT_TOKEN, "add-layer", "foo"])
+    cli_main([*PROJECT_ROOT_TOKEN, "list-layers", "--flag"])
+    cli_main([*PROJECT_ROOT_TOKEN, "validate", "--path", "proj"])
+
+    assert captured["calls"] == [
+        ["add", "foo"],
+        ["list", "--flag"],
+        ["validate", "--path", "proj"],
+    ]
