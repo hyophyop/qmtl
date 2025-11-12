@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import FrozenSet
-import logging
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, FrozenSet, Mapping
 
 import yaml
 
@@ -16,6 +15,35 @@ from qmtl.services.worldservice.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_GATEWAY_ALIASES: dict[str, str] = {
+    "redis_url": "redis_dsn",
+    "redis_uri": "redis_dsn",
+    "database_url": "database_dsn",
+    "database_uri": "database_dsn",
+    "controlbus_url": "controlbus_dsn",
+    "controlbus_uri": "controlbus_dsn",
+}
+
+_DAGMANAGER_ALIASES: dict[str, str] = {
+    "neo4j_url": "neo4j_dsn",
+    "neo4j_uri": "neo4j_dsn",
+    "kafka_url": "kafka_dsn",
+    "kafka_uri": "kafka_dsn",
+    "controlbus_url": "controlbus_dsn",
+    "controlbus_uri": "controlbus_dsn",
+}
+
+_WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = ("dsn", "redis", "bind", "auth")
+
+_LEGACY_WORLDSERVICE_KEYS: dict[str, str] = {
+    "worldservice_url": "url",
+    "worldservice_timeout": "timeout",
+    "worldservice_retries": "retries",
+    "enable_worldservice_proxy": "enable_proxy",
+    "enforce_live_guard": "enforce_live_guard",
+}
 
 
 @dataclass
@@ -339,8 +367,7 @@ def has_config_section(path: str, section: str) -> bool:
     return section in data
 
 
-def load_config(path: str) -> UnifiedConfig:
-    """Parse YAML/JSON and populate :class:`UnifiedConfig`."""
+def _read_config_mapping(path: str) -> dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             try:
@@ -354,132 +381,132 @@ def load_config(path: str) -> UnifiedConfig:
 
     if not isinstance(data, dict):
         raise TypeError("Unified config must be a mapping")
+    return data
 
-    gw_data = data.get("gateway", {})
-    dm_data = data.get("dagmanager", {})
-    world_data = data.get("worldservice", {})
-    seamless_data = data.get("seamless", {})
-    connectors_data = data.get("connectors", {})
-    telemetry_data = data.get("telemetry", {})
-    cache_data = data.get("cache", {})
-    runtime_data = data.get("runtime", {})
-    test_data = data.get("test", {})
+
+def _extract_sections(data: Mapping[str, Any]) -> tuple[dict[str, dict[str, Any]], FrozenSet[str]]:
     present_sections: FrozenSet[str] = frozenset(
         section
         for section in CONFIG_SECTION_NAMES
         if section in data and isinstance(data.get(section), dict)
     )
 
-    for section_name, section_data in (
-        ("gateway", gw_data),
-        ("dagmanager", dm_data),
-        ("worldservice", world_data),
-        ("seamless", seamless_data),
-        ("connectors", connectors_data),
-        ("telemetry", telemetry_data),
-        ("cache", cache_data),
-        ("runtime", runtime_data),
-        ("test", test_data),
-    ):
-        if section_data is None:
-            section_data = {}
-        if not isinstance(section_data, dict):
+    sections: dict[str, dict[str, Any]] = {}
+    for section_name in CONFIG_SECTION_NAMES:
+        raw_section = data.get(section_name, {})
+        if raw_section is None:
+            raw_section = {}
+        if not isinstance(raw_section, dict):
             raise TypeError(f"{section_name} section must be a mapping")
-        if section_name == "gateway":
-            gw_data = section_data
-        elif section_name == "dagmanager":
-            dm_data = section_data
-        elif section_name == "worldservice":
-            world_data = section_data
-        elif section_name == "seamless":
-            seamless_data = section_data
-        elif section_name == "connectors":
-            connectors_data = section_data
-        elif section_name == "telemetry":
-            telemetry_data = section_data
-        elif section_name == "cache":
-            cache_data = section_data
-        elif section_name == "runtime":
-            runtime_data = section_data
-        elif section_name == "test":
-            test_data = section_data
+        sections[section_name] = dict(raw_section)
+    return sections, present_sections
 
-    # Apply transitional aliases for connection-string keys to *_dsn
-    # Canonical keys take precedence if both are provided.
-    def _apply_aliases(section: dict, aliases: dict[str, str], *, logger_prefix: str) -> dict:
-        out = dict(section)
-        for alias, canonical in aliases.items():
-            if canonical in out:
-                continue
-            if alias in out:
-                logger.warning("%s: key '%s' is deprecated; use '%s' instead", logger_prefix, alias, canonical)
-                out[canonical] = out.pop(alias)
-        return out
 
-    gw_aliases = {
-        "redis_url": "redis_dsn",
-        "redis_uri": "redis_dsn",
-        "database_url": "database_dsn",
-        "database_uri": "database_dsn",
-        "controlbus_url": "controlbus_dsn",
-        "controlbus_uri": "controlbus_dsn",
-    }
-    dm_aliases = {
-        "neo4j_url": "neo4j_dsn",
-        "neo4j_uri": "neo4j_dsn",
-        "kafka_url": "kafka_dsn",
-        "kafka_uri": "kafka_dsn",
-        "controlbus_url": "controlbus_dsn",
-        "controlbus_uri": "controlbus_dsn",
-    }
+def _apply_aliases(section: Mapping[str, Any], aliases: Mapping[str, str], *, logger_prefix: str) -> dict[str, Any]:
+    normalized = dict(section)
+    for alias, canonical in aliases.items():
+        if canonical in normalized:
+            continue
+        if alias in normalized:
+            logger.warning(
+                "%s: key '%s' is deprecated; use '%s' instead",
+                logger_prefix,
+                alias,
+                canonical,
+            )
+            normalized[canonical] = normalized.pop(alias)
+    return normalized
 
-    gw_data = _apply_aliases(gw_data, gw_aliases, logger_prefix="gateway")
-    dm_data = _apply_aliases(dm_data, dm_aliases, logger_prefix="dagmanager")
 
-    # Backfill canonical WorldService settings from legacy Gateway keys to keep
-    # `worldservice` exports populated for configurations that have not migrated
-    # yet. Only fill values that are missing from the dedicated section so that
-    # explicit ``worldservice`` entries continue to take precedence.
-    world_data = dict(world_data)
-    server_data: Mapping[str, Any] | None = None
+def _collect_inline_worldservice_server(world_data: dict[str, Any]) -> dict[str, Any]:
     inline_server: dict[str, Any] = {}
-    for inline_key in ("dsn", "redis", "bind", "auth"):
+    for inline_key in _WORLD_INLINE_SERVER_KEYS:
         if inline_key in world_data:
             inline_server[inline_key] = world_data.pop(inline_key)
+    return inline_server
 
-    if "server" in world_data:
-        raw_server = world_data.pop("server")
-        if raw_server is None:
-            raw_server = {}
-        if not isinstance(raw_server, Mapping):
-            raise TypeError("worldservice.server must be a mapping")
-        merged_server = dict(raw_server)
-        if inline_server:
-            merged_server.update(inline_server)
-        server_data = merged_server
-    elif inline_server:
-        server_data = inline_server
-    legacy_worldservice_keys = {
-        "worldservice_url": "url",
-        "worldservice_timeout": "timeout",
-        "worldservice_retries": "retries",
-        "enable_worldservice_proxy": "enable_proxy",
-        "enforce_live_guard": "enforce_live_guard",
-    }
-    for legacy_key, canonical_key in legacy_worldservice_keys.items():
-        if canonical_key in world_data:
+
+def _merge_worldservice_server(
+    normalized_world: dict[str, Any], inline_server: dict[str, Any]
+) -> Mapping[str, Any] | None:
+    if "server" not in normalized_world:
+        return inline_server or None
+
+    raw_server = normalized_world.pop("server")
+    if raw_server is None:
+        raw_server = {}
+    if not isinstance(raw_server, Mapping):
+        raise TypeError("worldservice.server must be a mapping")
+
+    merged_server = dict(raw_server)
+    if inline_server:
+        merged_server.update(inline_server)
+    return merged_server
+
+
+def _backfill_legacy_worldservice(
+    normalized_world: dict[str, Any], gateway_data: Mapping[str, Any]
+) -> None:
+    for legacy_key, canonical_key in _LEGACY_WORLDSERVICE_KEYS.items():
+        if canonical_key in normalized_world:
             continue
-        if legacy_key in gw_data:
-            world_data[canonical_key] = gw_data[legacy_key]
+        if legacy_key in gateway_data:
+            normalized_world[canonical_key] = gateway_data[legacy_key]
 
-    # Deprecated breaker keys are no longer filtered; invalid keys should be surfaced
 
-    gateway_cfg = GatewayConfig.from_mapping(gw_data)
-    dagmanager_cfg = DagManagerConfig(**dm_data)
-    server_cfg: WorldServiceServerConfig | None = None
-    if server_data is not None:
-        server_cfg = load_worldservice_server_config(server_data)
+def _prepare_worldservice(
+    world_data: Mapping[str, Any], gateway_data: Mapping[str, Any]
+) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
+    normalized_world = dict(world_data)
+    inline_server = _collect_inline_worldservice_server(normalized_world)
+    server_data = _merge_worldservice_server(normalized_world, inline_server)
+    _backfill_legacy_worldservice(normalized_world, gateway_data)
+    return normalized_world, server_data
 
+
+def _mirror_worldservice_to_gateway(
+    world_data: Mapping[str, Any],
+    worldservice_cfg: WorldServiceConfig,
+    gateway_cfg: GatewayConfig,
+) -> None:
+    if not world_data:
+        return
+
+    if "url" in world_data:
+        gateway_cfg.worldservice_url = worldservice_cfg.url
+    if "timeout" in world_data:
+        gateway_cfg.worldservice_timeout = worldservice_cfg.timeout
+    if "retries" in world_data:
+        gateway_cfg.worldservice_retries = worldservice_cfg.retries
+    if "enable_proxy" in world_data:
+        gateway_cfg.enable_worldservice_proxy = worldservice_cfg.enable_proxy
+    if "enforce_live_guard" in world_data:
+        gateway_cfg.enforce_live_guard = worldservice_cfg.enforce_live_guard
+
+
+def load_config(path: str) -> UnifiedConfig:
+    """Parse YAML/JSON and populate :class:`UnifiedConfig`."""
+    data = _read_config_mapping(path)
+    sections, present_sections = _extract_sections(data)
+
+    gateway_data = _apply_aliases(sections["gateway"], _GATEWAY_ALIASES, logger_prefix="gateway")
+    dagmanager_data = _apply_aliases(
+        sections["dagmanager"], _DAGMANAGER_ALIASES, logger_prefix="dagmanager"
+    )
+    world_data, server_data = _prepare_worldservice(sections["worldservice"], gateway_data)
+
+    seamless_data = sections["seamless"]
+    connectors_data = sections["connectors"]
+    telemetry_data = sections["telemetry"]
+    cache_data = sections["cache"]
+    runtime_data = sections["runtime"]
+    test_data = sections["test"]
+
+    gateway_cfg = GatewayConfig.from_mapping(gateway_data)
+    dagmanager_cfg = DagManagerConfig(**dagmanager_data)
+    server_cfg = (
+        load_worldservice_server_config(server_data) if server_data is not None else None
+    )
     worldservice_cfg = WorldServiceConfig(**world_data, server=server_cfg)
     seamless_cfg = SeamlessConfig(**seamless_data)
     connectors_cfg = ConnectorsConfig(**connectors_data)
@@ -488,19 +515,7 @@ def load_config(path: str) -> UnifiedConfig:
     runtime_cfg = RuntimeConfig(**runtime_data)
     test_cfg = TestConfig(**test_data)
 
-    # Canonical WorldService settings live in the dedicated section; mirror them into
-    # the legacy Gateway fields when provided to maintain compatibility.
-    if world_data:
-        if "url" in world_data:
-            gateway_cfg.worldservice_url = worldservice_cfg.url
-        if "timeout" in world_data:
-            gateway_cfg.worldservice_timeout = worldservice_cfg.timeout
-        if "retries" in world_data:
-            gateway_cfg.worldservice_retries = worldservice_cfg.retries
-        if "enable_proxy" in world_data:
-            gateway_cfg.enable_worldservice_proxy = worldservice_cfg.enable_proxy
-        if "enforce_live_guard" in world_data:
-            gateway_cfg.enforce_live_guard = worldservice_cfg.enforce_live_guard
+    _mirror_worldservice_to_gateway(world_data, worldservice_cfg, gateway_cfg)
 
     return UnifiedConfig(
         worldservice=worldservice_cfg,
