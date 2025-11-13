@@ -63,6 +63,16 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             fallback_schema_version=fallback_schema_version,
         )
 
+        negotiated_schema_version_raw = None
+        if isinstance(plan_resp, Mapping):
+            negotiated_schema_version_raw = plan_resp.get("schema_version")
+        if isinstance(negotiated_schema_version_raw, int):
+            negotiated_schema_version = max(1, negotiated_schema_version_raw)
+        elif fallback_schema_version is not None and fallback_schema_version < preferred_schema_version:
+            negotiated_schema_version = max(1, fallback_schema_version)
+        else:
+            negotiated_schema_version = preferred_schema_version
+
         # 2) Convert per-world plans into orders
         per_world_orders: Dict[str, List[dict]] = {}
         per_world_plans = plan_resp.get("per_world", {})
@@ -143,7 +153,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
                         "code": "E_SHARED_ACCOUNT_POLICY",
                         "message": message,
@@ -224,8 +234,13 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             result["submitted"] = submitted
         else:
             result["submitted"] = False
-        result["rebalance_schema_version"] = rebalance_schema_version
-        result["alpha_metrics_capable"] = alpha_metrics_capable
+        alpha_metrics_available = bool(plan_resp.get("alpha_metrics"))
+        result["rebalance_schema_version"] = negotiated_schema_version
+        result["alpha_metrics_capable"] = bool(
+            alpha_metrics_capable
+            and negotiated_schema_version >= 2
+            and alpha_metrics_available
+        )
         return result
 
     return router
