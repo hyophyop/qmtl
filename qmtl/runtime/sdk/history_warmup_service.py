@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
 from .history_coverage import (
     WarmupWindow,
@@ -74,6 +75,28 @@ class HistoryWarmupService:
         self._history_loader = loader
 
     # ------------------------------------------------------------------
+    # Node helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _stream_inputs(strategy: Strategy) -> Iterable[Any]:
+        from .node import StreamInput
+
+        return (
+            node for node in getattr(strategy, "nodes", []) if isinstance(node, StreamInput)
+        )
+
+    @staticmethod
+    def _node_cache_rows(node: Any) -> dict[int, list[tuple[int, Any]]]:
+        snapshot_method = getattr(getattr(node, "cache", None), "_snapshot", None)
+        if not callable(snapshot_method):
+            return {}
+        snapshot = snapshot_method()
+        node_rows = snapshot.get(getattr(node, "node_id", ""), {})
+        if isinstance(node_rows, dict):
+            return node_rows
+        return {}
+
+    # ------------------------------------------------------------------
     # Snapshot helpers
     # ------------------------------------------------------------------
     @staticmethod
@@ -104,9 +127,25 @@ class HistoryWarmupService:
 
     async def _ensure_node_with_plan(self, node: Any, plan: NodeWarmupPlan) -> None:
         if plan.provider is None:
-            await node.load_history(plan.window.start, plan.window.end)
+            await self._load_node_history_range(node, plan.window.start, plan.window.end)
             return
 
+        result = await self._poll_history_provider(node, plan)
+        coverage = await self._resolve_provider_coverage(plan, result.coverage)
+
+        if getattr(node, "pre_warmup", False):
+            await self._load_pre_warmup_node(node, plan, coverage)
+        else:
+            await self._load_node_history_range(node, plan.window.start, plan.window.end)
+            if not coverage and not plan.stop_on_ready:
+                await self._fetch_provider_coverage(plan)
+
+        if plan.strict:
+            await self._validate_strict_node(node, plan)
+
+    async def _poll_history_provider(
+        self, node: Any, plan: NodeWarmupPlan
+    ) -> Any:
         poller = HistoryWarmupPoller(plan.provider)
         result = await poller.poll(
             WarmupRequest(
@@ -124,40 +163,61 @@ class HistoryWarmupService:
                 "history warm-up timed out for %s; proceeding with available data",
                 plan.node_id,
             )
+        return result
 
-        coverage = result.coverage
-        if getattr(node, "pre_warmup", False):
-            if not coverage and not plan.stop_on_ready:
-                coverage = list(
-                    await plan.provider.coverage(
-                        node_id=plan.node_id, interval=plan.interval
-                    )
-                )
-            bounds = coverage_bounds(coverage)
-            if bounds:
-                await node.load_history(bounds.start, bounds.end)
-            else:
-                await node.load_history(plan.window.start, plan.window.end)
-        else:
-            await node.load_history(plan.window.start, plan.window.end)
-            if not coverage and not plan.stop_on_ready:
-                coverage = list(
-                    await plan.provider.coverage(
-                        node_id=plan.node_id, interval=plan.interval
-                    )
-                )
+    async def _resolve_provider_coverage(
+        self, plan: NodeWarmupPlan, coverage: Any
+    ) -> list[Any]:
+        if coverage:
+            return list(coverage)
+        if plan.stop_on_ready or plan.provider is None:
+            return []
+        return await self._fetch_provider_coverage(plan)
 
-        if plan.strict:
-            coverage = list(
-                await plan.provider.coverage(
-                    node_id=plan.node_id, interval=plan.interval
-                )
-            )
-            gaps = compute_missing_ranges(coverage, plan.window)
-            if gaps or getattr(node, "pre_warmup", False):
-                raise RuntimeError(
-                    f"history gap for {plan.node_id} in strict mode"
-                )
+    async def _load_pre_warmup_node(
+        self, node: Any, plan: NodeWarmupPlan, coverage: list[Any]
+    ) -> None:
+        effective = coverage
+        if not effective and not plan.stop_on_ready:
+            effective = await self._fetch_provider_coverage(plan)
+        bounds = coverage_bounds(effective)
+        if bounds:
+            await self._load_node_history_range(node, bounds.start, bounds.end)
+            return
+        cached_bounds = self._cached_history_bounds(node, plan)
+        if cached_bounds is not None:
+            await self._load_node_history_range(node, *cached_bounds)
+            return
+        await self._load_node_history_range(node, plan.window.start, plan.window.end)
+
+    async def _fetch_provider_coverage(self, plan: NodeWarmupPlan) -> list[Any]:
+        if plan.provider is None:
+            return []
+        coverage = await plan.provider.coverage(
+            node_id=plan.node_id, interval=plan.interval
+        )
+        return list(coverage)
+
+    @staticmethod
+    async def _load_node_history_range(node: Any, start: int, end: int) -> None:
+        await node.load_history(start, end)
+
+    def _cached_history_bounds(
+        self, node: Any, plan: NodeWarmupPlan
+    ) -> tuple[int, int] | None:
+        rows = self._node_cache_rows(node).get(plan.interval, [])
+        if not rows:
+            return None
+        timestamps = [ts for ts, _ in rows]
+        if not timestamps:
+            return None
+        return min(timestamps), max(timestamps)
+
+    async def _validate_strict_node(self, node: Any, plan: NodeWarmupPlan) -> None:
+        coverage = await self._fetch_provider_coverage(plan)
+        gaps = compute_missing_ranges(coverage, plan.window)
+        if gaps or getattr(node, "pre_warmup", False):
+            raise RuntimeError(f"history gap for {plan.node_id} in strict mode")
 
     async def ensure_node_history(
         self,
@@ -210,14 +270,11 @@ class HistoryWarmupService:
     def collect_history_events(
         self, strategy: Strategy, start: int | None, end: int | None
     ) -> list[tuple[int, Any, Any]]:
-        from .node import StreamInput
-
         events: list[tuple[int, Any, Any]] = []
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
+        for node in self._stream_inputs(strategy):
+            if node.interval is None:
                 continue
-            snapshot = node.cache._snapshot().get(node.node_id, {})
-            items = snapshot.get(node.interval, []) if node.interval is not None else []
+            items = self._node_cache_rows(node).get(node.interval, [])
             for ts, payload in items:
                 if start is not None and ts < start:
                     continue
@@ -286,64 +343,105 @@ class HistoryWarmupService:
             pipeline.feed(node, ts, payload, on_missing=on_missing)
 
     def replay_events_simple(self, strategy: Strategy) -> None:
-        from .cache_view import CacheView
-        from .node import StreamInput
-
         events = self.collect_history_events(strategy, None, None)
-        by_ts: dict[int, list[tuple[StreamInput, Any]]] = {}
+        grouped = self._group_events_by_timestamp(events)
+        for ts in sorted(grouped):
+            self._replay_timestamp(strategy, ts, grouped[ts])
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _group_events_by_timestamp(
+        events: list[tuple[int, Any, Any]]
+    ) -> dict[int, list[tuple[Any, Any]]]:
+        grouped: dict[int, list[tuple[Any, Any]]] = defaultdict(list)
         for ts, node, payload in events:
-            by_ts.setdefault(ts, []).append((node, payload))
+            grouped[ts].append((node, payload))
+        return grouped
 
-        for ts in sorted(by_ts):
-            seeds = by_ts[ts]
-            event_values: dict[str, dict[int, list[tuple[int, Any]]]] = {}
-            for src, payload in seeds:
-                event_values.setdefault(src.node_id, {}).setdefault(src.interval, []).append(
-                    (ts, payload)
-                )
+    @staticmethod
+    def _initialize_event_values(
+        ts: int, seeds: list[tuple[Any, Any]]
+    ) -> dict[str, dict[int, list[tuple[int, Any]]]]:
+        event_values: dict[str, dict[int, list[tuple[int, Any]]]] = {}
+        for src, payload in seeds:
+            node_id = getattr(src, "node_id", None)
+            interval = getattr(src, "interval", None)
+            if node_id is None or interval is None:
+                continue
+            event_values.setdefault(node_id, {}).setdefault(interval, []).append((ts, payload))
+        return event_values
 
-            progressed = True
-            done: set[str] = set()
-            while progressed:
-                progressed = False
-                for node in strategy.nodes:
-                    if not getattr(node, "compute_fn", None):
-                        continue
-                    if not getattr(node, "execute", True):
-                        continue
-                    inputs = getattr(node, "inputs", [])
-                    if not inputs:
-                        continue
-                    node_id = getattr(node, "node_id", None)
-                    if node_id is None or node_id in done:
-                        continue
-                    ready = True
-                    iterable = inputs if isinstance(inputs, list) else [inputs]
-                    for upstream in iterable:
-                        if upstream is None:
-                            continue
-                        uid = getattr(upstream, "node_id", None)
-                        interval = getattr(upstream, "interval", None)
-                        if uid is None or interval is None:
-                            continue
-                        if uid not in event_values or interval not in event_values[uid]:
-                            ready = False
-                            break
-                    if not ready:
-                        continue
-                    view = CacheView(event_values)
-                    result = node.compute_fn(view)
-                    from .runner import Runner
+    @staticmethod
+    def _should_process_node(node: Any, done: set[str]) -> bool:
+        if not getattr(node, "compute_fn", None):
+            return False
+        if not getattr(node, "execute", True):
+            return False
+        inputs = getattr(node, "inputs", [])
+        if not inputs:
+            return False
+        node_id = getattr(node, "node_id", None)
+        return node_id is not None and node_id not in done
 
-                    Runner._postprocess_result(node, result)
-                    n_uid = getattr(node, "node_id", None)
-                    interval = getattr(node, "interval", None)
-                    if n_uid is not None and interval is not None:
-                        event_values.setdefault(n_uid, {}).setdefault(interval, []).append(
-                            (ts, result)
-                        )
-                        done.add(n_uid)
-                        progressed = True
+    @staticmethod
+    def _node_inputs_ready(node: Any, event_values: dict[str, dict[int, list[tuple[int, Any]]]]) -> bool:
+        inputs = getattr(node, "inputs", [])
+        iterable = inputs if isinstance(inputs, list) else [inputs]
+        for upstream in iterable:
+            if upstream is None:
+                continue
+            uid = getattr(upstream, "node_id", None)
+            interval = getattr(upstream, "interval", None)
+            if uid is None or interval is None:
+                continue
+            if uid not in event_values or interval not in event_values[uid]:
+                return False
+        return True
+
+    @staticmethod
+    def _execute_node(node: Any, event_values: dict[str, dict[int, list[tuple[int, Any]]]]) -> Any:
+        from .cache_view import CacheView
+        from .runner import Runner
+
+        view = CacheView(event_values)
+        result = node.compute_fn(view)
+        Runner._postprocess_result(node, result)
+        return result
+
+    @staticmethod
+    def _record_node_result(
+        node: Any,
+        ts: int,
+        result: Any,
+        event_values: dict[str, dict[int, list[tuple[int, Any]]]],
+        done: set[str],
+    ) -> None:
+        node_id = getattr(node, "node_id", None)
+        interval = getattr(node, "interval", None)
+        if node_id is None or interval is None:
+            return
+        event_values.setdefault(node_id, {}).setdefault(interval, []).append((ts, result))
+        done.add(node_id)
+
+    def _replay_timestamp(
+        self,
+        strategy: Strategy,
+        ts: int,
+        seeds: list[tuple[Any, Any]],
+    ) -> None:
+        event_values = self._initialize_event_values(ts, seeds)
+        done: set[str] = set()
+        progressed = True
+        while progressed:
+            progressed = False
+            for node in getattr(strategy, "nodes", []):
+                if not self._should_process_node(node, done):
+                    continue
+                if not self._node_inputs_ready(node, event_values):
+                    continue
+                result = self._execute_node(node, event_values)
+                self._record_node_result(node, ts, result, event_values, done)
+                progressed = True
 
     # ------------------------------------------------------------------
     async def warmup_strategy(
@@ -378,20 +476,16 @@ class HistoryWarmupService:
             await self._enforce_strict_mode(strategy)
 
     async def _enforce_strict_mode(self, strategy: Strategy) -> None:
-        from .node import StreamInput
-
-        for node in strategy.nodes:
-            if isinstance(node, StreamInput) and getattr(node, "pre_warmup", False):
+        for node in self._stream_inputs(strategy):
+            if getattr(node, "pre_warmup", False):
                 raise RuntimeError("history pre-warmup unresolved in strict mode")
 
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
-                continue
+        for node in self._stream_inputs(strategy):
             provider = getattr(node, "history_provider", None)
             if provider is None:
                 continue
             try:
-                snapshot = node.cache._snapshot()[node.node_id].get(node.interval, [])
+                snapshot = self._node_cache_rows(node).get(node.interval, [])
                 ts_sorted = sorted(ts for ts, _ in snapshot)
             except KeyError as exc:
                 raise RuntimeError("history missing in strict mode") from exc
@@ -413,13 +507,9 @@ class HistoryWarmupService:
         stop_on_ready: bool,
         strict: bool,
     ) -> list[tuple[Any, NodeWarmupPlan]]:
-        from .node import StreamInput
-
         now = self._resolve_now()
         plans: list[tuple[Any, NodeWarmupPlan]] = []
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
-                continue
+        for node in self._stream_inputs(strategy):
             window = self._resolve_node_window(node, start, end, now)
             if window is None:
                 continue
@@ -468,13 +558,11 @@ class HistoryWarmupService:
         history_start: Any | None,
         history_end: Any | None,
     ) -> StrategyWarmupPlan:
-        from .node import StreamInput
         from . import runtime as _runtime
 
         has_provider = any(
-            isinstance(node, StreamInput)
-            and getattr(node, "history_provider", None) is not None
-            for node in strategy.nodes
+            getattr(node, "history_provider", None) is not None
+            for node in self._stream_inputs(strategy)
         )
 
         strict_mode = bool(_runtime.FAIL_ON_HISTORY_GAP)
@@ -501,16 +589,10 @@ class HistoryWarmupService:
 
     @staticmethod
     def _has_cached_history(strategy: Strategy) -> bool:
-        from .node import StreamInput
-
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
+        for node in HistoryWarmupService._stream_inputs(strategy):
+            if node.interval is None:
                 continue
-            try:
-                snapshot = node.cache._snapshot()[node.node_id].get(node.interval, [])
-            except KeyError:
-                continue
-            if snapshot:
+            if HistoryWarmupService._node_cache_rows(node).get(node.interval):
                 return True
         return False
 

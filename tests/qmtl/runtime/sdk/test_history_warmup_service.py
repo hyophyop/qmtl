@@ -130,3 +130,61 @@ async def test_history_service_with_provider_and_strict(monkeypatch):
     assert recorded == [(None, None, True, True)]
     assert replay_calls == [(None, None)]
     assert strict_calls == [strategy]
+
+
+def test_replay_events_simple_orders_dependencies():
+    class TestStream(StreamInput):
+        def __init__(self, node_id_value: str, **kwargs) -> None:
+            self._node_id_override = node_id_value
+            super().__init__(**kwargs)
+
+        @property
+        def node_id(self) -> str:  # type: ignore[override]
+            return self._node_id_override
+
+    service = HistoryWarmupService()
+    src_a = TestStream("src_a", tags=["A"], interval=60, period=3)
+    src_b = TestStream("src_b", tags=["B"], interval=60, period=3)
+    src_a.cache.append(src_a.node_id, src_a.interval, 60, 1)
+    src_b.cache.append(src_b.node_id, src_b.interval, 60, 2)
+
+    adder_results: list[int] = []
+    aggregator_results: list[int] = []
+
+    class AdderNode:
+        def __init__(self) -> None:
+            self.node_id = "adder"
+            self.interval = 60
+            self.inputs = [src_a, src_b]
+            self.compute_fn = self._compute
+            self.execute = True
+
+        def _compute(self, view):
+            left = view[src_a.node_id][src_a.interval][-1][1]
+            right = view[src_b.node_id][src_b.interval][-1][1]
+            result = left + right
+            adder_results.append(result)
+            return result
+
+    class AggregatorNode:
+        def __init__(self, upstream) -> None:
+            self.node_id = "aggregator"
+            self.interval = 60
+            self.inputs = [upstream]
+            self.compute_fn = self._compute
+            self.execute = True
+
+        def _compute(self, view):
+            latest = view[adder.node_id][adder.interval][-1][1]
+            doubled = latest * 2
+            aggregator_results.append(doubled)
+            return doubled
+
+    adder = AdderNode()
+    aggregator = AggregatorNode(adder)
+    strategy = types.SimpleNamespace(nodes=[src_a, src_b, adder, aggregator])
+
+    service.replay_events_simple(strategy)
+
+    assert adder_results == [3]
+    assert aggregator_results == [6]
