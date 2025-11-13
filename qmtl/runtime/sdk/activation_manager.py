@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Optional
 
 import httpx
 
-from qmtl.runtime.helpers import parse_activation_update
+from qmtl.runtime.helpers import ActivationMetadata, ActivationUpdate, parse_activation_update
 
 from .ws_client import WebSocketClient
 from . import runtime
@@ -110,115 +111,70 @@ class ActivationManager:
         self.state.freeze = bool(self.state.long.freeze or self.state.short.freeze)
         self.state.drain = bool(self.state.long.drain or self.state.short.drain)
 
-    async def _on_message(self, data: dict) -> None:
-        payload = self._extract_activation_payload(data)
-        if payload is None:
+    async def _on_message(self, data: Mapping[str, object]) -> None:
+        update = self._parse_activation_event(data)
+        if update is None:
             return
 
-        update = parse_activation_update(payload)
+        self._apply_activation_update(update)
 
-        meta = update.metadata
-        if meta.etag is not None:
-            self.state.etag = meta.etag
-        if meta.run_id is not None:
-            self.state.run_id = meta.run_id
-        if meta.ts is not None:
-            self.state.ts = meta.ts
-        if meta.state_hash is not None:
-            self.state.state_hash = meta.state_hash
-        if meta.version is not None:
-            self.state.version = meta.version
-        if meta.effective_mode is not None:
-            self.state.effective_mode = meta.effective_mode
+    def _parse_activation_event(self, data: Mapping[str, object]) -> ActivationUpdate | None:
+        payload = self._extract_activation_payload(data)
+        if payload is None:
+            return None
+        return parse_activation_update(payload)
 
-        target: SideState | None = None
-        if update.side == "long":
-            target = self.state.long
-        elif update.side == "short":
-            target = self.state.short
-
-        if target is not None:
-            if update.active is not None:
-                target.active = update.active
-            if update.freeze is not None:
-                target.freeze = update.freeze
-            if update.drain is not None:
-                target.drain = update.drain
-            if update.weight is not None:
-                target.weight = update.weight
-            elif update.active is not None:
-                target.weight = 1.0 if update.active else 0.0
-        else:
-            if update.freeze is not None:
-                self.state.long.freeze = update.freeze
-                self.state.short.freeze = update.freeze
-            if update.drain is not None:
-                self.state.long.drain = update.drain
-                self.state.short.drain = update.drain
-
-        self.state.stale = False
-        self._recompute_global_modes()
-
-    def _extract_activation_payload(self, data: dict) -> dict | None:
+    def _extract_activation_payload(self, data: Mapping[str, object]) -> Mapping[str, object] | None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
-        if not isinstance(payload, dict):
+        if not isinstance(payload, Mapping):
             return None
         if event == "activation_updated" or payload.get("type") == "ActivationUpdated":
             return payload
         return None
 
-    def _update_activation_metadata(self, payload: dict) -> None:
-        self.state.etag = payload.get("etag") or self.state.etag
-        self.state.run_id = payload.get("run_id") or self.state.run_id
-        self.state.ts = payload.get("ts") or self.state.ts
-        self.state.state_hash = payload.get("state_hash") or self.state.state_hash
-        eff_mode = payload.get("effective_mode")
-        if eff_mode:
-            self.state.effective_mode = eff_mode
+    def _apply_activation_update(self, update: ActivationUpdate) -> None:
+        self._update_activation_metadata(update.metadata)
 
-        ver = payload.get("version")
-        if ver is not None:
-            try:
-                self.state.version = int(ver)
-            except (TypeError, ValueError):
-                pass
+        target = self._select_side_state(update.side)
+        if target is not None:
+            self._apply_side_update(target, update)
+        else:
+            self._apply_global_update(update.freeze, update.drain)
 
-    def _select_side_state(self, side: str) -> SideState | None:
+        self.state.stale = False
+        self._recompute_global_modes()
+
+    def _update_activation_metadata(self, metadata: ActivationMetadata) -> None:
+        if metadata.etag is not None:
+            self.state.etag = metadata.etag
+        if metadata.run_id is not None:
+            self.state.run_id = metadata.run_id
+        if metadata.ts is not None:
+            self.state.ts = metadata.ts
+        if metadata.state_hash is not None:
+            self.state.state_hash = metadata.state_hash
+        if metadata.version is not None:
+            self.state.version = metadata.version
+        if metadata.effective_mode is not None:
+            self.state.effective_mode = metadata.effective_mode
+
+    def _select_side_state(self, side: str | None) -> SideState | None:
         if side == "long":
             return self.state.long
         if side == "short":
             return self.state.short
         return None
 
-    def _normalize_flag(self, value: object | None) -> bool | None:
-        if value is None:
-            return None
-        return bool(value)
-
-    def _normalize_weight(self, weight: object | None, active: bool) -> float | None:
-        if weight is None:
-            return 1.0 if active else 0.0
-        try:
-            return float(weight)
-        except (TypeError, ValueError):
-            return None
-
-    def _apply_side_update(
-        self,
-        target: SideState,
-        active: bool,
-        freeze: bool | None,
-        drain: bool | None,
-        weight: float | None,
-    ) -> None:
-        target.active = active
-        if freeze is not None:
-            target.freeze = freeze
-        if drain is not None:
-            target.drain = drain
-        if weight is not None:
-            target.weight = weight
+    def _apply_side_update(self, target: SideState, update: ActivationUpdate) -> None:
+        if update.active is not None:
+            target.active = update.active
+        if update.freeze is not None:
+            target.freeze = update.freeze
+        if update.drain is not None:
+            target.drain = update.drain
+        if update.weight is not None:
+            target.weight = update.weight
 
     def _apply_global_update(self, freeze: bool | None, drain: bool | None) -> None:
         if freeze is not None:
