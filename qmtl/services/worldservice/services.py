@@ -371,9 +371,9 @@ class WorldService:
                 payload, etag, world_ids, world_alloc_before, strategy_before
             )
             await self._persist_allocation_plan(plan)
+            plan = await self._execute_allocation_plan(plan)
 
         assert plan is not None
-        plan = await self._execute_allocation_plan(plan)
 
         response = AllocationUpsertResponse(
             run_id=payload.run_id,
