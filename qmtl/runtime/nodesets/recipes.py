@@ -64,6 +64,116 @@ from qmtl.services.gateway.commit_log import CommitLogWriter
 _MISSING = object()
 
 
+def _seed_execution_resources(
+    resources: Any,
+    *,
+    initial_cash: float,
+) -> tuple[Any, Callable[[Mapping[str, Any]], float] | None]:
+    """Return portfolio resources after seeding the initial cash balance."""
+
+    portfolio = getattr(resources, "portfolio", None)
+    if portfolio is not None and getattr(portfolio, "cash", 0.0) <= 0.0:
+        portfolio.cash = float(initial_cash)
+
+    weight_fn = getattr(resources, "weight_fn", None)
+    return portfolio, weight_fn
+
+
+def _build_intent_node(
+    upstream: Node,
+    *,
+    symbol: str,
+    thresholds: Thresholds,
+    long_weight: float,
+    short_weight: float,
+    hold_weight: float,
+    price_node: Node | None,
+    price_resolver: Callable[[CacheView], float | None] | None,
+    world_id: str,
+) -> PositionTargetNode:
+    """Construct and configure the intent node."""
+
+    intent = PositionTargetNode(
+        upstream,
+        symbol=symbol,
+        thresholds=thresholds,
+        long_weight=long_weight,
+        short_weight=short_weight,
+        hold_weight=hold_weight,
+        to_order=True,
+        price_node=price_node,
+        price_resolver=price_resolver,
+    )
+    setattr(intent, "world_id", world_id)
+    return intent
+
+
+def _create_intent_guard_node(
+    intent: PositionTargetNode,
+    *,
+    portfolio: Any,
+    weight_fn: Callable[[Mapping[str, Any]], float] | None,
+    world_id: str,
+) -> Node:
+    """Return a guard node that sizes missing quantities for intents."""
+
+    def _guard_quantity(view: CacheView) -> dict | None:
+        data = view[intent][intent.interval]
+        if not data:
+            return None
+        _, payload = data[-1]
+        order = dict(payload)
+        sized_order: dict | None = order
+        if portfolio is not None and "quantity" not in order:
+            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
+        if sized_order is None:
+            return None
+        if "quantity" not in sized_order:
+            sized_order = dict(sized_order)
+            sized_order.setdefault("quantity", 0.0)
+        return sized_order
+
+    guard = Node(
+        input=intent,
+        compute_fn=_guard_quantity,
+        name=f"{intent.name}_intent_pretrade_guard",
+        interval=intent.interval,
+        period=1,
+    )
+    setattr(guard, "world_id", world_id)
+    return guard
+
+
+def _wrap_pretrade_gate_output(
+    gate: Node,
+    *,
+    intent: PositionTargetNode,
+    guard: Node,
+) -> Node:
+    """Wrap the pre-trade gate output, stripping internal sizing fields."""
+
+    def _strip_quantity(view: CacheView) -> dict | None:
+        data = view[gate][gate.interval]
+        if not data:
+            return None
+        _, payload = data[-1]
+        order = dict(payload)
+        order.pop("quantity", None)
+        return order
+
+    stage = Node(
+        input=gate,
+        compute_fn=_strip_quantity,
+        name=f"{gate.name}_sanitized",
+        interval=gate.interval,
+        period=1,
+    )
+    setattr(stage, "intent_node", intent)
+    setattr(stage, "pretrade_node", gate)
+    setattr(stage, "_intent_guard_node", guard)
+    return stage
+
+
 @dataclass(frozen=True)
 class AdapterParameter:
     """Declarative description of an adapter configuration parameter."""
@@ -348,48 +458,26 @@ def _intent_pretrade_factory(
     world_id: str,
     initial_cash: float,
 ) -> Node:
-    portfolio = getattr(resources, "portfolio", None)
-    weight_fn = getattr(resources, "weight_fn", None)
-    if portfolio is not None and getattr(portfolio, "cash", 0.0) <= 0.0:
-        portfolio.cash = float(initial_cash)
+    portfolio, weight_fn = _seed_execution_resources(resources, initial_cash=initial_cash)
 
-    intent = PositionTargetNode(
+    intent = _build_intent_node(
         upstream,
         symbol=symbol,
         thresholds=thresholds,
         long_weight=long_weight,
         short_weight=short_weight,
         hold_weight=hold_weight,
-        to_order=True,
         price_node=price_node,
         price_resolver=price_resolver,
+        world_id=world_id,
     )
-    setattr(intent, "world_id", world_id)
 
-    def _guard_quantity(view: CacheView) -> dict | None:
-        data = view[intent][intent.interval]
-        if not data:
-            return None
-        _, payload = data[-1]
-        order = dict(payload)
-        sized_order: dict | None = order
-        if portfolio is not None and "quantity" not in order:
-            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
-        if sized_order is None:
-            return None
-        if "quantity" not in sized_order:
-            sized_order = dict(sized_order)
-            sized_order.setdefault("quantity", 0.0)
-        return sized_order
-
-    guard = Node(
-        input=intent,
-        compute_fn=_guard_quantity,
-        name=f"{intent.name}_intent_pretrade_guard",
-        interval=intent.interval,
-        period=1,
+    guard = _create_intent_guard_node(
+        intent,
+        portfolio=portfolio,
+        weight_fn=weight_fn,
+        world_id=world_id,
     )
-    setattr(guard, "world_id", world_id)
 
     resolved_activation = activation_map or _default_activation(symbol)
     resolved_brokerage = brokerage or _default_brokerage()
@@ -403,26 +491,11 @@ def _intent_pretrade_factory(
     )
     setattr(gate, "world_id", world_id)
 
-    def _strip_quantity(view: CacheView) -> dict | None:
-        data = view[gate][gate.interval]
-        if not data:
-            return None
-        _, payload = data[-1]
-        order = dict(payload)
-        order.pop("quantity", None)
-        return order
-
-    stage = Node(
-        input=gate,
-        compute_fn=_strip_quantity,
-        name=f"{gate.name}_sanitized",
-        interval=gate.interval,
-        period=1,
+    return _wrap_pretrade_gate_output(
+        gate,
+        intent=intent,
+        guard=guard,
     )
-    setattr(stage, "intent_node", intent)
-    setattr(stage, "pretrade_node", gate)
-    setattr(stage, "_intent_guard_node", guard)
-    return stage
 
 
 INTENT_FIRST_DESCRIPTOR = NodeSetDescriptor(
