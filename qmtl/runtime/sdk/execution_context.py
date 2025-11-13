@@ -8,21 +8,14 @@ module extracts the pure functions so they can be imported and tested in
 isolation without initializing Runner singletons.
 """
 
-from dataclasses import dataclass
 from typing import Mapping, MutableMapping
 
-from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
-
-_VALID_MODES = {"backtest", "dryrun", "live"}
-_CLOCKS = {"virtual", "wall"}
-
-
-@dataclass(frozen=True)
-class ExecutionContextResolution:
-    """Result of resolving an execution context."""
-
-    context: dict[str, str]
-    force_offline: bool
+from qmtl.runtime.helpers import (
+    ExecutionContextResolution,
+    apply_temporal_requirements,
+    determine_execution_mode,
+    normalize_clock_value,
+)
 
 
 def normalize_default_context(context: Mapping[str, str] | None) -> dict[str, str] | None:
@@ -44,37 +37,6 @@ def normalize_default_context(context: Mapping[str, str] | None) -> dict[str, st
         normalized[str(key)] = str(value)
 
     return normalized or None
-
-
-def _mode_from_domain(domain: str | None) -> str | None:
-    if not domain:
-        return None
-    key = str(domain).strip().lower()
-    if key == DEFAULT_EXECUTION_DOMAIN:
-        return None
-    if key in _VALID_MODES:
-        return key
-    return None
-
-
-def _normalize_mode(value: str | None) -> str:
-    if value is None:
-        raise ValueError("execution_mode must be provided")
-    mode = str(value).strip().lower()
-    if mode not in _VALID_MODES:
-        raise ValueError("execution_mode must be one of 'backtest', 'dryrun', or 'live'")
-    return mode
-
-
-def _validate_clock(value: object, *, expected: str, mode: str | None = None) -> str:
-    cval = str(value).strip().lower()
-    if cval not in _CLOCKS:
-        raise ValueError("clock must be one of 'virtual' or 'wall'")
-    if cval != expected:
-        if mode:
-            raise ValueError(f"{mode} runs require '{expected}' clock but received '{value}'")
-        raise ValueError(f"runs require '{expected}' clock but received '{value}'")
-    return cval
 
 
 def merge_context(base: MutableMapping[str, str], source: Mapping[str, str] | None) -> None:
@@ -115,84 +77,28 @@ def resolve_execution_context(
 
     merge_context(merged, context)
 
-    mode: str | None = None
-    if execution_mode is not None:
-        mode = _normalize_mode(execution_mode)
-    else:
-        derived = _mode_from_domain(execution_domain)
-        if derived is not None:
-            mode = derived
-    if mode is None:
-        domain_hint = merged.get("execution_domain")
-        if domain_hint:
-            derived = _mode_from_domain(domain_hint)
-            if derived is not None:
-                mode = derived
-    if mode is None:
-        existing = merged.get("execution_mode")
-        if existing:
-            mode = _normalize_mode(existing)
-    if mode is None:
-        if trade_mode == "live" and not offline_requested:
-            mode = "live"
-        elif gateway_url and not offline_requested:
-            mode = "live"
-        else:
-            mode = "backtest"
+    mode = determine_execution_mode(
+        explicit_mode=execution_mode,
+        execution_domain=execution_domain,
+        merged_context=merged,
+        trade_mode=trade_mode,
+        offline_requested=offline_requested,
+        gateway_url=gateway_url,
+    )
 
     merged["execution_mode"] = mode
     merged["execution_domain"] = mode
 
-    expected_clock = "wall" if mode == "live" else "virtual"
-    if clock is not None:
-        merged["clock"] = _validate_clock(clock, expected=expected_clock, mode=mode)
-    else:
-        existing_clock = merged.get("clock")
-        if existing_clock is not None:
-            merged["clock"] = _validate_clock(
-                existing_clock, expected=expected_clock, mode=mode
-            )
-        else:
-            merged["clock"] = expected_clock
+    normalize_clock_value(merged, clock=clock, mode=mode)
 
-    if as_of is not None:
-        text = str(as_of).strip()
-        if text:
-            merged["as_of"] = text
-        else:
-            merged.pop("as_of", None)
-    elif "as_of" in merged:
-        text = str(merged["as_of"]).strip()
-        if text:
-            merged["as_of"] = text
-        else:
-            merged.pop("as_of", None)
-
-    if dataset_fingerprint is not None:
-        text = str(dataset_fingerprint).strip()
-        if text:
-            merged["dataset_fingerprint"] = text
-        else:
-            merged.pop("dataset_fingerprint", None)
-    elif "dataset_fingerprint" in merged:
-        text = str(merged["dataset_fingerprint"]).strip()
-        if text:
-            merged["dataset_fingerprint"] = text
-        else:
-            merged.pop("dataset_fingerprint", None)
-
-    force_offline = False
-    if mode != "live":
-        has_as_of = bool(merged.get("as_of"))
-        has_dataset = bool(merged.get("dataset_fingerprint"))
-        if not (has_as_of and has_dataset):
-            if gateway_url and not offline_requested:
-                force_offline = True
-            merged.pop("as_of", None)
-            merged.pop("dataset_fingerprint", None)
-    else:
-        merged.pop("as_of", None)
-        merged.pop("dataset_fingerprint", None)
+    force_offline = apply_temporal_requirements(
+        merged,
+        mode=mode,
+        as_of=as_of,
+        dataset_fingerprint=dataset_fingerprint,
+        gateway_url=gateway_url,
+        offline_requested=offline_requested,
+    )
 
     return ExecutionContextResolution(context=merged, force_offline=force_offline)
 
