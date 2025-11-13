@@ -116,3 +116,51 @@ async def test_execute_contract_v2_plan(gateway_app_factory):
     assert payload["rebalance_schema_version"] == 2
     assert payload["alpha_metrics_capable"] is True
     assert observed_versions == [2]
+
+
+@pytest.mark.asyncio
+async def test_execute_contract_reports_downgraded_version_on_fallback(
+    gateway_app_factory,
+):
+    """When WorldService rejects v2, Gateway should downgrade the reported version."""
+
+    plan_fixture_v1 = {
+        "schema_version": 1,
+        "per_world": {
+            "w1": {
+                "world_id": "w1",
+                "scale_world": 1.0,
+                "scale_by_strategy": {},
+                "deltas": [],
+            }
+        },
+        "global_deltas": [],
+    }
+
+    observed_versions: list[int | None] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = json.loads(request.content.decode())
+            observed_versions.append(body.get("schema_version"))
+            if len(observed_versions) == 1:
+                return httpx.Response(400, json={"detail": "unsupported schema"})
+            return httpx.Response(200, json=plan_fixture_v1)
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "simulate"}})
+        if request.method == "GET" and request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(
+        handler,
+        app_kwargs={"rebalance_schema_version": 2, "alpha_metrics_capable": True},
+    ) as ctx:
+        resp = await ctx.client.post("/rebalancing/execute", json=_default_payload())
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["rebalance_schema_version"] == 1
+    assert payload["alpha_metrics_capable"] is False
+    assert observed_versions == [2, None]
+

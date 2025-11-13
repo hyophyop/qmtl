@@ -136,7 +136,7 @@ async def test_rebalancing_execute_prefers_gateway_schema_version(gateway_app_fa
 
 @pytest.mark.asyncio
 async def test_rebalancing_execute_falls_back_when_worldservice_rejects(gateway_app_factory):
-    attempts: list[int] = []
+    attempts: list[int | None] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and request.url.path == "/rebalancing/plan":
@@ -170,7 +170,7 @@ async def test_rebalancing_execute_falls_back_when_worldservice_rejects(gateway_
         )
 
     assert resp.status_code == 200
-    assert attempts == [2, 1]
+    assert attempts == [2, None]
 
 
 @pytest.mark.asyncio
