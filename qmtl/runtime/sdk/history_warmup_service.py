@@ -68,6 +68,97 @@ class StrategyWarmupPlan:
     enforce_strict: bool
 
 
+@dataclass(frozen=True)
+class _HistoryWindow:
+    start: int | None
+    end: int | None
+
+    @classmethod
+    def coerce(cls, start: Any | None, end: Any | None) -> _HistoryWindow:
+        coerced_start = start if isinstance(start, int) else None
+        coerced_end = end if isinstance(end, int) else None
+        return cls(start=coerced_start, end=coerced_end)
+
+    def is_defined(self) -> bool:
+        return self.start is not None and self.end is not None
+
+    def is_empty(self) -> bool:
+        return self.start is None and self.end is None
+
+
+@dataclass(frozen=True)
+class _WarmupEnvironment:
+    offline_mode: bool
+    strict_mode: bool
+    has_provider: bool
+    has_cached_history: bool
+
+
+@dataclass(frozen=True)
+class _WarmupNodeInventory:
+    has_provider: bool
+    has_cached_history: bool
+
+    @classmethod
+    def collect(
+        cls, service: HistoryWarmupService, strategy: Strategy
+    ) -> _WarmupNodeInventory:
+        has_provider = False
+        has_cached_history = False
+        for node in service._stream_inputs(strategy):
+            if not has_provider and getattr(node, "history_provider", None) is not None:
+                has_provider = True
+            if not has_cached_history:
+                interval = getattr(node, "interval", None)
+                if interval is not None and service._node_cache_rows(node).get(interval):
+                    has_cached_history = True
+            if has_provider and has_cached_history:
+                break
+        return cls(has_provider=has_provider, has_cached_history=has_cached_history)
+
+
+class _WarmupPlanBuilder:
+    def __init__(
+        self,
+        environment: _WarmupEnvironment,
+        history_start: Any | None,
+        history_end: Any | None,
+    ) -> None:
+        self._environment = environment
+        self._requested_window = _HistoryWindow.coerce(history_start, history_end)
+
+    def build(self) -> tuple[_HistoryWindow, bool]:
+        window = self._apply_offline_baseline(self._requested_window)
+        ensure_history = self._requires_history(window)
+        if self._needs_bootstrap(ensure_history):
+            window = self._baseline_window()
+            ensure_history = True
+        return window, ensure_history
+
+    def _apply_offline_baseline(self, window: _HistoryWindow) -> _HistoryWindow:
+        if (
+            self._environment.offline_mode
+            and window.is_empty()
+            and not self._environment.has_provider
+        ):
+            return self._baseline_window()
+        return window
+
+    def _requires_history(self, window: _HistoryWindow) -> bool:
+        return self._environment.has_provider or window.is_defined()
+
+    def _needs_bootstrap(self, ensure_history: bool) -> bool:
+        return (
+            self._environment.offline_mode
+            and not ensure_history
+            and not self._environment.has_cached_history
+        )
+
+    @staticmethod
+    def _baseline_window() -> _HistoryWindow:
+        return _HistoryWindow(start=1, end=2)
+
+
 class HistoryWarmupService:
     """Coordinate history hydration, replay and strict validation."""
 
@@ -415,19 +506,13 @@ class HistoryWarmupService:
         result: Any,
         event_values: dict[str, dict[int, list[tuple[int, Any]]]],
         done: set[str],
-    ) -> bool:
+    ) -> None:
         node_id = getattr(node, "node_id", None)
-        if node_id is None:
-            return False
-
-        done.add(node_id)
-
         interval = getattr(node, "interval", None)
-        if interval is None:
-            return True
-
+        if node_id is None or interval is None:
+            return
         event_values.setdefault(node_id, {}).setdefault(interval, []).append((ts, result))
-        return True
+        done.add(node_id)
 
     def _replay_timestamp(
         self,
@@ -446,8 +531,8 @@ class HistoryWarmupService:
                 if not self._node_inputs_ready(node, event_values):
                     continue
                 result = self._execute_node(node, event_values)
-                if self._record_node_result(node, ts, result, event_values, done):
-                    progressed = True
+                self._record_node_result(node, ts, result, event_values, done)
+                progressed = True
 
     # ------------------------------------------------------------------
     async def warmup_strategy(
@@ -566,41 +651,24 @@ class HistoryWarmupService:
     ) -> StrategyWarmupPlan:
         from . import runtime as _runtime
 
-        has_provider = any(
-            getattr(node, "history_provider", None) is not None
-            for node in self._stream_inputs(strategy)
+        inventory = _WarmupNodeInventory.collect(self, strategy)
+        environment = _WarmupEnvironment(
+            offline_mode=offline_mode,
+            strict_mode=bool(_runtime.FAIL_ON_HISTORY_GAP),
+            has_provider=inventory.has_provider,
+            has_cached_history=inventory.has_cached_history,
         )
-
-        strict_mode = bool(_runtime.FAIL_ON_HISTORY_GAP)
-
-        start = history_start if isinstance(history_start, int) else None
-        end = history_end if isinstance(history_end, int) else None
-
-        if offline_mode and start is None and end is None and not has_provider:
-            start, end = 1, 2
-
-        ensure_history = has_provider or (start is not None and end is not None)
-        if offline_mode and not ensure_history and not self._has_cached_history(strategy):
-            start, end = 1, 2
-            ensure_history = True
+        window, ensure_history = _WarmupPlanBuilder(
+            environment, history_start, history_end
+        ).build()
 
         return StrategyWarmupPlan(
             ensure_history=ensure_history,
-            start=start,
-            end=end,
-            strict_mode=strict_mode,
-            needs_replay=offline_mode and has_provider,
-            enforce_strict=offline_mode and strict_mode,
+            start=window.start,
+            end=window.end,
+            strict_mode=environment.strict_mode,
+            needs_replay=offline_mode and inventory.has_provider,
+            enforce_strict=offline_mode and environment.strict_mode,
         )
-
-    @staticmethod
-    def _has_cached_history(strategy: Strategy) -> bool:
-        for node in HistoryWarmupService._stream_inputs(strategy):
-            if node.interval is None:
-                continue
-            if HistoryWarmupService._node_cache_rows(node).get(node.interval):
-                return True
-        return False
-
 
 __all__ = ["HistoryWarmupService"]
