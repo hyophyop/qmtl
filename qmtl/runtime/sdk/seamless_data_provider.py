@@ -10,6 +10,7 @@ from typing import (
     Any,
     Sequence,
     Mapping,
+    MutableMapping,
     Literal,
 )
 from abc import ABC
@@ -579,6 +580,14 @@ class SeamlessDataProvider(ABC):
             self._create_fingerprint_window
         )
         self._live_as_of_state: dict[tuple[str, str], str] = {}
+        self._domain_gate_evaluator = _DomainGateEvaluator(
+            merge_decisions=self._merge_decisions,
+            compute_coverage_ratio=self._compute_coverage_ratio,
+            compute_staleness_ms=self._compute_staleness_ms,
+            compare_as_of=self._compare_as_of,
+            live_state=self._live_as_of_state,
+            logger=logger,
+        )
 
         mode_value = str(config.fingerprint_mode or "").strip().lower()
         legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
@@ -1181,132 +1190,12 @@ class SeamlessDataProvider(ABC):
         node_id: str,
         interval: int,
     ) -> _DowngradeDecision | None:
-        domain = context.execution_domain
-        if domain in {"backtest", "dryrun"}:
-            if context.requested_as_of is None:
-                logger.error(
-                    "seamless.domain_gate.missing_as_of",
-                    extra={
-                        "node_id": node_id,
-                        "interval": interval,
-                        "execution_domain": domain,
-                        "world_id": context.world_id,
-                    },
-                )
-                raise SeamlessDomainPolicyError("as_of is required for backtest/dryrun domains")
-            if metadata.artifact is None and metadata.manifest_uri is None:
-                logger.error(
-                    "seamless.domain_gate.missing_artifact",
-                    extra={
-                        "node_id": node_id,
-                        "interval": interval,
-                        "execution_domain": domain,
-                        "world_id": context.world_id,
-                    },
-                )
-                raise SeamlessDomainPolicyError(
-                    "artifact-backed data is required for backtest/dryrun domains"
-                )
-            return None
-
-        if domain in {"live", "shadow"}:
-            coverage_ratio = metadata.coverage_ratio
-            if coverage_ratio is None:
-                coverage_ratio = self._compute_coverage_ratio(metadata)
-            staleness_ms = metadata.staleness_ms
-            if staleness_ms is None:
-                staleness_ms = self._compute_staleness_ms(metadata)
-
-            decision: _DowngradeDecision | None = None
-            key = (context.world_id, node_id)
-            requested_as_of = context.requested_as_of
-            if requested_as_of:
-                previous = self._live_as_of_state.get(key)
-                world_label = context.world_id or ""
-                if previous is not None:
-                    comparison = self._compare_as_of(requested_as_of, previous)
-                    if comparison < 0:
-                        decision = self._merge_decisions(
-                            decision,
-                            _DowngradeDecision(
-                                mode=SLAViolationMode.HOLD,
-                                reason="as_of_regression",
-                                violation=None,
-                                coverage_ratio=coverage_ratio,
-                                staleness_ms=staleness_ms,
-                            ),
-                        )
-                    else:
-                        self._live_as_of_state[key] = requested_as_of
-                        if comparison > 0:
-                            sdk_metrics.observe_as_of_advancement_event(
-                                node_id=node_id,
-                                world_id=world_label,
-                            )
-                else:
-                    self._live_as_of_state[key] = requested_as_of
-                    sdk_metrics.observe_as_of_advancement_event(
-                        node_id=node_id,
-                        world_id=world_label,
-                    )
-
-            if (
-                context.min_coverage is not None
-                and coverage_ratio is not None
-                and coverage_ratio < context.min_coverage
-            ):
-                decision = self._merge_decisions(
-                    decision,
-                    _DowngradeDecision(
-                        mode=SLAViolationMode.HOLD,
-                        reason="coverage_breach",
-                        violation=None,
-                        coverage_ratio=coverage_ratio,
-                        staleness_ms=staleness_ms,
-                    ),
-                )
-
-            if (
-                context.max_lag_seconds is not None
-                and staleness_ms is not None
-                and staleness_ms > context.max_lag_seconds * 1000
-            ):
-                decision = self._merge_decisions(
-                    decision,
-                    _DowngradeDecision(
-                        mode=SLAViolationMode.HOLD,
-                        reason="freshness_breach",
-                        violation=None,
-                        coverage_ratio=coverage_ratio,
-                        staleness_ms=staleness_ms,
-                    ),
-                )
-
-            if decision is not None:
-                fingerprint = metadata.dataset_fingerprint
-                if fingerprint is None and metadata.artifact is not None:
-                    fingerprint = getattr(metadata.artifact, "dataset_fingerprint", None)
-
-                as_of_value: Any | None = metadata.as_of
-                if as_of_value is None:
-                    as_of_value = metadata.requested_as_of or context.requested_as_of
-
-                logger.warning(
-                    "seamless.domain_gate.downgrade",
-                    extra={
-                        "node_id": node_id,
-                        "interval": interval,
-                        "world_id": context.world_id,
-                        "execution_domain": domain,
-                        "reason": decision.reason,
-                        "dataset_fingerprint": fingerprint,
-                        "as_of": as_of_value,
-                    },
-                )
-            return decision
-
-        # Unknown domain: do not advance live/shadow monotonic tracking
-        return None
+        return self._domain_gate_evaluator.evaluate(
+            context,
+            metadata,
+            node_id=node_id,
+            interval=interval,
+        )
 
     async def fetch(
         self,
@@ -1493,130 +1382,20 @@ class SeamlessDataProvider(ABC):
         sla_tracker: "_SLATracker | None" = None,
         request_context: _RequestContext | None = None,
     ) -> bool:
-        """
-        Ensure data is available for the given range.
-
-        If data is missing and auto-backfill is enabled, trigger backfill.
-        Returns True if data will be available after this call.
-        """
+        """Ensure data is available for the requested range."""
         self._validate_node_id(node_id)
         tracker = sla_tracker or self._build_sla_tracker(node_id, interval)
-
-        # Check current availability
-        if tracker:
-            available_ranges = await tracker.observe_async(
-                "storage_wait",
-                tracker.policy.max_wait_storage_ms,
-                self.coverage(node_id=node_id, interval=interval),
-            )
-        else:
-            available_ranges = await self.coverage(node_id=node_id, interval=interval)
-        missing_ranges = self._find_missing_ranges(start, end, available_ranges, interval)
-
-        if self._sla and self._sla.max_sync_gap_bars is not None and missing_ranges:
-            missing_bars = 0
-            for gap_start, gap_end in missing_ranges:
-                if interval <= 0:
-                    continue
-                missing_bars += max(0, int((gap_end - gap_start) / interval))
-            if missing_bars > self._sla.max_sync_gap_bars:
-                interval_ms = max(interval, 0) * 1000
-                elapsed_ms = missing_bars * interval_ms
-                budget_ms = self._sla.max_sync_gap_bars * interval_ms
-                if tracker:
-                    tracker.handle_violation(
-                        "sync_gap",
-                        elapsed_ms=float(elapsed_ms),
-                        budget_ms=int(budget_ms) if interval_ms else None,
-                    )
-                else:
-                    raise SeamlessSLAExceeded(
-                        "sync_gap",
-                        node_id=node_id,
-                        elapsed_ms=float(elapsed_ms),
-                        budget_ms=int(budget_ms) if interval_ms else None,
-                    )
-                return False
-
-        if not missing_ranges:
-            return True
-        
-        # Try to backfill missing ranges
-        if self.backfiller and self.strategy != DataAvailabilityStrategy.FAIL_FAST:
-            for missing_start, missing_end in missing_ranges:
-                can_backfill = await self.backfiller.can_backfill(
-                    missing_start, missing_end, node_id=node_id, interval=interval
-                )
-                if can_backfill:
-                    if self.enable_background_backfill:
-                        await self._start_background_backfill(
-                            missing_start,
-                            missing_end,
-                            node_id=node_id,
-                            interval=interval,
-                            request_context=request_context,
-                        )
-                    else:
-                        lease: Lease | None = None
-                        skip_due_to_conflict = False
-                        if self._coordinator:
-                            try:
-                                lease_key = self._backfill_key(
-                                    node_id=node_id,
-                                    interval=interval,
-                                    start=missing_start,
-                                    end=missing_end,
-                                    context=request_context,
-                                )
-                                lease = await self._coordinator.claim(
-                                    lease_key,
-                                    lease_ms=self._backfill_config.distributed_lease_ttl_ms,
-                                )
-                            except Exception:
-                                lease = None
-                            else:
-                                if lease is None:
-                                    skip_due_to_conflict = True
-                        if skip_due_to_conflict:
-                            continue
-
-                        try:
-                            await self._execute_backfill_range(
-                                missing_start,
-                                missing_end,
-                                node_id=node_id,
-                                interval=interval,
-                                target_storage=self.storage_source,
-                                sla_tracker=tracker,
-                            )
-                            if lease and self._coordinator:
-                                try:
-                                    await self._coordinator.complete(lease)
-                                except Exception:
-                                    pass
-                        except Exception as exc:
-                            if lease and self._coordinator:
-                                try:
-                                    await self._coordinator.fail(
-                                        lease,
-                                        f"synchronous_backfill_failed: {exc}",
-                                    )
-                                except Exception:
-                                    pass
-                            raise
-        
-        # Re-check availability
-        if tracker:
-            updated_ranges = await tracker.observe_async(
-                "storage_wait",
-                tracker.policy.max_wait_storage_ms,
-                self.coverage(node_id=node_id, interval=interval),
-            )
-        else:
-            updated_ranges = await self.coverage(node_id=node_id, interval=interval)
-        final_missing = self._find_missing_ranges(start, end, updated_ranges, interval)
-
-        return len(final_missing) == 0
+        pipeline = _AvailabilityPipeline(
+            provider=self,
+            tracker=tracker,
+            request_context=request_context,
+        )
+        return await pipeline.ensure(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
     
     def _get_ordered_sources(self) -> list[DataSource]:
         """Get data sources in priority order."""
@@ -1638,98 +1417,15 @@ class SeamlessDataProvider(ABC):
         request_context: _RequestContext | None = None,
     ) -> pd.DataFrame:
         """Implement seamless fetching strategy."""
-        # Try each source in priority order
-        result_frames = []
-        remaining_ranges = [(start, end)]
-
-        # Reset report tracking for this request
         self._last_conformance_report = None
-        
-        for source in self._get_ordered_sources():
-            if not remaining_ranges:
-                break
-                
-            new_remaining = []
-            for range_start, range_end in remaining_ranges:
-                try:
-                    # Check what this source can provide
-                    coverage_coro = source.coverage(node_id=node_id, interval=interval)
-                    if sla_tracker and source.priority == DataSourcePriority.STORAGE:
-                        source_coverage = await sla_tracker.observe_async(
-                            "storage_wait",
-                            sla_tracker.policy.max_wait_storage_ms,
-                            coverage_coro,
-                        )
-                    else:
-                        source_coverage = await coverage_coro
-                    available_in_range = self._intersect_ranges(
-                        [(range_start, range_end)], source_coverage
-                    )
-                    
-                    if available_in_range:
-                        # Fetch available data from this source
-                        for avail_start, avail_end in available_in_range:
-                            fetch_coro = source.fetch(
-                                avail_start, avail_end, node_id=node_id, interval=interval
-                            )
-                            if sla_tracker and source.priority == DataSourcePriority.STORAGE:
-                                frame = await sla_tracker.observe_async(
-                                    "storage_wait",
-                                    sla_tracker.policy.max_wait_storage_ms,
-                                    fetch_coro,
-                                )
-                            else:
-                                frame = await fetch_coro
-                            if not frame.empty:
-                                result_frames.append(frame)
-                        
-                        # Update remaining ranges
-                        still_missing = self._subtract_ranges(
-                            [(range_start, range_end)],
-                            available_in_range,
-                            interval,
-                        )
-                        new_remaining.extend(still_missing)
-                    else:
-                        new_remaining.append((range_start, range_end))
-                except Exception as exc:
-                    if isinstance(exc, SeamlessSLAExceeded):
-                        raise
-                    # If source fails, keep the range for other sources
-                    new_remaining.append((range_start, range_end))
-            
-            remaining_ranges = new_remaining
-        
-        # Try auto-backfill for remaining ranges
-        if remaining_ranges and self.backfiller:
-            for range_start, range_end in remaining_ranges:
-                try:
-                    frames = await self._execute_backfill_range(
-                        range_start,
-                        range_end,
-                        node_id=node_id,
-                        interval=interval,
-                        target_storage=self.storage_source,
-                        sla_tracker=sla_tracker,
-                        collect_results=True,
-                    )
-                    non_empty = [frame for frame in frames if not frame.empty]
-                    if non_empty:
-                        backfilled = pd.concat(non_empty, ignore_index=True)
-                        result_frames.append(backfilled)
-                except Exception as exc:
-                    if isinstance(exc, SeamlessSLAExceeded):
-                        raise
-                    continue
-        
-        # Combine all frames and sort by timestamp
-        if result_frames:
-            combined = pd.concat(result_frames, ignore_index=True)
-            if "ts" in combined.columns:
-                combined = combined.sort_values("ts").reset_index(drop=True)
-            return combined
-
-        return pd.DataFrame()
+        planner = _SeamlessFetchPlanner(
+            provider=self,
+            node_id=node_id,
+            interval=interval,
+            tracker=sla_tracker,
+            request_context=request_context,
+        )
+        return await planner.fetch(start, end)
     
     async def _fetch_fail_fast(
         self,
@@ -2630,24 +2326,7 @@ class SeamlessDataProvider(ABC):
             loop.create_task(_run())
     
     def _merge_ranges(self, ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
-        """Merge overlapping ranges."""
-        if not ranges:
-            return []
-        
-        sorted_ranges = sorted(ranges)
-        merged = [sorted_ranges[0]]
-        
-        for current_start, current_end in sorted_ranges[1:]:
-            last_start, last_end = merged[-1]
-            
-            if current_start <= last_end:
-                # Overlapping ranges, merge them
-                merged[-1] = (last_start, max(last_end, current_end))
-            else:
-                # Non-overlapping, add as new range
-                merged.append((current_start, current_end))
-        
-        return merged
+        return _RangeOperations.merge(ranges)
     
     def _find_missing_ranges(
         self, start: int, end: int, available_ranges: list[tuple[int, int]], interval: int
@@ -2676,18 +2355,7 @@ class SeamlessDataProvider(ABC):
     def _intersect_ranges(
         self, ranges1: list[tuple[int, int]], ranges2: list[tuple[int, int]]
     ) -> list[tuple[int, int]]:
-        """Find intersection of two range lists."""
-        result = []
-        
-        for start1, end1 in ranges1:
-            for start2, end2 in ranges2:
-                intersect_start = max(start1, start2)
-                intersect_end = min(end1, end2)
-                
-                if intersect_start < intersect_end:
-                    result.append((intersect_start, intersect_end))
-        
-        return self._merge_ranges(result)
+        return _RangeOperations.intersect(ranges1, ranges2)
     
     def _subtract_ranges(
         self,
@@ -2695,75 +2363,621 @@ class SeamlessDataProvider(ABC):
         subtract_ranges: list[tuple[int, int]],
         interval: int,
     ) -> list[tuple[int, int]]:
-        """Subtract ranges from other ranges using interval-aware semantics."""
+        return _RangeOperations.subtract(from_ranges, subtract_ranges, interval)
+
+
+class _RangeOperations:
+    """Range math helpers used by seamless orchestration."""
+
+    @staticmethod
+    def merge(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        if not ranges:
+            return []
+        sorted_ranges = sorted(ranges)
+        merged = [sorted_ranges[0]]
+        for current_start, current_end in sorted_ranges[1:]:
+            last_start, last_end = merged[-1]
+            if current_start <= last_end:
+                merged[-1] = (last_start, max(last_end, current_end))
+            else:
+                merged.append((current_start, current_end))
+        return merged
+
+    @staticmethod
+    def intersect(
+        ranges1: list[tuple[int, int]],
+        ranges2: list[tuple[int, int]],
+    ) -> list[tuple[int, int]]:
+        result: list[tuple[int, int]] = []
+        for start1, end1 in ranges1:
+            for start2, end2 in ranges2:
+                intersect_start = max(start1, start2)
+                intersect_end = min(end1, end2)
+                if intersect_start < intersect_end:
+                    result.append((intersect_start, intersect_end))
+        return _RangeOperations.merge(result)
+
+    @staticmethod
+    def subtract(
+        from_ranges: list[tuple[int, int]],
+        subtract_ranges: list[tuple[int, int]],
+        interval: int,
+    ) -> list[tuple[int, int]]:
         if not subtract_ranges:
             return list(from_ranges)
-
         if interval <= 0:
-            # Fallback to naive subtraction when interval metadata is unavailable
-            result = list(from_ranges)
-            for sub_start, sub_end in subtract_ranges:
-                new_result = []
-                for start, end in result:
-                    if sub_end <= start or sub_start >= end:
-                        new_result.append((start, end))
-                    else:
-                        if start < sub_start:
-                            new_result.append((start, sub_start))
-                        if end > sub_end:
-                            new_result.append((sub_end, end))
-                result = new_result
-            return result
+            return _RangeOperations._subtract_without_interval(from_ranges, subtract_ranges)
+        return _RangeOperations._subtract_with_interval(from_ranges, subtract_ranges, interval)
 
+    @staticmethod
+    def _subtract_without_interval(
+        from_ranges: list[tuple[int, int]],
+        subtract_ranges: list[tuple[int, int]],
+    ) -> list[tuple[int, int]]:
+        result = list(from_ranges)
+        for sub_start, sub_end in subtract_ranges:
+            new_result: list[tuple[int, int]] = []
+            for start, end in result:
+                if sub_end <= start or sub_start >= end:
+                    new_result.append((start, end))
+                    continue
+                if start < sub_start:
+                    new_result.append((start, sub_start))
+                if end > sub_end:
+                    new_result.append((sub_end, end))
+            result = new_result
+        return result
+
+    @staticmethod
+    def _subtract_with_interval(
+        from_ranges: list[tuple[int, int]],
+        subtract_ranges: list[tuple[int, int]],
+        interval: int,
+    ) -> list[tuple[int, int]]:
         remaining: list[tuple[int, int]] = []
-
         for range_start, range_end in from_ranges:
             segments: list[tuple[int, int]] = [(int(range_start), int(range_end))]
-
             for sub_start_raw, sub_end_raw in subtract_ranges:
                 sub_start = int(sub_start_raw)
                 sub_end = int(sub_end_raw)
                 if sub_start > sub_end:
                     continue
-
-                new_segments: list[tuple[int, int]] = []
-                for seg_start, seg_end in segments:
-                    if sub_end < seg_start or sub_start > seg_end:
-                        new_segments.append((seg_start, seg_end))
-                        continue
-
-                    # Only subtract bars that land on the same interval grid
-                    if (seg_start - sub_start) % interval != 0:
-                        new_segments.append((seg_start, seg_end))
-                        continue
-
-                    first = max(seg_start, sub_start)
-                    remainder = (first - seg_start) % interval
-                    if remainder:
-                        first += interval - remainder
-
-                    if first > seg_end or first > sub_end:
-                        new_segments.append((seg_start, seg_end))
-                        continue
-
-                    last = min(seg_end, sub_end)
-                    remainder = (last - seg_start) % interval
-                    last -= remainder
-
-                    if last < first:
-                        new_segments.append((seg_start, seg_end))
-                        continue
-
-                    if first > seg_start:
-                        new_segments.append((seg_start, first - interval))
-                    if last < seg_end:
-                        new_segments.append((last + interval, seg_end))
-
-                segments = new_segments
-
+                segments = _RangeOperations._subtract_segment(segments, sub_start, sub_end, interval)
+                if not segments:
+                    break
             remaining.extend(segments)
+        return _RangeOperations.merge(sorted(remaining))
 
-        return self._merge_ranges(sorted(remaining))
+    @staticmethod
+    def _subtract_segment(
+        segments: list[tuple[int, int]],
+        sub_start: int,
+        sub_end: int,
+        interval: int,
+    ) -> list[tuple[int, int]]:
+        new_segments: list[tuple[int, int]] = []
+        for seg_start, seg_end in segments:
+            if sub_end < seg_start or sub_start > seg_end:
+                new_segments.append((seg_start, seg_end))
+                continue
+            if (seg_start - sub_start) % interval != 0:
+                new_segments.append((seg_start, seg_end))
+                continue
+            first = max(seg_start, sub_start)
+            remainder = (first - seg_start) % interval
+            if remainder:
+                first += interval - remainder
+            if first > seg_end or first > sub_end:
+                new_segments.append((seg_start, seg_end))
+                continue
+            last = min(seg_end, sub_end)
+            remainder = (last - seg_start) % interval
+            last -= remainder
+            if last < first:
+                new_segments.append((seg_start, seg_end))
+                continue
+            if first > seg_start:
+                new_segments.append((seg_start, first - interval))
+            if last < seg_end:
+                new_segments.append((last + interval, seg_end))
+        return new_segments
+
+
+class _DomainGateEvaluator:
+    def __init__(
+        self,
+        *,
+        merge_decisions: Callable[[
+            _DowngradeDecision | None,
+            _DowngradeDecision | None,
+        ], _DowngradeDecision | None],
+        compute_coverage_ratio: Callable[[SeamlessFetchMetadata], float | None],
+        compute_staleness_ms: Callable[[SeamlessFetchMetadata], float | None],
+        compare_as_of: Callable[[str, str], int],
+        live_state: MutableMapping[tuple[str, str], str],
+        logger: logging.Logger,
+    ) -> None:
+        self._merge_decisions = merge_decisions
+        self._compute_coverage_ratio = compute_coverage_ratio
+        self._compute_staleness_ms = compute_staleness_ms
+        self._compare_as_of = compare_as_of
+        self._live_state = live_state
+        self._logger = logger
+
+    def evaluate(
+        self,
+        context: _RequestContext,
+        metadata: SeamlessFetchMetadata,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> _DowngradeDecision | None:
+        domain = context.execution_domain
+        if domain in {"backtest", "dryrun"}:
+            self._enforce_offline_requirements(context, metadata, node_id, interval)
+            return None
+        if domain in {"live", "shadow"}:
+            return self._evaluate_live_domain(context, metadata, node_id, interval, domain)
+        return None
+
+    def _enforce_offline_requirements(
+        self,
+        context: _RequestContext,
+        metadata: SeamlessFetchMetadata,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        if context.requested_as_of is None:
+            self._logger.error(
+                "seamless.domain_gate.missing_as_of",
+                extra={
+                    "node_id": node_id,
+                    "interval": interval,
+                    "execution_domain": context.execution_domain,
+                    "world_id": context.world_id,
+                },
+            )
+            raise SeamlessDomainPolicyError("as_of is required for backtest/dryrun domains")
+        if metadata.artifact is None and metadata.manifest_uri is None:
+            self._logger.error(
+                "seamless.domain_gate.missing_artifact",
+                extra={
+                    "node_id": node_id,
+                    "interval": interval,
+                    "execution_domain": context.execution_domain,
+                    "world_id": context.world_id,
+                },
+            )
+            raise SeamlessDomainPolicyError(
+                "artifact-backed data is required for backtest/dryrun domains"
+            )
+
+    def _evaluate_live_domain(
+        self,
+        context: _RequestContext,
+        metadata: SeamlessFetchMetadata,
+        node_id: str,
+        interval: int,
+        domain: str,
+    ) -> _DowngradeDecision | None:
+        coverage_ratio = metadata.coverage_ratio
+        if coverage_ratio is None:
+            coverage_ratio = self._compute_coverage_ratio(metadata)
+            metadata.coverage_ratio = coverage_ratio
+        staleness_ms = metadata.staleness_ms
+        if staleness_ms is None:
+            staleness_ms = self._compute_staleness_ms(metadata)
+            metadata.staleness_ms = staleness_ms
+
+        decision: _DowngradeDecision | None = None
+        decision = self._check_as_of_progress(
+            decision,
+            context,
+            node_id,
+            coverage_ratio,
+            staleness_ms,
+        )
+
+        if (
+            context.min_coverage is not None
+            and coverage_ratio is not None
+            and coverage_ratio < context.min_coverage
+        ):
+            decision = self._merge_decisions(
+                decision,
+                _DowngradeDecision(
+                    mode=SLAViolationMode.HOLD,
+                    reason="coverage_breach",
+                    violation=None,
+                    coverage_ratio=coverage_ratio,
+                    staleness_ms=staleness_ms,
+                ),
+            )
+
+        if (
+            context.max_lag_seconds is not None
+            and staleness_ms is not None
+            and staleness_ms > context.max_lag_seconds * 1000
+        ):
+            decision = self._merge_decisions(
+                decision,
+                _DowngradeDecision(
+                    mode=SLAViolationMode.HOLD,
+                    reason="freshness_breach",
+                    violation=None,
+                    coverage_ratio=coverage_ratio,
+                    staleness_ms=staleness_ms,
+                ),
+            )
+
+        if decision is not None:
+            self._log_downgrade(context, metadata, node_id, interval, domain, decision)
+        return decision
+
+    def _check_as_of_progress(
+        self,
+        base: _DowngradeDecision | None,
+        context: _RequestContext,
+        node_id: str,
+        coverage_ratio: float | None,
+        staleness_ms: float | None,
+    ) -> _DowngradeDecision | None:
+        requested_as_of = context.requested_as_of
+        if not requested_as_of:
+            return base
+        key = (context.world_id, node_id)
+        previous = self._live_state.get(key)
+        world_label = context.world_id or ""
+        if previous is not None:
+            comparison = self._compare_as_of(requested_as_of, previous)
+            if comparison < 0:
+                return self._merge_decisions(
+                    base,
+                    _DowngradeDecision(
+                        mode=SLAViolationMode.HOLD,
+                        reason="as_of_regression",
+                        violation=None,
+                        coverage_ratio=coverage_ratio,
+                        staleness_ms=staleness_ms,
+                    ),
+                )
+            self._live_state[key] = requested_as_of
+            if comparison > 0:
+                sdk_metrics.observe_as_of_advancement_event(
+                    node_id=node_id,
+                    world_id=world_label,
+                )
+            return base
+        self._live_state[key] = requested_as_of
+        sdk_metrics.observe_as_of_advancement_event(
+            node_id=node_id,
+            world_id=world_label,
+        )
+        return base
+
+    def _log_downgrade(
+        self,
+        context: _RequestContext,
+        metadata: SeamlessFetchMetadata,
+        node_id: str,
+        interval: int,
+        domain: str,
+        decision: _DowngradeDecision,
+    ) -> None:
+        fingerprint = metadata.dataset_fingerprint
+        if fingerprint is None and metadata.artifact is not None:
+            fingerprint = getattr(metadata.artifact, "dataset_fingerprint", None)
+        as_of_value: Any | None = metadata.as_of
+        if as_of_value is None:
+            as_of_value = metadata.requested_as_of or context.requested_as_of
+        self._logger.warning(
+            "seamless.domain_gate.downgrade",
+            extra={
+                "node_id": node_id,
+                "interval": interval,
+                "world_id": context.world_id,
+                "execution_domain": domain,
+                "reason": decision.reason,
+                "dataset_fingerprint": fingerprint,
+                "as_of": as_of_value,
+            },
+        )
+
+
+class _AvailabilityPipeline:
+    def __init__(
+        self,
+        *,
+        provider: "SeamlessDataProvider",
+        tracker: "_SLATracker | None",
+        request_context: _RequestContext | None,
+    ) -> None:
+        self._provider = provider
+        self._tracker = tracker
+        self._context = request_context
+
+    async def ensure(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> bool:
+        available_ranges = await self._observe_coverage(node_id, interval)
+        missing_ranges = self._provider._find_missing_ranges(
+            start, end, available_ranges, interval
+        )
+        if not self._respect_sync_gap(missing_ranges, interval, node_id):
+            return False
+        if not missing_ranges:
+            return True
+        await self._backfill_missing(missing_ranges, node_id, interval)
+        updated_ranges = await self._observe_coverage(node_id, interval)
+        final_missing = self._provider._find_missing_ranges(
+            start, end, updated_ranges, interval
+        )
+        return len(final_missing) == 0
+
+    async def _observe_coverage(
+        self, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:
+        coverage_coro = self._provider.coverage(node_id=node_id, interval=interval)
+        if self._tracker:
+            return await self._tracker.observe_async(
+                "storage_wait",
+                self._tracker.policy.max_wait_storage_ms,
+                coverage_coro,
+            )
+        return await coverage_coro
+
+    def _respect_sync_gap(
+        self,
+        missing_ranges: list[tuple[int, int]],
+        interval: int,
+        node_id: str,
+    ) -> bool:
+        sla = self._provider._sla
+        if not sla or sla.max_sync_gap_bars is None or not missing_ranges:
+            return True
+        missing_bars = 0
+        for gap_start, gap_end in missing_ranges:
+            if interval <= 0:
+                continue
+            missing_bars += max(0, int((gap_end - gap_start) / interval))
+        if missing_bars <= sla.max_sync_gap_bars:
+            return True
+        interval_ms = max(interval, 0) * 1000
+        elapsed_ms = missing_bars * interval_ms
+        budget_ms = sla.max_sync_gap_bars * interval_ms
+        if self._tracker:
+            self._tracker.handle_violation(
+                "sync_gap",
+                elapsed_ms=float(elapsed_ms),
+                budget_ms=int(budget_ms) if interval_ms else None,
+            )
+            return False
+        raise SeamlessSLAExceeded(
+            "sync_gap",
+            node_id=node_id,
+            elapsed_ms=float(elapsed_ms),
+            budget_ms=int(budget_ms) if interval_ms else None,
+        )
+
+    async def _backfill_missing(
+        self,
+        missing_ranges: list[tuple[int, int]],
+        node_id: str,
+        interval: int,
+    ) -> None:
+        provider = self._provider
+        backfiller = provider.backfiller
+        if backfiller is None or provider.strategy == DataAvailabilityStrategy.FAIL_FAST:
+            return
+        for missing_start, missing_end in missing_ranges:
+            can_backfill = await backfiller.can_backfill(
+                missing_start, missing_end, node_id=node_id, interval=interval
+            )
+            if not can_backfill:
+                continue
+            if provider.enable_background_backfill:
+                await provider._start_background_backfill(
+                    missing_start,
+                    missing_end,
+                    node_id=node_id,
+                    interval=interval,
+                    request_context=self._context,
+                )
+                continue
+            lease, skip = await self._claim_lease(missing_start, missing_end, node_id, interval)
+            if skip:
+                continue
+            try:
+                await provider._execute_backfill_range(
+                    missing_start,
+                    missing_end,
+                    node_id=node_id,
+                    interval=interval,
+                    target_storage=provider.storage_source,
+                    sla_tracker=self._tracker,
+                )
+                await self._complete_lease(lease)
+            except Exception as exc:
+                await self._fail_lease(lease, f"synchronous_backfill_failed: {exc}")
+                raise
+
+    async def _claim_lease(
+        self,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+    ) -> tuple[Lease | None, bool]:
+        coordinator = self._provider._coordinator
+        if coordinator is None:
+            return None, False
+        try:
+            lease_key = self._provider._backfill_key(
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                context=self._context,
+            )
+            lease = await coordinator.claim(
+                lease_key,
+                lease_ms=self._provider._backfill_config.distributed_lease_ttl_ms,
+            )
+        except Exception:
+            return None, False
+        if lease is None:
+            return None, True
+        return lease, False
+
+    async def _complete_lease(self, lease: Lease | None) -> None:
+        coordinator = self._provider._coordinator
+        if lease is None or coordinator is None:
+            return
+        try:
+            await coordinator.complete(lease)
+        except Exception:
+            pass
+
+    async def _fail_lease(self, lease: Lease | None, reason: str) -> None:
+        coordinator = self._provider._coordinator
+        if lease is None or coordinator is None:
+            return
+        try:
+            await coordinator.fail(lease, reason)
+        except Exception:
+            pass
+
+
+class _SeamlessFetchPlanner:
+    def __init__(
+        self,
+        *,
+        provider: "SeamlessDataProvider",
+        node_id: str,
+        interval: int,
+        tracker: "_SLATracker | None",
+        request_context: _RequestContext | None,
+    ) -> None:
+        self._provider = provider
+        self._node_id = node_id
+        self._interval = int(interval)
+        self._tracker = tracker
+        self._context = request_context
+
+    async def fetch(self, start: int, end: int) -> pd.DataFrame:
+        result_frames: list[pd.DataFrame] = []
+        remaining_ranges: list[tuple[int, int]] = [(start, end)]
+        for source in self._provider._get_ordered_sources():
+            if not remaining_ranges:
+                break
+            remaining_ranges = await self._consume_source(
+                source, remaining_ranges, result_frames
+            )
+        if remaining_ranges and self._provider.backfiller:
+            backfilled = await self._backfill_remaining(remaining_ranges)
+            result_frames.extend(backfilled)
+        if result_frames:
+            combined = pd.concat(result_frames, ignore_index=True)
+            if "ts" in combined.columns:
+                combined = combined.sort_values("ts").reset_index(drop=True)
+            return combined
+        return pd.DataFrame()
+
+    async def _consume_source(
+        self,
+        source: DataSource,
+        ranges: list[tuple[int, int]],
+        result_frames: list[pd.DataFrame],
+    ) -> list[tuple[int, int]]:
+        new_remaining: list[tuple[int, int]] = []
+        for range_start, range_end in ranges:
+            try:
+                coverage = await self._observe_source_coverage(source, range_start, range_end)
+            except Exception as exc:
+                if isinstance(exc, SeamlessSLAExceeded):
+                    raise
+                new_remaining.append((range_start, range_end))
+                continue
+            available = _RangeOperations.intersect([(range_start, range_end)], coverage)
+            if available:
+                frames = await self._fetch_available(source, available)
+                result_frames.extend(frames)
+                still_missing = _RangeOperations.subtract(
+                    [(range_start, range_end)], available, self._interval
+                )
+                new_remaining.extend(still_missing)
+            else:
+                new_remaining.append((range_start, range_end))
+        return new_remaining
+
+    async def _observe_source_coverage(
+        self,
+        source: DataSource,
+        range_start: int,
+        range_end: int,
+    ) -> list[tuple[int, int]]:
+        coverage_coro = source.coverage(node_id=self._node_id, interval=self._interval)
+        if self._tracker and source.priority == DataSourcePriority.STORAGE:
+            return await self._tracker.observe_async(
+                "storage_wait",
+                self._tracker.policy.max_wait_storage_ms,
+                coverage_coro,
+            )
+        return await coverage_coro
+
+    async def _fetch_available(
+        self,
+        source: DataSource,
+        available_ranges: list[tuple[int, int]],
+    ) -> list[pd.DataFrame]:
+        frames: list[pd.DataFrame] = []
+        for avail_start, avail_end in available_ranges:
+            fetch_coro = source.fetch(
+                avail_start,
+                avail_end,
+                node_id=self._node_id,
+                interval=self._interval,
+            )
+            if self._tracker and source.priority == DataSourcePriority.STORAGE:
+                frame = await self._tracker.observe_async(
+                    "storage_wait",
+                    self._tracker.policy.max_wait_storage_ms,
+                    fetch_coro,
+                )
+            else:
+                frame = await fetch_coro
+            if not frame.empty:
+                frames.append(frame)
+        return frames
+
+    async def _backfill_remaining(
+        self, remaining_ranges: list[tuple[int, int]]
+    ) -> list[pd.DataFrame]:
+        result: list[pd.DataFrame] = []
+        for range_start, range_end in remaining_ranges:
+            try:
+                frames = await self._provider._execute_backfill_range(
+                    range_start,
+                    range_end,
+                    node_id=self._node_id,
+                    interval=self._interval,
+                    target_storage=self._provider.storage_source,
+                    sla_tracker=self._tracker,
+                    collect_results=True,
+                )
+            except Exception as exc:
+                if isinstance(exc, SeamlessSLAExceeded):
+                    raise
+                continue
+            non_empty = [frame for frame in frames if not frame.empty]
+            if non_empty:
+                result.append(pd.concat(non_empty, ignore_index=True))
+        return result
 
 
 class _SLATracker:

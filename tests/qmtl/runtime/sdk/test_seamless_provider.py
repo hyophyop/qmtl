@@ -169,6 +169,28 @@ async def test_find_missing_ranges_uses_interval_math() -> None:
 
 
 @pytest.mark.asyncio
+async def test_subtract_ranges_without_interval_fallback() -> None:
+    provider = _DummyProvider()
+    remaining = provider._subtract_ranges(  # type: ignore[attr-defined]
+        [(0, 100)],
+        [(10, 20)],
+        0,
+    )
+    assert remaining == [(0, 10), (20, 100)]
+
+
+@pytest.mark.asyncio
+async def test_subtract_ranges_alignment_guard() -> None:
+    provider = _DummyProvider()
+    remaining = provider._subtract_ranges(  # type: ignore[attr-defined]
+        [(0, 40)],
+        [(5, 25)],
+        10,
+    )
+    assert remaining == [(0, 40)]
+
+
+@pytest.mark.asyncio
 async def test_fetch_response_includes_metadata() -> None:
     sdk_metrics.reset_metrics()
     storage = _StaticSource([(0, 100)], DataSourcePriority.STORAGE)
