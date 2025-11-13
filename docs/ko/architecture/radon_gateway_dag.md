@@ -42,7 +42,7 @@ Gateway, DAG Manager, ControlBus 경로는 SDK와 WorldService 사이에서 가�
 
 - `StrategySubmissionHelper.process`를 **세 단계**(payload 정규화 → DAG diff 호출 → CommitLog fan‑out)로 나누고, 단계별 async context manager를 도입해 재시도/메트릭을 각각 주입.
 - Redis FSM 및 TTL 캐시 만료 로직은 별도 헬퍼(`SubmissionPersistencePlan`)로 이동. DAG Manager gRPC 오류 시 현재의 broad except 대신 세분화된 예외 매핑을 문서화.
-- Contract 테스트: `tests/services/gateway/test_strategy_submission_contract.py`에 SDK 샘플 페이로드(단일/다중 월드)를 기록, `uv run -m pytest qmtl/services/gateway/tests` 로 검증.
+- Contract 테스트: `tests/qmtl/services/gateway/test_strategy_submission_contract.py`에 SDK 샘플 페이로드(단일/다중 월드)를 기록, `uv run -m pytest -W error -n auto tests/qmtl/services/gateway` 로 검증.
 
 ### 3. ControlBus 브리지 리팩터링
 
@@ -60,7 +60,7 @@ Gateway, DAG Manager, ControlBus 경로는 SDK와 WorldService 사이에서 가�
 
 - 새 구조를 `docs/ko/architecture/gateway.md` / `dag-manager.md`의 관련 섹션과 상호 참조; 본 문서는 고정된 계획의 출처 역할.
 - Smoke: `uv run --with radon -m radon cc -s qmtl/services/gateway qmtl/services/dagmanager | rg ' [CD]'` 로 회귀 감시.
-- 회귀 테스트: `uv run -m pytest -W error -n auto tests/services/gateway tests/services/dagmanager`.
+- 회귀 테스트: `uv run -m pytest -W error -n auto tests/qmtl/services/gateway tests/qmtl/services/dagmanager`.
 
 ## 일정 및 산출물
 

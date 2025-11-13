@@ -42,7 +42,7 @@ Gateway, DAG Manager, and ControlBus form the contract surface that precedes Wor
 
 - Break `StrategySubmissionHelper.process` into three explicit stages (normalize payload → invoke DAG diff → CommitLog fan-out). Wrap each stage with its own async context manager for retries and metrics.
 - Move Redis FSM/TTL invalidation into a standalone helper (`SubmissionPersistencePlan`) so DAG retry semantics become testable.
-- Author contract tests under `tests/services/gateway/test_strategy_submission_contract.py` for single/multi-world payloads and run them with `uv run -m pytest -W error -n auto`.
+- Author contract tests under `tests/qmtl/services/gateway/test_strategy_submission_contract.py` for single/multi-world payloads and run them with `uv run -m pytest -W error -n auto`.
 
 ### 3. ControlBus bridge refactor
 
@@ -60,7 +60,7 @@ Gateway, DAG Manager, and ControlBus form the contract surface that precedes Wor
 
 - Cross-link the new structure inside `docs/en/architecture/gateway.md` and `dag-manager.md`; keep this plan as the canonical sourcing note.
 - Smoke check via `uv run --with radon -m radon cc -s qmtl/services/gateway qmtl/services/dagmanager | rg ' [CD]'`.
-- Regression suite: `uv run -m pytest -W error -n auto tests/services/gateway tests/services/dagmanager`.
+- Regression suite: `uv run -m pytest -W error -n auto tests/qmtl/services/gateway tests/qmtl/services/dagmanager`.
 
 ## Timeline & deliverables
 
