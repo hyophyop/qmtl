@@ -415,13 +415,19 @@ class HistoryWarmupService:
         result: Any,
         event_values: dict[str, dict[int, list[tuple[int, Any]]]],
         done: set[str],
-    ) -> None:
+    ) -> bool:
         node_id = getattr(node, "node_id", None)
-        interval = getattr(node, "interval", None)
-        if node_id is None or interval is None:
-            return
-        event_values.setdefault(node_id, {}).setdefault(interval, []).append((ts, result))
+        if node_id is None:
+            return False
+
         done.add(node_id)
+
+        interval = getattr(node, "interval", None)
+        if interval is None:
+            return True
+
+        event_values.setdefault(node_id, {}).setdefault(interval, []).append((ts, result))
+        return True
 
     def _replay_timestamp(
         self,
@@ -440,8 +446,8 @@ class HistoryWarmupService:
                 if not self._node_inputs_ready(node, event_values):
                     continue
                 result = self._execute_node(node, event_values)
-                self._record_node_result(node, ts, result, event_values, done)
-                progressed = True
+                if self._record_node_result(node, ts, result, event_values, done):
+                    progressed = True
 
     # ------------------------------------------------------------------
     async def warmup_strategy(
