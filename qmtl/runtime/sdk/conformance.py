@@ -192,37 +192,7 @@ class ConformancePipeline:
         ts = df[self._TS_COLUMN]
         dtype = ts.dtype
 
-        timezone_adjusted = 0
-        cast_rows = 0
-
-        if isinstance(dtype, pd.DatetimeTZDtype):
-            timezone_adjusted = len(ts)
-            converted = ts.dt.tz_convert("UTC")
-            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
-            cast_rows = len(df)
-        elif pd.api.types.is_datetime64_dtype(dtype):
-            df[self._TS_COLUMN] = self._timestamps_to_seconds(ts)
-            cast_rows = len(df)
-        elif pd.api.types.is_integer_dtype(dtype):
-            cast_rows = self._normalize_integer_epoch(df, flags, warnings)
-        else:
-            converted = pd.to_datetime(ts, utc=True, errors="coerce")
-            invalid_mask = converted.isna()
-            if invalid_mask.any():
-                invalid_count = int(invalid_mask.sum())
-                warnings.append(
-                    f"dropped {invalid_count} rows with invalid timestamps"
-                )
-                flags[self._FLAG_INVALID_TS] = (
-                    flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
-                )
-                df.drop(index=df.index[invalid_mask], inplace=True)
-                df.reset_index(drop=True, inplace=True)
-                converted = converted[~invalid_mask]
-            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
-            cast_rows = len(df)
-            if isinstance(dtype, pd.DatetimeTZDtype) or getattr(dtype, "tz", None) is not None:
-                timezone_adjusted = len(df)
+        cast_rows, timezone_adjusted = self._cast_timestamp_column(df, dtype, flags, warnings)
 
         if cast_rows:
             flags[self._FLAG_TS_CAST] = flags.get(self._FLAG_TS_CAST, 0) + cast_rows
@@ -234,36 +204,15 @@ class ConformancePipeline:
         if df.empty:
             return
 
-        df.sort_values(self._TS_COLUMN, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-
-        duplicates_mask = df.duplicated(subset=[self._TS_COLUMN], keep="last")
-        duplicates = int(duplicates_mask.sum())
-        if duplicates:
-            df.drop(index=df.index[duplicates_mask], inplace=True)
-            df.reset_index(drop=True, inplace=True)
-            flags[self._FLAG_DUPLICATE_TS] = (
-                flags.get(self._FLAG_DUPLICATE_TS, 0) + duplicates
-            )
-            warnings.append(f"dropped {duplicates} duplicate bars")
+        self._sort_and_dedupe_timestamps(df, flags, warnings)
+        if df.empty:
+            return
 
         if interval is None or interval <= 0 or len(df) < 2:
             return
 
         arr = df[self._TS_COLUMN].to_numpy(copy=False)
-        deltas = np.diff(arr)
-        if not len(deltas):
-            return
-
-        gap_bars = 0
-        misaligned = 0
-        for delta in deltas:
-            if delta <= 0:
-                continue
-            if delta > interval:
-                gap_bars += int((delta - interval) // interval)
-                if (delta - interval) % interval:
-                    misaligned += 1
+        gap_bars, misaligned = self._detect_interval_gaps(arr, interval)
 
         if gap_bars:
             flags[self._FLAG_GAP] = flags.get(self._FLAG_GAP, 0) + gap_bars
@@ -274,6 +223,91 @@ class ConformancePipeline:
             warnings.append(
                 f"detected {misaligned} gaps with misaligned boundaries for interval={interval}"
             )
+
+    def _cast_timestamp_column(
+        self,
+        df: pd.DataFrame,
+        dtype: object,
+        flags: dict[str, int],
+        warnings: list[str],
+    ) -> tuple[int, int]:
+        ts = df[self._TS_COLUMN]
+        if isinstance(dtype, pd.DatetimeTZDtype):
+            converted = ts.dt.tz_convert("UTC")
+            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
+            return len(df), len(df)
+        if pd.api.types.is_datetime64_dtype(dtype):
+            df[self._TS_COLUMN] = self._timestamps_to_seconds(ts)
+            return len(df), 0
+        if pd.api.types.is_integer_dtype(dtype):
+            cast_rows = self._normalize_integer_epoch(df, flags, warnings)
+            return cast_rows, 0
+        return self._cast_flexible_timestamps(df, dtype, flags, warnings)
+
+    def _cast_flexible_timestamps(
+        self,
+        df: pd.DataFrame,
+        dtype: object,
+        flags: dict[str, int],
+        warnings: list[str],
+    ) -> tuple[int, int]:
+        ts = df[self._TS_COLUMN]
+        converted = pd.to_datetime(ts, utc=True, errors="coerce")
+        invalid_mask = converted.isna()
+        if invalid_mask.any():
+            invalid_count = int(invalid_mask.sum())
+            warnings.append(f"dropped {invalid_count} rows with invalid timestamps")
+            flags[self._FLAG_INVALID_TS] = (
+                flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
+            )
+            df.drop(index=df.index[invalid_mask], inplace=True)
+            df.reset_index(drop=True, inplace=True)
+            if df.empty:
+                return 0, 0
+            converted = converted[~invalid_mask].reset_index(drop=True)
+        else:
+            converted = converted.reset_index(drop=True)
+
+        df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
+        timezone_adjusted = 0
+        if isinstance(dtype, pd.DatetimeTZDtype) or getattr(dtype, "tz", None) is not None:
+            timezone_adjusted = len(df)
+        return len(df), timezone_adjusted
+
+    def _sort_and_dedupe_timestamps(
+        self,
+        df: pd.DataFrame,
+        flags: dict[str, int],
+        warnings: list[str],
+    ) -> None:
+        df.sort_values(self._TS_COLUMN, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
+        duplicates_mask = df.duplicated(subset=[self._TS_COLUMN], keep="last")
+        duplicates = int(duplicates_mask.sum())
+        if not duplicates:
+            return
+        df.drop(index=df.index[duplicates_mask], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        flags[self._FLAG_DUPLICATE_TS] = (
+            flags.get(self._FLAG_DUPLICATE_TS, 0) + duplicates
+        )
+        warnings.append(f"dropped {duplicates} duplicate bars")
+
+    def _detect_interval_gaps(self, arr: np.ndarray, interval: int) -> tuple[int, int]:
+        if arr.size < 2:
+            return 0, 0
+        deltas = np.diff(arr)
+        gap_bars = 0
+        misaligned = 0
+        for delta in deltas:
+            if delta <= 0:
+                continue
+            if delta > interval:
+                gap_bars += int((delta - interval) // interval)
+                if (delta - interval) % interval:
+                    misaligned += 1
+        return gap_bars, misaligned
 
     def _timestamps_to_seconds(self, series: pd.Series) -> pd.Series:
         as_int = series.astype("int64", copy=False)
