@@ -19,6 +19,7 @@ from .commit_log import CommitLogWriter
 from .database import Database
 from .degradation import DegradationManager
 from .fsm import StrategyFSM
+from .history_metadata import build_history_metadata_envelope
 from .models import StrategySubmit
 from .strategy_persistence import StrategyQueue, StrategyStorage
 from .submission import ComputeContextService, StrategyComputeContext
@@ -263,118 +264,36 @@ class StrategyManager:
         if not exists:
             raise KeyError(strategy_id)
 
-        artifact = getattr(report, "artifact", None)
-        dataset_fp = getattr(report, "dataset_fingerprint", None)
-        if dataset_fp is None and artifact is not None:
-            dataset_fp = getattr(artifact, "dataset_fingerprint", None)
-        as_of_value = getattr(report, "as_of", None)
-        if as_of_value is None and artifact is not None:
-            as_of_value = getattr(artifact, "as_of", None)
+        envelope = build_history_metadata_envelope(strategy_id, report)
 
-        mapping = self._build_history_mapping(report, dataset_fp, as_of_value)
-        if mapping:
-            await self.redis.hset(storage_key, mapping=mapping)
+        if envelope.redis_mapping:
+            await self.redis.hset(storage_key, mapping=envelope.redis_mapping)
 
-        meta_payload = self._build_meta_payload(
-            report, artifact, dataset_fp, as_of_value
-        )
         await self.redis.hset(
             storage_key,
-            mapping={f"seamless:{report.node_id}": json.dumps(meta_payload)},
+            mapping={
+                envelope.redis_key: json.dumps(envelope.redis_payload),
+            },
         )
 
-        world_id = getattr(report, "world_id", None)
-        if self.world_client is not None and world_id:
+        if (
+            self.world_client is not None
+            and envelope.world_request is not None
+        ):
             try:
-                world_payload = self._build_world_payload(
-                    strategy_id, report, meta_payload
-                )
                 await self.world_client.post_history_metadata(
-                    world_id=str(world_id),
-                    payload=world_payload,
+                    world_id=envelope.world_request.world_id,
+                    payload=envelope.world_request.payload,
                 )
             except Exception:
                 logger.exception(
                     "failed to forward seamless metadata to worldservice",
                     extra={
                         "strategy_id": strategy_id,
-                        "world_id": world_id,
-                        "node_id": report.node_id,
+                        "world_id": envelope.world_request.world_id,
+                        "node_id": envelope.node_id,
                     },
                 )
-
-    def _build_history_mapping(
-        self,
-        report: Any,
-        dataset_fp: Any,
-        as_of_value: Any,
-    ) -> dict[str, str]:
-        mapping: dict[str, str] = {}
-        world_id = getattr(report, "world_id", None)
-        if world_id:
-            mapping["compute_world_id"] = str(world_id)
-        execution_domain = getattr(report, "execution_domain", None)
-        if execution_domain:
-            mapping["compute_execution_domain"] = str(execution_domain)
-        if as_of_value:
-            mapping["compute_as_of"] = str(as_of_value)
-        if dataset_fp:
-            mapping["compute_dataset_fingerprint"] = str(dataset_fp)
-        return mapping
-
-    def _build_meta_payload(
-        self,
-        report: Any,
-        artifact: Any,
-        dataset_fp: Any,
-        as_of_value: Any,
-    ) -> dict[str, Any]:
-        world_id = getattr(report, "world_id", None)
-        execution_domain = getattr(report, "execution_domain", None)
-        coverage_bounds = getattr(report, "coverage_bounds", None)
-        artifact_payload: Any | None = None
-        if artifact is not None:
-            model_dump = getattr(artifact, "model_dump", None)
-            if callable(model_dump):
-                artifact_payload = model_dump()
-            else:
-                artifact_payload = artifact.__dict__
-
-        meta_payload: dict[str, Any] = {
-            "node_id": report.node_id,
-            "interval": int(report.interval),
-            "rows": getattr(report, "rows", None),
-            "coverage_bounds": list(coverage_bounds) if coverage_bounds else None,
-            "conformance_flags": getattr(report, "conformance_flags", None) or {},
-            "conformance_warnings": getattr(
-                report, "conformance_warnings", None
-            )
-            or [],
-            "artifact": artifact_payload,
-            "dataset_fingerprint": dataset_fp,
-            "as_of": as_of_value,
-            "updated_at": datetime.now(timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z"),
-        }
-        if world_id:
-            meta_payload["world_id"] = str(world_id)
-        if execution_domain:
-            meta_payload["execution_domain"] = str(execution_domain)
-        return meta_payload
-
-    def _build_world_payload(
-        self,
-        strategy_id: str,
-        report: Any,
-        meta_payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        payload = dict(meta_payload)
-        payload["strategy_id"] = strategy_id
-        world_id = getattr(report, "world_id", None)
-        if world_id:
-            payload["world_id"] = str(world_id)
-        return payload
 
     async def _build_compute_context(
         self, payload: StrategySubmit

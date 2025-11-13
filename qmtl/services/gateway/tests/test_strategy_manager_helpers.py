@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from qmtl.services.gateway.history_metadata import build_history_metadata_envelope
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.strategy_manager import StrategyManager
 
@@ -98,24 +99,6 @@ def test_inject_version_sentinel_skips_when_disabled(fake_redis):
     assert updated["nodes"] == []
 
 
-def test_build_history_mapping_includes_fields(strategy_manager):
-    report = SimpleNamespace(
-        world_id="world-1",
-        execution_domain="live",
-    )
-
-    mapping = strategy_manager._build_history_mapping(
-        report, dataset_fp="fp-1", as_of_value="2025-01-01T00:00:00Z"
-    )
-
-    assert mapping == {
-        "compute_world_id": "world-1",
-        "compute_execution_domain": "live",
-        "compute_as_of": "2025-01-01T00:00:00Z",
-        "compute_dataset_fingerprint": "fp-1",
-    }
-
-
 class _Artifact:
     def __init__(self) -> None:
         self.dataset_fingerprint = "fp-artifact"
@@ -132,8 +115,7 @@ class _Artifact:
         }
 
 
-def test_build_meta_payload_matches_report(strategy_manager):
-    artifact = _Artifact()
+def test_build_history_metadata_envelope_with_artifact():
     report = SimpleNamespace(
         node_id="node-1",
         interval=60,
@@ -143,30 +125,50 @@ def test_build_meta_payload_matches_report(strategy_manager):
         conformance_warnings=["gap"],
         world_id="world-9",
         execution_domain="sim",
+        artifact=_Artifact(),
     )
 
-    payload = strategy_manager._build_meta_payload(
-        report, artifact, dataset_fp="fp-artifact", as_of_value="2025-02-01T00:00:00Z"
-    )
+    envelope = build_history_metadata_envelope("strategy-123", report)
 
-    assert payload["node_id"] == "node-1"
-    assert payload["coverage_bounds"] == [0, 120]
-    assert payload["artifact"]["uri"] == "local://artifact"
-    assert payload["world_id"] == "world-9"
-    assert payload["execution_domain"] == "sim"
-
-
-def test_build_world_payload_adds_strategy(strategy_manager):
-    meta_payload = {
-        "node_id": "node-1",
-        "world_id": "world-9",
+    assert envelope.redis_key == "seamless:node-1"
+    assert envelope.redis_mapping == {
+        "compute_world_id": "world-9",
+        "compute_execution_domain": "sim",
+        "compute_dataset_fingerprint": "fp-artifact",
+        "compute_as_of": "2025-02-01T00:00:00Z",
     }
-    report = SimpleNamespace(world_id="world-9")
+    assert envelope.redis_payload["artifact"]["uri"] == "local://artifact"
+    assert envelope.redis_payload["coverage_bounds"] == [0, 120]
+    assert envelope.world_request is not None
+    assert envelope.world_request.world_id == "world-9"
+    assert envelope.world_request.payload["strategy_id"] == "strategy-123"
 
-    payload = strategy_manager._build_world_payload(
-        "strategy-123", report, meta_payload
+
+def test_build_history_metadata_envelope_falls_back_to_artifact_fields():
+    artifact = SimpleNamespace(
+        dataset_fingerprint="fp-from-artifact",
+        as_of="2025-01-01T00:00:00Z",
+    )
+    report = SimpleNamespace(
+        node_id="node-2",
+        interval=30,
+        rows=None,
+        coverage_bounds=None,
+        conformance_flags=None,
+        conformance_warnings=None,
+        artifact=artifact,
+        execution_domain=None,
     )
 
-    assert payload["strategy_id"] == "strategy-123"
-    assert payload["world_id"] == "world-9"
-    assert payload["node_id"] == "node-1"
+    envelope = build_history_metadata_envelope("strategy-456", report)
+
+    assert envelope.redis_mapping == {
+        "compute_dataset_fingerprint": "fp-from-artifact",
+        "compute_as_of": "2025-01-01T00:00:00Z",
+    }
+    assert (
+        envelope.redis_payload["dataset_fingerprint"]
+        == "fp-from-artifact"
+    )
+    assert envelope.redis_payload["as_of"] == "2025-01-01T00:00:00Z"
+    assert envelope.world_request is None
