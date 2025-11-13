@@ -360,6 +360,29 @@ class _CacheEntry:
 
 
 @dataclass(slots=True)
+class _ConformanceDefaults:
+    sla: SLAPolicy | None
+    partial_ok: bool
+    schema: dict[str, Any] | None
+    interval: int | None
+
+
+@dataclass(slots=True)
+class _BackfillSettings:
+    config: BackfillConfig
+    background_enabled: bool
+    coordinator: BackfillCoordinator
+
+
+@dataclass(slots=True)
+class _FingerprintSettings:
+    publish: bool
+    early: bool
+    preview: bool
+    mode: str
+
+
+@dataclass(slots=True)
 class _RequestContext:
     """Normalized compute context associated with a fetch call."""
 
@@ -529,43 +552,29 @@ class SeamlessDataProvider(ABC):
         self.max_backfill_chunk_size = max_backfill_chunk_size
         config = seamless_config or get_seamless_config()
         self._seamless_config = config
-        self._conformance_schema: dict[str, Any] | None = None
-        self._conformance_interval: int | None = None
-        presets_data, _ = _load_presets_document(config)
-        preset_sla = _resolve_sla_preset(presets_data, config)
-        (
-            preset_partial_ok,
-            preset_schema,
-            preset_interval_ms,
-        ) = _resolve_conformance_preset(presets_data, config)
-        resolved_sla = sla or preset_sla
-        resolved_partial_ok = (
-            partial_ok if partial_ok is not None else preset_partial_ok
-        )
-        if preset_schema is not None:
-            self._conformance_schema = preset_schema
-        if preset_interval_ms is not None:
-            try:
-                interval_value = int(preset_interval_ms)
-                if interval_value > 0:
-                    if interval_value % 1000 == 0:
-                        interval_value //= 1000
-                    self._conformance_interval = interval_value
-            except (TypeError, ValueError):  # pragma: no cover - defensive
-                self._conformance_interval = None
-        effective_config = self._normalize_backfill_config(
-            backfill_config
-            if backfill_config is not None
-            else BackfillConfig(window_bars=max_backfill_chunk_size)
-        )
-        self._backfill_config = effective_config
-        self.enable_background_backfill = bool(enable_background_backfill) and (
-            effective_config.mode == "background"
+
+        conformance_defaults = self._build_conformance_defaults(
+            config=config,
+            sla=sla,
+            partial_ok=partial_ok,
         )
         self._conformance = conformance
-        self._coordinator = coordinator or self._create_default_coordinator()
-        self._sla = resolved_sla
-        self._partial_ok = bool(resolved_partial_ok)
+        self._conformance_schema: dict[str, Any] | None = (
+            conformance_defaults.schema
+        )
+        self._conformance_interval: int | None = conformance_defaults.interval
+        self._sla = conformance_defaults.sla
+        self._partial_ok = conformance_defaults.partial_ok
+
+        backfill_settings = self._init_backfill_policy(
+            backfill_config=backfill_config,
+            enable_background_backfill=enable_background_backfill,
+            coordinator=coordinator,
+            max_backfill_chunk_size=max_backfill_chunk_size,
+        )
+        self._backfill_config = backfill_settings.config
+        self.enable_background_backfill = backfill_settings.background_enabled
+        self._coordinator = backfill_settings.coordinator
         self._last_conformance_report: Optional[ConformanceReport] = None
         self._registrar = registrar
         self._stabilization_bars = max(0, int(stabilization_bars))
@@ -589,42 +598,15 @@ class SeamlessDataProvider(ABC):
             logger=logger,
         )
 
-        mode_value = str(config.fingerprint_mode or "").strip().lower()
-        legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
-        canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
-
-        publish_override = _resolve_publish_override(config)
-        if publish_override is None:
-            publish_default = _coerce_bool(
-                config.publish_fingerprint,
-                default=True,
-            )
-            if legacy_requested:
-                publish_default = False
-        else:
-            publish_default = publish_override
-        self._publish_fingerprint = _coerce_bool(
-            publish_fingerprint,
-            default=publish_default,
+        fingerprint_settings = self._configure_fingerprint_mode(
+            config=config,
+            publish_override=publish_fingerprint,
+            early_override=early_fingerprint,
         )
-
-        early_default = _coerce_bool(config.early_fingerprint, default=False)
-        self._early_fingerprint = _coerce_bool(
-            early_fingerprint,
-            default=early_default,
-        )
-
-        if canonical_requested or legacy_requested:
-            self._fingerprint_mode = mode_value
-        else:
-            self._fingerprint_mode = (
-                _FINGERPRINT_MODE_CANONICAL
-                if self._publish_fingerprint
-                else _FINGERPRINT_MODE_LEGACY
-            )
-
-        preview_flag = _coerce_bool(config.preview_fingerprint, default=False)
-        self._preview_fingerprint = preview_flag or self._early_fingerprint
+        self._publish_fingerprint = fingerprint_settings.publish
+        self._early_fingerprint = fingerprint_settings.early
+        self._fingerprint_mode = fingerprint_settings.mode
+        self._preview_fingerprint = fingerprint_settings.preview
 
         cache_config = cache or {}
         template_default = "{node_id}:{start}:{end}:{interval}:{conformance_version}:{world_id}:{as_of}"
@@ -659,6 +641,121 @@ class SeamlessDataProvider(ABC):
         """Return metadata describing the last call to :meth:`fetch`."""
 
         return self._last_fetch_metadata
+
+    def _build_conformance_defaults(
+        self,
+        *,
+        config: SeamlessConfig,
+        sla: SLAPolicy | None,
+        partial_ok: bool | None,
+    ) -> _ConformanceDefaults:
+        presets_data, _ = _load_presets_document(config)
+        preset_sla = _resolve_sla_preset(presets_data, config)
+        (
+            preset_partial_ok,
+            preset_schema,
+            preset_interval_ms,
+        ) = _resolve_conformance_preset(presets_data, config)
+
+        resolved_partial_flag = (
+            partial_ok if partial_ok is not None else preset_partial_ok
+        )
+
+        interval_value: int | None = None
+        if preset_interval_ms is not None:
+            try:
+                candidate = int(preset_interval_ms)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                candidate = None
+            if candidate is not None and candidate > 0:
+                if candidate % 1000 == 0:
+                    candidate //= 1000
+                interval_value = candidate
+
+        return _ConformanceDefaults(
+            sla=sla or preset_sla,
+            partial_ok=bool(resolved_partial_flag),
+            schema=preset_schema,
+            interval=interval_value,
+        )
+
+    def _init_backfill_policy(
+        self,
+        *,
+        backfill_config: BackfillConfig | None,
+        enable_background_backfill: bool,
+        coordinator: BackfillCoordinator | None,
+        max_backfill_chunk_size: int,
+    ) -> _BackfillSettings:
+        effective_config = self._normalize_backfill_config(
+            backfill_config
+            if backfill_config is not None
+            else BackfillConfig(window_bars=max_backfill_chunk_size)
+        )
+        background_enabled = bool(enable_background_backfill) and (
+            effective_config.mode == "background"
+        )
+        resolved_coordinator = coordinator or self._create_default_coordinator()
+        return _BackfillSettings(
+            config=effective_config,
+            background_enabled=background_enabled,
+            coordinator=resolved_coordinator,
+        )
+
+    def _configure_fingerprint_mode(
+        self,
+        *,
+        config: SeamlessConfig,
+        publish_override: bool | None,
+        early_override: bool | None,
+    ) -> _FingerprintSettings:
+        mode_value = str(config.fingerprint_mode or "").strip().lower()
+        legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
+        canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
+
+        publish_override_value = _resolve_publish_override(config)
+        if publish_override_value is None:
+            publish_default = _coerce_bool(
+                config.publish_fingerprint,
+                default=True,
+            )
+            if legacy_requested:
+                publish_default = False
+        else:
+            publish_default = publish_override_value
+
+        publish_flag = _coerce_bool(
+            publish_override,
+            default=publish_default,
+        )
+
+        early_default = _coerce_bool(config.early_fingerprint, default=False)
+        early_flag = _coerce_bool(
+            early_override,
+            default=early_default,
+        )
+
+        if canonical_requested or legacy_requested:
+            fingerprint_mode = mode_value or (
+                _FINGERPRINT_MODE_CANONICAL
+                if publish_flag
+                else _FINGERPRINT_MODE_LEGACY
+            )
+        else:
+            fingerprint_mode = (
+                _FINGERPRINT_MODE_CANONICAL
+                if publish_flag
+                else _FINGERPRINT_MODE_LEGACY
+            )
+
+        preview_flag = _coerce_bool(config.preview_fingerprint, default=False)
+
+        return _FingerprintSettings(
+            publish=publish_flag,
+            early=early_flag,
+            preview=preview_flag or early_flag,
+            mode=fingerprint_mode,
+        )
 
     def _create_default_coordinator(self) -> BackfillCoordinator:
         url = (self._seamless_config.coordinator_url or "").strip()

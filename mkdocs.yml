@@ -20,6 +20,9 @@ nav:
       - Execution State: architecture/execution_state.md
       - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
       - Control-Plane Radon Plan: architecture/radon_control_plane.md
+      - Seamless Data Provider Radon Plan: architecture/radon_seamless_data.md
+      - History Warmup Radon Plan: architecture/radon_history_warmup.md
+      - Runtime SDK Radon Plan: architecture/radon_runtime_sdk.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -145,6 +148,9 @@ plugins:
             "Execution State": "실행 상태"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
             "Control-Plane Radon Plan": "컨트롤 플레인 Radon 계획"
+            "Seamless Data Provider Radon Plan": "Seamless Data Provider Radon 계획"
+            "History Warmup Radon Plan": "History Warmup Radon 계획"
+            "Runtime SDK Radon Plan": "런타임 SDK Radon 계획"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"

@@ -132,6 +132,52 @@ async def test_history_service_with_provider_and_strict(monkeypatch):
     assert strict_calls == [strategy]
 
 
+def test_plan_skips_bootstrap_when_cache_is_populated(monkeypatch):
+    service = HistoryWarmupService()
+    node = StreamInput(interval=60, period=1)
+    strategy = types.SimpleNamespace(nodes=[node])
+
+    def fake_rows(self, target):
+        if target is node:
+            return {node.interval: [(5, object())]}
+        return {}
+
+    monkeypatch.setattr(service, "_node_cache_rows", types.MethodType(fake_rows, service))
+
+    plan = service._plan_strategy_warmup(
+        strategy,
+        offline_mode=True,
+        history_start=None,
+        history_end=120,
+    )
+
+    assert plan.start is None
+    assert plan.end == 120
+    assert plan.ensure_history is False
+
+
+def test_plan_bootstraps_when_partial_window_and_no_cache(monkeypatch):
+    service = HistoryWarmupService()
+    node = StreamInput(interval=60, period=1)
+    strategy = types.SimpleNamespace(nodes=[node])
+
+    def fake_rows(self, target):
+        return {}
+
+    monkeypatch.setattr(service, "_node_cache_rows", types.MethodType(fake_rows, service))
+
+    plan = service._plan_strategy_warmup(
+        strategy,
+        offline_mode=True,
+        history_start=None,
+        history_end=120,
+    )
+
+    assert plan.start == 1
+    assert plan.end == 2
+    assert plan.ensure_history is True
+
+
 def test_replay_events_simple_orders_dependencies():
     class TestStream(StreamInput):
         def __init__(self, node_id_value: str, **kwargs) -> None:
