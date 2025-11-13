@@ -70,7 +70,7 @@ last_modified: 2025-11-04
   - 각 월드에 `ProportionalRebalancer`를 적용하고, 전역 넷 델타를 추가 계산합니다.
   - 실제 주문은 안전하게 월드별로 실행하고, 공유 계정 모드에서만 `global_deltas`를 넷팅 근거로 사용할 것을 권장합니다.
 
-현재 WorldService는 선택적 `schema_version` 필드를 수용하며 기본값은 1입니다. `WorldServiceServerConfig`의 `compat_rebalance_v2`/`alpha_metrics_required` 플래그에 따라 응답이 `schema_version=2`와 `AlphaMetricsEnvelope`(per_world/per_strategy `alpha_performance` 사전 포함)을 포함하도록 확장되거나 v1로 노출됩니다. `alpha_metrics_required`가 활성화되었으면 `schema_version<2` 요청은 계산 전에 거부되어 메트릭을 기대하는 클라이언트가 안정적으로 실패할 수 있습니다. 쓰기/리딩을 동시에 조율하는 절차는 `docs/operations/rebalancing_schema_coordination.md`에 기록되어 있습니다.【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+현재 WorldService는 선택적 `schema_version` 필드를 수용하며 기본값은 1입니다. `WorldServiceServerConfig`의 `compat_rebalance_v2`/`alpha_metrics_required` 플래그에 따라 응답이 `schema_version=2`와 `AlphaMetricsEnvelope`(per_world/per_strategy `alpha_performance` 사전 포함), `rebalance_intent.meta`(콜러가 전송한 티켓·릴리즈 메모 등)까지 포함하도록 확장되거나 v1으로 다운그레이드됩니다. `alpha_metrics_required`가 활성화되었으면 `schema_version<2` 요청은 계산 전에 거부되어 메트릭을 기대하는 클라이언트가 안정적으로 실패할 수 있습니다. v2에서 `rebalance_intent`를 보내지 않으면 서버가 빈 `meta` 맵을 채워 응답하지만, v1 클라이언트에는 해당 필드를 완전히 생략해 역호환성을 유지합니다. 쓰기/리딩을 동시에 조율하는 절차는 `docs/operations/rebalancing_schema_coordination.md`에 기록되어 있습니다.【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L219】【F:qmtl/services/worldservice/schemas.py#L245-L308】
 
 ## 전략 비중 조절 트리거와 캐스케이드
 

@@ -4,7 +4,10 @@ from collections.abc import Sequence
 import math
 from typing import Iterable
 
-from qmtl.runtime.alpha_metrics import default_alpha_performance_metrics
+from qmtl.runtime.alpha_metrics import (
+    default_alpha_performance_metrics,
+    sanitize_alpha_performance_metrics,
+)
 from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
 
 from .schemas import AlphaMetricsEnvelope, RebalancePlanModel, StrategySeries
@@ -61,7 +64,7 @@ def alpha_performance_metrics_from_returns(returns: Sequence[float]) -> dict[str
     if not clean:
         return default_alpha_performance_metrics()
     raw = alpha_performance_node(clean)
-    return {f"alpha_performance.{key}": float(value) for key, value in raw.items()}
+    return sanitize_alpha_performance_metrics(raw)
 
 
 def alpha_performance_metrics_from_series(series: StrategySeries) -> dict[str, float]:

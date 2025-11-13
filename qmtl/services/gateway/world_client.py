@@ -379,17 +379,60 @@ class WorldServiceClient:
             json=payload,
         )
 
-    async def post_rebalance_plan(self, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
-        """Request a multi-world rebalance plan from WorldService.
+    async def post_rebalance_plan(
+        self,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+        *,
+        schema_version: int | None = None,
+        fallback_schema_version: int | None = None,
+    ) -> Any:
+        """Request a multi-world rebalance plan, negotiating schema versions if needed."""
 
-        This proxies to the WorldService endpoint at ``/rebalancing/plan``.
-        """
-        return await self._request_json(
-            "POST",
-            "/rebalancing/plan",
-            headers=headers,
-            json=payload,
+        def _coerce_body(data: Any) -> Dict[str, Any]:
+            if hasattr(data, "model_dump"):
+                return data.model_dump(exclude_none=True)
+            if isinstance(data, dict):
+                return dict(data)
+            raise TypeError("payload must be a mapping or pydantic model")
+
+        preferred_version = max(1, int(schema_version)) if schema_version is not None else None
+        fallback_version = (
+            max(1, int(fallback_schema_version))
+            if fallback_schema_version is not None
+            else None
         )
+
+        body = _coerce_body(payload)
+        if preferred_version is not None:
+            body["schema_version"] = preferred_version
+
+        try:
+            return await self._request_json(
+                "POST",
+                "/rebalancing/plan",
+                headers=headers,
+                json=body,
+            )
+        except httpx.HTTPStatusError as exc:
+            should_retry = (
+                preferred_version is not None
+                and fallback_version is not None
+                and fallback_version != preferred_version
+                and exc.response is not None
+                and exc.response.status_code in {400, 404, 422}
+            )
+            if not should_retry:
+                raise
+
+            downgraded = _coerce_body(payload)
+            downgraded["schema_version"] = fallback_version
+            return await self._request_json(
+                "POST",
+                "/rebalancing/plan",
+                headers=headers,
+                json=downgraded,
+            )
 
 
 __all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]

@@ -195,12 +195,17 @@ class WorldService:
         )
         await self.store.record_rebalance_plan(plan.plan_payload)
         if self.bus is not None:
+            alpha_metrics = plan.plan_payload.get("alpha_metrics")
+            intent = plan.plan_payload.get("rebalance_intent")
             for wid, per_plan in plan.plan_payload["per_world"].items():
                 try:
                     await self.bus.publish_rebalancing_plan(
                         wid,
                         per_plan,
                         version=plan.schema_version,
+                        schema_version=plan.schema_version,
+                        alpha_metrics=alpha_metrics,
+                        rebalance_intent=intent,
                     )
                 except Exception:  # pragma: no cover - best effort
                     logger.exception("Failed to publish rebalancing plan for %s", wid)
@@ -270,7 +275,13 @@ class WorldService:
         ]
 
     @staticmethod
-    def _serialize_plan(result, *, schema_version: int = 1, alpha_metrics: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    def _serialize_plan(
+        result,
+        *,
+        schema_version: int = 1,
+        alpha_metrics: Dict[str, Any] | None = None,
+        rebalance_intent: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         per_world: Dict[str, Any] = {}
         for wid, plan in result.per_world.items():
             per_world[wid] = {
@@ -297,6 +308,8 @@ class WorldService:
         }
         if alpha_metrics is not None:
             payload["alpha_metrics"] = alpha_metrics
+        if rebalance_intent is not None:
+            payload["rebalance_intent"] = rebalance_intent
         return payload
 
     async def _execute_rebalance(

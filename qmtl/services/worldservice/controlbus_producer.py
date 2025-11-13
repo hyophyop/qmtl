@@ -95,12 +95,21 @@ class ControlBusProducer:
         plan: Dict[str, Any],
         *,
         version: int = 1,
+        schema_version: int | None = None,
+        alpha_metrics: Dict[str, Any] | None = None,
+        rebalance_intent: Dict[str, Any] | None = None,
     ) -> None:
         payload: Dict[str, Any] = {
             "world_id": world_id,
             "plan": plan,
             "version": version,
         }
+        if schema_version is not None:
+            payload["schema_version"] = schema_version
+        if alpha_metrics is not None:
+            payload["alpha_metrics"] = alpha_metrics
+        if rebalance_intent is not None:
+            payload["rebalance_intent"] = rebalance_intent
         await self._publish("rebalancing_planned", world_id, payload)
 
 

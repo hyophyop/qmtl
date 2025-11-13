@@ -55,8 +55,12 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 )
 
         # 1) Fetch plan from WorldService
+        preferred_schema_version = max(1, rebalance_schema_version or 1)
+        fallback_schema_version = 1 if preferred_schema_version > 1 else None
         plan_resp = await world_client.post_rebalance_plan(
-            payload.model_dump(exclude_unset=True)
+            payload.model_dump(exclude_unset=True),
+            schema_version=preferred_schema_version,
+            fallback_schema_version=fallback_schema_version,
         )
 
         # 2) Convert per-world plans into orders

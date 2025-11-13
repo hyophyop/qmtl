@@ -16,8 +16,8 @@ def test_report_cli_generates_markdown(tmp_path: Path) -> None:
     assert output_path.exists()
     content = output_path.read_text()
     metrics = alpha_performance_node(results["returns"])
-    assert f"{metrics['sharpe']:.6f}" in content
-    assert f"{metrics['max_drawdown']:.6f}" in content
+    assert f"{metrics['alpha_performance.sharpe']:.6f}" in content
+    assert f"{metrics['alpha_performance.max_drawdown']:.6f}" in content
 
 
 def test_report_cli_handles_missing_returns(tmp_path: Path, capsys) -> None:

@@ -3,9 +3,11 @@
 import math
 from collections.abc import Sequence
 from typing import Optional
-from qmtl.runtime.sdk.node import Node
+
+from qmtl.runtime.alpha_metrics import alpha_metric_key
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
+from qmtl.runtime.sdk.node import Node
 
 
 def _car_mdd(returns: Sequence[float], max_drawdown: float) -> float:
@@ -159,7 +161,7 @@ def alpha_performance_node(
     car_mdd = _car_mdd(net_returns, max_dd)
     rar_mdd = _rar_mdd(net_returns, max_dd, risk_free_rate)
 
-    result = {
+    base_metrics = {
         "sharpe": sharpe,
         "max_drawdown": max_dd,
         "win_ratio": win_ratio,
@@ -167,13 +169,12 @@ def alpha_performance_node(
         "car_mdd": car_mdd,
         "rar_mdd": rar_mdd,
     }
-    
-    # Add execution metrics if available
+
+    result = {alpha_metric_key(name): value for name, value in base_metrics.items()}
+
     if execution_metrics:
-        result.update({
-            f"execution_{k}": v for k, v in execution_metrics.items()
-        })
-    
+        result.update({f"execution_{k}": v for k, v in execution_metrics.items()})
+
     return result
 
 

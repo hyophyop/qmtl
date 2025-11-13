@@ -250,6 +250,12 @@ class AlphaMetricsEnvelope(BaseModel):
     per_strategy: Dict[str, Dict[str, Dict[str, float]]] = Field(default_factory=dict)
 
 
+class RebalanceIntentModel(BaseModel):
+    """Metadata describing how and why a rebalance was triggered."""
+
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class MultiWorldRebalanceRequest(BaseModel):
     total_equity: float
     world_alloc_before: Dict[str, float]
@@ -263,6 +269,7 @@ class MultiWorldRebalanceRequest(BaseModel):
     mode: str | None = None  # 'scaling' (default), 'overlay', or 'hybrid'
     overlay: OverlayConfigModel | None = None
     schema_version: int | None = Field(default=None, ge=1)
+    rebalance_intent: RebalanceIntentModel | None = None
 
 
 class MultiWorldRebalanceResponse(BaseModel):
@@ -271,6 +278,8 @@ class MultiWorldRebalanceResponse(BaseModel):
     global_deltas: List[SymbolDeltaModel]
     overlay_deltas: List[SymbolDeltaModel] | None = None
     alpha_metrics: AlphaMetricsEnvelope | None = None
+    rebalance_intent: RebalanceIntentModel | None = None
+    model_config = ConfigDict(ser_json_exclude_none=True)
 
 
 class OverlayConfigModel(BaseModel):
@@ -341,4 +350,5 @@ __all__ = [
     'WorldNodeUpsertRequest',
     'MultiWorldRebalanceRequest',
     'MultiWorldRebalanceResponse',
+    'RebalanceIntentModel',
 ]

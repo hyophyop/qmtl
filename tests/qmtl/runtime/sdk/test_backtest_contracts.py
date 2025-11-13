@@ -146,7 +146,7 @@ def test_alpha_performance_includes_execution_metrics() -> None:
 
     assert "execution_total_trades" in result
     assert result["execution_total_trades"] == 1
-    assert "sharpe" in result
+    assert "alpha_performance.sharpe" in result
 
     adjusted_returns = adjust_returns_for_costs(raw_returns, fills)
     assert len(adjusted_returns) == len(raw_returns)

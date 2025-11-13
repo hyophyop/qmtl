@@ -16,6 +16,7 @@ from ..schemas import (
     MultiWorldRebalanceResponse,
     PositionSliceModel,
     RebalancePlanModel,
+    RebalanceIntentModel,
     SymbolDeltaModel,
 )
 from ..services import WorldService
@@ -66,13 +67,26 @@ def create_rebalancing_router(
             version = 1
         return min(version, max_supported_version)
 
-    def _build_response_payload(result, active_version: int) -> tuple[MultiWorldRebalanceResponse, AlphaMetricsEnvelope | None, Dict[str, RebalancePlanModel], List[SymbolDeltaModel]]:
+    def _build_response_payload(
+        result,
+        active_version: int,
+        intent: RebalanceIntentModel | None,
+    ) -> tuple[
+        MultiWorldRebalanceResponse,
+        AlphaMetricsEnvelope | None,
+        Dict[str, RebalancePlanModel],
+        List[SymbolDeltaModel],
+        RebalanceIntentModel | None,
+    ]:
         per_world = _serialize_plan_models(result.per_world)
         global_deltas = [
             SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
             for d in result.global_deltas
         ]
         alpha_metrics = build_alpha_metrics_envelope(per_world) if active_version >= 2 else None
+        intent_payload: RebalanceIntentModel | None = None
+        if active_version >= 2:
+            intent_payload = intent or RebalanceIntentModel()
         response_kwargs: dict[str, object] = {
             "schema_version": active_version,
             "per_world": per_world,
@@ -80,7 +94,15 @@ def create_rebalancing_router(
         }
         if alpha_metrics is not None:
             response_kwargs["alpha_metrics"] = alpha_metrics
-        return MultiWorldRebalanceResponse(**response_kwargs), alpha_metrics, per_world, global_deltas
+        if intent_payload is not None:
+            response_kwargs["rebalance_intent"] = intent_payload
+        return (
+            MultiWorldRebalanceResponse(**response_kwargs),
+            alpha_metrics,
+            per_world,
+            global_deltas,
+            intent_payload,
+        )
 
     def _ensure_mode(payload: MultiWorldRebalanceRequest) -> None:
         mode = (payload.mode or "scaling").lower()
@@ -97,7 +119,11 @@ def create_rebalancing_router(
                 detail="schema_version>=2 required when alpha_metrics_required is enabled",
             )
 
-    @router.post('/rebalancing/plan', response_model=MultiWorldRebalanceResponse)
+    @router.post(
+        '/rebalancing/plan',
+        response_model=MultiWorldRebalanceResponse,
+        response_model_exclude_none=True,
+    )
     async def post_rebalance_plan(payload: MultiWorldRebalanceRequest) -> MultiWorldRebalanceResponse:
         _ensure_mode(payload)
         _ensure_version_requirements(payload.schema_version)
@@ -117,10 +143,18 @@ def create_rebalancing_router(
         planner = MultiWorldProportionalRebalancer()
         result = planner.plan(ctx)
 
-        response, _, _, _ = _build_response_payload(result, active_version)
+        response, _, _, _, _ = _build_response_payload(
+            result,
+            active_version,
+            payload.rebalance_intent,
+        )
         return response
 
-    @router.post('/rebalancing/apply', response_model=MultiWorldRebalanceResponse)
+    @router.post(
+        '/rebalancing/apply',
+        response_model=MultiWorldRebalanceResponse,
+        response_model_exclude_none=True,
+    )
     async def post_rebalance_apply(payload: MultiWorldRebalanceRequest) -> MultiWorldRebalanceResponse:
         _ensure_mode(payload)
         _ensure_version_requirements(payload.schema_version)
@@ -139,8 +173,16 @@ def create_rebalancing_router(
         planner = MultiWorldProportionalRebalancer()
         result = planner.plan(ctx)
 
-        response, alpha_metrics, per_world, global_deltas = _build_response_payload(
-            result, active_version
+        (
+            response,
+            alpha_metrics,
+            per_world,
+            global_deltas,
+            intent_payload,
+        ) = _build_response_payload(
+            result,
+            active_version,
+            payload.rebalance_intent,
         )
         overlay_deltas: list[SymbolDeltaModel] | None = None
 
@@ -149,6 +191,7 @@ def create_rebalancing_router(
             result,
             schema_version=active_version,
             alpha_metrics=alpha_metrics.model_dump() if alpha_metrics is not None else None,
+            rebalance_intent=intent_payload.model_dump() if intent_payload is not None else None,
         )
         payload_to_store = dict(plan_payload)
 
@@ -164,6 +207,12 @@ def create_rebalancing_router(
         # Emit a ControlBus event per world if a bus is configured
         if getattr(service, "bus", None) is not None:
             bus = service.bus
+            alpha_metrics_dict = (
+                alpha_metrics.model_dump() if alpha_metrics is not None else None
+            )
+            intent_dict = (
+                intent_payload.model_dump() if intent_payload is not None else None
+            )
             try:
                 for wid in per_world.keys():
                     plan_payload = payload_to_store["per_world"][wid]
@@ -171,21 +220,21 @@ def create_rebalancing_router(
                         wid,
                         plan_payload,
                         version=active_version,
+                        schema_version=active_version,
+                        alpha_metrics=alpha_metrics_dict,
+                        rebalance_intent=intent_dict,
                     )
             except Exception:
                 # Non-fatal if bus is unavailable
                 pass
 
-        response_kwargs: dict[str, object] = {
-            "schema_version": active_version,
-            "per_world": per_world,
-            "global_deltas": global_deltas,
-        }
         if overlay_deltas is not None:
-            response_kwargs["overlay_deltas"] = overlay_deltas
+            response.overlay_deltas = overlay_deltas
         if alpha_metrics is not None:
-            response_kwargs["alpha_metrics"] = alpha_metrics
+            response.alpha_metrics = alpha_metrics
+        if intent_payload is not None:
+            response.rebalance_intent = intent_payload
 
-        return MultiWorldRebalanceResponse(**response_kwargs)
+        return response
 
     return router

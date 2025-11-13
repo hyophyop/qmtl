@@ -245,6 +245,9 @@ class ControlBusConsumer:
                     version=payload.version,
                     policy=payload.policy,
                     run_id=payload.run_id,
+                    schema_version=payload.schema_version,
+                    alpha_metrics=payload.alpha_metrics,
+                    rebalance_intent=payload.rebalance_intent,
                 )
 
             if self._rebalancing_policy is not None:
