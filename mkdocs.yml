@@ -19,6 +19,7 @@ nav:
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
       - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
+      - Seamless Data Provider Radon Plan: architecture/radon_seamless_data.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -143,6 +144,7 @@ plugins:
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
+            "Seamless Data Provider Radon Plan": "Seamless Data Provider Radon 계획"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"
