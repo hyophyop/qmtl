@@ -265,8 +265,6 @@ class ConformancePipeline:
             if df.empty:
                 return 0, 0
             converted = converted[~invalid_mask].reset_index(drop=True)
-        else:
-            converted = converted.reset_index(drop=True)
 
         df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
         timezone_adjusted = 0
