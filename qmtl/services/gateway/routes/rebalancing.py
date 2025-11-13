@@ -39,6 +39,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         manager: StrategyManager = Depends(deps.provide_manager),
         database: Database = Depends(deps.provide_database),
         enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+        rebalance_schema_version: int = Depends(deps.provide_rebalance_schema_version),
+        alpha_metrics_capable: bool = Depends(deps.provide_alpha_metrics_capable),
     ) -> Dict[str, Any]:
         submit_requested = _parse_bool(request.query_params.get("submit"))
 
@@ -53,8 +55,12 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 )
 
         # 1) Fetch plan from WorldService
+        preferred_schema_version = max(1, rebalance_schema_version or 1)
+        fallback_schema_version = 1 if preferred_schema_version > 1 else None
         plan_resp = await world_client.post_rebalance_plan(
-            payload.model_dump(exclude_unset=True)
+            payload.model_dump(exclude_unset=True),
+            schema_version=preferred_schema_version,
+            fallback_schema_version=fallback_schema_version,
         )
 
         # 2) Convert per-world plans into orders
@@ -137,7 +143,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail={
                         "code": "E_SHARED_ACCOUNT_POLICY",
                         "message": message,
@@ -218,6 +224,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             result["submitted"] = submitted
         else:
             result["submitted"] = False
+        result["rebalance_schema_version"] = rebalance_schema_version
+        result["alpha_metrics_capable"] = alpha_metrics_capable
         return result
 
     return router

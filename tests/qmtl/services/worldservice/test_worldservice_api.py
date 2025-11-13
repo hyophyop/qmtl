@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import asyncio
 
@@ -70,6 +71,29 @@ class DummyBus(ControlBusProducer):
                 },
         )
         )
+
+
+    async def publish_rebalancing_plan(  # type: ignore[override]
+        self,
+        world_id: str,
+        plan: dict,
+        *,
+        version: int = 1,
+        schema_version: int | None = None,
+        alpha_metrics: dict | None = None,
+        rebalance_intent: dict | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "plan": plan,
+            "version": version,
+        }
+        if schema_version is not None:
+            payload["schema_version"] = schema_version
+        if alpha_metrics is not None:
+            payload["alpha_metrics"] = alpha_metrics
+        if rebalance_intent is not None:
+            payload["rebalance_intent"] = rebalance_intent
+        self.events.append(("rebalancing_planned", world_id, payload))
 
 
 class DummyExecutor:
@@ -239,7 +263,8 @@ async def test_rebalancing_apply_scaling_mode_success():
             assert resp.status_code == 200
 
             body = resp.json()
-            assert set(body) >= {"per_world", "global_deltas"}
+            assert set(body) >= {"schema_version", "per_world", "global_deltas"}
+            assert body["schema_version"] == 1
             assert "w1" in body["per_world"]
 
             plan = body["per_world"]["w1"]
@@ -250,6 +275,250 @@ async def test_rebalancing_apply_scaling_mode_success():
 
             assert body["global_deltas"] == []
             assert "overlay_deltas" not in body or body["overlay_deltas"] is None
+            assert body.get("alpha_metrics") is None
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_downgrades_when_v2_disabled():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 1
+            assert body.get("alpha_metrics") is None
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_serves_v2_when_enabled():
+    app = create_app(storage=Storage(), compat_rebalance_v2=True)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 2
+            alpha_metrics = body["alpha_metrics"]
+            assert "per_world" in alpha_metrics
+            assert "per_strategy" in alpha_metrics
+            assert alpha_metrics["per_world"]["w1"]["alpha_performance.sharpe"] == 0.0
+            assert "s1" in alpha_metrics["per_strategy"]
+            assert alpha_metrics["per_strategy"]["s1"]["w1"]["alpha_performance.sharpe"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_includes_intent_metadata_when_v2_enabled():
+    app = create_app(storage=Storage(), compat_rebalance_v2=True)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "rebalance_intent": {
+                    "meta": {
+                        "ticket": "1514",
+                        "reason": "smoke-test",
+                    }
+                },
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 2
+            assert body["rebalance_intent"]["meta"]["ticket"] == "1514"
+            assert body["rebalance_intent"]["meta"]["reason"] == "smoke-test"
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_strips_intent_for_v1_clients():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "rebalance_intent": {"meta": {"ticket": "legacy-client"}},
+            }
+
+            resp = await client.post("/rebalancing/plan", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["schema_version"] == 1
+            assert "rebalance_intent" not in body
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_apply_emits_controlbus_metadata_for_v2():
+    bus = DummyBus()
+    app = create_app(bus=bus, storage=Storage(), compat_rebalance_v2=True)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "schema_version": 2,
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "rebalance_intent": {"meta": {"ticket": "cb-v2"}},
+            }
+
+            resp = await client.post("/rebalancing/apply", json=payload)
+            assert resp.status_code == 200
+
+    events = [evt for evt in bus.events if evt[0] == "rebalancing_planned"]
+    assert events
+    per_world_event = next(evt for evt in events if evt[1] == "w1")
+    event_payload = per_world_event[2]
+    assert event_payload["version"] == 2
+    assert event_payload["schema_version"] == 2
+    assert event_payload["alpha_metrics"]["per_world"]["w1"]["alpha_performance.sharpe"] == 0.0
+    assert event_payload["rebalance_intent"]["meta"]["ticket"] == "cb-v2"
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_apply_controlbus_v1_skips_optional_metadata():
+    bus = DummyBus()
+    app = create_app(bus=bus, storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "rebalance_intent": {"meta": {"ticket": "legacy"}},
+            }
+
+            resp = await client.post("/rebalancing/apply", json=payload)
+            assert resp.status_code == 200
+
+    events = [evt for evt in bus.events if evt[0] == "rebalancing_planned"]
+    assert events
+    per_world_event = next(evt for evt in events if evt[1] == "w1")
+    event_payload = per_world_event[2]
+    assert event_payload["version"] == 1
+    assert event_payload.get("schema_version") == 1
+    assert "alpha_metrics" not in event_payload
+    assert "rebalance_intent" not in event_payload
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_requires_v2_when_alpha_metrics_required():
+    app = create_app(
+        storage=Storage(),
+        compat_rebalance_v2=True,
+        alpha_metrics_required=True,
+    )
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            base_payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+            }
+
+            resp = await client.post("/rebalancing/plan", json=base_payload)
+            assert resp.status_code == 400
+            assert "schema_version>=2" in resp.json()["detail"]
+
+            payload_v2 = dict(base_payload, schema_version=2)
+            ok = await client.post("/rebalancing/plan", json=payload_v2)
+            assert ok.status_code == 200
+            assert ok.json()["schema_version"] == 2
 
 
 @pytest.mark.asyncio

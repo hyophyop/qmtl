@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import asyncio
 import json
 import logging
@@ -36,6 +37,22 @@ from .storage import Storage
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_REBALANCE_SCHEMA_VERSION = 1
+
+
+@dataclass
+class AllocationExecutionPlan:
+    payload: AllocationUpsertRequest
+    etag: str
+    schema_version: int
+    world_ids: tuple[str, ...]
+    world_alloc_before: Dict[str, float]
+    strategy_alloc_before: Dict[str, Dict[str, float]]
+    plan_payload: Dict[str, Any]
+    request_snapshot: Dict[str, Any]
+    executed: bool = False
+    execution_response: Any | None = None
 
 
 class WorldService:
@@ -82,6 +99,125 @@ class WorldService:
             lock = asyncio.Lock()
             self._allocation_locks[world_id] = lock
         return lock
+
+    def _validate_allocation_payload(self, payload: AllocationUpsertRequest) -> None:
+        if not payload.world_allocations:
+            raise HTTPException(status_code=422, detail="world_allocations cannot be empty")
+        invalid = [wid for wid, val in payload.world_allocations.items() if val < 0 or val > 1]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Allocation ratios must be between 0 and 1: {', '.join(sorted(invalid))}",
+            )
+
+    def _ensure_scaling_mode(self, payload: AllocationUpsertRequest) -> None:
+        requested_mode = (payload.mode or "scaling").lower()
+        if requested_mode in {"overlay", "hybrid"}:
+            raise HTTPException(status_code=501, detail="Overlay mode is not implemented yet")
+
+    async def _load_allocation_state(
+        self, payload: AllocationUpsertRequest, world_ids: list[str]
+    ) -> tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
+        states = await self.store.get_world_allocation_states(world_ids)
+        world_alloc_before: Dict[str, float] = {
+            wid: states[wid].allocation if wid in states else 0.0 for wid in world_ids
+        }
+        strategy_before: Dict[str, Dict[str, float]] = {}
+        for wid, state in states.items():
+            if state.strategy_alloc_total:
+                strategy_before[wid] = dict(state.strategy_alloc_total)
+        if payload.strategy_alloc_before_total:
+            for wid, mapping in payload.strategy_alloc_before_total.items():
+                strategy_before[wid] = dict(mapping)
+        return world_alloc_before, strategy_before
+
+    def _build_allocation_execution_plan(
+        self,
+        payload: AllocationUpsertRequest,
+        etag: str,
+        world_ids: list[str],
+        world_alloc_before: Dict[str, float],
+        strategy_before: Dict[str, Dict[str, float]],
+    ) -> AllocationExecutionPlan:
+        context = MultiWorldRebalanceContext(
+            total_equity=payload.total_equity,
+            world_alloc_before=world_alloc_before,
+            world_alloc_after=dict(payload.world_allocations),
+            strategy_alloc_before_total=strategy_before or None,
+            strategy_alloc_after_total=payload.strategy_alloc_after_total,
+            positions=self._convert_positions(payload.positions),
+            min_trade_notional=payload.min_trade_notional or 0.0,
+            lot_size_by_symbol=payload.lot_size_by_symbol,
+        )
+        plan_result = self._multi_rebalancer.plan(context)
+        plan_payload = self._serialize_plan(
+            plan_result, schema_version=DEFAULT_REBALANCE_SCHEMA_VERSION
+        )
+        request_snapshot = MultiWorldRebalanceRequest(
+            total_equity=payload.total_equity,
+            world_alloc_before=world_alloc_before,
+            world_alloc_after=dict(payload.world_allocations),
+            positions=payload.positions,
+            strategy_alloc_before_total=strategy_before or None,
+            strategy_alloc_after_total=payload.strategy_alloc_after_total,
+            min_trade_notional=payload.min_trade_notional,
+            lot_size_by_symbol=payload.lot_size_by_symbol,
+            mode=payload.mode,
+            overlay=payload.overlay,
+            schema_version=DEFAULT_REBALANCE_SCHEMA_VERSION,
+        ).model_dump(exclude_none=True)
+        return AllocationExecutionPlan(
+            payload=payload,
+            etag=etag,
+            schema_version=DEFAULT_REBALANCE_SCHEMA_VERSION,
+            world_ids=tuple(world_ids),
+            world_alloc_before=world_alloc_before,
+            strategy_alloc_before=strategy_before,
+            plan_payload=plan_payload,
+            request_snapshot=request_snapshot,
+        )
+
+    async def _persist_allocation_plan(self, plan: AllocationExecutionPlan) -> None:
+        await self.store.record_allocation_run(
+            plan.payload.run_id,
+            plan.etag,
+            {
+                "plan": plan.plan_payload,
+                "request": plan.request_snapshot,
+            },
+            executed=False,
+        )
+        await self.store.set_world_allocations(
+            plan.payload.world_allocations,
+            run_id=plan.payload.run_id,
+            etag=plan.etag,
+            strategy_allocations=plan.payload.strategy_alloc_after_total,
+        )
+        await self.store.record_rebalance_plan(plan.plan_payload)
+        if self.bus is not None:
+            alpha_metrics = plan.plan_payload.get("alpha_metrics")
+            intent = plan.plan_payload.get("rebalance_intent")
+            for wid, per_plan in plan.plan_payload["per_world"].items():
+                try:
+                    await self.bus.publish_rebalancing_plan(
+                        wid,
+                        per_plan,
+                        version=plan.schema_version,
+                        schema_version=plan.schema_version,
+                        alpha_metrics=alpha_metrics,
+                        rebalance_intent=intent,
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    logger.exception("Failed to publish rebalancing plan for %s", wid)
+
+    async def _execute_allocation_plan(self, plan: AllocationExecutionPlan) -> AllocationExecutionPlan:
+        if not plan.payload.execute:
+            return plan
+        response = await self._execute_rebalance(plan.request_snapshot)
+        plan.execution_response = response
+        plan.executed = True
+        await self.store.mark_allocation_run_executed(plan.payload.run_id)
+        return plan
 
     async def evaluate(self, world_id: str, payload: EvaluateRequest) -> ApplyResponse:
         active = await self._evaluator.determine_active(world_id, payload)
@@ -139,7 +275,13 @@ class WorldService:
         ]
 
     @staticmethod
-    def _serialize_plan(result) -> Dict[str, Any]:
+    def _serialize_plan(
+        result,
+        *,
+        schema_version: int = 1,
+        alpha_metrics: Dict[str, Any] | None = None,
+        rebalance_intent: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         per_world: Dict[str, Any] = {}
         for wid, plan in result.per_world.items():
             per_world[wid] = {
@@ -159,7 +301,16 @@ class WorldService:
             {"symbol": d.symbol, "delta_qty": d.delta_qty, "venue": d.venue}
             for d in result.global_deltas
         ]
-        return {"per_world": per_world, "global_deltas": global_deltas}
+        payload: Dict[str, Any] = {
+            "schema_version": schema_version,
+            "per_world": per_world,
+            "global_deltas": global_deltas,
+        }
+        if alpha_metrics is not None:
+            payload["alpha_metrics"] = alpha_metrics
+        if rebalance_intent is not None:
+            payload["rebalance_intent"] = rebalance_intent
+        return payload
 
     async def _execute_rebalance(
         self,
@@ -175,18 +326,8 @@ class WorldService:
             raise HTTPException(status_code=502, detail="Rebalance execution failed") from exc
 
     async def upsert_allocations(self, payload: AllocationUpsertRequest) -> AllocationUpsertResponse:
-        if not payload.world_allocations:
-            raise HTTPException(status_code=422, detail="world_allocations cannot be empty")
-        invalid = [wid for wid, val in payload.world_allocations.items() if val < 0 or val > 1]
-        if invalid:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Allocation ratios must be between 0 and 1: {', '.join(sorted(invalid))}",
-            )
-
-        requested_mode = (payload.mode or "scaling").lower() if payload.mode else "scaling"
-        if requested_mode in {"overlay", "hybrid"}:
-            raise HTTPException(status_code=501, detail="Overlay mode is not implemented yet")
+        self._validate_allocation_payload(payload)
+        self._ensure_scaling_mode(payload)
 
         etag = self._hash_allocation_payload(payload)
         existing_run = await self.store.get_allocation_run(payload.run_id)
@@ -220,106 +361,26 @@ class WorldService:
 
         world_ids = sorted(payload.world_allocations.keys())
         locks = [self._allocation_lock_for(wid) for wid in world_ids]
+        plan: AllocationExecutionPlan | None = None
 
         async with AsyncExitStack() as stack:
             for lock in locks:
                 await stack.enter_async_context(lock)
-
-            states = await self.store.get_world_allocation_states(world_ids)
-            world_alloc_before: Dict[str, float] = {
-                wid: states[wid].allocation if wid in states else 0.0 for wid in world_ids
-            }
-            strategy_before: Dict[str, Dict[str, float]] = {}
-            for wid, state in states.items():
-                if state.strategy_alloc_total:
-                    strategy_before[wid] = dict(state.strategy_alloc_total)
-            if payload.strategy_alloc_before_total:
-                for wid, mapping in payload.strategy_alloc_before_total.items():
-                    strategy_before[wid] = dict(mapping)
-
-            context = MultiWorldRebalanceContext(
-                total_equity=payload.total_equity,
-                world_alloc_before=world_alloc_before,
-                world_alloc_after=dict(payload.world_allocations),
-                strategy_alloc_before_total=strategy_before or None,
-                strategy_alloc_after_total=payload.strategy_alloc_after_total,
-                positions=self._convert_positions(payload.positions),
-                min_trade_notional=payload.min_trade_notional or 0.0,
-                lot_size_by_symbol=payload.lot_size_by_symbol,
+            world_alloc_before, strategy_before = await self._load_allocation_state(payload, world_ids)
+            plan = self._build_allocation_execution_plan(
+                payload, etag, world_ids, world_alloc_before, strategy_before
             )
+            await self._persist_allocation_plan(plan)
+            plan = await self._execute_allocation_plan(plan)
 
-            plan_result = self._multi_rebalancer.plan(context)
-            plan_payload = self._serialize_plan(plan_result)
-
-            await self.store.record_allocation_run(
-                payload.run_id,
-                etag,
-                {
-                    "plan": plan_payload,
-                    "request": MultiWorldRebalanceRequest(
-                        total_equity=payload.total_equity,
-                        world_alloc_before=world_alloc_before,
-                        world_alloc_after=dict(payload.world_allocations),
-                        positions=payload.positions,
-                        strategy_alloc_before_total=strategy_before or None,
-                        strategy_alloc_after_total=payload.strategy_alloc_after_total,
-                        min_trade_notional=payload.min_trade_notional,
-                        lot_size_by_symbol=payload.lot_size_by_symbol,
-                        mode=payload.mode,
-                        overlay=payload.overlay,
-                    ).model_dump(exclude_none=True),
-                },
-                executed=False,
-            )
-
-            await self.store.set_world_allocations(
-                payload.world_allocations,
-                run_id=payload.run_id,
-                etag=etag,
-                strategy_allocations=payload.strategy_alloc_after_total,
-            )
-            await self.store.record_rebalance_plan(plan_payload)
-
-            if self.bus is not None:
-                for wid, plan in plan_payload["per_world"].items():
-                    try:
-                        await self.bus.publish_rebalancing_plan(
-                            wid,
-                            {
-                                "scale_world": plan.get("scale_world", 1.0),
-                                "scale_by_strategy": plan.get("scale_by_strategy", {}),
-                                "deltas": plan.get("deltas", []),
-                            },
-                            version=1,
-                        )
-                    except Exception:  # pragma: no cover - best effort
-                        logger.exception("Failed to publish rebalancing plan for %s", wid)
-
-            execution_response: Any | None = None
-            executed = False
-            if payload.execute:
-                request_payload = MultiWorldRebalanceRequest(
-                    total_equity=payload.total_equity,
-                    world_alloc_before=world_alloc_before,
-                    world_alloc_after=dict(payload.world_allocations),
-                    positions=payload.positions,
-                    strategy_alloc_before_total=strategy_before or None,
-                    strategy_alloc_after_total=payload.strategy_alloc_after_total,
-                    min_trade_notional=payload.min_trade_notional,
-                    lot_size_by_symbol=payload.lot_size_by_symbol,
-                    mode=payload.mode,
-                    overlay=payload.overlay,
-                ).model_dump(exclude_none=True)
-                execution_response = await self._execute_rebalance(request_payload)
-                await self.store.mark_allocation_run_executed(payload.run_id)
-                executed = True
+        assert plan is not None
 
         response = AllocationUpsertResponse(
             run_id=payload.run_id,
-            etag=etag,
-            executed=executed,
-            execution_response=execution_response,
-            **plan_payload,
+            etag=plan.etag,
+            executed=plan.executed,
+            execution_response=plan.execution_response,
+            **plan.plan_payload,
         )
         return response
 

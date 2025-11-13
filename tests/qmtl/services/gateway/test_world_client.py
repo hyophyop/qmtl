@@ -46,6 +46,65 @@ async def test_request_json_propagates_http_errors() -> None:
 
 
 @pytest.mark.asyncio
+async def test_post_rebalance_plan_sets_schema_version() -> None:
+    recorded: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/rebalancing/plan":
+            raise AssertionError("unexpected path")
+        recorded.append(json.loads(request.content))
+        return httpx.Response(200, json={"per_world": {}, "global_deltas": []})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        await client.post_rebalance_plan(
+            {"total_equity": 1000.0},
+            schema_version=2,
+        )
+    finally:
+        await client._client.aclose()
+
+    assert recorded
+    assert recorded[0]["schema_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_post_rebalance_plan_falls_back_when_schema_rejected() -> None:
+    attempts: list[int | None] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/rebalancing/plan":
+            raise AssertionError("unexpected path")
+        body = json.loads(request.content)
+        attempts.append(body.get("schema_version"))
+        if len(attempts) == 1:
+            return httpx.Response(400, json={"detail": "unsupported schema"})
+        return httpx.Response(200, json={"per_world": {}, "global_deltas": []})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        await client.post_rebalance_plan(
+            {"total_equity": 1000.0},
+            schema_version=2,
+            fallback_schema_version=1,
+        )
+    finally:
+        await client._client.aclose()
+
+    assert attempts == [2, None]
+
+
+@pytest.mark.asyncio
 async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
     metrics.reset_metrics()
     calls = {"count": 0}

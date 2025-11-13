@@ -394,12 +394,25 @@ class WorldServiceClient:
             json=payload,
         )
 
-    async def post_rebalance_plan(self, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
+    async def post_rebalance_plan(
+        self,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+        *,
+        schema_version: int | None = None,
+        fallback_schema_version: int | None = None,
+    ) -> Any:
         """Request a multi-world rebalance plan from WorldService.
 
         This proxies to the WorldService endpoint at ``/rebalancing/plan``.
         """
-        attempts = list(self._iter_rebalance_payloads(payload))
+        attempts = list(
+            self._iter_rebalance_payloads(
+                payload,
+                schema_version=schema_version,
+                fallback_schema_version=fallback_schema_version,
+            )
+        )
         last_exc: httpx.HTTPStatusError | None = None
         for version, body in attempts:
             try:
@@ -417,20 +430,36 @@ class WorldServiceClient:
             raise last_exc
         raise RuntimeError("no payload variants generated for rebalance plan")
 
-    def _iter_rebalance_payloads(self, payload: Any) -> list[tuple[int, dict[str, Any]]]:
-        preferred = max(1, self._rebalance_schema_version or 1)
+    def _iter_rebalance_payloads(
+        self,
+        payload: Any,
+        *,
+        schema_version: int | None = None,
+        fallback_schema_version: int | None = None,
+    ) -> list[tuple[int, dict[str, Any]]]:
+        if schema_version is not None:
+            preferred = max(1, schema_version)
+        else:
+            preferred = max(1, self._rebalance_schema_version or 1)
         versions: list[int] = []
         if preferred > 1:
             versions.append(preferred)
-        if 1 not in versions:
+        fallback = (
+            max(1, fallback_schema_version)
+            if fallback_schema_version is not None
+            else (1 if preferred > 1 else None)
+        )
+        if fallback is not None and fallback not in versions:
+            versions.append(fallback)
+        if preferred == 1 and not versions:
             versions.append(1)
+        base_payload = dict(payload)
+        base_payload.pop("schema_version", None)
         variants: list[tuple[int, dict[str, Any]]] = []
         for version in versions:
-            body = dict(payload)
+            body = dict(base_payload)
             if version > 1:
                 body["schema_version"] = version
-            else:
-                body.pop("schema_version", None)
             variants.append((version, body))
         return variants
 

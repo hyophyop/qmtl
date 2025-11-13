@@ -198,6 +198,9 @@ class WebSocketHub:
         version: int,
         policy: str | None = None,
         run_id: str | None = None,
+        schema_version: int | None = None,
+        alpha_metrics: Mapping[str, Any] | None = None,
+        rebalance_intent: Mapping[str, Any] | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "world_id": world_id,
@@ -208,6 +211,12 @@ class WebSocketHub:
             payload["policy"] = policy
         if run_id:
             payload["run_id"] = run_id
+        if schema_version is not None:
+            payload["schema_version"] = schema_version
+        if alpha_metrics:
+            payload["alpha_metrics"] = dict(alpha_metrics)
+        if rebalance_intent:
+            payload["rebalance_intent"] = dict(rebalance_intent)
         await self._send_event("rebalancing.planned", payload, topic="rebalancing")
 
     async def send_deprecation_notice(self, payload: dict) -> None:

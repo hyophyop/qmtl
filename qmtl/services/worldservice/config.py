@@ -30,6 +30,8 @@ class WorldServiceServerConfig:
     redis: str | None = None
     bind: WorldServiceBindConfig = field(default_factory=WorldServiceBindConfig)
     auth: WorldServiceAuthConfig = field(default_factory=WorldServiceAuthConfig)
+    compat_rebalance_v2: bool = False
+    alpha_metrics_required: bool = False
 
 
 def _ensure_mapping(name: str, value: Any) -> Mapping[str, Any]:
@@ -94,7 +96,17 @@ def load_worldservice_server_config(data: Mapping[str, Any]) -> WorldServiceServ
                 raise TypeError("WorldService auth tokens must be provided as a list")
         auth_cfg = WorldServiceAuthConfig(**auth_kwargs)
 
-    return WorldServiceServerConfig(dsn=dsn, redis=redis_dsn, bind=bind_cfg, auth=auth_cfg)
+    compat_rebalance_v2 = bool(raw.get("compat_rebalance_v2", False))
+    alpha_metrics_required = bool(raw.get("alpha_metrics_required", False))
+
+    return WorldServiceServerConfig(
+        dsn=dsn,
+        redis=redis_dsn,
+        bind=bind_cfg,
+        auth=auth_cfg,
+        compat_rebalance_v2=compat_rebalance_v2,
+        alpha_metrics_required=alpha_metrics_required,
+    )
 
 
 __all__ = [
@@ -103,4 +115,3 @@ __all__ = [
     "WorldServiceServerConfig",
     "load_worldservice_server_config",
 ]
-

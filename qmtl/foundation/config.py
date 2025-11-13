@@ -35,7 +35,14 @@ _DAGMANAGER_ALIASES: dict[str, str] = {
     "controlbus_uri": "controlbus_dsn",
 }
 
-_WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = ("dsn", "redis", "bind", "auth")
+_WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = (
+    "dsn",
+    "redis",
+    "bind",
+    "auth",
+    "compat_rebalance_v2",
+    "alpha_metrics_required",
+)
 
 _LEGACY_WORLDSERVICE_KEYS: dict[str, str] = {
     "worldservice_url": "url",

@@ -17,6 +17,7 @@ nav:
       - Exchange Node Sets: architecture/exchange_node_sets.md
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
+      - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -63,6 +64,7 @@ nav:
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md
       - Rebalancing Execution: operations/rebalancing_execution.md
+      - Rebalancing Schema Coordination: operations/rebalancing_schema_coordination.md
       - Schema Registry Governance: operations/schema_registry_governance.md
       - Risk Management: operations/risk_management.md
       - Timing Controls: operations/timing_controls.md
@@ -139,6 +141,7 @@ plugins:
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
+            "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"
@@ -148,6 +151,7 @@ plugins:
             "Short-Term Microstructure Filters": "단기 마이크로스트럭처 필터"
             "IO & Integrations": "IO & 통합"
             Operations: 운영
+            "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             Reference: 레퍼런스
             World: 월드

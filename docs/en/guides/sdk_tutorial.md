@@ -279,7 +279,12 @@ metrics.start_metrics_server(port=8000)
 ## Performance Metrics
 
 `alpha_performance_node` computes statistics such as Sharpe, max drawdown, and
-CAR/MDD. Pair it with `alpha_history_node` to decouple return accumulation and
+CAR/MDD. The resulting metrics are emitted under the `alpha_performance.<metric>`
+namespace (for example, `alpha_performance.sharpe` or
+`alpha_performance.max_drawdown`) so they stay aligned with the `alpha_metrics`
+envelope that WorldService publishes. Unknown keys are ignored to keep the parser
+compatible with future additions.
+Pair it with `alpha_history_node` to decouple return accumulation and
 performance calculation for easier testing.
 
 ```python

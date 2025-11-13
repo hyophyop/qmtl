@@ -82,6 +82,9 @@ class RebalancingPlannedData(BaseModel):
     version: StrictInt
     policy: Optional[StrictStr] = None
     run_id: Optional[StrictStr] = None
+    schema_version: Optional[StrictInt] = None
+    alpha_metrics: Optional[Dict[str, Any]] = None
+    rebalance_intent: Optional[Dict[str, Any]] = None
 
 
 T = TypeVar("T", bound=BaseModel)

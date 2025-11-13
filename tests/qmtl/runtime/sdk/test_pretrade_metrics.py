@@ -67,6 +67,8 @@ def test_gateway_status_includes_pretrade_metrics():
         degradation=DegradationManager(None, None, None),
         world_client=None,
         enforce_live_guard=False,
+        rebalance_schema_version=1,
+        alpha_metrics_capable=False,
     )
 
     # Extract the status endpoint and execute

@@ -28,6 +28,8 @@ class GatewayDependencyProvider:
         degradation: DegradationManager,
         world_client: Optional[WorldServiceClient],
         enforce_live_guard: bool,
+        rebalance_schema_version: int,
+        alpha_metrics_capable: bool,
         fill_producer: Any | None = None,
         submission_pipeline: SubmissionPipeline | None = None,
         health_capabilities: GatewayHealthCapabilities | None = None,
@@ -40,6 +42,8 @@ class GatewayDependencyProvider:
         self._degradation = degradation
         self._world_client = world_client
         self._enforce_live_guard = enforce_live_guard
+        self._rebalance_schema_version = rebalance_schema_version
+        self._alpha_metrics_capable = alpha_metrics_capable
         self._fill_producer = fill_producer
         if submission_pipeline is not None:
             self._pipeline = submission_pipeline
@@ -56,9 +60,16 @@ class GatewayDependencyProvider:
             pipeline=self._pipeline,
             world_client=self._world_client,
         )
-        self._health_capabilities = (
-            health_capabilities or GatewayHealthCapabilities()
-        )
+        if health_capabilities is not None:
+            caps = health_capabilities
+        else:
+            caps = GatewayHealthCapabilities(
+                rebalance_schema_version=self._rebalance_schema_version,
+                alpha_metrics_capable=self._alpha_metrics_capable,
+            )
+        self._health_capabilities = caps
+        self._rebalance_schema_version = caps.rebalance_schema_version
+        self._alpha_metrics_capable = caps.alpha_metrics_capable
 
     # Core dependencies -------------------------------------------------
 
@@ -99,6 +110,12 @@ class GatewayDependencyProvider:
 
     def provide_enforce_live_guard(self) -> bool:
         return self._enforce_live_guard
+
+    def provide_rebalance_schema_version(self) -> int:
+        return self._rebalance_schema_version
+
+    def provide_alpha_metrics_capable(self) -> bool:
+        return self._alpha_metrics_capable
 
     def provide_health_capabilities(self) -> GatewayHealthCapabilities:
         return self._health_capabilities

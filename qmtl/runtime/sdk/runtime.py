@@ -16,6 +16,8 @@ WS_RECV_TIMEOUT_SECONDS: float = 30.0
 WS_MAX_TOTAL_TIME_SECONDS: float | None = None
 FAIL_ON_HISTORY_GAP: bool = False
 POLL_INTERVAL_SECONDS: float = 10.0
+ALPHA_METRICS_CAPABLE: bool = False
+REBALANCE_SCHEMA_VERSION: int = 1
 
 
 def _maybe_int(value: Any) -> int | None:
@@ -66,6 +68,20 @@ def reload() -> None:
     _reload_from_config(cfg)
 
 
+def set_gateway_capabilities(
+    *,
+    rebalance_schema_version: int | None = None,
+    alpha_metrics_capable: bool | None = None,
+) -> None:
+    """Update runtime feature flags based on Gateway health."""
+
+    global ALPHA_METRICS_CAPABLE, REBALANCE_SCHEMA_VERSION
+    if rebalance_schema_version is not None:
+        REBALANCE_SCHEMA_VERSION = max(1, int(rebalance_schema_version))
+    if alpha_metrics_capable is not None:
+        ALPHA_METRICS_CAPABLE = bool(alpha_metrics_capable)
+
+
 _reload_from_config()
 
 
@@ -79,4 +95,7 @@ __all__ = [
     "WS_MAX_TOTAL_TIME_SECONDS",
     "WS_RECV_TIMEOUT_SECONDS",
     "reload",
+    "ALPHA_METRICS_CAPABLE",
+    "REBALANCE_SCHEMA_VERSION",
+    "set_gateway_capabilities",
 ]

@@ -101,6 +101,29 @@ def test_load_unified_config_worldservice_server(tmp_path: Path) -> None:
     assert config.worldservice.server.redis == "redis://localhost:6379/5"
     assert config.worldservice.server.bind.port == 9090
     assert config.worldservice.server.auth.tokens == ["secret-token"]
+    assert config.worldservice.server.compat_rebalance_v2 is False
+    assert config.worldservice.server.alpha_metrics_required is False
+
+
+def test_load_unified_config_worldservice_server_flags(tmp_path: Path) -> None:
+    config_file = tmp_path / "ws_flags.yml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "worldservice": {
+                    "dsn": "sqlite:///ws.db",
+                    "redis": "redis://localhost:6379/5",
+                    "compat_rebalance_v2": True,
+                    "alpha_metrics_required": True,
+                }
+            }
+        )
+    )
+
+    config = load_config(str(config_file))
+    assert config.worldservice.server is not None
+    assert config.worldservice.server.compat_rebalance_v2 is True
+    assert config.worldservice.server.alpha_metrics_required is True
 
 
 def test_load_unified_config_aliases(tmp_path: Path) -> None:

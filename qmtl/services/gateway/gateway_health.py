@@ -66,6 +66,8 @@ class GatewayHealthCollector:
             "dagmanager": dag_status,
             "worldservice": world_status,
             "capabilities": self.capabilities.as_payload(),
+            "rebalance_schema_version": self.capabilities.rebalance_schema_version,
+            "alpha_metrics_capable": self.capabilities.alpha_metrics_capable,
         }
         return result
 

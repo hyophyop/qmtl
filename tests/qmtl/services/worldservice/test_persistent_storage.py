@@ -126,7 +126,10 @@ async def test_persistent_storage_allocation_state(tmp_path, fake_redis):
         await storage.record_allocation_run(
             "alloc-run",
             "etag-1",
-            {"plan": {"per_world": {}, "global_deltas": []}, "request": {"world_alloc_after": {"w1": 0.55}}},
+            {
+                "plan": {"schema_version": 1, "per_world": {}, "global_deltas": []},
+                "request": {"world_alloc_after": {"w1": 0.55}},
+            },
             executed=False,
         )
     finally:
@@ -145,6 +148,7 @@ async def test_persistent_storage_allocation_state(tmp_path, fake_redis):
         assert run is not None
         assert run["etag"] == "etag-1"
         assert run["payload"]["plan"]["per_world"] == {}
+        assert run["payload"]["plan"]["schema_version"] == 1
         await storage2.mark_allocation_run_executed("alloc-run")
         run_after = await storage2.get_allocation_run("alloc-run")
         assert run_after is not None and run_after["executed"] is True

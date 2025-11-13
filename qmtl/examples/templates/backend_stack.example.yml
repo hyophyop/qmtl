@@ -61,6 +61,8 @@ worldservice:
   auth:
     header: Authorization
     tokens: []
+  compat_rebalance_v2: false
+  alpha_metrics_required: false
   controlbus:
     brokers: *kafka_brokers
     topic: ${backends.kafka.controlbus_topics.policy}

@@ -89,12 +89,21 @@ class FakeHub:
         version: int,
         policy: str | None = None,
         run_id: str | None = None,
+        schema_version: int | None = None,
+        alpha_metrics: dict | None = None,
+        rebalance_intent: dict | None = None,
     ) -> None:
         payload = {"world_id": world_id, "plan": plan, "version": version}
         if policy:
             payload["policy"] = policy
         if run_id:
             payload["run_id"] = run_id
+        if schema_version is not None:
+            payload["schema_version"] = schema_version
+        if alpha_metrics is not None:
+            payload["alpha_metrics"] = alpha_metrics
+        if rebalance_intent is not None:
+            payload["rebalance_intent"] = rebalance_intent
         self.events.append(("rebalancing.planned", payload))
         self._note_event()
 
@@ -324,6 +333,61 @@ async def test_rebalancing_plan_broadcasts_and_triggers_policy():
         metrics.event_relay_dropped_total.labels(topic="rebalancing_planned")._value.get()
         == 1
     )
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_plan_broadcasts_v2_metadata():
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["rebalancing_planned"],
+        group="g",
+        ws_hub=hub,
+    )
+    await consumer.start()
+    ts = time.time() * 1000
+    plan_payload = {
+        "world_id": "world-2",
+        "plan": {
+            "scale_world": 0.9,
+            "scale_by_strategy": {"s1": 0.5},
+            "deltas": [{"symbol": "BTC", "delta_qty": 1.0, "venue": "coinbase"}],
+        },
+        "version": 2,
+        "schema_version": 2,
+        "alpha_metrics": {
+            "per_world": {"world-2": {"alpha_performance.sharpe": 0.5}},
+            "per_strategy": {},
+        },
+        "rebalance_intent": {"meta": {"ticket": "ws-1514"}},
+    }
+    msg = ControlBusMessage(
+        topic="rebalancing_planned",
+        key="world-2",
+        etag="",
+        run_id="",
+        data=plan_payload,
+        timestamp_ms=ts,
+    )
+
+    await consumer.publish(msg)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == [
+        (
+            "rebalancing.planned",
+            {
+                "world_id": "world-2",
+                "plan": plan_payload["plan"],
+                "version": 2,
+                "schema_version": 2,
+                "alpha_metrics": plan_payload["alpha_metrics"],
+                "rebalance_intent": plan_payload["rebalance_intent"],
+            },
+        )
+    ]
 
 
 class StartStopConsumer(ControlBusConsumer):

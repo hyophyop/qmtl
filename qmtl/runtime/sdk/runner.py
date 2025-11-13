@@ -53,6 +53,21 @@ class Runner:
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
 
     @classmethod
+    async def _refresh_gateway_capabilities(cls, gateway_url: str) -> None:
+        client = cls.services().gateway_client
+        try:
+            health = await client.get_health(gateway_url=gateway_url)
+        except Exception:
+            logger.debug("Failed to fetch gateway health for %s", gateway_url, exc_info=True)
+            return
+        if not isinstance(health, dict):
+            return
+        runtime.set_gateway_capabilities(
+            rebalance_schema_version=health.get("rebalance_schema_version"),
+            alpha_metrics_capable=health.get("alpha_metrics_capable"),
+        )
+
+    @classmethod
     def services(cls) -> RunnerServices:
         return cls._services
 
@@ -390,6 +405,8 @@ class Runner:
         cleanup_needed = True
         try:
             strategy.on_start()
+            if gateway_url and not effective_offline:
+                await Runner._refresh_gateway_capabilities(gateway_url)
 
             bootstrapper = StrategyBootstrapper(services.gateway_client)
             bootstrap_result = await bootstrapper.bootstrap(
@@ -652,12 +669,22 @@ class Runner:
         from . import metrics as sdk_metrics
 
         if isinstance(result, dict):
-            if "sharpe" in result:
-                sdk_metrics.alpha_sharpe.set(result["sharpe"])
-                sdk_metrics.alpha_sharpe._val = result["sharpe"]  # type: ignore[attr-defined]
-            if "max_drawdown" in result:
-                sdk_metrics.alpha_max_drawdown.set(result["max_drawdown"])
-                sdk_metrics.alpha_max_drawdown._val = result["max_drawdown"]  # type: ignore[attr-defined]
+            def _value(name: str) -> float | None:
+                prefixed = f"alpha_performance.{name}"
+                if prefixed in result:
+                    return result[prefixed]
+                if name in result:
+                    return result[name]
+                return None
+
+            sharpe_value = _value("sharpe")
+            if sharpe_value is not None:
+                sdk_metrics.alpha_sharpe.set(sharpe_value)
+                sdk_metrics.alpha_sharpe._val = sharpe_value  # type: ignore[attr-defined]
+            max_dd_value = _value("max_drawdown")
+            if max_dd_value is not None:
+                sdk_metrics.alpha_max_drawdown.set(max_dd_value)
+                sdk_metrics.alpha_max_drawdown._val = max_dd_value  # type: ignore[attr-defined]
 
     @classmethod
     def _handle_trade_order(cls, order: dict) -> None:

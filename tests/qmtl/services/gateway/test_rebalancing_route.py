@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -61,6 +63,114 @@ async def test_rebalancing_submit_requires_live_guard(gateway_app_factory):
 
     assert resp.status_code == 403
     assert writer.published == []
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_execute_returns_schema_flags(gateway_app_factory):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = _plan_response(
+                {
+                    "w1": {
+                        "scale_world": 1.0,
+                        "scale_by_strategy": {},
+                        "deltas": [
+                            {"symbol": "BTCUSDT", "delta_qty": -0.1, "venue": "binance"}
+                        ],
+                    }
+                }
+            )
+            return httpx.Response(200, json=body)
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "simulate"}})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute",
+            json=_default_payload(),
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["rebalance_schema_version"] == 1
+    assert payload["alpha_metrics_capable"] is False
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_execute_prefers_gateway_schema_version(gateway_app_factory):
+    seen_versions: list[int] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = json.loads(request.content)
+            seen_versions.append(body.get("schema_version"))
+            return httpx.Response(
+                200,
+                json=_plan_response(
+                    {
+                        "w1": {
+                            "scale_world": 1.0,
+                            "scale_by_strategy": {},
+                            "deltas": [],
+                        }
+                    }
+                ),
+            )
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "simulate"}})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(
+        handler,
+        app_kwargs={"rebalance_schema_version": 2},
+    ) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute",
+            json=_default_payload(),
+        )
+
+    assert resp.status_code == 200
+    assert seen_versions == [2]
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_execute_falls_back_when_worldservice_rejects(gateway_app_factory):
+    attempts: list[int] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = json.loads(request.content)
+            attempts.append(body.get("schema_version"))
+            if len(attempts) == 1:
+                return httpx.Response(400, json={"detail": "unsupported schema"})
+            return httpx.Response(
+                200,
+                json=_plan_response(
+                    {
+                        "w1": {
+                            "scale_world": 1.0,
+                            "scale_by_strategy": {},
+                            "deltas": [],
+                        }
+                    }
+                ),
+            )
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "simulate"}})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(
+        handler,
+        app_kwargs={"rebalance_schema_version": 2},
+    ) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute",
+            json=_default_payload(),
+        )
+
+    assert resp.status_code == 200
+    assert attempts == [2, 1]
 
 
 @pytest.mark.asyncio

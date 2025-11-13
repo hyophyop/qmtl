@@ -124,6 +124,8 @@ def create_app(
     config: WorldServiceServerConfig | None = None,
     config_path: str | Path | None = None,
     rebalance_executor: Any | None = None,
+    compat_rebalance_v2: bool | None = None,
+    alpha_metrics_required: bool | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
@@ -138,6 +140,8 @@ def create_app(
     store = storage or Storage()
     service = WorldService(store=store, bus=bus, rebalance_executor=rebalance_executor)
     storage_handle: StorageHandle | None = None
+    compat_flag = compat_rebalance_v2
+    alpha_flag = alpha_metrics_required
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -173,18 +177,36 @@ def create_app(
                     except Exception:  # pragma: no cover - defensive cleanup
                         logger.exception("Failed to close WorldService rebalance executor")
 
+    if resolved_config is not None:
+        if compat_flag is None:
+            compat_flag = resolved_config.compat_rebalance_v2
+        if alpha_flag is None:
+            alpha_flag = resolved_config.alpha_metrics_required
+    compat_flag = bool(compat_flag)
+    alpha_flag = bool(alpha_flag)
+
     app = FastAPI(lifespan=lifespan)
     app.state.apply_locks = service.apply_locks
     app.state.apply_runs = service.apply_runs
     app.state.storage = store
     app.state.world_service = service
     app.state.worldservice_config = resolved_config
+    app.state.rebalance_capabilities = {
+        "compat_rebalance_v2": compat_flag,
+        "alpha_metrics_required": alpha_flag,
+    }
     app.include_router(create_worlds_router(service))
     app.include_router(create_policies_router(service))
     app.include_router(create_bindings_router(service))
     app.include_router(create_activation_router(service))
     app.include_router(create_allocations_router(service))
-    app.include_router(create_rebalancing_router(service))
+    app.include_router(
+        create_rebalancing_router(
+            service,
+            compat_rebalance_v2=compat_flag,
+            alpha_metrics_required=alpha_flag,
+        )
+    )
     app.include_router(create_validations_router(service))
     return app
 
