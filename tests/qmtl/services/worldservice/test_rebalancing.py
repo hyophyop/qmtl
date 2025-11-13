@@ -203,3 +203,30 @@ def test_missing_mark_skips_delta():
 
     plan = ProportionalRebalancer().plan(ctx)
     assert plan.deltas == []
+
+
+def test_multi_world_handles_zero_total_equity_when_estimating_strategy_weights():
+    positions = [
+        PositionSlice(
+            world_id="z",
+            strategy_id="s",
+            symbol="BTCUSDT",
+            qty=1.0,
+            mark=10_000.0,
+            venue="binance",
+        )
+    ]
+
+    ctx = MultiWorldRebalanceContext(
+        total_equity=0.0,
+        world_alloc_before={"z": 0.4},
+        world_alloc_after={"z": 0.4},
+        positions=positions,
+        min_trade_notional=0.0,
+        lot_size_by_symbol={"BTCUSDT": 0.001},
+    )
+
+    plan = MultiWorldProportionalRebalancer().plan(ctx)
+
+    assert plan.per_world["z"].scale_world == pytest.approx(1.0)
+    assert plan.global_deltas == []
