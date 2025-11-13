@@ -3,8 +3,14 @@ from __future__ import annotations
 import pytest
 
 from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
-from qmtl.services.worldservice.schemas import EvaluateRequest, StrategySeries
+from qmtl.services.worldservice.schemas import (
+    AllocationUpsertRequest,
+    PositionSliceModel,
+    StrategySeries,
+    EvaluateRequest,
+)
 from qmtl.services.worldservice.services import WorldService
+from qmtl.services.worldservice.storage.facade import Storage
 
 
 class _StubStore:
@@ -66,3 +72,49 @@ async def test_world_service_evaluate_uses_augmented_metrics():
     response = await service.evaluate('world', request)
 
     assert response.active == ['good']
+
+
+class _RecorderExecutor:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def execute(self, payload):  # pragma: no cover - interface contract exercised via tests
+        self.calls.append(payload)
+        return {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_upsert_allocations_executes_pending_existing_plan():
+    store = Storage()
+    executor = _RecorderExecutor()
+    service = WorldService(store=store, rebalance_executor=executor)
+
+    payload = AllocationUpsertRequest(
+        run_id="alloc-existing",
+        total_equity=1_000.0,
+        world_allocations={"w1": 1.0},
+        positions=[
+            PositionSliceModel(
+                world_id="w1",
+                strategy_id="s1",
+                symbol="BTCUSDT",
+                qty=1.0,
+                mark=50_000.0,
+            )
+        ],
+        execute=True,
+    )
+
+    etag = service._hash_allocation_payload(payload)
+    await store.record_allocation_run(
+        payload.run_id,
+        etag,
+        {"plan": {"schema_version": 1, "per_world": {}, "global_deltas": []}},
+        executed=False,
+    )
+
+    response = await service.upsert_allocations(payload)
+
+    assert response.executed is True
+    assert executor.calls and executor.calls[0]["world_allocations"] == {"w1": 1.0}
+    assert store.allocation_runs[payload.run_id].executed is True

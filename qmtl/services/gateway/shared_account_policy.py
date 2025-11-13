@@ -71,56 +71,86 @@ class SharedAccountPolicy:
     ) -> SharedAccountPolicyResult:
         """Return whether ``orders`` satisfy configured constraints."""
 
-        metrics: dict[str, object] = {
-            "total_equity": float(total_equity),
-        }
-
-        gross = 0.0
-        net = 0.0
-        missing_marks: list[Mapping[str, str | None]] = []
         current_net = float(current_net_notional or 0.0)
-        if current_net:
-            metrics["current_net_notional"] = abs(current_net)
+        metrics = self._baseline_metrics(total_equity, current_net)
 
-        for order in orders:
-            qty_raw = order.get("quantity", 0.0)
-            try:
-                qty = float(qty_raw)
-            except Exception:
-                continue
-            if qty == 0.0:
-                continue
-            symbol = str(order.get("symbol", "") or "")
-            venue = order.get("venue")
-            mark = _lookup_mark(marks_by_symbol, symbol, str(venue) if venue else None)
-            if mark is None:
-                missing_marks.append({"symbol": symbol or None, "venue": venue if isinstance(venue, str) else None})
-                continue
-            notional = abs(qty) * mark
-            gross += notional
-            net += qty * mark
+        gross, net, missing_marks = self._accumulate_notional(
+            orders, marks_by_symbol
+        )
+        projected_net, projected_net_abs = self._project_net(current_net, net)
+        margin_headroom = self._margin_headroom(total_equity, projected_net_abs)
 
-        net_abs = abs(net)
-        projected_net = current_net + net
-        projected_net_abs = abs(projected_net)
-        metrics["gross_notional"] = gross
-        metrics["net_notional_delta"] = net_abs
-        metrics["net_notional"] = projected_net_abs
+        metrics.update(
+            {
+                "gross_notional": gross,
+                "net_notional_delta": abs(net),
+                "net_notional": projected_net_abs,
+                "margin_headroom": margin_headroom,
+            }
+        )
+
         if missing_marks:
             metrics["missing_marks"] = missing_marks
-
-        margin_headroom = 0.0
-        if total_equity > 0:
-            margin_headroom = max(0.0, 1.0 - (projected_net_abs / total_equity))
-        metrics["margin_headroom"] = margin_headroom
-
-        if missing_marks:
             return SharedAccountPolicyResult(
                 allowed=False,
                 reason="missing mark data for shared-account exposure evaluation",
                 context=metrics,
             )
 
+        return self._enforce_limits(metrics, gross, projected_net_abs, margin_headroom)
+
+    def _baseline_metrics(self, total_equity: float, current_net: float) -> dict[str, object]:
+        metrics: dict[str, object] = {"total_equity": float(total_equity)}
+        if current_net:
+            metrics["current_net_notional"] = abs(current_net)
+        return metrics
+
+    def _accumulate_notional(
+        self,
+        orders: Sequence[Mapping[str, object]],
+        marks_by_symbol: Mapping[tuple[str | None, str], float],
+    ) -> tuple[float, float, list[Mapping[str, str | None]]]:
+        gross = 0.0
+        net = 0.0
+        missing_marks: list[Mapping[str, str | None]] = []
+
+        for order in orders:
+            qty_raw = order.get("quantity", 0.0)
+            qty = self._safe_float(qty_raw)
+            if qty is None or qty == 0.0:
+                continue
+            symbol = str(order.get("symbol", "") or "")
+            venue = order.get("venue")
+            mark = _lookup_mark(
+                marks_by_symbol, symbol, str(venue) if venue else None
+            )
+            if mark is None:
+                missing_marks.append(
+                    {"symbol": symbol or None, "venue": venue if isinstance(venue, str) else None}
+                )
+                continue
+            notional = abs(qty) * mark
+            gross += notional
+            net += qty * mark
+
+        return gross, net, missing_marks
+
+    def _project_net(self, current_net: float, net_delta: float) -> tuple[float, float]:
+        projected = current_net + net_delta
+        return projected, abs(projected)
+
+    def _margin_headroom(self, total_equity: float, projected_net_abs: float) -> float:
+        if total_equity <= 0:
+            return 0.0
+        return max(0.0, 1.0 - (projected_net_abs / total_equity))
+
+    def _enforce_limits(
+        self,
+        metrics: Mapping[str, object],
+        gross: float,
+        projected_net_abs: float,
+        margin_headroom: float,
+    ) -> SharedAccountPolicyResult:
         cfg = self.config
         eps = 1e-9
 
@@ -133,7 +163,10 @@ class SharedAccountPolicy:
                 context=metrics,
             )
 
-        if cfg.max_net_notional is not None and projected_net_abs - cfg.max_net_notional > eps:
+        if (
+            cfg.max_net_notional is not None
+            and projected_net_abs - cfg.max_net_notional > eps
+        ):
             return SharedAccountPolicyResult(
                 allowed=False,
                 reason=(
@@ -143,7 +176,7 @@ class SharedAccountPolicy:
             )
 
         if cfg.min_margin_headroom is not None:
-            if total_equity <= 0:
+            if metrics["total_equity"] <= 0:  # type: ignore[index]
                 return SharedAccountPolicyResult(
                     allowed=False,
                     reason="margin headroom check requires positive total_equity",
@@ -159,6 +192,12 @@ class SharedAccountPolicy:
                 )
 
         return SharedAccountPolicyResult(allowed=True, context=metrics)
+
+    def _safe_float(self, value: object) -> float | None:
+        try:
+            return float(value)
+        except Exception:
+            return None
 
 
 __all__ = [

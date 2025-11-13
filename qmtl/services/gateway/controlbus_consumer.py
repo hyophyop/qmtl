@@ -219,105 +219,129 @@ class ControlBusConsumer:
         return (payload.version, marker, digest)
 
     async def _handle_message(self, msg: ControlBusMessage) -> None:
-        key = (msg.topic, msg.key)
         if msg.topic == "rebalancing_planned":
-            try:
-                payload = RebalancingPlannedData.model_validate(msg.data)
-            except ValidationError as exc:
-                logger.warning("invalid rebalancing_planned payload: %s", exc)
-                return
-
-            marker = self._marker_for_plan(payload)
-            if self._last_seen.get(key) == marker:
-                gw_metrics.record_event_dropped(msg.topic)
-                return
-            self._last_seen[key] = marker
-
-            gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
-            gw_metrics.record_rebalance_plan(
-                payload.world_id, len(payload.plan.deltas)
-            )
-
-            if self.ws_hub:
-                await self.ws_hub.send_rebalancing_planned(
-                    world_id=payload.world_id,
-                    plan=payload.plan.model_dump(mode="json"),
-                    version=payload.version,
-                    policy=payload.policy,
-                    run_id=payload.run_id,
-                    schema_version=payload.schema_version,
-                    alpha_metrics=payload.alpha_metrics,
-                    rebalance_intent=payload.rebalance_intent,
-                )
-
-            if self._rebalancing_policy is not None:
-                try:
-                    should_execute = await self._rebalancing_policy.should_execute(
-                        payload
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to evaluate rebalancing execution policy",
-                        extra={"world_id": payload.world_id},
-                    )
-                else:
-                    if should_execute:
-                        try:
-                            await self._rebalancing_policy.execute(payload)
-                        except Exception:
-                            gw_metrics.record_rebalance_plan_execution(
-                                payload.world_id, success=False
-                            )
-                            logger.exception(
-                                "Failed to execute rebalancing plan",
-                                extra={"world_id": payload.world_id},
-                            )
-                        else:
-                            gw_metrics.record_rebalance_plan_execution(
-                                payload.world_id, success=True
-                            )
+            await self._process_rebalancing_planned(msg)
             return
 
         if msg.topic == "sentinel_weight":
-            try:
-                payload = SentinelWeightData.model_validate(msg.data)
-            except ValidationError as exc:
-                logger.warning("invalid sentinel_weight payload: %s", exc)
-                return
-            marker = (payload.sentinel_id, payload.weight, payload.version)
-            if self._last_seen.get(key) == marker:
-                gw_metrics.record_event_dropped(msg.topic)
-                return
-            self._last_seen[key] = marker
-
-            gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
-
-            sentinel_id = payload.sentinel_id
-            weight = float(payload.weight)
-            try:
-                gw_metrics.record_sentinel_weight_update(sentinel_id)
-                gw_metrics.set_sentinel_traffic_ratio(sentinel_id, weight)
-            except Exception:
-                logger.exception("failed to update sentinel weight metrics", exc_info=True)
-            if self.ws_hub:
-                await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
+            await self._process_sentinel_weight(msg)
             return
 
-        if msg.topic == "policy":
-            marker = (msg.data.get("checksum"), msg.data.get("policy_version"))
+        await self._process_generic_message(msg)
+
+    async def _process_rebalancing_planned(self, msg: ControlBusMessage) -> None:
+        key = (msg.topic, msg.key)
+        try:
+            payload = RebalancingPlannedData.model_validate(msg.data)
+        except ValidationError as exc:
+            logger.warning("invalid rebalancing_planned payload: %s", exc)
+            return
+
+        marker = self._marker_for_plan(payload)
+        if not self._track_delivery(key, marker, msg.topic):
+            return
+
+        gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
+        gw_metrics.record_rebalance_plan(
+            payload.world_id, len(payload.plan.deltas)
+        )
+
+        await self._notify_rebalancing(payload)
+        await self._maybe_execute_rebalance(payload)
+
+    async def _notify_rebalancing(self, payload: RebalancingPlannedData) -> None:
+        if not self.ws_hub:
+            return
+        await self.ws_hub.send_rebalancing_planned(
+            world_id=payload.world_id,
+            plan=payload.plan.model_dump(mode="json"),
+            version=payload.version,
+            policy=payload.policy,
+            run_id=payload.run_id,
+            schema_version=payload.schema_version,
+            alpha_metrics=payload.alpha_metrics,
+            rebalance_intent=payload.rebalance_intent,
+        )
+
+    async def _maybe_execute_rebalance(
+        self, payload: RebalancingPlannedData
+    ) -> None:
+        if self._rebalancing_policy is None:
+            return
+        try:
+            should_execute = await self._rebalancing_policy.should_execute(payload)
+        except Exception:
+            logger.exception(
+                "Failed to evaluate rebalancing execution policy",
+                extra={"world_id": payload.world_id},
+            )
+            return
+
+        if not should_execute:
+            return
+
+        try:
+            await self._rebalancing_policy.execute(payload)
+        except Exception:
+            gw_metrics.record_rebalance_plan_execution(
+                payload.world_id, success=False
+            )
+            logger.exception(
+                "Failed to execute rebalancing plan",
+                extra={"world_id": payload.world_id},
+            )
         else:
-            marker = (msg.etag, msg.run_id)
+            gw_metrics.record_rebalance_plan_execution(
+                payload.world_id, success=True
+            )
 
-        if self._last_seen.get(key) == marker:
-            gw_metrics.record_event_dropped(msg.topic)
+    async def _process_sentinel_weight(self, msg: ControlBusMessage) -> None:
+        key = (msg.topic, msg.key)
+        try:
+            payload = SentinelWeightData.model_validate(msg.data)
+        except ValidationError as exc:
+            logger.warning("invalid sentinel_weight payload: %s", exc)
             return
-        self._last_seen[key] = marker
+
+        marker = (payload.sentinel_id, payload.weight, payload.version)
+        if not self._track_delivery(key, marker, msg.topic):
+            return
+
+        gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
+
+        sentinel_id = payload.sentinel_id
+        weight = float(payload.weight)
+        try:
+            gw_metrics.record_sentinel_weight_update(sentinel_id)
+            gw_metrics.set_sentinel_traffic_ratio(sentinel_id, weight)
+        except Exception:
+            logger.exception("failed to update sentinel weight metrics", exc_info=True)
+
+        if self.ws_hub:
+            await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
+
+    async def _process_generic_message(self, msg: ControlBusMessage) -> None:
+        key = (msg.topic, msg.key)
+        marker = self._marker_for_generic_message(msg)
+        if not self._track_delivery(key, marker, msg.topic):
+            return
 
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
         if not self.ws_hub:
             return
 
+        await self._dispatch_generic_message(msg)
+
+    def _marker_for_generic_message(self, msg: ControlBusMessage) -> tuple[Any, ...]:
+        if msg.topic == "policy":
+            return (
+                msg.data.get("checksum"),
+                msg.data.get("policy_version"),
+            )
+        return (msg.etag, msg.run_id)
+
+    async def _dispatch_generic_message(self, msg: ControlBusMessage) -> None:
         version = msg.data.get("version")
         if version != 1:
             logger.warning("unsupported controlbus message version: %s", version)
@@ -325,26 +349,54 @@ class ControlBusConsumer:
 
         if msg.topic == "activation":
             await self.ws_hub.send_activation_updated(msg.data)
-        elif msg.topic == "policy":
+            return
+        if msg.topic == "policy":
             await self.ws_hub.send_policy_updated(msg.data)
-        elif msg.topic == "queue":
-            tags = msg.data.get("tags", [])
-            interval = msg.data.get("interval", 0)
-            queues = msg.data.get("queues", [])
-            match_mode = msg.data.get("match_mode", MatchMode.ANY.value)
-            etag = msg.data.get("etag", msg.etag)
-            ts = msg.data.get("ts")
-            try:
-                mode = MatchMode(match_mode)
-            except ValueError:
-                mode = MatchMode.ANY
-            await self.ws_hub.send_queue_update(tags, interval, queues, mode, etag=etag, ts=ts)
-            key = (tuple(sorted(tags)), int(interval))
-            if key not in self._known_tag_intervals:
-                self._known_tag_intervals.add(key)
-                await self.ws_hub.send_tagquery_upsert(tags, interval, queues)
-        else:
-            logger.warning("Unhandled ControlBus topic %s", msg.topic)
+            return
+        if msg.topic == "queue":
+            await self._handle_queue_update(msg)
+            return
+
+        logger.warning("Unhandled ControlBus topic %s", msg.topic)
+
+    async def _handle_queue_update(self, msg: ControlBusMessage) -> None:
+        tags = msg.data.get("tags", [])
+        interval = msg.data.get("interval", 0)
+        queues = msg.data.get("queues", [])
+        match_mode = msg.data.get("match_mode", MatchMode.ANY.value)
+        etag = msg.data.get("etag", msg.etag)
+        ts = msg.data.get("ts")
+
+        try:
+            mode = MatchMode(match_mode)
+        except ValueError:
+            mode = MatchMode.ANY
+
+        await self.ws_hub.send_queue_update(tags, interval, queues, mode, etag=etag, ts=ts)
+        await self._maybe_emit_tagquery_upsert(tags, interval, queues)
+
+    async def _maybe_emit_tagquery_upsert(
+        self, tags: list[str], interval: int, queues: list[Any]
+    ) -> None:
+        key = (tuple(sorted(tags)), int(interval))
+        if key in self._known_tag_intervals:
+            return
+
+        self._known_tag_intervals.add(key)
+        await self.ws_hub.send_tagquery_upsert(tags, interval, queues)
+
+    def _track_delivery(
+        self,
+        key: tuple[str, str],
+        marker: tuple[Any, ...],
+        topic: str,
+    ) -> bool:
+        if self._last_seen.get(key) == marker:
+            gw_metrics.record_event_dropped(topic)
+            return False
+
+        self._last_seen[key] = marker
+        return True
 
 
 __all__ = [

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import asyncio
 import json
 import logging
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, Dict, Iterable, Mapping
 
 from fastapi import HTTPException
@@ -115,7 +115,7 @@ class WorldService:
         if requested_mode in {"overlay", "hybrid"}:
             raise HTTPException(status_code=501, detail="Overlay mode is not implemented yet")
 
-    async def _load_allocation_state(
+    async def _build_allocation_context(
         self, payload: AllocationUpsertRequest, world_ids: list[str]
     ) -> tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
         states = await self.store.get_world_allocation_states(world_ids)
@@ -210,7 +210,9 @@ class WorldService:
                 except Exception:  # pragma: no cover - best effort
                     logger.exception("Failed to publish rebalancing plan for %s", wid)
 
-    async def _execute_allocation_plan(self, plan: AllocationExecutionPlan) -> AllocationExecutionPlan:
+    async def _maybe_execute_allocation_plan(
+        self, plan: AllocationExecutionPlan
+    ) -> AllocationExecutionPlan:
         if not plan.payload.execute:
             return plan
         response = await self._execute_rebalance(plan.request_snapshot)
@@ -218,6 +220,61 @@ class WorldService:
         plan.executed = True
         await self.store.mark_allocation_run_executed(plan.payload.run_id)
         return plan
+
+    @asynccontextmanager
+    async def _lock_worlds(self, world_ids: list[str]):
+        async with AsyncExitStack() as stack:
+            for wid in world_ids:
+                await stack.enter_async_context(self._allocation_lock_for(wid))
+            yield
+
+    async def _plan_and_persist_allocation(
+        self,
+        payload: AllocationUpsertRequest,
+        etag: str,
+        world_ids: list[str],
+        world_alloc_before: Dict[str, float],
+        strategy_before: Dict[str, Dict[str, float]],
+    ) -> AllocationExecutionPlan:
+        plan = self._build_allocation_execution_plan(
+            payload, etag, world_ids, world_alloc_before, strategy_before
+        )
+        await self._persist_allocation_plan(plan)
+        return plan
+
+    async def _handle_existing_allocation_run(
+        self,
+        payload: AllocationUpsertRequest,
+        etag: str,
+        existing_run: Mapping[str, Any],
+    ) -> AllocationUpsertResponse:
+        stored_etag = existing_run.get("etag")
+        if stored_etag and stored_etag != etag:
+            raise HTTPException(status_code=409, detail="run_id already used with a different payload")
+
+        record_payload = existing_run.get("payload", {})
+        plan_payload = record_payload.get("plan", record_payload)
+        request_snapshot = record_payload.get("request")
+        executed = bool(existing_run.get("executed", False))
+        execution_response: Any | None = None
+
+        if payload.execute and not executed:
+            if request_snapshot is None:
+                request_snapshot = payload.model_dump(
+                    exclude={"run_id", "etag"},
+                    exclude_none=True,
+                )
+            execution_response = await self._execute_rebalance(request_snapshot)
+            await self.store.mark_allocation_run_executed(payload.run_id)
+            executed = True
+
+        return AllocationUpsertResponse(
+            run_id=payload.run_id,
+            etag=stored_etag or etag,
+            executed=executed,
+            execution_response=execution_response,
+            **plan_payload,
+        )
 
     async def evaluate(self, world_id: str, payload: EvaluateRequest) -> ApplyResponse:
         active = await self._evaluator.determine_active(world_id, payload)
@@ -332,57 +389,26 @@ class WorldService:
         etag = self._hash_allocation_payload(payload)
         existing_run = await self.store.get_allocation_run(payload.run_id)
         if existing_run is not None:
-            stored_etag = existing_run.get("etag")
-            if stored_etag and stored_etag != etag:
-                raise HTTPException(status_code=409, detail="run_id already used with a different payload")
-
-            record_payload = existing_run.get("payload", {})
-            plan_payload = record_payload.get("plan", record_payload)
-            request_snapshot = record_payload.get("request")
-            executed = bool(existing_run.get("executed", False))
-            execution_response: Any | None = None
-            if payload.execute and not executed:
-                if request_snapshot is None:
-                    request_snapshot = payload.model_dump(
-                        exclude={"run_id", "etag"},
-                        exclude_none=True,
-                    )
-                execution_response = await self._execute_rebalance(request_snapshot)
-                await self.store.mark_allocation_run_executed(payload.run_id)
-                executed = True
-            response = AllocationUpsertResponse(
-                run_id=payload.run_id,
-                etag=stored_etag or etag,
-                executed=executed,
-                execution_response=execution_response,
-                **plan_payload,
-            )
-            return response
+            return await self._handle_existing_allocation_run(payload, etag, existing_run)
 
         world_ids = sorted(payload.world_allocations.keys())
-        locks = [self._allocation_lock_for(wid) for wid in world_ids]
-        plan: AllocationExecutionPlan | None = None
 
-        async with AsyncExitStack() as stack:
-            for lock in locks:
-                await stack.enter_async_context(lock)
-            world_alloc_before, strategy_before = await self._load_allocation_state(payload, world_ids)
-            plan = self._build_allocation_execution_plan(
+        async with self._lock_worlds(world_ids):
+            world_alloc_before, strategy_before = await self._build_allocation_context(
+                payload, world_ids
+            )
+            plan = await self._plan_and_persist_allocation(
                 payload, etag, world_ids, world_alloc_before, strategy_before
             )
-            await self._persist_allocation_plan(plan)
-            plan = await self._execute_allocation_plan(plan)
+            plan = await self._maybe_execute_allocation_plan(plan)
 
-        assert plan is not None
-
-        response = AllocationUpsertResponse(
+        return AllocationUpsertResponse(
             run_id=payload.run_id,
             etag=plan.etag,
             executed=plan.executed,
             execution_response=plan.execution_response,
             **plan.plan_payload,
         )
-        return response
 
 
 __all__ = [

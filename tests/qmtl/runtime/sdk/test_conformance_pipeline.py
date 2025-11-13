@@ -87,6 +87,30 @@ def test_conformance_normalizes_timezone_and_flags_casts():
     assert report.flags_counts["ts_timezone_normalized"] == 2
 
 
+def test_conformance_casts_flexible_timestamps_without_relying_on_index_alignment():
+    base = pd.Timestamp("2025-01-01T00:00:00Z")
+    df = pd.DataFrame(
+        {
+            "ts": [
+                (base + pd.Timedelta(minutes=offset)).isoformat()
+                for offset in (0, 1, 2)
+            ],
+            "price": [1.0, 2.0, 3.0],
+        },
+        index=[10, 20, 30],
+    )
+
+    cp = ConformancePipeline()
+    out, report = cp.normalize(df, schema=None, interval=60)
+
+    expected = [
+        int((base + pd.Timedelta(minutes=offset)).value // 10**9)
+        for offset in (0, 1, 2)
+    ]
+    assert out["ts"].tolist() == expected
+    assert report.flags_counts["ts_cast"] == 3
+
+
 def test_conformance_normalizes_non_finite_values():
     df = pd.DataFrame(
         {

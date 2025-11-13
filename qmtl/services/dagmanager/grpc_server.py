@@ -106,93 +106,122 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[dagmanager_pb2.DiffChunk]:
         sentinel_id = f"{request.strategy_id}-sentinel"
-        stream = _GrpcStream(asyncio.get_running_loop())
+        stream = self._create_stream()
         self._streams[sentinel_id] = stream
-        svc = DiffService(
+        svc = self._spawn_service(stream)
+        task = asyncio.create_task(svc.diff_async(self._build_diff_request(request)))
+        task.add_done_callback(lambda _fut: stream.queue.put_nowait(None))
+
+        try:
+            async for chunk in self._chunk_stream(stream):
+                await self._emit_weight_events(svc)
+                await self._publish_new_node_updates(chunk)
+                yield self._to_proto_chunk(chunk)
+        finally:
+            task_error = await self._finalize_diff(sentinel_id, svc, task)
+        if task_error is not None:
+            raise task_error
+
+    def _create_stream(self) -> _GrpcStream:
+        return _GrpcStream(asyncio.get_running_loop())
+
+    def _spawn_service(self, stream: _GrpcStream) -> DiffService:
+        return DiffService(
             self._service.node_repo,
             self._service.queue_manager,
             stream,
             sentinel_weights=self._sentinel_weights,
         )
-        fut = asyncio.create_task(
-            svc.diff_async(
-                DiffRequest(
-                    strategy_id=request.strategy_id,
-                    dag_json=request.dag_json,
-                    world_id=request.world_id or None,
-                    execution_domain=request.execution_domain or None,
-                    as_of=request.as_of or None,
-                    partition=request.partition or None,
-                    dataset_fingerprint=request.dataset_fingerprint or None,
-                )
-            )
+
+    def _build_diff_request(self, request: dagmanager_pb2.DiffRequest) -> DiffRequest:
+        return DiffRequest(
+            strategy_id=request.strategy_id,
+            dag_json=request.dag_json,
+            world_id=request.world_id or None,
+            execution_domain=request.execution_domain or None,
+            as_of=request.as_of or None,
+            partition=request.partition or None,
+            dataset_fingerprint=request.dataset_fingerprint or None,
         )
-        fut.add_done_callback(lambda _fut: stream.queue.put_nowait(None))
+
+    async def _chunk_stream(
+        self, stream: _GrpcStream
+    ) -> AsyncIterable[DiffChunk]:
+        while True:
+            chunk = await stream.queue.get()
+            if chunk is None:
+                break
+            yield chunk
+
+    async def _emit_weight_events(self, svc: DiffService) -> None:
+        events = svc.consume_weight_events()
+        if not events or not self._bus:
+            return
+        for event in events:
+            await self._bus.publish_sentinel_weight(
+                event.sentinel_id,
+                event.weight,
+                sentinel_version=event.sentinel_version,
+                world_id=event.world_id,
+            )
+
+    async def _publish_new_node_updates(self, chunk: DiffChunk) -> None:
+        if not self._bus:
+            return
+        new_nodes = getattr(chunk, "new_nodes", None) or []
+        for node in new_nodes:
+            if not node.tags or node.interval is None:
+                continue
+            queue_name = chunk.queue_map.get(node.node_id, "")
+            queues = ([{"queue": queue_name, "global": False}] if queue_name else [])
+            await self._bus.publish_queue_update(
+                node.tags,
+                node.interval,
+                queues,
+                "any",
+            )
+
+    async def _finalize_diff(
+        self,
+        sentinel_id: str,
+        svc: DiffService,
+        task: asyncio.Task[DiffChunk],
+    ) -> BaseException | None:
+        exc: BaseException | None = None
+        if not task.done():
+            task.cancel()
         try:
-            while True:
-                chunk = await stream.queue.get()
-                if chunk is None:
-                    break
-                events = svc.consume_weight_events()
-                if self._bus:
-                    for event in events:
-                        await self._bus.publish_sentinel_weight(
-                            event.sentinel_id,
-                            event.weight,
-                            sentinel_version=event.sentinel_version,
-                            world_id=event.world_id,
-                        )
-                pb = dagmanager_pb2.DiffChunk(
-                    queue_map=chunk.queue_map,
-                    sentinel_id=chunk.sentinel_id,
-                    version=chunk.version,
-                    crc32=chunk.crc32,
-                    buffer_nodes=[
-                            dagmanager_pb2.BufferInstruction(
-                                node_id=n.node_id,
-                                node_type=n.node_type,
-                                code_hash=n.code_hash,
-                                schema_hash=n.schema_hash,
-                                schema_id=n.schema_id,
-                                interval=n.interval or 0,
-                                period=n.period or 0,
-                                tags=list(n.tags),
-                                lag=n.lag,
-                            )
-                        for n in getattr(chunk, 'buffering_nodes', [])
-                    ],
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as err:
+            exc = err
+        await self._emit_weight_events(svc)
+        self._streams.pop(sentinel_id, None)
+        return exc
+
+    @staticmethod
+    def _to_proto_chunk(chunk: DiffChunk) -> dagmanager_pb2.DiffChunk:
+        return dagmanager_pb2.DiffChunk(
+            queue_map=chunk.queue_map,
+            sentinel_id=chunk.sentinel_id,
+            version=chunk.version,
+            crc32=chunk.crc32,
+            buffer_nodes=[
+                dagmanager_pb2.BufferInstruction(
+                    node_id=node.node_id,
+                    node_type=node.node_type,
+                    code_hash=node.code_hash,
+                    schema_hash=node.schema_hash,
+                    schema_id=node.schema_id,
+                    interval=node.interval or 0,
+                    period=node.period or 0,
+                    tags=list(node.tags),
+                    lag=node.lag,
                 )
-                if getattr(chunk, 'new_nodes', None) and self._bus:
-                    for node in chunk.new_nodes:
-                        if node.tags and node.interval is not None:
-                            qname = chunk.queue_map.get(node.node_id, "")
-                            payload = {
-                                "tags": node.tags,
-                                "interval": node.interval,
-                                # Emit descriptor objects to align with Gateway/SDK schema
-                                "queues": ([{"queue": qname, "global": False}] if qname else []),
-                                "match_mode": "any",
-                            }
-                            await self._bus.publish_queue_update(
-                                payload["tags"],
-                                payload["interval"],
-                                payload["queues"],
-                                payload["match_mode"],
-                            )
-                yield pb
-        finally:
-            fut.cancel()
-            await fut
-            events = svc.consume_weight_events()
-            if self._bus:
-                for event in events:
-                    await self._bus.publish_sentinel_weight(
-                        event.sentinel_id,
-                        event.weight,
-                        sentinel_version=event.sentinel_version,
-                        world_id=event.world_id,
-                    )
-            self._streams.pop(sentinel_id, None)
+                for node in getattr(chunk, "buffering_nodes", [])
+            ],
+        )
 
     async def AckChunk(
         self,

@@ -17,7 +17,7 @@ from opentelemetry import trace
 from . import metrics as gw_metrics
 from .commit_log import CommitLogWriter
 from .database import Database
-from .degradation import DegradationManager, DegradationLevel
+from .degradation import DegradationManager
 from .fsm import StrategyFSM
 from .models import StrategySubmit
 from .strategy_persistence import StrategyQueue, StrategyStorage
@@ -67,62 +67,23 @@ class StrategyManager:
     ) -> tuple[str, bool]:
         with tracer.start_as_current_span("gateway.submit"):
             decoded = self._decode_dag(payload)
+            strategy_ctx = await self._resolve_strategy_context(
+                payload, strategy_context
+            )
+            self._record_downgrade_metric(
+                strategy_ctx.context, skip_downgrade_metric
+            )
 
-            strategy_ctx = strategy_context or await self._build_compute_context(payload)
-            compute_ctx = strategy_ctx.context
-            compute_ctx_payload = strategy_ctx.commit_log_payload()
-            context_mapping = strategy_ctx.redis_mapping()
-            world_list = strategy_ctx.worlds_list()
-
-            if (
-                compute_ctx.downgraded
-                and compute_ctx.downgrade_reason
-                and not skip_downgrade_metric
-            ):
-                reason = getattr(
-                    compute_ctx.downgrade_reason,
-                    "value",
-                    compute_ctx.downgrade_reason,
-                )
-                gw_metrics.strategy_compute_context_downgrade_total.labels(
-                    reason=reason
-                ).inc()
-
-            try:
-                strategy_id, existed = await self._ensure_unique_strategy(
-                    decoded.strategy_id,
-                    decoded.dag_hash,
-                    decoded.encoded_dag,
-                )
-            except Exception:
-                self._increment_lost_requests()
-                raise
-
+            strategy_id, existed = await self._register_strategy(decoded)
             if existed:
                 return strategy_id, True
 
-            await self._publish_submission(
+            await self._finalize_submission(
                 strategy_id,
-                decoded.dag_for_storage,
-                decoded.encoded_dag,
-                decoded.dag_hash,
+                decoded,
                 payload,
-                compute_ctx_payload,
-                world_list,
+                strategy_ctx,
             )
-
-            try:
-                await self._enqueue_strategy(strategy_id)
-            except Exception:
-                self._increment_lost_requests()
-                await self._rollback_submission(strategy_id, decoded.dag_hash)
-                raise
-
-            if context_mapping:
-                await self.redis.hset(
-                    f"strategy:{strategy_id}", mapping=context_mapping
-                )
-            await self.fsm.create(strategy_id, payload.meta)
             return strategy_id, False
 
     async def status(self, strategy_id: str) -> Optional[str]:
@@ -199,7 +160,7 @@ class StrategyManager:
                 encoded_dag,
                 dag_hash,
                 payload,
-        compute_ctx,
+                compute_ctx,
                 world_list,
             )
             await self.commit_log_writer.publish_submission(strategy_id, record)
@@ -347,3 +308,86 @@ class StrategyManager:
         if self.context_service is None:
             self.context_service = ComputeContextService()
         return await self.context_service.build(payload)
+
+    async def _resolve_strategy_context(
+        self,
+        payload: StrategySubmit,
+        strategy_context: StrategyComputeContext | None,
+    ) -> StrategyComputeContext:
+        if strategy_context is not None:
+            return strategy_context
+        return await self._build_compute_context(payload)
+
+    def _record_downgrade_metric(
+        self, compute_ctx: StrategyComputeContext, skip_downgrade_metric: bool
+    ) -> None:
+        if (
+            skip_downgrade_metric
+            or not compute_ctx.downgraded
+            or not compute_ctx.downgrade_reason
+        ):
+            return
+        reason = getattr(
+            compute_ctx.downgrade_reason,
+            "value",
+            compute_ctx.downgrade_reason,
+        )
+        gw_metrics.strategy_compute_context_downgrade_total.labels(
+            reason=reason
+        ).inc()
+
+    async def _register_strategy(
+        self, decoded: DecodedDag
+    ) -> tuple[str, bool]:
+        try:
+            return await self._ensure_unique_strategy(
+                decoded.strategy_id,
+                decoded.dag_hash,
+                decoded.encoded_dag,
+            )
+        except Exception:
+            self._increment_lost_requests()
+            raise
+
+    async def _finalize_submission(
+        self,
+        strategy_id: str,
+        decoded: DecodedDag,
+        payload: StrategySubmit,
+        strategy_ctx: StrategyComputeContext,
+    ) -> None:
+        compute_ctx_payload = strategy_ctx.commit_log_payload()
+        world_list = strategy_ctx.worlds_list()
+        await self._publish_submission(
+            strategy_id,
+            decoded.dag_for_storage,
+            decoded.encoded_dag,
+            decoded.dag_hash,
+            payload,
+            compute_ctx_payload,
+            world_list,
+        )
+
+        await self._enqueue_with_rollback(strategy_id, decoded.dag_hash)
+        await self._persist_context(strategy_id, strategy_ctx)
+        await self.fsm.create(strategy_id, payload.meta)
+
+    async def _enqueue_with_rollback(
+        self, strategy_id: str, dag_hash: str
+    ) -> None:
+        try:
+            await self._enqueue_strategy(strategy_id)
+        except Exception:
+            self._increment_lost_requests()
+            await self._rollback_submission(strategy_id, dag_hash)
+            raise
+
+    async def _persist_context(
+        self, strategy_id: str, strategy_ctx: StrategyComputeContext
+    ) -> None:
+        context_mapping = strategy_ctx.redis_mapping()
+        if not context_mapping:
+            return
+        await self.redis.hset(
+            f"strategy:{strategy_id}", mapping=context_mapping
+        )

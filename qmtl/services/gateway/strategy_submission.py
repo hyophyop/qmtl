@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+import json
 import logging
 from http import HTTPStatus
 from typing import Any
 
 from fastapi import HTTPException
 from httpx import HTTPStatusError
+
 from . import metrics as gw_metrics
 from .models import StrategySubmit
 from .submission import SubmissionPipeline, StrategyComputeContext
@@ -43,6 +44,13 @@ class StrategySubmissionResult:
     safe_mode: bool = False
 
 
+@dataclass
+class DiffOutcome:
+    sentinel_id: str | None
+    queue_map: dict[str, list[dict[str, Any]]] | None
+    error: bool
+
+
 class StrategySubmissionHelper:
     """Normalize DAG processing for ingestion and dry-run endpoints."""
 
@@ -73,12 +81,7 @@ class StrategySubmissionHelper:
         downgrade_reason = strategy_ctx.downgrade_reason
         safe_mode = strategy_ctx.safe_mode
 
-        # Emit a downgrade metric whenever we enter safe mode due to missing context.
-        if downgraded and downgrade_reason:
-            reason = getattr(downgrade_reason, "value", downgrade_reason)
-            gw_metrics.strategy_compute_context_downgrade_total.labels(
-                reason=reason
-            ).inc()
+        self._record_downgrade_metric(downgraded, downgrade_reason)
 
         strategy_id, existed = await self._maybe_submit(
             payload, config, downgraded, strategy_ctx
@@ -92,56 +95,15 @@ class StrategySubmissionHelper:
         if config.submit and self._database is not None:
             await self._persist_world_bindings(worlds, payload.world_id, strategy_id)
 
-        queue_map = {}
-        exec_domain = strategy_ctx.execution_domain or None
-
-        prefer_diff = config.prefer_diff_queue_map
-        diff_strategy_id = config.diff_strategy_id or strategy_id
-        dag_json = json.dumps(dag)
-
-        sentinel_default = (
-            config.sentinel_default
-            if config.sentinel_default is not None
-            else (f"{strategy_id}-sentinel" if strategy_id else "")
+        sentinel_id, queue_map = await self._build_queue_outputs(
+            dag,
+            worlds,
+            payload,
+            strategy_ctx,
+            config,
+            node_crc32,
+            strategy_id,
         )
-
-        sentinel_id = sentinel_default
-        diff_queue_map: dict[str, list[dict[str, Any]]] | None = None
-        diff_error = False
-        try:
-            sentinel_id, diff_queue_map = await self._pipeline.run_diff(
-                strategy_id=diff_strategy_id,
-                dag_json=dag_json,
-                worlds=worlds,
-                fallback_world_id=payload.world_id,
-                compute_ctx=strategy_ctx,
-                timeout=config.diff_timeout,
-                prefer_queue_map=prefer_diff,
-                expected_crc32=node_crc32,
-            )
-            if not sentinel_id:
-                sentinel_id = sentinel_default
-        except Exception:
-            diff_error = True
-            sentinel_id = sentinel_default
-            diff_queue_map = None
-
-        if prefer_diff and not diff_error and diff_queue_map is not None:
-            queue_map = diff_queue_map
-        else:
-            queue_map = await self._pipeline.build_queue_map(
-                dag, worlds, payload.world_id, exec_domain
-            )
-            if (
-                prefer_diff
-                and diff_error
-                and not sentinel_id
-                and config.use_crc_sentinel_fallback
-            ):
-                sentinel_id = self._crc_sentinel(dag)
-
-        if not prefer_diff and config.use_crc_sentinel_fallback and not sentinel_id:
-            sentinel_id = self._crc_sentinel(dag)
 
         return StrategySubmissionResult(
             strategy_id=strategy_id,
@@ -176,6 +138,102 @@ class StrategySubmissionHelper:
 
         crc = crc32_of_list(n.get("node_id", "") for n in dag.get("nodes", []))
         return f"dryrun:{crc:08x}"
+
+    def _record_downgrade_metric(
+        self, downgraded: bool, downgrade_reason: "DowngradeReason | str | None"
+    ) -> None:
+        if not downgraded or not downgrade_reason:
+            return
+        reason = getattr(downgrade_reason, "value", downgrade_reason)
+        gw_metrics.strategy_compute_context_downgrade_total.labels(
+            reason=reason
+        ).inc()
+
+    async def _build_queue_outputs(
+        self,
+        dag: dict[str, Any],
+        worlds: list[str],
+        payload: StrategySubmit,
+        strategy_ctx: StrategyComputeContext,
+        config: StrategySubmissionConfig,
+        node_crc32: int,
+        strategy_id: str,
+    ) -> tuple[str, dict[str, list[dict[str, Any] | Any]]]:
+        exec_domain = strategy_ctx.execution_domain or None
+        prefer_diff = config.prefer_diff_queue_map
+        sentinel_default = self._sentinel_default(config, strategy_id)
+
+        diff_strategy_id = config.diff_strategy_id or strategy_id
+        diff_outcome = await self._run_diff(
+            prefer_diff,
+            diff_strategy_id,
+            dag,
+            worlds,
+            payload,
+            strategy_ctx,
+            config,
+            node_crc32,
+        )
+
+        sentinel_id = diff_outcome.sentinel_id or sentinel_default
+        queue_map: dict[str, list[dict[str, Any] | Any]]
+
+        if prefer_diff and not diff_outcome.error and diff_outcome.queue_map is not None:
+            queue_map = diff_outcome.queue_map
+        else:
+            queue_map = await self._pipeline.build_queue_map(
+                dag, worlds, payload.world_id, exec_domain
+            )
+            if (
+                prefer_diff
+                and diff_outcome.error
+                and not sentinel_id
+                and config.use_crc_sentinel_fallback
+            ):
+                sentinel_id = self._crc_sentinel(dag)
+
+        if not prefer_diff and config.use_crc_sentinel_fallback and not sentinel_id:
+            sentinel_id = self._crc_sentinel(dag)
+
+        return sentinel_id, queue_map
+
+    def _sentinel_default(
+        self, config: StrategySubmissionConfig, strategy_id: str
+    ) -> str:
+        if config.sentinel_default is not None:
+            return config.sentinel_default
+        return f"{strategy_id}-sentinel" if strategy_id else ""
+
+    async def _run_diff(
+        self,
+        prefer_diff: bool,
+        diff_strategy_id: str,
+        dag: dict[str, Any],
+        worlds: list[str],
+        payload: StrategySubmit,
+        strategy_ctx: StrategyComputeContext,
+        config: StrategySubmissionConfig,
+        node_crc32: int,
+    ) -> DiffOutcome:
+        dag_json = json.dumps(dag)
+        try:
+            sentinel_id, queue_map = await self._pipeline.run_diff(
+                strategy_id=diff_strategy_id,
+                dag_json=dag_json,
+                worlds=worlds,
+                fallback_world_id=payload.world_id,
+                compute_ctx=strategy_ctx,
+                timeout=config.diff_timeout,
+                prefer_queue_map=prefer_diff,
+                expected_crc32=node_crc32,
+            )
+            return DiffOutcome(
+                sentinel_id=sentinel_id,
+                queue_map=queue_map,
+                error=False,
+            )
+        except Exception:
+            return DiffOutcome(sentinel_id=None, queue_map=None, error=True)
 
     async def _persist_world_bindings(
         self, worlds: list[str], default_world: str | None, strategy_id: str
