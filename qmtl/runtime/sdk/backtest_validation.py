@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import math
-import statistics
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -42,6 +41,8 @@ class DataQualityReport:
 
 class BacktestDataValidator:
     """Validates data quality before backtest execution."""
+
+    _PRICE_FIELDS = {"open", "high", "low", "close", "price"}
     
     def __init__(
         self, 
@@ -98,61 +99,91 @@ class BacktestDataValidator:
         
         # Check for timestamp gaps
         report.timestamp_gaps = self._check_timestamp_gaps(sorted_data, interval_sec)
-        
-        # Validate individual records
+
         valid_count = 0
-        prev_prices = {}
-        
-        for i, (timestamp, record) in enumerate(sorted_data):
+        prev_prices: Dict[str, float] = {}
+
+        for timestamp, record in sorted_data:
             is_valid = True
-            
-            # Check for missing required fields
-            for field in self.required_fields:
-                if field not in record or record[field] is None:
-                    report.missing_fields.append((timestamp, field))
-                    is_valid = False
-            
-            # Validate price fields
-            price_fields = [f for f in record.keys() if f in ['open', 'high', 'low', 'close', 'price']]
-            for field in price_fields:
-                if field in record and record[field] is not None:
-                    price = record[field]
-                    
-                    # Check for invalid price values
-                    if not isinstance(price, (int, float)) or math.isnan(price) or math.isinf(price):
-                        report.invalid_prices.append((timestamp, f"{field}: not a valid number"))
-                        is_valid = False
-                        continue
-                        
-                    if price < self.min_price:
-                        report.invalid_prices.append((timestamp, f"{field}: price {price} below minimum {self.min_price}"))
-                        is_valid = False
-                        continue
-                    
-                    # Check for suspicious price movements
-                    if field in prev_prices and prev_prices[field] is not None:
-                        change = abs(price - prev_prices[field]) / prev_prices[field]
-                        if change > self.max_price_change_pct:
-                            report.suspicious_moves.append((
-                                timestamp, 
-                                change, 
-                                f"{field}: {change:.1%} change from {prev_prices[field]} to {price}"
-                            ))
-                    
-                    prev_prices[field] = price
-            
-            # Validate OHLC relationships if all present
-            if all(f in record and record[f] is not None for f in ['open', 'high', 'low', 'close']):
-                o, h, l, c = record['open'], record['high'], record['low'], record['close']
-                if not (l <= o <= h and l <= c <= h):
-                    report.invalid_prices.append((timestamp, f"Invalid OHLC: O={o}, H={h}, L={l}, C={c}"))
-                    is_valid = False
-            
+
+            if not self._check_required_fields(timestamp, record, report):
+                is_valid = False
+
+            if not self._validate_price_fields(timestamp, record, report, prev_prices):
+                is_valid = False
+
+            if not self._validate_ohlc_relationship(timestamp, record, report):
+                is_valid = False
+
             if is_valid:
                 valid_count += 1
-        
+
         report.valid_records = valid_count
         return report
+
+    def _check_required_fields(
+        self,
+        timestamp: int,
+        record: Dict[str, Any],
+        report: DataQualityReport,
+    ) -> bool:
+        is_valid = True
+        for field in self.required_fields:
+            if field not in record or record[field] is None:
+                report.missing_fields.append((timestamp, field))
+                is_valid = False
+        return is_valid
+
+    def _validate_price_fields(
+        self,
+        timestamp: int,
+        record: Dict[str, Any],
+        report: DataQualityReport,
+        prev_prices: Dict[str, float],
+    ) -> bool:
+        is_valid = True
+        for field in record.keys() & self._PRICE_FIELDS:
+            price = record.get(field)
+            if price is None:
+                continue
+            if not isinstance(price, (int, float)) or math.isnan(price) or math.isinf(price):
+                report.invalid_prices.append((timestamp, f"{field}: not a valid number"))
+                is_valid = False
+                continue
+            if price < self.min_price:
+                report.invalid_prices.append(
+                    (timestamp, f"{field}: price {price} below minimum {self.min_price}")
+                )
+                is_valid = False
+                continue
+            prev_price = prev_prices.get(field)
+            if prev_price is not None:
+                change = abs(price - prev_price) / prev_price
+                if change > self.max_price_change_pct:
+                    report.suspicious_moves.append(
+                        (
+                            timestamp,
+                            change,
+                            f"{field}: {change:.1%} change from {prev_price} to {price}",
+                        )
+                    )
+            prev_prices[field] = float(price)
+        return is_valid
+
+    def _validate_ohlc_relationship(
+        self,
+        timestamp: int,
+        record: Dict[str, Any],
+        report: DataQualityReport,
+    ) -> bool:
+        required = {"open", "high", "low", "close"}
+        if not all(field in record and record[field] is not None for field in required):
+            return True
+        o, h, l, c = (record[field] for field in ("open", "high", "low", "close"))
+        if l <= o <= h and l <= c <= h:
+            return True
+        report.invalid_prices.append((timestamp, f"Invalid OHLC: O={o}, H={h}, L={l}, C={c}"))
+        return False
     
     def _check_timestamp_gaps(
         self, 

@@ -109,58 +109,95 @@ class ActivationManager:
         self.state.drain = bool(self.state.long.drain or self.state.short.drain)
 
     async def _on_message(self, data: dict) -> None:
+        payload = self._extract_activation_payload(data)
+        if payload is None:
+            return
+
+        self._update_activation_metadata(payload)
+
+        side = (payload.get("side") or "").lower()
+        target = self._select_side_state(side)
+        active = bool(payload.get("active", False))
+        freeze = self._normalize_flag(payload.get("freeze"))
+        drain = self._normalize_flag(payload.get("drain"))
+        weight = self._normalize_weight(payload.get("weight"), active)
+
+        if target is not None:
+            self._apply_side_update(target, active, freeze, drain, weight)
+        else:
+            self._apply_global_update(freeze, drain)
+
+        self.state.stale = False
+        self._recompute_global_modes()
+
+    def _extract_activation_payload(self, data: dict) -> dict | None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
+        if not isinstance(payload, dict):
+            return None
         if event == "activation_updated" or payload.get("type") == "ActivationUpdated":
-            side = (payload.get("side") or "").lower()
-            active = bool(payload.get("active", False))
-            weight = payload.get("weight")
-            freeze_val = payload.get("freeze")
-            drain_val = payload.get("drain")
-            freeze = bool(freeze_val) if freeze_val is not None else None
-            drain = bool(drain_val) if drain_val is not None else None
-            eff_mode = payload.get("effective_mode")
-            self.state.etag = payload.get("etag") or self.state.etag
-            self.state.run_id = payload.get("run_id") or self.state.run_id
-            self.state.ts = payload.get("ts") or self.state.ts
-            self.state.state_hash = payload.get("state_hash") or self.state.state_hash
-            ver = payload.get("version")
-            if ver is not None:
-                try:
-                    self.state.version = int(ver)
-                except (TypeError, ValueError):
-                    pass
-            if eff_mode:
-                self.state.effective_mode = eff_mode
-            self.state.stale = False
-            target: SideState | None = None
-            if side == "long":
-                target = self.state.long
-            elif side == "short":
-                target = self.state.short
-            if target is not None:
-                target.active = active
-                if freeze is not None:
-                    target.freeze = freeze
-                if drain is not None:
-                    target.drain = drain
-                if weight is not None:
-                    try:
-                        target.weight = float(weight)
-                    except (TypeError, ValueError):
-                        pass
-                else:
-                    # Default weight when absent per spec: 1.0 if active else 0.0
-                    target.weight = 1.0 if active else 0.0
-            else:
-                # Global mode update (e.g., side="all")
-                if freeze is not None:
-                    self.state.long.freeze = freeze
-                    self.state.short.freeze = freeze
-                if drain is not None:
-                    self.state.long.drain = drain
-                    self.state.short.drain = drain
-            self._recompute_global_modes()
+            return payload
+        return None
+
+    def _update_activation_metadata(self, payload: dict) -> None:
+        self.state.etag = payload.get("etag") or self.state.etag
+        self.state.run_id = payload.get("run_id") or self.state.run_id
+        self.state.ts = payload.get("ts") or self.state.ts
+        self.state.state_hash = payload.get("state_hash") or self.state.state_hash
+        eff_mode = payload.get("effective_mode")
+        if eff_mode:
+            self.state.effective_mode = eff_mode
+
+        ver = payload.get("version")
+        if ver is not None:
+            try:
+                self.state.version = int(ver)
+            except (TypeError, ValueError):
+                pass
+
+    def _select_side_state(self, side: str) -> SideState | None:
+        if side == "long":
+            return self.state.long
+        if side == "short":
+            return self.state.short
+        return None
+
+    def _normalize_flag(self, value: object | None) -> bool | None:
+        if value is None:
+            return None
+        return bool(value)
+
+    def _normalize_weight(self, weight: object | None, active: bool) -> float | None:
+        if weight is None:
+            return 1.0 if active else 0.0
+        try:
+            return float(weight)
+        except (TypeError, ValueError):
+            return None
+
+    def _apply_side_update(
+        self,
+        target: SideState,
+        active: bool,
+        freeze: bool | None,
+        drain: bool | None,
+        weight: float | None,
+    ) -> None:
+        target.active = active
+        if freeze is not None:
+            target.freeze = freeze
+        if drain is not None:
+            target.drain = drain
+        if weight is not None:
+            target.weight = weight
+
+    def _apply_global_update(self, freeze: bool | None, drain: bool | None) -> None:
+        if freeze is not None:
+            self.state.long.freeze = freeze
+            self.state.short.freeze = freeze
+        if drain is not None:
+            self.state.long.drain = drain
+            self.state.short.drain = drain
 
     async def start(self) -> None:
         if self._started:

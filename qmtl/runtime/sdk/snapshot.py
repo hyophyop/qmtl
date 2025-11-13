@@ -115,28 +115,79 @@ def write_snapshot(node) -> Path | None:
 
     Returns the written snapshot path or ``None`` when nothing to write.
     """
+
     cache = getattr(node, "cache", None)
     if cache is None:
         return None
-    # Capture current data
-    data = {}
+
     last_ts = cache.last_timestamps()
     if not last_ts:
         return None
-    for u, mp in last_ts.items():
-        for interval, _ in mp.items():
-            # store a bounded slice (up to period)
-            items = cache.get_slice(u, interval, count=getattr(node, "period", 0))
-            data.setdefault(u, {})[interval] = [
-                (int(ts), _b64(json.dumps(payload).encode())) for ts, payload in items
-            ]
-    # Compute a state hash for validation/fallback
-    state_hash: str | None = None
-    try:
-        state_hash = cache.input_window_hash()  # type: ignore[attr-defined]
-    except Exception:
-        state_hash = None
 
+    data = _collect_snapshot_payload(cache, node, last_ts)
+    state_hash = _compute_state_hash(cache)
+    meta = _build_snapshot_meta(node, last_ts, state_hash)
+
+    key = _node_key(node)
+    remote_url, filesystem = _remote_base()
+    base_dir = _snapshot_dir()
+
+    start = time.perf_counter()
+    if _should_use_parquet(meta["format"]):
+        path_obj = _write_parquet_snapshot(
+            data=data,
+            meta=meta,
+            key=key,
+            remote_url=remote_url,
+            filesystem=filesystem,
+            base_dir=base_dir,
+        )
+    else:
+        path_obj = _write_json_snapshot(
+            data=data,
+            meta=meta,
+            key=key,
+            remote_url=remote_url,
+            filesystem=filesystem,
+            base_dir=base_dir,
+        )
+    duration_ms = (time.perf_counter() - start) * 1000
+
+    _record_snapshot_metrics(path_obj, duration_ms)
+    return path_obj
+
+
+def _collect_snapshot_payload(cache, node, last_ts: Mapping[str, Mapping[Any, Any]]) -> Dict[str, Dict[int, list[tuple[int, str]]]]:
+    data: Dict[str, Dict[int, list[tuple[int, str]]]] = {}
+    for universe, interval_map in last_ts.items():
+        for interval in interval_map.keys():
+            items = cache.get_slice(universe, interval, count=getattr(node, "period", 0))
+            encoded_items = [
+                (int(ts), _b64(json.dumps(payload).encode()))
+                for ts, payload in items
+            ]
+            data.setdefault(universe, {})[int(interval)] = encoded_items
+    return data
+
+
+def _compute_state_hash(cache) -> str | None:
+    try:
+        return cache.input_window_hash()  # type: ignore[attr-defined]
+    except Exception:
+        return None
+
+
+def _build_snapshot_meta(
+    node,
+    last_ts: Mapping[str, Mapping[Any, Any]],
+    state_hash: str | None,
+) -> Dict[str, Any]:
+    wm_ts = int(
+        min(
+            (ts for mp in last_ts.values() for ts in mp.values() if ts is not None),
+            default=0,
+        )
+    )
     meta: Dict[str, Any] = {
         "node_id": node.node_id,
         "interval": node.interval,
@@ -145,78 +196,106 @@ def write_snapshot(node) -> Path | None:
         "schema_compat_id": getattr(node, "schema_compat_id", None),
         "runtime_fingerprint": runtime_fingerprint(),
         "state_hash": state_hash,
-        "wm_ts": int(min(
-            (ts for mp in last_ts.values() for ts in mp.values() if ts is not None),
-            default=0,
-        )),
+        "wm_ts": wm_ts,
         "created_at": int(time.time()),
         "format": os.getenv("QMTL_SNAPSHOT_FORMAT", "json").lower(),
     }
     dataset_fp = getattr(node, "dataset_fingerprint", None)
     if dataset_fp:
         meta["dataset_fingerprint"] = str(dataset_fp)
-    key = _node_key(node)
-    fmt = meta["format"]
-    # Prefer remote base when configured
-    remote_url, fs = _remote_base()
-    base = _snapshot_dir()
-    if fmt == "parquet" and pa is not None and pq is not None:
-        # Write rows to Parquet and meta to a sidecar JSON
-        rows_u: list[str] = []
-        rows_i: list[int] = []
-        rows_t: list[int] = []
-        rows_v: list[bytes] = []
-        for u, mp in data.items():
-            for interval, items in mp.items():
-                for ts, b64 in items:
-                    rows_u.append(u)
-                    rows_i.append(int(interval))
-                    rows_t.append(int(ts))
-                    rows_v.append(_b64d(b64))
-        table = pa.table({
-            "u": pa.array(rows_u, pa.string()),
-            "i": pa.array(rows_i, pa.int64()),
-            "t": pa.array(rows_t, pa.int64()),
-            "v": pa.array(rows_v, pa.binary()),
-        })
-        start = time.perf_counter()
-        if remote_url and fs is not None:
-            pq_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
-            with fs.open(pq_path, "wb") as fobj:  # type: ignore[attr-defined]
-                pq.write_table(table, fobj)
-            meta_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
-            with fs.open(meta_path, "w") as mf:  # type: ignore[attr-defined]
-                json.dump({"meta": meta}, mf)
-        else:
-            pq_path = base / f"{key}_{meta['wm_ts']}.snap.parquet"
-            pq.write_table(table, pq_path)
-            meta_path = base / f"{key}_{meta['wm_ts']}.meta.json"
-            with meta_path.open("w") as mf:
-                json.dump({"meta": meta}, mf)
-        duration_ms = (time.perf_counter() - start) * 1000
-        path = Path(pq_path) if not isinstance(pq_path, Path) else pq_path
-    else:
-        # Fallback to JSON container
-        start = time.perf_counter()
-        if remote_url and fs is not None:
-            path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
-            with fs.open(path, "w") as f:  # type: ignore[attr-defined]
-                json.dump({"meta": meta, "data": data}, f)
-        else:
-            path = base / f"{key}_{meta['wm_ts']}.snap.json"
-            with path.open("w") as f:
-                json.dump({"meta": meta, "data": data}, f)
-    duration_ms = (time.perf_counter() - start) * 1000
+    return meta
+
+
+def _should_use_parquet(fmt: str) -> bool:
+    return fmt == "parquet" and pa is not None and pq is not None
+
+
+def _write_parquet_snapshot(
+    *,
+    data: Dict[str, Dict[int, list[tuple[int, str]]]],
+    meta: Dict[str, Any],
+    key: str,
+    remote_url: str | None,
+    filesystem: Any | None,
+    base_dir: Path,
+):
+    rows_u: list[str] = []
+    rows_i: list[int] = []
+    rows_t: list[int] = []
+    rows_v: list[bytes] = []
+    for universe, interval_map in data.items():
+        for interval, items in interval_map.items():
+            for ts, encoded in items:
+                rows_u.append(universe)
+                rows_i.append(int(interval))
+                rows_t.append(int(ts))
+                rows_v.append(_b64d(encoded))
+    table = pa.table({
+        "u": pa.array(rows_u, pa.string()),
+        "i": pa.array(rows_i, pa.int64()),
+        "t": pa.array(rows_t, pa.int64()),
+        "v": pa.array(rows_v, pa.binary()),
+    })
+
+    if remote_url and filesystem is not None:
+        pq_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
+        with filesystem.open(pq_path, "wb") as handle:  # type: ignore[attr-defined]
+            pq.write_table(table, handle)
+        meta_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
+        with filesystem.open(meta_path, "w") as meta_handle:  # type: ignore[attr-defined]
+            json.dump({"meta": meta}, meta_handle)
+        return Path(pq_path) if not isinstance(pq_path, Path) else pq_path
+
+    pq_path = base_dir / f"{key}_{meta['wm_ts']}.snap.parquet"
+    pq.write_table(table, pq_path)
+    meta_path = base_dir / f"{key}_{meta['wm_ts']}.meta.json"
+    with meta_path.open("w") as meta_handle:
+        json.dump({"meta": meta}, meta_handle)
+    return pq_path
+
+
+def _write_json_snapshot(
+    *,
+    data: Dict[str, Dict[int, list[tuple[int, str]]]],
+    meta: Dict[str, Any],
+    key: str,
+    remote_url: str | None,
+    filesystem: Any | None,
+    base_dir: Path,
+):
+    if remote_url and filesystem is not None:
+        path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
+        with filesystem.open(path, "w") as handle:  # type: ignore[attr-defined]
+            json.dump({"meta": meta, "data": data}, handle)
+        return Path(path) if not isinstance(path, Path) else path
+
+    path = base_dir / f"{key}_{meta['wm_ts']}.snap.json"
+    with path.open("w") as handle:
+        json.dump({"meta": meta, "data": data}, handle)
+    return path
+
+
+def _record_snapshot_metrics(path: Path | str, duration_ms: float) -> None:
     try:
         sdk_metrics.node_processed_total  # type: ignore[attr-defined]
-        # Record snapshot metrics when available
         if hasattr(sdk_metrics, "snapshot_write_duration_ms"):
             sdk_metrics.snapshot_write_duration_ms.observe(duration_ms)  # type: ignore[attr-defined]
         if hasattr(sdk_metrics, "snapshot_bytes_total"):
-            sdk_metrics.snapshot_bytes_total.inc(path.stat().st_size)  # type: ignore[attr-defined]
+            size = None
+            if isinstance(path, Path):
+                if path.exists():
+                    size = path.stat().st_size
+            elif hasattr(path, "stat"):
+                size = path.stat().st_size  # type: ignore[attr-defined]
+            elif isinstance(path, str):
+                candidate = Path(path)
+                if candidate.exists():
+                    size = candidate.stat().st_size
+            if size is not None:
+                sdk_metrics.snapshot_bytes_total.inc(size)  # type: ignore[attr-defined]
     except Exception:
         pass
-    return path
+
 
 
 def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
