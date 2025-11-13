@@ -454,12 +454,9 @@ class WorldServiceClient:
         if preferred == 1 and not versions:
             versions.append(1)
         variants: list[tuple[int, dict[str, Any]]] = []
-        include_schema_version = (
-            schema_version is not None or fallback_schema_version is not None
-        )
         for version in versions:
             body = dict(payload)
-            if version > 1 or include_schema_version:
+            if version > 1:
                 body["schema_version"] = version
             else:
                 body.pop("schema_version", None)
