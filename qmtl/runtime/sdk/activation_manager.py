@@ -12,6 +12,8 @@ from typing import Optional
 
 import httpx
 
+from qmtl.runtime.helpers import parse_activation_update
+
 from .ws_client import WebSocketClient
 from . import runtime
 
@@ -113,19 +115,46 @@ class ActivationManager:
         if payload is None:
             return
 
-        self._update_activation_metadata(payload)
+        update = parse_activation_update(payload)
 
-        side = (payload.get("side") or "").lower()
-        target = self._select_side_state(side)
-        active = bool(payload.get("active", False))
-        freeze = self._normalize_flag(payload.get("freeze"))
-        drain = self._normalize_flag(payload.get("drain"))
-        weight = self._normalize_weight(payload.get("weight"), active)
+        meta = update.metadata
+        if meta.etag is not None:
+            self.state.etag = meta.etag
+        if meta.run_id is not None:
+            self.state.run_id = meta.run_id
+        if meta.ts is not None:
+            self.state.ts = meta.ts
+        if meta.state_hash is not None:
+            self.state.state_hash = meta.state_hash
+        if meta.version is not None:
+            self.state.version = meta.version
+        if meta.effective_mode is not None:
+            self.state.effective_mode = meta.effective_mode
+
+        target: SideState | None = None
+        if update.side == "long":
+            target = self.state.long
+        elif update.side == "short":
+            target = self.state.short
 
         if target is not None:
-            self._apply_side_update(target, active, freeze, drain, weight)
+            if update.active is not None:
+                target.active = update.active
+            if update.freeze is not None:
+                target.freeze = update.freeze
+            if update.drain is not None:
+                target.drain = update.drain
+            if update.weight is not None:
+                target.weight = update.weight
+            elif update.active is not None:
+                target.weight = 1.0 if update.active else 0.0
         else:
-            self._apply_global_update(freeze, drain)
+            if update.freeze is not None:
+                self.state.long.freeze = update.freeze
+                self.state.short.freeze = update.freeze
+            if update.drain is not None:
+                self.state.long.drain = update.drain
+                self.state.short.drain = update.drain
 
         self.state.stale = False
         self._recompute_global_modes()
