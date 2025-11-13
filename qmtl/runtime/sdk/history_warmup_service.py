@@ -57,6 +57,16 @@ class NodeWarmupPlan:
         )
 
 
+@dataclass(frozen=True)
+class StrategyWarmupPlan:
+    ensure_history: bool
+    start: int | None
+    end: int | None
+    strict_mode: bool
+    needs_replay: bool
+    enforce_strict: bool
+
+
 class HistoryWarmupService:
     """Coordinate history hydration, replay and strict validation."""
 
@@ -178,40 +188,23 @@ class HistoryWarmupService:
         stop_on_ready: bool = False,
         strict: bool = False,
     ) -> None:
-        from .node import StreamInput
-        from . import runtime as _runtime
-
-        tasks = []
-        now = (
-            _runtime.FIXED_NOW
-            if _runtime.FIXED_NOW is not None
-            else int(time.time())
-        )
-        for node in strategy.nodes:
-            if not isinstance(node, StreamInput):
-                continue
-            if start is None or end is None:
-                if node.interval is None or node.period is None:
-                    continue
-                rng_end = now - (now % node.interval)
-                rng_start = rng_end - node.interval * node.period + node.interval
-            else:
-                rng_start = start
-                rng_end = end
-            plan = NodeWarmupPlan.build(
-                node,
-                rng_start,
-                rng_end,
+        plans = list(
+            self._iter_node_plans(
+                strategy,
+                start,
+                end,
                 stop_on_ready=stop_on_ready,
                 strict=strict,
             )
-            if plan is None:
-                continue
-            tasks.append(
+        )
+        if not plans:
+            return
+        await asyncio.gather(
+            *[
                 asyncio.create_task(self._ensure_node_with_plan(node, plan))
-            )
-        if tasks:
-            await asyncio.gather(*tasks)
+                for node, plan in plans
+            ]
+        )
 
     # ------------------------------------------------------------------
     def collect_history_events(
@@ -361,54 +354,28 @@ class HistoryWarmupService:
         history_start: Any | None,
         history_end: Any | None,
     ) -> None:
-        from .node import StreamInput
-        from . import runtime as _runtime
-
         self.hydrate_snapshots(strategy)
-
-        has_provider = any(
-            isinstance(node, StreamInput)
-            and getattr(node, "history_provider", None) is not None
-            for node in strategy.nodes
+        plan = self._plan_strategy_warmup(
+            strategy,
+            offline_mode=offline_mode,
+            history_start=history_start,
+            history_end=history_end,
         )
 
-        strict_mode = bool(_runtime.FAIL_ON_HISTORY_GAP)
-
-        h_start = history_start
-        h_end = history_end
-        if offline_mode and h_start is None and h_end is None and not has_provider:
-            h_start, h_end = 1, 2
-
-        ensure_history = has_provider or (h_start is not None and h_end is not None)
-        if not ensure_history and offline_mode:
-            has_cached = False
-            for node in strategy.nodes:
-                if isinstance(node, StreamInput):
-                    try:
-                        snapshot = node.cache._snapshot()[node.node_id].get(node.interval, [])
-                        if snapshot:
-                            has_cached = True
-                            break
-                    except KeyError:
-                        continue
-            if not has_cached:
-                h_start, h_end = 1, 2
-                ensure_history = True
-
-        if ensure_history:
+        if plan.ensure_history:
             await self.ensure_history(
                 strategy,
-                h_start if isinstance(h_start, int) else None,
-                h_end if isinstance(h_end, int) else None,
+                plan.start,
+                plan.end,
                 stop_on_ready=True,
-                strict=strict_mode,
+                strict=plan.strict_mode,
             )
 
-        if offline_mode:
-            if has_provider:
-                await self.replay_history(strategy, None, None)
-            if strict_mode:
-                await self._enforce_strict_mode(strategy)
+        if plan.needs_replay:
+            await self.replay_history(strategy, None, None)
+
+        if plan.enforce_strict:
+            await self._enforce_strict_mode(strategy)
 
     async def _enforce_strict_mode(self, strategy: Strategy) -> None:
         from .node import StreamInput
@@ -435,6 +402,117 @@ class HistoryWarmupService:
                 getattr(node, "period", 1) or 1,
                 coverage,
             )
+
+    # ------------------------------------------------------------------
+    def _iter_node_plans(
+        self,
+        strategy: Strategy,
+        start: int | None,
+        end: int | None,
+        *,
+        stop_on_ready: bool,
+        strict: bool,
+    ) -> list[tuple[Any, NodeWarmupPlan]]:
+        from .node import StreamInput
+
+        now = self._resolve_now()
+        plans: list[tuple[Any, NodeWarmupPlan]] = []
+        for node in strategy.nodes:
+            if not isinstance(node, StreamInput):
+                continue
+            window = self._resolve_node_window(node, start, end, now)
+            if window is None:
+                continue
+            rng_start, rng_end = window
+            plan = NodeWarmupPlan.build(
+                node,
+                rng_start,
+                rng_end,
+                stop_on_ready=stop_on_ready,
+                strict=strict,
+            )
+            if plan is not None:
+                plans.append((node, plan))
+        return plans
+
+    @staticmethod
+    def _resolve_now() -> int:
+        from . import runtime as _runtime
+
+        if _runtime.FIXED_NOW is not None:
+            return _runtime.FIXED_NOW
+        return int(time.time())
+
+    @staticmethod
+    def _resolve_node_window(
+        node: Any,
+        start: int | None,
+        end: int | None,
+        now: int,
+    ) -> tuple[int, int] | None:
+        if start is not None and end is not None:
+            return start, end
+        interval = getattr(node, "interval", None)
+        period = getattr(node, "period", None)
+        if interval is None or period is None:
+            return None
+        rng_end = now - (now % interval)
+        rng_start = rng_end - interval * period + interval
+        return rng_start, rng_end
+
+    def _plan_strategy_warmup(
+        self,
+        strategy: Strategy,
+        *,
+        offline_mode: bool,
+        history_start: Any | None,
+        history_end: Any | None,
+    ) -> StrategyWarmupPlan:
+        from .node import StreamInput
+        from . import runtime as _runtime
+
+        has_provider = any(
+            isinstance(node, StreamInput)
+            and getattr(node, "history_provider", None) is not None
+            for node in strategy.nodes
+        )
+
+        strict_mode = bool(_runtime.FAIL_ON_HISTORY_GAP)
+
+        start = history_start if isinstance(history_start, int) else None
+        end = history_end if isinstance(history_end, int) else None
+
+        if offline_mode and start is None and end is None and not has_provider:
+            start, end = 1, 2
+
+        ensure_history = has_provider or (start is not None and end is not None)
+        if offline_mode and not ensure_history and not self._has_cached_history(strategy):
+            start, end = 1, 2
+            ensure_history = True
+
+        return StrategyWarmupPlan(
+            ensure_history=ensure_history,
+            start=start,
+            end=end,
+            strict_mode=strict_mode,
+            needs_replay=offline_mode and has_provider,
+            enforce_strict=offline_mode and strict_mode,
+        )
+
+    @staticmethod
+    def _has_cached_history(strategy: Strategy) -> bool:
+        from .node import StreamInput
+
+        for node in strategy.nodes:
+            if not isinstance(node, StreamInput):
+                continue
+            try:
+                snapshot = node.cache._snapshot()[node.node_id].get(node.interval, [])
+            except KeyError:
+                continue
+            if snapshot:
+                return True
+        return False
 
 
 __all__ = ["HistoryWarmupService"]
