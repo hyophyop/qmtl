@@ -9,6 +9,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+
+if hasattr(status, "HTTP_422_UNPROCESSABLE_CONTENT"):
+    HTTP_422_UNPROCESSABLE = status.HTTP_422_UNPROCESSABLE_CONTENT
+else:
+    HTTP_422_UNPROCESSABLE = status.HTTP_422_UNPROCESSABLE_ENTITY
+
 from .. import metrics as gw_metrics
 from ..database import Database
 from ..rebalancing_executor import (
@@ -153,7 +159,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=HTTP_422_UNPROCESSABLE,
                     detail={
                         "code": "E_SHARED_ACCOUNT_POLICY",
                         "message": message,
