@@ -453,13 +453,13 @@ class WorldServiceClient:
             versions.append(fallback)
         if preferred == 1 and not versions:
             versions.append(1)
+        base_payload = dict(payload)
+        base_payload.pop("schema_version", None)
         variants: list[tuple[int, dict[str, Any]]] = []
         for version in versions:
-            body = dict(payload)
+            body = dict(base_payload)
             if version > 1:
                 body["schema_version"] = version
-            else:
-                body.pop("schema_version", None)
             variants.append((version, body))
         return variants
 

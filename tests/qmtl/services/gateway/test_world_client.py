@@ -75,13 +75,13 @@ async def test_post_rebalance_plan_sets_schema_version() -> None:
 
 @pytest.mark.asyncio
 async def test_post_rebalance_plan_falls_back_when_schema_rejected() -> None:
-    attempts: list[int] = []
+    attempts: list[int | None] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path != "/rebalancing/plan":
             raise AssertionError("unexpected path")
         body = json.loads(request.content)
-        attempts.append(body.get("schema_version", 0))
+        attempts.append(body.get("schema_version"))
         if len(attempts) == 1:
             return httpx.Response(400, json={"detail": "unsupported schema"})
         return httpx.Response(200, json={"per_world": {}, "global_deltas": []})
@@ -101,7 +101,7 @@ async def test_post_rebalance_plan_falls_back_when_schema_rejected() -> None:
     finally:
         await client._client.aclose()
 
-    assert attempts == [2, 1]
+    assert attempts == [2, None]
 
 
 @pytest.mark.asyncio
