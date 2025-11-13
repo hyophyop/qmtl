@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.degradation import DegradationManager
+from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.strategy_submission import StrategySubmissionHelper
 from qmtl.services.gateway.submission import ComputeContextService, SubmissionPipeline
@@ -31,6 +32,7 @@ class GatewayDependencyProvider:
         alpha_metrics_capable: bool,
         fill_producer: Any | None = None,
         submission_pipeline: SubmissionPipeline | None = None,
+        health_capabilities: GatewayHealthCapabilities | None = None,
     ) -> None:
         self._manager = manager
         self._redis_conn = redis_conn
@@ -58,6 +60,16 @@ class GatewayDependencyProvider:
             pipeline=self._pipeline,
             world_client=self._world_client,
         )
+        if health_capabilities is not None:
+            caps = health_capabilities
+        else:
+            caps = GatewayHealthCapabilities(
+                rebalance_schema_version=self._rebalance_schema_version,
+                alpha_metrics_capable=self._alpha_metrics_capable,
+            )
+        self._health_capabilities = caps
+        self._rebalance_schema_version = caps.rebalance_schema_version
+        self._alpha_metrics_capable = caps.alpha_metrics_capable
 
     # Core dependencies -------------------------------------------------
 
@@ -104,6 +116,9 @@ class GatewayDependencyProvider:
 
     def provide_alpha_metrics_capable(self) -> bool:
         return self._alpha_metrics_capable
+
+    def provide_health_capabilities(self) -> GatewayHealthCapabilities:
+        return self._health_capabilities
 
 
 __all__ = ["GatewayDependencyProvider"]
