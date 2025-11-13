@@ -28,17 +28,11 @@ from qmtl.runtime.nodesets.base import (
 )
 from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
 from qmtl.runtime.nodesets.options import NodeSetOptions
-from qmtl.runtime.nodesets.resources import get_execution_resources
 from qmtl.runtime.nodesets.steps import (
     StepSpec,
     STEP_ORDER,
-    compose as compose_steps,
     execution,
-    pretrade,
     order_publish,
-    fills,
-    risk,
-    timing,
 )
 from qmtl.runtime.nodesets.registry import nodeset_recipe
 from qmtl.runtime.pipeline.execution_nodes import (
@@ -97,6 +91,116 @@ class RecipeAdapterSpec:
 
 
 RecipeComponent = Node | Callable[[Node, NodeSetContext], Node] | StepSpec | None
+
+
+def _ensure_sandbox_credentials(
+    *, sandbox: bool, api_key: str | None, secret: str | None
+) -> None:
+    if sandbox and (not api_key or not secret):
+        raise RuntimeError("sandbox mode requires apiKey and secret")
+
+
+def _build_ccxt_client(
+    client_ctor: Callable[..., Any],
+    *,
+    exchange_id: str,
+    sandbox: bool,
+    api_key: str | None,
+    secret: str | None,
+    fake_ctor: Callable[[], Any] = FakeBrokerageClient,
+    **client_kwargs: Any,
+) -> Any:
+    _ensure_sandbox_credentials(sandbox=sandbox, api_key=api_key, secret=secret)
+    if api_key and secret:
+        return client_ctor(
+            exchange_id,
+            sandbox=sandbox,
+            apiKey=api_key,
+            secret=secret,
+            **client_kwargs,
+        )
+    return fake_ctor()
+
+
+def _latest_order(
+    view: CacheView, upstream: Node, *, copy: bool = True
+) -> dict[str, Any] | None:
+    data = view[upstream][upstream.interval]
+    if not data:
+        return None
+    _, order = data[-1]
+    return dict(order) if copy else order
+
+
+def _build_order_mutator(
+    *,
+    time_in_force: str | None,
+    reduce_only: bool,
+    extra_mutate: Callable[[dict[str, Any]], None] | None = None,
+) -> Callable[[dict[str, Any]], None]:
+    def _mutate(order: dict[str, Any]) -> None:
+        if time_in_force:
+            order.setdefault("time_in_force", time_in_force)
+        if reduce_only:
+            order["reduce_only"] = True
+        if extra_mutate is not None:
+            extra_mutate(order)
+
+    return _mutate
+
+
+def _build_execution_compute_fn(
+    mutator: Callable[[dict[str, Any]], None],
+) -> Callable[[CacheView, Node], dict[str, Any] | None]:
+    def _exec(view: CacheView, upstream: Node) -> dict[str, Any] | None:
+        order = _latest_order(view, upstream, copy=True)
+        if order is None:
+            return None
+        mutator(order)
+        return order
+
+    return _exec
+
+
+def _build_publish_compute_fn(
+    client: FakeBrokerageClient | CcxtBrokerageClient | FuturesCcxtBrokerageClient | Any,
+) -> Callable[[CacheView, Node], dict[str, Any] | None]:
+    def _publish(view: CacheView, upstream: Node) -> dict[str, Any] | None:
+        order = _latest_order(view, upstream, copy=False)
+        if order is None:
+            return None
+        client.post_order(order)
+        return order
+
+    return _publish
+
+
+def _ccxt_execution_publish_steps(
+    *,
+    client: Any,
+    mutator: Callable[[dict[str, Any]], None],
+) -> dict[str, StepSpec]:
+    exec_step = StepSpec.from_step(
+        execution(compute_fn=_build_execution_compute_fn(mutator))
+    )
+    publish_step = StepSpec.from_step(
+        order_publish(compute_fn=_build_publish_compute_fn(client))
+    )
+    return {"execution": exec_step, "order_publish": publish_step}
+
+
+def _ccxt_sizing_portfolio_steps() -> dict[str, StepSpec]:
+    return {
+        "sizing": StepSpec.from_factory(
+            RealSizingNode,
+            inject_portfolio=True,
+            inject_weight_fn=True,
+        ),
+        "portfolio": StepSpec.from_factory(
+            RealPortfolioNode,
+            inject_portfolio=True,
+        ),
+    }
 
 
 class NodeSetRecipe:
@@ -627,18 +731,15 @@ _CCXT_SPOT_RECIPE = NodeSetRecipe(
     name="ccxt_spot",
     modes=("simulate", "paper", "live"),
     descriptor=CCXT_SPOT_DESCRIPTOR,
-    steps={
-        "sizing": StepSpec.from_factory(
-            RealSizingNode,
-            inject_portfolio=True,
-            inject_weight_fn=True,
-        ),
-        "portfolio": StepSpec.from_factory(
-            RealPortfolioNode,
-            inject_portfolio=True,
-        ),
-    },
+    steps=_ccxt_sizing_portfolio_steps(),
     adapter_parameters=CCXT_SPOT_ADAPTER_PARAMETERS,
+)
+
+
+_CCXT_FUTURES_RECIPE = NodeSetRecipe(
+    name="ccxt_futures",
+    modes=("simulate", "paper", "live"),
+    steps=_ccxt_sizing_portfolio_steps(),
 )
 
 
@@ -661,45 +762,22 @@ def make_ccxt_spot_nodeset(
     In simulate mode (no credentials), a FakeBrokerageClient is used. In
     sandbox mode, credentials are required.
     """
-    if sandbox and (not apiKey or not secret):
-        raise RuntimeError("sandbox mode requires apiKey and secret")
+    client = _build_ccxt_client(
+        CcxtBrokerageClient,
+        exchange_id=exchange_id,
+        sandbox=sandbox,
+        api_key=apiKey,
+        secret=secret,
+        options={"defaultType": "spot"},
+    )
 
-    client: Any
-    if apiKey and secret:
-        client = CcxtBrokerageClient(
-            exchange_id,
-            apiKey=apiKey,
-            secret=secret,
-            sandbox=sandbox,
-            options={"defaultType": "spot"},
-        )
-    else:
-        client = FakeBrokerageClient()
-
-    def _exec(view: CacheView, upstream: Node) -> dict | None:
-        data = view[upstream][upstream.interval]
-        if not data:
-            return None
-        _, order = data[-1]
-        order = dict(order)
-        order.setdefault("time_in_force", time_in_force)
-        if reduce_only:
-            order["reduce_only"] = True
-        return order
-
-    def _publish(view: CacheView, upstream: Node) -> dict | None:
-        data = view[upstream][upstream.interval]
-        if not data:
-            return None
-        _, order = data[-1]
-        client.post_order(order)
-        return order
+    mutator = _build_order_mutator(
+        time_in_force=time_in_force,
+        reduce_only=reduce_only,
+    )
 
     resolved_options = options or NodeSetOptions()
-    step_overrides = {
-        "execution": StepSpec.from_step(execution(compute_fn=_exec)),
-        "order_publish": StepSpec.from_step(order_publish(compute_fn=_publish)),
-    }
+    step_overrides = _ccxt_execution_publish_steps(client=client, mutator=mutator)
 
     return _CCXT_SPOT_RECIPE.compose(
         signal_node,
@@ -759,79 +837,40 @@ def make_ccxt_futures_nodeset(
 ) -> NodeSet:
     """Compose a CCXT futures (perpetual) execution Node Set behind ``signal_node``."""
 
-    if sandbox and (not apiKey or not secret):
-        raise RuntimeError("sandbox mode requires apiKey and secret")
-
-    client: Any
-    if apiKey and secret:
-        client = FuturesCcxtBrokerageClient(
-            exchange_id,
-            leverage=leverage,
-            margin_mode=margin_mode,
-            hedge_mode=hedge_mode,
-            sandbox=sandbox,
-            apiKey=apiKey,
-            secret=secret,
-        )
-    else:
-        client = FakeBrokerageClient()
-
-    def _exec(view: CacheView, upstream: Node) -> dict | None:
-        data = view[upstream][upstream.interval]
-        if not data:
-            return None
-        _, order = data[-1]
-        order = dict(order)
-        order.setdefault("time_in_force", time_in_force)
-        if reduce_only:
-            order["reduce_only"] = True
-        if leverage is not None:
-            order.setdefault("leverage", leverage)
-        return order
-
-    def _publish(view: CacheView, upstream: Node) -> dict | None:
-        data = view[upstream][upstream.interval]
-        if not data:
-            return None
-        _, order = data[-1]
-        client.post_order(order)
-        return order
-
-    opts = options or NodeSetOptions()
-    resources = get_execution_resources(
-        world_id,
-        portfolio_scope=opts.portfolio_scope,
-        activation_weighting=opts.activation_weighting,
+    client = _build_ccxt_client(
+        FuturesCcxtBrokerageClient,
+        exchange_id=exchange_id,
+        sandbox=sandbox,
+        api_key=apiKey,
+        secret=secret,
+        leverage=leverage,
+        margin_mode=margin_mode,
+        hedge_mode=hedge_mode,
     )
-    portfolio_obj = resources.portfolio
-    weight_fn = resources.weight_fn
 
-    def _sizing_step(upstream: Node) -> Node:
-        node = RealSizingNode(upstream, portfolio=portfolio_obj, weight_fn=weight_fn)
-        setattr(node, "world_id", world_id)
-        return node
+    extra_mutator: Callable[[dict[str, Any]], None] | None = None
+    if leverage is not None:
+        def _apply_leverage(order: dict[str, Any], *, _value: int | None = leverage) -> None:
+            if _value is not None:
+                order.setdefault("leverage", _value)
 
-    def _portfolio_step(upstream: Node) -> Node:
-        node = RealPortfolioNode(upstream, portfolio=portfolio_obj)
-        setattr(node, "world_id", world_id)
-        return node
+        extra_mutator = _apply_leverage
 
-    return compose_steps(
+    mutator = _build_order_mutator(
+        time_in_force=time_in_force,
+        reduce_only=reduce_only,
+        extra_mutate=extra_mutator,
+    )
+
+    resolved_options = options or NodeSetOptions()
+    step_overrides = _ccxt_execution_publish_steps(client=client, mutator=mutator)
+
+    return _CCXT_FUTURES_RECIPE.compose(
         signal_node,
-        steps=[
-            pretrade(),
-            _sizing_step,
-            execution(compute_fn=_exec),
-            order_publish(compute_fn=_publish),
-            fills(),
-            _portfolio_step,
-            risk(),
-            timing(),
-        ],
-        name="ccxt_futures",
-        modes=("simulate", "paper", "live"),
-        portfolio_scope=opts.portfolio_scope,
+        world_id,
         descriptor=descriptor,
+        steps=step_overrides,
+        options=resolved_options,
     )
 
 
