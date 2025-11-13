@@ -185,6 +185,7 @@ async def _main(argv: list[str] | None = None) -> None:
         event_config=event_descriptor,
         enable_otel=telemetry_enabled,
         shared_account_policy_config=config.shared_account_policy,
+        health_capabilities=config.build_health_capabilities(),
     )
     db = app.state.database
     if hasattr(db, "connect"):

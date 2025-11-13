@@ -141,3 +141,57 @@ async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
         assert metrics.worlds_stale_responses_total._value.get() == 1
     finally:
         await client._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_post_rebalance_plan_includes_schema_version() -> None:
+    observed: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode() or "{}")
+        observed.append(body)
+        assert body.get("schema_version") == 2
+        return httpx.Response(200, json={"per_world": {}})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+        rebalance_schema_version=2,
+    )
+
+    try:
+        result = await client.post_rebalance_plan({"total_equity": 1})
+        assert result == {"per_world": {}}
+        assert observed and observed[0]["schema_version"] == 2
+    finally:
+        await client._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_post_rebalance_plan_falls_back_to_v1_on_client_error() -> None:
+    attempts: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode() or "{}")
+        attempts.append(body)
+        if len(attempts) == 1:
+            assert body.get("schema_version") == 2
+            return httpx.Response(400, json={"detail": "unsupported"})
+        assert "schema_version" not in body
+        return httpx.Response(200, json={"per_world": {"world-a": {}}})
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+        rebalance_schema_version=2,
+    )
+
+    try:
+        result = await client.post_rebalance_plan({"total_equity": 1})
+        assert result == {"per_world": {"world-a": {}}}
+        assert len(attempts) == 2
+        assert attempts[1].get("schema_version") is None
+    finally:
+        await client._client.aclose()
