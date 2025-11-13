@@ -155,6 +155,106 @@ class StreamSender:
         raise NotImplementedError
 
 
+@dataclass(frozen=True)
+class _DiffPlan:
+    queue_map: Mapping[str, str]
+    sentinel_id: str
+    version: str
+    crc32: int
+    new_nodes: List[NodeInfo]
+    buffering_nodes: List[BufferInstruction]
+
+
+class _ChunkStreamer:
+    """Manage diff chunk streaming and acknowledgements."""
+
+    def __init__(
+        self,
+        sender: StreamSender,
+        *,
+        chunk_size: int = 100,
+        ack_window: int = 10,
+        max_retry: int = 3,
+        deadline_seconds: float = 30.0,
+    ) -> None:
+        self._sender = sender
+        self._chunk_size = chunk_size
+        self._ack_window = ack_window
+        self._max_retry = max_retry
+        self._deadline_seconds = deadline_seconds
+        self._outstanding = 0
+
+    def stream(
+        self,
+        queue_map: Mapping[str, str],
+        sentinel_id: str,
+        version: str,
+        new_nodes: List[NodeInfo],
+        buffering_nodes: List[BufferInstruction],
+        crc32: int,
+    ) -> None:
+        total = max(len(new_nodes), len(buffering_nodes))
+
+        if total == 0:
+            self._send_chunk(
+                DiffChunk(
+                    queue_map=queue_map,
+                    sentinel_id=sentinel_id,
+                    version=version,
+                    crc32=crc32,
+                    new_nodes=[],
+                    buffering_nodes=[],
+                )
+            )
+            self._drain_ack_window()
+            return
+
+        for offset in range(0, total, self._chunk_size):
+            chunk_new = new_nodes[offset : offset + self._chunk_size]
+            chunk_buffer = buffering_nodes[offset : offset + self._chunk_size]
+            self._send_chunk(
+                DiffChunk(
+                    queue_map=queue_map,
+                    sentinel_id=sentinel_id,
+                    version=version,
+                    crc32=crc32,
+                    new_nodes=chunk_new,
+                    buffering_nodes=chunk_buffer,
+                )
+            )
+            if self._outstanding >= self._ack_window:
+                self._await_ack()
+
+        self._drain_ack_window()
+
+    def _send_chunk(self, chunk: DiffChunk) -> None:
+        self._sender.send(chunk)
+        self._outstanding += 1
+
+    def _drain_ack_window(self) -> None:
+        while self._outstanding:
+            self._await_ack()
+
+    def _await_ack(self) -> None:
+        deadline = time.monotonic() + self._deadline_seconds
+        attempts = 0
+        while True:
+            status = self._sender.wait_for_ack()
+            if status is AckStatus.OK:
+                self._outstanding -= 1
+                return
+            resume = getattr(self._sender, "resume_from_last_offset", None)
+            if callable(resume):
+                resume()
+            attempts += 1
+            if attempts < self._max_retry:
+                continue
+            if time.monotonic() >= deadline:
+                break
+            attempts = 0
+        raise TimeoutError("Client did not acknowledge diff chunk")
+
+
 class DiffService:
     """Process :class:`DiffRequest` following the documented steps."""
 
@@ -601,127 +701,31 @@ class DiffService:
         buffering_nodes: List[BufferInstruction],
         crc32: int,
     ) -> None:
-        CHUNK_SIZE = 100
-        ACK_WINDOW = 10
-        total = max(len(new_nodes), len(buffering_nodes))
-
-        def await_ack() -> None:
-            MAX_RETRY = 3
-            DEADLINE_SECONDS = 30
-            deadline = time.monotonic() + DEADLINE_SECONDS
-            attempts = 0
-            while True:
-                status = self.stream_sender.wait_for_ack()
-                if status is AckStatus.OK:
-                    return
-                resume = getattr(self.stream_sender, "resume_from_last_offset", None)
-                if callable(resume):
-                    resume()
-                attempts += 1
-                if attempts < MAX_RETRY:
-                    continue
-                if time.monotonic() >= deadline:
-                    break
-                attempts = 0
-            raise TimeoutError("Client did not acknowledge diff chunk")
-
-        if total == 0:
-            # 그래도 최소 1개는 보내야 함 (empty chunk)
-            self.stream_sender.send(
-                DiffChunk(
-                    queue_map=queue_map,
-                    sentinel_id=sentinel_id,
-                    version=version,
-                    crc32=crc32,
-                    new_nodes=[],
-                    buffering_nodes=[],
-                )
-            )
-            await_ack()
-            return
-
-        outstanding = 0
-        for i in range(0, total, CHUNK_SIZE):
-            chunk_new = new_nodes[i:i+CHUNK_SIZE]
-            chunk_buf = buffering_nodes[i:i+CHUNK_SIZE]
-            self.stream_sender.send(
-                DiffChunk(
-                    queue_map=queue_map,
-                    sentinel_id=sentinel_id,
-                    version=version,
-                    crc32=crc32,
-                    new_nodes=chunk_new,
-                    buffering_nodes=chunk_buf,
-                )
-            )
-            outstanding += 1
-            if outstanding >= ACK_WINDOW:
-                await_ack()
-                outstanding -= 1
-
-        while outstanding:
-            await_ack()
-            outstanding -= 1
+        streamer = _ChunkStreamer(self.stream_sender)
+        streamer.stream(
+            queue_map,
+            sentinel_id,
+            version,
+            new_nodes,
+            buffering_nodes,
+            crc32,
+        )
 
     def diff(self, request: DiffRequest) -> DiffChunk:
         start = time.perf_counter()
         try:
-            nodes, version, inferred_context, namespace, sentinel_weight = self._pre_scan(
-                request.dag_json
-            )
-            merged_context = replace(
-                inferred_context,
-                world_id=stringify(request.world_id) or inferred_context.world_id,
-                execution_domain=normalize_execution_domain(
-                    request.execution_domain or inferred_context.execution_domain
-                ),
-                as_of=stringify(request.as_of) or inferred_context.as_of,
-                partition=stringify(request.partition) or inferred_context.partition,
-                dataset_fingerprint=
-                stringify(request.dataset_fingerprint)
-                or inferred_context.dataset_fingerprint,
-            )
-            existing = self._db_fetch([n.node_id for n in nodes])
-            queue_map, new_nodes, buffering = self._hash_compare(
-                nodes,
-                existing,
-                version,
-                merged_context,
-                namespace=namespace,
-            )
-            instructions = self._buffer_instructions(buffering)
-            sentinel_id = f"{request.strategy_id}-sentinel"
-            self._insert_sentinel(sentinel_id, new_nodes, version)
-            if not new_nodes:
-                sentinel_gap_count.inc()
-                sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
-            crc32 = crc32_of_list(n.node_id for n in nodes)
-            self._record_sentinel_weight(
-                sentinel_id,
-                version,
-                sentinel_weight,
-                world_id=merged_context.world_id or None,
-            )
+            plan = self._prepare_diff(request)
             self._stream_send(
-                queue_map,
-                sentinel_id,
-                version,
-                new_nodes,
-                instructions,
-                crc32,
+                plan.queue_map,
+                plan.sentinel_id,
+                plan.version,
+                plan.new_nodes,
+                plan.buffering_nodes,
+                plan.crc32,
             )
-            # success path accounted as processed request
             diff_requests_total.inc()
-            return DiffChunk(
-                queue_map=queue_map,
-                sentinel_id=sentinel_id,
-                version=version,
-                crc32=crc32,
-                new_nodes=new_nodes,
-                buffering_nodes=instructions,
-            )
+            return self._build_chunk(plan)
         except Exception:
-            # record failure for alerting, then propagate
             diff_failures_total.inc()
             raise
         finally:
@@ -730,6 +734,72 @@ class DiffService:
 
     async def diff_async(self, request: DiffRequest) -> DiffChunk:
         return await asyncio.to_thread(self.diff, request)
+
+    def _prepare_diff(self, request: DiffRequest) -> _DiffPlan:
+        nodes, version, inferred_context, namespace, sentinel_weight = self._pre_scan(
+            request.dag_json
+        )
+        merged_context = self._merge_context(inferred_context, request)
+        existing = self._db_fetch([n.node_id for n in nodes])
+        queue_map, new_nodes, buffering = self._hash_compare(
+            nodes,
+            existing,
+            version,
+            merged_context,
+            namespace=namespace,
+        )
+        instructions = self._buffer_instructions(buffering)
+        sentinel_id = self._build_sentinel_id(request.strategy_id)
+        self._insert_sentinel(sentinel_id, new_nodes, version)
+        if not new_nodes:
+            sentinel_gap_count.inc()
+            sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
+        crc32 = crc32_of_list(n.node_id for n in nodes)
+        self._record_sentinel_weight(
+            sentinel_id,
+            version,
+            sentinel_weight,
+            world_id=merged_context.world_id or None,
+        )
+        return _DiffPlan(
+            queue_map=queue_map,
+            sentinel_id=sentinel_id,
+            version=version,
+            crc32=crc32,
+            new_nodes=new_nodes,
+            buffering_nodes=instructions,
+        )
+
+    def _merge_context(
+        self, inferred_context: ComputeContext, request: DiffRequest
+    ) -> ComputeContext:
+        return replace(
+            inferred_context,
+            world_id=stringify(request.world_id) or inferred_context.world_id,
+            execution_domain=normalize_execution_domain(
+                request.execution_domain or inferred_context.execution_domain
+            ),
+            as_of=stringify(request.as_of) or inferred_context.as_of,
+            partition=stringify(request.partition) or inferred_context.partition,
+            dataset_fingerprint=
+            stringify(request.dataset_fingerprint)
+            or inferred_context.dataset_fingerprint,
+        )
+
+    @staticmethod
+    def _build_sentinel_id(strategy_id: str) -> str:
+        return f"{strategy_id}-sentinel"
+
+    @staticmethod
+    def _build_chunk(plan: _DiffPlan) -> DiffChunk:
+        return DiffChunk(
+            queue_map=plan.queue_map,
+            sentinel_id=plan.sentinel_id,
+            version=plan.version,
+            crc32=plan.crc32,
+            new_nodes=plan.new_nodes,
+            buffering_nodes=plan.buffering_nodes,
+        )
 
 
 class Neo4jNodeRepository(NodeRepository):
