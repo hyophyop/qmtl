@@ -46,6 +46,12 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         enforce_live_guard = _resolve_dependency(
             enforce_live_guard, deps.provide_enforce_live_guard
         )
+        rebalance_schema_version = _resolve_dependency(
+            rebalance_schema_version, deps.provide_rebalance_schema_version
+        )
+        alpha_metrics_capable = _resolve_dependency(
+            alpha_metrics_capable, deps.provide_alpha_metrics_capable
+        )
         health_data = await gateway_health(
             redis_conn,
             database_obj,
@@ -78,6 +84,12 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         dagmanager = _resolve_dependency(dagmanager, deps.provide_dagmanager)
         world_client = _resolve_dependency(
             world_client, deps.provide_world_client_optional
+        )
+        rebalance_schema_version = _resolve_dependency(
+            rebalance_schema_version, deps.provide_rebalance_schema_version
+        )
+        alpha_metrics_capable = _resolve_dependency(
+            alpha_metrics_capable, deps.provide_alpha_metrics_capable
         )
         return await gateway_health(
             redis_conn,

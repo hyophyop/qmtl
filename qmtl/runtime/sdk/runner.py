@@ -406,7 +406,7 @@ class Runner:
         try:
             strategy.on_start()
             if gateway_url and not effective_offline:
-                await cls._refresh_gateway_capabilities(gateway_url)
+                await Runner._refresh_gateway_capabilities(gateway_url)
 
             bootstrapper = StrategyBootstrapper(services.gateway_client)
             bootstrap_result = await bootstrapper.bootstrap(
