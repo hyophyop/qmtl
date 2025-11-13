@@ -458,7 +458,8 @@ class WorldServiceClient:
         variants: list[tuple[int, dict[str, Any]]] = []
         for version in versions:
             body = dict(base_payload)
-            body["schema_version"] = version
+            if version > 1:
+                body["schema_version"] = version
             variants.append((version, body))
         return variants
 
