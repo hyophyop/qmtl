@@ -99,6 +99,23 @@ class StrategyManager:
             pass
 
     def _decode_dag(self, payload: StrategySubmit) -> DecodedDag:
+        dag_dict, dag_for_storage, dag_hash = self._parse_dag_payload(payload)
+        strategy_id = str(uuid.uuid4())
+        dag_for_storage = self._inject_version_sentinel(
+            strategy_id, dag_for_storage, payload.meta
+        )
+        encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
+        return DecodedDag(
+            strategy_id=strategy_id,
+            dag=dag_dict,
+            dag_for_storage=dag_for_storage,
+            encoded_dag=encoded_dag,
+            dag_hash=dag_hash,
+        )
+
+    def _parse_dag_payload(
+        self, payload: StrategySubmit
+    ) -> tuple[dict[str, Any], dict[str, Any], str]:
         try:
             dag_bytes = base64.b64decode(payload.dag_json)
             dag_dict = json.loads(dag_bytes.decode())
@@ -108,31 +125,36 @@ class StrategyManager:
         dag_hash = hashlib.sha256(
             json.dumps(dag_dict, sort_keys=True).encode()
         ).hexdigest()
-        strategy_id = str(uuid.uuid4())
-        dag_for_storage = copy.deepcopy(dag_dict)
-        if self.insert_sentinel:
-            version_meta = None
-            if isinstance(payload.meta, dict):
-                for key in ("version", "strategy_version", "build_version"):
-                    val = payload.meta.get(key)
-                    if isinstance(val, str) and val.strip():
-                        version_meta = val.strip()
+        return dag_dict, copy.deepcopy(dag_dict), dag_hash
+
+    def _inject_version_sentinel(
+        self,
+        strategy_id: str,
+        dag: dict[str, Any],
+        meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not self.insert_sentinel:
+            return dag
+
+        version_meta: str | None = None
+        if isinstance(meta, dict):
+            for key in ("version", "strategy_version", "build_version"):
+                val = meta.get(key)
+                if isinstance(val, str):
+                    candidate = val.strip()
+                    if candidate:
+                        version_meta = candidate
                         break
-            sentinel = {
-                "node_type": "VersionSentinel",
-                "node_id": f"{strategy_id}-sentinel",
-            }
-            if version_meta:
-                sentinel["version"] = version_meta
-            dag_for_storage.setdefault("nodes", []).append(sentinel)
-        encoded_dag = base64.b64encode(json.dumps(dag_for_storage).encode()).decode()
-        return DecodedDag(
-            strategy_id=strategy_id,
-            dag=dag_dict,
-            dag_for_storage=dag_for_storage,
-            encoded_dag=encoded_dag,
-            dag_hash=dag_hash,
-        )
+
+        sentinel = {
+            "node_type": "VersionSentinel",
+            "node_id": f"{strategy_id}-sentinel",
+        }
+        if version_meta:
+            sentinel["version"] = version_meta
+
+        dag.setdefault("nodes", []).append(sentinel)
+        return dag
 
     async def _ensure_unique_strategy(
         self, strategy_id: str, dag_hash: str, encoded_dag: str
@@ -249,45 +271,24 @@ class StrategyManager:
         if as_of_value is None and artifact is not None:
             as_of_value = getattr(artifact, "as_of", None)
 
-        mapping: dict[str, str] = {}
-        world_id = getattr(report, "world_id", None)
-        if world_id:
-            mapping["compute_world_id"] = str(world_id)
-        execution_domain = getattr(report, "execution_domain", None)
-        if execution_domain:
-            mapping["compute_execution_domain"] = str(execution_domain)
-        if as_of_value:
-            mapping["compute_as_of"] = str(as_of_value)
-        if dataset_fp:
-            mapping["compute_dataset_fingerprint"] = str(dataset_fp)
+        mapping = self._build_history_mapping(report, dataset_fp, as_of_value)
         if mapping:
             await self.redis.hset(storage_key, mapping=mapping)
 
-        meta_payload = {
-            "node_id": report.node_id,
-            "interval": int(report.interval),
-            "rows": getattr(report, "rows", None),
-            "coverage_bounds": list(report.coverage_bounds) if report.coverage_bounds else None,
-            "conformance_flags": report.conformance_flags or {},
-            "conformance_warnings": report.conformance_warnings or [],
-            "artifact": artifact.model_dump() if getattr(artifact, "model_dump", None) else (artifact.__dict__ if artifact else None),
-            "dataset_fingerprint": dataset_fp,
-            "as_of": as_of_value,
-            "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
-        if world_id:
-            meta_payload["world_id"] = str(world_id)
-        if execution_domain:
-            meta_payload["execution_domain"] = str(execution_domain)
+        meta_payload = self._build_meta_payload(
+            report, artifact, dataset_fp, as_of_value
+        )
         await self.redis.hset(
             storage_key,
             mapping={f"seamless:{report.node_id}": json.dumps(meta_payload)},
         )
 
+        world_id = getattr(report, "world_id", None)
         if self.world_client is not None and world_id:
             try:
-                world_payload = dict(meta_payload)
-                world_payload["strategy_id"] = strategy_id
+                world_payload = self._build_world_payload(
+                    strategy_id, report, meta_payload
+                )
                 await self.world_client.post_history_metadata(
                     world_id=str(world_id),
                     payload=world_payload,
@@ -301,6 +302,79 @@ class StrategyManager:
                         "node_id": report.node_id,
                     },
                 )
+
+    def _build_history_mapping(
+        self,
+        report: Any,
+        dataset_fp: Any,
+        as_of_value: Any,
+    ) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        world_id = getattr(report, "world_id", None)
+        if world_id:
+            mapping["compute_world_id"] = str(world_id)
+        execution_domain = getattr(report, "execution_domain", None)
+        if execution_domain:
+            mapping["compute_execution_domain"] = str(execution_domain)
+        if as_of_value:
+            mapping["compute_as_of"] = str(as_of_value)
+        if dataset_fp:
+            mapping["compute_dataset_fingerprint"] = str(dataset_fp)
+        return mapping
+
+    def _build_meta_payload(
+        self,
+        report: Any,
+        artifact: Any,
+        dataset_fp: Any,
+        as_of_value: Any,
+    ) -> dict[str, Any]:
+        world_id = getattr(report, "world_id", None)
+        execution_domain = getattr(report, "execution_domain", None)
+        coverage_bounds = getattr(report, "coverage_bounds", None)
+        artifact_payload: Any | None = None
+        if artifact is not None:
+            model_dump = getattr(artifact, "model_dump", None)
+            if callable(model_dump):
+                artifact_payload = model_dump()
+            else:
+                artifact_payload = artifact.__dict__
+
+        meta_payload: dict[str, Any] = {
+            "node_id": report.node_id,
+            "interval": int(report.interval),
+            "rows": getattr(report, "rows", None),
+            "coverage_bounds": list(coverage_bounds) if coverage_bounds else None,
+            "conformance_flags": getattr(report, "conformance_flags", None) or {},
+            "conformance_warnings": getattr(
+                report, "conformance_warnings", None
+            )
+            or [],
+            "artifact": artifact_payload,
+            "dataset_fingerprint": dataset_fp,
+            "as_of": as_of_value,
+            "updated_at": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
+        }
+        if world_id:
+            meta_payload["world_id"] = str(world_id)
+        if execution_domain:
+            meta_payload["execution_domain"] = str(execution_domain)
+        return meta_payload
+
+    def _build_world_payload(
+        self,
+        strategy_id: str,
+        report: Any,
+        meta_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = dict(meta_payload)
+        payload["strategy_id"] = strategy_id
+        world_id = getattr(report, "world_id", None)
+        if world_id:
+            payload["world_id"] = str(world_id)
+        return payload
 
     async def _build_compute_context(
         self, payload: StrategySubmit
