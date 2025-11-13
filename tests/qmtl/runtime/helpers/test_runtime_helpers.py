@@ -131,6 +131,19 @@ def test_parse_activation_update_clamps_weight() -> None:
     assert update.metadata.effective_mode == "Live"
 
 
+def test_parse_activation_update_ignores_invalid_weight() -> None:
+    update = parse_activation_update(
+        {
+            "side": "short",
+            "active": 0,
+            "weight": "oops",
+        }
+    )
+
+    assert update.weight is None
+    assert update.active is False
+
+
 def test_compute_alpha_performance_summary_handles_empty_returns() -> None:
     result = compute_alpha_performance_summary([])
 

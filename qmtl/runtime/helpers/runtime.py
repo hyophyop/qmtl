@@ -245,6 +245,7 @@ def parse_activation_update(payload: Mapping[str, Any]) -> ActivationUpdate:
 
     weight_raw = payload.get("weight")
     weight_value: float | None
+    invalid_weight = False
     if weight_raw is None:
         weight_value = None
     else:
@@ -252,6 +253,7 @@ def parse_activation_update(payload: Mapping[str, Any]) -> ActivationUpdate:
             weight_value = float(weight_raw)
         except (TypeError, ValueError):
             weight_value = None
+            invalid_weight = True
 
     metadata = ActivationMetadata(
         version=_coerce_optional_int(payload.get("version")),
@@ -267,7 +269,11 @@ def parse_activation_update(payload: Mapping[str, Any]) -> ActivationUpdate:
         active=active_bool,
         freeze=_coerce_optional_bool(payload.get("freeze")),
         drain=_coerce_optional_bool(payload.get("drain")),
-        weight=normalize_weight(weight_value, active=active_bool),
+        weight=(
+            normalize_weight(weight_value, active=active_bool)
+            if not invalid_weight
+            else None
+        ),
         metadata=metadata,
     )
 
