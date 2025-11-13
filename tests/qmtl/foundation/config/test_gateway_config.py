@@ -80,3 +80,22 @@ def test_gateway_config_defaults() -> None:
     assert cfg.worldservice_timeout == 0.3
     assert cfg.worldservice_retries == 2
     assert cfg.enforce_live_guard is True
+    assert cfg.rebalance_schema_version == 1
+    assert cfg.alpha_metrics_capable is False
+    assert cfg.compute_context_contract is None
+    caps = cfg.build_health_capabilities()
+    assert caps.rebalance_schema_version == 1
+    assert caps.alpha_metrics_capable is False
+    assert caps.compute_context_contract is None
+
+
+def test_gateway_config_builds_capabilities_from_values() -> None:
+    cfg = GatewayConfig(
+        rebalance_schema_version=2,
+        alpha_metrics_capable=True,
+        compute_context_contract="compute:v2",
+    )
+    caps = cfg.build_health_capabilities()
+    assert caps.rebalance_schema_version == 2
+    assert caps.alpha_metrics_capable is True
+    assert caps.compute_context_contract == "compute:v2"

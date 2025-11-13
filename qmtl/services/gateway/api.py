@@ -21,7 +21,7 @@ from .degradation import DegradationManager, DegradationLevel
 from .event_descriptor import EventDescriptorConfig
 from .event_handlers import create_event_router
 from .fsm import StrategyFSM
-from .gateway_health import get_health as gateway_health
+from .gateway_health import GatewayHealthCapabilities
 from .routes import create_api_router
 from .strategy_manager import StrategyManager
 from .world_client import Budget, WorldServiceClient
@@ -61,7 +61,9 @@ def create_app(
     enable_otel: bool | None = None,
     enable_background: bool = True,
     shared_account_policy_config: SharedAccountPolicyConfig | None = None,
+    health_capabilities: GatewayHealthCapabilities | None = None,
 ) -> FastAPI:
+    capabilities = health_capabilities or GatewayHealthCapabilities()
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
     if database is not None:
         database_obj = database
@@ -110,7 +112,18 @@ def create_app(
         )
         gw_metrics.worlds_breaker_state.set(0)
         gw_metrics.worlds_breaker_failures.set(0)
-        world_client_local = WorldServiceClient(worldservice_url, budget=budget, breaker=breaker)
+        world_client_local = WorldServiceClient(
+            worldservice_url,
+            budget=budget,
+            breaker=breaker,
+            rebalance_schema_version=capabilities.rebalance_schema_version,
+            alpha_metrics_capable=capabilities.alpha_metrics_capable,
+        )
+    elif world_client_local is not None:
+        world_client_local.configure_rebalance_capabilities(
+            schema_version=capabilities.rebalance_schema_version,
+            alpha_metrics_capable=capabilities.alpha_metrics_capable,
+        )
     if world_client_local is not None:
         degradation.world_client = world_client_local
     if event_config is not None:
@@ -210,6 +223,7 @@ def create_app(
     app.state.commit_log_consumer = commit_log_consumer_local
     app.state.commit_log_writer = commit_log_writer_local
     app.state.shared_account_policy = shared_policy
+    app.state.health_capabilities = capabilities
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):
@@ -240,6 +254,7 @@ def create_app(
         enforce_live_guard,
         fill_producer,
         submission_pipeline=submission_pipeline,
+        health_capabilities=capabilities,
     )
     app.include_router(api_router)
     # Expose event endpoints (subscribe/JWKS and WS bridge). Pass world and

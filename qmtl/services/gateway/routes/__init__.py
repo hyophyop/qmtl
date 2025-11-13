@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.degradation import DegradationManager
+from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.submission import SubmissionPipeline
 from qmtl.services.gateway.ws import WebSocketHub
@@ -32,7 +33,9 @@ def create_api_router(
     enforce_live_guard: bool,
     fill_producer: Any | None = None,
     submission_pipeline: SubmissionPipeline | None = None,
+    health_capabilities: GatewayHealthCapabilities | None = None,
 ) -> APIRouter:
+    capabilities = health_capabilities or GatewayHealthCapabilities()
     deps = GatewayDependencyProvider(
         manager=manager,
         redis_conn=redis_conn,
@@ -44,6 +47,7 @@ def create_api_router(
         enforce_live_guard=enforce_live_guard,
         fill_producer=fill_producer,
         submission_pipeline=submission_pipeline,
+        health_capabilities=capabilities,
     )
 
     router = APIRouter()
