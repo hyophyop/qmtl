@@ -7,6 +7,7 @@ nav:
       - Architecture & World ID Flow: architecture/architecture.md
       - Layered Template System: architecture/layered_template_system.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
+      - Seamless Data Provider Modularization: architecture/seamless_data_provider_modularity.md
       - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md

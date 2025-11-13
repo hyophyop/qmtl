@@ -1,0 +1,40 @@
+# 심리스 데이터 프로바이더 모듈화 노트
+
+## 개요
+심리스 데이터 프로바이더는 SLA 추적, 도메인 정책, 백필 조율, 범위 병합 등 서로 다른 관심사를 한 클래스에 수용하면서 복잡도가 상승해 왔습니다. 이번 개편은 주요 경로를 헬퍼 클래스로 분리해 CC/MI 기준을 맞추고, 팀이 병렬로 작업할 수 있는 모듈 경계를 제공합니다.
+
+주요 목표는 다음과 같습니다.
+
+- **도메인 게이트링 분리**: 실행 도메인 규칙을 `_DomainGateEvaluator`가 전담하도록 이동했습니다.
+- **가용성 파이프라인 단순화**: `_AvailabilityPipeline`이 범위 점검과 백필 트리거를 책임져 `ensure_data_available`의 분기 수를 줄입니다.
+- **심리스 Fetch 단계화**: `_SeamlessFetchPlanner`가 소스별 커버리지/패치/백필 조합을 관리합니다.
+- **범위 연산 재사용**: `_RangeOperations`는 커버리지 병합·교차·차집합을 단일 구현으로 제공합니다.
+
+## `_DomainGateEvaluator`
+- 라이브/섀도우 도메인의 as_of 단조성 검증과 커버리지/신선도 제한을 명확하게 분리했습니다.
+- 과거 as_of가 역전될 때 `_merge_decisions`를 통해 HOLD 결정을 일관되게 결합합니다.
+- 백테스트/드라이런 도메인은 아티팩트 유무와 as_of 요구 사항을 독립 메서드에서 검사합니다.
+- 메트릭(`observe_as_of_advancement_event`)과 경고 로그는 이 헬퍼 내부에서 발생하여 호출부가 단순화됩니다.
+
+## `_AvailabilityPipeline`
+- 초기 커버리지 관찰 → 누락 범위 계산 → SLA 동기 갭 검사 → 백필 실행 → 사후 검증 순으로 파이프라인을 구성했습니다.
+- 분산 코디네이터 사용 시 리스 획득/완료/실패를 개별 메서드로 분리해 예외 처리를 캡슐화합니다.
+- SLA 위반 시 `_SLATracker.handle_violation` 호출과 `SeamlessSLAExceeded` 예외 방출이 동일한 경로에서 이뤄집니다.
+
+## `_SeamlessFetchPlanner`
+- 소스별 커버리지 관찰과 데이터 페치를 `_consume_source`로 추상화했습니다.
+- 잔여 범위는 `_RangeOperations.subtract`를 통해 인터벌 정렬을 보존한 채 갱신됩니다.
+- 모든 소스가 실패한 후에는 `_backfill_remaining`이 동기 백필을 실행하고, 결과는 `pd.concat`으로 정규화합니다.
+
+## `_RangeOperations`
+- 병합/교차/차집합 연산을 단일 책임으로 묶어 테스트와 재사용이 용이합니다.
+- 간격 정보가 없는 경우와 있는 경우를 별도 경로에서 처리해 기존 다운그레이드와 동일한 결과를 유지합니다.
+
+## 테스트 전략
+- `tests/qmtl/runtime/sdk/test_seamless_provider.py`에 새 파이프라인 경로를 검증하는 단위 테스트를 추가했습니다.
+- 커버리지/백필 경계 시나리오를 집중적으로 다뤄 `_RangeOperations`의 정합성을 보장합니다.
+- 핵심 경로는 `uv run -m pytest -W error -n auto`로 병렬 실행하도록 유지합니다.
+
+## 후속 작업
+- `_SeamlessFetchPlanner`에 대한 부하 테스트를 별도 이슈(#1482, #1491)에서 추적합니다.
+- 헬퍼 단위 테스트를 보강하면서 레거시 `_find_missing_ranges` 대체 전략을 검토할 예정입니다.
