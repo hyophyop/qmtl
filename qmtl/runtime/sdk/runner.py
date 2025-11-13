@@ -53,6 +53,21 @@ class Runner:
     _trade_mode: str = "simulate"  # simulate | live (non-breaking; informational)
 
     @classmethod
+    async def _refresh_gateway_capabilities(cls, gateway_url: str) -> None:
+        client = cls.services().gateway_client
+        try:
+            health = await client.get_health(gateway_url=gateway_url)
+        except Exception:
+            logger.debug("Failed to fetch gateway health for %s", gateway_url, exc_info=True)
+            return
+        if not isinstance(health, dict):
+            return
+        runtime.set_gateway_capabilities(
+            rebalance_schema_version=health.get("rebalance_schema_version"),
+            alpha_metrics_capable=health.get("alpha_metrics_capable"),
+        )
+
+    @classmethod
     def services(cls) -> RunnerServices:
         return cls._services
 
@@ -390,6 +405,8 @@ class Runner:
         cleanup_needed = True
         try:
             strategy.on_start()
+            if gateway_url and not effective_offline:
+                await cls._refresh_gateway_capabilities(gateway_url)
 
             bootstrapper = StrategyBootstrapper(services.gateway_client)
             bootstrap_result = await bootstrapper.bootstrap(

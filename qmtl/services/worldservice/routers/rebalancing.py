@@ -9,6 +9,7 @@ from ..rebalancing import (
     MultiWorldRebalanceContext,
     PositionSlice,
 )
+from ..alpha_metrics import build_alpha_metrics_envelope
 from ..schemas import (
     AlphaMetricsEnvelope,
     MultiWorldRebalanceRequest,
@@ -71,7 +72,7 @@ def create_rebalancing_router(
             SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
             for d in result.global_deltas
         ]
-        alpha_metrics = AlphaMetricsEnvelope() if active_version >= 2 else None
+        alpha_metrics = build_alpha_metrics_envelope(per_world) if active_version >= 2 else None
         response_kwargs: dict[str, object] = {
             "schema_version": active_version,
             "per_world": per_world,

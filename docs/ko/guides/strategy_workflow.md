@@ -192,6 +192,11 @@ Intent-first 전략은 월드/게이트웨이 리밸런싱 스택과 결합할 �
 계획을 확인하고, 게이트웨이의 드라이런 응답으로 주문 형태를 점검하세요. 활성화/게이트웨이 URL을 지정하면
 동일한 플로우가 실제 환경에서도 그대로 작동합니다.
 
+`compat_rebalance_v2` 플래그가 켜져 있다면 로컬 요청에 `schema_version=2`를 포함하고, 응답에 붙는 `alpha_metrics`
+봉투(`AlphaMetricsEnvelope`의 `per_world`/`per_strategy` `alpha_performance` 지표)를 처리하세요. `alpha_metrics_required`
+설정을 활성화하면 `schema_version<2` 요청이 계산 전에 거부되어 메트릭을 필요로 하는 클라이언트가 안정적으로 실패하므로,
+이전/동시 배포 경계를 조율하려면 `docs/operations/rebalancing_schema_coordination.md` 체크리스트를 확인하십시오.【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
 ## 5. Test Your Implementation
 
 Always run the unit tests in parallel before committing code:

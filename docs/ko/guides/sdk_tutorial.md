@@ -233,6 +233,9 @@ metrics.start_metrics_server(port=8000)
 ## Performance Metrics
 
 `alpha_performance_node`는 Sharpe, 최대 낙폭, CAR/MDD 등의 성과 지표를 계산합니다.
+생성된 지표는 `alpha_performance.<metric>` 네임스페이스(예: `alpha_performance.sharpe`,
+`alpha_performance.max_drawdown`)로 표기되어 WorldService의 `alpha_metrics` 봉투와
+일치하며, 알 수 없는 키는 파서가 무시해 향후 확장에도 대비할 수 있습니다.
 `alpha_history_node`와 조합하면 수익률 누적과 성과 계산을 분리하여 로직과 테스트를
 병렬로 개발할 수 있습니다.
 

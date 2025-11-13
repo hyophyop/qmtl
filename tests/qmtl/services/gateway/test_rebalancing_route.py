@@ -64,6 +64,38 @@ async def test_rebalancing_submit_requires_live_guard(gateway_app_factory):
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_execute_returns_schema_flags(gateway_app_factory):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = _plan_response(
+                {
+                    "w1": {
+                        "scale_world": 1.0,
+                        "scale_by_strategy": {},
+                        "deltas": [
+                            {"symbol": "BTCUSDT", "delta_qty": -0.1, "venue": "binance"}
+                        ],
+                    }
+                }
+            )
+            return httpx.Response(200, json=body)
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "simulate"}})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute",
+            json=_default_payload(),
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["rebalance_schema_version"] == 1
+    assert payload["alpha_metrics_capable"] is False
+
+
+@pytest.mark.asyncio
 async def test_rebalancing_submit_records_metrics_and_audit(
     gateway_app_factory, reset_gateway_metrics
 ) -> None:

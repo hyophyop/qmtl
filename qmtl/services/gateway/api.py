@@ -58,6 +58,8 @@ def create_app(
     worldservice_retries: int = 2,
     enable_worldservice_proxy: bool = True,
     enforce_live_guard: bool = True,
+    rebalance_schema_version: int = 1,
+    alpha_metrics_capable: bool = False,
     enable_otel: bool | None = None,
     enable_background: bool = True,
     shared_account_policy_config: SharedAccountPolicyConfig | None = None,
@@ -238,6 +240,8 @@ def create_app(
         degradation,
         world_client_local,
         enforce_live_guard,
+        rebalance_schema_version,
+        alpha_metrics_capable,
         fill_producer,
         submission_pipeline=submission_pipeline,
     )

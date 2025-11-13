@@ -70,6 +70,8 @@ last_modified: 2025-11-04
   - 각 월드에 `ProportionalRebalancer`를 적용하고, 전역 넷 델타를 추가 계산합니다.
   - 실제 주문은 안전하게 월드별로 실행하고, 공유 계정 모드에서만 `global_deltas`를 넷팅 근거로 사용할 것을 권장합니다.
 
+현재 WorldService는 선택적 `schema_version` 필드를 수용하며 기본값은 1입니다. `WorldServiceServerConfig`의 `compat_rebalance_v2`/`alpha_metrics_required` 플래그에 따라 응답이 `schema_version=2`와 `AlphaMetricsEnvelope`(per_world/per_strategy `alpha_performance` 사전 포함)을 포함하도록 확장되거나 v1로 노출됩니다. `alpha_metrics_required`가 활성화되었으면 `schema_version<2` 요청은 계산 전에 거부되어 메트릭을 기대하는 클라이언트가 안정적으로 실패할 수 있습니다. 쓰기/리딩을 동시에 조율하는 절차는 `docs/operations/rebalancing_schema_coordination.md`에 기록되어 있습니다.【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
 ## 전략 비중 조절 트리거와 캐스케이드
 
 - 수동 조절은 지원하지 않습니다. 전략 비중은 두 가지 트리거로만 변경됩니다.

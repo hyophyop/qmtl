@@ -30,6 +30,8 @@ def create_api_router(
     degradation: DegradationManager,
     world_client: Optional[WorldServiceClient],
     enforce_live_guard: bool,
+    rebalance_schema_version: int,
+    alpha_metrics_capable: bool,
     fill_producer: Any | None = None,
     submission_pipeline: SubmissionPipeline | None = None,
 ) -> APIRouter:
@@ -42,6 +44,8 @@ def create_api_router(
         degradation=degradation,
         world_client=world_client,
         enforce_live_guard=enforce_live_guard,
+        rebalance_schema_version=rebalance_schema_version,
+        alpha_metrics_capable=alpha_metrics_capable,
         fill_producer=fill_producer,
         submission_pipeline=submission_pipeline,
     )

@@ -33,6 +33,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         ),
         degradation: DegradationManager = Depends(deps.provide_degradation),
         enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+        rebalance_schema_version: int = Depends(deps.provide_rebalance_schema_version),
+        alpha_metrics_capable: bool = Depends(deps.provide_alpha_metrics_capable),
     ) -> dict[str, Any]:
         redis_conn = _resolve_dependency(redis_conn, deps.provide_redis_conn)
         database_obj = _resolve_dependency(database_obj, deps.provide_database)
@@ -45,7 +47,12 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             enforce_live_guard, deps.provide_enforce_live_guard
         )
         health_data = await gateway_health(
-            redis_conn, database_obj, dagmanager, world_client
+            redis_conn,
+            database_obj,
+            dagmanager,
+            world_client,
+            rebalance_schema_version=rebalance_schema_version,
+            alpha_metrics_capable=alpha_metrics_capable,
         )
         health_data["degrade_level"] = degradation.level.name
         health_data["enforce_live_guard"] = enforce_live_guard
@@ -63,6 +70,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         world_client: Optional[WorldServiceClient] = Depends(
             deps.provide_world_client_optional
         ),
+        rebalance_schema_version: int = Depends(deps.provide_rebalance_schema_version),
+        alpha_metrics_capable: bool = Depends(deps.provide_alpha_metrics_capable),
     ) -> dict[str, Any]:
         redis_conn = _resolve_dependency(redis_conn, deps.provide_redis_conn)
         database_obj = _resolve_dependency(database_obj, deps.provide_database)
@@ -70,7 +79,14 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         world_client = _resolve_dependency(
             world_client, deps.provide_world_client_optional
         )
-        return await gateway_health(redis_conn, database_obj, dagmanager, world_client)
+        return await gateway_health(
+            redis_conn,
+            database_obj,
+            dagmanager,
+            world_client,
+            rebalance_schema_version=rebalance_schema_version,
+            alpha_metrics_capable=alpha_metrics_capable,
+        )
 
     return router
 

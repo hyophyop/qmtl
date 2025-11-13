@@ -39,6 +39,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         manager: StrategyManager = Depends(deps.provide_manager),
         database: Database = Depends(deps.provide_database),
         enforce_live_guard: bool = Depends(deps.provide_enforce_live_guard),
+        rebalance_schema_version: int = Depends(deps.provide_rebalance_schema_version),
+        alpha_metrics_capable: bool = Depends(deps.provide_alpha_metrics_capable),
     ) -> Dict[str, Any]:
         submit_requested = _parse_bool(request.query_params.get("submit"))
 
@@ -137,7 +139,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             if not evaluation.allowed:
                 message = evaluation.reason or "shared-account policy rejected execution"
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail={
                         "code": "E_SHARED_ACCOUNT_POLICY",
                         "message": message,
@@ -218,6 +220,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             result["submitted"] = submitted
         else:
             result["submitted"] = False
+        result["rebalance_schema_version"] = rebalance_schema_version
+        result["alpha_metrics_capable"] = alpha_metrics_capable
         return result
 
     return router

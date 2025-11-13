@@ -27,6 +27,8 @@ class GatewayDependencyProvider:
         degradation: DegradationManager,
         world_client: Optional[WorldServiceClient],
         enforce_live_guard: bool,
+        rebalance_schema_version: int,
+        alpha_metrics_capable: bool,
         fill_producer: Any | None = None,
         submission_pipeline: SubmissionPipeline | None = None,
     ) -> None:
@@ -38,6 +40,8 @@ class GatewayDependencyProvider:
         self._degradation = degradation
         self._world_client = world_client
         self._enforce_live_guard = enforce_live_guard
+        self._rebalance_schema_version = rebalance_schema_version
+        self._alpha_metrics_capable = alpha_metrics_capable
         self._fill_producer = fill_producer
         if submission_pipeline is not None:
             self._pipeline = submission_pipeline
@@ -94,6 +98,12 @@ class GatewayDependencyProvider:
 
     def provide_enforce_live_guard(self) -> bool:
         return self._enforce_live_guard
+
+    def provide_rebalance_schema_version(self) -> int:
+        return self._rebalance_schema_version
+
+    def provide_alpha_metrics_capable(self) -> bool:
+        return self._alpha_metrics_capable
 
 
 __all__ = ["GatewayDependencyProvider"]

@@ -208,6 +208,14 @@ For local validation, run the strategy with `Runner.offline()` while posting
 review the Gateway dry-run response to confirm order shapes. Providing activation
 and Gateway URLs enables the exact same flow in integrated environments.
 
+When the WorldService `compat_rebalance_v2` toggle is enabled, include
+`schema_version=2` in your local requests and be prepared to consume the
+resulting `alpha_metrics` envelope (`AlphaMetricsEnvelope` contains `per_world`
+and `per_strategy` `alpha_performance` stats). The `alpha_metrics_required`
+setting rejects `schema_version<2` submissions, so the `docs/operations/rebalancing_schema_coordination.md`
+checklist should be satisfied before flipping the flag to keep Gateway/SDK
+consumers in lockstep.【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
 ## 5. Test Your Implementation
 
 Always run the unit tests in parallel before committing code:

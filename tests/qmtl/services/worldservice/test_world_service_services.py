@@ -39,6 +39,15 @@ def test_augment_metrics_with_linearity_adds_portfolio_metrics():
         assert 'portfolio_el_v2_score' in slot
 
 
+def test_augment_metrics_with_linearity_records_alpha_performance():
+    series = {'alpha': StrategySeries(equity=[0.0, 1.0, 1.5, 2.0])}
+
+    enriched = WorldService.augment_metrics_with_linearity({}, series)
+
+    assert 'alpha_performance.sharpe' in enriched['alpha']
+    assert 'alpha_performance.max_drawdown' in enriched['alpha']
+
+
 @pytest.mark.asyncio
 async def test_world_service_evaluate_uses_augmented_metrics():
     service = WorldService(store=_StubStore())

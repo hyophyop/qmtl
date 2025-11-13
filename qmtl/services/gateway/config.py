@@ -31,6 +31,8 @@ class GatewayConfig:
     worldservice_retries: int = 2
     enable_worldservice_proxy: bool = True
     enforce_live_guard: bool = True
+    rebalance_schema_version: int = 1
+    alpha_metrics_capable: bool = False
     events: "GatewayEventsConfig" = field(default_factory=lambda: GatewayEventsConfig())
     websocket: "GatewayWebSocketConfig" = field(
         default_factory=lambda: GatewayWebSocketConfig()

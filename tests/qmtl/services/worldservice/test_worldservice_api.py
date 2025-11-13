@@ -311,7 +311,12 @@ async def test_rebalancing_plan_serves_v2_when_enabled():
             assert resp.status_code == 200
             body = resp.json()
             assert body["schema_version"] == 2
-            assert body["alpha_metrics"] == {"per_world": {}, "per_strategy": {}}
+            alpha_metrics = body["alpha_metrics"]
+            assert "per_world" in alpha_metrics
+            assert "per_strategy" in alpha_metrics
+            assert alpha_metrics["per_world"]["w1"]["alpha_performance.sharpe"] == 0.0
+            assert "s1" in alpha_metrics["per_strategy"]
+            assert alpha_metrics["per_strategy"]["s1"]["w1"]["alpha_performance.sharpe"] == 0.0
 
 
 @pytest.mark.asyncio

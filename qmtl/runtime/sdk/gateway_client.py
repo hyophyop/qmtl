@@ -117,3 +117,22 @@ class GatewayClient:
             except Exception:  # pragma: no cover - non-JSON payloads
                 return None
         return None
+
+    async def get_health(
+        self,
+        *,
+        gateway_url: str,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Fetch the Gateway health endpoint."""
+
+        url = gateway_url.rstrip("/") + "/health"
+        try:
+            async with httpx.AsyncClient(headers=headers, timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                if resp.content:
+                    return resp.json()
+                return {}
+        except Exception:
+            return {}

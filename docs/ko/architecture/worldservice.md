@@ -266,7 +266,13 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 - `/rebalancing/plan`과 동일한 계산을 수행한 뒤, 월드별 플랜과 전역 델타를 직렬화해 감사 스토리지에 기록합니다(베스트 에포트). ControlBus가 연결되어 있으면 월드별 `rebalancing_planned` 이벤트를 발행합니다.【F:qmtl/services/worldservice/routers/rebalancing.py†L84-L154】【F:qmtl/services/worldservice/storage/persistent.py†L850-L864】
 - `/rebalancing/apply`는 월드 비중을 직접 변경하지 않습니다. `/allocations` 업서트 또는 외부 실행기가 실거래 계좌 업데이트를 담당하며, 이 엔드포인트는 “승인된 플랜”을 감사/모니터링 용도로 고정합니다.
 
-### 5‑D. ControlBus 연동 & 지표
+### 5‑D. 스키마 버전 및 alpha 메트릭 핸드셰이크
+
+- `/rebalancing/plan`과 `/rebalancing/apply`는 이제 `schema_version`을 협상하고, v2가 활성화되면 `alpha_metrics` 봉투를 플랜/글로벌 델타와 함께 반환합니다. WorldService는 `create_app()`과 `WorldServiceServerConfig`를 통해 `compat_rebalance_v2`/`alpha_metrics_required` 토글을 노출하며, 배포자는 이 플래그로 v2를 켜거나 필수로 만들 수 있습니다 (`api.py`와 `config.py`에서 설정 검사). v2가 비활성화되면 응답은 `schema_version=1`이고 메트릭을 생략하며, v2에서는 항상 `schema_version=2`와 `AlphaMetricsEnvelope`(per_world/per_strategy `alpha_performance` 사전 포함)를 반환하여 downstream 클라이언트가 안정적으로 파싱하도록 합니다. `alpha_metrics_required`가 켜지면 `schema_version<2` 요청은 계산 전에 거부되어 필수 메트릭을 기대하는 클라이언트가 조기에 실패할 수 있습니다.【F:qmtl/services/worldservice/api.py#L119-L210】【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+- 각 `alpha_metrics` 맵은 `alpha_performance.sharpe`, `alpha_performance.max_drawdown` 등의 키와 0.0 기본값을 사용하므로 파싱 로직은 추가 예외 없이 실행할 수 있습니다.【F:qmtl/services/worldservice/alpha_metrics.py#L1-L52】
+- ControlBus `rebalancing_planned` 이벤트도 협상된 `schema_version`과 동일한 `alpha_metrics`를 포함시켜 Gateway ControlBus 소비자가 같은 `alpha_performance` 봉투를 WebSocket/CommitLog에 전파할 수 있습니다. (`docs/operations/rebalancing_schema_coordination.md`는 Gateway(#1512)와 SDK(#1511)가 v2를 함께 전환할 때 확인해야 할 체크리스트입니다).【F:qmtl/services/worldservice/controlbus_producer.py#L27-L52】【docs/operations/rebalancing_schema_coordination.md】
+
+### 5‑E. ControlBus 연동 & 지표
 
 - WorldService가 발행하는 `rebalancing_planned` 이벤트는 Gateway Consumer가 받아 WebSocket `rebalancing` 채널로 중계하고 다음 Prometheus 지표를 갱신합니다: `rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`. 이를 통해 운영자는 플랜 생성 빈도와 자동 실행 성공률을 추적할 수 있습니다.【F:qmtl/services/gateway/controlbus_consumer.py†L223-L276】【F:qmtl/services/gateway/metrics.py†L216-L592】
 

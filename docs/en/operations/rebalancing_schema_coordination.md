@@ -23,6 +23,7 @@ This document tracks issue #1514 “Coordination: WS↔Gateway schema + SDK alph
 
 - [ ] Add `schema_version` to `MultiWorldRebalanceRequest` / `RebalancePlanModel` with a default of `1`.
 - [ ] Introduce v2-gated `alpha_metrics` (per_world/per_strategy) and `rebalance_intent.meta`, stripping them when serving v1 clients.
+- [ ] Ensure the `alpha_metrics` envelope uses the `alpha_performance.<metric>` namespace (e.g., `alpha_performance.sharpe`, `alpha_performance.max_drawdown`) and defaults each value to `0.0` when actual history isn’t provided, keeping downstream parsers simple.
 - [ ] Add `WorldServiceConfig.compat_rebalance_v2` and surface the current version/flag in `/rebalancing/plan|apply` responses and ControlBus events.
 - [ ] Wire the new `worldservice.server.compat_rebalance_v2` and `worldservice.server.alpha_metrics_required` settings into `create_app()` so operators can toggle v2 support (or require it) per deployment.
 - [ ] Update `docs/en|ko/architecture/worldservice.md` and `docs/en|ko/world/rebalancing.md`, linking back to this checklist.

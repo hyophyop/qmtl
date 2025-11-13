@@ -13,6 +13,11 @@ from qmtl.runtime.transforms.linearity_metrics import (
 
 from .policy_engine import evaluate_policy
 from .schemas import ApplyRequest, EvaluateRequest, StrategySeries
+from .alpha_metrics import (
+    alpha_performance_metrics_from_returns,
+    alpha_performance_metrics_from_series,
+    equity_curve_to_returns,
+)
 from .storage import Storage
 
 
@@ -64,6 +69,7 @@ def augment_metrics_with_linearity(
                     "el_v2_net_gain": m2["net_gain"],
                 }
             )
+            slot.update(alpha_performance_metrics_from_series(s))
 
     if equities:
         minlen = min(len(v) for v in equities.values())
@@ -71,6 +77,7 @@ def augment_metrics_with_linearity(
             portfolio = [sum(v[i] for v in equities.values()) for i in range(minlen)]
             p1 = equity_linearity_metrics(portfolio)
             p2 = equity_linearity_metrics_v2(portfolio)
+            portfolio_returns = equity_curve_to_returns(portfolio)
             for sid in equities.keys():
                 slot = out.setdefault(sid, {})
                 slot.update(
@@ -82,6 +89,7 @@ def augment_metrics_with_linearity(
                         "portfolio_el_v2_mdd_norm": p2["mdd_norm"],
                     }
                 )
+                slot.update(alpha_performance_metrics_from_returns(portfolio_returns))
 
     return out
 

@@ -23,6 +23,7 @@ last_modified: 2025-11-13
 
 - [ ] `MultiWorldRebalanceRequest` / `RebalancePlanModel`에 `schema_version` 필드를 추가하고 기본값을 `1`로 유지한다.
 - [ ] `alpha_metrics` (per_world/per_strategy)와 `rebalance_intent.meta` 필드를 v2 gate로 추가하고, v1에서는 자동으로 제거한다.
+- [ ] `alpha_metrics` 봉투는 `alpha_performance.sharpe`, `alpha_performance.max_drawdown` 등 `alpha_performance.<metric>` 네임스페이스를 사용하며, raw 데이터가 없을 경우 모든 값을 `0.0`으로 기본 설정하여 downstream 파서를 간단히 유지한다.
 - [ ] `WorldServiceConfig.compat_rebalance_v2` 플래그를 도입하고, REST `/rebalancing/plan|apply` 응답 및 ControlBus 이벤트에 현재 버전과 플래그를 포함한다.
 - [ ] `worldservice.server.compat_rebalance_v2` / `worldservice.server.alpha_metrics_required` 설정을 `create_app()` 경로에 연결해 배포마다 v2 지원 여부(또는 필수 여부)를 제어한다.
 - [ ] `docs/ko|en/architecture/worldservice.md`, `docs/ko|en/world/rebalancing.md` 에 위 필드를 명시하고 본 체크리스트를 링크한다.

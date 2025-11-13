@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 import asyncio
 import time
@@ -23,7 +23,10 @@ async def get_health(
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
     world_client: Optional[WorldServiceClient] = None,
-) -> dict[str, str]:
+    *,
+    rebalance_schema_version: int | None = None,
+    alpha_metrics_capable: bool | None = None,
+) -> dict[str, Any]:
     """Return health information for gateway and dependencies.
 
     Results are cached for a short time to avoid spamming external
@@ -33,11 +36,15 @@ async def get_health(
     global _STATUS_CACHE_MAP, _STATUS_CACHE_TS
 
     now = time.monotonic()
+    schema_version = rebalance_schema_version or 1
+    alpha_flag = bool(alpha_metrics_capable)
     key = (
         id(redis_client) if redis_client is not None else 0,
         id(database) if database is not None else 0,
         id(dag_client) if dag_client is not None else 0,
         id(world_client) if world_client is not None else 0,
+        schema_version,
+        int(alpha_flag),
     )
     cached = _STATUS_CACHE_MAP.get(key)
     if cached and now - cached[0] < _STATUS_CACHE_TTL:
@@ -92,6 +99,8 @@ async def get_health(
             "postgres": postgres_status,
             "dagmanager": dag_status,
             "worldservice": world_status,
+            "rebalance_schema_version": schema_version,
+            "alpha_metrics_capable": alpha_flag,
         }
         _STATUS_CACHE_MAP[key] = (now, result)
         _STATUS_CACHE_TS = now

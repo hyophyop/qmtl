@@ -69,6 +69,8 @@ Example:
   - Applies `ProportionalRebalancer` per world and computes a global net delta view.
   - Execute orders per world by default; only apply global netting in shared-account mode.
 
+Rebalancing requests now accept an optional `schema_version` (default 1). The WorldService config toggles `compat_rebalance_v2` and `alpha_metrics_required` determine whether the service replies with `schema_version=2` and an `AlphaMetricsEnvelope` (per-world/per-strategy `alpha_performance` stats) or downgrades to v1 without the envelope; when `alpha_metrics_required` is enabled the service rejects `schema_version<2` requests outright. The coordination checklist (`docs/operations/rebalancing_schema_coordination.md`) tracks the steps Gateway/SDK consumers must take before introducing the v2 handshake so everyone parses a stable `schema_version`/`alpha_metrics` contract.【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
 ## Strategy Weight Triggers and Cascade
 
 - No manual tuning here. Strategy weights change only via two triggers:
