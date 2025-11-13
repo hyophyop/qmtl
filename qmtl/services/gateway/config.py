@@ -5,6 +5,7 @@ import logging
 import secrets
 
 from .event_descriptor import EventDescriptorConfig
+from .gateway_health import GatewayHealthCapabilities
 from .shared_account_policy import SharedAccountPolicyConfig
 
 
@@ -33,6 +34,7 @@ class GatewayConfig:
     enforce_live_guard: bool = True
     rebalance_schema_version: int = 1
     alpha_metrics_capable: bool = False
+    compute_context_contract: Optional[str] = None
     events: "GatewayEventsConfig" = field(default_factory=lambda: GatewayEventsConfig())
     websocket: "GatewayWebSocketConfig" = field(
         default_factory=lambda: GatewayWebSocketConfig()
@@ -69,6 +71,15 @@ class GatewayConfig:
         else:
             raise TypeError("gateway.shared_account_policy must be a mapping")
         return cfg
+
+    def build_health_capabilities(self) -> GatewayHealthCapabilities:
+        """Return capability bits exposed via /status and /health endpoints."""
+
+        return GatewayHealthCapabilities(
+            rebalance_schema_version=self.rebalance_schema_version,
+            alpha_metrics_capable=self.alpha_metrics_capable,
+            compute_context_contract=self.compute_context_contract,
+        )
 
 
 @dataclass

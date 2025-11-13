@@ -40,6 +40,8 @@ class WorldServiceClient:
         budget: Budget | None = None,
         client: httpx.AsyncClient | None = None,
         breaker: AsyncCircuitBreaker | None = None,
+        rebalance_schema_version: int = 1,
+        alpha_metrics_capable: bool = False,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._budget = budget or Budget()
@@ -75,6 +77,19 @@ class WorldServiceClient:
             observe_latency=gw_metrics.observe_worlds_proxy_latency,
             on_success=_after_success,
         )
+        self._rebalance_schema_version = max(1, rebalance_schema_version or 1)
+        self._alpha_metrics_capable = bool(alpha_metrics_capable)
+
+    def configure_rebalance_capabilities(
+        self,
+        *,
+        schema_version: int | None = None,
+        alpha_metrics_capable: bool | None = None,
+    ) -> None:
+        if schema_version is not None:
+            self._rebalance_schema_version = max(1, schema_version)
+        if alpha_metrics_capable is not None:
+            self._alpha_metrics_capable = bool(alpha_metrics_capable)
 
     async def _wait_for_service(self, timeout: float = 5.0) -> None:
         """Poll the WorldService health endpoint until it is ready."""
@@ -387,52 +402,76 @@ class WorldServiceClient:
         schema_version: int | None = None,
         fallback_schema_version: int | None = None,
     ) -> Any:
-        """Request a multi-world rebalance plan, negotiating schema versions if needed."""
+        """Request a multi-world rebalance plan from WorldService.
 
-        def _coerce_body(data: Any) -> Dict[str, Any]:
-            if hasattr(data, "model_dump"):
-                return data.model_dump(exclude_none=True)
-            if isinstance(data, dict):
-                return dict(data)
-            raise TypeError("payload must be a mapping or pydantic model")
-
-        preferred_version = max(1, int(schema_version)) if schema_version is not None else None
-        fallback_version = (
-            max(1, int(fallback_schema_version))
-            if fallback_schema_version is not None
-            else None
+        This proxies to the WorldService endpoint at ``/rebalancing/plan``.
+        """
+        attempts = list(
+            self._iter_rebalance_payloads(
+                payload,
+                schema_version=schema_version,
+                fallback_schema_version=fallback_schema_version,
+            )
         )
+        last_exc: httpx.HTTPStatusError | None = None
+        for version, body in attempts:
+            try:
+                return await self._request_json(
+                    "POST",
+                    "/rebalancing/plan",
+                    headers=headers,
+                    json=body,
+                )
+            except httpx.HTTPStatusError as exc:
+                if not self._should_retry_rebalance_version(version, exc):
+                    raise
+                last_exc = exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("no payload variants generated for rebalance plan")
 
-        body = _coerce_body(payload)
-        if preferred_version is not None:
-            body["schema_version"] = preferred_version
+    def _iter_rebalance_payloads(
+        self,
+        payload: Any,
+        *,
+        schema_version: int | None = None,
+        fallback_schema_version: int | None = None,
+    ) -> list[tuple[int, dict[str, Any]]]:
+        if schema_version is not None:
+            preferred = max(1, schema_version)
+        else:
+            preferred = max(1, self._rebalance_schema_version or 1)
+        versions: list[int] = []
+        if preferred > 1:
+            versions.append(preferred)
+        fallback = (
+            max(1, fallback_schema_version)
+            if fallback_schema_version is not None
+            else (1 if preferred > 1 else None)
+        )
+        if fallback is not None and fallback not in versions:
+            versions.append(fallback)
+        if preferred == 1 and not versions:
+            versions.append(1)
+        base_payload = dict(payload)
+        base_payload.pop("schema_version", None)
+        variants: list[tuple[int, dict[str, Any]]] = []
+        for version in versions:
+            body = dict(base_payload)
+            if version > 1:
+                body["schema_version"] = version
+            variants.append((version, body))
+        return variants
 
-        try:
-            return await self._request_json(
-                "POST",
-                "/rebalancing/plan",
-                headers=headers,
-                json=body,
-            )
-        except httpx.HTTPStatusError as exc:
-            should_retry = (
-                preferred_version is not None
-                and fallback_version is not None
-                and fallback_version != preferred_version
-                and exc.response is not None
-                and exc.response.status_code in {400, 404, 422}
-            )
-            if not should_retry:
-                raise
-
-            downgraded = _coerce_body(payload)
-            downgraded["schema_version"] = fallback_version
-            return await self._request_json(
-                "POST",
-                "/rebalancing/plan",
-                headers=headers,
-                json=downgraded,
-            )
+    def _should_retry_rebalance_version(
+        self,
+        attempted_version: int,
+        exc: httpx.HTTPStatusError,
+    ) -> bool:
+        if attempted_version <= 1:
+            return False
+        status = exc.response.status_code
+        return status in {400, 404, 415, 422, 501}
 
 
 __all__ = ["Budget", "WorldServiceClient", "ExecutionDomain", "ComputeContext"]
