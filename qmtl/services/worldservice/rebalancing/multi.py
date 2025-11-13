@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional
 
 from .base import (
     PositionSlice,
@@ -11,6 +11,10 @@ from .base import (
     SymbolDelta,
 )
 from .rule_based import ProportionalRebalancer
+from .calculators import (
+    GlobalDeltaAggregator,
+    StrategyAllocationCalculator,
+)
 
 
 @dataclass
@@ -74,53 +78,22 @@ class MultiWorldProportionalRebalancer:
             grouped.setdefault(pos.world_id, []).append(pos)
         return grouped
 
-    def _derive_strategy_targets(
-        self,
-        ctx: MultiWorldRebalanceContext,
-        wid: str,
-        positions: List[PositionSlice],
-    ) -> Tuple[Mapping[str, float], Mapping[str, float]]:
-        s_before_total = (ctx.strategy_alloc_before_total or {}).get(wid)
-        s_after_total = (ctx.strategy_alloc_after_total or {}).get(wid)
-
-        if s_before_total is None:
-            totals: Dict[str, float] = {}
-            world_total = 0.0
-            for pos in positions:
-                notional = pos.qty * pos.mark
-                totals[pos.strategy_id] = totals.get(pos.strategy_id, 0.0) + notional
-                world_total += notional
-            if world_total > 0:
-                denom = ctx.total_equity if ctx.total_equity > 0 else world_total
-                s_before_total = {sid: value / denom for sid, value in totals.items()}
-            else:
-                s_before_total = {sid: 0.0 for sid in totals.keys()}
-
-        if s_after_total is None:
-            gw_before = ctx.world_alloc_before.get(wid, 0.0)
-            gw_after = ctx.world_alloc_after.get(wid, 0.0)
-            factor = (gw_after / gw_before) if gw_before > 0 else (1.0 if gw_after > 0 else 0.0)
-            s_after_total = {sid: s_before_total.get(sid, 0.0) * factor for sid in s_before_total.keys()}
-
-        return s_before_total, s_after_total
-
     def _build_per_world_plans(
         self,
         ctx: MultiWorldRebalanceContext,
         per_world_positions: Mapping[str, List[PositionSlice]],
     ) -> Dict[str, RebalancePlan]:
+        calculator = StrategyAllocationCalculator(ctx)
         plans: Dict[str, RebalancePlan] = {}
         for wid, positions in per_world_positions.items():
-            gw_before = ctx.world_alloc_before.get(wid, 0.0)
-            gw_after = ctx.world_alloc_after.get(wid, 0.0)
-            s_before_total, s_after_total = self._derive_strategy_targets(ctx, wid, positions)
+            targets = calculator.derive(wid, positions)
             single_ctx = RebalanceContext(
                 total_equity=ctx.total_equity,
                 world_id=wid,
-                world_alloc_before=gw_before,
-                world_alloc_after=gw_after,
-                strategy_alloc_before=s_before_total,
-                strategy_alloc_after=s_after_total,
+                world_alloc_before=ctx.world_alloc_before.get(wid, 0.0),
+                world_alloc_after=ctx.world_alloc_after.get(wid, 0.0),
+                strategy_alloc_before=dict(targets.before),
+                strategy_alloc_after=dict(targets.after),
                 positions=positions,
                 min_trade_notional=ctx.min_trade_notional,
                 lot_size_by_symbol=ctx.lot_size_by_symbol,
@@ -134,34 +107,8 @@ class MultiWorldProportionalRebalancer:
         per_world_positions: Mapping[str, List[PositionSlice]],
         per_world_plans: Mapping[str, RebalancePlan],
     ) -> List[SymbolDelta]:
-        agg_notional: Dict[Tuple[str | None, str], float] = {}
-        marks_cache: Dict[Tuple[str | None, str], List[float]] = {}
-
+        aggregator = GlobalDeltaAggregator(ctx)
         for wid, positions in per_world_positions.items():
-            plan = per_world_plans[wid]
-            for delta in plan.deltas:
-                key = (delta.venue, delta.symbol)
-                marks = [
-                    pos.mark
-                    for pos in positions
-                    if pos.symbol == delta.symbol and pos.venue == delta.venue and pos.mark > 0
-                ]
-                if not marks:
-                    continue
-                avg_mark = sum(marks) / len(marks)
-                agg_notional[key] = agg_notional.get(key, 0.0) + delta.delta_qty * avg_mark
-                marks_cache.setdefault(key, []).append(avg_mark)
-
-        global_deltas: List[SymbolDelta] = []
-        for key, d_notional in agg_notional.items():
-            if abs(d_notional) < (ctx.min_trade_notional or 0.0):
-                continue
-            marks = marks_cache.get(key, [1.0])
-            avg_mark = sum(marks) / max(len(marks), 1)
-            delta_qty = 0.0 if avg_mark == 0 else d_notional / avg_mark
-            if delta_qty != 0.0:
-                venue, symbol = key
-                global_deltas.append(SymbolDelta(symbol=symbol, delta_qty=delta_qty, venue=venue))
-
-        return global_deltas
+            aggregator.ingest(positions, per_world_plans[wid])
+        return aggregator.build()
 

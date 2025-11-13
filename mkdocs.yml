@@ -19,6 +19,7 @@ nav:
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
       - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
+      - WorldService Allocation Radon Plan: architecture/radon_worldservice_allocation.md
       - Control-Plane Radon Plan: architecture/radon_control_plane.md
       - Seamless Data Provider Radon Plan: architecture/radon_seamless_data.md
       - History Warmup Radon Plan: architecture/radon_history_warmup.md
@@ -147,6 +148,7 @@ plugins:
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
+            "WorldService Allocation Radon Plan": "WorldService 할당 Radon 계획"
             "Control-Plane Radon Plan": "컨트롤 플레인 Radon 계획"
             "Seamless Data Provider Radon Plan": "Seamless Data Provider Radon 계획"
             "History Warmup Radon Plan": "History Warmup Radon 계획"
