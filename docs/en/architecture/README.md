@@ -4,7 +4,7 @@ tags:
   - architecture
   - overview
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-09-12
 ---
 
 {{ nav_links() }}
@@ -25,6 +25,7 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 - [WorldService](worldservice.md): World policy, decisions, activation.
 - [ControlBus](controlbus.md): Internal control bus (opaque to SDK).
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
+- [Control-Plane Radon Plan](radon_control_plane.md): Roadmap for Gateway and DAG Manager complexity remediation.
 
 ## Architectural Layers at a Glance
 
