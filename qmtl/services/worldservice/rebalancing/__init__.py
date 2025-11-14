@@ -6,6 +6,11 @@ from .base import (
     SymbolDelta,
 )
 from .rule_based import ProportionalRebalancer
+from .calculators import (
+    GlobalDeltaAggregator,
+    StrategyAllocationCalculator,
+    StrategyAllocationTargets,
+)
 from .multi import (
     MultiWorldRebalanceContext,
     MultiWorldRebalancePlan,
@@ -23,6 +28,9 @@ __all__ = [
     "MultiWorldRebalanceContext",
     "MultiWorldRebalancePlan",
     "MultiWorldProportionalRebalancer",
+    "GlobalDeltaAggregator",
+    "StrategyAllocationCalculator",
+    "StrategyAllocationTargets",
     "ExecutionDelta",
     "allocate_strategy_deltas",
 ]
