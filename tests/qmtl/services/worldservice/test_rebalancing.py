@@ -8,6 +8,10 @@ from qmtl.services.worldservice.rebalancing import (
     PositionSlice,
     MultiWorldProportionalRebalancer,
     MultiWorldRebalanceContext,
+    StrategyAllocationCalculator,
+    GlobalDeltaAggregator,
+    RebalancePlan,
+    SymbolDelta,
 )
 
 
@@ -230,3 +234,87 @@ def test_multi_world_handles_zero_total_equity_when_estimating_strategy_weights(
 
     assert plan.per_world["z"].scale_world == pytest.approx(1.0)
     assert plan.global_deltas == []
+
+
+def test_strategy_allocation_calculator_infers_targets_from_positions():
+    ctx = MultiWorldRebalanceContext(
+        total_equity=1_000_000.0,
+        world_alloc_before={"w": 0.2},
+        world_alloc_after={"w": 0.3},
+        positions=[],
+        min_trade_notional=0.0,
+        lot_size_by_symbol=None,
+    )
+    calculator = StrategyAllocationCalculator(ctx)
+    positions = [
+        PositionSlice(
+            world_id="w",
+            strategy_id="s1",
+            symbol="BTCUSDT",
+            qty=1.0,
+            mark=200_000.0,
+            venue="binance",
+        ),
+        PositionSlice(
+            world_id="w",
+            strategy_id="s2",
+            symbol="ETHUSDT",
+            qty=10.0,
+            mark=2_000.0,
+            venue="binance",
+        ),
+    ]
+
+    targets = calculator.derive("w", positions)
+
+    expected_s1 = (1.0 * 200_000.0) / 1_000_000.0
+    expected_s2 = (10.0 * 2_000.0) / 1_000_000.0
+    scale_factor = 0.3 / 0.2
+
+    assert targets.before == pytest.approx({"s1": expected_s1, "s2": expected_s2})
+    assert targets.after == pytest.approx({"s1": expected_s1 * scale_factor, "s2": expected_s2 * scale_factor})
+
+
+def test_global_delta_aggregator_averages_marks_per_symbol():
+    ctx = MultiWorldRebalanceContext(
+        total_equity=1_000_000.0,
+        world_alloc_before={"w": 0.2},
+        world_alloc_after={"w": 0.2},
+        positions=[],
+        min_trade_notional=100.0,
+        lot_size_by_symbol=None,
+    )
+    aggregator = GlobalDeltaAggregator(ctx)
+    positions = [
+        PositionSlice(
+            world_id="w",
+            strategy_id="s",
+            symbol="BTCUSDT",
+            qty=1.0,
+            mark=30_000.0,
+            venue="binance",
+        ),
+        PositionSlice(
+            world_id="w",
+            strategy_id="s2",
+            symbol="BTCUSDT",
+            qty=0.5,
+            mark=30_000.0,
+            venue="binance",
+        ),
+    ]
+    plan = RebalancePlan(
+        world_id="w",
+        scale_world=1.0,
+        scale_by_strategy={"s": 1.0},
+        deltas=[SymbolDelta(symbol="BTCUSDT", delta_qty=-0.75, venue="binance")],
+    )
+
+    aggregator.ingest(positions, plan)
+    global_deltas = aggregator.build()
+
+    assert len(global_deltas) == 1
+    delta = global_deltas[0]
+    assert delta.symbol == "BTCUSDT"
+    assert delta.venue == "binance"
+    assert delta.delta_qty == pytest.approx(-0.75, abs=1e-9)
