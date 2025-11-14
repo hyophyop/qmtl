@@ -671,5 +671,4 @@ class HistoryWarmupService:
             enforce_strict=offline_mode and environment.strict_mode,
         )
 
-
 __all__ = ["HistoryWarmupService"]
