@@ -8,6 +8,7 @@ from qmtl.services.gateway.submission import (
     StrategyComputeContext,
     SubmissionPipeline,
 )
+from qmtl.services.gateway.submission.diff_executor import DiffOutcome
 
 
 class _Loader:
@@ -45,7 +46,10 @@ class _DiffExecutor:
 
     async def run(self, **kwargs):
         self.calls.append(kwargs)
-        return "sentinel", {"nid": [{"queue": "q", "global": False}]}
+        return DiffOutcome(
+            sentinel_id="sentinel",
+            queue_map={"nid": [{"queue": "q", "global": False}]},
+        )
 
 
 class _QueueMapResolver:
@@ -87,7 +91,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
     assert prepared.node_ids_crc32 == 0
     assert validator.calls
 
-    sentinel, queue_map = await pipeline.run_diff(
+    outcome = await pipeline.run_diff(
         strategy_id="sid",
         dag_json="{}",
         worlds=["w1"],
@@ -96,8 +100,8 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
         timeout=0.1,
         prefer_queue_map=False,
     )
-    assert sentinel == "sentinel"
-    assert queue_map == {"nid": [{"queue": "q", "global": False}]}
+    assert outcome.sentinel_id == "sentinel"
+    assert outcome.queue_map == {"nid": [{"queue": "q", "global": False}]}
     assert diff_exec.calls
     assert diff_exec.calls[0].get("expected_crc32") is None
 
