@@ -217,7 +217,7 @@ class StrategySubmissionHelper:
     ) -> DiffOutcome:
         dag_json = json.dumps(dag)
         try:
-            sentinel_id, queue_map = await self._pipeline.run_diff(
+            outcome = await self._pipeline.run_diff(
                 strategy_id=diff_strategy_id,
                 dag_json=dag_json,
                 worlds=worlds,
@@ -228,8 +228,8 @@ class StrategySubmissionHelper:
                 expected_crc32=node_crc32,
             )
             return DiffOutcome(
-                sentinel_id=sentinel_id,
-                queue_map=queue_map,
+                sentinel_id=outcome.sentinel_id,
+                queue_map=outcome.queue_map,
                 error=False,
             )
         except Exception:

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from .context_service import ComputeContextService, StrategyComputeContext
 from .dag_loader import DagLoader
-from .diff_executor import DiffExecutor
+from .diff_executor import DiffExecutor, DiffOutcome
 from .node_identity import NodeIdentityValidator
 from .queue_map_resolver import QueueMapResolver
 
@@ -79,7 +79,7 @@ class SubmissionPipeline:
         timeout: float,
         prefer_queue_map: bool,
         expected_crc32: int | None = None,
-    ) -> tuple[str | None, dict[str, list[dict[str, Any]]] | None]:
+    ) -> DiffOutcome:
         return await self._diff_executor.run(
             strategy_id=strategy_id,
             dag_json=dag_json,
