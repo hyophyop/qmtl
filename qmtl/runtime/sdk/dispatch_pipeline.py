@@ -167,7 +167,11 @@ class KafkaSubmitStep:
         try:
             producer.send(topic, context.order)
         except Exception:  # pragma: no cover - Kafka failures are non-deterministic
-            logger.warning("trade order Kafka submit failed; dropping order")
+            logger.warning(
+                "trade order Kafka submit failed; raising for caller handling",
+                exc_info=True,
+            )
+            raise
 
 
 __all__ = [
