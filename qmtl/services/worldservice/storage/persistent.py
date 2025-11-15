@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
@@ -18,6 +17,10 @@ from qmtl.services.worldservice.policy_engine import Policy
 from .constants import DEFAULT_EDGE_OVERRIDES
 from .models import AllocationRun, AllocationState, WorldActivation
 from .repositories import (
+    PersistentActivationRepository,
+    PersistentBindingRepository,
+    PersistentPolicyRepository,
+    PersistentWorldRepository,
     _REASON_UNSET,
     _normalize_execution_domain,
     _normalize_world_node_status,
@@ -120,6 +123,12 @@ class PersistentStorage:
     def __init__(self, driver: _BaseDriver, redis_client) -> None:
         self._driver = driver
         self._redis = redis_client
+        self._world_repo = PersistentWorldRepository(self._driver, self._append_audit)
+        self._policy_repo = PersistentPolicyRepository(self._driver, self._append_audit)
+        self._binding_repo = PersistentBindingRepository(self._driver, self._append_audit)
+        self._activation_repo = PersistentActivationRepository(
+            self._redis, self._append_audit
+        )
         self.apply_runs: Dict[str, Dict[str, Any]] = {}
         # Legacy compatibility surfaces – kept as empty proxies for tests that
         # introspect the in-memory façade.
@@ -302,237 +311,94 @@ class PersistentStorage:
     # World lifecycle
     # ------------------------------------------------------------------
     async def create_world(self, world: Dict[str, Any]) -> None:
-        await self._driver.execute(
-            "INSERT OR REPLACE INTO worlds(id, data) VALUES(?, ?)",
-            world["id"],
-            json.dumps(world),
-        )
-        await self._append_audit(world["id"], {"event": "world_created", "world": world})
+        await self._world_repo.create(world)
         await self.ensure_default_edge_overrides(world["id"])
 
     async def list_worlds(self) -> List[Dict[str, Any]]:
-        rows = await self._driver.fetchall("SELECT data FROM worlds ORDER BY id")
-        return [json.loads(row[0]) for row in rows]
+        return await self._world_repo.list()
 
     async def get_world(self, world_id: str) -> Optional[Dict[str, Any]]:
-        row = await self._driver.fetchone(
-            "SELECT data FROM worlds WHERE id = ?",
-            world_id,
-        )
-        if not row:
-            return None
-        return json.loads(row[0])
+        return await self._world_repo.get(world_id)
 
     async def update_world(self, world_id: str, data: Dict[str, Any]) -> None:
-        current = await self.get_world(world_id)
-        if current is None:
-            raise KeyError(world_id)
-        current.update(data)
-        await self._driver.execute(
-            "UPDATE worlds SET data = ? WHERE id = ?",
-            json.dumps(current),
-            world_id,
-        )
-        await self._append_audit(world_id, {"event": "world_updated", "world": current})
-        if {"contract_id", "dataset_fingerprint", "resource_policy", "code_version"} & data.keys():
+        invalidate = {
+            "contract_id",
+            "dataset_fingerprint",
+            "resource_policy",
+            "code_version",
+        } & data.keys()
+        await self._world_repo.update(world_id, data)
+        if invalidate:
             await self.invalidate_validation_cache(world_id)
 
     async def delete_world(self, world_id: str) -> None:
-        await self._driver.execute("DELETE FROM worlds WHERE id = ?", world_id)
-        await self._driver.execute("DELETE FROM policies WHERE world_id = ?", world_id)
-        await self._driver.execute("DELETE FROM policy_defaults WHERE world_id = ?", world_id)
-        await self._driver.execute("DELETE FROM bindings WHERE world_id = ?", world_id)
-        await self._driver.execute("DELETE FROM decisions WHERE world_id = ?", world_id)
+        await self._world_repo.delete(world_id)
+        await self._policy_repo.delete_all(world_id)
+        await self._binding_repo.clear(world_id)
         await self._driver.execute("DELETE FROM audit_logs WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM edge_overrides WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM validation_cache WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM world_nodes WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM history_metadata WHERE world_id = ?", world_id)
-        await self._redis.delete(self._activation_key(world_id))
+        await self._activation_repo.clear(world_id)
 
     # ------------------------------------------------------------------
     # Policies
     # ------------------------------------------------------------------
     async def add_policy(self, world_id: str, policy: Any) -> int:
-        row = await self._driver.fetchone(
-            "SELECT MAX(version) FROM policies WHERE world_id = ?",
-            world_id,
-        )
-        next_version = (row[0] or 0) + 1 if row else 1
-        if hasattr(policy, "model_dump"):
-            payload = policy.model_dump()
-        elif hasattr(policy, "dict"):
-            payload = policy.dict()
-        elif isinstance(policy, dict):
-            payload = dict(policy)
-        else:
-            payload = asdict(policy)
-        await self._driver.execute(
-            "INSERT INTO policies(world_id, version, payload) VALUES(?, ?, ?)",
-            world_id,
-            next_version,
-            json.dumps(payload),
-        )
-        default = await self._driver.fetchone(
-            "SELECT version FROM policy_defaults WHERE world_id = ?",
-            world_id,
-        )
-        if default is None:
-            await self._driver.execute(
-                "INSERT INTO policy_defaults(world_id, version) VALUES(?, ?)",
-                world_id,
-                next_version,
-            )
-        await self._append_audit(world_id, {"event": "policy_added", "version": next_version})
+        next_version = await self._policy_repo.add(world_id, policy)
         await self.invalidate_validation_cache(world_id)
         return next_version
 
     async def list_policies(self, world_id: str) -> List[Dict[str, int]]:
-        rows = await self._driver.fetchall(
-            "SELECT version FROM policies WHERE world_id = ? ORDER BY version",
-            world_id,
-        )
-        return [{"version": int(row[0])} for row in rows]
+        return await self._policy_repo.list_versions(world_id)
 
     async def get_policy(self, world_id: str, version: int) -> Optional[Any]:
-        row = await self._driver.fetchone(
-            "SELECT payload FROM policies WHERE world_id = ? AND version = ?",
-            world_id,
-            version,
-        )
-        if not row:
-            return None
-        payload = json.loads(row[0])
-        return Policy.model_validate(payload)
+        return await self._policy_repo.get(world_id, version)
 
     async def set_default_policy(self, world_id: str, version: int) -> None:
-        await self._driver.execute(
-            "INSERT INTO policy_defaults(world_id, version) VALUES(?, ?)\n"
-            "ON CONFLICT(world_id) DO UPDATE SET version = excluded.version",
-            world_id,
-            version,
-        )
-        await self._append_audit(world_id, {"event": "policy_default_set", "version": version})
+        await self._policy_repo.set_default(world_id, version)
         await self.invalidate_validation_cache(world_id)
 
     async def get_default_policy(self, world_id: str) -> Optional[Any]:
-        version = await self.default_policy_version(world_id)
-        if version == 0:
-            return None
-        return await self.get_policy(world_id, version)
+        return await self._policy_repo.get_default(world_id)
 
     async def default_policy_version(self, world_id: str) -> int:
-        row = await self._driver.fetchone(
-            "SELECT version FROM policy_defaults WHERE world_id = ?",
-            world_id,
-        )
-        return int(row[0]) if row else 0
+        return await self._policy_repo.default_version(world_id)
 
     # ------------------------------------------------------------------
     # Bindings & decisions
     # ------------------------------------------------------------------
     async def add_bindings(self, world_id: str, strategies: Iterable[str]) -> None:
-        for strategy in strategies:
-            await self._driver.execute(
-                "INSERT OR IGNORE INTO bindings(world_id, strategy_id) VALUES(?, ?)",
-                world_id,
-                strategy,
-            )
-        await self._append_audit(
-            world_id,
-            {"event": "bindings_added", "strategies": list(strategies)},
-        )
+        await self._binding_repo.add(world_id, strategies)
 
     async def list_bindings(self, world_id: str) -> List[str]:
-        rows = await self._driver.fetchall(
-            "SELECT strategy_id FROM bindings WHERE world_id = ? ORDER BY strategy_id",
-            world_id,
-        )
-        return [row[0] for row in rows]
+        return await self._binding_repo.list(world_id)
 
     async def set_decisions(self, world_id: str, strategies: List[str]) -> None:
-        await self._driver.execute(
-            "INSERT INTO decisions(world_id, strategies) VALUES(?, ?)\n"
-            "ON CONFLICT(world_id) DO UPDATE SET strategies = excluded.strategies",
-            world_id,
-            json.dumps(list(strategies)),
-        )
-        await self._append_audit(
-            world_id,
-            {"event": "decisions_set", "strategies": list(strategies)},
-        )
+        await self._binding_repo.set_decisions(world_id, strategies)
 
     async def get_decisions(self, world_id: str) -> List[str]:
-        row = await self._driver.fetchone(
-            "SELECT strategies FROM decisions WHERE world_id = ?",
-            world_id,
-        )
-        if not row:
-            return []
-        return list(json.loads(row[0]))
+        return await self._binding_repo.get_decisions(world_id)
 
     # ------------------------------------------------------------------
     # Activation state (Redis backed)
     # ------------------------------------------------------------------
-    def _activation_key(self, world_id: str) -> str:
-        return f"world:{world_id}:activation"
-
     async def get_activation(
         self, world_id: str, strategy_id: str | None = None, side: str | None = None
     ) -> Dict[str, Any]:
-        state = await self._load_activation(world_id)
-        if strategy_id and side:
-            entry = state["state"].get(strategy_id, {}).get(side)
-            payload: Dict[str, Any] = {"version": state["version"]}
-            if entry:
-                payload.update(entry)
-            return payload
-        return {"version": state["version"], "state": state["state"]}
+        return await self._activation_repo.get(
+            world_id, strategy_id=strategy_id, side=side
+        )
 
     async def snapshot_activation(self, world_id: str) -> WorldActivation:
-        state = await self._load_activation(world_id)
-        return WorldActivation(version=state["version"], state=state["state"])
+        return await self._activation_repo.snapshot(world_id)
 
     async def restore_activation(self, world_id: str, snapshot: WorldActivation) -> None:
-        payload = {"version": snapshot.version, "state": snapshot.state}
-        await self._redis.set(self._activation_key(world_id), json.dumps(payload))
+        await self._activation_repo.restore(world_id, snapshot)
 
     async def update_activation(self, world_id: str, payload: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
-        state = await self._load_activation(world_id)
-        state["version"] += 1
-        strategy_id = str(payload["strategy_id"])
-        side = str(payload["side"])
-        ts = payload.get("ts") or _utc_now()
-        etag = f"act:{world_id}:{strategy_id}:{side}:{state['version']}"
-        entry = {
-            "active": bool(payload.get("active", False)),
-            "weight": float(payload.get("weight", 1.0)),
-            "freeze": bool(payload.get("freeze", False)),
-            "drain": bool(payload.get("drain", False)),
-            "effective_mode": payload.get("effective_mode"),
-            "run_id": payload.get("run_id"),
-            "ts": ts,
-            "etag": etag,
-        }
-        state["state"].setdefault(strategy_id, {})[side] = entry
-        await self._redis.set(self._activation_key(world_id), json.dumps(state))
-        audit_payload = {
-            "event": "activation_updated",
-            "version": state["version"],
-            "strategy_id": strategy_id,
-            "side": side,
-        }
-        audit_payload.update(entry)
-        await self._append_audit(world_id, audit_payload)
-        return state["version"], dict(entry)
-
-    async def _load_activation(self, world_id: str) -> Dict[str, Any]:
-        raw = await self._redis.get(self._activation_key(world_id))
-        if not raw:
-            return {"version": 0, "state": {}}
-        if isinstance(raw, bytes):
-            raw = raw.decode()
-        return json.loads(raw)
+        return await self._activation_repo.update(world_id, payload)
 
     # ------------------------------------------------------------------
     # Audit log
