@@ -4,6 +4,11 @@ import pytest
 from cachetools import TTLCache
 
 from qmtl.runtime.sdk.trade_dispatcher import TradeOrderDispatcher
+from qmtl.runtime.sdk.dispatch_pipeline import (
+    DispatchContext,
+    HttpSubmitStep,
+    KafkaSubmitStep,
+)
 
 
 class RecordingPoster:
@@ -112,3 +117,38 @@ def test_payload_validation_blocks_invalid_orders() -> None:
     dispatcher.dispatch("not-an-order")
 
     assert RecordingPoster.calls == []
+
+
+def test_http_submit_step_logs_final_failure(caplog: pytest.LogCaptureFixture) -> None:
+    class AlwaysFailPoster:
+        calls = 0
+
+        @classmethod
+        def post(cls, url: str, json: dict) -> None:
+            cls.calls += 1
+            raise RuntimeError("boom")
+
+    step = HttpSubmitStep(AlwaysFailPoster, "http://endpoint")
+    context = DispatchContext({"side": "BUY"})
+
+    with caplog.at_level("WARNING"):
+        step.handle(context)
+
+    assert AlwaysFailPoster.calls == 2
+    assert "trade order HTTP submit failed; dropping order" in caplog.text
+
+
+def test_kafka_submit_step_logs_and_raises(caplog: pytest.LogCaptureFixture) -> None:
+    class FailingProducer:
+        def send(self, topic: str, payload: dict) -> None:
+            raise RuntimeError("kafka down")
+
+    producer = FailingProducer()
+    step = KafkaSubmitStep(producer, "orders")
+    context = DispatchContext({"side": "BUY"})
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RuntimeError):
+            step.handle(context)
+
+    assert "trade order Kafka submit failed; raising for caller handling" in caplog.text
