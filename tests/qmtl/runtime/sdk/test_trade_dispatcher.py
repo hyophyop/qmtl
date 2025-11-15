@@ -100,3 +100,15 @@ def test_trade_execution_service_takes_precedence() -> None:
 
     assert service.orders == [order]
     assert RecordingPoster.calls == []
+
+
+def test_payload_validation_blocks_invalid_orders() -> None:
+    dispatcher = TradeOrderDispatcher(
+        http_poster=RecordingPoster,
+        dedup_cache=TTLCache(maxsize=10, ttl=60),
+        trade_order_http_url="http://endpoint",
+    )
+
+    dispatcher.dispatch("not-an-order")
+
+    assert RecordingPoster.calls == []
