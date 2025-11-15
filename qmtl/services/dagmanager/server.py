@@ -61,6 +61,105 @@ class _NullStream(StreamSender):
 
 
 @dataclass
+class TopicSummaryCollector:
+    """Build topic summaries from Kafka metadata payloads."""
+
+    kafka_error_cls: type | None
+
+    def collect(self, topics_metadata: Mapping[str, object]) -> dict[str, dict[str, object]]:
+        summaries: dict[str, dict[str, object]] = {}
+        for name, topic in topics_metadata.items():
+            if not self._is_healthy(topic):
+                continue
+            partitions = getattr(topic, "partitions", {}) or {}
+            summaries[name] = {
+                "config": {},
+                "num_partitions": len(partitions),
+                "replication_factor": self._replication_factor(partitions),
+            }
+        return summaries
+
+    def _is_healthy(self, topic: object) -> bool:
+        error = getattr(topic, "error", None)
+        if error is None or not hasattr(error, "code"):
+            return True
+        if self.kafka_error_cls is None:
+            return True
+        try:
+            return error.code() == self.kafka_error_cls.NO_ERROR  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive path
+            return False
+
+    def _replication_factor(self, partitions: Mapping[object, object]) -> int:
+        if not partitions:
+            return 0
+        replication = 0
+        for partition in partitions.values():
+            replicas = getattr(partition, "replicas", None) or []
+            try:
+                replication = max(replication, len(replicas))
+            except TypeError:  # pragma: no cover - defensive
+                continue
+        return replication
+
+
+@dataclass
+class TopicConfigLoader:
+    """Attach configuration values to collected topic summaries."""
+
+    client: "AdminClient" | None
+    config_resource_cls: type | None
+    timeout: float
+
+    def attach_configs(self, topics: Mapping[str, dict[str, object]]) -> None:
+        if not topics or self.client is None or self.config_resource_cls is None:
+            return
+
+        resources = self._build_resources(topics)
+        if not resources:
+            return
+
+        try:
+            futures = self.client.describe_configs(resources)
+        except Exception:  # pragma: no cover - broker compatibility
+            return
+
+        for resource, future in futures.items():
+            resource_name = getattr(resource, "name", None)
+            if resource_name not in topics:
+                continue
+            try:
+                entries = future.result(timeout=self.timeout)
+            except Exception:  # pragma: no cover - partial failure
+                continue
+            config: dict[str, object] = {}
+            for entry in entries.values():
+                value = getattr(entry, "value", None)
+                entry_name = getattr(entry, "name", None)
+                if value is not None and entry_name:
+                    config[entry_name] = value
+            topics[resource_name]["config"] = config
+
+    def _build_resources(self, topics: Mapping[str, dict[str, object]]) -> list[object]:
+        resources: list[object] = []
+        config_cls = self.config_resource_cls
+        if config_cls is None:
+            return resources
+        for name in topics:
+            try:
+                resource = config_cls(config_cls.Type.TOPIC, name)
+            except AttributeError:  # pragma: no cover - legacy API
+                try:
+                    resource = config_cls("topic", name)
+                except Exception:  # pragma: no cover - defensive
+                    continue
+            except Exception:  # pragma: no cover - defensive
+                continue
+            resources.append(resource)
+        return resources
+
+
+@dataclass
 class _KafkaAdminClient:
     """Thin wrapper around :mod:`confluent_kafka` for metadata access."""
 
@@ -114,52 +213,15 @@ class _KafkaAdminClient:
             return {}
 
         metadata = self._client.list_topics(timeout=self.timeout)
-        topics: dict[str, dict[str, object]] = {}
-        for name, topic in metadata.topics.items():
-            error = getattr(topic, "error", None)
-            if error is not None and hasattr(error, "code"):
-                if self._kafka_error_cls is not None and error.code() != self._kafka_error_cls.NO_ERROR:  # type: ignore[attr-defined]
-                    continue
-            partitions = getattr(topic, "partitions", {}) or {}
-            replication = 0
-            if partitions:
-                try:
-                    replication = max(len(p.replicas) for p in partitions.values())
-                except Exception:  # pragma: no cover - defensive
-                    replication = 0
-            topics[name] = {
-                "config": {},
-                "num_partitions": len(partitions),
-                "replication_factor": replication,
-            }
+        collector = TopicSummaryCollector(self._kafka_error_cls)
+        topics = collector.collect(getattr(metadata, "topics", {}))
 
-        config_cls = self._config_resource_cls
-        if topics and config_cls is not None:
-            resources = []
-            for name in topics:
-                try:
-                    resource = config_cls(config_cls.Type.TOPIC, name)
-                except AttributeError:  # pragma: no cover - legacy API
-                    resource = config_cls("topic", name)
-                resources.append(resource)
-            try:
-                futures = self._client.describe_configs(resources)
-            except Exception:  # pragma: no cover - broker compatibility
-                futures = {}
-            for resource, future in futures.items():
-                name = getattr(resource, "name", None)
-                if name not in topics:
-                    continue
-                try:
-                    entries = future.result(timeout=self.timeout)
-                except Exception:  # pragma: no cover - partial failure
-                    continue
-                config: dict[str, object] = {}
-                for entry in entries.values():
-                    value = getattr(entry, "value", None)
-                    if value is not None:
-                        config[entry.name] = value
-                topics[name]["config"] = config
+        config_loader = TopicConfigLoader(
+            client=self._client,
+            config_resource_cls=self._config_resource_cls,
+            timeout=self.timeout,
+        )
+        config_loader.attach_configs(topics)
         return topics
 
     def create_topic(
