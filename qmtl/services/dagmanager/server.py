@@ -125,8 +125,8 @@ class TopicConfigLoader:
             return
 
         for resource, future in futures.items():
-            name = getattr(resource, "name", None)
-            if name not in topics:
+            resource_name = getattr(resource, "name", None)
+            if resource_name not in topics:
                 continue
             try:
                 entries = future.result(timeout=self.timeout)
@@ -135,10 +135,10 @@ class TopicConfigLoader:
             config: dict[str, object] = {}
             for entry in entries.values():
                 value = getattr(entry, "value", None)
-                name = getattr(entry, "name", None)
-                if value is not None and name:
-                    config[name] = value
-            topics[name]["config"] = config
+                entry_name = getattr(entry, "name", None)
+                if value is not None and entry_name:
+                    config[entry_name] = value
+            topics[resource_name]["config"] = config
 
     def _build_resources(self, topics: Mapping[str, dict[str, object]]) -> list[object]:
         resources: list[object] = []
