@@ -203,6 +203,119 @@ class RecipeAdapterSpec:
 RecipeComponent = Node | Callable[[Node, NodeSetContext], Node] | StepSpec | None
 
 
+@dataclass(frozen=True)
+class LegacyResolution:
+    """Outcome of attempting to coerce a legacy recipe component."""
+
+    step: StepSpec | None = None
+    passthrough: RecipeComponent | None = None
+    drop_default: bool = False
+
+
+class LegacyComponentResolver:
+    """Classify legacy recipe components for integration with new steps."""
+
+    def __init__(self, *, ensure: Callable[[RecipeComponent], StepSpec] | None = None) -> None:
+        self._ensure = ensure or StepSpec.ensure
+
+    def resolve(self, name: str, component: RecipeComponent) -> LegacyResolution | None:
+        """Return how ``component`` should influence ``name``'s step wiring."""
+
+        if name not in STEP_ORDER:
+            raise KeyError(f"Unknown step name: {name}")
+        if component is None:
+            return None
+
+        try:
+            spec = self._ensure(component)
+        except TypeError:
+            return LegacyResolution(passthrough=component)
+
+        if spec.is_default:
+            return LegacyResolution(drop_default=True)
+
+        return LegacyResolution(step=spec)
+
+
+class StepResolutionContext:
+    """State carrier for merging step overrides and legacy components."""
+
+    def __init__(
+        self,
+        defaults: Mapping[str, StepSpec],
+        *,
+        overrides: Mapping[str, RecipeComponent],
+        legacy_components: Mapping[str, RecipeComponent],
+        normalizer: Callable[[Mapping[str, RecipeComponent], bool], dict[str, StepSpec]],
+        legacy_resolver: LegacyComponentResolver | None = None,
+    ) -> None:
+        self._defaults = dict(defaults)
+        self._resolved_steps = dict(defaults)
+        self._overrides = overrides
+        self._legacy_components = legacy_components
+        self._normalize = normalizer
+        self._legacy_resolver = legacy_resolver or LegacyComponentResolver()
+        self._legacy_passthrough: dict[str, RecipeComponent] = {}
+        self._resolved = False
+
+    def attach_kwargs(self) -> dict[str, RecipeComponent]:
+        """Return keyword arguments for :meth:`NodeSetBuilder.attach`."""
+
+        self._ensure_resolved()
+        attach: dict[str, RecipeComponent] = {}
+        for name in STEP_ORDER:
+            if name in self._resolved_steps:
+                attach[name] = self._resolved_steps[name]
+            elif name in self._legacy_passthrough:
+                attach[name] = self._legacy_passthrough[name]
+        return attach
+
+    @property
+    def resolved_steps(self) -> Mapping[str, StepSpec]:
+        self._ensure_resolved()
+        return MappingProxyType(dict(self._resolved_steps))
+
+    @property
+    def legacy_passthrough(self) -> Mapping[str, RecipeComponent]:
+        self._ensure_resolved()
+        return MappingProxyType(dict(self._legacy_passthrough))
+
+    def _ensure_resolved(self) -> None:
+        if self._resolved:
+            return
+        self._merge_overrides()
+        self._apply_legacy_components()
+        self._resolved = True
+
+    def _merge_overrides(self) -> None:
+        if not self._overrides:
+            return
+        normalized = self._normalize(self._overrides, drop_defaults=False)
+        for name, spec in normalized.items():
+            if spec.is_default:
+                self._resolved_steps.pop(name, None)
+            else:
+                self._resolved_steps[name] = spec
+
+    def _apply_legacy_components(self) -> None:
+        if not self._legacy_components:
+            return
+        for name, component in self._legacy_components.items():
+            resolution = self._legacy_resolver.resolve(name, component)
+            if resolution is None:
+                continue
+            if resolution.drop_default:
+                self._resolved_steps.pop(name, None)
+                self._legacy_passthrough.pop(name, None)
+                continue
+            if resolution.step is not None:
+                self._resolved_steps[name] = resolution.step
+                self._legacy_passthrough.pop(name, None)
+                continue
+            if resolution.passthrough is not None:
+                self._legacy_passthrough[name] = resolution.passthrough
+
+
 def _ensure_sandbox_credentials(
     *, sandbox: bool, api_key: str | None, secret: str | None
 ) -> None:
@@ -337,6 +450,7 @@ class NodeSetRecipe:
         self._descriptor = descriptor
         self._steps = self._normalize_steps(steps or {}, drop_defaults=True)
         self._adapter_parameters = tuple(adapter_parameters or ())
+        self._legacy_resolver = LegacyComponentResolver()
 
     def compose(
         self,
@@ -349,11 +463,16 @@ class NodeSetRecipe:
         options: NodeSetOptions | None = None,
         **legacy_components: RecipeComponent,
     ) -> NodeSet:
-        resolved_steps = self._merge_step_overrides(steps or {})
-        resolved_steps, legacy_passthrough = self._apply_legacy_components(
-            resolved_steps, legacy_components
+        context = StepResolutionContext(
+            self._steps,
+            overrides=steps or {},
+            legacy_components=legacy_components,
+            normalizer=lambda data, drop_defaults: self._normalize_steps(
+                data, drop_defaults=drop_defaults
+            ),
+            legacy_resolver=self._legacy_resolver,
         )
-        attach_kwargs = self._build_attach_kwargs(resolved_steps, legacy_passthrough)
+        attach_kwargs = context.attach_kwargs()
 
         builder = self._make_builder(options)
 
@@ -387,56 +506,6 @@ class NodeSetRecipe:
     @property
     def adapter_parameters(self) -> tuple[AdapterParameter, ...]:
         return self._adapter_parameters
-
-    def _merge_step_overrides(
-        self,
-        overrides: Mapping[str, StepSpec | Callable[[Node], Node] | Node | None],
-    ) -> dict[str, StepSpec]:
-        resolved_steps = dict(self._steps)
-        normalized_overrides = self._normalize_steps(overrides, drop_defaults=False)
-        for name, spec in normalized_overrides.items():
-            if spec.is_default:
-                resolved_steps.pop(name, None)
-            else:
-                resolved_steps[name] = spec
-        return resolved_steps
-
-    def _apply_legacy_components(
-        self,
-        resolved_steps: Mapping[str, StepSpec],
-        legacy_components: Mapping[str, RecipeComponent],
-    ) -> tuple[dict[str, StepSpec], dict[str, RecipeComponent]]:
-        updated_steps = dict(resolved_steps)
-        legacy_passthrough: dict[str, RecipeComponent] = {}
-        for name, component in legacy_components.items():
-            if name not in STEP_ORDER:
-                raise KeyError(f"Unknown step name: {name}")
-            if component is None:
-                continue
-            try:
-                spec = StepSpec.ensure(component)
-            except TypeError:
-                legacy_passthrough[name] = component
-                continue
-            if spec.is_default:
-                updated_steps.pop(name, None)
-                legacy_passthrough.pop(name, None)
-            else:
-                updated_steps[name] = spec
-        return updated_steps, legacy_passthrough
-
-    @staticmethod
-    def _build_attach_kwargs(
-        resolved_steps: Mapping[str, RecipeComponent],
-        legacy_passthrough: Mapping[str, RecipeComponent],
-    ) -> dict[str, RecipeComponent]:
-        attach_kwargs: dict[str, RecipeComponent] = {}
-        for name in STEP_ORDER:
-            if name in resolved_steps:
-                attach_kwargs[name] = resolved_steps[name]
-            elif name in legacy_passthrough:
-                attach_kwargs[name] = legacy_passthrough[name]
-        return attach_kwargs
 
     @staticmethod
     def _normalize_steps(
