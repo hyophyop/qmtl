@@ -167,67 +167,19 @@ class WorldServiceClient:
         if cached.fresh:
             gw_metrics.record_worlds_cache_hit()
             return cached.value, False
-        try:
-            resp = await self._request(
-                "GET",
-                self._build_url(f"/worlds/{world_id}/decide"),
-                headers=headers,
-            )
-        except Exception:
-            if cached.present:
-                gw_metrics.record_worlds_stale_response()
-                return cached.value, True
-            raise
-        if resp.status_code >= 500 and cached.present:
-            gw_metrics.record_worlds_stale_response()
-            return cached.value, True
+        result = await self._fetch_decide_response(world_id, headers, cached)
+        if not isinstance(result, httpx.Response):
+            payload, stale = result
+            return payload, stale
+
+        resp: httpx.Response = result
         resp.raise_for_status()
         data = resp.json()
         cache_control = resp.headers.get("Cache-Control", "")
-        ttl = 0
-        if "max-age=" in cache_control:
-            try:
-                ttl = int(cache_control.split("max-age=")[1].split(",")[0])
-            except Exception:
-                ttl = 0
-
-        # Header max-age takes precedence if positive
-        if ttl > 0:
-            augmented = augment_decision_payload(world_id, data)
-            self._decision_cache.set(world_id, augmented, ttl)
-            return augmented, False
-
-        # Fallback to envelope ttl semantics when header is missing or <= 0
-        tval = data.get("ttl") if isinstance(data, dict) else None
-        if tval is None:
-            # Spec default when envelope omits ttl
-            augmented = augment_decision_payload(world_id, data)
-            self._decision_cache.set(world_id, augmented, 300)
-            return augmented, False
-
-        # Envelope provided ttl; honor zero as "do not cache"
-        env_ttl: int | None = None
-        if isinstance(tval, str):
-            if tval.endswith("s"):
-                try:
-                    env_ttl = int(tval[:-1])
-                except Exception:
-                    env_ttl = None
-            else:
-                # Not a supported format; treat as invalid → no cache
-                env_ttl = None
-        elif isinstance(tval, (int, float)):
-            env_ttl = int(tval)
-
-        if env_ttl is None:
-            # Invalid ttl provided → be conservative and do not cache
-            return augment_decision_payload(world_id, data), False
-        if env_ttl <= 0:
-            # Explicit no-cache
-            return augment_decision_payload(world_id, data), False
-
         augmented = augment_decision_payload(world_id, data)
-        self._decision_cache.set(world_id, augmented, env_ttl)
+        ttl = self._compute_decide_ttl(data, cache_control)
+        if ttl > 0:
+            self._decision_cache.set(world_id, augmented, ttl)
         return augmented, False
 
     async def get_activation(
@@ -265,6 +217,60 @@ class WorldServiceClient:
         if new_etag:
             self._activation_cache.set(key, new_etag, data)
         return data, False
+
+    async def _fetch_decide_response(
+        self,
+        world_id: str,
+        headers: Optional[Dict[str, str]],
+        cached: TTLCacheResult[Any],
+    ) -> httpx.Response | tuple[Any, bool]:
+        try:
+            resp = await self._request(
+                "GET",
+                self._build_url(f"/worlds/{world_id}/decide"),
+                headers=headers,
+            )
+        except Exception:
+            if cached.present:
+                gw_metrics.record_worlds_stale_response()
+                return cached.value, True
+            raise
+        if resp.status_code >= 500 and cached.present:
+            gw_metrics.record_worlds_stale_response()
+            return cached.value, True
+        return resp
+
+    def _compute_decide_ttl(self, data: Any, cache_control: str) -> int:
+        ttl = self._ttl_from_cache_control(cache_control)
+        if ttl > 0:
+            return ttl
+        tval = data.get("ttl") if isinstance(data, dict) else None
+        if tval is None:
+            return 300
+        env_ttl = self._ttl_from_envelope_value(tval)
+        if env_ttl is None or env_ttl <= 0:
+            return 0
+        return env_ttl
+
+    def _ttl_from_cache_control(self, cache_control: str) -> int:
+        if "max-age=" not in cache_control:
+            return 0
+        try:
+            return int(cache_control.split("max-age=")[1].split(",")[0])
+        except Exception:
+            return 0
+
+    def _ttl_from_envelope_value(self, tval: Any) -> int | None:
+        if isinstance(tval, str):
+            if tval.endswith("s"):
+                try:
+                    return int(tval[:-1])
+                except Exception:
+                    return None
+            return None
+        if isinstance(tval, (int, float)):
+            return int(tval)
+        return None
 
 
     async def list_worlds(self, headers: Optional[Dict[str, str]] = None) -> Any:
