@@ -257,34 +257,37 @@ def validate_backtest_data(
     
     config = validation_config or {}
     validator = BacktestDataValidator(**config)
-    reports = {}
+    reports: Dict[str, DataQualityReport] = {}
     
     for node in strategy.nodes:
-        if isinstance(node, StreamInput) and node.interval is not None:
-            # Get all cached data for this node
-            all_data = []
-            
-            # Get snapshot of cache data
-            cache_snapshot = node.cache._snapshot()
-            
-            for upstream_id, intervals in cache_snapshot.items():
-                if node.interval in intervals:
-                    interval_data = intervals[node.interval]
-                    all_data.extend(interval_data)
-            
-            if all_data:
-                # Validate the time series
-                report = validator.validate_time_series(all_data, node.interval)
-                reports[node.name or node.node_id] = report
-                
-                # Log results
-                validator.log_validation_results(report, node.name or node.node_id)
-                
-                # Check quality threshold
-                if report.data_quality_score < fail_on_quality_threshold:
-                    raise ValueError(
-                        f"Data quality for node '{node.name or node.node_id}' is {report.data_quality_score:.2%}, "
-                        f"below required threshold of {fail_on_quality_threshold:.2%}"
-                    )
+        if not isinstance(node, StreamInput) or node.interval is None:
+            continue
+
+        all_data = _collect_stream_node_data(node, node.interval)
+        if not all_data:
+            continue
+
+        name = node.name or node.node_id
+        report = validator.validate_time_series(all_data, node.interval)
+        reports[name] = report
+
+        validator.log_validation_results(report, name)
+
+        if report.data_quality_score < fail_on_quality_threshold:
+            raise ValueError(
+                f"Data quality for node '{name}' is {report.data_quality_score:.2%}, "
+                f"below required threshold of {fail_on_quality_threshold:.2%}"
+            )
     
     return reports
+
+
+def _collect_stream_node_data(node, interval: int) -> List[Tuple[int, Dict[str, Any]]]:
+    """Collect all cached samples for a stream node at the given interval."""
+    all_data: List[Tuple[int, Dict[str, Any]]] = []
+    cache_snapshot = node.cache._snapshot()
+    for upstream_id, intervals in cache_snapshot.items():
+        interval_data = intervals.get(interval)
+        if interval_data:
+            all_data.extend(interval_data)
+    return all_data

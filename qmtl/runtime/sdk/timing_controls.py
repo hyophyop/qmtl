@@ -253,47 +253,54 @@ def validate_backtest_timing(
     from .node import StreamInput
 
     controller = timing_controller or TimingController()
-    issues = {}
+    issues: dict[str, list] = {}
 
     for node in strategy.nodes:
-        if isinstance(node, StreamInput) and node.interval is not None:
-            node_issues = []
+        if not isinstance(node, StreamInput) or node.interval is None:
+            continue
 
-            # Get cached data
-            cache_snapshot = node.cache._snapshot()
+        node_issues = _collect_node_timing_issues(node, controller)
+        if not node_issues:
+            continue
 
-            for upstream_id, intervals in cache_snapshot.items():
-                if node.interval in intervals:
-                    interval_data = intervals[node.interval]
+        key = node.name or node.node_id
+        issues[key] = node_issues
 
-                    for timestamp_ms, data in interval_data:
-                        # Convert timestamp to datetime
-                        timestamp = datetime.fromtimestamp(
-                            timestamp_ms / 1000.0, tz=timezone.utc
-                        )
-
-                        # Validate timing
-                        is_valid, reason, session = controller.validate_timing(
-                            timestamp
-                        )
-
-                        if not is_valid:
-                            node_issues.append(
-                                {
-                                    "timestamp": timestamp_ms,
-                                    "reason": reason,
-                                    "session": session.value,
-                                    "datetime": timestamp.isoformat(),
-                                }
-                            )
-
-            if node_issues:
-                issues[node.name or node.node_id] = node_issues
-
-                if fail_on_invalid_timing:
-                    raise ValueError(
-                        f"Invalid timing found in node '{node.name or node.node_id}': "
-                        f"{len(node_issues)} issues detected"
-                    )
+        if fail_on_invalid_timing:
+            raise ValueError(
+                f"Invalid timing found in node '{key}': "
+                f"{len(node_issues)} issues detected"
+            )
 
     return issues
+
+
+def _iter_interval_samples(node, interval: int):
+    """Yield (timestamp_ms, payload) for the given node interval."""
+    cache_snapshot = node.cache._snapshot()
+    for upstream_id, intervals in cache_snapshot.items():
+        interval_data = intervals.get(interval)
+        if not interval_data:
+            continue
+        for timestamp_ms, data in interval_data:
+            yield timestamp_ms, data
+
+
+def _collect_node_timing_issues(node, controller: "TimingController") -> list[dict]:
+    """Collect timing issues for all samples of a single node."""
+    node_issues: list[dict] = []
+
+    for timestamp_ms, _ in _iter_interval_samples(node, node.interval):
+        timestamp = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc)
+        is_valid, reason, session = controller.validate_timing(timestamp)
+        if not is_valid:
+            node_issues.append(
+                {
+                    "timestamp": timestamp_ms,
+                    "reason": reason,
+                    "session": session.value,
+                    "datetime": timestamp.isoformat(),
+                }
+            )
+
+    return node_issues
