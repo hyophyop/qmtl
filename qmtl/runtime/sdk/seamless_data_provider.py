@@ -1123,40 +1123,21 @@ class SeamlessDataProvider(ABC):
         min_coverage: Any | None,
         max_lag_seconds: Any | None,
     ) -> _RequestContext:
-        source = compute_context
-        if source is not None and hasattr(source, "context"):
-            source = getattr(source, "context")
-
-        if isinstance(source, Mapping):
-            world_id = world_id or self._normalize_mapping_value(source, "world_id")
-            execution_domain = execution_domain or self._normalize_mapping_value(
-                source, "execution_domain"
-            )
-            as_of = as_of if as_of is not None else source.get("as_of")
-            min_coverage = (
-                min_coverage
-                if min_coverage is not None
-                else source.get("min_coverage")
-            )
-            max_lag_seconds = (
-                max_lag_seconds
-                if max_lag_seconds is not None
-                else source.get("max_lag")
-                or source.get("max_lag_seconds")
-            )
-        elif source is not None:
-            world_id = world_id or getattr(source, "world_id", None)
-            execution_domain = execution_domain or getattr(source, "execution_domain", None)
-            if as_of is None:
-                as_of = getattr(source, "as_of", None)
-            if min_coverage is None:
-                min_coverage = getattr(source, "min_coverage", None)
-            if max_lag_seconds is None:
-                max_lag_seconds = (
-                    getattr(source, "max_lag", None)
-                    if hasattr(source, "max_lag")
-                    else getattr(source, "max_lag_seconds", None)
-                )
+        source = self._resolve_context_source(compute_context)
+        (
+            world_id,
+            execution_domain,
+            as_of,
+            min_coverage,
+            max_lag_seconds,
+        ) = self._merge_context_values(
+            source=source,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            as_of=as_of,
+            min_coverage=min_coverage,
+            max_lag_seconds=max_lag_seconds,
+        )
 
         normalized_world = self._normalize_world_id(world_id)
         normalized_domain = self._normalize_domain(execution_domain)
@@ -1171,6 +1152,89 @@ class SeamlessDataProvider(ABC):
             min_coverage=normalized_min_cov,
             max_lag_seconds=normalized_max_lag,
         )
+
+    def _resolve_context_source(self, compute_context: Any | None) -> Any | None:
+        if compute_context is None:
+            return None
+        if hasattr(compute_context, "context"):
+            return getattr(compute_context, "context")
+        return compute_context
+
+    def _merge_context_values(
+        self,
+        *,
+        source: Any | None,
+        world_id: Any | None,
+        execution_domain: Any | None,
+        as_of: Any | None,
+        min_coverage: Any | None,
+        max_lag_seconds: Any | None,
+    ) -> tuple[Any | None, Any | None, Any | None, Any | None, Any | None]:
+        if isinstance(source, Mapping):
+            return self._merge_mapping_context(
+                source,
+                world_id=world_id,
+                execution_domain=execution_domain,
+                as_of=as_of,
+                min_coverage=min_coverage,
+                max_lag_seconds=max_lag_seconds,
+            )
+        if source is not None:
+            return self._merge_object_context(
+                source,
+                world_id=world_id,
+                execution_domain=execution_domain,
+                as_of=as_of,
+                min_coverage=min_coverage,
+                max_lag_seconds=max_lag_seconds,
+            )
+        return world_id, execution_domain, as_of, min_coverage, max_lag_seconds
+
+    def _merge_mapping_context(
+        self,
+        source: Mapping[str, Any],
+        *,
+        world_id: Any | None,
+        execution_domain: Any | None,
+        as_of: Any | None,
+        min_coverage: Any | None,
+        max_lag_seconds: Any | None,
+    ) -> tuple[Any | None, Any | None, Any | None, Any | None, Any | None]:
+        world_id = world_id or self._normalize_mapping_value(source, "world_id")
+        execution_domain = execution_domain or self._normalize_mapping_value(
+            source, "execution_domain"
+        )
+        if as_of is None:
+            as_of = source.get("as_of")
+        if min_coverage is None:
+            min_coverage = source.get("min_coverage")
+        if max_lag_seconds is None:
+            max_lag_seconds = source.get("max_lag") or source.get("max_lag_seconds")
+        return world_id, execution_domain, as_of, min_coverage, max_lag_seconds
+
+    def _merge_object_context(
+        self,
+        source: Any,
+        *,
+        world_id: Any | None,
+        execution_domain: Any | None,
+        as_of: Any | None,
+        min_coverage: Any | None,
+        max_lag_seconds: Any | None,
+    ) -> tuple[Any | None, Any | None, Any | None, Any | None, Any | None]:
+        world_id = world_id or getattr(source, "world_id", None)
+        execution_domain = execution_domain or getattr(source, "execution_domain", None)
+        if as_of is None:
+            as_of = getattr(source, "as_of", None)
+        if min_coverage is None:
+            min_coverage = getattr(source, "min_coverage", None)
+        if max_lag_seconds is None:
+            max_lag_seconds = (
+                getattr(source, "max_lag", None)
+                if hasattr(source, "max_lag")
+                else getattr(source, "max_lag_seconds", None)
+            )
+        return world_id, execution_domain, as_of, min_coverage, max_lag_seconds
 
     def _cache_key(
         self,
@@ -1328,73 +1392,30 @@ class SeamlessDataProvider(ABC):
             node_id=node_id, start=start, end=end, interval=interval, context=context
         )
 
-        if context.execution_domain in {"backtest", "dryrun"} and context.requested_as_of is None:
-            logger.error(
-                "seamless.domain_gate.missing_as_of",
-                extra={
-                    "node_id": node_id,
-                    "interval": interval,
-                    "execution_domain": context.execution_domain,
-                    "world_id": context.world_id,
-                },
-            )
-            raise SeamlessDomainPolicyError(
-                "as_of is required for backtest/dryrun domains"
-            )
+        self._enforce_as_of_requirement(
+            node_id=node_id,
+            interval=interval,
+            context=context,
+        )
 
         tracker = self._build_sla_tracker(node_id, interval)
 
-        response: SeamlessFetchResult | None = None
-        cache_hit = False
-        if self._cache_available():
-            cached_entry = self._cache_lookup(
-                cache_key,
-                node_id=node_id,
-                interval=int(interval),
-                world_id=context.world_id or None,
-            )
-            if cached_entry is not None:
-                response = self._materialize_cached_result(cached_entry)
-                cache_hit = True
+        response, cache_hit = self._maybe_get_cached_response(
+            cache_key,
+            context,
+            node_id=node_id,
+            interval=interval,
+        )
 
         if response is None:
-            if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
-                result = await self._fetch_fail_fast(
-                    start,
-                    end,
-                    node_id=node_id,
-                    interval=interval,
-                    sla_tracker=tracker,
-                    request_context=context,
-                )
-            elif self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
-                result = await self._fetch_auto_backfill(
-                    start,
-                    end,
-                    node_id=node_id,
-                    interval=interval,
-                    sla_tracker=tracker,
-                    request_context=context,
-                )
-            elif self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
-                result = await self._fetch_partial_fill(
-                    start,
-                    end,
-                    node_id=node_id,
-                    interval=interval,
-                    sla_tracker=tracker,
-                    request_context=context,
-                )
-            else:  # SEAMLESS
-                result = await self._fetch_seamless(
-                    start,
-                    end,
-                    node_id=node_id,
-                    interval=interval,
-                    sla_tracker=tracker,
-                    request_context=context,
-                )
-
+            result = await self._dispatch_fetch_strategy(
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                tracker=tracker,
+                context=context,
+            )
             response = await self._finalize_response(
                 result,
                 start=start,
@@ -1405,28 +1426,13 @@ class SeamlessDataProvider(ABC):
                 cache_key=cache_key,
             )
 
-        should_store_cache = self._cache_available() and not cache_hit
-
-        downgrade: _DowngradeDecision | None = None
-        if tracker:
-            tracker.observe_total()
-            downgrade = self._resolve_downgrade(tracker, response.metadata)
-
-        domain_decision = self._domain_gate(
-            context,
-            response.metadata,
+        self._apply_sla_and_domain(
+            tracker=tracker,
+            context=context,
+            response=response,
             node_id=node_id,
             interval=interval,
         )
-        downgrade = self._merge_decisions(downgrade, domain_decision)
-
-        if downgrade:
-            self._apply_downgrade(
-                response,
-                downgrade,
-                node_id=node_id,
-                interval=interval,
-            )
 
         self._record_fingerprint(
             node_id,
@@ -1435,12 +1441,12 @@ class SeamlessDataProvider(ABC):
             context,
         )
 
-        if should_store_cache:
-            self._cache_snapshot(
-                cache_key,
-                response,
-                world_id=context.world_id or None,
-            )
+        self._maybe_store_in_cache(
+            cache_key,
+            response,
+            context=context,
+            cache_hit=cache_hit,
+        )
 
         return response
     
@@ -1502,6 +1508,140 @@ class SeamlessDataProvider(ABC):
         if self.storage_source:
             sources.append(self.storage_source)
         return sorted(sources, key=lambda s: s.priority.value)
+
+    def _enforce_as_of_requirement(
+        self,
+        *,
+        node_id: str,
+        interval: int,
+        context: _RequestContext,
+    ) -> None:
+        if context.execution_domain in {"backtest", "dryrun"} and context.requested_as_of is None:
+            logger.error(
+                "seamless.domain_gate.missing_as_of",
+                extra={
+                    "node_id": node_id,
+                    "interval": interval,
+                    "execution_domain": context.execution_domain,
+                    "world_id": context.world_id,
+                },
+            )
+            raise SeamlessDomainPolicyError(
+                "as_of is required for backtest/dryrun domains"
+            )
+
+    def _maybe_get_cached_response(
+        self,
+        cache_key: str,
+        context: _RequestContext,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> tuple[SeamlessFetchResult | None, bool]:
+        if not self._cache_available():
+            return None, False
+        cached_entry = self._cache_lookup(
+            cache_key,
+            node_id=node_id,
+            interval=int(interval),
+            world_id=context.world_id or None,
+        )
+        if cached_entry is None:
+            return None, False
+        response = self._materialize_cached_result(cached_entry)
+        return response, True
+
+    async def _dispatch_fetch_strategy(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        tracker: "_SLATracker | None",
+        context: _RequestContext,
+    ) -> pd.DataFrame:
+        if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
+            return await self._fetch_fail_fast(
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
+            )
+        if self.strategy == DataAvailabilityStrategy.AUTO_BACKFILL:
+            return await self._fetch_auto_backfill(
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
+            )
+        if self.strategy == DataAvailabilityStrategy.PARTIAL_FILL:
+            return await self._fetch_partial_fill(
+                start,
+                end,
+                node_id=node_id,
+                interval=interval,
+                sla_tracker=tracker,
+                request_context=context,
+            )
+        return await self._fetch_seamless(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+            sla_tracker=tracker,
+            request_context=context,
+        )
+
+    def _apply_sla_and_domain(
+        self,
+        *,
+        tracker: "_SLATracker | None",
+        context: _RequestContext,
+        response: SeamlessFetchResult,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        downgrade: _DowngradeDecision | None = None
+        if tracker:
+            tracker.observe_total()
+            downgrade = self._resolve_downgrade(tracker, response.metadata)
+
+        domain_decision = self._domain_gate(
+            context,
+            response.metadata,
+            node_id=node_id,
+            interval=interval,
+        )
+        final_decision = self._merge_decisions(downgrade, domain_decision)
+
+        if final_decision:
+            self._apply_downgrade(
+                response,
+                final_decision,
+                node_id=node_id,
+                interval=interval,
+            )
+
+    def _maybe_store_in_cache(
+        self,
+        cache_key: str,
+        response: SeamlessFetchResult,
+        *,
+        context: _RequestContext,
+        cache_hit: bool,
+    ) -> None:
+        if not self._cache_available() or cache_hit:
+            return
+        self._cache_snapshot(
+            cache_key,
+            response,
+            world_id=context.world_id or None,
+        )
     
     async def _fetch_seamless(
         self,
@@ -1806,19 +1946,13 @@ class SeamlessDataProvider(ABC):
             return False
         return bool(report.warnings or report.flags_counts)
 
-    async def _handle_artifact_publication(
+    def _compute_initial_fingerprints(
         self,
         stabilized: pd.DataFrame,
-        report: ConformanceReport,
         *,
-        start: int,
-        end: int,
-        node_id: str,
-        interval: int,
-        coverage_bounds: tuple[int, int] | None,
         canonical_metadata: Mapping[str, Any],
         legacy_metadata: Mapping[str, Any],
-    ) -> _PublicationContext:
+    ) -> tuple[str | None, str | None]:
         fingerprint: str | None = None
         preview_fingerprint: str | None = None
         should_compute_immediate = (
@@ -1838,7 +1972,107 @@ class SeamlessDataProvider(ABC):
                 legacy_metadata=legacy_metadata,
                 mode=_FINGERPRINT_MODE_CANONICAL,
             )
+        return fingerprint, preview_fingerprint
 
+    def _build_publish_call(
+        self,
+        *,
+        stabilized: pd.DataFrame,
+        report: ConformanceReport,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+        coverage_bounds: tuple[int, int] | None,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+        fingerprint: str | None,
+        as_of: str,
+    ) -> tuple[Any | None, str | None]:
+        publish_call: Any | None = None
+        try:
+            publish_call = self._registrar.publish(  # type: ignore[union-attr]
+                stabilized,
+                node_id=node_id,
+                interval=interval,
+                conformance_report=report,
+                requested_range=(int(start), int(end)),
+                publish_fingerprint=self._publish_fingerprint,
+                early_fingerprint=self._early_fingerprint,
+            )
+        except TypeError:
+            if coverage_bounds is not None:
+                try:
+                    if fingerprint is None:
+                        fingerprint = self._compute_fingerprint_value(
+                            stabilized,
+                            canonical_metadata=canonical_metadata,
+                            legacy_metadata=legacy_metadata,
+                            mode=self._fingerprint_mode,
+                        )
+                    publish_call = self._registrar.publish(  # type: ignore[misc,union-attr]
+                        stabilized,
+                        node_id=node_id,
+                        interval=interval,
+                        coverage_bounds=coverage_bounds,
+                        fingerprint=fingerprint,
+                        as_of=as_of,
+                        conformance_flags=report.flags_counts,
+                        conformance_warnings=report.warnings,
+                        request_window=(int(start), int(end)),
+                        publish_fingerprint=self._publish_fingerprint,
+                        early_fingerprint=self._early_fingerprint,
+                    )
+                except Exception:  # pragma: no cover - publication failures shouldn't crash
+                    publish_call = None
+        except Exception:  # pragma: no cover - publication failures shouldn't crash
+            publish_call = None
+        return publish_call, fingerprint
+
+    async def _execute_publish_call(
+        self,
+        publish_call: Any | None,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> ArtifactPublication | None:
+        if publish_call is None:
+            return None
+        try:
+            start_time = time.monotonic()
+            if inspect.isawaitable(publish_call):
+                publication = await publish_call
+            else:
+                publication = publish_call
+        except Exception:  # pragma: no cover - publication failures shouldn't crash
+            return None
+        if self._publish_fingerprint:
+            elapsed_ms = (time.monotonic() - start_time) * 1000.0
+            sdk_metrics.observe_artifact_publish_latency(
+                node_id=node_id,
+                interval=interval,
+                duration_ms=elapsed_ms,
+            )
+        return publication
+
+    async def _handle_artifact_publication(
+        self,
+        stabilized: pd.DataFrame,
+        report: ConformanceReport,
+        *,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+        coverage_bounds: tuple[int, int] | None,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+    ) -> _PublicationContext:
+        fingerprint, preview_fingerprint = self._compute_initial_fingerprints(
+            stabilized,
+            canonical_metadata=canonical_metadata,
+            legacy_metadata=legacy_metadata,
+        )
         as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         manifest_uri: str | None = None
         publication: ArtifactPublication | None = None
@@ -1847,62 +2081,24 @@ class SeamlessDataProvider(ABC):
         )
 
         if self._registrar:
-            publish_call: Any | None = None
-            publish_started = time.monotonic()
-            try:
-                publish_call = self._registrar.publish(
-                    stabilized,
-                    node_id=node_id,
-                    interval=interval,
-                    conformance_report=report,
-                    requested_range=(int(start), int(end)),
-                    publish_fingerprint=self._publish_fingerprint,
-                    early_fingerprint=self._early_fingerprint,
-                )
-            except TypeError:
-                if coverage_bounds is not None:
-                    try:
-                        if fingerprint is None:
-                            fingerprint = self._compute_fingerprint_value(
-                                stabilized,
-                                canonical_metadata=canonical_metadata,
-                                legacy_metadata=legacy_metadata,
-                                mode=self._fingerprint_mode,
-                            )
-                        publish_call = self._registrar.publish(  # type: ignore[misc]
-                            stabilized,
-                            node_id=node_id,
-                            interval=interval,
-                            coverage_bounds=coverage_bounds,
-                            fingerprint=fingerprint,
-                            as_of=as_of,
-                            conformance_flags=report.flags_counts,
-                            conformance_warnings=report.warnings,
-                            request_window=(int(start), int(end)),
-                            publish_fingerprint=self._publish_fingerprint,
-                            early_fingerprint=self._early_fingerprint,
-                        )
-                    except Exception:  # pragma: no cover - publication failures shouldn't crash
-                        publish_call = None
-            except Exception:  # pragma: no cover - publication failures shouldn't crash
-                publish_call = None
-
-            if publish_call is not None:
-                try:
-                    if inspect.isawaitable(publish_call):
-                        publication = await publish_call
-                    else:
-                        publication = publish_call
-                except Exception:  # pragma: no cover - publication failures shouldn't crash
-                    publication = None
-                else:
-                    if self._publish_fingerprint:
-                        elapsed_ms = (time.monotonic() - publish_started) * 1000.0
-                        sdk_metrics.observe_artifact_publish_latency(
-                            node_id=node_id,
-                            interval=interval,
-                            duration_ms=elapsed_ms,
-                        )
+            publish_call, fingerprint = self._build_publish_call(
+                stabilized=stabilized,
+                report=report,
+                start=start,
+                end=end,
+                node_id=node_id,
+                interval=interval,
+                coverage_bounds=coverage_bounds,
+                canonical_metadata=canonical_metadata,
+                legacy_metadata=legacy_metadata,
+                fingerprint=fingerprint,
+                as_of=as_of,
+            )
+            publication = await self._execute_publish_call(
+                publish_call,
+                node_id=node_id,
+                interval=interval,
+            )
 
         if publication:
             (
@@ -1956,7 +2152,7 @@ class SeamlessDataProvider(ABC):
         interval: int,
         approx_bytes: int,
         as_of_ref: str,
-    ) -> tuple[str | None, tuple[int, int] | None, str | None, str]:
+        ) -> tuple[str | None, tuple[int, int] | None, str | None, str]:
         pub_fingerprint = getattr(publication, "dataset_fingerprint", None)
         manifest_uri: str | None = getattr(publication, "manifest_uri", None)
         as_of = getattr(publication, "as_of", as_of_ref)
@@ -1997,16 +2193,45 @@ class SeamlessDataProvider(ABC):
         fingerprint: str | None,
         preview_fingerprint: str | None,
     ) -> str | None:
+        (
+            normalized_fp,
+            canonical_for_preview,
+            fingerprint,
+        ) = self._resolve_effective_publication_fingerprint(
+            pub_fingerprint=pub_fingerprint,
+            stabilized=stabilized,
+            canonical_metadata=canonical_metadata,
+            legacy_metadata=legacy_metadata,
+            fingerprint=fingerprint,
+        )
+        self._update_publication_manifest(
+            publication,
+            normalized_fp=normalized_fp,
+            canonical_for_preview=canonical_for_preview,
+            preview_fingerprint=preview_fingerprint,
+        )
+        return fingerprint
+
+    @staticmethod
+    def _looks_like_raw_sha256(value: str) -> bool:
+        return len(value) == 64 and all(ch in "0123456789abcdefABCDEF" for ch in value)
+
+    def _resolve_effective_publication_fingerprint(
+        self,
+        *,
+        pub_fingerprint: str,
+        stabilized: pd.DataFrame,
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
+        fingerprint: str | None,
+    ) -> tuple[str, str | None, str | None]:
         normalized_fp = pub_fingerprint
         canonical_normalized: str | None = None
         if normalized_fp.startswith("lake:sha256:"):
             canonical_normalized = normalized_fp.replace("lake:", "", 1)
         elif normalized_fp.startswith("sha256:"):
             canonical_normalized = normalized_fp.lower()
-        elif (
-            len(normalized_fp) == 64
-            and all(ch in "0123456789abcdefABCDEF" for ch in normalized_fp)
-        ):
+        elif self._looks_like_raw_sha256(normalized_fp):
             canonical_normalized = f"sha256:{normalized_fp.lower()}"
 
         if self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
@@ -2035,6 +2260,16 @@ class SeamlessDataProvider(ABC):
                 mode=_FINGERPRINT_MODE_CANONICAL,
             )
 
+        return normalized_fp, canonical_for_preview, fingerprint
+
+    def _update_publication_manifest(
+        self,
+        publication: ArtifactPublication,
+        *,
+        normalized_fp: str,
+        canonical_for_preview: str | None,
+        preview_fingerprint: str | None,
+    ) -> None:
         manifest_obj = getattr(publication, "manifest", None)
         if isinstance(manifest_obj, dict):
             manifest_obj["dataset_fingerprint"] = normalized_fp
@@ -2052,7 +2287,6 @@ class SeamlessDataProvider(ABC):
             publication.dataset_fingerprint = normalized_fp  # type: ignore[misc]
         except Exception:  # pragma: no cover - defensive guard
             pass
-        return fingerprint
 
     def _record_artifact_bytes(
         self,
