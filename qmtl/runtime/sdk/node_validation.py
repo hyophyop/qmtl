@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, List
 
+from qmtl.foundation.validation_core import Rule, RuleSet, ValidationResult
 from .util import parse_interval, parse_period, validate_tag, validate_name
 from .exceptions import InvalidParameterError
 
@@ -15,6 +17,92 @@ __all__ = [
     "validate_tag",
     "validate_name",
 ]
+
+
+@dataclass(slots=True)
+class _NodeParamsContext:
+    """Context object used by validation rules for node parameters."""
+
+    name: str | None
+    tags: list[str] | None
+    interval: int | str | None
+    period: int | None
+    config: dict | None
+    schema: dict | None
+    expected_schema: dict | None
+    validated_name: str | None = None
+    validated_tags: list[str] | None = None
+    interval_val: int | None = None
+    period_val: int | None = None
+
+
+class _NameIntervalPeriodRule(Rule[_NodeParamsContext]):
+    code = "NODE_NAME_INTERVAL_PERIOD"
+    description = "Validate node name, interval and period relationship."
+
+    def validate(self, context: _NodeParamsContext) -> ValidationResult:
+        interval_val = (
+            parse_interval(context.interval) if context.interval is not None else None
+        )
+        period_val = (
+            parse_period(context.period) if context.period is not None else None
+        )
+
+        if interval_val is not None and period_val is not None and period_val < 1:
+            raise InvalidParameterError(
+                "period must be at least 1 when interval is specified"
+            )
+
+        validated_name = validate_name(context.name)
+
+        context.interval_val = interval_val
+        context.period_val = period_val
+        context.validated_name = validated_name
+
+        return ValidationResult.success()
+
+
+class _TagsRule(Rule[_NodeParamsContext]):
+    code = "NODE_TAGS"
+    description = "Validate node tags collection and individual tag values."
+
+    def validate(self, context: _NodeParamsContext) -> ValidationResult:
+        tags = context.tags
+        validated_tags: List[str] = []
+
+        if tags is None:
+            context.validated_tags = validated_tags
+            return ValidationResult.success()
+
+        if not isinstance(tags, list):
+            raise InvalidParameterError("tags must be a list")
+
+        seen_tags: set[str] = set()
+        for tag in tags:
+            validated_tag = validate_tag(tag)
+            if validated_tag in seen_tags:
+                raise InvalidParameterError(f"duplicate tag: {validated_tag!r}")
+            seen_tags.add(validated_tag)
+            validated_tags.append(validated_tag)
+
+        context.validated_tags = validated_tags
+        return ValidationResult.success()
+
+
+class _MappingParamsRule(Rule[_NodeParamsContext]):
+    code = "NODE_MAPPING_PARAMS"
+    description = "Validate mapping-type node parameters such as config and schema."
+
+    def validate(self, context: _NodeParamsContext) -> ValidationResult:
+        if context.config is not None and not isinstance(context.config, dict):
+            raise InvalidParameterError("config must be a dictionary")
+        if context.schema is not None and not isinstance(context.schema, dict):
+            raise InvalidParameterError("schema must be a dictionary")
+        if context.expected_schema is not None and not isinstance(
+            context.expected_schema, dict
+        ):
+            raise InvalidParameterError("expected_schema must be a dictionary")
+        return ValidationResult.success()
 
 
 def normalize_inputs(inp: Any) -> list:
@@ -42,36 +130,25 @@ def validate_node_params(
     expected_schema: dict | None,
 ) -> tuple[str | None, list[str], int | None, int | None]:
     """Validate common ``Node`` constructor arguments."""
-    interval_val = parse_interval(interval) if interval is not None else None
-    period_val = parse_period(period) if period is not None else None
+    context = _NodeParamsContext(
+        name=name,
+        tags=tags,
+        interval=interval,
+        period=period,
+        config=config,
+        schema=schema,
+        expected_schema=expected_schema,
+    )
 
-    validated_name = validate_name(name)
+    rules: tuple[Rule[_NodeParamsContext], ...] = (
+        _NameIntervalPeriodRule(),
+        _TagsRule(),
+        _MappingParamsRule(),
+    )
+    RuleSet(rules=rules).validate(context)
 
-    validated_tags: list[str] = []
-    if tags is not None:
-        if not isinstance(tags, list):
-            raise InvalidParameterError("tags must be a list")
-        seen_tags = set()
-        for tag in tags:
-            validated_tag = validate_tag(tag)
-            if validated_tag in seen_tags:
-                raise InvalidParameterError(f"duplicate tag: {validated_tag!r}")
-            seen_tags.add(validated_tag)
-            validated_tags.append(validated_tag)
-
-    if config is not None and not isinstance(config, dict):
-        raise InvalidParameterError("config must be a dictionary")
-    if schema is not None and not isinstance(schema, dict):
-        raise InvalidParameterError("schema must be a dictionary")
-    if expected_schema is not None and not isinstance(expected_schema, dict):
-        raise InvalidParameterError("expected_schema must be a dictionary")
-
-    if interval_val is not None and period_val is not None and period_val < 1:
-        raise InvalidParameterError(
-            "period must be at least 1 when interval is specified"
-        )
-
-    return validated_name, validated_tags, interval_val, period_val
+    validated_tags = context.validated_tags or []
+    return context.validated_name, validated_tags, context.interval_val, context.period_val
 
 
 def validate_compute_fn(compute_fn) -> None:

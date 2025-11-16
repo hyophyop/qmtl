@@ -59,6 +59,27 @@ QMTLValidationError (base, inherits from ValueError)
 - Must be dictionaries if provided
 - Applied to `config` and `schema` parameters
 
+## Rule / Result pattern overview
+
+As validation rules grow, large if/elif chains inside a single function become
+hard to maintain. To keep complexity under control, QMTL introduces a shared
+`Rule` / `ValidationResult` pattern.
+
+- `qmtl.foundation.validation_core.ValidationMessage`  
+  A structured record with `code`, human‑readable `message`, `severity` and
+  optional `hint`.
+- `qmtl.foundation.validation_core.ValidationResult`  
+  Aggregates multiple `ValidationMessage` instances and exposes an `ok` flag
+  and helpers to inspect errors and warnings.
+- `qmtl.foundation.validation_core.Rule` / `RuleSet`  
+  Rule objects that accept a context object (for example, node parameters or
+  backtest timing) and return a `ValidationResult`, plus a collection type that
+  runs several rules in sequence.
+
+Runtime SDK, WorldService and schema validation logic use this Rule‑based
+design so that adding new checks does not linearly increase each function's
+cyclomatic complexity.
+
 ### Feed Method Validation
 
 The `feed()` method now validates all parameters:
