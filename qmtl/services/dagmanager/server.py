@@ -112,33 +112,19 @@ class TopicConfigLoader:
     timeout: float
 
     def attach_configs(self, topics: Mapping[str, dict[str, object]]) -> None:
-        if not topics or self.client is None or self.config_resource_cls is None:
+        if not self._can_load(topics):
             return
 
         resources = self._build_resources(topics)
         if not resources:
             return
 
-        try:
-            futures = self.client.describe_configs(resources)
-        except Exception:  # pragma: no cover - broker compatibility
+        futures = self._describe_configs(resources)
+        if not futures:
             return
 
         for resource, future in futures.items():
-            resource_name = getattr(resource, "name", None)
-            if resource_name not in topics:
-                continue
-            try:
-                entries = future.result(timeout=self.timeout)
-            except Exception:  # pragma: no cover - partial failure
-                continue
-            config: dict[str, object] = {}
-            for entry in entries.values():
-                value = getattr(entry, "value", None)
-                entry_name = getattr(entry, "name", None)
-                if value is not None and entry_name:
-                    config[entry_name] = value
-            topics[resource_name]["config"] = config
+            self._attach_resource_config(resource, future, topics)
 
     def _build_resources(self, topics: Mapping[str, dict[str, object]]) -> list[object]:
         resources: list[object] = []
@@ -157,6 +143,45 @@ class TopicConfigLoader:
                 continue
             resources.append(resource)
         return resources
+
+    def _can_load(self, topics: Mapping[str, dict[str, object]]) -> bool:
+        return bool(topics) and self.client is not None and self.config_resource_cls is not None
+
+    def _describe_configs(self, resources: list[object]) -> Mapping[object, object]:
+        try:
+            describe = self.client.describe_configs(resources) if self.client else {}
+        except Exception:  # pragma: no cover - broker compatibility
+            return {}
+        return describe or {}
+
+    def _attach_resource_config(
+        self,
+        resource: object,
+        future: object,
+        topics: Mapping[str, dict[str, object]],
+    ) -> None:
+        resource_name = getattr(resource, "name", None)
+        if resource_name not in topics:
+            return
+        config = self._config_from_future(future)
+        if config is not None:
+            topics[resource_name]["config"] = config
+
+    def _config_from_future(self, future: object) -> dict[str, object] | None:
+        try:
+            entries = future.result(timeout=self.timeout)  # type: ignore[call-arg]
+        except Exception:  # pragma: no cover - partial failure
+            return None
+        return self._build_config_map(entries)
+
+    def _build_config_map(self, entries: Mapping[object, object]) -> dict[str, object]:
+        config: dict[str, object] = {}
+        for entry in entries.values():
+            value = getattr(entry, "value", None)
+            entry_name = getattr(entry, "name", None)
+            if value is not None and entry_name:
+                config[entry_name] = value
+        return config
 
 
 @dataclass
@@ -234,32 +259,55 @@ class _KafkaAdminClient:
     ) -> None:
         self._ensure_client()
         assert self._client is not None  # for type checkers
+        topic = self._build_new_topic(
+            name=name,
+            num_partitions=num_partitions,
+            replication_factor=replication_factor,
+            config=config,
+        )
+        future = self._submit_topic_request(topic, name)
+        if future is None:
+            return
+        self._await_topic_creation(future)
+
+    def _build_new_topic(
+        self,
+        *,
+        name: str,
+        num_partitions: int,
+        replication_factor: int,
+        config: Mapping[str, object] | None,
+    ) -> object:
         if self._new_topic_cls is None:
             raise RuntimeError("Kafka NewTopic helper unavailable")
-        topic = self._new_topic_cls(
+        return self._new_topic_cls(
             name,
             num_partitions=int(num_partitions),
             replication_factor=int(replication_factor),
             config={k: str(v) for k, v in (config or {}).items()},
         )
+
+    def _submit_topic_request(self, topic: object, name: str) -> object | None:
         futures = self._client.create_topics([topic], request_timeout=int(self.timeout))
-        future = futures.get(name)
-        if future is None:
-            return
+        return futures.get(name)
+
+    def _await_topic_creation(self, future: object) -> None:
         try:
             future.result()
         except Exception as exc:  # pragma: no cover - depends on broker
-            if (
-                self._kafka_exception_cls is not None
-                and isinstance(exc, self._kafka_exception_cls)
-                and self._kafka_error_cls is not None
-            ):
-                err = exc.args[0]
-                if getattr(err, "code", lambda: None)() == self._kafka_error_cls.TOPIC_ALREADY_EXISTS:
-                    from .kafka_admin import TopicExistsError
-
-                    raise TopicExistsError from exc
+            self._maybe_raise_topic_exists(exc)
             raise
+
+    def _maybe_raise_topic_exists(self, exc: Exception) -> None:
+        if self._kafka_exception_cls is None or not isinstance(exc, self._kafka_exception_cls):
+            return
+        if self._kafka_error_cls is None:
+            return
+        err = exc.args[0] if exc.args else None
+        if getattr(err, "code", lambda: None)() == self._kafka_error_cls.TOPIC_ALREADY_EXISTS:
+            from .kafka_admin import TopicExistsError
+
+            raise TopicExistsError from exc
 
     def delete_topic(self, name: str) -> None:
         if self._client is None:

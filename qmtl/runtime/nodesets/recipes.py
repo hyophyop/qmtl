@@ -524,6 +524,22 @@ class NodeSetRecipe:
         return normalized
 
 
+def _build_adapter_signature(parameters: tuple[AdapterParameter, ...]) -> Signature:
+    init_parameters = [Parameter("self", Parameter.POSITIONAL_OR_KEYWORD)]
+    for param in parameters:
+        default = param.default if param.has_default() else Parameter.empty
+        annotation = param.annotation if param.annotation is not None else Parameter.empty
+        init_parameters.append(
+            Parameter(
+                param.name,
+                kind=Parameter.KEYWORD_ONLY,
+                default=default,
+                annotation=annotation,
+            )
+        )
+    return Signature(init_parameters)
+
+
 def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
     """Return a concrete :class:`NodeSetAdapter` for ``spec``."""
 
@@ -540,6 +556,25 @@ def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
 
     slots = tuple(param.name for param in parameters) + ("_config",)
 
+    def _resolve_adapter_values(kwargs: dict[str, Any]) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for param in parameters:
+            if param.name in kwargs:
+                value = kwargs.pop(param.name)
+            elif param.has_default():
+                value = param.default
+            elif param.required:
+                raise TypeError(f"missing required adapter parameter: {param.name}")
+            else:
+                value = None
+            values[param.name] = value
+        return values
+
+    def _validate_no_extras(kwargs: dict[str, Any]) -> None:
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            raise TypeError(f"unexpected adapter parameter(s): {unexpected}")
+
     class GeneratedAdapter(NodeSetAdapter):
         __slots__ = slots
         descriptor = descriptor_value
@@ -550,23 +585,10 @@ def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
 
         def __init__(self, **kwargs: Any) -> None:
             super().__init__()
-            values: dict[str, Any] = {}
-            for param in parameters:
-                if param.name in kwargs:
-                    value = kwargs.pop(param.name)
-                elif param.has_default():
-                    value = param.default
-                elif param.required:
-                    raise TypeError(f"missing required adapter parameter: {param.name}")
-                else:
-                    value = None
-                setattr(self, param.name, value)
-                values[param.name] = value
-
-            if kwargs:
-                unexpected = ", ".join(sorted(kwargs))
-                raise TypeError(f"unexpected adapter parameter(s): {unexpected}")
-
+            values = _resolve_adapter_values(kwargs)
+            _validate_no_extras(kwargs)
+            for name, value in values.items():
+                setattr(self, name, value)
             object.__setattr__(self, "_config", MappingProxyType(dict(values)))
 
         def build(
@@ -593,19 +615,7 @@ def build_adapter(spec: RecipeAdapterSpec) -> type[NodeSetAdapter]:
         def config(self) -> Mapping[str, Any]:
             return self._config
 
-    init_parameters = [Parameter("self", Parameter.POSITIONAL_OR_KEYWORD)]
-    for param in parameters:
-        default = param.default if param.has_default() else Parameter.empty
-        annotation = param.annotation if param.annotation is not None else Parameter.empty
-        init_parameters.append(
-            Parameter(
-                param.name,
-                kind=Parameter.KEYWORD_ONLY,
-                default=default,
-                annotation=annotation,
-            )
-        )
-    GeneratedAdapter.__init__.__signature__ = Signature(init_parameters)
+    GeneratedAdapter.__init__.__signature__ = _build_adapter_signature(parameters)
 
     GeneratedAdapter.__name__ = class_name
     GeneratedAdapter.__qualname__ = class_name
