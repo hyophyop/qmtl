@@ -59,28 +59,15 @@ class QuestDBBackend:
     async def write_rows(
         self, rows: pd.DataFrame, *, node_id: str, interval: int
     ) -> None:
-        if rows is None or rows.empty:
+        if self._is_empty(rows):
             return
+
+        payload_columns = [c for c in rows.columns if c != "ts"]
+        sql = self._build_insert_sql(payload_columns)
 
         conn = await asyncpg.connect(dsn=self.dsn)
         try:
-            payload_columns = [c for c in rows.columns if c != "ts"]
-            for _, row in rows.iterrows():
-                if "ts" not in row.index:
-                    raise KeyError("row missing 'ts' column")
-                ts = int(row["ts"])
-                values = [self._normalize_value(row[c]) for c in payload_columns]
-                columns_sql = ", ".join(payload_columns)
-                placeholders = ", ".join(
-                    f"${i}" for i in range(4, 4 + len(payload_columns))
-                )
-                sql = (
-                    f"INSERT INTO {self.table}(node_id, interval, ts"
-                    + (f", {columns_sql}" if columns_sql else "")
-                    + ") VALUES($1, $2, $3"
-                    + (f", {placeholders}" if placeholders else "")
-                    + ")"
-                )
+            for ts, values in self._iter_row_payloads(rows, payload_columns):
                 await conn.execute(sql, node_id, interval, ts, *values)
         finally:
             await conn.close()
@@ -121,6 +108,33 @@ class QuestDBBackend:
             return value.item()
         return value
 
+    @staticmethod
+    def _is_empty(rows: pd.DataFrame | None) -> bool:
+        return rows is None or rows.empty
+
+    def _build_insert_sql(self, payload_columns: list[str]) -> str:
+        columns_sql = ", ".join(payload_columns)
+        placeholders = ", ".join(f"${i}" for i in range(4, 4 + len(payload_columns)))
+        return (
+            f"INSERT INTO {self.table}(node_id, interval, ts"
+            + (f", {columns_sql}" if columns_sql else "")
+            + ") VALUES($1, $2, $3"
+            + (f", {placeholders}" if placeholders else "")
+            + ")"
+        )
+
+    def _iter_row_payloads(
+        self, rows: pd.DataFrame, payload_columns: list[str]
+    ) -> list[tuple[int, list]]:
+        normalized_rows: list[tuple[int, list]] = []
+        for _, row in rows.iterrows():
+            if "ts" not in row.index:
+                raise KeyError("row missing 'ts' column")
+            ts = int(row["ts"])
+            values = [self._normalize_value(row[c]) for c in payload_columns]
+            normalized_rows.append((ts, values))
+        return normalized_rows
+
 
 class QuestDBHistoryProvider(AugmentedHistoryProvider):
     """QuestDB-backed history provider using :class:`AugmentedHistoryProvider`."""
@@ -148,4 +162,3 @@ QuestDBLoader = QuestDBHistoryProvider
 
 
 __all__ = ["QuestDBBackend", "QuestDBHistoryProvider", "QuestDBLoader"]
-
