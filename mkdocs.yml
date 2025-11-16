@@ -26,6 +26,7 @@ nav:
       - History Warmup Radon Plan: architecture/radon_history_warmup.md
       - Runtime SDK Radon Plan: architecture/radon_runtime_sdk.md
       - Workflow Orchestration Radon Plan: architecture/radon_workflow_orchestration.md
+      - RPC Adapters Command/Facade Plan: architecture/rpc_adapters.md
       - Radon Metrics Snapshot (2025-11-14): architecture/metrics/2025-11-14.md
       - Linearity & Alpha Metrics Complexity Plan: architecture/metrics/linearity_and_alpha_metrics_complexity.md
   - Guides:

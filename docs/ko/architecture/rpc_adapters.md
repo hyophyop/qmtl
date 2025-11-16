@@ -1,0 +1,186 @@
+---
+title: "RPC 어댑터 Command/Facade 설계안"
+tags:
+  - architecture
+  - rpc
+  - gateway
+  - dag-manager
+author: "QMTL Team"
+last_modified: 2025-11-16
+---
+
+{{ nav_links() }}
+
+# RPC 어댑터 Command/Facade 설계안
+
+## 1. 범위 및 배경
+
+이 문서는 Gateway/DAG Manager/WorldService 및 Runtime SDK 계층에서 사용하는 RPC/서비스 어댑터의 복잡도를 줄이기 위한 공통 설계 패턴을 정의한다.
+
+- 메타 이슈: #1554 RPC·서비스 어댑터 복잡도 개선
+- 설계/공통 모듈 이슈: #1581
+
+### 1.1 radon 기준 대상 함수 스냅샷
+
+`uv run --with radon -m radon cc -s -n C qmtl/runtime/sdk qmtl/services/gateway` 기준, RPC/어댑터 관련 C 등급 함수의 예시는 다음과 같다(2025‑11‑16 기준).
+
+| 파일 | 함수 | CC 등급 / 점수 | 역할 요약 |
+| --- | --- | --- | --- |
+| `services/gateway/world_client.py` | `WorldServiceClient.get_decide` | C / 17 | WorldService 결정 HTTP 호출 + TTL 캐시 + 헤더/본문 기반 TTL 파싱 + 에러/폴백 처리 |
+| `services/gateway/world_client.py` | `WorldServiceClient._iter_rebalance_payloads` | C / 12 | 리밸런싱 스키마 버전별 페이로드 생성 및 폴백 전개 |
+| `services/gateway/ownership.py` | `OwnershipManager.acquire` | C / 16 | Redis 락 획득/타임아웃/에러 분기를 한 함수에 결합 |
+| `services/gateway/strategy_submission.py` | `StrategySubmissionHelper._resolve_queue_map` | C / 11 | DAG diff 결과/월드 컨텍스트 기반 큐맵 해석 및 폴백 |
+| `services/gateway/controlbus_consumer.py` | `ControlBusConsumer._parse_kafka_message` | C / 15 | ControlBus 메시지 디코딩·검증·분기 처리 |
+| `services/gateway/api.py` | `create_app` | C / 18 | Gateway API/라우터/미들웨어 구성 및 의존성 주입 |
+| `services/gateway/cli.py` | `_main` | C / 18 | CLI 인자 파싱·환경 구성·서비스 부트스트랩 |
+
+참고로, 이전 스냅샷에서 C 등급이었던 다음 경로들은 이미 개별 이슈에서 정비되었다.
+
+- `runtime/sdk/gateway_client.GatewayClient.post_strategy` — #1582
+- `services/gateway/dagmanager_client.DagManagerClient.diff`, `services/gateway/submission/diff_executor.DiffExecutor.run`, `services/gateway/worker.StrategyWorker._process` — 워크플로 오케스트레이션 Radon 계획 문서와 연계.
+
+이 문서는 위/유사 경로에 공통으로 적용할 수 있는 Command/Facade·응답 파서·에러 매퍼 설계를 정의하고, 이후 서브 이슈(#1582, #1583, #1584 등)에서 사용할 가이드를 제공한다.
+
+## 2. 레이어 모델
+
+RPC 어댑터 경로는 다음과 같은 최소 레이어로 나눈다.
+
+1. **Request Builder**
+   - 도메인 인자를 받아 HTTP/gRPC 요청/메시지(경로, 헤더, 바디, gRPC Request)를 구성한다.
+   - WorldService/Gateway/DAG Manager 별로 형식은 다르지만, 순수 함수 형태로 유지해 테스트를 단순화한다.
+2. **Command (Transport + Breaker/Retry)**
+   - Request Builder가 만든 요청을 실제로 전송하는 단일 커맨드 객체/함수.
+   - circuit breaker, 재시도, health‑check backoff, 지연 측정 등은 이 레이어에서 처리한다.
+   - 구현은 `qmtl/foundation/common.AsyncCircuitBreaker`, WorldService용 `BreakerRetryTransport` 등과 결합한다.
+3. **Response Parser**
+   - HTTP/gRPC 응답을 도메인 결과(예: `StrategyAck`, 큐맵 dict, 결정/활성 페이로드)로 변환한다.
+   - 필요한 경우 스키마 검증(pydantic 등)과 기본값 채우기를 수행한다.
+4. **Error Mapper**
+   - 상태 코드/에러 코드/예외를 도메인 에러(예: `{"error": "duplicate strategy"}` 또는 전용 예외)로 변환한다.
+   - 동일한 World/Gateway/DAG Manager 에러를 여러 어댑터에서 재사용할 수 있도록 공통 규칙을 정의한다.
+5. **Facade**
+   - SDK나 상위 서비스가 사용하는 퍼블릭 API 계층.
+   - `WorldServiceClient.get_decide`, `DagManagerClient.diff`, `GatewayClient.post_strategy` 같은 메서드가 여기에 속한다.
+   - Facade는 Request Builder/Command/Response Parser/Error Mapper를 조합하는 역할만 담당한다.
+
+이 레이어 모델의 목적은 다음 두 가지다.
+
+- radon CC 을 C → A/B 수준으로 낮추면서, 테스트 단위를 `Request Builder`, `Command`, `Parser`, `Error Mapper`, `Facade` 별로 좁혀 회귀 범위를 명확히 한다.
+- Gateway/WorldService/DAG Manager 간에 재시도/에러 매핑/로깅 규칙을 공유해, 정책 변경 시 수정 범위를 줄인다.
+
+## 3. 공통 모듈 스켈레톤
+
+공통 Command/Parser/에러 결과 표현을 위해 `qmtl/foundation/common/rpc.py` 에 최소 스켈레톤을 도입한다.
+
+```python
+from dataclasses import dataclass
+from typing import Any, Callable, Generic, Protocol, TypeVar
+
+TResponse = TypeVar("TResponse")
+TResult = TypeVar("TResult")
+
+class RpcCommand(Protocol[TResponse]):
+    async def execute(self) -> TResponse: ...
+
+class RpcResponseParser(Protocol[TResponse, TResult]):
+    def parse(self, response: TResponse) -> TResult: ...
+
+@dataclass(slots=True)
+class RpcError:
+    message: str
+    cause: Exception | None = None
+    details: dict[str, Any] | None = None
+
+@dataclass(slots=True)
+class RpcOutcome(Generic[TResult]):
+    result: TResult | None = None
+    error: RpcError | None = None
+
+    @property
+    def ok(self) -> bool: ...
+
+async def execute_rpc(
+    command: RpcCommand[TResponse],
+    parser: RpcResponseParser[TResponse, TResult],
+    *,
+    on_error: Callable[[Exception], RpcError] | None = None,
+) -> RpcOutcome[TResult]: ...
+```
+
+특징:
+
+- Command는 "요청 생성 + 전송"을 캡슐화하고, Parser는 "응답 → 도메인 결과"에만 집중한다.
+- `execute_rpc` 는 Command/Parser 핸드쉐이크를 공통화해, Facade/어댑터 코드에서 try/except 블록 중복을 줄인다.
+- retry/breaker/메트릭은 여전히 World/Gateway/DAG Manager 각 어댑터의 책임으로 남기고, 추후 필요 시 별도 공통 모듈로 확장한다.
+
+이 스켈레톤은 이후 서브 이슈에서 다음과 같이 사용된다.
+
+- WorldService: `get_decide` 의 HTTP 호출 부분을 `RpcCommand[httpx.Response]` 로 캡슐화하고, TTL/캐시 여부를 결정하는 Parser로 분리.
+- DAG Manager: diff/tag 쿼리 호출을 Command 로 감싸고, CRC 검증/큐맵 정규화/네임스페이스 적용을 Parser/전략 객체로 이동.
+- Gateway SDK: `GatewayClient.post_strategy` 응답 파싱 로직은 이미 헬퍼로 분해되어 있으며, 필요 시 Parser 형태로 래핑.
+
+## 4. Command/Facade 적용 가이드
+
+### 4.1 WorldServiceClient.get_decide (서브 이슈 #1583)
+
+대상: `qmtl/services/gateway/world_client.py:WorldServiceClient.get_decide`
+
+- **Request Builder**: `world_id` 와 헤더를 받아 `/worlds/{world_id}/decide` 경로와 쿼리/헤더를 구성.
+- **Command**: `_transport.request("GET", url, headers=headers)` 호출을 `RpcCommand[httpx.Response]` 구현으로 캡슐화.
+- **Response Parser**:
+  - `Cache-Control` 헤더 기반 TTL 파싱.
+  - envelope `ttl` 필드 파싱 및 잘못된 형식 처리.
+  - `augment_decision_payload` 적용.
+- **Error Mapper**:
+  - 네트워크 예외/5xx 시 캐시 폴백 정책(`TTLCache`)을 명시적으로 정의.
+  - 캐시 미존재 시 예외를 전파하거나 도메인 에러로 변환.
+- **Facade**(`get_decide`):
+  - 캐시 조회 → Command/Parser 실행 → 캐시 갱신/폴백 → `(payload, stale)` 튜플 반환.
+
+### 4.2 DAG diff 경로 (서브 이슈 #1584)
+
+대상: `DagManagerClient.diff` → `DiffExecutor.run` → `StrategyWorker._diff_strategy`.
+
+- **Request Builder**: `DiffNamespace` 와 `DiffRequest` 생성 로직을 그대로 유지하되, `DiffStreamClient` 호출 인자를 명확히 분리.
+- **Command**:
+  - `DiffStreamClient.collect` 호출을 감싸는 `RpcCommand[dagmanager_pb2.DiffChunk]` 구현.
+  - circuit breaker 및 `_collect_with_retries` 에서의 재시도/health 체크를 Command 내 책임으로 정리.
+- **Response Parser / 전략**:
+  - `DiffExecutor` 의 `DiffRunStrategy` (`QueueMapAggregationStrategy`, `SingleWorldStrategy`) 는 CRC 검증/센티넬/큐맵 정규화를 담당하는 고수준 Parser 역할.
+- **Facade**:
+  - `StrategyWorker._diff_strategy` 는 Command 실행과 실패 시 에러 기록/알람 전송/상태 전이만 담당.
+
+## 5. 마이그레이션 전략 및 완료 조건
+
+### 5.1 단계별 마이그레이션
+
+1. **공통 스켈레톤 도입 (이 이슈 #1581)**
+   - `qmtl/foundation/common/rpc.py` 에 Command/Parser/Outcome 타입과 `execute_rpc` 헬퍼를 추가한다.
+   - 단위 테스트: `tests/qmtl/foundation/common/test_rpc.py` 에서 기본 성공/실패 경로를 검증한다.
+2. **대표 경로 PoC (#1582, #1583)**
+   - Gateway SDK: `GatewayClient.post_strategy` 경로의 응답 파싱/에러 매핑을 헬퍼/Parser 기반으로 정리(이미 #1582 에서 CC 개선).
+   - WorldService: `get_decide` 를 Command/Parser 구조로 리팩터링하고, TTL/캐시 정책을 명확히 문서화 및 테스트.
+3. **DAG diff 경로 정리 (#1584)**
+   - DAG Manager diff 실행/재시도/CRC 검증/큐맵 정규화를 명확히 분리하고, `DiffRunStrategy` 를 Parser/전략 객체로 보는 방향으로 단순화.
+4. **추가 RPC 어댑터로 확장**
+   - Rebalancing, ControlBus Consumer, Strategy Submission 등에서 동일 패턴을 점진적으로 적용.
+
+### 5.2 완료 기준
+
+- Command/Facade/Parser/Error Mapper 역할이 이 문서 기준으로 정의되고, representative 경로(WorldService, DAG diff, Gateway SDK)에 대한 서브 이슈가 생성되어 있다.
+- `qmtl/foundation/common/rpc.py` 가 머지되고, 최소한 하나 이상의 경로(#1582, #1583, #1584 중 하나 이상)에서 이 스켈레톤을 직접 또는 간접적으로 활용한다.
+- radon CC 기준으로 RPC 어댑터 경로의 C 등급 함수 수가 감소하거나, C 등급이더라도 책임이 명확히 분리되었음을 이슈/PR 설명에서 근거로 제시한다.
+
+## 6. 체크리스트
+
+- [x] radon CC 리포트 기준 RPC 어댑터 관련 C 등급 함수 목록 수집.
+- [x] Command/Facade/Parser/Error Mapper 레이어 모델 정의.
+- [x] 공통 스켈레톤 모듈(`qmtl/foundation/common/rpc.py`) 도입 및 단위 테스트 추가.
+- [ ] WorldService/SDK/DAG diff 대표 경로에서 Command/Facade 패턴 적용(#1582, #1583, #1584).
+
+관련 이슈
+- #1554
+- #1581
+- #1582
+- #1583
+- #1584
