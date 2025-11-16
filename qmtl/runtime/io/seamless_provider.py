@@ -182,6 +182,196 @@ class DataFetcherAutoBackfiller:
             payload["error"] = error
         return payload
 
+    @staticmethod
+    def _should_use_storage(target_storage: Optional[DataSource]) -> bool:
+        return (
+            target_storage is not None
+            and getattr(target_storage, "priority", None) is DataSourcePriority.STORAGE
+        )
+
+    def _resolve_storage_provider(self, target_storage: Optional[DataSource]):
+        if not self._should_use_storage(target_storage):
+            return None
+        storage_provider = getattr(target_storage, "provider", None) if target_storage else None
+        if storage_provider is None and target_storage is not None:
+            storage_provider = getattr(target_storage, "storage_provider", None)
+        if storage_provider and hasattr(storage_provider, "fill_missing") and hasattr(
+            storage_provider, "fetch"
+        ):
+            return storage_provider
+        return None
+
+    def _log_attempt(
+        self,
+        *,
+        batch_id: str,
+        attempt: int,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        source: str,
+    ) -> None:
+        logger.info(
+            "seamless.backfill.attempt",
+            extra=self._build_log_extra(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                source=source,
+            ),
+        )
+
+    def _log_success(
+        self,
+        *,
+        batch_id: str,
+        attempt: int,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        source: str,
+    ) -> None:
+        logger.info(
+            "seamless.backfill.succeeded",
+            extra=self._build_log_extra(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                source=source,
+            ),
+        )
+
+    def _log_storage_fallback(
+        self,
+        *,
+        batch_id: str,
+        attempt: int,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        error: str,
+    ) -> None:
+        logger.warning(
+            "seamless.backfill.storage_fallback",
+            extra=self._build_log_extra(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                source="storage",
+                error=error,
+            ),
+            exc_info=True,
+        )
+
+    def _log_failure(
+        self,
+        *,
+        batch_id: str,
+        attempt: int,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+        error: str,
+    ) -> None:
+        logger.error(
+            "seamless.backfill.failed",
+            extra=self._build_log_extra(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                source="fetcher",
+                error=error,
+            ),
+            exc_info=True,
+        )
+
+    async def _try_storage_backfill(
+        self,
+        storage_provider: Any,
+        *,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+        batch_id: str,
+        attempt: int,
+    ) -> pd.DataFrame | None:
+        try:
+            await storage_provider.fill_missing(start, end, node_id=node_id, interval=interval)
+            frame = await storage_provider.fetch(start, end, node_id=node_id, interval=interval)
+            self._log_success(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                source="storage",
+            )
+            return frame
+        except Exception as exc:
+            self._log_storage_fallback(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                error=str(exc),
+            )
+            return None
+
+    async def _fetch_from_source(
+        self,
+        *,
+        start: int,
+        end: int,
+        node_id: str,
+        interval: int,
+        batch_id: str,
+        attempt: int,
+    ) -> pd.DataFrame:
+        try:
+            frame = await self.fetcher.fetch(start, end, node_id=node_id, interval=interval)
+        except Exception as exc:
+            self._log_failure(
+                batch_id=batch_id,
+                attempt=attempt,
+                node_id=node_id,
+                interval=interval,
+                start=start,
+                end=end,
+                error=str(exc),
+            )
+            raise
+
+        self._log_success(
+            batch_id=batch_id,
+            attempt=attempt,
+            node_id=node_id,
+            interval=interval,
+            start=start,
+            end=end,
+            source="fetcher",
+        )
+        return frame
+
     async def backfill(
         self,
         start: int,
@@ -197,99 +387,39 @@ class DataFetcherAutoBackfiller:
         batch_identifier = self._build_batch_id(
             batch_id=batch_id, node_id=node_id, interval=interval, start=start, end=end
         )
-        is_storage_target = (
-            target_storage is not None
-            and getattr(target_storage, "priority", None) is DataSourcePriority.STORAGE
+        planned_source = "storage" if self._should_use_storage(target_storage) else "fetcher"
+        self._log_attempt(
+            batch_id=batch_identifier,
+            attempt=attempt,
+            node_id=node_id,
+            interval=interval,
+            start=start,
+            end=end,
+            source=planned_source,
         )
-        planned_source = "storage" if is_storage_target else "fetcher"
-        logger.info(
-            "seamless.backfill.attempt",
-            extra=self._build_log_extra(
-                batch_id=batch_identifier,
-                attempt=attempt,
-                node_id=node_id,
-                interval=interval,
+
+        storage_provider = self._resolve_storage_provider(target_storage)
+        if storage_provider:
+            stored_frame = await self._try_storage_backfill(
+                storage_provider,
                 start=start,
                 end=end,
-                source=planned_source,
-            ),
-        )
-
-        # Prefer materializing directly into storage to avoid double-fetch
-        if is_storage_target:
-            storage_provider = getattr(target_storage, "provider", None) if target_storage else None
-            if storage_provider is None and target_storage is not None:
-                storage_provider = getattr(target_storage, "storage_provider", None)
-            if storage_provider and hasattr(storage_provider, "fill_missing") and hasattr(storage_provider, "fetch"):
-                try:
-                    await storage_provider.fill_missing(
-                        start, end, node_id=node_id, interval=interval
-                    )
-                    frame = await storage_provider.fetch(
-                        start, end, node_id=node_id, interval=interval
-                    )
-                    logger.info(
-                        "seamless.backfill.succeeded",
-                        extra=self._build_log_extra(
-                            batch_id=batch_identifier,
-                            attempt=attempt,
-                            node_id=node_id,
-                            interval=interval,
-                            start=start,
-                            end=end,
-                            source="storage",
-                        ),
-                    )
-                    return frame
-                except Exception as exc:
-                    logger.warning(
-                        "seamless.backfill.storage_fallback",
-                        extra=self._build_log_extra(
-                            batch_id=batch_identifier,
-                            attempt=attempt,
-                            node_id=node_id,
-                            interval=interval,
-                            start=start,
-                            end=end,
-                            source="storage",
-                            error=str(exc),
-                        ),
-                        exc_info=True,
-                    )
-
-        # Fallback: fetch directly from external source and return
-        try:
-            frame = await self.fetcher.fetch(start, end, node_id=node_id, interval=interval)
-        except Exception as exc:
-            logger.error(
-                "seamless.backfill.failed",
-                extra=self._build_log_extra(
-                    batch_id=batch_identifier,
-                    attempt=attempt,
-                    node_id=node_id,
-                    interval=interval,
-                    start=start,
-                    end=end,
-                    source="fetcher",
-                    error=str(exc),
-                ),
-                exc_info=True,
+                node_id=node_id,
+                interval=interval,
+                batch_id=batch_identifier,
+                attempt=attempt,
             )
-            raise
+            if stored_frame is not None:
+                return stored_frame
 
-        logger.info(
-            "seamless.backfill.succeeded",
-            extra=self._build_log_extra(
-                batch_id=batch_identifier,
-                attempt=attempt,
-                node_id=node_id,
-                interval=interval,
-                start=start,
-                end=end,
-                source="fetcher",
-            ),
+        return await self._fetch_from_source(
+            start=start,
+            end=end,
+            node_id=node_id,
+            interval=interval,
+            batch_id=batch_identifier,
+            attempt=attempt,
         )
-        return frame
     
     async def backfill_async(
         self, start: int, end: int, *, node_id: str, interval: int,

@@ -255,9 +255,7 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher):
         super().__init__(config, exchange=exchange)
 
     # ------------------------------------------------------------------
-    async def fetch(
-        self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    def _resolve_symbol_and_timeframe(self, node_id: str) -> tuple[str, str]:
         parsed = _parse_ohlcv_node_id(node_id)
         symbol = parsed[1] if parsed else None
         tf_from_node = parsed[2] if parsed else None
@@ -265,44 +263,79 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher):
         timeframe = tf_from_node or self.config.timeframe
         if not symbol:
             raise ValueError("symbol not provided in config and not parseable from node_id")
+        return symbol, timeframe
 
-        step_s = _try_parse_timeframe_s(timeframe)
-        # Trust caller-supplied interval alignment, but guard gross mismatches
+    @staticmethod
+    def _ensure_interval_alignment(interval: int, step_s: int) -> None:
         if interval and step_s and interval % step_s != 0:
-            # Allow submultiples; primary alignment responsibility remains with caller
+            # Allow submultiples; alignment responsibility is on the caller
             pass
 
+    async def _collect_ohlcv_batches(
+        self,
+        *,
+        exchange: Any,
+        symbol: str,
+        timeframe: str,
+        start: int,
+        end: int,
+        step_ms: int,
+    ) -> list[list[Any]]:
+        start_ms = max(0, int(start) * 1000)
+        end_ms = max(0, int(end) * 1000)
+        cursor = start_ms
+        hard_cap = 500_000  # safety valve against infinite loops
         rows: list[list[Any]] = []
+
+        while cursor <= end_ms and hard_cap > 0:
+            hard_cap -= 1
+            remaining = end_ms - cursor
+            if remaining < 0:
+                break
+            max_points = remaining // step_ms + 1
+            limit = int(min(self.config.window_size, max(1, max_points)))
+            batch = await self._fetch_ohlcv_with_retry(exchange, symbol, timeframe, cursor, limit)
+            if not batch:
+                break
+            rows.extend(batch)
+            next_cursor = self._advance_cursor_ms(cursor, batch, step_ms)
+            if next_cursor is None:
+                break
+            cursor = next_cursor
+
+        return rows
+
+    @staticmethod
+    def _advance_cursor_ms(
+        cursor: int, batch: Sequence[Sequence[Any]], step_ms: int
+    ) -> int | None:
+        last_ms = int(batch[-1][0])
+        next_cursor = last_ms + step_ms
+        if next_cursor <= cursor:
+            return None
+        return next_cursor
+
+    async def fetch(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        symbol, timeframe = self._resolve_symbol_and_timeframe(node_id)
+        step_s = _try_parse_timeframe_s(timeframe)
+        self._ensure_interval_alignment(interval, step_s)
+
         ex = await self._get_or_create_exchange()
         try:
-            start_ms = max(0, int(start) * 1000)
-            end_ms = max(0, int(end) * 1000)
-            step_ms = step_s * 1000
-
-            cursor = start_ms
-            hard_cap = 500_000  # safety valve against infinite loops
-            while cursor <= end_ms and hard_cap > 0:
-                hard_cap -= 1
-                remaining = end_ms - cursor
-                if remaining < 0:
-                    break
-                max_points = remaining // step_ms + 1
-                limit = int(min(self.config.window_size, max(1, max_points)))
-                batch = await self._fetch_ohlcv_with_retry(ex, symbol, timeframe, cursor, limit)
-                if not batch:
-                    break
-                rows.extend(batch)
-                last_ms = int(batch[-1][0])
-                next_cursor = last_ms + step_ms
-                if next_cursor <= cursor:
-                    break
-                cursor = next_cursor
+            rows = await self._collect_ohlcv_batches(
+                exchange=ex,
+                symbol=symbol,
+                timeframe=timeframe,
+                start=start,
+                end=end,
+                step_ms=step_s * 1000,
+            )
         finally:
             await self._maybe_close_exchange(ex)
 
-        # Normalize
-        normalized = self._normalize_ohlcv(rows, start, end)
-        return normalized
+        return self._normalize_ohlcv(rows, start, end)
 
     # ------------------------------------------------------------------
     async def _fetch_ohlcv_with_retry(
