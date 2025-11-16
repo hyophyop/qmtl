@@ -58,6 +58,13 @@ class StrategyComputeContext:
         return self.worlds[0] if self.worlds else None
 
 
+@dataclass(frozen=True)
+class DecisionContext:
+    context: ComputeContext | None
+    stale: bool = False
+    missing: bool = False
+
+
 class ComputeContextService:
     """Normalize compute context metadata and world identifiers."""
 
@@ -68,35 +75,52 @@ class ComputeContextService:
         self, payload: "StrategySubmit"
     ) -> StrategyComputeContext:
         worlds = tuple(self._unique_worlds(payload))
-        meta = payload.meta if isinstance(payload.meta, dict) else None
-        base_ctx = build_strategy_compute_context(meta)
-
-        context = base_ctx
-        if worlds:
-            context = context.with_world(worlds[0])
-
-        decision_ctx: ComputeContext | None = None
-        stale_decision = False
-        downgrade_missing_decision = False
-        if worlds and self._world_client is not None:
-            world_id = worlds[0]
-            try:
-                decision_ctx, stale_decision = await self._fetch_decision_context(world_id)
-            except _WorldDecisionUnavailable as exc:
-                stale_decision = stale_decision or exc.stale
-                decision_ctx = None
-                downgrade_missing_decision = True
-
-        if decision_ctx is not None:
-            context = self._merge_contexts(decision_ctx, base_ctx)
-            if stale_decision:
-                context = self._downgrade_stale(context)
-        elif downgrade_missing_decision and worlds:
-            gw_metrics.record_worlds_stale_response()
-            if not context.safe_mode:
-                context = self._downgrade_unavailable(context)
+        base_ctx = self._base_context(payload, worlds)
+        decision = await self._decision_context(worlds)
+        context = self._apply_decision(base_ctx, decision, worlds)
 
         return StrategyComputeContext(context=context, worlds=worlds)
+
+    def _base_context(
+        self, payload: "StrategySubmit", worlds: tuple[str, ...]
+    ) -> ComputeContext:
+        meta = payload.meta if isinstance(payload.meta, dict) else None
+        context = build_strategy_compute_context(meta)
+        if worlds:
+            return context.with_world(worlds[0])
+        return context
+
+    async def _decision_context(self, worlds: tuple[str, ...]) -> DecisionContext:
+        if not worlds or self._world_client is None:
+            return DecisionContext(context=None)
+
+        world_id = worlds[0]
+        try:
+            context, stale = await self._fetch_decision_context(world_id)
+        except _WorldDecisionUnavailable as exc:
+            return DecisionContext(context=None, stale=exc.stale, missing=True)
+
+        return DecisionContext(context=context, stale=stale, missing=context is None)
+
+    def _apply_decision(
+        self,
+        base_ctx: ComputeContext,
+        decision: DecisionContext,
+        worlds: tuple[str, ...],
+    ) -> ComputeContext:
+        context = base_ctx
+        if decision.context is not None:
+            context = self._merge_contexts(decision.context, base_ctx)
+            if decision.stale:
+                return self._downgrade_stale(context)
+            return context
+
+        if decision.missing and worlds:
+            gw_metrics.record_worlds_stale_response()
+            if not context.safe_mode:
+                return self._downgrade_unavailable(context)
+
+        return context
 
     async def _fetch_decision_context(
         self, world_id: str

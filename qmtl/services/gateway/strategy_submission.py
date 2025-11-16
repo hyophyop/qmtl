@@ -42,6 +42,9 @@ class StrategySubmissionResult:
     downgraded: bool = False
     downgrade_reason: "DowngradeReason | str | None" = None
     safe_mode: bool = False
+    queue_map_source: str | None = None
+    diff_error: bool = False
+    crc_fallback: bool = False
 
 
 @dataclass
@@ -49,6 +52,17 @@ class DiffOutcome:
     sentinel_id: str | None
     queue_map: dict[str, list[dict[str, Any]]] | None
     error: bool
+
+
+@dataclass
+class QueueResolution:
+    """Represents queue-map resolution across diff and fallback paths."""
+
+    sentinel_id: str | None
+    queue_map: dict[str, list[dict[str, Any] | Any]]
+    source: str
+    diff_error: bool = False
+    crc_fallback: bool = False
 
 
 class StrategySubmissionHelper:
@@ -95,7 +109,7 @@ class StrategySubmissionHelper:
         if config.submit and self._database is not None:
             await self._persist_world_bindings(worlds, payload.world_id, strategy_id)
 
-        sentinel_id, queue_map = await self._build_queue_outputs(
+        resolution = await self._build_queue_outputs(
             dag,
             worlds,
             payload,
@@ -107,12 +121,15 @@ class StrategySubmissionHelper:
 
         return StrategySubmissionResult(
             strategy_id=strategy_id,
-            queue_map=queue_map,
-            sentinel_id=sentinel_id,
+            queue_map=resolution.queue_map,
+            sentinel_id=resolution.sentinel_id,
             node_ids_crc32=node_crc32,
             downgraded=downgraded,
             downgrade_reason=downgrade_reason,
             safe_mode=safe_mode,
+            queue_map_source=resolution.source,
+            diff_error=resolution.diff_error,
+            crc_fallback=resolution.crc_fallback,
         )
 
     async def _maybe_submit(
@@ -158,14 +175,51 @@ class StrategySubmissionHelper:
         config: StrategySubmissionConfig,
         node_crc32: int,
         strategy_id: str,
-    ) -> tuple[str, dict[str, list[dict[str, Any] | Any]]]:
+    ) -> QueueResolution:
         exec_domain = strategy_ctx.execution_domain or None
-        prefer_diff = config.prefer_diff_queue_map
-        sentinel_default = self._sentinel_default(config, strategy_id)
+        diff_outcome = await self._compute_diff_outcome(
+            dag,
+            worlds,
+            payload,
+            strategy_ctx,
+            config,
+            node_crc32,
+            strategy_id,
+        )
 
+        resolution = await self._resolve_queue_map(
+            dag,
+            worlds,
+            payload,
+            exec_domain,
+            config,
+            diff_outcome,
+        )
+
+        sentinel = resolution.sentinel_id or self._sentinel_default(
+            config, strategy_id
+        )
+        return QueueResolution(
+            sentinel_id=sentinel,
+            queue_map=resolution.queue_map,
+            source=resolution.source,
+            diff_error=resolution.diff_error,
+            crc_fallback=resolution.crc_fallback,
+        )
+
+    async def _compute_diff_outcome(
+        self,
+        dag: dict[str, Any],
+        worlds: list[str],
+        payload: StrategySubmit,
+        strategy_ctx: StrategyComputeContext,
+        config: StrategySubmissionConfig,
+        node_crc32: int,
+        strategy_id: str,
+    ) -> DiffOutcome:
         diff_strategy_id = config.diff_strategy_id or strategy_id
-        diff_outcome = await self._run_diff(
-            prefer_diff,
+        return await self._run_diff(
+            config.prefer_diff_queue_map,
             diff_strategy_id,
             dag,
             worlds,
@@ -175,27 +229,44 @@ class StrategySubmissionHelper:
             node_crc32,
         )
 
-        sentinel_id = diff_outcome.sentinel_id or sentinel_default
-        queue_map: dict[str, list[dict[str, Any] | Any]]
-
+    async def _resolve_queue_map(
+        self,
+        dag: dict[str, Any],
+        worlds: list[str],
+        payload: StrategySubmit,
+        exec_domain: str | None,
+        config: StrategySubmissionConfig,
+        diff_outcome: DiffOutcome,
+    ) -> QueueResolution:
+        prefer_diff = config.prefer_diff_queue_map
         if prefer_diff and not diff_outcome.error and diff_outcome.queue_map is not None:
-            queue_map = diff_outcome.queue_map
-        else:
-            queue_map = await self._pipeline.build_queue_map(
-                dag, worlds, payload.world_id, exec_domain
+            return QueueResolution(
+                sentinel_id=diff_outcome.sentinel_id,
+                queue_map=diff_outcome.queue_map,
+                source="diff",
             )
-            if (
-                prefer_diff
-                and diff_outcome.error
-                and not sentinel_id
-                and config.use_crc_sentinel_fallback
-            ):
-                sentinel_id = self._crc_sentinel(dag)
 
-        if not prefer_diff and config.use_crc_sentinel_fallback and not sentinel_id:
+        queue_map = await self._pipeline.build_queue_map(
+            dag, worlds, payload.world_id, exec_domain
+        )
+        sentinel_id = diff_outcome.sentinel_id
+        crc_fallback = False
+
+        if prefer_diff and diff_outcome.error and not sentinel_id:
+            crc_fallback = config.use_crc_sentinel_fallback
+        elif not prefer_diff and config.use_crc_sentinel_fallback and not sentinel_id:
+            crc_fallback = True
+
+        if crc_fallback:
             sentinel_id = self._crc_sentinel(dag)
 
-        return sentinel_id, queue_map
+        return QueueResolution(
+            sentinel_id=sentinel_id,
+            queue_map=queue_map,
+            source="tag_query",
+            diff_error=diff_outcome.error,
+            crc_fallback=crc_fallback,
+        )
 
     def _sentinel_default(
         self, config: StrategySubmissionConfig, strategy_id: str
@@ -240,39 +311,47 @@ class StrategySubmissionHelper:
     ) -> None:
         if self._database is None:
             return
-        targets = worlds or ([default_world] if default_world else [])
-        for world_id in targets:
-            if not world_id:
-                continue
-            try:
-                await self._database.upsert_wsb(world_id, strategy_id)
-            except Exception:
-                logger.exception(
-                    "Failed to upsert world binding", extra={"world_id": world_id}
-                )
-                continue
+        for world_id in self._binding_targets(worlds, default_world):
+            await self._persist_world_binding(world_id, strategy_id)
 
-            if self._world_client is None:
-                continue
+    def _binding_targets(
+        self, worlds: list[str], default_world: str | None
+    ) -> list[str]:
+        return [w for w in (worlds or [default_world]) if w]
 
-            try:
-                await self._world_client.post_bindings(
-                    world_id, {"strategies": [strategy_id]}
-                )
-            except HTTPStatusError as exc:
-                status_code = exc.response.status_code if exc.response else None
-                if status_code == HTTPStatus.CONFLICT:
-                    continue
-                logger.warning(
-                    "WorldService binding sync failed for %s (status=%s)",
-                    world_id,
-                    status_code,
-                    exc_info=exc,
-                )
-            except Exception as exc:  # pragma: no cover - defensive network guard
-                logger.warning(
-                    "WorldService binding sync failed for %s", world_id, exc_info=exc
-                )
+    async def _persist_world_binding(self, world_id: str, strategy_id: str) -> None:
+        try:
+            await self._database.upsert_wsb(world_id, strategy_id)
+        except Exception:
+            logger.exception(
+                "Failed to upsert world binding", extra={"world_id": world_id}
+            )
+            return
+
+        await self._sync_world_binding(world_id, strategy_id)
+
+    async def _sync_world_binding(self, world_id: str, strategy_id: str) -> None:
+        if self._world_client is None:
+            return
+
+        try:
+            await self._world_client.post_bindings(
+                world_id, {"strategies": [strategy_id]}
+            )
+        except HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response else None
+            if status_code == HTTPStatus.CONFLICT:
+                return
+            logger.warning(
+                "WorldService binding sync failed for %s (status=%s)",
+                world_id,
+                status_code,
+                exc_info=exc,
+            )
+        except Exception as exc:  # pragma: no cover - defensive network guard
+            logger.warning(
+                "WorldService binding sync failed for %s", world_id, exc_info=exc
+            )
 
     async def _build_queue_map_from_queries(
         self,
