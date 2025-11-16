@@ -62,36 +62,9 @@ def _sorted_deps(node: Mapping[str, Any]) -> list[str]:
 
 def _canonicalize_params(value: Any) -> Any:
     if isinstance(value, Mapping):
-        canonical_items: list[tuple[str, Any]] = []
-        for raw_key, raw_value in value.items():
-            key_name = str(raw_key)
-            lowered = key_name.lower()
-            if lowered in _PARAM_EXCLUDE_KEYS:
-                continue
-            if any(lowered.startswith(prefix) for prefix in _PARAM_EXCLUDE_PREFIXES):
-                continue
-            canonical_items.append((key_name, _canonicalize_params(raw_value)))
-        # Sort using the normalized string form to guarantee deterministic output
-        # even when heterogeneous key types are supplied (e.g., integers mixed with
-        # strings). ``json.dumps(..., sort_keys=True)`` will take care of the final
-        # ordering, but normalising here prevents ``TypeError`` from unsortable key
-        # combinations before reaching the serializer.
-        canonical: dict[str, Any] = {}
-        for key_name, normalized_value in sorted(
-            canonical_items, key=lambda item: item[0]
-        ):
-            canonical[key_name] = normalized_value
-        return canonical
+        return _canonicalize_mapping(value)
     if isinstance(value, set):
-        items = [_canonicalize_params(item) for item in value]
-
-        def _sort_key(x: Any) -> str:
-            try:
-                return json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-            except Exception:
-                return str(x)
-
-        return sorted(items, key=_sort_key)
+        return _canonicalize_set(value)
     if isinstance(value, Sequence) and not isinstance(
         value, (str, bytes, bytearray)
     ):
@@ -99,6 +72,49 @@ def _canonicalize_params(value: Any) -> Any:
     if isinstance(value, (bytes, bytearray)):
         return value.decode()
     return value
+
+
+def _canonicalize_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
+    canonical_items: list[tuple[str, Any]] = []
+    for raw_key, raw_value in mapping.items():
+        key_name = str(raw_key)
+        lowered = key_name.lower()
+        if _is_excluded_param_key(lowered):
+            continue
+        canonical_items.append((key_name, _canonicalize_params(raw_value)))
+    # Sort using the normalized string form to guarantee deterministic output
+    # even when heterogeneous key types are supplied (e.g., integers mixed with
+    # strings). ``json.dumps(..., sort_keys=True)`` will take care of the final
+    # ordering, but normalising here prevents ``TypeError`` from unsortable key
+    # combinations before reaching the serializer.
+    canonical: dict[str, Any] = {}
+    for key_name, normalized_value in sorted(
+        canonical_items, key=lambda item: item[0]
+    ):
+        canonical[key_name] = normalized_value
+    return canonical
+
+
+def _is_excluded_param_key(lowered_key: str) -> bool:
+    if lowered_key in _PARAM_EXCLUDE_KEYS:
+        return True
+    return any(
+        lowered_key.startswith(prefix) for prefix in _PARAM_EXCLUDE_PREFIXES
+    )
+
+
+def _canonicalize_set(values: set[Any]) -> list[Any]:
+    items = [_canonicalize_params(item) for item in values]
+
+    def _sort_key(x: Any) -> str:
+        try:
+            return json.dumps(
+                x, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            )
+        except Exception:
+            return str(x)
+
+    return sorted(items, key=_sort_key)
 
 
 def _params_source_from_node(node: Mapping[str, Any]) -> Any:
