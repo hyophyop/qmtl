@@ -315,6 +315,28 @@ def test_legacy_mode_allows_publish_override(
         reset_runtime_config_cache()
 
 
+def test_publish_override_none_when_no_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    seamless_module._reset_publish_override_cache()
+    monkeypatch.setattr(seamless_module, "get_runtime_config_path", lambda: None)
+
+    override = seamless_module._read_publish_override_from_config()
+
+    assert override is None
+    assert seamless_module._PUBLISH_OVERRIDE_CACHE_LOADED is False
+
+
+def test_publish_override_missing_file_cached(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seamless_module._reset_publish_override_cache()
+    missing = tmp_path / "qmtl.yml"
+    monkeypatch.setattr(seamless_module, "get_runtime_config_path", lambda: str(missing))
+
+    override = seamless_module._read_publish_override_from_config()
+
+    assert override is None
+    assert seamless_module._PUBLISH_OVERRIDE_CACHE_LOADED is True
+    assert seamless_module._PUBLISH_OVERRIDE_CACHE_PATH == str(missing)
+
+
 def test_coordinator_url_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "qmtl.yml"
     config_path.write_text(
@@ -387,6 +409,37 @@ def test_presets_file_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.Monke
         assert provider._partial_ok is False
         assert provider._conformance_schema == {"fields": ["ts"]}
         assert provider._conformance_interval == 60
+    finally:
+        reset_runtime_config_cache()
+
+
+def test_presets_file_missing_falls_back_to_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    missing = tmp_path / "absent_presets.yaml"
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text("seamless:\n  presets_file: absent_presets.yaml\n")
+    monkeypatch.chdir(tmp_path)
+    reset_runtime_config_cache()
+    try:
+        config = SeamlessConfig(presets_file=str(missing))
+        data, source = seamless_module._load_presets_document(config)
+        assert data == {}
+        assert source == str(missing)
+    finally:
+        reset_runtime_config_cache()
+
+
+def test_presets_file_invalid_document_defaults_to_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    invalid = tmp_path / "presets.yaml"
+    invalid.write_text("- not-a-mapping\n")
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text("seamless:\n  presets_file: presets.yaml\n")
+    monkeypatch.chdir(tmp_path)
+    reset_runtime_config_cache()
+    try:
+        config = SeamlessConfig(presets_file=str(invalid))
+        data, source = seamless_module._load_presets_document(config)
+        assert data == {}
+        assert source == str(invalid)
     finally:
         reset_runtime_config_cache()
 

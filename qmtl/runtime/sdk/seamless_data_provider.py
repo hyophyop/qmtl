@@ -100,49 +100,72 @@ def _coerce_bool(value: object | None, *, default: bool) -> bool:
     return default
 
 
-def _read_publish_override_from_config() -> bool | None:
-    """Return publish override from the active config file when available."""
-
+def _reset_publish_override_cache() -> None:
     global _PUBLISH_OVERRIDE_CACHE_LOADED
     global _PUBLISH_OVERRIDE_CACHE_PATH
     global _PUBLISH_OVERRIDE_CACHE_VALUE
 
+    _PUBLISH_OVERRIDE_CACHE_LOADED = False
+    _PUBLISH_OVERRIDE_CACHE_PATH = None
+    _PUBLISH_OVERRIDE_CACHE_VALUE = None
+
+
+def _read_publish_override_from_config() -> bool | None:
+    """Return publish override from the active config file when available."""
+
     path = get_runtime_config_path()
     if path is None:
-        _PUBLISH_OVERRIDE_CACHE_LOADED = False
-        _PUBLISH_OVERRIDE_CACHE_PATH = None
-        _PUBLISH_OVERRIDE_CACHE_VALUE = None
+        _reset_publish_override_cache()
         return None
 
     if _PUBLISH_OVERRIDE_CACHE_LOADED and path == _PUBLISH_OVERRIDE_CACHE_PATH:
         return _PUBLISH_OVERRIDE_CACHE_VALUE
 
-    override: bool | None = None
+    override = _load_publish_override(path)
+    _cache_publish_override(path, override)
+    return override
+
+
+def _cache_publish_override(path: str, override: bool | None) -> None:
+    global _PUBLISH_OVERRIDE_CACHE_LOADED
+    global _PUBLISH_OVERRIDE_CACHE_PATH
+    global _PUBLISH_OVERRIDE_CACHE_VALUE
+
+    _PUBLISH_OVERRIDE_CACHE_LOADED = True
+    _PUBLISH_OVERRIDE_CACHE_PATH = path
+    _PUBLISH_OVERRIDE_CACHE_VALUE = override
+
+
+def _load_publish_override(path: str) -> bool | None:
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
     except FileNotFoundError:
         logger.debug("seamless.publish_config_missing", extra={"path": path})
+        return None
     except OSError as exc:
         logger.debug(
             "seamless.publish_config_read_failed",
             extra={"path": path, "error": str(exc)},
         )
+        return None
     except yaml.YAMLError as exc:
         logger.debug(
             "seamless.publish_config_parse_failed",
             extra={"path": path, "error": str(exc)},
         )
-    else:
-        if isinstance(data, dict):
-            section = data.get("seamless")
-            if isinstance(section, dict) and "publish_fingerprint" in section:
-                override = _coerce_bool(section.get("publish_fingerprint"), default=True)
+        return None
 
-    _PUBLISH_OVERRIDE_CACHE_LOADED = True
-    _PUBLISH_OVERRIDE_CACHE_PATH = path
-    _PUBLISH_OVERRIDE_CACHE_VALUE = override
-    return override
+    if not isinstance(data, dict):
+        logger.debug("seamless.publish_config_invalid", extra={"path": path})
+        return None
+
+    section = data.get("seamless")
+    if not isinstance(section, dict):
+        return None
+    if "publish_fingerprint" not in section:
+        return None
+    return _coerce_bool(section.get("publish_fingerprint"), default=True)
 
 
 def _resolve_publish_override(config: SeamlessConfig) -> bool | None:
@@ -166,62 +189,77 @@ def _resolve_publish_override(config: SeamlessConfig) -> bool | None:
 def _load_presets_document(config: SeamlessConfig) -> tuple[dict[str, Any], str | None]:
     """Return the parsed presets mapping and the source identifier."""
 
-    if getattr(config, "presets_file", None):
-        path = Path(config.presets_file)
-        if not path.is_absolute():
-            base = get_runtime_config_path()
-            if base:
-                path = Path(base).parent / path
-        try:
-            with path.open("r", encoding="utf-8") as handle:
-                data = yaml.safe_load(handle) or {}
-        except FileNotFoundError:
-            logger.warning("seamless.presets.missing_file", extra={"path": str(path)})
-            return {}, str(path)
-        except OSError as exc:
-            logger.warning(
-                "seamless.presets.read_failed",
-                extra={"path": str(path), "error": str(exc)},
-            )
-            return {}, str(path)
-        except yaml.YAMLError as exc:
-            logger.warning(
-                "seamless.presets.parse_failed",
-                extra={"path": str(path), "error": str(exc)},
-            )
-            return {}, str(path)
-        if not isinstance(data, dict):
-            logger.warning(
-                "seamless.presets.invalid_document", extra={"path": str(path)}
-            )
-            return {}, str(path)
-        return data, str(path)
+    path = _resolve_presets_path(config)
+    if path is not None:
+        data, source = _load_presets_from_path(path)
+        return data, source
 
+    data, source = _load_packaged_presets()
+    return data, source
+
+
+def _resolve_presets_path(config: SeamlessConfig) -> Path | None:
+    raw = getattr(config, "presets_file", None)
+    if not raw:
+        return None
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    base = get_runtime_config_path()
+    if base:
+        return Path(base).parent / path
+    return path
+
+
+def _load_presets_from_path(path: Path) -> tuple[dict[str, Any], str]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        logger.warning("seamless.presets.missing_file", extra={"path": str(path)})
+        return {}, str(path)
+    except OSError as exc:
+        logger.warning(
+            "seamless.presets.read_failed",
+            extra={"path": str(path), "error": str(exc)},
+        )
+        return {}, str(path)
+    except yaml.YAMLError as exc:
+        logger.warning(
+            "seamless.presets.parse_failed",
+            extra={"path": str(path), "error": str(exc)},
+        )
+        return {}, str(path)
+
+    if not isinstance(data, dict):
+        logger.warning("seamless.presets.invalid_document", extra={"path": str(path)})
+        return {}, str(path)
+    return data, str(path)
+
+
+def _load_packaged_presets() -> tuple[dict[str, Any], str | None]:
     try:
         resource = resources.files("qmtl.examples.seamless").joinpath("presets.yaml")
     except AttributeError:  # pragma: no cover - older Python fallback
         resource = None
 
-    if resource is not None:
-        try:
-            with resource.open("r", encoding="utf-8") as handle:
-                data = yaml.safe_load(handle) or {}
-            if not isinstance(data, dict):
-                logger.warning("seamless.presets.invalid_document", extra={"path": str(resource)})
-                return {}, str(resource)
-            return data, str(resource)
-        except FileNotFoundError:
-            logger.warning("seamless.presets.packaged_missing")
-        except OSError as exc:
-            logger.warning(
-                "seamless.presets.packaged_read_failed", extra={"error": str(exc)}
-            )
-        except yaml.YAMLError as exc:
-            logger.warning(
-                "seamless.presets.packaged_parse_failed", extra={"error": str(exc)}
-            )
+    if resource is None:
+        return {}, None
 
-    return {}, None
+    try:
+        with resource.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        if not isinstance(data, dict):
+            logger.warning("seamless.presets.invalid_document", extra={"path": str(resource)})
+            return {}, str(resource)
+        return data, str(resource)
+    except FileNotFoundError:
+        logger.warning("seamless.presets.packaged_missing")
+    except OSError as exc:
+        logger.warning("seamless.presets.packaged_read_failed", extra={"error": str(exc)})
+    except yaml.YAMLError as exc:
+        logger.warning("seamless.presets.packaged_parse_failed", extra={"error": str(exc)})
+    return {}, str(resource)
 
 
 def _resolve_sla_preset(data: dict[str, Any], config: SeamlessConfig) -> SLAPolicy | None:
