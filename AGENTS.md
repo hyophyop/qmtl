@@ -128,6 +128,17 @@ Notes:
 - Prefer diff‑based checks during development to avoid chasing legacy hotspots unrelated to your change (“leave the campsite cleaner than you found it”).
 - Use `--exclude` or `--ignore` for generated files, examples, or tests when scans would be noisy (e.g., `-e "qmtl/examples/*,tests/*"`).
 
+## Design & Coding Principles
+
+- **SRP/SOC**: Separate input normalization/validation, core domain logic, and result/error mapping into distinct helpers/strategies. Keep handlers thin.
+- **Strategy/Template**: If `if/elif` branches are 3+ for mode/option handling, replace them with a registry/strategy map or template method.
+- **OCP/DRY**: Add new cases by registering a strategy/handler, not by editing existing control flow. Put shared parsing/validation/calculation/error mapping in helper modules—avoid local copy/paste.
+- **Early return, flat flow**: Guard/exit early for invalid inputs and errors to avoid deep nesting.
+- **Boundary purity**: Keep domain/calculation code pure or side‑effect minimal; wrap external I/O (HTTP/gRPC/SDK/files) behind adapters.
+- **Error/option consistency**: Distinguish validation errors from business errors; keep option defaults/precedence in one helper; centralize error mapping per boundary (HTTP/gRPC/CLI).
+- **Traceability (hot paths)**: For hot paths, maintain minimal structured logs/metrics outside core calculations.
+- **Complexity guardrail**: If a C‑grade function is introduced or touched, either refactor to B+ or document the reason/plan in the PR and include `radon cc` results for changed files.
+
 ## Example Projects
 
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
