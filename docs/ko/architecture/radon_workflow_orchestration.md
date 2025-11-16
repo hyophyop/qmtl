@@ -96,3 +96,9 @@
 
 이 체크리스트와 위 서브 이슈들을 기준으로, #1549 에서 합의한 워크플로 오케스트레이션 복잡도 정리는 완료된 것으로 간주한다.
 
+### RPC 어댑터 계획(#1554, #1584)과의 연계
+
+- DAG diff 실행 경로(`DagManagerClient.diff` → `DiffExecutor.run` → `StrategyWorker._diff_strategy`)는 이미 위 패턴을 적용한 상태이며, radon 기준으로 A/B 등급을 유지한다.
+- RPC 어댑터 Command/Facade 설계안(#1554, #1581, #1584)은 이 경로를 대표 사례로 간주하며, 자세한 레이어링 설명은 `architecture/rpc_adapters.md` 문서를 따른다.
+- #1584 에서는 추가 코드 변경 없이, 본 문서와 RPC 어댑터 설계 문서 간의 정렬 상태를 검증하고 메타 이슈(#1554)에서 diff 경로를 완료된 상태로 표시한다.
+
