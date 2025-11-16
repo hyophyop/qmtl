@@ -78,14 +78,26 @@ def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> No
 
     spec = _resolve_schema(expected)
 
+    _ensure_required_columns_present(df, spec)
+    _ensure_no_unexpected_columns(df, spec)
+    _ensure_column_types_match(df, spec)
+
+
+def _ensure_required_columns_present(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
     missing = [col for col in spec if col not in df.columns]
-    if missing:
-        raise InvalidSchemaError(f"missing columns: {', '.join(missing)}")
+    if not missing:
+        return
+    raise InvalidSchemaError(f"missing columns: {', '.join(missing)}")
 
+
+def _ensure_no_unexpected_columns(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
     unexpected = [col for col in df.columns if col not in spec]
-    if unexpected:
-        raise InvalidSchemaError(f"unexpected columns: {', '.join(unexpected)}")
+    if not unexpected:
+        return
+    raise InvalidSchemaError(f"unexpected columns: {', '.join(unexpected)}")
 
+
+def _ensure_column_types_match(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
     for col, dtype in spec.items():
         series = df[col]
         if col == "ts":
@@ -98,4 +110,3 @@ def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> No
             raise InvalidSchemaError(
                 f"column '{col}' expected dtype {dtype}, got {series.dtype}"
             )
-
