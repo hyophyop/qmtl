@@ -81,6 +81,34 @@ class LegacyAckClient:
         return httpx.Response(202, json={"strategy_id": "s-legacy"})
 
 
+class DuplicateStrategyClient:
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def post(self, url, json=None):
+        return httpx.Response(409, json={})
+
+
+class InvalidPayloadClient422:
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def post(self, url, json=None):
+        return httpx.Response(422, json={})
+
+
 class TrackingCircuitBreaker(AsyncCircuitBreaker):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -183,3 +211,23 @@ async def test_accepts_strategy_id_without_queue_map(monkeypatch):
     assert isinstance(res, StrategyAck)
     assert res.strategy_id == "s-legacy"
     assert res.queue_map == {}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_strategy_error(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", DuplicateStrategyClient)
+    client = GatewayClient()
+
+    res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
+
+    assert res == {"error": "duplicate strategy"}
+
+
+@pytest.mark.asyncio
+async def test_invalid_strategy_payload_error(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", InvalidPayloadClient422)
+    client = GatewayClient()
+
+    res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
+
+    assert res == {"error": "invalid strategy payload"}
