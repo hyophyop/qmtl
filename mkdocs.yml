@@ -18,6 +18,7 @@ nav:
       - Exchange Node Sets: architecture/exchange_node_sets.md
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
+      - Data Normalization & Backfill Radon Plan: architecture/radon_normalization_backfill.md
       - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
       - WorldService Allocation Radon Plan: architecture/radon_worldservice_allocation.md
       - Control-Plane Radon Plan: architecture/radon_control_plane.md
@@ -149,6 +150,7 @@ plugins:
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
+            "Data Normalization & Backfill Radon Plan": "데이터 정규화·백필 Radon 계획"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
             "WorldService Allocation Radon Plan": "WorldService 할당 Radon 계획"
             "Control-Plane Radon Plan": "컨트롤 플레인 Radon 계획"
