@@ -59,6 +59,22 @@ QMTLValidationError (base, inherits from ValueError)
 - 제공된 경우 딕셔너리여야 함
 - `config`, `schema` 파라미터에 적용
 
+## Rule / Result 패턴 개요
+
+검증 규칙이 늘어나면서 개별 함수 안에 if/elif 체인이 쌓이는 문제를 줄이기 위해,
+공통 `Rule` / `ValidationResult` 패턴을 도입했습니다.
+
+- `qmtl.foundation.validation_core.ValidationMessage`  
+  코드(`code`), 사용자 메시지(`message`), 심각도(`severity`), 수정 힌트(`hint`)를 담는 구조체입니다.
+- `qmtl.foundation.validation_core.ValidationResult`  
+  여러 `ValidationMessage`를 모아 `ok` 여부와 오류/경고 목록을 제공합니다.
+- `qmtl.foundation.validation_core.Rule` / `RuleSet`  
+  컨텍스트(예: 노드 파라미터, 백테스트 타이밍)를 입력으로 받아 `ValidationResult`를 반환하는 규칙 객체와,
+  여러 규칙을 순차적으로 실행하는 컬렉션입니다.
+
+런타임 SDK, WorldService, 스키마 검증 로직은 이 Rule 기반 설계를 사용해
+새 규칙 추가 시 기존 함수의 Cyclomatic Complexity가 선형적으로 증가하지 않도록 정리하고 있습니다.
+
 ### feed() 메서드 검증
 
 `feed()` 메서드는 모든 파라미터를 검증합니다:

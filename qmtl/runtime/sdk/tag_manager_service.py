@@ -1,12 +1,48 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
+from qmtl.foundation.validation_core import Rule, RuleSet, ValidationResult
 from .tagquery_manager import TagQueryManager
 from .node import TagQueryNode
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _QueueMappingContext:
+    """Context for applying queue mappings to a single node."""
+
+    node: object
+    queue_map: dict[str, object]
+    matches: list[object] | None = None
+    old_execute: bool | None = None
+    mapping: object | None = None
+
+
+class _ApplyQueueMappingRule(Rule[_QueueMappingContext]):
+    code = "TAG_MANAGER_APPLY_QUEUE_MAP"
+    description = "Apply queue mapping for a single strategy node."
+
+    def __init__(self, service: "TagManagerService") -> None:
+        self._service = service
+
+    def validate(self, context: _QueueMappingContext) -> ValidationResult:
+        node = context.node
+        queue_map = context.queue_map
+
+        matches = self._service._collect_matches(node, queue_map)
+        context.matches = matches
+        context.old_execute = getattr(node, "execute", None)
+
+        if isinstance(node, TagQueryNode):
+            context.mapping = self._service._apply_tag_node_mapping(node, matches)
+        else:
+            context.mapping = self._service._apply_generic_node_mapping(node, matches)
+
+        return ValidationResult.success()
 
 
 class TagManagerService:
@@ -35,15 +71,14 @@ class TagManagerService:
 
     def apply_queue_map(self, strategy, queue_map: dict[str, object]) -> None:
         """Apply queue mappings to strategy nodes."""
+        rule_set: RuleSet[_QueueMappingContext] = RuleSet(
+            rules=(_ApplyQueueMappingRule(self),)
+        )
         for node in strategy.nodes:
-            matches = self._collect_matches(node, queue_map)
-            old_execute = node.execute
-            mapping = (
-                self._apply_tag_node_mapping(node, matches)
-                if isinstance(node, TagQueryNode)
-                else self._apply_generic_node_mapping(node, matches)
-            )
-            self._log_execute_change(node, old_execute, mapping)
+            context = _QueueMappingContext(node=node, queue_map=queue_map)
+            rule_set.validate(context)
+            if context.old_execute is not None:
+                self._log_execute_change(node, context.old_execute, context.mapping)
 
     def _collect_matches(self, node, queue_map: dict[str, object]) -> list[object]:
         prefix = f"{node.node_id}:"
