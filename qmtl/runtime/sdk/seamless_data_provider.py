@@ -2454,34 +2454,40 @@ class SeamlessDataProvider(ABC):
         if staleness_ms is None:
             staleness_ms = self._compute_staleness_ms(metadata)
             metadata.staleness_ms = staleness_ms
-        violation = tracker.violation
+        decision = self._evaluate_sla_violation(self._sla, tracker.violation, coverage_ratio, staleness_ms)
+        return decision
 
+    @staticmethod
+    def _evaluate_sla_violation(
+        sla: SLAPolicy,
+        violation: _SLAViolationDetail | None,
+        coverage_ratio: float | None,
+        staleness_ms: float | None,
+    ) -> _DowngradeDecision | None:
         mode: SLAViolationMode | None = None
         reason: str | None = None
-
         if violation:
-            mode = self._sla.on_violation
+            mode = sla.on_violation
             reason = "sla_violation"
 
         if (
-            self._sla.min_coverage is not None
+            sla.min_coverage is not None
             and coverage_ratio is not None
-            and coverage_ratio < self._sla.min_coverage
+            and coverage_ratio < sla.min_coverage
         ):
             mode = SLAViolationMode.HOLD
             reason = "coverage_breach"
 
         if (
-            self._sla.max_lag_seconds is not None
+            sla.max_lag_seconds is not None
             and staleness_ms is not None
-            and staleness_ms > self._sla.max_lag_seconds * 1000
+            and staleness_ms > sla.max_lag_seconds * 1000
         ):
             mode = SLAViolationMode.HOLD
             reason = "freshness_breach"
 
         if mode is None or reason is None:
             return None
-
         return _DowngradeDecision(
             mode=mode,
             reason=reason,
@@ -2826,30 +2832,55 @@ class _RangeOperations:
     ) -> list[tuple[int, int]]:
         new_segments: list[tuple[int, int]] = []
         for seg_start, seg_end in segments:
-            if sub_end < seg_start or sub_start > seg_end:
+            if not _RangeOperations._segments_overlap(seg_start, seg_end, sub_start, sub_end):
                 new_segments.append((seg_start, seg_end))
                 continue
-            if (seg_start - sub_start) % interval != 0:
+            if not _RangeOperations._is_aligned(seg_start, sub_start, interval):
                 new_segments.append((seg_start, seg_end))
                 continue
-            first = max(seg_start, sub_start)
-            remainder = (first - seg_start) % interval
-            if remainder:
-                first += interval - remainder
-            if first > seg_end or first > sub_end:
+
+            first = _RangeOperations._aligned_first(seg_start, seg_end, sub_start, interval, sub_end)
+            last = _RangeOperations._aligned_last(seg_start, seg_end, sub_end, interval)
+            if first is None or last is None or last < first:
                 new_segments.append((seg_start, seg_end))
                 continue
-            last = min(seg_end, sub_end)
-            remainder = (last - seg_start) % interval
-            last -= remainder
-            if last < first:
-                new_segments.append((seg_start, seg_end))
-                continue
+
             if first > seg_start:
                 new_segments.append((seg_start, first - interval))
             if last < seg_end:
                 new_segments.append((last + interval, seg_end))
         return new_segments
+
+    @staticmethod
+    def _segments_overlap(seg_start: int, seg_end: int, sub_start: int, sub_end: int) -> bool:
+        return not (sub_end < seg_start or sub_start > seg_end)
+
+    @staticmethod
+    def _is_aligned(seg_start: int, sub_start: int, interval: int) -> bool:
+        return (seg_start - sub_start) % interval == 0
+
+    @staticmethod
+    def _aligned_first(
+        seg_start: int, seg_end: int, sub_start: int, interval: int, sub_end: int
+    ) -> int | None:
+        first = max(seg_start, sub_start)
+        remainder = (first - seg_start) % interval
+        if remainder:
+            first += interval - remainder
+        if first > seg_end or first > sub_end:
+            return None
+        return first
+
+    @staticmethod
+    def _aligned_last(
+        seg_start: int, seg_end: int, sub_end: int, interval: int
+    ) -> int | None:
+        last = min(seg_end, sub_end)
+        remainder = (last - seg_start) % interval
+        last -= remainder
+        if last < seg_start:
+            return None
+        return last
 
 
 class _DomainGateEvaluator:
