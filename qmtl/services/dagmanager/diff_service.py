@@ -165,6 +165,17 @@ class _DiffPlan:
     buffering_nodes: List[BufferInstruction]
 
 
+@dataclass
+class _TopicBindingPlanEntry:
+    node: NodeInfo
+    compute_key: str
+    topic: str | None
+    needs_new_queue: bool
+    needs_buffering: bool
+    bindings: Dict[str, _CachedBinding]
+    compute_context: ComputeContext
+
+
 class _ChunkStreamer:
     """Manage diff chunk streaming and acknowledgements."""
 
@@ -354,6 +365,20 @@ class DiffService:
                 world_id=world_id,
             )
         )
+
+    @staticmethod
+    def _asset_from_tags(tags: list[str]) -> str:
+        """Prefer a short, stable asset name derived from tags."""
+
+        for tag in tags:
+            if not tag:
+                continue
+            sanitized = "".join(
+                ch for ch in str(tag).lower() if ch.isalnum() or ch in ("_", "-")
+            )
+            if sanitized:
+                return sanitized
+        return "asset"
 
     # Step 1 ---------------------------------------------------------------
     def _pre_scan(
@@ -546,6 +571,164 @@ class DiffService:
             cross_context_cache_violation_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
         )
 
+    def _handle_cross_context_violation(
+        self, node: NodeInfo, compute_context: ComputeContext, bindings: Dict[str, _CachedBinding]
+    ) -> None:
+        existing_binding = next(iter(bindings.values()), None)
+        existing_context = existing_binding.context if existing_binding else None
+        self._record_cross_context_hit(node, compute_context)
+        raise CrossContextTopicReuseError(
+            node.node_id,
+            attempted_context=compute_context,
+            existing_context=existing_context,
+        )
+
+    def _ensure_compute_key(
+        self, node: NodeInfo, compute_context: ComputeContext
+    ) -> str:
+        if node.compute_key:
+            return node.compute_key
+        node.compute_key = compute_key(
+            node.node_id,
+            world_id=compute_context.world_id or None,
+            execution_domain=compute_context.execution_domain or None,
+            as_of=compute_context.as_of or None,
+            partition=compute_context.partition or None,
+            dataset_fingerprint=compute_context.dataset_fingerprint or None,
+        )
+        return node.compute_key
+
+    def _partition_key_for(self, node: NodeInfo, compute_key_value: str) -> str:
+        return partition_key(
+            node.node_id,
+            node.interval,
+            node.bucket,
+            compute_key=compute_key_value,
+        )
+
+    def _upsert_topic(
+        self, node: NodeInfo, version: str, namespace: object | None
+    ) -> str:
+        try:
+            return self.queue_manager.upsert(
+                self._asset_from_tags(node.tags),
+                node.node_type,
+                node.code_hash,
+                version,
+                namespace=namespace,
+            )
+        except Exception:
+            queue_create_error_total.inc()
+            queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
+            raise
+
+    def _apply_namespace(
+        self, topic: str, node: NodeInfo, version: str, namespace: object | None
+    ) -> str:
+        if not namespace:
+            return topic
+        namespaced = ensure_namespace(topic, namespace)
+        if namespaced == topic:
+            return topic
+        return self._upsert_topic(node, version, namespace)
+
+    def _build_topic_binding_plan(
+        self,
+        nodes: Iterable[NodeInfo],
+        existing: Dict[str, NodeRecord],
+        compute_context: ComputeContext,
+    ) -> list[_TopicBindingPlanEntry]:
+        plan: list[_TopicBindingPlanEntry] = []
+        for node in nodes:
+            bindings = self._bindings.setdefault(node.node_id, {})
+            compute_key_value = self._ensure_compute_key(node, compute_context)
+            cached = bindings.get(compute_key_value)
+            record = existing.get(node.node_id)
+
+            if cached and cached.code_hash == node.code_hash:
+                plan.append(
+                    _TopicBindingPlanEntry(
+                        node=node,
+                        compute_key=compute_key_value,
+                        topic=cached.topic,
+                        needs_new_queue=False,
+                        needs_buffering=cached.schema_hash != node.schema_hash,
+                        bindings=bindings,
+                        compute_context=compute_context,
+                    )
+                )
+                continue
+
+            if record and record.code_hash == node.code_hash:
+                if bindings and compute_key_value not in bindings:
+                    self._handle_cross_context_violation(node, compute_context, bindings)
+                bindings[compute_key_value] = _CachedBinding(
+                    topic=record.topic,
+                    code_hash=record.code_hash,
+                    schema_hash=record.schema_hash,
+                    context=compute_context,
+                )
+                plan.append(
+                    _TopicBindingPlanEntry(
+                        node=node,
+                        compute_key=compute_key_value,
+                        topic=record.topic,
+                        needs_new_queue=False,
+                        needs_buffering=record.schema_hash != node.schema_hash,
+                        bindings=bindings,
+                        compute_context=compute_context,
+                    )
+                )
+                continue
+
+            plan.append(
+                _TopicBindingPlanEntry(
+                    node=node,
+                    compute_key=compute_key_value,
+                    topic=None,
+                    needs_new_queue=True,
+                    needs_buffering=False,
+                    bindings=bindings,
+                    compute_context=compute_context,
+                )
+            )
+
+        return plan
+
+    def _execute_topic_binding_plan(
+        self,
+        plan: Iterable[_TopicBindingPlanEntry],
+        *,
+        version: str,
+        namespace: object | None,
+    ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
+        queue_map: Dict[str, str] = {}
+        new_nodes: List[NodeInfo] = []
+        buffering_nodes: List[NodeInfo] = []
+
+        for entry in plan:
+            topic = entry.topic
+            if entry.needs_new_queue:
+                topic = self._upsert_topic(entry.node, version, namespace)
+                new_nodes.append(entry.node)
+            if topic is None:
+                continue
+            topic = self._apply_namespace(topic, entry.node, version, namespace)
+            entry.bindings[entry.compute_key] = _CachedBinding(
+                topic=topic,
+                code_hash=entry.node.code_hash,
+                schema_hash=entry.node.schema_hash,
+                context=entry.compute_context,
+            )
+
+            key = self._partition_key_for(entry.node, entry.compute_key)
+            queue_map[key] = topic
+            if entry.needs_buffering:
+                buffering_nodes.append(entry.node)
+
+        return queue_map, new_nodes, buffering_nodes
+
+
     # Step 3 ---------------------------------------------------------------
     def _hash_compare(
         self,
@@ -556,109 +739,10 @@ class DiffService:
         *,
         namespace: object | None = None,
     ) -> tuple[Dict[str, str], List[NodeInfo], List[NodeInfo]]:
-        queue_map: Dict[str, str] = {}
-        new_nodes: List[NodeInfo] = []
-        buffering_nodes: List[NodeInfo] = []
-
-        def _asset_from_tags(tags: list[str]) -> str:
-            # Prefer a short, stable asset name derived from tags
-            for t in tags:
-                if not t:
-                    continue
-                s = ''.join(ch for ch in str(t).lower() if ch.isalnum() or ch in ('_', '-'))
-                if s:
-                    return s
-            return 'asset'
-
-        def _ensure_topic_namespace(topic: str, node: NodeInfo) -> str:
-            if not namespace:
-                return topic
-            namespaced = ensure_namespace(topic, namespace)
-            if namespaced != topic:
-                try:
-                    return self.queue_manager.upsert(
-                        _asset_from_tags(node.tags),
-                        node.node_type,
-                        node.code_hash,
-                        version,
-                        namespace=namespace,
-                    )
-                except Exception:
-                    queue_create_error_total.inc()
-                    queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
-                    raise
-            return namespaced
-        for n in nodes:
-            rec = existing.get(n.node_id)
-            node_compute_key = n.compute_key or compute_key(
-                n.node_id,
-                world_id=compute_context.world_id or None,
-                execution_domain=compute_context.execution_domain or None,
-                as_of=compute_context.as_of or None,
-                partition=compute_context.partition or None,
-                dataset_fingerprint=compute_context.dataset_fingerprint or None,
-            )
-            n.compute_key = node_compute_key
-            key = partition_key(
-                n.node_id,
-                n.interval,
-                n.bucket,
-                compute_key=node_compute_key,
-            )
-            bindings = self._bindings.setdefault(n.node_id, {})
-            cached = bindings.get(node_compute_key)
-            if cached and cached.code_hash == n.code_hash:
-                topic = _ensure_topic_namespace(cached.topic, n)
-                cached.topic = topic
-                queue_map[key] = topic
-                if cached.schema_hash != n.schema_hash:
-                    buffering_nodes.append(n)
-                continue
-            if rec and rec.code_hash == n.code_hash and not bindings:
-                topic = _ensure_topic_namespace(rec.topic, n)
-                queue_map[key] = topic
-                bindings[node_compute_key] = _CachedBinding(
-                    topic=topic,
-                    code_hash=rec.code_hash,
-                    schema_hash=rec.schema_hash,
-                    context=compute_context,
-                )
-                if rec.schema_hash != n.schema_hash:
-                    buffering_nodes.append(n)
-                continue
-            if rec and rec.code_hash == n.code_hash and node_compute_key not in bindings:
-                existing_binding = next(iter(bindings.values()), None)
-                existing_context = (
-                    existing_binding.context if existing_binding else None
-                )
-                self._record_cross_context_hit(n, compute_context)
-                raise CrossContextTopicReuseError(
-                    n.node_id,
-                    attempted_context=compute_context,
-                    existing_context=existing_context,
-                )
-            try:
-                topic = self.queue_manager.upsert(
-                    _asset_from_tags(n.tags),
-                    n.node_type,
-                    n.code_hash,
-                    version,
-                    namespace=namespace,
-                )
-            except Exception:
-                queue_create_error_total.inc()
-                queue_create_error_total._val = queue_create_error_total._value.get()  # type: ignore[attr-defined]
-                raise
-            topic = _ensure_topic_namespace(topic, n)
-            queue_map[key] = topic
-            new_nodes.append(n)
-            bindings[node_compute_key] = _CachedBinding(
-                topic=topic,
-                code_hash=n.code_hash,
-                schema_hash=n.schema_hash,
-                context=compute_context,
-            )
-        return queue_map, new_nodes, buffering_nodes
+        plan = self._build_topic_binding_plan(nodes, existing, compute_context)
+        return self._execute_topic_binding_plan(
+            plan, version=version, namespace=namespace
+        )
 
     def _buffer_instructions(self, nodes: Iterable[NodeInfo]) -> List[BufferInstruction]:
         """Create buffering instructions with lag equal to ``period``."""
