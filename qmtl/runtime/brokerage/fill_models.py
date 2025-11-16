@@ -54,24 +54,36 @@ class BaseFillModel(FillModel):
         if desired_qty <= 0:
             return 0
 
+        available = self._cap_available(desired_qty, bar_volume)
+        return self._apply_time_in_force(order, desired_qty, available, ts)
+
+    def _cap_available(self, desired_qty: int, bar_volume: Optional[int]) -> int:
         available = desired_qty
         if self.volume_limit is not None and bar_volume is not None:
             available = min(available, int(self.volume_limit * bar_volume))
         if self.liquidity_cap is not None:
             available = min(available, self.liquidity_cap)
+        return available
 
-        if order.tif == TimeInForce.FOK:
-            return desired_qty if desired_qty <= available else 0
+    def _apply_time_in_force(
+        self,
+        order: Order,
+        desired_qty: int,
+        available: int,
+        ts: Optional[datetime],
+    ) -> int:
+        tif_handlers = {
+            TimeInForce.FOK: lambda: desired_qty if desired_qty <= available else 0,
+            TimeInForce.IOC: lambda: available,
+            TimeInForce.GTD: lambda: 0
+            if order.expire_at is not None and ts is not None and ts > order.expire_at
+            else min(desired_qty, available),
+        }
 
-        if order.tif == TimeInForce.IOC:
-            return available
+        handler = tif_handlers.get(order.tif)
+        if handler is not None:
+            return handler()
 
-        if order.tif == TimeInForce.GTD:
-            if order.expire_at is not None and ts is not None and ts > order.expire_at:
-                return 0
-            return min(desired_qty, available)
-
-        # DAY/GTC
         return min(desired_qty, available)
 
 
@@ -234,6 +246,29 @@ class MarketOnCloseFillModel(BaseFillModel):
 class TrailingStopFillModel(BaseFillModel):
     """Trailing stop orders adjust their stop with favorable price moves."""
 
+    @staticmethod
+    def _ensure_stop_price(order: Order, market_price: float) -> float:
+        base_stop = (
+            market_price + order.trail_amount
+            if order.quantity > 0
+            else market_price - order.trail_amount
+        )
+        return base_stop if order.stop_price is None else order.stop_price
+
+    @staticmethod
+    def _adjust_trailing_stop(order: Order, market_price: float) -> float:
+        if order.quantity > 0:
+            return min(order.stop_price, market_price + order.trail_amount)
+        return max(order.stop_price, market_price - order.trail_amount)
+
+    @staticmethod
+    def _triggered(order: Order, market_price: float) -> bool:
+        return (
+            market_price >= order.stop_price
+            if order.quantity > 0
+            else market_price <= order.stop_price
+        )
+
     def fill(
         self,
         order: Order,
@@ -246,25 +281,10 @@ class TrailingStopFillModel(BaseFillModel):
         if order.trail_amount is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        if order.stop_price is None:
-            if order.quantity > 0:
-                order.stop_price = market_price + order.trail_amount
-            else:
-                order.stop_price = market_price - order.trail_amount
-        else:
-            if order.quantity > 0:
-                new_stop = market_price + order.trail_amount
-                if new_stop < order.stop_price:
-                    order.stop_price = new_stop
-            else:
-                new_stop = market_price - order.trail_amount
-                if new_stop > order.stop_price:
-                    order.stop_price = new_stop
+        order.stop_price = self._ensure_stop_price(order, market_price)
+        order.stop_price = self._adjust_trailing_stop(order, market_price)
 
-        triggered = (
-            market_price >= order.stop_price if order.quantity > 0 else market_price <= order.stop_price
-        )
-        if not triggered:
+        if not self._triggered(order, market_price):
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
         qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)
@@ -284,27 +304,29 @@ class UnifiedFillModel(FillModel):
     def __init__(
         self, *, liquidity_cap: Optional[int] = None, volume_limit: Optional[float] = None
     ) -> None:
-        self._market = MarketFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._limit = LimitFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._stop = StopMarketFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._stop_limit = StopLimitFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._moo = MarketOnOpenFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._moc = MarketOnCloseFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
-        self._trailing = TrailingStopFillModel(
-            liquidity_cap=liquidity_cap, volume_limit=volume_limit
-        )
+        self._fillers = {
+            OrderType.MARKET: MarketFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.LIMIT: LimitFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.STOP: StopMarketFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.STOP_LIMIT: StopLimitFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.MOO: MarketOnOpenFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.MOC: MarketOnCloseFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+            OrderType.TRAILING_STOP: TrailingStopFillModel(
+                liquidity_cap=liquidity_cap, volume_limit=volume_limit
+            ),
+        }
 
     def fill(
         self,
@@ -315,33 +337,14 @@ class UnifiedFillModel(FillModel):
         exchange_hours=None,
         bar_volume: Optional[int] = None,
     ) -> Fill:
-        if order.type == OrderType.MARKET:
-            return self._market.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
+        handler = self._fillers.get(order.type)
+        if handler is not None:
+            return handler.fill(
+                order,
+                market_price,
+                ts=ts,
+                exchange_hours=exchange_hours,
+                bar_volume=bar_volume,
             )
-        if order.type == OrderType.LIMIT:
-            return self._limit.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        if order.type == OrderType.STOP:
-            return self._stop.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        if order.type == OrderType.STOP_LIMIT:
-            return self._stop_limit.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        if order.type == OrderType.MOO:
-            return self._moo.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        if order.type == OrderType.MOC:
-            return self._moc.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        if order.type == OrderType.TRAILING_STOP:
-            return self._trailing.fill(
-                order, market_price, ts=ts, exchange_hours=exchange_hours, bar_volume=bar_volume
-            )
-        # Fallback: no fill
+
         return Fill(symbol=order.symbol, quantity=0, price=market_price)

@@ -106,28 +106,37 @@ class SizingNode(Node):
 def _infer_activation_side(order: Mapping[str, Any]) -> str | None:
     """Infer order side for activation gating."""
 
-    side = order.get("side")
-    if side is not None:
-        s = str(side).lower()
-        if s in {"buy", "long"}:
-            return "buy"
-        if s in {"sell", "short"}:
-            return "sell"
+    normalized_side = _normalize_side(order.get("side"))
+    if normalized_side is not None:
+        return normalized_side
 
-    qty = order.get("quantity")
-    if qty is not None:
-        try:
-            return "buy" if float(qty) >= 0 else "sell"
-        except (TypeError, ValueError):
-            pass
+    qty_based = _infer_by_numeric(order, ("quantity",))
+    if qty_based is not None:
+        return qty_based
 
-    for key in ("value", "percent", "target_percent"):
+    return _infer_by_numeric(order, ("value", "percent", "target_percent"))
+
+
+def _normalize_side(value: Any) -> str | None:
+    if value is None:
+        return None
+    s = str(value).lower()
+    if s in {"buy", "long"}:
+        return "buy"
+    if s in {"sell", "short"}:
+        return "sell"
+    return None
+
+
+def _infer_by_numeric(order: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
         val = order.get(key)
-        if val is not None:
-            try:
-                return "buy" if float(val) >= 0 else "sell"
-            except (TypeError, ValueError):
-                continue
+        if val is None:
+            continue
+        try:
+            return "buy" if float(val) >= 0 else "sell"
+        except (TypeError, ValueError):
+            continue
     return None
 
 

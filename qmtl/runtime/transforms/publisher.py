@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
@@ -70,25 +70,33 @@ class TradeOrderPublisherNode(Node):
             "quantity": signal.get("size", 1.0),
             "timestamp": ts,
         }
-        # Optional fields for richer connectors
-        if "symbol" in signal:
-            order["symbol"] = signal["symbol"]
-        if "type" in signal:
-            order["type"] = signal["type"]
-        if "limit_price" in signal:
-            order["limit_price"] = signal["limit_price"]
-        elif "price" in signal:
-            order["limit_price"] = signal["price"]
-        if "stop_loss" in signal:
-            order["stop_loss"] = signal["stop_loss"]
-        if "take_profit" in signal:
-            order["take_profit"] = signal["take_profit"]
-        if "client_order_id" in signal:
-            order["client_order_id"] = signal["client_order_id"]
-        elif "newClientOrderId" in signal:
-            order["client_order_id"] = signal["newClientOrderId"]
+        _copy_if_present(signal, order, "symbol")
+        _copy_if_present(signal, order, "type")
+        _copy_first_of(signal, order, ("limit_price", "price"), target_key="limit_price")
+        _copy_if_present(signal, order, "stop_loss")
+        _copy_if_present(signal, order, "take_profit")
+        _copy_first_of(
+            signal,
+            order,
+            ("client_order_id", "newClientOrderId"),
+            target_key="client_order_id",
+        )
         try:
             sdk_metrics.record_order_published()
         except Exception:
             pass
         return order
+
+
+def _copy_if_present(source: dict[str, Any], target: dict[str, Any], key: str) -> None:
+    if key in source:
+        target[key] = source[key]
+
+
+def _copy_first_of(
+    source: dict[str, Any], target: dict[str, Any], keys: tuple[str, ...], *, target_key: str
+) -> None:
+    for key in keys:
+        if key in source:
+            target[target_key] = source[key]
+            return
