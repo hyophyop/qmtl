@@ -27,6 +27,7 @@ nav:
       - Runtime SDK Radon Plan: architecture/radon_runtime_sdk.md
       - Workflow Orchestration Radon Plan: architecture/radon_workflow_orchestration.md
       - Radon Metrics Snapshot (2025-11-14): architecture/metrics/2025-11-14.md
+      - Linearity & Alpha Metrics Complexity Plan: architecture/metrics/linearity_and_alpha_metrics_complexity.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -158,6 +159,7 @@ plugins:
             "History Warmup Radon Plan": "History Warmup Radon 계획"
             "Runtime SDK Radon Plan": "런타임 SDK Radon 계획"
             "Radon Metrics Snapshot (2025-11-14)": "라돈 지표 스냅샷 (2025-11-14)"
+            "Linearity & Alpha Metrics Complexity Plan": "선형성·알파 메트릭 복잡도 계획"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"
