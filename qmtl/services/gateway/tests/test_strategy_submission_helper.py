@@ -36,6 +36,9 @@ def assert_submission_result(
     downgraded: bool = False,
     downgrade_reason=None,
     safe_mode: bool = False,
+    queue_map_source: str | None = None,
+    diff_error: bool | None = None,
+    crc_fallback: bool | None = None,
 ):
     """Common assertions for :class:`StrategySubmissionResult` instances."""
 
@@ -48,6 +51,12 @@ def assert_submission_result(
     assert result.downgraded is downgraded
     assert result.safe_mode is safe_mode
     assert result.downgrade_reason == downgrade_reason
+    if queue_map_source is not None:
+        assert result.queue_map_source == queue_map_source
+    if diff_error is not None:
+        assert result.diff_error is diff_error
+    if crc_fallback is not None:
+        assert result.crc_fallback is crc_fallback
 
 
 def _assert_query_queue_map(queue_map: dict, bundle) -> None:
@@ -69,6 +78,9 @@ def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
         "expected_tag_domain",
         "expected_bindings",
         "expected_world_calls",
+        "expected_queue_source",
+        "expected_diff_error",
+        "expected_crc_fallback",
     ),
     [
         pytest.param(
@@ -85,6 +97,9 @@ def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
                 ("world-1", {"strategies": ["strategy-abc"]}),
                 ("world-2", {"strategies": ["strategy-abc"]}),
             ],
+            "tag_query",
+            False,
+            False,
             id="submit-queries",
         ),
         pytest.param(
@@ -103,6 +118,9 @@ def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
             None,
             [],
             [],
+            "diff",
+            False,
+            False,
             id="dryrun-prefer-diff",
         ),
     ],
@@ -115,6 +133,9 @@ async def test_process_generates_queue_outputs(
     expected_tag_domain,
     expected_bindings,
     expected_world_calls,
+    expected_queue_source,
+    expected_diff_error,
+    expected_crc_fallback,
     dummy_manager: DummyManager,
     dummy_dag_manager: DummyDagManager,
     dummy_database: DummyDatabase,
@@ -139,6 +160,9 @@ async def test_process_generates_queue_outputs(
         expected_tag_domain=expected_tag_domain,
         expected_bindings=expected_bindings,
         expected_world_calls=expected_world_calls,
+        expected_queue_source=expected_queue_source,
+        expected_diff_error=expected_diff_error,
+        expected_crc_fallback=expected_crc_fallback,
         dummy_manager=dummy_manager,
         dummy_dag_manager=dummy_dag_manager,
         dummy_database=dummy_database,
@@ -156,6 +180,9 @@ def _assert_process_outcome(
     expected_tag_domain,
     expected_bindings,
     expected_world_calls,
+    expected_queue_source,
+    expected_diff_error,
+    expected_crc_fallback,
     dummy_manager: DummyManager,
     dummy_dag_manager: DummyDagManager,
     dummy_database: DummyDatabase,
@@ -169,6 +196,9 @@ def _assert_process_outcome(
         expected_strategy_id=expected_strategy_id,
         expected_sentinel=expected_sentinel,
         queue_map_assert=lambda qm: queue_map_checker(qm, bundle),
+        queue_map_source=expected_queue_source,
+        diff_error=expected_diff_error,
+        crc_fallback=expected_crc_fallback,
     )
 
     assert dummy_dag_manager.diff_calls
@@ -383,6 +413,9 @@ async def test_dry_run_diff_failure_falls_back_to_queries_and_crc(
         expected_strategy_id="dryrun",
         expected_sentinel=f"dryrun:{expected_crc:08x}",
         queue_map_assert=lambda qm: _assert_query_queue_map(qm, bundle),
+        queue_map_source="tag_query",
+        diff_error=True,
+        crc_fallback=True,
     )
 
 

@@ -3,7 +3,16 @@ from __future__ import annotations
 """Fallback queue-map resolution using TagQuery lookups."""
 
 import asyncio
-from typing import Any, Iterable
+from dataclasses import dataclass
+from typing import Any, Iterable, Iterator
+
+
+@dataclass(frozen=True)
+class _TagQueryNode:
+    node_id: str
+    tags: list[Any]
+    interval: int
+    match_mode: str
 
 
 class QueueMapResolver:
@@ -20,36 +29,10 @@ class QueueMapResolver:
         execution_domain: str | None,
     ) -> dict[str, list[dict[str, Any] | Any]]:
         queue_map: dict[str, list[dict[str, Any] | Any]] = {}
-        queries: list[asyncio.Future] = []
-        query_targets: list[tuple[str, str | None]] = []
-
-        nodes = dag.get("nodes", [])
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            if node.get("node_type") != "TagQueryNode":
-                continue
-            nid = node.get("node_id")
-            if not isinstance(nid, str) or not nid:
-                continue
-            tags = node.get("tags", [])
-            interval = int(node.get("interval", 0))
-            match_mode = node.get("match_mode", "any")
-            if worlds:
-                for world_id in worlds:
-                    queries.append(
-                        self._dagmanager.get_queues_by_tag(
-                            tags, interval, match_mode, world_id, execution_domain
-                        )
-                    )
-                    query_targets.append((nid, world_id))
-            else:
-                queries.append(
-                    self._dagmanager.get_queues_by_tag(
-                        tags, interval, match_mode, default_world, execution_domain
-                    )
-                )
-                query_targets.append((nid, default_world))
+        nodes = list(self._iter_tag_queries(dag))
+        queries, query_targets = self._schedule_queries(
+            nodes, worlds, default_world, execution_domain
+        )
 
         results: Iterable[Any] = []
         if queries:
@@ -57,18 +40,73 @@ class QueueMapResolver:
 
         seen: dict[str, set[str]] = {}
         for (nid, _world_id), result in zip(query_targets, results):
-            lst = queue_map.setdefault(nid, [])
-            seen.setdefault(nid, set())
-            if isinstance(result, Exception):
-                continue
-            for item in result:
-                queue_name = (
-                    item.get("queue")
-                    if isinstance(item, dict)
-                    else str(item)
-                )
-                if queue_name not in seen[nid]:
-                    lst.append(item)
-                    seen[nid].add(queue_name)
+            self._collect_results(queue_map, seen, nid, result)
 
         return queue_map
+
+    def _iter_tag_queries(self, dag: dict[str, Any]) -> Iterator[_TagQueryNode]:
+        for node in dag.get("nodes", []):
+            if not isinstance(node, dict):
+                continue
+            if node.get("node_type") != "TagQueryNode":
+                continue
+            node_id = node.get("node_id")
+            if not isinstance(node_id, str) or not node_id:
+                continue
+            tags = node.get("tags", [])
+            interval = int(node.get("interval", 0))
+            match_mode = node.get("match_mode", "any")
+            yield _TagQueryNode(
+                node_id=node_id,
+                tags=tags,
+                interval=interval,
+                match_mode=match_mode,
+            )
+
+    def _schedule_queries(
+        self,
+        nodes: list[_TagQueryNode],
+        worlds: list[str],
+        default_world: str | None,
+        execution_domain: str | None,
+    ) -> tuple[list[asyncio.Future], list[tuple[str, str | None]]]:
+        queries: list[asyncio.Future] = []
+        targets: list[tuple[str, str | None]] = []
+        if not nodes:
+            return queries, targets
+
+        for node in nodes:
+            if worlds:
+                for world_id in worlds:
+                    queries.append(
+                        self._dagmanager.get_queues_by_tag(
+                            node.tags, node.interval, node.match_mode, world_id, execution_domain
+                        )
+                    )
+                    targets.append((node.node_id, world_id))
+            else:
+                queries.append(
+                    self._dagmanager.get_queues_by_tag(
+                        node.tags, node.interval, node.match_mode, default_world, execution_domain
+                    )
+                )
+                targets.append((node.node_id, default_world))
+
+        return queries, targets
+
+    def _collect_results(
+        self,
+        queue_map: dict[str, list[dict[str, Any] | Any]],
+        seen: dict[str, set[str]],
+        node_id: str,
+        result: Any,
+    ) -> None:
+        lst = queue_map.setdefault(node_id, [])
+        seen.setdefault(node_id, set())
+        if isinstance(result, Exception):
+            return
+        for item in result:
+            queue_name = item.get("queue") if isinstance(item, dict) else str(item)
+            if queue_name not in seen[node_id]:
+                lst.append(item)
+                seen[node_id].add(queue_name)
