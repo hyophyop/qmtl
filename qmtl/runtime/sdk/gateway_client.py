@@ -168,8 +168,14 @@ class GatewayClient:
         if status == 202:
             self._reset_breaker()
             payload = result.payload or {}
-            if not isinstance(payload, dict) or "queue_map" not in payload:
+            if not isinstance(payload, dict):
                 return {"error": "invalid gateway response"}
+
+            if "queue_map" not in payload:
+                if isinstance(payload.get("strategy_id"), str):
+                    payload = {**payload, "queue_map": {}}
+                else:
+                    return {"error": "invalid gateway response"}
             try:
                 if hasattr(StrategyAck, "model_validate"):
                     return StrategyAck.model_validate(payload)  # type: ignore[attr-defined]

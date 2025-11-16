@@ -67,6 +67,20 @@ class InvalidPayloadClient:
         return httpx.Response(202, json={"unexpected": True})
 
 
+class LegacyAckClient:
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def post(self, url, json=None):
+        return httpx.Response(202, json={"strategy_id": "s-legacy"})
+
+
 class TrackingCircuitBreaker(AsyncCircuitBreaker):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -157,3 +171,15 @@ async def test_invalid_gateway_response(monkeypatch):
     res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
 
     assert res == {"error": "invalid gateway response"}
+
+
+@pytest.mark.asyncio
+async def test_accepts_strategy_id_without_queue_map(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", LegacyAckClient)
+    client = GatewayClient()
+
+    res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
+
+    assert isinstance(res, StrategyAck)
+    assert res.strategy_id == "s-legacy"
+    assert res.queue_map == {}
