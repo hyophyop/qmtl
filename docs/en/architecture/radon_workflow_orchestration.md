@@ -96,3 +96,9 @@ The following checklist is recommended when modifying workflow orchestration pat
 
 With this work and the checklist above, the workflow orchestration complexity review in #1549 is considered complete.
 
+### Relation to RPC adapter plan (#1554, #1584)
+
+- The DAG diff execution path (`DagManagerClient.diff` → `DiffExecutor.run` → `StrategyWorker._diff_strategy`) already follows the patterns described above and now has A/B radon grades.
+- The RPC adapter Command/Facade design (#1554, #1581, #1584) treats this path as a representative example; see `architecture/rpc_adapters.md` for the layered breakdown.
+- Issue #1584 focuses on aligning the RPC adapter plan with this existing design and marking the diff path as complete under the #1554 meta issue, without additional structural changes.
+
