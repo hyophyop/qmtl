@@ -229,3 +229,51 @@ async def test_metadata_publish(monkeypatch):
     assert payload["as_of"] == "2024-10-10T00:00:00Z"
     assert payload["coverage_bounds"] == [60, 120]
     assert payload["artifact"]["rows"] == 2
+
+
+@pytest.mark.asyncio
+async def test_metadata_publish_handles_failure(monkeypatch, caplog):
+    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
+    from qmtl.runtime.sdk.runner import Runner
+
+    node = StreamInput(interval="60s", period=2)
+    node.strategy_id = "strategy-1"
+    node.gateway_url = "http://gateway"
+    node.world_id = "world-123"
+
+    metadata = SeamlessFetchMetadata(
+        node_id=node.node_id,
+        interval=60,
+        requested_range=(60, 120),
+        rows=0,
+        coverage_bounds=None,
+        conformance_flags={},
+        conformance_warnings=(),
+        dataset_fingerprint=None,
+        as_of=None,
+        manifest_uri=None,
+        artifact=None,
+    )
+
+    df = pd.DataFrame([], columns=["ts", "v"])
+    src = DummySource(df, delay=0.0, metadata=metadata)
+    engine = BackfillEngine(src)
+
+    async def failing_post(*_, **__):
+        raise RuntimeError("boom")
+
+    caplog.set_level(logging.DEBUG, logger="qmtl.runtime.sdk.backfill_engine")
+    monkeypatch.setattr(
+        Runner.services().gateway_client,
+        "post_history_metadata",
+        failing_post,
+    )
+
+    engine.submit(node, 60, 120)
+    await engine.wait()
+
+    assert any(
+        "failed to publish seamless metadata" in r.getMessage()
+        for r in caplog.records
+        if r.name == "qmtl.runtime.sdk.backfill_engine"
+    )
