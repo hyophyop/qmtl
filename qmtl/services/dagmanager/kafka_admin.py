@@ -120,6 +120,119 @@ class InMemoryAdminClient:
 
 
 @dataclass
+class TopicEnsureResult:
+    """Result of ensuring a topic exists and matches the requested config."""
+
+    ok: bool
+    error: Exception | None = None
+    collisions: list[str] = field(default_factory=list)
+    diagnostics: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def success(cls, diagnostics: dict[str, object] | None = None) -> "TopicEnsureResult":
+        return cls(True, None, [], diagnostics or {})
+
+    @classmethod
+    def failure(
+        cls,
+        error: Exception | None,
+        *,
+        collisions: list[str] | None = None,
+        diagnostics: dict[str, object] | None = None,
+    ) -> "TopicEnsureResult":
+        return cls(False, error, collisions or [], diagnostics or {})
+
+
+@dataclass
+class TopicVerificationPolicy:
+    """Policy for validating broker metadata for a topic."""
+
+    def evaluate(
+        self, name: str, metadata: Mapping[str, dict], config: TopicConfig
+    ) -> TopicEnsureResult:
+        collisions = self._find_collisions(name, metadata)
+        if collisions:
+            return TopicEnsureResult.failure(
+                TopicExistsError(f"name collision for topic '{name}'"),
+                collisions=collisions,
+                diagnostics={"collisions": collisions},
+            )
+
+        info = metadata.get(name)
+        if not isinstance(info, Mapping):
+            return TopicEnsureResult.failure(None, diagnostics={"reason": "missing"})
+
+        config_result = self._validate_metadata(name, info, config)
+        if config_result is not None:
+            return config_result
+
+        return TopicEnsureResult.success({"reason": "verified"})
+
+    def _find_collisions(
+        self, name: str, metadata: Mapping[str, dict]
+    ) -> list[str]:  # pragma: no cover - trivial
+        return [
+            existing
+            for existing in metadata
+            if existing.lower() == name.lower() and existing != name
+        ]
+
+    def _validate_metadata(
+        self, name: str, info: Mapping[str, object], config: TopicConfig
+    ) -> TopicEnsureResult | None:
+        partitions = info.get("num_partitions")
+        if partitions is not None and int(partitions) != config.partitions:
+            return TopicEnsureResult.failure(
+                TopicExistsError(f"partition mismatch for topic '{name}'"),
+                diagnostics={"partitions": partitions},
+            )
+
+        replication = info.get("replication_factor")
+        if replication is not None and int(replication) != config.replication_factor:
+            return TopicEnsureResult.failure(
+                TopicExistsError(f"replication mismatch for topic '{name}'"),
+                diagnostics={"replication_factor": replication},
+            )
+
+        meta_config = info.get("config")
+        if isinstance(meta_config, Mapping):
+            retention = meta_config.get("retention.ms")
+            if retention is not None and int(retention) != int(config.retention_ms):
+                return TopicEnsureResult.failure(
+                    TopicExistsError(f"retention mismatch for topic '{name}'"),
+                    diagnostics={"retention.ms": retention},
+                )
+        return None
+
+
+@dataclass
+class RetryStep:
+    attempt: int
+    delay: float
+    is_last: bool
+
+
+@dataclass
+class TopicCreateRetryStrategy:
+    """Strategy object for retry/backoff orchestration."""
+
+    attempts: int
+    initial_delay: float
+    max_delay: float
+    multiplier: float
+
+    def plan(self) -> Iterable[RetryStep]:
+        total_attempts = max(1, int(self.attempts))
+        delay = max(0.0, float(self.initial_delay))
+        cap = max(delay, float(self.max_delay))
+
+        for attempt in range(1, total_attempts + 1):
+            yield RetryStep(attempt, delay, attempt == total_attempts)
+            if self.multiplier > 0 and not attempt == total_attempts:
+                delay = min(cap, max(0.0, delay * float(self.multiplier)))
+
+
+@dataclass
 class KafkaAdmin:
     client: AdminClient
     breaker: AsyncCircuitBreaker = field(default_factory=AsyncCircuitBreaker)
@@ -127,6 +240,9 @@ class KafkaAdmin:
     wait_initial: float = 0.5
     wait_max: float = 4.0
     backoff_multiplier: float = 2.0
+    verification_policy: TopicVerificationPolicy = field(
+        default_factory=TopicVerificationPolicy
+    )
 
     def __post_init__(self) -> None:
         """Attach metric callbacks without overriding existing hooks."""
@@ -139,58 +255,42 @@ class KafkaAdmin:
 
         self.breaker._on_open = _on_open
 
-    def _verify_topic(self, name: str, config: TopicConfig) -> bool:
-        """Return ``True`` if broker metadata confirms ``name`` exists."""
+    def _verify_topic(self, name: str, config: TopicConfig) -> TopicEnsureResult:
+        """Return verification result for ``name`` using broker metadata."""
 
         metadata = self.client.list_topics()
-        collisions = [
-            existing
-            for existing in metadata
-            if existing.lower() == name.lower() and existing != name
-        ]
-        if collisions:
-            raise TopicExistsError(f"name collision for topic '{name}'")
+        return self.verification_policy.evaluate(name, metadata, config)
 
-        info = metadata.get(name)
-        if not isinstance(info, Mapping):
-            return False
+    def _build_retry_strategy(self) -> TopicCreateRetryStrategy:
+        return TopicCreateRetryStrategy(
+            attempts=self.max_attempts,
+            initial_delay=self.wait_initial,
+            max_delay=self.wait_max,
+            multiplier=self.backoff_multiplier,
+        )
 
-        partitions = info.get("num_partitions")
-        if partitions is not None and int(partitions) != config.partitions:
-            raise TopicExistsError(f"partition mismatch for topic '{name}'")
-
-        replication = info.get("replication_factor")
-        if replication is not None and int(replication) != config.replication_factor:
-            raise TopicExistsError(f"replication mismatch for topic '{name}'")
-
-        meta_config = info.get("config")
-        if isinstance(meta_config, Mapping):
-            retention = meta_config.get("retention.ms")
-            if retention is not None and int(retention) != int(config.retention_ms):
-                raise TopicExistsError(f"retention mismatch for topic '{name}'")
-        return True
+    def _create_topic(self, name: str, config: TopicConfig) -> None:
+        self.client.create_topic(
+            name,
+            num_partitions=config.partitions,
+            replication_factor=config.replication_factor,
+            config={"retention.ms": str(config.retention_ms)},
+        )
 
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:
         """Create topic idempotently using a circuit breaker."""
 
-        attempts = max(1, int(self.max_attempts))
+        strategy = self._build_retry_strategy()
 
         @self.breaker
         async def _create() -> None:
-            delay = max(0.0, float(self.wait_initial))
-            backoff_cap = max(delay, float(self.wait_max))
             last_error: Exception | None = None
             skip_create = False
 
-            for attempt in range(1, attempts + 1):
+            for step in strategy.plan():
                 if not skip_create:
                     try:
-                        self.client.create_topic(
-                            name,
-                            num_partitions=config.partitions,
-                            replication_factor=config.replication_factor,
-                            config={"retention.ms": str(config.retention_ms)},
-                        )
+                        self._create_topic(name, config)
                         last_error = None
                     except TopicExistsError as exc:
                         skip_create = True
@@ -198,28 +298,23 @@ class KafkaAdmin:
                     except Exception as exc:  # pragma: no cover - defensive guard
                         last_error = exc
 
-                try:
-                    if self._verify_topic(name, config):
-                        return
-                except TopicExistsError:
-                    raise
-                except Exception as exc:  # pragma: no cover - defensive guard
-                    last_error = exc
+                result = self._verify_topic(name, config)
+                if result.ok:
+                    return
+                if isinstance(result.error, TopicExistsError):
+                    raise result.error
+                if result.error is not None:
+                    last_error = result.error
 
-                if attempt >= attempts:
+                if step.is_last:
                     break
 
-                await asyncio.sleep(delay)
-                if self.backoff_multiplier > 0:
-                    delay = min(
-                        backoff_cap,
-                        max(0.0, delay * float(self.backoff_multiplier)),
-                    )
+                await asyncio.sleep(step.delay)
 
             if last_error is not None:
                 raise last_error
             raise RuntimeError(
-                f"failed to create topic '{name}' after {attempts} attempts"
+                f"failed to create topic '{name}' after {strategy.attempts} attempts"
             )
 
         asyncio.run(_create())
