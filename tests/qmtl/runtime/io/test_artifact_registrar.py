@@ -46,3 +46,40 @@ async def test_publish_returns_none_when_frame_missing_timestamp():
     result = await registrar.publish(frame, node_id="alpha.node", interval=60)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_when_stabilization_removes_all_rows():
+    registrar = ArtifactRegistrar(stabilization_bars=5)
+    frame = pd.DataFrame(
+        [
+            {"ts": 10, "open": 100, "close": 101},
+            {"ts": 20, "open": 102, "close": 103},
+        ]
+    )
+
+    result = await registrar.publish(frame, node_id="alpha.node", interval=60)
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_publish_survives_store_failure_and_returns_publication(caplog):
+    def boom_store(frame: pd.DataFrame, manifest: dict):
+        raise RuntimeError("boom")
+
+    registrar = ArtifactRegistrar(store=boom_store, stabilization_bars=1)
+    frame = pd.DataFrame(
+        [
+            {"ts": 10, "open": 100, "close": 101, "volume": 1},
+            {"ts": 20, "open": 102, "close": 103, "volume": 2},
+            {"ts": 30, "open": 104, "close": 105, "volume": 3},
+        ]
+    )
+
+    with caplog.at_level("ERROR"):
+        publication = await registrar.publish(frame, node_id="alpha.node", interval=60)
+
+    assert publication is not None
+    assert publication.uri is None
+    assert publication.rows == 2

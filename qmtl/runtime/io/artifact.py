@@ -33,6 +33,16 @@ class ArtifactPublication:
     manifest: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(slots=True)
+class _FrameStats:
+    """Computed metadata about a stabilized frame."""
+
+    start: int
+    end: int
+    rows: int
+    as_of: str
+
+
 class ArtifactRegistrar:
     """Compute dataset fingerprints and optionally persist stabilized artifacts."""
 
@@ -82,73 +92,36 @@ class ArtifactRegistrar:
         logged and do not raise.
         """
 
-        if not publish_fingerprint:
+        if not self._should_publish(frame, publish_fingerprint):
             return None
 
-        if not isinstance(frame, pd.DataFrame) or frame.empty or "ts" not in frame.columns:
-            return None
-
-        canonical = self._canonicalize_frame(frame)
-        stabilized = self._stabilize_frame(canonical)
+        stabilized = self._stabilize_frame(self._canonicalize_frame(frame))
         if stabilized.empty:
             return None
 
-        start = int(stabilized["ts"].min())
-        end = int(stabilized["ts"].max())
-        rows = int(stabilized.shape[0])
-        as_of = self._now_iso()
-        fingerprint_metadata = {
-            "node_id": node_id,
-            "interval": int(interval),
-            "coverage_bounds": (start, end),
-            "conformance_version": self._conformance_version,
-        }
-        fingerprint = compute_artifact_fingerprint(stabilized, fingerprint_metadata)
-
-        manifest: dict[str, Any] = {
-            "node_id": node_id,
-            "range": [start, end],
-            "row_count": rows,
-            "interval": int(interval),
-            "dataset_fingerprint": fingerprint,
-            "as_of": as_of,
-            "conformance_version": self._conformance_version,
-            "stabilization_bars": self._stabilization_bars,
-        }
-        manifest["publication_watermark"] = self._now_iso()
-        manifest["producer"] = {
-            "identity": self._producer_identity,
-            "node_id": node_id,
-            "interval": int(interval),
-        }
-        if requested_range is not None:
-            manifest["requested_range"] = [int(requested_range[0]), int(requested_range[1])]
-        if conformance_report is not None:
-            manifest["conformance"] = {
-                "flags": dict(conformance_report.flags_counts),
-                "warnings": list(conformance_report.warnings),
-            }
-
-        uri: str | None = None
-        if self._store is not None:
-            try:
-                result = self._store(stabilized.copy(deep=True), manifest)
-                if inspect.isawaitable(result):
-                    uri = await result  # type: ignore[assignment]
-                else:
-                    uri = result
-            except Exception:  # pragma: no cover - defensive logging only
-                logger.exception("artifact store failure for node %s", node_id)
-
-        return ArtifactPublication(
-            dataset_fingerprint=fingerprint,
-            as_of=as_of,
+        stats = self._frame_stats(stabilized)
+        fingerprint = self._compute_fingerprint(
+            stabilized=stabilized,
             node_id=node_id,
-            start=start,
-            end=end,
-            rows=rows,
+            interval=interval,
+            start=stats.start,
+            end=stats.end,
+        )
+        manifest = self._build_manifest(
+            node_id=node_id,
+            interval=interval,
+            stats=stats,
+            fingerprint=fingerprint,
+            requested_range=requested_range,
+            conformance_report=conformance_report,
+        )
+        uri = await self._store_artifact(stabilized, manifest, node_id=node_id)
+
+        return self._build_publication(
+            fingerprint=fingerprint,
+            stats=stats,
+            node_id=node_id,
             uri=uri,
-            manifest_uri=manifest.get("manifest_uri"),
             manifest=manifest,
         )
 
@@ -184,6 +157,109 @@ class ArtifactRegistrar:
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def _should_publish(frame: pd.DataFrame, publish_fingerprint: bool) -> bool:
+        if not publish_fingerprint:
+            return False
+        if not isinstance(frame, pd.DataFrame):
+            return False
+        if frame.empty or "ts" not in frame.columns:
+            return False
+        return True
+
+    def _frame_stats(self, frame: pd.DataFrame) -> _FrameStats:
+        start = int(frame["ts"].min())
+        end = int(frame["ts"].max())
+        rows = int(frame.shape[0])
+        return _FrameStats(start=start, end=end, rows=rows, as_of=self._now_iso())
+
+    def _compute_fingerprint(
+        self,
+        *,
+        stabilized: pd.DataFrame,
+        node_id: str,
+        interval: int,
+        start: int,
+        end: int,
+    ) -> str:
+        fingerprint_metadata = {
+            "node_id": node_id,
+            "interval": int(interval),
+            "coverage_bounds": (start, end),
+            "conformance_version": self._conformance_version,
+        }
+        return compute_artifact_fingerprint(stabilized, fingerprint_metadata)
+
+    def _build_manifest(
+        self,
+        *,
+        node_id: str,
+        interval: int,
+        stats: _FrameStats,
+        fingerprint: str,
+        requested_range: tuple[int, int] | None,
+        conformance_report: ConformanceReport | None,
+    ) -> dict[str, Any]:
+        manifest: dict[str, Any] = {
+            "node_id": node_id,
+            "range": [stats.start, stats.end],
+            "row_count": stats.rows,
+            "interval": int(interval),
+            "dataset_fingerprint": fingerprint,
+            "as_of": stats.as_of,
+            "conformance_version": self._conformance_version,
+            "stabilization_bars": self._stabilization_bars,
+        }
+        manifest["publication_watermark"] = self._now_iso()
+        manifest["producer"] = {
+            "identity": self._producer_identity,
+            "node_id": node_id,
+            "interval": int(interval),
+        }
+        if requested_range is not None:
+            manifest["requested_range"] = [int(requested_range[0]), int(requested_range[1])]
+        if conformance_report is not None:
+            manifest["conformance"] = {
+                "flags": dict(conformance_report.flags_counts),
+                "warnings": list(conformance_report.warnings),
+            }
+        return manifest
+
+    def _build_publication(
+        self,
+        *,
+        fingerprint: str,
+        stats: _FrameStats,
+        node_id: str,
+        uri: str | None,
+        manifest: dict[str, Any],
+    ) -> ArtifactPublication:
+        return ArtifactPublication(
+            dataset_fingerprint=fingerprint,
+            as_of=stats.as_of,
+            node_id=node_id,
+            start=stats.start,
+            end=stats.end,
+            rows=stats.rows,
+            uri=uri,
+            manifest_uri=manifest.get("manifest_uri"),
+            manifest=manifest,
+        )
+
+    async def _store_artifact(
+        self, stabilized: pd.DataFrame, manifest: dict[str, Any], *, node_id: str
+    ) -> str | None:
+        if self._store is None:
+            return None
+        try:
+            result = self._store(stabilized.copy(deep=True), manifest)
+            if inspect.isawaitable(result):
+                return await result  # type: ignore[return-value]
+            return result
+        except Exception:  # pragma: no cover - defensive logging only
+            logger.exception("artifact store failure for node %s", node_id)
+            return None
 
 
 __all__ = ["ArtifactRegistrar", "ArtifactPublication"]
