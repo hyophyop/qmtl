@@ -67,35 +67,8 @@ def load_worldservice_server_config(data: Mapping[str, Any]) -> WorldServiceServ
         raise ValueError("WorldService configuration requires 'dsn'")
 
     redis_dsn = raw.get("redis")
-
-    bind_cfg = WorldServiceBindConfig()
-    if "bind" in raw and raw["bind"] is not None:
-        bind_data = _ensure_mapping("bind", raw["bind"])
-        bind_kwargs: dict[str, Any] = {}
-        if "host" in bind_data:
-            bind_kwargs["host"] = bind_data["host"]
-        if "port" in bind_data:
-            bind_kwargs["port"] = bind_data["port"]
-        bind_cfg = WorldServiceBindConfig(**bind_kwargs)
-
-    auth_cfg = WorldServiceAuthConfig()
-    if "auth" in raw and raw["auth"] is not None:
-        auth_data = _ensure_mapping("auth", raw["auth"])
-        auth_kwargs: dict[str, Any] = {}
-        if "header" in auth_data:
-            auth_kwargs["header"] = auth_data["header"]
-        if "tokens" in auth_data:
-            tokens = auth_data["tokens"]
-            if tokens is None:
-                auth_kwargs["tokens"] = []
-            elif isinstance(tokens, list):
-                if not all(isinstance(token, str) for token in tokens):
-                    raise TypeError("WorldService auth tokens must be strings")
-                auth_kwargs["tokens"] = list(tokens)
-            else:
-                raise TypeError("WorldService auth tokens must be provided as a list")
-        auth_cfg = WorldServiceAuthConfig(**auth_kwargs)
-
+    bind_cfg = _parse_bind_config(raw)
+    auth_cfg = _parse_auth_config(raw)
     compat_rebalance_v2 = bool(raw.get("compat_rebalance_v2", False))
     alpha_metrics_required = bool(raw.get("alpha_metrics_required", False))
 
@@ -107,6 +80,41 @@ def load_worldservice_server_config(data: Mapping[str, Any]) -> WorldServiceServ
         compat_rebalance_v2=compat_rebalance_v2,
         alpha_metrics_required=alpha_metrics_required,
     )
+
+
+def _parse_bind_config(raw: Mapping[str, Any]) -> WorldServiceBindConfig:
+    if "bind" not in raw or raw["bind"] is None:
+        return WorldServiceBindConfig()
+    bind_data = _ensure_mapping("bind", raw["bind"])
+    bind_kwargs: dict[str, Any] = {}
+    if "host" in bind_data:
+        bind_kwargs["host"] = bind_data["host"]
+    if "port" in bind_data:
+        bind_kwargs["port"] = bind_data["port"]
+    return WorldServiceBindConfig(**bind_kwargs)
+
+
+def _parse_auth_config(raw: Mapping[str, Any]) -> WorldServiceAuthConfig:
+    if "auth" not in raw or raw["auth"] is None:
+        return WorldServiceAuthConfig()
+    auth_data = _ensure_mapping("auth", raw["auth"])
+    auth_kwargs: dict[str, Any] = {}
+    if "header" in auth_data:
+        auth_kwargs["header"] = auth_data["header"]
+    if "tokens" in auth_data:
+        tokens = auth_data["tokens"]
+        auth_kwargs["tokens"] = _normalize_auth_tokens(tokens)
+    return WorldServiceAuthConfig(**auth_kwargs)
+
+
+def _normalize_auth_tokens(tokens: Any) -> list[str]:
+    if tokens is None:
+        return []
+    if isinstance(tokens, list):
+        if not all(isinstance(token, str) for token in tokens):
+            raise TypeError("WorldService auth tokens must be strings")
+        return list(tokens)
+    raise TypeError("WorldService auth tokens must be provided as a list")
 
 
 __all__ = [

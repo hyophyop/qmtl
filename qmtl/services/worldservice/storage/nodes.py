@@ -48,70 +48,88 @@ class WorldNodeRepository(AuditableRepository):
         if isinstance(bucket, dict) and bucket and isinstance(next(iter(bucket.values())), WorldNodeRef):
             return bucket
         if isinstance(bucket, dict) and "status" in bucket:
-            ref = self._make_ref(
-                world_id,
-                node_id,
-                bucket.get("execution_domain"),
-                bucket.get("status"),
-                bucket.get("last_eval_key"),
-                bucket.get("annotations"),
-            )
-            container = {ref.execution_domain: ref}
-            world_bucket[node_id] = container
-            self._emit_audit(
-                world_id,
-                {
-                    "event": "world_node_bucket_normalized",
-                    "node_id": node_id,
-                    "domains": [ref.execution_domain],
-                    "source": "legacy-single",
-                },
-            )
-            return container
+            return self._normalize_legacy_single_bucket(world_id, node_id, world_bucket, bucket)
         if isinstance(bucket, dict):
-            container: Dict[str, WorldNodeRef] = {}
-            changed = False
-            updated_domains: set[str] = set()
-            dropped_domains: set[str] = set()
-            for domain_key, payload in list(bucket.items()):
-                if isinstance(payload, WorldNodeRef):
-                    ref = payload
-                    domain = ref.execution_domain
-                elif isinstance(payload, Mapping):
-                    ref = self._make_ref(
-                        world_id,
-                        node_id,
-                        payload.get("execution_domain", domain_key),
-                        payload.get("status"),
-                        payload.get("last_eval_key"),
-                        payload.get("annotations"),
-                    )
-                    domain = ref.execution_domain
-                else:
-                    raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {payload!r}")
-                if domain_key != domain or container.get(domain) is not ref:
-                    changed = True
-                    updated_domains.add(domain)
-                if domain in container:
-                    changed = True
-                    dropped_domains.add(str(domain_key))
-                container[domain] = ref if isinstance(payload, WorldNodeRef) else ref
-            if changed:
-                world_bucket[node_id] = container
-                audit_payload: Dict[str, Any] = {
-                    "event": "world_node_bucket_normalized",
-                    "node_id": node_id,
-                    "domains": sorted(container.keys()),
-                    "source": "bucket",
-                }
-                if updated_domains:
-                    audit_payload["updated_domains"] = sorted(updated_domains)
-                if dropped_domains:
-                    audit_payload["dropped_domains"] = sorted(dropped_domains)
-                self._emit_audit(world_id, audit_payload)
-                return container
-            return bucket  # type: ignore[return-value]
+            return self._normalize_bucket(world_id, node_id, world_bucket, bucket)
         raise TypeError(f"unexpected world node container for {world_id}/{node_id}: {bucket!r}")
+
+    def _normalize_legacy_single_bucket(
+        self,
+        world_id: str,
+        node_id: str,
+        world_bucket: Dict[str, Dict[str, WorldNodeRef]],
+        bucket: Dict[str, Any],
+    ) -> Dict[str, WorldNodeRef]:
+        ref = self._make_ref(
+            world_id,
+            node_id,
+            bucket.get("execution_domain"),
+            bucket.get("status"),
+            bucket.get("last_eval_key"),
+            bucket.get("annotations"),
+        )
+        container = {ref.execution_domain: ref}
+        world_bucket[node_id] = container
+        self._emit_audit(
+            world_id,
+            {
+                "event": "world_node_bucket_normalized",
+                "node_id": node_id,
+                "domains": [ref.execution_domain],
+                "source": "legacy-single",
+            },
+        )
+        return container
+
+    def _normalize_bucket(
+        self,
+        world_id: str,
+        node_id: str,
+        world_bucket: Dict[str, Dict[str, WorldNodeRef]],
+        bucket: Dict[str, Any],
+    ) -> Dict[str, WorldNodeRef]:
+        container: Dict[str, WorldNodeRef] = {}
+        changed = False
+        updated_domains: set[str] = set()
+        dropped_domains: set[str] = set()
+        for domain_key, payload in list(bucket.items()):
+            if isinstance(payload, WorldNodeRef):
+                ref = payload
+                domain = ref.execution_domain
+            elif isinstance(payload, Mapping):
+                ref = self._make_ref(
+                    world_id,
+                    node_id,
+                    payload.get("execution_domain", domain_key),
+                    payload.get("status"),
+                    payload.get("last_eval_key"),
+                    payload.get("annotations"),
+                )
+                domain = ref.execution_domain
+            else:
+                raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {payload!r}")
+            if domain_key != domain or container.get(domain) is not ref:
+                changed = True
+                updated_domains.add(domain)
+            if domain in container:
+                changed = True
+                dropped_domains.add(str(domain_key))
+            container[domain] = ref if isinstance(payload, WorldNodeRef) else ref
+        if changed:
+            world_bucket[node_id] = container
+            audit_payload: Dict[str, Any] = {
+                "event": "world_node_bucket_normalized",
+                "node_id": node_id,
+                "domains": sorted(container.keys()),
+                "source": "bucket",
+            }
+            if updated_domains:
+                audit_payload["updated_domains"] = sorted(updated_domains)
+            if dropped_domains:
+                audit_payload["dropped_domains"] = sorted(dropped_domains)
+            self._emit_audit(world_id, audit_payload)
+            return container
+        return bucket  # type: ignore[return-value]
 
     def upsert(
         self,
