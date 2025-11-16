@@ -130,6 +130,37 @@ async def test_process_generates_queue_outputs(
 
     result = await helper.process(bundle.payload, config)
 
+    _assert_process_outcome(
+        result=result,
+        config=config,
+        bundle=bundle,
+        queue_map_checker=queue_map_checker,
+        expected_sentinel=expected_sentinel,
+        expected_tag_domain=expected_tag_domain,
+        expected_bindings=expected_bindings,
+        expected_world_calls=expected_world_calls,
+        dummy_manager=dummy_manager,
+        dummy_dag_manager=dummy_dag_manager,
+        dummy_database=dummy_database,
+        world_client=world_client,
+    )
+
+
+def _assert_process_outcome(
+    *,
+    result,
+    config: StrategySubmissionConfig,
+    bundle,
+    queue_map_checker,
+    expected_sentinel: str,
+    expected_tag_domain,
+    expected_bindings,
+    expected_world_calls,
+    dummy_manager: DummyManager,
+    dummy_dag_manager: DummyDagManager,
+    dummy_database: DummyDatabase,
+    world_client,
+) -> None:
     expected_strategy_id = (
         "strategy-abc" if config.submit else (config.strategy_id or "dryrun")
     )
@@ -141,21 +172,40 @@ async def test_process_generates_queue_outputs(
     )
 
     assert dummy_dag_manager.diff_calls
-    if expected_tag_domain is not None:
-        assert dummy_dag_manager.diff_calls[0][2] == expected_tag_domain
-        assert dummy_dag_manager.tag_queries
-        assert dummy_dag_manager.tag_queries[0][-1] == expected_tag_domain
-    else:
+    _assert_tag_query(dummy_dag_manager, expected_tag_domain)
+    _assert_submission_context(config, dummy_manager)
+    _assert_bindings(dummy_database, expected_bindings)
+    _assert_world_calls(world_client, expected_world_calls)
+
+
+def _assert_tag_query(dummy_dag_manager: DummyDagManager, expected_tag_domain) -> None:
+    if expected_tag_domain is None:
         assert not dummy_dag_manager.tag_queries
+        return
+    assert dummy_dag_manager.diff_calls[0][2] == expected_tag_domain
+    assert dummy_dag_manager.tag_queries
+    assert dummy_dag_manager.tag_queries[0][-1] == expected_tag_domain
 
-    if config.submit:
-        assert dummy_manager.contexts
-        assert isinstance(dummy_manager.contexts[0], StrategyComputeContext)
 
-    if expected_bindings is not None:
-        assert dummy_database.bindings == expected_bindings
-    if expected_world_calls is not None:
-        assert world_client.calls == expected_world_calls
+def _assert_submission_context(
+    config: StrategySubmissionConfig, dummy_manager: DummyManager
+) -> None:
+    if not config.submit:
+        return
+    assert dummy_manager.contexts
+    assert isinstance(dummy_manager.contexts[0], StrategyComputeContext)
+
+
+def _assert_bindings(dummy_database: DummyDatabase, expected_bindings) -> None:
+    if expected_bindings is None:
+        return
+    assert dummy_database.bindings == expected_bindings
+
+
+def _assert_world_calls(world_client, expected_world_calls) -> None:
+    if expected_world_calls is None:
+        return
+    assert world_client.calls == expected_world_calls
 
 
 async def test_process_dryrun_missing_as_of_downgrades_to_backtest(

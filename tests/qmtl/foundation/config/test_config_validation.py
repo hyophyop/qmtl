@@ -4,10 +4,16 @@ import pytest
 
 from qmtl.foundation.config import UnifiedConfig
 from qmtl.foundation.config_validation import (
+    _type_description,
+    _type_matches,
+    _value_type_name,
+    validate_gateway_config,
     validate_config_structure,
     validate_dagmanager_config,
 )
+import qmtl.foundation.config_validation as config_validation
 from qmtl.services.dagmanager.config import DagManagerConfig
+from qmtl.services.gateway.config import GatewayConfig
 
 
 @pytest.mark.asyncio
@@ -51,3 +57,47 @@ def test_validate_config_structure_reports_list_schemas() -> None:
     assert "feature_artifact_write_domains" in cache_issue.hint
     assert "expected list[str]" in cache_issue.hint
     assert "got str" in cache_issue.hint
+
+
+def test_value_type_name_reports_collections() -> None:
+    assert _value_type_name([1, "x"]) == "list[int,str]"
+    assert _value_type_name((1,)) == "tuple"
+    assert _value_type_name({1, 2}) == "set[int]"
+    assert _value_type_name({"a": 1}) == "mapping"
+
+
+def test_type_description_and_matches_tuple_variants() -> None:
+    assert _type_description(list[str]) == "list[str]"
+    assert _type_description(tuple[int, ...]) == "tuple[int]"
+    assert _type_matches((1, 2, 3), tuple[int, ...]) is True
+    assert _type_matches((1, "x"), tuple[int, ...]) is False
+    assert _type_matches((1, "x"), tuple[int, str]) is True
+
+
+@pytest.mark.asyncio
+async def test_validate_gateway_worldservice_formats_probe(monkeypatch) -> None:
+    config = GatewayConfig(
+        worldservice_url="http://world",
+        enable_worldservice_proxy=True,
+        worldservice_timeout=0.2,
+    )
+
+    class Result:
+        ok = False
+        code = "http_error"
+        status = 503
+        err = "boom"
+        latency_ms = 12.3
+
+    async def _probe(url, service, endpoint, timeout, request):
+        return Result()
+
+    monkeypatch.setattr(config_validation, "probe_http_async", _probe)
+
+    issues = await validate_gateway_config(config, offline=False)
+    ws_issue = issues["worldservice"]
+
+    assert ws_issue.severity == "error"
+    assert "status=503" in ws_issue.hint
+    assert "error=boom" in ws_issue.hint
+    assert "latency_ms=12.3" in ws_issue.hint
