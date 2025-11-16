@@ -395,33 +395,23 @@ class Runner:
         """
         services = Runner.services()
         strategy = Runner._prepare(strategy_cls)
-        # Minimal compute context; backend decisions determine effective domain.
         compute_context = ComputeContext(world_id=world_id, execution_domain=DEFAULT_EXECUTION_DOMAIN)
         setattr(strategy, "compute_context", {"world_id": world_id})
-
         meta_payload: dict | None = dict(meta) if isinstance(meta, dict) else None
 
-        effective_offline = False
         cleanup_needed = True
         try:
             strategy.on_start()
-            if gateway_url and not effective_offline:
-                await Runner._refresh_gateway_capabilities(gateway_url)
+            await Runner._maybe_refresh_capabilities(gateway_url)
 
-            bootstrapper = StrategyBootstrapper(services.gateway_client)
-            bootstrap_result = await bootstrapper.bootstrap(
+            bootstrap_result = await Runner._bootstrap_strategy(
+                services,
                 strategy,
-                context=compute_context,
-                world_id=world_id,
-                gateway_url=gateway_url,
-                meta=meta_payload,
-                offline=effective_offline,
-                kafka_available=services.kafka_factory.available,
-                trade_mode=Runner._trade_mode,
-                schema_enforcement=schema_enforcement,
-                feature_plane=services.feature_plane,
-                gateway_context=None,
-                skip_gateway_submission=False,
+                compute_context,
+                world_id,
+                gateway_url,
+                meta_payload,
+                schema_enforcement,
             )
             manager = bootstrap_result.manager
             offline_mode = bootstrap_result.offline_mode
@@ -429,26 +419,13 @@ class Runner:
                 cleanup_needed = False
                 return strategy
 
-            if gateway_url and not offline_mode:
-                try:
-                    activation_manager = services.ensure_activation_manager(
-                        gateway_url=gateway_url,
-                        world_id=world_id,
-                        strategy_id=bootstrap_result.strategy_id,
-                    )
-                    services.trade_dispatcher.set_activation_manager(
-                        activation_manager
-                    )
-                    await activation_manager.start()
-                except Exception:
-                    logger.warning(
-                        "Activation manager failed to start; proceeding with gates OFF by default"
-                    )
-            else:
-                services.trade_dispatcher.set_activation_manager(
-                    services.activation_manager
-                )
-
+            await Runner._configure_activation(
+                services,
+                bootstrap_result.strategy_id,
+                gateway_url,
+                world_id,
+                offline_mode,
+            )
             history_service = services.history_service
             await history_service.warmup_strategy(
                 strategy,
@@ -456,7 +433,6 @@ class Runner:
                 history_start=history_start,
                 history_end=history_end,
             )
-
             if not offline_mode:
                 await manager.start()
 
@@ -518,6 +494,61 @@ class Runner:
         return asyncio.run(
             Runner.offline_async(strategy_cls, schema_enforcement=schema_enforcement)
         )
+
+    @staticmethod
+    async def _maybe_refresh_capabilities(gateway_url: str | None) -> None:
+        if gateway_url:
+            await Runner._refresh_gateway_capabilities(gateway_url)
+
+    @staticmethod
+    async def _bootstrap_strategy(
+        services,
+        strategy: Strategy,
+        compute_context: ComputeContext,
+        world_id: str,
+        gateway_url: str | None,
+        meta_payload: dict | None,
+        schema_enforcement: str,
+    ):
+        bootstrapper = StrategyBootstrapper(services.gateway_client)
+        return await bootstrapper.bootstrap(
+            strategy,
+            context=compute_context,
+            world_id=world_id,
+            gateway_url=gateway_url,
+            meta=meta_payload,
+            offline=False,
+            kafka_available=services.kafka_factory.available,
+            trade_mode=Runner._trade_mode,
+            schema_enforcement=schema_enforcement,
+            feature_plane=services.feature_plane,
+            gateway_context=None,
+            skip_gateway_submission=False,
+        )
+
+    @staticmethod
+    async def _configure_activation(
+        services,
+        strategy_id: str | None,
+        gateway_url: str | None,
+        world_id: str,
+        offline_mode: bool,
+    ) -> None:
+        if gateway_url and not offline_mode:
+            try:
+                activation_manager = services.ensure_activation_manager(
+                    gateway_url=gateway_url,
+                    world_id=world_id,
+                    strategy_id=strategy_id,
+                )
+                services.trade_dispatcher.set_activation_manager(activation_manager)
+                await activation_manager.start()
+                return
+            except Exception:
+                logger.warning(
+                    "Activation manager failed to start; proceeding with gates OFF by default"
+                )
+        services.trade_dispatcher.set_activation_manager(services.activation_manager)
 
     @staticmethod
     async def offline_async(

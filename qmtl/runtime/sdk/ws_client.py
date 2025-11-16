@@ -56,28 +56,17 @@ class WebSocketClient:
     async def _handle(self, data: dict) -> None:
         event = data.get("event") or data.get("type")
         payload = data.get("data", data)
-        if event != "ack":
-            ver = payload.get("version")
-            if ver != 1:
-                logging.warning("unsupported event version: %s for %s", ver, event)
-                return
-        if event == "queue_created":
-            qid = payload.get("queue_id")
-            topic = payload.get("topic")
-            if qid and topic:
-                self.queue_topics[qid] = topic
-        elif event == "queue_update":
-            pass  # handled by caller via ``on_message``
-        elif event == "sentinel_weight":
-            sid = payload.get("sentinel_id")
-            weight = payload.get("weight")
-            if sid is not None and weight is not None:
-                try:
-                    self.sentinel_weights[sid] = float(weight)
-                except (TypeError, ValueError):
-                    logging.warning(
-                        "Invalid weight received for sentinel %s: %r", sid, weight
-                    )
+        if event != "ack" and not self._is_supported_version(payload, event):
+            return
+
+        handlers = {
+            "queue_created": self._handle_queue_created,
+            "queue_update": self._handle_queue_update,
+            "sentinel_weight": self._handle_sentinel_weight,
+        }
+        handler = handlers.get(event)
+        if handler:
+            await handler(payload)
         if self.on_message:
             await self.on_message(data)
 
@@ -88,32 +77,10 @@ class WebSocketClient:
         start = loop.time()
         while not self._stop_event.is_set():
             try:
-                connect_kwargs = {}
-                if self.token:
-                    connect_kwargs["extra_headers"] = {
-                        "Authorization": f"Bearer {self.token}"
-                    }
-                async with websockets.connect(self.url, **connect_kwargs) as ws:
+                async with websockets.connect(self.url, **self._connect_kwargs()) as ws:
                     self._ws = ws
                     delay = self._base_delay
-                    heartbeat = asyncio.create_task(self._heartbeat(ws))
-                    try:
-                        while not self._stop_event.is_set():
-                            try:
-                                msg = await ws.recv()
-                            except websockets.ConnectionClosed:
-                                break
-                            except Exception:
-                                break
-                            try:
-                                data = json.loads(msg)
-                            except json.JSONDecodeError:
-                                continue
-                            await self._handle(data)
-                    finally:
-                        heartbeat.cancel()
-                        with contextlib.suppress(asyncio.CancelledError):
-                            await heartbeat
+                    await self._consume_ws(ws)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -123,12 +90,74 @@ class WebSocketClient:
             if self._stop_event.is_set():
                 break
             retries += 1
-            if self.max_retries is not None and retries > self.max_retries:
-                break
-            if self.max_total_time is not None and loop.time() - start > self.max_total_time:
+            if not self._should_retry(retries, loop.time() - start):
                 break
             await self._poll_reconnect(delay)
             delay = min(delay * self._backoff_factor, self._max_delay)
+
+    def _connect_kwargs(self) -> dict:
+        if not self.token:
+            return {}
+        return {"extra_headers": {"Authorization": f"Bearer {self.token}"}}
+
+    async def _consume_ws(self, ws: websockets.WebSocketClientProtocol) -> None:
+        heartbeat = asyncio.create_task(self._heartbeat(ws))
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    msg = await ws.recv()
+                except (websockets.ConnectionClosed, Exception):
+                    break
+                data = self._safe_loads(msg)
+                if data is None:
+                    continue
+                await self._handle(data)
+        finally:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
+
+    def _should_retry(self, retries: int, elapsed: float) -> bool:
+        if self.max_retries is not None and retries > self.max_retries:
+            return False
+        if self.max_total_time is not None and elapsed > self.max_total_time:
+            return False
+        return True
+
+    @staticmethod
+    def _safe_loads(msg: str) -> dict | None:
+        try:
+            return json.loads(msg)
+        except json.JSONDecodeError:
+            return None
+
+    async def _handle_queue_created(self, payload: dict) -> None:
+        qid = payload.get("queue_id")
+        topic = payload.get("topic")
+        if qid and topic:
+            self.queue_topics[qid] = topic
+
+    async def _handle_queue_update(self, payload: dict) -> None:
+        # handled upstream; nothing to do here
+        return None
+
+    async def _handle_sentinel_weight(self, payload: dict) -> None:
+        sid = payload.get("sentinel_id")
+        weight = payload.get("weight")
+        if sid is None or weight is None:
+            return
+        try:
+            self.sentinel_weights[sid] = float(weight)
+        except (TypeError, ValueError):
+            logging.warning("Invalid weight received for sentinel %s: %r", sid, weight)
+
+    @staticmethod
+    def _is_supported_version(payload: dict, event: str | None) -> bool:
+        ver = payload.get("version")
+        if ver == 1:
+            return True
+        logging.warning("unsupported event version: %s for %s", ver, event)
+        return False
 
     async def start(self) -> None:
         """Start listening in the background."""
