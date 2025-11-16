@@ -24,7 +24,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from qmtl.runtime.sdk.history_coverage import WarmupWindow, compute_missing_ranges, merge_coverage
-from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider
+from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider, _RangeOperations
 
 
 def _range_strategy() -> st.SearchStrategy[List[Tuple[int, int]]]:
@@ -149,3 +149,15 @@ def test_find_missing_ranges_matches_history_utilities(
 
     assert dummy_backfiller.calls == expected
     assert result == (len(expected) == 0)
+
+
+def test_subtract_segment_skips_unaligned_ranges() -> None:
+    segments = [(0, 20)]
+    result = _RangeOperations._subtract_segment(segments, sub_start=3, sub_end=10, interval=5)
+    assert result == segments
+
+
+def test_subtract_segment_splits_segment_on_grid() -> None:
+    segments = [(0, 20)]
+    result = _RangeOperations._subtract_segment(segments, sub_start=5, sub_end=10, interval=5)
+    assert result == [(0, 0), (15, 20)]
