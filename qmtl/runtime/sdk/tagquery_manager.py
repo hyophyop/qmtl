@@ -6,11 +6,17 @@ import os
 from pathlib import Path
 import zlib
 import httpx
-from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
+from typing import Dict, List, Tuple, Optional, TYPE_CHECKING, Any
 import tempfile
 
 from qmtl.foundation.common.tagquery import MatchMode
-from qmtl.foundation.common.tagquery import split_tags, normalize_match_mode, normalize_queues
+from qmtl.foundation.common.tagquery import normalize_match_mode, normalize_queues
+from qmtl.runtime.sdk._message_registry import AsyncMessageRegistry
+from qmtl.runtime.sdk._normalizers import (
+    extract_message_payload,
+    normalize_interval,
+    normalize_tags,
+)
 
 from .ws_client import WebSocketClient
 from . import runtime, configuration
@@ -51,6 +57,8 @@ class TagQueryManager:
         self._last_queue_sets: Dict[
             Tuple[Tuple[str, ...], int, MatchMode], frozenset[str]
         ] = {}
+        self._message_registry = AsyncMessageRegistry()
+        self._register_handlers()
         if cache_path is None:
             cfg = configuration.get_runtime_config()
             cache_path = (
@@ -104,6 +112,27 @@ class TagQueryManager:
             except Exception:
                 pass
 
+    def _register_handlers(self) -> None:
+        self._message_registry.register("tagquery.upsert", self._handle_tagquery_upsert)
+        self._message_registry.register("queue_update", self._handle_queue_update)
+
+    def _normalize_tags_interval(
+        self, payload: dict[str, Any]
+    ) -> tuple[tuple[str, ...], int] | None:
+        tags = normalize_tags(payload.get("tags") or [])
+        interval = normalize_interval(payload.get("interval"))
+        if interval is None:
+            return None
+        return tuple(sorted(tags)), interval
+
+    def _is_duplicate(self, key: Tuple[Tuple[str, ...], int, MatchMode], qset: frozenset[str]) -> bool:
+        last = self._last_queue_sets.get(key)
+        return last is not None and last == qset
+
+    def _apply_update(self, key: Tuple[Tuple[str, ...], int, MatchMode], queues: list[str]) -> None:
+        for n in self._nodes.get(key, []):
+            n.update_queues(list(queues))
+
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
         key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
@@ -154,55 +183,39 @@ class TagQueryManager:
     # ------------------------------------------------------------------
     async def handle_message(self, data: dict) -> None:
         """Apply WebSocket ``data`` to registered nodes."""
-        event = data.get("event") or data.get("type")
-        payload = data.get("data", data)
-        ver = payload.get("version")
-        if ver != 1:
+        normalized = extract_message_payload(data)
+        if normalized is None:
             return
-        if event == "tagquery.upsert":
-            tags = payload.get("tags") or []
-            interval = payload.get("interval")
-            raw = payload.get("queues", [])
-            queues = normalize_queues(raw)
-            if isinstance(tags, str):
-                tags = split_tags(tags)
-            try:
-                interval = int(interval)
-            except (TypeError, ValueError):
-                return
-            qset = frozenset(queues)
-            for mode in (MatchMode.ANY, MatchMode.ALL):
-                key = (tuple(sorted(tags)), interval, mode)
-                last = self._last_queue_sets.get(key)
-                if last is not None and last == qset:
-                    continue
-                self._last_queue_sets[key] = qset
-                for n in self._nodes.get(key, []):
-                    n.update_queues(list(queues))
-        elif event == "queue_update":
-            tags = payload.get("tags") or []
-            interval = payload.get("interval")
-            raw = payload.get("queues", [])
-            queues = normalize_queues(raw)
-            try:
-                match_mode = normalize_match_mode(payload.get("match_mode"))
-            except ValueError:
-                return
-            if isinstance(tags, str):
-                tags = split_tags(tags)
-            try:
-                interval = int(interval)
-            except (TypeError, ValueError):
-                return
-            key = (tuple(sorted(tags)), interval, match_mode)
-            # Idempotency: drop duplicate updates with identical queue sets
-            qset = frozenset(queues)
-            last = self._last_queue_sets.get(key)
-            if last is not None and last == qset:
-                return
+        event, payload = normalized
+        await self._message_registry.dispatch(event, payload)
+
+    async def _handle_tagquery_upsert(self, payload: dict[str, Any]) -> None:
+        normalized = self._normalize_tags_interval(payload)
+        if normalized is None:
+            return
+        tags, interval = normalized
+        queues = normalize_queues(payload.get("queues", []))
+        qset = frozenset(queues)
+        for mode in (MatchMode.ANY, MatchMode.ALL):
+            key = (tags, interval, mode)
+            if self._is_duplicate(key, qset):
+                continue
             self._last_queue_sets[key] = qset
-            for n in self._nodes.get(key, []):
-                n.update_queues(list(queues))
+            self._apply_update(key, queues)
+
+    async def _handle_queue_update(self, payload: dict[str, Any]) -> None:
+        normalized = self._normalize_tags_interval(payload)
+        if normalized is None:
+            return
+        tags, interval = normalized
+        queues = normalize_queues(payload.get("queues", []))
+        match_mode = normalize_match_mode(payload.get("match_mode"))
+        key = (tags, interval, match_mode)
+        qset = frozenset(queues)
+        if self._is_duplicate(key, qset):
+            return
+        self._last_queue_sets[key] = qset
+        self._apply_update(key, queues)
 
     # ------------------------------------------------------------------
     async def start(self) -> None:
