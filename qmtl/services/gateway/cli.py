@@ -55,6 +55,59 @@ async def _main(argv: list[str] | None = None) -> None:
     if language_source() != "explicit":
         set_language(None)
 
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle = _load_gateway_config(
+        parser, args.config
+    )
+    setup_tracing("gateway", exporter_endpoint=telemetry_endpoint, config_path=cfg_path)
+    if namespace_toggle is not None:
+        set_topic_namespace_enabled(namespace_toggle)
+
+    redis_client = _resolve_redis(config)
+    insert_sentinel, enforce_live_guard = _resolve_flags(config, args)
+    controlbus_consumer = _build_controlbus_consumer(config)
+    commit_writer, commit_consumer = await _build_commitlog_clients(config)
+
+    ws_hub = WebSocketHub(rate_limit_per_sec=config.websocket.rate_limit_per_sec)
+    event_descriptor = config.events.build_descriptor(logger=logging.getLogger(__name__))
+
+    app = create_app(
+        redis_client=redis_client,
+        database_backend=config.database_backend,
+        database_dsn=config.database_dsn,
+        insert_sentinel=insert_sentinel,
+        controlbus_consumer=controlbus_consumer,
+        commit_log_consumer=commit_consumer,
+        commit_log_writer=commit_writer,
+        commit_log_handler=_process_commits,
+        worldservice_url=config.worldservice_url,
+        worldservice_timeout=config.worldservice_timeout,
+        worldservice_retries=config.worldservice_retries,
+        enable_worldservice_proxy=config.enable_worldservice_proxy,
+        enforce_live_guard=enforce_live_guard,
+        rebalance_schema_version=config.rebalance_schema_version,
+        alpha_metrics_capable=config.alpha_metrics_capable,
+        ws_hub=ws_hub,
+        event_config=event_descriptor,
+        enable_otel=telemetry_enabled,
+        shared_account_policy_config=config.shared_account_policy,
+        health_capabilities=config.build_health_capabilities(),
+    )
+
+    db = app.state.database
+    await _connect_database(db)
+
+    import uvicorn
+
+    try:
+        uvicorn.run(app, host=config.host, port=config.port)
+    finally:
+        await _close_database(db)
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qmtl service gateway",
         description=_("Run the Gateway HTTP server."),
@@ -74,10 +127,14 @@ async def _main(argv: list[str] | None = None) -> None:
         help=_("Disable live trading guard requiring X-Allow-Live header"),
         default=None,
     )
-    args = parser.parse_args(argv)
+    return parser
 
-    cfg_path = args.config or find_config_file()
-    _log_config_source(cfg_path, cli_override=args.config)
+
+def _load_gateway_config(
+    parser: argparse.ArgumentParser, cli_path: str | None
+) -> tuple[str | None, GatewayConfig, bool | None, str | None, bool | None]:
+    cfg_path = cli_path or find_config_file()
+    _log_config_source(cfg_path, cli_override=cli_path)
     config = GatewayConfig()
     telemetry_enabled: bool | None = None
     telemetry_endpoint: str | None = None
@@ -94,38 +151,38 @@ async def _main(argv: list[str] | None = None) -> None:
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
         telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
         namespace_toggle = unified.dagmanager.enable_topic_namespace
+    return cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle
 
-    setup_tracing(
-        "gateway",
-        exporter_endpoint=telemetry_endpoint,
-        config_path=cfg_path,
-    )
 
-    if namespace_toggle is not None:
-        set_topic_namespace_enabled(namespace_toggle)
-
+def _resolve_redis(config: GatewayConfig):
     if config.redis_dsn:
-        redis_client = redis.from_url(config.redis_dsn, decode_responses=True)
-    else:
-        redis_client = InMemoryRedis()
+        return redis.from_url(config.redis_dsn, decode_responses=True)
+    return InMemoryRedis()
+
+
+def _resolve_flags(config: GatewayConfig, args: argparse.Namespace) -> tuple[bool, bool]:
     insert_sentinel = (
-        config.insert_sentinel
-        if args.insert_sentinel is None
-        else args.insert_sentinel
+        config.insert_sentinel if args.insert_sentinel is None else args.insert_sentinel
     )
     enforce_live_guard = (
-        config.enforce_live_guard
-        if args.enforce_live_guard is None
-        else args.enforce_live_guard
+        config.enforce_live_guard if args.enforce_live_guard is None else args.enforce_live_guard
     )
-    consumer = None
-    if config.controlbus_topics:
-        consumer = ControlBusConsumer(
-            brokers=config.controlbus_brokers,
-            topics=config.controlbus_topics,
-            group=config.controlbus_group,
-        )
+    return insert_sentinel, enforce_live_guard
 
+
+def _build_controlbus_consumer(config: GatewayConfig) -> ControlBusConsumer | None:
+    if not config.controlbus_topics:
+        return None
+    return ControlBusConsumer(
+        brokers=config.controlbus_brokers,
+        topics=config.controlbus_topics,
+        group=config.controlbus_group,
+    )
+
+
+async def _build_commitlog_clients(
+    config: GatewayConfig,
+) -> tuple[CommitLogWriter | None, CommitLogConsumer | None]:
     if not config.commitlog_bootstrap or not config.commitlog_topic:
         logging.warning(
             _(
@@ -133,79 +190,49 @@ async def _main(argv: list[str] | None = None) -> None:
                 "commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
             )
         )
+        return None, None
 
-    commit_consumer = None
-    commit_writer = None
-    if config.commitlog_bootstrap and config.commitlog_topic:
-        commit_writer = await create_commit_log_writer(
-            config.commitlog_bootstrap,
-            config.commitlog_topic,
-            config.commitlog_transactional_id,
-        )
-        kafka_consumer = AIOKafkaConsumer(
-            config.commitlog_topic,
-            bootstrap_servers=config.commitlog_bootstrap,
-            group_id=config.commitlog_group,
-            enable_auto_commit=False,
-        )
-        commit_consumer = CommitLogConsumer(
-            kafka_consumer,
-            topic=config.commitlog_topic,
-            group_id=config.commitlog_group,
-        )
-
-    async def _process_commits(records):
-        for rec in records:
-            logging.info("commit %s", rec)
-
-    ws_hub = WebSocketHub(
-        rate_limit_per_sec=config.websocket.rate_limit_per_sec,
+    writer = await create_commit_log_writer(
+        config.commitlog_bootstrap,
+        config.commitlog_topic,
+        config.commitlog_transactional_id,
     )
-    event_descriptor = config.events.build_descriptor(
-        logger=logging.getLogger(__name__)
+    kafka_consumer = AIOKafkaConsumer(
+        config.commitlog_topic,
+        bootstrap_servers=config.commitlog_bootstrap,
+        group_id=config.commitlog_group,
+        enable_auto_commit=False,
     )
-
-    app = create_app(
-        redis_client=redis_client,
-        database_backend=config.database_backend,
-        database_dsn=config.database_dsn,
-        insert_sentinel=insert_sentinel,
-        controlbus_consumer=consumer,
-        commit_log_consumer=commit_consumer,
-        commit_log_writer=commit_writer,
-        commit_log_handler=_process_commits,
-        worldservice_url=config.worldservice_url,
-        worldservice_timeout=config.worldservice_timeout,
-        worldservice_retries=config.worldservice_retries,
-        enable_worldservice_proxy=config.enable_worldservice_proxy,
-        enforce_live_guard=enforce_live_guard,
-        rebalance_schema_version=config.rebalance_schema_version,
-        alpha_metrics_capable=config.alpha_metrics_capable,
-        ws_hub=ws_hub,
-        event_config=event_descriptor,
-        enable_otel=telemetry_enabled,
-        shared_account_policy_config=config.shared_account_policy,
-        health_capabilities=config.build_health_capabilities(),
+    consumer = CommitLogConsumer(
+        kafka_consumer,
+        topic=config.commitlog_topic,
+        group_id=config.commitlog_group,
     )
-    db = app.state.database
-    if hasattr(db, "connect"):
-        try:
-            await db.connect()  # type: ignore[attr-defined]
-        except Exception as exc:  # pragma: no cover - exception path tested separately
-            message = _("Failed to connect to database")
-            logging.exception(message)
-            raise SystemExit(message) from exc
+    return writer, consumer
 
-    import uvicorn
 
+async def _process_commits(records):
+    for rec in records:
+        logging.info("commit %s", rec)
+
+
+async def _connect_database(db) -> None:
+    if not hasattr(db, "connect"):
+        return
     try:
-        uvicorn.run(app, host=config.host, port=config.port)
-    finally:
-        if hasattr(db, "close"):
-            try:
-                await db.close()  # type: ignore[attr-defined]
-            except Exception:  # pragma: no cover - exception path tested separately
-                logging.exception(_("Failed to close database connection"))
+        await db.connect()  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - exception path tested separately
+        message = _("Failed to connect to database")
+        logging.exception(message)
+        raise SystemExit(message) from exc
+
+
+async def _close_database(db) -> None:
+    if hasattr(db, "close"):
+        try:
+            await db.close()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - exception path tested separately
+            logging.exception(_("Failed to close database connection"))
 
 
 def main(argv: list[str] | None = None) -> None:

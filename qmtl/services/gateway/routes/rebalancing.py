@@ -322,23 +322,50 @@ async def _submit_rebalance_orders(
     *,
     shared_account: bool,
 ) -> bool:
-    writer = manager.commit_log_writer
-    if writer is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "E_COMMITLOG_DISABLED",
-                "message": "commit log unavailable",
-            },
-        )
+    writer = _ensure_commit_writer(manager.commit_log_writer)
+    world_modes = await _resolve_world_modes(
+        world_client, _collect_world_ids(per_world_orders, orders_per_strategy)
+    )
+    submitted_any = await _publish_per_world(writer, database, per_world_orders, world_modes, shared_account)
+    submitted_any |= await _publish_global(writer, database, orders_global)
+    submitted_any |= await _publish_per_strategy(
+        writer, database, orders_per_strategy, world_modes
+    )
+    return submitted_any
 
-    world_ids = set(per_world_orders.keys())
+
+def _ensure_commit_writer(writer) -> object:
+    if writer is not None:
+        return writer
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "E_COMMITLOG_DISABLED",
+            "message": "commit log unavailable",
+        },
+    )
+
+
+def _collect_world_ids(
+    per_world_orders: Mapping[str, Sequence[Mapping[str, Any]]],
+    orders_per_strategy: Sequence[Mapping[str, Any]] | None,
+) -> set[str]:
+    world_ids = {wid for wid in per_world_orders.keys() if wid}
     if orders_per_strategy:
-        world_ids.update(item.get("world_id") for item in orders_per_strategy)
-    world_modes = await _resolve_world_modes(world_client, {wid for wid in world_ids if wid})
+        world_ids.update(
+            wid for wid in (item.get("world_id") for item in orders_per_strategy) if wid
+        )
+    return world_ids
 
+
+async def _publish_per_world(
+    writer,
+    database: Database,
+    per_world_orders: Mapping[str, Sequence[Mapping[str, Any]]],
+    world_modes: Mapping[str, str],
+    shared_account: bool,
+) -> bool:
     submitted_any = False
-    # Submit per-world batches
     for wid, orders in per_world_orders.items():
         submitted_any |= await _publish_batch(
             writer,
@@ -349,36 +376,52 @@ async def _submit_rebalance_orders(
             world_modes.get(wid),
             shared_account=shared_account,
         )
+    return submitted_any
 
-    if orders_global:
+
+async def _publish_global(
+    writer,
+    database: Database,
+    orders_global: Sequence[Mapping[str, Any]] | None,
+) -> bool:
+    if not orders_global:
+        return False
+    return await _publish_batch(
+        writer,
+        database,
+        "global",
+        "global",
+        list(orders_global),
+        None,
+        shared_account=True,
+    )
+
+
+async def _publish_per_strategy(
+    writer,
+    database: Database,
+    orders_per_strategy: Sequence[Mapping[str, Any]] | None,
+    world_modes: Mapping[str, str],
+) -> bool:
+    if not orders_per_strategy:
+        return False
+    per_world_entries: dict[str, List[dict[str, Any]]] = defaultdict(list)
+    for item in orders_per_strategy:
+        wid = item["world_id"]
+        per_world_entries[wid].append(item)
+    submitted_any = False
+    for wid, entries in per_world_entries.items():
+        orders_only = [entry["order"] for entry in entries]
         submitted_any |= await _publish_batch(
             writer,
             database,
-            "global",
-            "global",
-            list(orders_global),
-            None,
-            shared_account=True,
+            wid,
+            "per_strategy",
+            orders_only,
+            world_modes.get(wid),
+            shared_account=False,
+            extra_orders_payload=entries,
         )
-
-    if orders_per_strategy:
-        per_world_entries: dict[str, List[dict[str, Any]]] = defaultdict(list)
-        for item in orders_per_strategy:
-            wid = item["world_id"]
-            per_world_entries[wid].append(item)
-        for wid, entries in per_world_entries.items():
-            orders_only = [entry["order"] for entry in entries]
-            submitted_any |= await _publish_batch(
-                writer,
-                database,
-                wid,
-                "per_strategy",
-                orders_only,
-                world_modes.get(wid),
-                shared_account=False,
-                extra_orders_payload=entries,
-            )
-
     return submitted_any
 
 
