@@ -171,31 +171,66 @@ class BackfillEngine:
         if not gateway_url or not strategy_id:
             return
 
+        client = self._resolve_gateway_client()
+        if client is None:
+            return
+
+        artifact = getattr(metadata, "artifact", None)
+        dataset_fp = self._resolve_dataset_fingerprint(metadata, artifact, node)
+        as_of_value = self._resolve_as_of(metadata, artifact, node)
+        payload = self._build_metadata_payload(
+            node=node,
+            metadata=metadata,
+            dataset_fp=dataset_fp,
+            as_of_value=as_of_value,
+            artifact=artifact,
+        )
+
+        try:
+            await client.post_history_metadata(
+                gateway_url=gateway_url,
+                strategy_id=strategy_id,
+                payload=payload,
+            )
+        except Exception:
+            logger.debug("failed to publish seamless metadata", exc_info=True)
+
+    def _resolve_gateway_client(self):
         try:
             from .runner import Runner
 
             services = Runner.services()
-            client = getattr(services, "gateway_client", None)
-            if client is None:
-                return
+            return getattr(services, "gateway_client", None)
         except Exception:
             logger.debug("gateway client unavailable for metadata publish", exc_info=True)
-            return
+            return None
 
-        artifact = getattr(metadata, "artifact", None)
+    def _resolve_dataset_fingerprint(self, metadata, artifact, node: Node):
         dataset_fp = getattr(metadata, "dataset_fingerprint", None)
         if dataset_fp is None and artifact is not None:
             dataset_fp = getattr(artifact, "dataset_fingerprint", None)
         if dataset_fp is None:
             dataset_fp = node.dataset_fingerprint
+        return dataset_fp
 
+    def _resolve_as_of(self, metadata, artifact, node: Node):
         as_of_value = getattr(metadata, "as_of", None)
         if as_of_value is None and artifact is not None:
             as_of_value = getattr(artifact, "as_of", None)
         if as_of_value is None:
             as_of_value = getattr(node.compute_context, "as_of", None)
+        return as_of_value
 
-        payload = {
+    def _build_metadata_payload(
+        self,
+        *,
+        node: Node,
+        metadata,
+        dataset_fp,
+        as_of_value,
+        artifact,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
             "node_id": node.node_id,
             "interval": int(getattr(node, "interval", 0) or 0),
             "rows": getattr(metadata, "rows", 0),
@@ -214,12 +249,4 @@ class BackfillEngine:
                 "rows": getattr(artifact, "rows", 0),
                 "uri": getattr(artifact, "uri", None),
             }
-
-        try:
-            await client.post_history_metadata(
-                gateway_url=gateway_url,
-                strategy_id=strategy_id,
-                payload=payload,
-            )
-        except Exception:
-            logger.debug("failed to publish seamless metadata", exc_info=True)
+        return payload

@@ -53,6 +53,34 @@ class FlakyClient:
         )
 
 
+class InvalidPayloadClient:
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def post(self, url, json=None):
+        return httpx.Response(202, json={"unexpected": True})
+
+
+class LegacyAckClient:
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def post(self, url, json=None):
+        return httpx.Response(202, json={"strategy_id": "s-legacy"})
+
+
 class TrackingCircuitBreaker(AsyncCircuitBreaker):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -133,3 +161,25 @@ async def test_breaker_resets_on_success(monkeypatch):
     assert cb.reset_calls == 1
     assert cb.failures == 0
     assert not cb.is_open
+
+
+@pytest.mark.asyncio
+async def test_invalid_gateway_response(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", InvalidPayloadClient)
+    client = GatewayClient()
+
+    res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
+
+    assert res == {"error": "invalid gateway response"}
+
+
+@pytest.mark.asyncio
+async def test_accepts_strategy_id_without_queue_map(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", LegacyAckClient)
+    client = GatewayClient()
+
+    res = await client.post_strategy(gateway_url="http://gw", dag={}, meta=None)
+
+    assert isinstance(res, StrategyAck)
+    assert res.strategy_id == "s-legacy"
+    assert res.queue_map == {}

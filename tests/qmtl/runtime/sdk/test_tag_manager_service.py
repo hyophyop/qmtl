@@ -72,3 +72,43 @@ def test_apply_queue_map_filters_global():
     }
     service.apply_queue_map(strat, mapping)
     assert strat.tq.upstreams == ["q2"]
+
+
+def test_apply_queue_map_merges_prefixed_and_direct():
+    strat = _Strat()
+    strat.setup()
+    service = TagManagerService(None)
+    prefix_key = f"{strat.tq.node_id}:secondary"
+    mapping = {
+        partition_key(
+            strat.tq.node_id,
+            strat.tq.interval,
+            0,
+            compute_key=compute_key(strat.tq.node_id),
+        ): "q1",
+        prefix_key: "q2",
+    }
+
+    service.apply_queue_map(strat, mapping)
+
+    assert strat.tq.upstreams == ["q1", "q2"]
+    assert strat.tq.execute
+
+
+def test_apply_queue_map_ignores_invalid_entries():
+    strat = _Strat()
+    strat.setup()
+    service = TagManagerService(None)
+    mapping = {
+        partition_key(
+            strat.tq.node_id,
+            strat.tq.interval,
+            0,
+            compute_key=compute_key(strat.tq.node_id),
+        ): [{"queue": None}, object()],
+    }
+
+    service.apply_queue_map(strat, mapping)
+
+    assert strat.tq.upstreams == []
+    assert strat.tq.execute is False
