@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping as ABCMapping, Sequence as ABCSequence
-from typing import Any, Callable, Mapping, Sequence, get_args, get_origin
+from typing import Any, Callable, Dict, Mapping, Sequence, get_args, get_origin
 
 
 def _describe_collection(args: tuple[Any, ...], label: str) -> str:
