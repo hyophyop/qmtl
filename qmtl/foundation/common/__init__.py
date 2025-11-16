@@ -7,6 +7,7 @@ from .nodeid import compute_node_id
 from .nodespec import CanonicalNodeSpec
 from .compute_key import compute_compute_key
 from .compute_context import ComputeContext, DEFAULT_EXECUTION_DOMAIN, DowngradeReason
+from .rpc import RpcCommand, RpcError, RpcOutcome, RpcResponseParser, execute_rpc
 from .node_validation import (
     MissingNodeField,
     NodeIdentityMismatch,
@@ -43,4 +44,9 @@ __all__ = [
     "classify_result",
     "probe_http",
     "probe_http_async",
+    "RpcCommand",
+    "RpcResponseParser",
+    "RpcOutcome",
+    "RpcError",
+    "execute_rpc",
 ]
