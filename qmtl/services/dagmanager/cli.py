@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, Sequence
+from typing import Awaitable, Callable, Dict, Iterable, Sequence
 
 import grpc
 
@@ -231,104 +232,71 @@ def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
 _LEGACY_TARGET_COMMANDS = {"diff", "queue-stats", "gc", "redo-diff"}
 
 
-def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
-    """Rewrite legacy dagmanager CLI arguments for compatibility."""
-
-    args = list(sys.argv[1:] if argv is None else argv)
+def _find_legacy_subcommand(args: list[str]) -> tuple[int | None, str | None]:
     for idx, token in enumerate(args):
         if token in _LEGACY_TARGET_COMMANDS:
-            subcmd_index = idx
-            subcmd = token
-            break
-    else:
-        return args
+            return idx, token
+    return None, None
 
-    leading = args[:subcmd_index]
+
+def _extract_target_override(tokens: list[str]) -> tuple[str | None, list[str]]:
     target_value: str | None = None
-    normalized_leading: list[str] = []
+    normalized: list[str] = []
     skip_next = False
 
-    for i, token in enumerate(leading):
+    for i, token in enumerate(tokens):
         if skip_next:
             skip_next = False
             continue
         if token == "--target":
-            if i == len(leading) - 1:
-                return args  # argparse will raise the appropriate error
-            target_value = leading[i + 1]
-            skip_next = True
+            if i < len(tokens) - 1:
+                target_value = tokens[i + 1]
+                skip_next = True
+            else:
+                normalized.append(token)
             continue
         if token.startswith("--target="):
             target_value = token.split("=", 1)[1]
             continue
-        normalized_leading.append(token)
+        normalized.append(token)
 
+    return target_value, normalized
+
+
+def _tail_has_target(tokens: list[str]) -> bool:
+    return any(part == "--target" or part.startswith("--target=") for part in tokens)
+
+
+def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
+    """Rewrite legacy dagmanager CLI arguments for compatibility."""
+
+    args = list(sys.argv[1:] if argv is None else argv)
+    subcmd_index, subcmd = _find_legacy_subcommand(args)
+    if subcmd_index is None or subcmd is None:
+        return args
+
+    leading = args[:subcmd_index]
+    target_value, normalized_leading = _extract_target_override(leading)
     if target_value is None:
         return args
 
     tail = args[subcmd_index + 1 :]
-    if any(part == "--target" or part.startswith("--target=") for part in tail):
+    if _tail_has_target(tail):
         return normalized_leading + [subcmd, *tail]
 
     return normalized_leading + [subcmd, "--target", target_value, *tail]
 
 
-def _cmd_snapshot(args: argparse.Namespace) -> None:
-    dag_text = _read_file(args.file)
-    digest = _dag_hash(dag_text)
-    snap_path = Path(args.snapshot)
-    if args.freeze:
-        snap = {"dag_hash": digest, "dag": json.loads(dag_text)}
-        snap_path.write_text(json.dumps(snap, indent=2, sort_keys=True))
-        print(digest)
-        return
-    if args.verify:
-        try:
-            existing = json.loads(snap_path.read_text())
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
-            print(
-                _("Failed to read snapshot '{path}': {error}").format(
-                    path=snap_path, error=e
-                ),
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        if existing.get("dag_hash") != digest:
-            print(_("Snapshot mismatch"), file=sys.stderr)
-            raise SystemExit(1)
-        print(_("Snapshot OK"))
-        return
-    print(digest)
-
-
-def _cmd_export_schema(args: argparse.Namespace) -> None:
-    driver = connect(args.uri, args.user, args.password)
-    try:
-        stmts = export_schema(driver)
-    finally:
-        driver.close()
-    text = "\n".join(stmts) + "\n"
-    if args.out:
-        Path(args.out).write_text(text)
-    else:
-        print(text, end="")
-
-
-def _cmd_neo4j_init(args: argparse.Namespace) -> None:
-    init_schema(args.uri, args.user, args.password)
-
-
-async def _main(argv: list[str] | None = None) -> None:
-    raw_argv = list(sys.argv[1:] if argv is None else argv)
-    original_is_none = argv is None
-    raw_argv, lang = _extract_lang(raw_argv)
+def _prepare_language(argv: list[str], original_is_none: bool) -> list[str]:
+    raw_argv, lang = _extract_lang(argv)
     if lang is not None:
         set_language(lang)
     elif original_is_none:
         set_language(None)
+    return raw_argv
 
-    normalized_argv = _normalize_argv(raw_argv)
 
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qmtl service dagmanager",
         description=_("Operate DAG Manager services and utilities."),
@@ -429,35 +397,102 @@ async def _main(argv: list[str] | None = None) -> None:
         help=_("Port to expose metrics on"),
     )
 
+    return parser
+
+
+def _cmd_snapshot(args: argparse.Namespace) -> None:
+    dag_text = _read_file(args.file)
+    digest = _dag_hash(dag_text)
+    snap_path = Path(args.snapshot)
+    if args.freeze:
+        snap = {"dag_hash": digest, "dag": json.loads(dag_text)}
+        snap_path.write_text(json.dumps(snap, indent=2, sort_keys=True))
+        print(digest)
+        return
+    if args.verify:
+        try:
+            existing = json.loads(snap_path.read_text())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            print(
+                _("Failed to read snapshot '{path}': {error}").format(
+                    path=snap_path, error=e
+                ),
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        if existing.get("dag_hash") != digest:
+            print(_("Snapshot mismatch"), file=sys.stderr)
+            raise SystemExit(1)
+        print(_("Snapshot OK"))
+        return
+    print(digest)
+
+
+def _cmd_export_schema(args: argparse.Namespace) -> None:
+    driver = connect(args.uri, args.user, args.password)
+    try:
+        stmts = export_schema(driver)
+    finally:
+        driver.close()
+    text = "\n".join(stmts) + "\n"
+    if args.out:
+        Path(args.out).write_text(text)
+    else:
+        print(text, end="")
+
+
+def _cmd_neo4j_init(args: argparse.Namespace) -> None:
+    init_schema(args.uri, args.user, args.password)
+
+
+def _run_server(args: argparse.Namespace) -> None:
+    from .server import main as server_main
+
+    server_args: list[str] = []
+    if args.config:
+        server_args.extend(["--config", args.config])
+    server_main(server_args)
+
+
+def _run_metrics(args: argparse.Namespace) -> None:
+    from .metrics import main as metrics_main
+
+    metrics_main(["--port", str(args.port)])
+
+
+CommandHandler = Callable[[argparse.Namespace], Awaitable[None] | None]
+
+_COMMAND_HANDLERS: dict[str, CommandHandler] = {
+    "diff": _cmd_diff,
+    "snapshot": _cmd_snapshot,
+    "queue-stats": _cmd_queue_stats,
+    "gc": _cmd_gc,
+    "redo-diff": _cmd_redo_diff,
+    "export-schema": _cmd_export_schema,
+    "neo4j-init": _cmd_neo4j_init,
+    "neo4j-rollback": lambda args: neo4j_rollback(args.uri, args.user, args.password),
+    "server": _run_server,
+    "metrics": _run_metrics,
+}
+
+
+async def _dispatch_command(args: argparse.Namespace) -> None:
+    handler = _COMMAND_HANDLERS.get(args.cmd)
+    if handler is None:
+        raise SystemExit(1)
+    result = handler(args)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def _main(argv: list[str] | None = None) -> None:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    normalized_argv = _normalize_argv(_prepare_language(raw_argv, argv is None))
+
+    parser = _build_parser()
     args = parser.parse_args(normalized_argv)
 
-    if args.cmd == "diff":
-        await _cmd_diff(args)
-    elif args.cmd == "snapshot":
-        _cmd_snapshot(args)
-    elif args.cmd == "queue-stats":
-        await _cmd_queue_stats(args)
-    elif args.cmd == "gc":
-        await _cmd_gc(args)
-    elif args.cmd == "redo-diff":
-        await _cmd_redo_diff(args)
-    elif args.cmd == "export-schema":
-        _cmd_export_schema(args)
-    elif args.cmd == "neo4j-init":
-        _cmd_neo4j_init(args)
-    elif args.cmd == "neo4j-rollback":
-        neo4j_rollback(args.uri, args.user, args.password)
-    elif args.cmd == "server":
-        from .server import main as server_main
-
-        server_args: list[str] = []
-        if args.config:
-            server_args.extend(["--config", args.config])
-        server_main(server_args)
-    elif args.cmd == "metrics":
-        from .metrics import main as metrics_main
-
-        metrics_main(["--port", str(args.port)])
+    await _dispatch_command(args)
 
 
 def main(argv: list[str] | None = None) -> None:
