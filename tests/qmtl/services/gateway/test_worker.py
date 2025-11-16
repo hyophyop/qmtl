@@ -97,6 +97,16 @@ class DummyHub(WebSocketHub):
         self.maps.append((strategy_id, queue_map))
 
 
+class RecordingAlerts:
+    def __init__(self) -> None:
+        self.slack_messages: list[str] = []
+
+    async def send_slack(
+        self, message: str, *, topic: str | None = None, node: str | None = None
+    ) -> None:
+        self.slack_messages.append(message)
+
+
 @pytest.mark.asyncio
 async def test_worker_diff_success_broadcasts(fake_redis):
     redis = fake_redis
@@ -225,4 +235,39 @@ async def test_process_logs_unhandled_error(fake_redis, caplog):
     assert result is False
     assert "Unhandled error processing strategy sid" in caplog.text
     assert db.records["sid"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_worker_alerts_on_consecutive_diff_failures(fake_redis):
+    redis = fake_redis
+    queue = RedisTaskQueue(redis, "strategy_queue")
+    db = FakeDB()
+    fsm = StrategyFSM(redis, db)
+    alerts = RecordingAlerts()
+    manager = DummyManager()
+
+    for strategy_id in ("sid-1", "sid-2"):
+        await fsm.create(strategy_id, None)
+        await redis.hset(f"strategy:{strategy_id}", mapping={"dag": "{}"})
+
+    async def diff(_sid: str, _dag: str, **_kwargs):
+        raise RuntimeError("fail")
+
+    dag_client = SimpleNamespace(diff=diff)
+    worker = StrategyWorker(
+        redis,
+        db,
+        fsm,
+        queue,
+        dag_client,
+        ws_hub=None,
+        alert_manager=alerts,
+        grpc_fail_threshold=2,
+        manager=manager,
+    )
+
+    assert await worker._process("sid-1") is False
+    assert await worker._process("sid-2") is False
+    assert alerts.slack_messages == ["gRPC diff repeatedly failed"]
+    assert worker._grpc_fail_count == 0
 

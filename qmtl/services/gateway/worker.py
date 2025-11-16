@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
 import logging
@@ -15,6 +16,26 @@ from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
 from .ownership import OwnershipManager
 from ..dagmanager.kafka_admin import partition_key
+
+
+@dataclass
+class ComputeContext:
+    world_id: str | None
+    execution_domain: str | None
+    as_of: str | None
+    partition: str | None
+    dataset_fingerprint: str | None
+
+
+@dataclass
+class StrategyContext:
+    strategy_id: str
+    dag_json: str
+    compute: ComputeContext
+
+
+class DiffFailure(Exception):
+    """Raised when a diff attempt fails."""
 
 
 class StrategyWorker:
@@ -66,88 +87,127 @@ class StrategyWorker:
         return bool(redis_ok) and dag_ok and db_ok
 
     async def _process(self, strategy_id: str) -> bool:
-        key_str = partition_key(strategy_id, None, None)
-        key = zlib.crc32(key_str.encode())
+        key = self._lock_key(strategy_id)
         acquired = await self.manager.acquire(key, owner=self.worker_id)
         if not acquired:
             return False
         try:
-            state = await self.fsm.transition(strategy_id, "PROCESS")
-            if self.ws_hub:
-                await self.ws_hub.send_progress(strategy_id, state)
-
-            dag_json = await self.redis.hget(f"strategy:{strategy_id}", "dag")
-            if isinstance(dag_json, bytes):
-                dag_json = dag_json.decode()
-            if dag_json is None:
-                raise RuntimeError("dag not found")
-
-            raw_context = await self.redis.hmget(
-                f"strategy:{strategy_id}",
-                "compute_world_id",
-                "compute_execution_domain",
-                "compute_as_of",
-                "compute_partition",
-                "compute_dataset_fingerprint",
-            )
-
-            def _decode(value):
-                if isinstance(value, bytes):
-                    value = value.decode()
-                if value is None:
-                    return None
-                text = str(value).strip()
-                return text or None
-
-            world_id, execution_domain, as_of, partition, dataset_fingerprint = (
-                _decode(raw_context[0]),
-                _decode(raw_context[1]),
-                _decode(raw_context[2]),
-                _decode(raw_context[3]),
-                _decode(raw_context[4]),
-            )
-
-            try:
-                diff_result = await self.dag_client.diff(
-                    strategy_id,
-                    dag_json,
-                    world_id=world_id,
-                    execution_domain=execution_domain,
-                    as_of=as_of,
-                    partition=partition,
-                    dataset_fingerprint=dataset_fingerprint,
-                )
-                self._grpc_fail_count = 0
-            except Exception:
-                logging.exception("gRPC diff failed for strategy %s", strategy_id)
-                self._grpc_fail_count += 1
-                if self._grpc_fail_count >= self._grpc_fail_thresh:
-                    if self.alerts:
-                        await self.alerts.send_slack("gRPC diff repeatedly failed")
-                    self._grpc_fail_count = 0
-                state = await self.fsm.transition(strategy_id, "FAIL")
-                if self.ws_hub:
-                    await self.ws_hub.send_progress(strategy_id, state)
-                return False
-
-            if self.ws_hub:
-                await self.ws_hub.send_queue_map(strategy_id, dict(diff_result.queue_map))
-
-            if self._handler:
-                await self._handler(strategy_id)
-
-            state = await self.fsm.transition(strategy_id, "COMPLETE")
-            if self.ws_hub:
-                await self.ws_hub.send_progress(strategy_id, state)
+            await self._enter_processing(strategy_id)
+            context = await self._load_context(strategy_id)
+            diff_result = await self._diff_strategy(context)
+            await self._broadcast_queue_map(context.strategy_id, diff_result)
+            await self._invoke_handler(context.strategy_id)
+            await self._complete_strategy(context.strategy_id)
             return True
+        except DiffFailure:
+            await self._fail_strategy(strategy_id)
+            return False
         except Exception:
-            logging.exception("Unhandled error processing strategy %s", strategy_id)
-            state = await self.fsm.transition(strategy_id, "FAIL")
-            if self.ws_hub:
-                await self.ws_hub.send_progress(strategy_id, state)
+            await self._handle_unexpected_error(strategy_id)
             return False
         finally:
             await self.manager.release(key)
+
+    def _lock_key(self, strategy_id: str) -> int:
+        key_str = partition_key(strategy_id, None, None)
+        return zlib.crc32(key_str.encode())
+
+    async def _enter_processing(self, strategy_id: str) -> None:
+        await self._transition(strategy_id, "PROCESS")
+
+    async def _load_context(self, strategy_id: str) -> StrategyContext:
+        dag_json = await self.redis.hget(f"strategy:{strategy_id}", "dag")
+        if isinstance(dag_json, bytes):
+            dag_json = dag_json.decode()
+        if dag_json is None:
+            raise RuntimeError("dag not found")
+        compute = await self._load_compute_context(strategy_id)
+        return StrategyContext(strategy_id=strategy_id, dag_json=dag_json, compute=compute)
+
+    async def _load_compute_context(self, strategy_id: str) -> ComputeContext:
+        raw_context = await self.redis.hmget(
+            f"strategy:{strategy_id}",
+            "compute_world_id",
+            "compute_execution_domain",
+            "compute_as_of",
+            "compute_partition",
+            "compute_dataset_fingerprint",
+        )
+        world_id, execution_domain, as_of, partition, dataset_fingerprint = (
+            self._decode_field(raw_context[0]),
+            self._decode_field(raw_context[1]),
+            self._decode_field(raw_context[2]),
+            self._decode_field(raw_context[3]),
+            self._decode_field(raw_context[4]),
+        )
+        return ComputeContext(
+            world_id=world_id,
+            execution_domain=execution_domain,
+            as_of=as_of,
+            partition=partition,
+            dataset_fingerprint=dataset_fingerprint,
+        )
+
+    def _decode_field(self, value: str | bytes | None) -> str | None:
+        if isinstance(value, bytes):
+            value = value.decode()
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    async def _diff_strategy(self, context: StrategyContext):
+        try:
+            result = await self.dag_client.diff(
+                context.strategy_id,
+                context.dag_json,
+                world_id=context.compute.world_id,
+                execution_domain=context.compute.execution_domain,
+                as_of=context.compute.as_of,
+                partition=context.compute.partition,
+                dataset_fingerprint=context.compute.dataset_fingerprint,
+            )
+            self._grpc_fail_count = 0
+            return result
+        except Exception as exc:
+            await self._record_diff_failure(context.strategy_id, exc)
+            raise DiffFailure from exc
+
+    async def _record_diff_failure(self, strategy_id: str, error: Exception) -> None:
+        logging.exception(
+            "gRPC diff failed for strategy %s", strategy_id, exc_info=error
+        )
+        self._grpc_fail_count += 1
+        if self._grpc_fail_count >= self._grpc_fail_thresh:
+            if self.alerts:
+                await self.alerts.send_slack("gRPC diff repeatedly failed")
+            self._grpc_fail_count = 0
+
+    async def _broadcast_queue_map(self, strategy_id: str, diff_result) -> None:
+        if self.ws_hub:
+            await self.ws_hub.send_queue_map(strategy_id, dict(diff_result.queue_map))
+
+    async def _invoke_handler(self, strategy_id: str) -> None:
+        if self._handler:
+            await self._handler(strategy_id)
+
+    async def _complete_strategy(self, strategy_id: str) -> None:
+        await self._transition(strategy_id, "COMPLETE")
+
+    async def _fail_strategy(self, strategy_id: str) -> None:
+        await self._transition(strategy_id, "FAIL")
+
+    async def _handle_unexpected_error(self, strategy_id: str) -> None:
+        logging.exception("Unhandled error processing strategy %s", strategy_id)
+        await self._fail_strategy(strategy_id)
+
+    async def _transition(self, strategy_id: str, state: str) -> None:
+        new_state = await self.fsm.transition(strategy_id, state)
+        await self._send_progress(strategy_id, new_state)
+
+    async def _send_progress(self, strategy_id: str, state: str) -> None:
+        if self.ws_hub:
+            await self.ws_hub.send_progress(strategy_id, state)
 
     async def run_once(self) -> Optional[str]:
         """Pop and process a single strategy."""
