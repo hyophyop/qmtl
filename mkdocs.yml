@@ -24,6 +24,7 @@ nav:
       - Seamless Data Provider Radon Plan: architecture/radon_seamless_data.md
       - History Warmup Radon Plan: architecture/radon_history_warmup.md
       - Runtime SDK Radon Plan: architecture/radon_runtime_sdk.md
+      - Workflow Orchestration Radon Plan: architecture/radon_workflow_orchestration.md
       - Radon Metrics Snapshot (2025-11-14): architecture/metrics/2025-11-14.md
   - Guides:
       - Overview: guides/README.md
