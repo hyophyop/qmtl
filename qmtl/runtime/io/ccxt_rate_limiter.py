@@ -188,74 +188,132 @@ async def get_limiter(
     key_suffix: str | None = None,
 ) -> _SharedLimiter | _RedisTokenBucketLimiter:
     if scope == "local":
-        return _LocalLimiter(
-            max_concurrency=max_concurrency, min_interval_s=min_interval_s
-        )
+        return _LocalLimiter(max_concurrency=max_concurrency, min_interval_s=min_interval_s)
     if scope == "cluster":
-        if aioredis is None:  # pragma: no cover - dependency missing
-            raise RuntimeError(
-                "redis is required for cluster scope rate limiting; install redis"
-            )
-        # Compose full bucket key; allow suffix to partition by account/scope
-        bucket_key = f"rl:{key}"
-        if key_suffix:
-            bucket_key = f"{bucket_key}:{key_suffix}"
-        interval_ms_val = int(interval_ms) if interval_ms is not None else None
-        if interval_ms_val is not None:
-            interval_ms_val = max(1, interval_ms_val)
-        rate: float
-        capacity: int
-        if tokens_per_interval is not None and interval_ms_val is not None:
-            window_s = interval_ms_val / 1000.0
-            rate = float(tokens_per_interval) / max(0.001, window_s)
-            capacity = int(
-                max(
-                    1,
-                    int(burst_tokens)
-                    if burst_tokens is not None
-                    else int(tokens_per_interval),
-                )
-            )
-        else:
-            rate = float(
-                tokens_per_interval
-                if tokens_per_interval is not None
-                else (1.0 / max(0.000001, min_interval_s))
-            )
-            capacity = int(
-                max(1, int(burst_tokens) if burst_tokens is not None else 1)
-            )
-        local_limit = int(
-            max(
-                1,
-                int(local_semaphore) if local_semaphore is not None else max_concurrency,
-            )
+        return await _get_cluster_limiter(
+            key=key,
+            max_concurrency=max_concurrency,
+            min_interval_s=min_interval_s,
+            redis_dsn=redis_dsn,
+            tokens_per_interval=tokens_per_interval,
+            interval_ms=interval_ms,
+            burst_tokens=burst_tokens,
+            local_semaphore=local_semaphore,
+            key_suffix=key_suffix,
         )
-
-        # Cache a limiter per (bucket_key, rate, capacity, concurrency)
-        cache_key = f"{bucket_key}|{rate}|{capacity}|{local_limit}"
-        if cache_key in _CLUSTER_CACHE:
-            return _CLUSTER_CACHE[cache_key]
-
-        connectors_cfg = get_connectors_config()
-        default_dsn = connectors_cfg.ccxt_rate_limiter_redis or "redis://localhost:6379/0"
-        dsn = redis_dsn or default_dsn
-        
-
-        client = aioredis.from_url(dsn, encoding=None, decode_responses=False)
-        limiter = _RedisTokenBucketLimiter(
-            redis=client,
-            bucket_key=bucket_key,
-            tokens_per_sec=rate,
-            capacity=capacity,
-            local_concurrency=local_limit,
-        )
-        _CLUSTER_CACHE[cache_key] = limiter
-        return limiter
-    # Default: process-wide
     return await get_shared_limiter(
         key, max_concurrency=max_concurrency, min_interval_s=min_interval_s
     )
+
+
+def _build_bucket_key(key: str, key_suffix: str | None) -> str:
+    bucket_key = f"rl:{key}"
+    if key_suffix:
+        bucket_key = f"{bucket_key}:{key_suffix}"
+    return bucket_key
+
+
+def _coerce_interval_ms(interval_ms: int | None) -> int | None:
+    if interval_ms is None:
+        return None
+    return max(1, int(interval_ms))
+
+
+def _compute_rate_and_capacity(
+    *,
+    tokens_per_interval: float | None,
+    interval_ms_val: int | None,
+    min_interval_s: float,
+    burst_tokens: int | None,
+) -> tuple[float, int]:
+    if tokens_per_interval is not None and interval_ms_val is not None:
+        window_s = interval_ms_val / 1000.0
+        rate = float(tokens_per_interval) / max(0.001, window_s)
+        capacity = int(
+            max(1, int(burst_tokens) if burst_tokens is not None else int(tokens_per_interval))
+        )
+        return rate, capacity
+
+    rate = float(
+        tokens_per_interval if tokens_per_interval is not None else (1.0 / max(0.000001, min_interval_s))
+    )
+    capacity = int(max(1, int(burst_tokens) if burst_tokens is not None else 1))
+    return rate, capacity
+
+
+def _compute_local_limit(local_semaphore: int | None, max_concurrency: int) -> int:
+    return int(max(1, int(local_semaphore) if local_semaphore is not None else max_concurrency))
+
+
+def _cluster_cache_key(bucket_key: str, rate: float, capacity: int, local_limit: int) -> str:
+    return f"{bucket_key}|{rate}|{capacity}|{local_limit}"
+
+
+def _resolve_redis_dsn(redis_dsn: str | None) -> str:
+    connectors_cfg = get_connectors_config()
+    default_dsn = connectors_cfg.ccxt_rate_limiter_redis or "redis://localhost:6379/0"
+    return redis_dsn or default_dsn
+
+
+def _ensure_cluster_dependency() -> None:
+    if aioredis is None:  # pragma: no cover - dependency missing
+        raise RuntimeError("redis is required for cluster scope rate limiting; install redis")
+
+
+def _build_cluster_limiter(
+    *,
+    bucket_key: str,
+    rate: float,
+    capacity: int,
+    local_limit: int,
+    dsn: str,
+) -> _RedisTokenBucketLimiter:
+    client = aioredis.from_url(dsn, encoding=None, decode_responses=False)
+    return _RedisTokenBucketLimiter(
+        redis=client,
+        bucket_key=bucket_key,
+        tokens_per_sec=rate,
+        capacity=capacity,
+        local_concurrency=local_limit,
+    )
+
+
+async def _get_cluster_limiter(
+    *,
+    key: str,
+    max_concurrency: int,
+    min_interval_s: float,
+    redis_dsn: str | None,
+    tokens_per_interval: float | None,
+    interval_ms: int | None,
+    burst_tokens: int | None,
+    local_semaphore: int | None,
+    key_suffix: str | None,
+) -> _RedisTokenBucketLimiter:
+    _ensure_cluster_dependency()
+    bucket_key = _build_bucket_key(key, key_suffix)
+    interval_ms_val = _coerce_interval_ms(interval_ms)
+    rate, capacity = _compute_rate_and_capacity(
+        tokens_per_interval=tokens_per_interval,
+        interval_ms_val=interval_ms_val,
+        min_interval_s=min_interval_s,
+        burst_tokens=burst_tokens,
+    )
+    local_limit = _compute_local_limit(local_semaphore, max_concurrency)
+    cache_key = _cluster_cache_key(bucket_key, rate, capacity, local_limit)
+    if cache_key in _CLUSTER_CACHE:
+        return _CLUSTER_CACHE[cache_key]
+
+    dsn = _resolve_redis_dsn(redis_dsn)
+    limiter = _build_cluster_limiter(
+        bucket_key=bucket_key,
+        rate=rate,
+        capacity=capacity,
+        local_limit=local_limit,
+        dsn=dsn,
+    )
+    _CLUSTER_CACHE[cache_key] = limiter
+    return limiter
 __all__ = [
     "get_limiter",
 ]

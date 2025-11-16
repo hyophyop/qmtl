@@ -1183,6 +1183,34 @@ async def test_storage_backfill_materializes_and_reads_back() -> None:
     assert not df.empty and set(df["ts"]) == {0, 100}
 
 
+class _FailingStorageProvider(_FakeStorageProvider):
+    async def fill_missing(self, start: int, end: int, *, node_id: str, interval: int) -> None:  # pragma: no cover - exc path
+        raise RuntimeError("storage down")
+
+
+@pytest.mark.asyncio
+async def test_storage_backfill_falls_back_to_fetcher(caplog) -> None:
+    storage_provider = _FailingStorageProvider()
+
+    class _StorageDS(HistoryProviderDataSource):
+        def __init__(self, sp):
+            super().__init__(sp, DataSourcePriority.STORAGE)
+
+    storage_ds = _StorageDS(storage_provider)
+    fetcher = _FakeFetcher()
+    backfiller = DataFetcherAutoBackfiller(fetcher)
+
+    caplog.set_level(logging.WARNING, logger="qmtl.runtime.io.seamless_provider")
+
+    df = await backfiller.backfill(0, 50, node_id="n", interval=10, target_storage=storage_ds)
+
+    fallback_logs = [r for r in caplog.records if r.getMessage() == "seamless.backfill.storage_fallback"]
+    assert len(fallback_logs) == 1
+    assert fallback_logs[0].source == "storage"
+    assert fetcher.calls == 1
+    assert not df.empty and df["ts"].tolist() == [0]
+
+
 @pytest.mark.asyncio
 async def test_data_fetcher_backfiller_logs_structured_success(caplog) -> None:
     storage_provider = _FakeStorageProvider()
