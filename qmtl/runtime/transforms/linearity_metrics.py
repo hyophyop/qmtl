@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Dict
 
 __all__ = [
@@ -165,27 +166,11 @@ def _ols_slope_r2_t(y: Sequence[float]) -> tuple[float, float, float]:
     n = len(y)
     if n < 3:
         return 0.0, 0.0, 0.0
-    t_sum = (n - 1) * n / 2.0
-    t2_sum = (n - 1) * n * (2 * n - 1) / 6.0
-    y_sum = float(sum(y))
-    ty_sum = float(sum(i * yi for i, yi in enumerate(y)))
-    denom = n * t2_sum - t_sum * t_sum
-    if denom == 0:
+    slope, intercept, r2 = _linreg_y_on_t(y)
+    if slope == 0.0 and r2 == 0.0:
         return 0.0, 0.0, 0.0
-    b = (n * ty_sum - t_sum * y_sum) / denom
-    a = (y_sum - b * t_sum) / n
-    y_mean = y_sum / n
-    ss_tot = sum((yi - y_mean) ** 2 for yi in y)
-    ss_res = sum((yi - (a + b * i)) ** 2 for i, yi in enumerate(y))
-    r2 = 0.0 if ss_tot == 0 else max(0.0, min(1.0, 1.0 - ss_res / ss_tot))
-    if n <= 2:
-        t_stat = 0.0
-    else:
-        s2 = ss_res / (n - 2)
-        sxx = n * t2_sum - t_sum * t_sum
-        se_b = math.sqrt(s2 * n / sxx) if sxx > 0 and s2 >= 0 else 0.0
-        t_stat = 0.0 if se_b == 0.0 else b / se_b
-    return b, r2, t_stat
+    t_stat = _ols_t_stat_for_slope(y, slope, intercept)
+    return slope, r2, t_stat
 
 
 def _variation_ratio(y: Sequence[float], eps: float) -> float:
@@ -226,6 +211,142 @@ def _max_drawdown(y: Sequence[float]) -> float:
     return mdd
 
 
+def _ols_t_stat_for_slope(
+    y: Sequence[float],
+    slope: float,
+    intercept: float,
+) -> float:
+    n = len(y)
+    if n <= 2:
+        return 0.0
+    ss_res = sum((yi - (intercept + slope * i)) ** 2 for i, yi in enumerate(y))
+    if ss_res <= 0.0:
+        return 0.0
+    s2 = ss_res / (n - 2)
+    t_mean = (n - 1) / 2.0
+    sxx = sum((i - t_mean) ** 2 for i in range(n))
+    if sxx <= 0.0:
+        return 0.0
+    se_b = math.sqrt(s2 / sxx)
+    if se_b == 0.0:
+        return 0.0
+    return slope / se_b
+
+
+def _coarse(seq: Sequence[float], k: int) -> Sequence[float]:
+    if k <= 1 or len(seq) <= 2 * k:
+        return seq
+    out = list(seq[::k])
+    if out[-1] != seq[-1]:
+        out.append(seq[-1])
+    return out
+
+
+@dataclass(frozen=True)
+class _LinearityComponents:
+    r2_up: float
+    spearman_rho: float
+    t_slope: float
+    t_slope_sig: float
+    tvr: float
+    tuw: float
+    nh_frac: float
+    mdd_norm: float
+    net_gain: float
+
+
+class _HarmonicMeanLinearityStrategy:
+    """Aggregate linearity components into a single score."""
+
+    def __init__(self, orientation: str) -> None:
+        self._orientation = orientation
+
+    def _direction_consistent(self, raw_gain: float) -> bool:
+        if self._orientation == "up":
+            return raw_gain > 0.0
+        if self._orientation == "down":
+            return raw_gain < 0.0
+        return False
+
+    def score(self, components: _LinearityComponents, raw_gain: float, eps: float) -> float:
+        if not self._direction_consistent(raw_gain):
+            return 0.0
+
+        rho_pos = max(0.0, components.spearman_rho)
+        trend = math.sqrt(_clamp01(components.r2_up) * rho_pos)
+        smooth = components.tvr
+        persistence = components.nh_frac
+        dd_penalty = 1.0 / (1.0 + components.mdd_norm)
+
+        values = [max(eps, _clamp01(v)) for v in (trend, smooth, persistence, dd_penalty)]
+        return len(values) / sum(1.0 / v for v in values)
+
+
+def _prepare_oriented_series(
+    pnl: Sequence[float],
+    *,
+    orientation: str,
+    use_log: bool,
+) -> list[float]:
+    sgn = 1.0 if orientation == "up" else -1.0
+    y = [sgn * float(v) for v in pnl]
+    if use_log:
+        if min(y) > 0.0:
+            y = [math.log(v) for v in y]
+        else:
+            # Keep original series if log-transform is not applicable.
+            use_log = False
+    return y
+
+
+def _trend_components(y: Sequence[float]) -> tuple[float, float, float, float]:
+    slope, r2, t_stat = _ols_slope_r2_t(y)
+    r2_up = r2 if slope > 0.0 else 0.0
+    rho = _spearman_rho(y)
+    t_slope_sig = _clamp01(abs(t_stat) / 3.0)
+    return r2_up, rho, t_stat, t_slope_sig
+
+
+def _tvr_multi_scale(y: Sequence[float], eps: float, scales: Sequence[int]) -> float:
+    tvr_vals = []
+    for k in scales:
+        s = _coarse(y, int(k))
+        if len(s) >= 2:
+            tvr_vals.append(_variation_ratio(s, eps))
+    if not tvr_vals:
+        return 0.0
+    return math.prod(tvr_vals) ** (1.0 / len(tvr_vals))
+
+
+def _persistence_components(y: Sequence[float], eps: float) -> tuple[float, float]:
+    tuw = _time_under_water(y, eps)
+    nh_frac = 1.0 - tuw
+    return tuw, nh_frac
+
+
+def _normalized_drawdown(y: Sequence[float], net_gain: float, eps: float) -> float:
+    mdd = _max_drawdown(y)
+    return mdd / (abs(net_gain) + eps)
+
+
+_V2_METRIC_KEYS: tuple[str, ...] = (
+    "r2_up",
+    "spearman_rho",
+    "t_slope",
+    "t_slope_sig",
+    "tvr",
+    "tuw",
+    "nh_frac",
+    "mdd_norm",
+    "net_gain",
+    "score",
+)
+
+
+def _empty_v2_metrics() -> Dict[str, float]:
+    return {key: 0.0 for key in _V2_METRIC_KEYS}
+
+
 def equity_linearity_metrics_v2(
     pnl: Sequence[float],
     *,
@@ -236,71 +357,31 @@ def equity_linearity_metrics_v2(
 ) -> Dict[str, float]:
     """Robust upward linearity score with multiple corroborating components."""
     y_raw = [float(v) for v in pnl]
-    n = len(y_raw)
-    if n < 3:
-        return {k: 0.0 for k in (
-            "r2_up",
-            "spearman_rho",
-            "t_slope",
-            "t_slope_sig",
-            "tvr",
-            "tuw",
-            "nh_frac",
-            "mdd_norm",
-            "net_gain",
-            "score",
-        )}
+    if len(y_raw) < 3:
+        return _empty_v2_metrics()
 
-    sgn = 1.0 if orientation == "up" else -1.0
-    y = [sgn * v for v in y_raw]
-
-    if use_log:
-        if min(y) > 0.0:
-            y = [math.log(v) for v in y]
-        else:
-            use_log = False
-
+    y = _prepare_oriented_series(y_raw, orientation=orientation, use_log=use_log)
     net_gain = y[-1] - y[0]
 
-    slope, r2, t_stat = _ols_slope_r2_t(y)
-    r2_up = r2 if slope > 0 else 0.0
-    rho = _spearman_rho(y)
-    rho_pos = max(0.0, rho)
+    r2_up, rho, t_stat, t_slope_sig = _trend_components(y)
+    tvr = _tvr_multi_scale(y, eps, scales)
+    tuw, nh_frac = _persistence_components(y, eps)
+    mdd_norm = _normalized_drawdown(y, net_gain, eps)
 
-    def _coarse(seq: Sequence[float], k: int) -> Sequence[float]:
-        if k <= 1 or len(seq) <= 2 * k:
-            return seq
-        out = seq[::k]
-        if out[-1] != seq[-1]:
-            out = list(out) + [seq[-1]]
-        return out
-
-    tvr_vals = []
-    for k in scales:
-        s = _coarse(y, int(k))
-        if len(s) >= 2:
-            tvr_vals.append(_variation_ratio(s, eps))
-    tvr = 0.0 if not tvr_vals else math.prod(tvr_vals) ** (1.0 / len(tvr_vals))
-
-    tuw = _time_under_water(y, eps)
-    nh_frac = 1.0 - tuw
-
-    mdd = _max_drawdown(y)
-    mdd_norm = mdd / (abs(net_gain) + eps)
-
-    trend = math.sqrt(_clamp01(r2_up) * rho_pos)  # geometric mean
-    smooth = tvr
-    persistence = nh_frac
-    dd_penalty = 1.0 / (1.0 + mdd_norm)
-
-    comps = [max(eps, _clamp01(v)) for v in (trend, smooth, persistence, dd_penalty)]
-    score = 0.0
-    # Directional gate based on raw (pre-transformation) gain
+    strategy = _HarmonicMeanLinearityStrategy(orientation=orientation)
+    components = _LinearityComponents(
+        r2_up=r2_up,
+        spearman_rho=rho,
+        t_slope=t_stat,
+        t_slope_sig=t_slope_sig,
+        tvr=tvr,
+        tuw=tuw,
+        nh_frac=nh_frac,
+        mdd_norm=mdd_norm,
+        net_gain=net_gain,
+    )
     raw_gain = y_raw[-1] - y_raw[0]
-    if (orientation == "up" and raw_gain > 0) or (orientation == "down" and raw_gain < 0):
-        score = len(comps) / sum(1.0 / v for v in comps)
-
-    t_slope_sig = _clamp01(abs(t_stat) / 3.0)
+    score = strategy.score(components, raw_gain=raw_gain, eps=eps)
 
     return {
         "r2_up": r2_up,
