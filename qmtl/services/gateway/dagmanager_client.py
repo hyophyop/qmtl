@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Dict
 
 
@@ -14,6 +15,88 @@ from qmtl.services.dagmanager.topic import (
     topic_namespace_enabled,
 )
 from . import metrics as gw_metrics
+
+
+@dataclass(frozen=True)
+class DiffNamespace:
+    namespace: str | None
+    domain: str | None
+    world_id: str | None
+
+    def applied(self) -> str | None:
+        if not topic_namespace_enabled():
+            return None
+        if self.namespace:
+            return self.namespace
+        if self.world_id:
+            return build_namespace(self.world_id, self.domain or "live")
+        return None
+
+    def apply(self, chunk: dagmanager_pb2.DiffChunk) -> dagmanager_pb2.DiffChunk:
+        applied = self.applied()
+        if applied:
+            chunk.queue_map.update(
+                {k: ensure_namespace(v, applied) for k, v in chunk.queue_map.items()}
+            )
+        return chunk
+
+
+class DiffStreamClient:
+    """Collects and validates diff stream chunks."""
+
+    def __init__(self, stub: dagmanager_pb2_grpc.DiffServiceStub) -> None:
+        self._stub = stub
+
+    async def collect(self, request: dagmanager_pb2.DiffRequest) -> dagmanager_pb2.DiffChunk:
+        queue_map: Dict[str, str] = {}
+        sentinel_id = ""
+        version = ""
+        buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
+        crc32_value: int | None = None
+
+        async for chunk in self._stub.Diff(request):
+            queue_map.update(dict(chunk.queue_map))
+            sentinel_id = chunk.sentinel_id
+            if getattr(chunk, "version", ""):
+                version = chunk.version
+            buffer_nodes.extend(chunk.buffer_nodes)
+            try:
+                crc32_value = self._update_crc(crc32_value, chunk)
+            finally:
+                await self._ack_chunk(chunk)
+
+        return dagmanager_pb2.DiffChunk(
+            queue_map=queue_map,
+            sentinel_id=sentinel_id,
+            buffer_nodes=buffer_nodes,
+            version=version,
+            crc32=crc32_value or 0,
+        )
+
+    async def _ack_chunk(self, chunk: dagmanager_pb2.DiffChunk) -> None:
+        await self._stub.AckChunk(
+            dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)
+        )
+
+    def _require_crc(self, message: dagmanager_pb2.DiffChunk) -> int:
+        has_field = getattr(message, "HasField", None)
+        if callable(has_field):
+            if not message.HasField("crc32"):
+                raise ValueError("diff chunk missing CRC32 handshake")
+        crc = getattr(message, "crc32", None)
+        if crc is None:
+            raise ValueError("diff chunk missing CRC32 handshake")
+        return int(crc)
+
+    def _update_crc(
+        self, current: int | None, message: dagmanager_pb2.DiffChunk
+    ) -> int:
+        chunk_crc = self._require_crc(message)
+        if current is None:
+            return chunk_crc
+        if chunk_crc != current:
+            raise ValueError("diff chunk CRC32 mismatch")
+        return current
 
 
 class DagManagerClient:
@@ -133,6 +216,60 @@ class DagManagerClient:
             namespace = build_namespace(world_id, execution_domain)
         return namespace, execution_domain
 
+    def _build_namespace(
+        self, dag_json: str, world_id: str | None, execution_domain: str | None
+    ) -> DiffNamespace:
+        inferred_ns: str | None = None
+        domain: str | None = execution_domain
+        if topic_namespace_enabled():
+            inferred_ns, inferred_domain = self._infer_namespace(dag_json, world_id)
+            if not domain and inferred_domain:
+                domain = inferred_domain
+        return DiffNamespace(namespace=inferred_ns, domain=domain, world_id=world_id)
+
+    def _build_diff_request(
+        self,
+        strategy_id: str,
+        dag_json: str,
+        *,
+        namespace: DiffNamespace,
+        as_of: str | None = None,
+        partition: str | None = None,
+        dataset_fingerprint: str | None = None,
+    ) -> dagmanager_pb2.DiffRequest:
+        return dagmanager_pb2.DiffRequest(
+            strategy_id=strategy_id,
+            dag_json=dag_json,
+            world_id=namespace.world_id or "",
+            execution_domain=(namespace.domain or ""),
+            as_of=as_of or "",
+            partition=partition or "",
+            dataset_fingerprint=dataset_fingerprint or "",
+        )
+
+    async def _execute_diff(
+        self, request: dagmanager_pb2.DiffRequest, namespace: DiffNamespace
+    ) -> dagmanager_pb2.DiffChunk:
+        collector = DiffStreamClient(self._diff_stub)
+        return await self._collect_with_retries(collector, request, namespace)
+
+    async def _collect_with_retries(
+        self,
+        collector: DiffStreamClient,
+        request: dagmanager_pb2.DiffRequest,
+        namespace: DiffNamespace,
+    ) -> dagmanager_pb2.DiffChunk:
+        retries = 5
+        for attempt in range(retries):
+            try:
+                result = await collector.collect(request)
+                return namespace.apply(result)
+            except Exception:
+                if attempt == retries - 1:
+                    raise
+                await self._wait_for_service()
+        raise RuntimeError("unreachable")
+
     async def diff(
         self,
         strategy_id: str,
@@ -149,98 +286,20 @@ class DagManagerClient:
         Returns ``None`` when the request ultimately fails or the circuit is
         open."""
 
-        namespace: str | None = None
-        domain: str | None = execution_domain
-        if topic_namespace_enabled():
-            inferred_ns, inferred_domain = self._infer_namespace(dag_json, world_id)
-            namespace = inferred_ns
-            if not domain and inferred_domain:
-                domain = inferred_domain
-
-        request = dagmanager_pb2.DiffRequest(
-            strategy_id=strategy_id,
-            dag_json=dag_json,
-            world_id=world_id or "",
-            execution_domain=(domain or ""),
-            as_of=as_of or "",
-            partition=partition or "",
-            dataset_fingerprint=dataset_fingerprint or "",
+        namespace = self._build_namespace(dag_json, world_id, execution_domain)
+        request = self._build_diff_request(
+            strategy_id,
+            dag_json,
+            namespace=namespace,
+            as_of=as_of,
+            partition=partition,
+            dataset_fingerprint=dataset_fingerprint,
         )
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:
             self._ensure_channel()
-            retries = 5
-            for attempt in range(retries):
-                try:
-                    queue_map: Dict[str, str] = {}
-                    sentinel_id = ""
-                    version = ""
-                    buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
-                    crc32_value: int | None = None
-
-                    def _require_crc(message: dagmanager_pb2.DiffChunk) -> int:
-                        has_field = getattr(message, "HasField", None)
-                        if callable(has_field):
-                            if not message.HasField("crc32"):
-                                raise ValueError("diff chunk missing CRC32 handshake")
-                        crc = getattr(message, "crc32", None)
-                        if crc is None:
-                            raise ValueError("diff chunk missing CRC32 handshake")
-                        return int(crc)
-
-                    async for chunk in self._diff_stub.Diff(request):
-                        queue_map.update(dict(chunk.queue_map))
-                        sentinel_id = chunk.sentinel_id
-                        if getattr(chunk, "version", ""):
-                            version = chunk.version
-                        buffer_nodes.extend(chunk.buffer_nodes)
-                        error: Exception | None = None
-                        chunk_crc: int | None = None
-                        try:
-                            chunk_crc = _require_crc(chunk)
-                        except Exception as exc:  # pragma: no cover - defensive
-                            error = exc
-                        finally:
-                            await self._diff_stub.AckChunk(
-                                dagmanager_pb2.ChunkAck(
-                                    sentinel_id=chunk.sentinel_id, chunk_id=0
-                                )
-                            )
-                        if error is not None:
-                            raise error
-                        if chunk_crc is not None:
-                            if crc32_value is None:
-                                crc32_value = chunk_crc
-                            elif chunk_crc != crc32_value:
-                                raise ValueError("diff chunk CRC32 mismatch")
-                    result_chunk = dagmanager_pb2.DiffChunk(
-                        queue_map=queue_map,
-                        sentinel_id=sentinel_id,
-                        buffer_nodes=buffer_nodes,
-                        version=version,
-                        crc32=crc32_value or 0,
-                    )
-                    if topic_namespace_enabled():
-                        applied_namespace = namespace
-                        if not applied_namespace and world_id:
-                            applied_namespace = build_namespace(
-                                world_id,
-                                domain or "live",
-                            )
-                        if applied_namespace:
-                            result_chunk.queue_map.update(
-                                {
-                                    k: ensure_namespace(v, applied_namespace)
-                                    for k, v in result_chunk.queue_map.items()
-                                }
-                            )
-                    return result_chunk
-                except Exception:
-                    if attempt == retries - 1:
-                        raise
-                    await self._wait_for_service()
-            raise RuntimeError("unreachable")
+            return await self._execute_diff(request, namespace)
 
         try:
             result = await _call()
