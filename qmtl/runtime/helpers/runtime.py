@@ -386,6 +386,57 @@ def _profit_factor(returns: Sequence[float]) -> float:
     return gross_profit / abs(gross_loss) if gross_loss else float("inf")
 
 
+def _clean_returns(returns: Sequence[float]) -> list[float]:
+    return [float(r) for r in returns if not math.isnan(r)]
+
+
+def _net_returns_and_execution_metrics(
+    clean_returns: Sequence[float],
+    *,
+    transaction_cost: float,
+    execution_fills: Sequence[ExecutionFill] | None,
+    use_realistic_costs: bool,
+) -> tuple[list[float], dict[str, float]]:
+    if use_realistic_costs and execution_fills:
+        net_returns = adjust_returns_for_costs(clean_returns, execution_fills)
+        execution_metrics = calculate_execution_metrics(execution_fills)
+    else:
+        net_returns = [r - transaction_cost for r in clean_returns]
+        execution_metrics: dict[str, float] = {}
+    return net_returns, execution_metrics
+
+
+def _excess_returns(net_returns: Sequence[float], risk_free_rate: float) -> list[float]:
+    return [r - risk_free_rate for r in net_returns]
+
+
+def _sharpe_ratio(excess_returns: Sequence[float]) -> float:
+    if not excess_returns:
+        return 0.0
+    mean = sum(excess_returns) / len(excess_returns)
+    variance = sum((r - mean) ** 2 for r in excess_returns) / len(excess_returns)
+    std = math.sqrt(variance)
+    return mean / std if std else 0.0
+
+
+def _alpha_core_metrics(
+    net_returns: Sequence[float],
+    *,
+    risk_free_rate: float,
+) -> dict[str, float]:
+    excess = _excess_returns(net_returns, risk_free_rate)
+    sharpe = _sharpe_ratio(excess)
+    max_dd = _max_drawdown(net_returns)
+    return {
+        "sharpe": sharpe,
+        "max_drawdown": max_dd,
+        "win_ratio": _win_ratio(net_returns),
+        "profit_factor": _profit_factor(net_returns),
+        "car_mdd": _car_mdd(net_returns, max_dd),
+        "rar_mdd": _rar_mdd(net_returns, max_dd, risk_free_rate),
+    }
+
+
 def compute_alpha_performance_summary(
     returns: Sequence[float],
     *,
@@ -396,32 +447,17 @@ def compute_alpha_performance_summary(
 ) -> dict[str, float]:
     """Return a mapping with alpha-performance metrics and execution costs."""
 
-    clean_returns = [r for r in returns if not math.isnan(r)]
+    clean_returns = _clean_returns(returns)
     if not clean_returns:
         return default_alpha_performance_metrics()
 
-    if use_realistic_costs and execution_fills:
-        net_returns = adjust_returns_for_costs(clean_returns, execution_fills)
-        execution_metrics = calculate_execution_metrics(execution_fills)
-    else:
-        net_returns = [r - transaction_cost for r in clean_returns]
-        execution_metrics = {}
-
-    excess = [r - risk_free_rate for r in net_returns]
-    mean = sum(excess) / len(excess)
-    variance = sum((r - mean) ** 2 for r in excess) / len(excess)
-    std = math.sqrt(variance)
-    sharpe = mean / std if std else 0.0
-
-    max_dd = _max_drawdown(net_returns)
-    metrics = {
-        "sharpe": sharpe,
-        "max_drawdown": max_dd,
-        "win_ratio": _win_ratio(net_returns),
-        "profit_factor": _profit_factor(net_returns),
-        "car_mdd": _car_mdd(net_returns, max_dd),
-        "rar_mdd": _rar_mdd(net_returns, max_dd, risk_free_rate),
-    }
+    net_returns, execution_metrics = _net_returns_and_execution_metrics(
+        clean_returns,
+        transaction_cost=transaction_cost,
+        execution_fills=execution_fills,
+        use_realistic_costs=use_realistic_costs,
+    )
+    metrics = _alpha_core_metrics(net_returns, risk_free_rate=risk_free_rate)
 
     result = {alpha_metric_key(name): value for name, value in metrics.items()}
     if execution_metrics:
