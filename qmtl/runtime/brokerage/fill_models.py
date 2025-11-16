@@ -246,6 +246,29 @@ class MarketOnCloseFillModel(BaseFillModel):
 class TrailingStopFillModel(BaseFillModel):
     """Trailing stop orders adjust their stop with favorable price moves."""
 
+    @staticmethod
+    def _ensure_stop_price(order: Order, market_price: float) -> float:
+        base_stop = (
+            market_price + order.trail_amount
+            if order.quantity > 0
+            else market_price - order.trail_amount
+        )
+        return base_stop if order.stop_price is None else order.stop_price
+
+    @staticmethod
+    def _adjust_trailing_stop(order: Order, market_price: float) -> float:
+        if order.quantity > 0:
+            return min(order.stop_price, market_price + order.trail_amount)
+        return max(order.stop_price, market_price - order.trail_amount)
+
+    @staticmethod
+    def _triggered(order: Order, market_price: float) -> bool:
+        return (
+            market_price >= order.stop_price
+            if order.quantity > 0
+            else market_price <= order.stop_price
+        )
+
     def fill(
         self,
         order: Order,
@@ -258,25 +281,10 @@ class TrailingStopFillModel(BaseFillModel):
         if order.trail_amount is None:
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
-        if order.stop_price is None:
-            if order.quantity > 0:
-                order.stop_price = market_price + order.trail_amount
-            else:
-                order.stop_price = market_price - order.trail_amount
-        else:
-            if order.quantity > 0:
-                new_stop = market_price + order.trail_amount
-                if new_stop < order.stop_price:
-                    order.stop_price = new_stop
-            else:
-                new_stop = market_price - order.trail_amount
-                if new_stop > order.stop_price:
-                    order.stop_price = new_stop
+        order.stop_price = self._ensure_stop_price(order, market_price)
+        order.stop_price = self._adjust_trailing_stop(order, market_price)
 
-        triggered = (
-            market_price >= order.stop_price if order.quantity > 0 else market_price <= order.stop_price
-        )
-        if not triggered:
+        if not self._triggered(order, market_price):
             return Fill(symbol=order.symbol, quantity=0, price=market_price)
 
         qty = self._apply_tif(order, abs(order.quantity), ts, bar_volume)

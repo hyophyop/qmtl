@@ -45,23 +45,35 @@ def _latest_entry(series: CacheView | Sequence[Any]):
     return None
 
 
+def _enter_state(value: float, th: Thresholds) -> float:
+    if value >= th.long_enter:
+        return 1.0
+    if value <= th.short_enter:
+        return -1.0
+    return 0.0
+
+
+def _long_exit_triggered(value: float, th: Thresholds) -> bool:
+    return th.long_exit is not None and value < th.long_exit
+
+
+def _short_exit_triggered(value: float, th: Thresholds) -> bool:
+    return th.short_exit is not None and value > th.short_exit
+
+
 def _hysteresis(prev: float | None, value: float, th: Thresholds) -> float:
     # Map continuous value to discrete {-1,0,+1} with hysteresis
     if prev is None or prev == 0:
-        if value >= th.long_enter:
-            return 1.0
-        if value <= th.short_enter:
-            return -1.0
-        return 0.0
+        return _enter_state(value, th)
+
     if prev > 0:
-        # stay long until exit falls below long_exit (if provided)
-        if th.long_exit is not None and value < th.long_exit:
+        if _long_exit_triggered(value, th):
             return 0.0
         if value <= th.short_enter:
             return -1.0
-        return 1.0  # remain long unless inversion
-    # prev < 0
-    if th.short_exit is not None and value > th.short_exit:
+        return 1.0
+
+    if _short_exit_triggered(value, th):
         return 0.0
     if value >= th.long_enter:
         return 1.0
@@ -175,4 +187,3 @@ class PositionTargetNode(ProcessingNode):
 
 
 __all__ = ["PositionTargetNode", "Thresholds"]
-
