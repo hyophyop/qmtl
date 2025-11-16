@@ -14,6 +14,13 @@ from tests.qmtl.services.gateway.helpers import (
     StubGatewayDatabase,
     gateway_app,
 )
+from tests.qmtl.services.gateway.fixtures import (
+    DB_BUILDERS,
+    DummyDagManager,
+    DummyDatabase,
+    DummyManager,
+    StubWorldClient,
+)
 
 
 @pytest.fixture
@@ -94,3 +101,41 @@ def reset_gateway_metrics():
         yield metrics
     finally:
         metrics.reset_metrics()
+
+
+@pytest.fixture
+def dummy_manager() -> DummyManager:
+    """Return a fresh :class:`DummyManager` instance."""
+
+    return DummyManager()
+
+
+@pytest.fixture
+def dummy_dag_manager() -> DummyDagManager:
+    """Return a fresh :class:`DummyDagManager` instance."""
+
+    return DummyDagManager()
+
+
+@pytest.fixture
+def dummy_database() -> DummyDatabase:
+    """Return a fresh :class:`DummyDatabase` instance."""
+
+    return DummyDatabase()
+
+
+@pytest.fixture
+def stub_world_client_factory() -> Callable[..., StubWorldClient]:
+    """Factory fixture for :class:`StubWorldClient` instances."""
+
+    def factory(**kwargs: Any) -> StubWorldClient:
+        return StubWorldClient(**kwargs)
+
+    return factory
+
+
+@pytest.fixture(params=tuple(DB_BUILDERS.keys()), ids=tuple(DB_BUILDERS.keys()))
+def world_binding_db_builder(request) -> Callable[..., Any]:
+    """Parameterized fixture yielding database builder coroutines."""
+
+    return DB_BUILDERS[request.param]
