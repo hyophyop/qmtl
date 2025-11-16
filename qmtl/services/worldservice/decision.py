@@ -30,68 +30,88 @@ def augment_metrics_with_linearity(
 
     out: Dict[str, Dict[str, float]] = {k: dict(v) for k, v in (metrics or {}).items()}
 
-    equities: Dict[str, List[float]] = {}
-    for sid, s in series.items():
-        eq: List[float] | None
-        if s.equity:
-            eq = list(s.equity)
-        elif s.pnl:
-            eq = list(s.pnl)
-        elif s.returns:
-            cumulative = 0.0
-            eq = []
-            for value in s.returns:
-                cumulative += float(value)
-                eq.append(cumulative)
-        else:
-            eq = None
-        if eq and len(eq) >= 2:
-            equities[sid] = eq
-            m1 = equity_linearity_metrics(eq)
-            m2 = equity_linearity_metrics_v2(eq)
-            slot = out.setdefault(sid, {})
-            slot.update(
-                {
-                    "el_v1_score": m1["score"],
-                    "el_v1_r2_up": m1["r2_up"],
-                    "el_v1_straightness": m1["straightness_ratio"],
-                    "el_v1_monotonicity": m1["monotonicity"],
-                    "el_v1_new_high_frac": m1["new_high_frac"],
-                    "el_v1_net_gain": m1["net_gain"],
-                    "el_v2_score": m2["score"],
-                    "el_v2_tvr": m2["tvr"],
-                    "el_v2_tuw": m2["tuw"],
-                    "el_v2_r2_up": m2["r2_up"],
-                    "el_v2_spearman_rho": m2["spearman_rho"],
-                    "el_v2_t_slope": m2["t_slope"],
-                    "el_v2_t_slope_sig": m2["t_slope_sig"],
-                    "el_v2_mdd_norm": m2["mdd_norm"],
-                    "el_v2_net_gain": m2["net_gain"],
-                }
-            )
-            slot.update(alpha_performance_metrics_from_series(s))
-
-    if equities:
-        minlen = min(len(v) for v in equities.values())
-        if minlen >= 2:
-            portfolio = [sum(v[i] for v in equities.values()) for i in range(minlen)]
-            p1 = equity_linearity_metrics(portfolio)
-            p2 = equity_linearity_metrics_v2(portfolio)
-            portfolio_returns = equity_curve_to_returns(portfolio)
-            for sid in equities.keys():
-                slot = out.setdefault(sid, {})
-                slot.update(
-                    {
-                        "portfolio_el_v1_score": p1["score"],
-                        "portfolio_el_v2_score": p2["score"],
-                        "portfolio_el_v2_tvr": p2["tvr"],
-                        "portfolio_el_v2_tuw": p2["tuw"],
-                        "portfolio_el_v2_mdd_norm": p2["mdd_norm"],
-                    }
-                )
-                slot.update(alpha_performance_metrics_from_returns(portfolio_returns))
+    equities = _extract_equity_series(series, out)
+    _augment_with_portfolio_metrics(equities, out)
 
     return out
+
+
+def _extract_equity_series(
+    series: Dict[str, StrategySeries],
+    out: Dict[str, Dict[str, float]],
+) -> Dict[str, List[float]]:
+    equities: Dict[str, List[float]] = {}
+    for sid, s in series.items():
+        eq = _materialize_equity_curve(s)
+        if not eq or len(eq) < 2:
+            continue
+        equities[sid] = eq
+        m1 = equity_linearity_metrics(eq)
+        m2 = equity_linearity_metrics_v2(eq)
+        slot = out.setdefault(sid, {})
+        slot.update(
+            {
+                "el_v1_score": m1["score"],
+                "el_v1_r2_up": m1["r2_up"],
+                "el_v1_straightness": m1["straightness_ratio"],
+                "el_v1_monotonicity": m1["monotonicity"],
+                "el_v1_new_high_frac": m1["new_high_frac"],
+                "el_v1_net_gain": m1["net_gain"],
+                "el_v2_score": m2["score"],
+                "el_v2_tvr": m2["tvr"],
+                "el_v2_tuw": m2["tuw"],
+                "el_v2_r2_up": m2["r2_up"],
+                "el_v2_spearman_rho": m2["spearman_rho"],
+                "el_v2_t_slope": m2["t_slope"],
+                "el_v2_t_slope_sig": m2["t_slope_sig"],
+                "el_v2_mdd_norm": m2["mdd_norm"],
+                "el_v2_net_gain": m2["net_gain"],
+            }
+        )
+        slot.update(alpha_performance_metrics_from_series(s))
+    return equities
+
+
+def _materialize_equity_curve(series: StrategySeries) -> List[float] | None:
+    if series.equity:
+        return list(series.equity)
+    if series.pnl:
+        return list(series.pnl)
+    if series.returns:
+        cumulative = 0.0
+        eq: List[float] = []
+        for value in series.returns:
+            cumulative += float(value)
+            eq.append(cumulative)
+        return eq
+    return None
+
+
+def _augment_with_portfolio_metrics(
+    equities: Dict[str, List[float]],
+    out: Dict[str, Dict[str, float]],
+) -> None:
+    if not equities:
+        return
+    minlen = min(len(v) for v in equities.values())
+    if minlen < 2:
+        return
+    portfolio = [sum(v[i] for v in equities.values()) for i in range(minlen)]
+    p1 = equity_linearity_metrics(portfolio)
+    p2 = equity_linearity_metrics_v2(portfolio)
+    portfolio_returns = equity_curve_to_returns(portfolio)
+    for sid in equities.keys():
+        slot = out.setdefault(sid, {})
+        slot.update(
+            {
+                "portfolio_el_v1_score": p1["score"],
+                "portfolio_el_v2_score": p2["score"],
+                "portfolio_el_v2_tvr": p2["tvr"],
+                "portfolio_el_v2_tuw": p2["tuw"],
+                "portfolio_el_v2_mdd_norm": p2["mdd_norm"],
+            }
+        )
+        slot.update(alpha_performance_metrics_from_returns(portfolio_returns))
 
 
 class DecisionEvaluator:
