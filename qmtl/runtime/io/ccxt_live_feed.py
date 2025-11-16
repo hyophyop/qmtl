@@ -45,6 +45,34 @@ class CcxtProConfig:
     emit_building_candle: bool = False  # if False, emit only fully closed bars
 
 
+@dataclass(slots=True)
+class _SubscriptionParams:
+    node_id: str
+    symbol: str
+    timeframe: str | None
+    mode: str
+    interval: int
+    key: str
+
+
+@dataclass(slots=True)
+class _BackoffController:
+    schedule: list[float]
+    base_backoff: float
+    max_backoff: float
+    schedule_index: int = 0
+
+    def next_delay(self) -> float:
+        if self.schedule:
+            idx = min(self.schedule_index, len(self.schedule) - 1)
+            delay = self.schedule[idx]
+            self.schedule_index += 1
+            return delay
+        delay = self.base_backoff
+        self.base_backoff = min(self.max_backoff, self.base_backoff * 2.0)
+        return delay
+
+
 class CcxtProLiveFeed(LiveDataFeed):
     """LiveDataFeed powered by ccxt.pro websockets (draft).
 
@@ -72,63 +100,14 @@ class CcxtProLiveFeed(LiveDataFeed):
         return hasattr(ex, "watch_trades")
 
     async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pd.DataFrame]]:  # type: ignore[override]
-        parsed = _parse_ohlcv_node_id(node_id)
-        symbol = parsed[1] if parsed else None
-        tf = parsed[2] if parsed else None
-        mode = self._mode_for_node(node_id)
-        symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
-        if not symbol:
-            raise ValueError("CcxtProLiveFeed requires symbol in node_id or config.symbols")
-        timeframe = tf or self.config.timeframe
-        if mode == "ohlcv" and not timeframe:
-            raise ValueError("OHLCV mode requires timeframe (from node_id or config)")
-        key = f"{node_id}:{symbol}:{timeframe or ''}:{mode}:{int(interval)}"
-        self._subs[key] = True
-
-        schedule = self._build_backoff_schedule()
-        backoff = max(0.1, float(self.config.reconnect_backoff_s))
-        max_backoff = max(backoff, float(self.config.max_backoff_s))
-        schedule_index = 0
-
-        while self._subs.get(key, False):
-            ex = None
-            try:
-                ex = await self._get_or_create_exchange()
-                if mode == "ohlcv":
-                    async for ts, df in self._stream_ohlcv(ex, symbol, timeframe or "1m", interval, key):
-                        yield ts, df
-                else:
-                    async for ts, df in self._stream_trades(ex, symbol, interval, key):
-                        yield ts, df
-                # Normal termination (unsubscribe)
-                break
-            except asyncio.CancelledError:  # pragma: no cover - cooperative cancel
-                raise
-            except Exception as exc:
-                if not self._subs.get(key, False):
-                    break
-                log.warning("ccxtpro.live_feed.error; will reconnect", extra={
-                    "node_id": node_id,
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "mode": mode,
-                    "error": str(exc),
-                })
-                delay = None
-                if schedule:
-                    idx = min(schedule_index, len(schedule) - 1)
-                    delay = schedule[idx]
-                    schedule_index += 1
-                else:
-                    delay = backoff
-                    backoff = min(max_backoff, backoff * 2.0)
-                await asyncio.sleep(delay)
-            finally:
-                # no explicit close; ccxt.pro manages WS per instance; users may call .close()
-                pass
-
-        # cleanup
-        self._subs.pop(key, None)
+        params = self._build_subscription_params(node_id=node_id, interval=interval)
+        backoff = self._build_backoff_controller()
+        self._subs[params.key] = True
+        try:
+            async for ts, df in self._run_subscribe_loop(params=params, backoff=backoff):
+                yield ts, df
+        finally:
+            self._subs.pop(params.key, None)
 
     async def _stream_ohlcv(
         self,
@@ -202,6 +181,98 @@ class CcxtProLiveFeed(LiveDataFeed):
 
             yield normalized
 
+    def _build_subscription_params(self, *, node_id: str, interval: int) -> _SubscriptionParams:
+        parsed = _parse_ohlcv_node_id(node_id)
+        symbol = parsed[1] if parsed else None
+        tf = parsed[2] if parsed else None
+        mode = self._mode_for_node(node_id)
+        symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
+        if not symbol:
+            raise ValueError("CcxtProLiveFeed requires symbol in node_id or config.symbols")
+        timeframe = tf or self.config.timeframe
+        if mode == "ohlcv" and not timeframe:
+            raise ValueError("OHLCV mode requires timeframe (from node_id or config)")
+        key = f"{node_id}:{symbol}:{timeframe or ''}:{mode}:{int(interval)}"
+        return _SubscriptionParams(
+            node_id=node_id,
+            symbol=symbol,
+            timeframe=timeframe,
+            mode=mode,
+            interval=int(interval),
+            key=key,
+        )
+
+    def _build_backoff_controller(self) -> _BackoffController:
+        schedule = self._build_backoff_schedule()
+        base_backoff = max(0.1, float(self.config.reconnect_backoff_s))
+        max_backoff = max(base_backoff, float(self.config.max_backoff_s))
+        return _BackoffController(
+            schedule=schedule,
+            base_backoff=base_backoff,
+            max_backoff=max_backoff,
+        )
+
+    async def _run_subscribe_loop(
+        self,
+        *,
+        params: _SubscriptionParams,
+        backoff: _BackoffController,
+    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+        key = params.key
+        while self._subs.get(key, False):
+            try:
+                ex = await self._get_or_create_exchange()
+                async for ts, df in self._stream_by_mode(
+                    exchange=ex,
+                    symbol=params.symbol,
+                    timeframe=params.timeframe,
+                    interval=params.interval,
+                    mode=params.mode,
+                    key=key,
+                ):
+                    yield ts, df
+                # Normal termination (unsubscribe)
+                break
+            except asyncio.CancelledError:  # pragma: no cover - cooperative cancel
+                raise
+            except Exception as exc:
+                if not self._subs.get(key, False):
+                    break
+                self._log_subscribe_error(params=params, error=exc)
+                await asyncio.sleep(backoff.next_delay())
+
+    async def _stream_by_mode(
+        self,
+        *,
+        exchange: Any,
+        symbol: str,
+        timeframe: str | None,
+        interval: int,
+        mode: str,
+        key: str,
+    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+        if mode == "ohlcv":
+            effective_timeframe = timeframe or self.config.timeframe or "1m"
+            async for ts, df in self._stream_ohlcv(
+                exchange, symbol, effective_timeframe, interval, key
+            ):
+                yield ts, df
+        else:
+            async for ts, df in self._stream_trades(exchange, symbol, interval, key):
+                yield ts, df
+
+    def _log_subscribe_error(self, *, params: _SubscriptionParams, error: Exception) -> None:
+        log.warning(
+            "ccxtpro.live_feed.error; will reconnect",
+            extra={
+                "node_id": params.node_id,
+                "symbol": params.symbol,
+                "timeframe": params.timeframe,
+                "mode": params.mode,
+                "error": str(error),
+            },
+        )
+
     def _trade_records(self, trades: Iterable[dict[str, Any]], symbol: str) -> Iterable[dict[str, Any]]:
         for t in trades:
             try:
@@ -229,29 +300,13 @@ class CcxtProLiveFeed(LiveDataFeed):
         last_token = self._last_emitted_token.get(key)
         ready_records: list[dict[str, Any]] = []
         for raw in records:
-            if "ts" not in raw:
-                continue
-            try:
-                ts = int(raw["ts"])
-            except (TypeError, ValueError):
-                continue
-            record = dict(raw)
-            record["ts"] = ts
-            symbol_for_token: str | None
-            if self._uses_symbol_dedupe():
-                symbol_for_token = record.get("symbol")
-                if symbol_for_token is None:
-                    symbol_for_token = symbol
-                    if symbol is not None:
-                        record.setdefault("symbol", symbol)
-            else:
-                symbol_for_token = symbol
-            token = self._dedupe_token(ts, symbol_for_token)
-            if self.config.dedupe and not self._should_emit(last_token, token):
-                continue
-            ready_records.append(record)
-            if self.config.dedupe:
-                last_token = token
+            record, last_token = self._normalize_single_record(
+                raw,
+                symbol=symbol,
+                last_token=last_token,
+            )
+            if record is not None:
+                ready_records.append(record)
 
         if not ready_records:
             return None
@@ -272,6 +327,37 @@ class CcxtProLiveFeed(LiveDataFeed):
         self._last_emitted_token[key] = last_token
         return last_ts, df
 
+    def _normalize_single_record(
+        self,
+        raw: dict[str, Any],
+        *,
+        symbol: str | None,
+        last_token: int | tuple[int, str] | None,
+    ) -> tuple[dict[str, Any] | None, int | tuple[int, str] | None]:
+        if "ts" not in raw:
+            return None, last_token
+        try:
+            ts = int(raw["ts"])
+        except (TypeError, ValueError):
+            return None, last_token
+        record = dict(raw)
+        record["ts"] = ts
+        symbol_for_token: str | None
+        if self._uses_symbol_dedupe():
+            symbol_for_token = record.get("symbol")
+            if symbol_for_token is None:
+                symbol_for_token = symbol
+                if symbol is not None:
+                    record.setdefault("symbol", symbol)
+        else:
+            symbol_for_token = symbol
+        token = self._dedupe_token(ts, symbol_for_token)
+        if self.config.dedupe and not self._should_emit(last_token, token):
+            return None, last_token
+        if self.config.dedupe:
+            last_token = token
+        return record, last_token
+
     def _mode_for_node(self, node_id: str) -> str:
         if node_id.startswith("ohlcv:"):
             return "ohlcv"
@@ -283,6 +369,20 @@ class CcxtProLiveFeed(LiveDataFeed):
     async def _get_or_create_exchange(self) -> Any:
         if self._exchange is not None:
             return self._exchange
+        klass = self._resolve_ccxt_exchange_class()
+        ex = klass({"enableRateLimit": True, "newUpdates": True})
+        await self._configure_exchange(ex)
+        self._exchange = ex
+        return ex
+
+    def _resolve_ccxt_exchange_class(self) -> Any:
+        ccxtpro = self._import_ccxtpro_module()
+        eid = self.config.exchange_id.lower()
+        if not hasattr(ccxtpro, eid):
+            raise ValueError(f"Unknown ccxt.pro exchange id: {eid}")
+        return getattr(ccxtpro, eid)
+
+    def _import_ccxtpro_module(self) -> Any:
         # Lazy, guarded import of ccxt.pro
         ccxtpro: Optional[Any] = None
         try:  # pragma: no cover - optional dependency
@@ -290,33 +390,37 @@ class CcxtProLiveFeed(LiveDataFeed):
         except Exception:
             try:  # pragma: no cover - alternative name
                 import ccxtpro  # type: ignore
-            except Exception as e:  # noqa: F841
+            except Exception as exc:  # noqa: F841
                 raise RuntimeError(
                     "ccxt.pro is required for CcxtProLiveFeed; install ccxtpro or ccxt.pro"
-                )
-        eid = self.config.exchange_id.lower()
-        if not hasattr(ccxtpro, eid):
-            raise ValueError(f"Unknown ccxt.pro exchange id: {eid}")
-        klass = getattr(ccxtpro, eid)
-        ex = klass({"enableRateLimit": True, "newUpdates": True})
-        # best-effort sandbox mode
+                ) from exc
+        return ccxtpro
+
+    async def _configure_exchange(self, ex: Any) -> None:
+        self._apply_sandbox_mode_if_needed(ex)
+        await self._load_markets_if_available(ex)
+
+    def _apply_sandbox_mode_if_needed(self, ex: Any) -> None:
+        if not self.config.sandbox:
+            return
         try:
-            if self.config.sandbox and hasattr(ex, "set_sandbox_mode"):
+            if hasattr(ex, "set_sandbox_mode"):
                 ex.set_sandbox_mode(True)  # type: ignore[attr-defined]
+                return
         except Exception:
-            try:
-                if self.config.sandbox and hasattr(ex, "setSandboxMode"):
-                    getattr(ex, "setSandboxMode")(True)
-            except Exception:
-                pass
-        # best-effort market metadata
+            pass
+        try:
+            if hasattr(ex, "setSandboxMode"):
+                getattr(ex, "setSandboxMode")(True)
+        except Exception:
+            pass
+
+    async def _load_markets_if_available(self, ex: Any) -> None:
         try:
             if hasattr(ex, "load_markets"):
                 await ex.load_markets()
         except Exception:
             pass
-        self._exchange = ex
-        return ex
 
     def _build_backoff_schedule(self) -> list[float]:
         values = self.config.reconnect_backoff_ms or []
