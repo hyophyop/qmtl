@@ -267,31 +267,17 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         request: dagmanager_pb2.QueueStatsRequest,
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.QueueStats:
-        sizes = {}
-        if self._admin is not None:
-            sizes = self._admin.get_topic_sizes()
-        if request.filter and self._repo is not None and sizes:
-            tags: list[str] = []
-            interval = 0
-            try:
-                parts = [p for p in request.filter.split(";") if p]
-                kv = dict(p.split("=", 1) for p in parts if "=" in p)
-                tag_str = kv.get("tag")
-                if tag_str:
-                    tags = tag_str.split(",")
-                if "interval" in kv:
-                    interval = int(kv["interval"])
-            except Exception:
-                tags = []
-            if tags and interval:
-                queues = {
-                    q["queue"]
-                    for q in self._repo.get_queues_by_tag(
-                        tags, interval, match_mode="any"
-                    )
-                }
-                sizes = {k: v for k, v in sizes.items() if k in queues}
-        return dagmanager_pb2.QueueStats(sizes=sizes)
+        sizes = self._admin.get_topic_sizes() if self._admin is not None else {}
+        tags, interval = _parse_queue_filter(request.filter)
+        if not (tags and interval and self._repo and sizes):
+            return dagmanager_pb2.QueueStats(sizes=sizes)
+
+        queues = {
+            q["queue"]
+            for q in self._repo.get_queues_by_tag(tags, interval, match_mode="any")
+        }
+        filtered_sizes = {k: v for k, v in sizes.items() if k in queues}
+        return dagmanager_pb2.QueueStats(sizes=filtered_sizes)
 
     async def RedoDiff(
         self,
@@ -346,6 +332,21 @@ class HealthServicer(dagmanager_pb2_grpc.HealthCheckServicer):
             neo4j=info.get("neo4j", "unknown"),
             state=info.get("dagmanager", "unknown"),
         )
+
+
+def _parse_queue_filter(value: str) -> tuple[list[str], int]:
+    if not value:
+        return [], 0
+    try:
+        parts = [p for p in value.split(";") if p]
+        kv = dict(p.split("=", 1) for p in parts if "=" in p)
+        tags = kv.get("tag", "")
+        interval_str = kv.get("interval")
+        tag_list = tags.split(",") if tags else []
+        interval = int(interval_str) if interval_str is not None else 0
+        return tag_list, interval
+    except Exception:
+        return [], 0
 
 
 def serve(

@@ -443,24 +443,11 @@ class WorldServiceClient:
         schema_version: int | None = None,
         fallback_schema_version: int | None = None,
     ) -> list[tuple[int, dict[str, Any]]]:
-        if schema_version is not None:
-            preferred = max(1, schema_version)
-        else:
-            preferred = max(1, self._rebalance_schema_version or 1)
-        versions: list[int] = []
-        if preferred > 1:
-            versions.append(preferred)
-        fallback = (
-            max(1, fallback_schema_version)
-            if fallback_schema_version is not None
-            else (1 if preferred > 1 else None)
-        )
-        if fallback is not None and fallback not in versions:
-            versions.append(fallback)
-        if preferred == 1 and not versions:
-            versions.append(1)
+        preferred = self._preferred_schema_version(schema_version)
+        versions = self._rebalance_versions(preferred, fallback_schema_version)
         base_payload = dict(payload)
         base_payload.pop("schema_version", None)
+
         variants: list[tuple[int, dict[str, Any]]] = []
         for version in versions:
             body = dict(base_payload)
@@ -468,6 +455,23 @@ class WorldServiceClient:
                 body["schema_version"] = version
             variants.append((version, body))
         return variants
+
+    def _preferred_schema_version(self, explicit: int | None) -> int:
+        if explicit is not None:
+            return max(1, explicit)
+        return max(1, self._rebalance_schema_version or 1)
+
+    @staticmethod
+    def _rebalance_versions(preferred: int, fallback: int | None) -> list[int]:
+        versions: list[int] = []
+        if preferred > 1:
+            versions.append(preferred)
+        fallback_version = max(1, fallback) if fallback is not None else (1 if preferred > 1 else None)
+        if fallback_version is not None and fallback_version not in versions:
+            versions.append(fallback_version)
+        if preferred == 1 and not versions:
+            versions.append(1)
+        return versions
 
     def _should_retry_rebalance_version(
         self,

@@ -65,153 +65,61 @@ def create_app(
     shared_account_policy_config: SharedAccountPolicyConfig | None = None,
     health_capabilities: GatewayHealthCapabilities | None = None,
 ) -> FastAPI:
-    if health_capabilities is not None:
-        capabilities = health_capabilities
-    else:
-        capabilities = GatewayHealthCapabilities(
-            rebalance_schema_version=rebalance_schema_version,
-            alpha_metrics_capable=alpha_metrics_capable,
-        )
+    capabilities = health_capabilities or GatewayHealthCapabilities(
+        rebalance_schema_version=rebalance_schema_version,
+        alpha_metrics_capable=alpha_metrics_capable,
+    )
     redis_conn = redis_client or redis.Redis(host="localhost", port=6379, decode_responses=True)
-    if database is not None:
-        database_obj = database
-    else:
-        if database_backend == "postgres":
-            database_obj = PostgresDatabase(database_dsn or "postgresql://localhost/qmtl")
-        elif database_backend == "memory":
-            database_obj = MemoryDatabase()
-        elif database_backend == "sqlite":
-            database_obj = SQLiteDatabase(database_dsn or ":memory:")
-        else:
-            raise ValueError(f"Unsupported database backend: {database_backend}")
-    fsm = StrategyFSM(redis=redis_conn, database=database_obj)
-    dagmanager = dag_client if dag_client is not None else DagManagerClient("127.0.0.1:50051")
-    degradation = DegradationManager(redis_conn, database_obj, dagmanager, world_client)
-    commit_log_writer_local = commit_log_writer
-    world_client_local = world_client
-    shared_context_service = ComputeContextService(world_client=world_client_local)
+    database_obj = _resolve_database(database, database_backend, database_dsn)
+    dagmanager = dag_client or DagManagerClient("127.0.0.1:50051")
 
+    world_client_local = _resolve_world_client(
+        world_client,
+        enable_worldservice_proxy,
+        worldservice_url,
+        worldservice_timeout,
+        worldservice_retries,
+        capabilities,
+    )
+    degradation = DegradationManager(redis_conn, database_obj, dagmanager, world_client_local)
+
+    shared_context_service = ComputeContextService(world_client=world_client_local)
     manager = StrategyManager(
         redis=redis_conn,
         database=database_obj,
-        fsm=fsm,
+        fsm=StrategyFSM(redis=redis_conn, database=database_obj),
         degrade=degradation,
         insert_sentinel=insert_sentinel,
-        commit_log_writer=commit_log_writer_local,
+        commit_log_writer=commit_log_writer,
         context_service=shared_context_service,
         world_client=world_client_local,
     )
-    ws_hub_local = ws_hub
-    controlbus_consumer_local = controlbus_consumer
-    commit_log_consumer_local = commit_log_consumer
-    commit_log_handler_local = commit_log_handler
-    if world_client_local is None and enable_worldservice_proxy and worldservice_url is not None:
-        budget = Budget(timeout=worldservice_timeout, retries=worldservice_retries)
-        breaker = AsyncCircuitBreaker(
-            on_open=lambda: (
-                gw_metrics.worlds_breaker_state.set(1),
-                gw_metrics.worlds_breaker_open_total.inc(),
-            ),
-            on_close=lambda: (
-                gw_metrics.worlds_breaker_state.set(0),
-                gw_metrics.worlds_breaker_failures.set(0),
-            ),
-            on_failure=lambda c: gw_metrics.worlds_breaker_failures.set(c),
-        )
-        gw_metrics.worlds_breaker_state.set(0)
-        gw_metrics.worlds_breaker_failures.set(0)
-        world_client_local = WorldServiceClient(
-            worldservice_url,
-            budget=budget,
-            breaker=breaker,
-            rebalance_schema_version=capabilities.rebalance_schema_version,
-            alpha_metrics_capable=capabilities.alpha_metrics_capable,
-        )
-    elif world_client_local is not None:
-        world_client_local.configure_rebalance_capabilities(
-            schema_version=capabilities.rebalance_schema_version,
-            alpha_metrics_capable=capabilities.alpha_metrics_capable,
-        )
-    if world_client_local is not None:
-        degradation.world_client = world_client_local
-    if event_config is not None:
-        event_cfg = event_config
-    else:
-        secret = secrets.token_hex(32)
-        logger.warning(
-            "Gateway events.secret not configured; using a generated secret"
-        )
-        event_cfg = EventDescriptorConfig(
-            keys={"default": secret},
-            active_kid="default",
-            ttl=300,
-            stream_url="wss://gateway/ws/evt",
-            fallback_url="wss://gateway/ws",
-        )
+    event_cfg = _resolve_event_config(event_config)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         commit_task: asyncio.Task[None] | None = None
-        if enable_background and controlbus_consumer_local:
-            if ws_hub_local and controlbus_consumer_local.ws_hub is None:
-                controlbus_consumer_local.ws_hub = ws_hub_local
-            await controlbus_consumer_local.start()
-        if enable_background and commit_log_consumer_local:
-            await commit_log_consumer_local.start()
-            handler = commit_log_handler_local or (
-                lambda records: None
-            )
-            async def _consume_loop() -> None:
-                while True:
-                    await commit_log_consumer_local.consume(
-                        handler, timeout_ms=1000
-                    )
-
-            commit_task = asyncio.create_task(_consume_loop())
-        if enable_background and ws_hub_local:
-            await ws_hub_local.start()
+        commit_task = await _start_background(
+            enable_background=enable_background,
+            controlbus_consumer=controlbus_consumer,
+            commit_log_consumer=commit_log_consumer,
+            commit_log_handler=commit_log_handler,
+            ws_hub=ws_hub,
+        )
         try:
             yield
         finally:
-            if commit_task:
-                commit_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await commit_task
-            if ws_hub_local:
-                await ws_hub_local.stop()
-            if controlbus_consumer_local:
-                await controlbus_consumer_local.stop()
-            if commit_log_consumer_local:
-                await commit_log_consumer_local.stop()
-            if commit_log_writer_local is not None:
-                try:
-                    await commit_log_writer_local._producer.stop()
-                except Exception:
-                    logger.exception("Failed to close commit-log writer")
-            if hasattr(dagmanager, "close"):
-                await dagmanager.close()
-            db_obj = getattr(app.state, "database", None)
-            if db_obj is not None and hasattr(db_obj, "close"):
-                try:
-                    await db_obj.close()  # type: ignore[attr-defined]
-                except Exception:
-                    logger.exception("Failed to close database connection")
-            # Close Redis connection to avoid unclosed socket warnings in tests
-            try:
-                if hasattr(redis_conn, "aclose"):
-                    await redis_conn.aclose()  # type: ignore[attr-defined]
-                elif hasattr(redis_conn, "close"):
-                    await redis_conn.close()  # type: ignore[attr-defined]
-                pool = getattr(redis_conn, "connection_pool", None)
-                if pool is not None and hasattr(pool, "disconnect"):
-                    await pool.disconnect()  # type: ignore[attr-defined]
-            except Exception:
-                logger.exception("Failed to close Redis connection")
-            if world_client_local is not None and hasattr(world_client_local._client, "aclose"):
-                try:
-                    await world_client_local._client.aclose()  # type: ignore[attr-defined]
-                except Exception:
-                    logger.exception("Failed to close world client")
+            await _stop_background(
+                commit_task=commit_task,
+                ws_hub=ws_hub,
+                controlbus_consumer=controlbus_consumer,
+                commit_log_consumer=commit_log_consumer,
+                commit_log_writer=commit_log_writer,
+                dagmanager=dagmanager,
+                database_obj=database_obj,
+                redis_conn=redis_conn,
+                world_client=world_client_local,
+            )
 
     policy_config = shared_account_policy_config or SharedAccountPolicyConfig()
     shared_policy = policy_config.as_policy()
@@ -227,9 +135,9 @@ def create_app(
     app.state.world_client = world_client_local
     app.state.enforce_live_guard = enforce_live_guard
     app.state.event_config = event_cfg
-    app.state.ws_hub = ws_hub_local
-    app.state.commit_log_consumer = commit_log_consumer_local
-    app.state.commit_log_writer = commit_log_writer_local
+    app.state.ws_hub = ws_hub
+    app.state.commit_log_consumer = commit_log_consumer
+    app.state.commit_log_writer = commit_log_writer
     app.state.shared_account_policy = shared_policy
     app.state.health_capabilities = capabilities
 
@@ -256,7 +164,7 @@ def create_app(
         redis_conn,
         database_obj,
         dagmanager,
-        ws_hub_local,
+        ws_hub,
         degradation,
         world_client_local,
         enforce_live_guard,
@@ -271,8 +179,173 @@ def create_app(
     # dag clients so that initial snapshots/state hashes can be sent on
     # connection when topics are scoped.
     event_router = create_event_router(
-        ws_hub_local, event_cfg, world_client=world_client_local, dagmanager=dagmanager
+        ws_hub, event_cfg, world_client=world_client_local, dagmanager=dagmanager
     )
     app.include_router(event_router)
 
     return app
+
+
+def _resolve_database(
+    database: Optional[Database],
+    backend: str,
+    dsn: str | None,
+) -> Database:
+    if database is not None:
+        return database
+    if backend == "postgres":
+        return PostgresDatabase(dsn or "postgresql://localhost/qmtl")
+    if backend == "memory":
+        return MemoryDatabase()
+    if backend == "sqlite":
+        return SQLiteDatabase(dsn or ":memory:")
+    raise ValueError(f"Unsupported database backend: {backend}")
+
+
+def _resolve_world_client(
+    world_client: WorldServiceClient | None,
+    enable_proxy: bool,
+    url: str | None,
+    timeout: float,
+    retries: int,
+    capabilities: GatewayHealthCapabilities,
+) -> WorldServiceClient | None:
+    if world_client is None and enable_proxy and url is not None:
+        budget = Budget(timeout=timeout, retries=retries)
+        breaker = AsyncCircuitBreaker(
+            on_open=lambda: (
+                gw_metrics.worlds_breaker_state.set(1),
+                gw_metrics.worlds_breaker_open_total.inc(),
+            ),
+            on_close=lambda: (
+                gw_metrics.worlds_breaker_state.set(0),
+                gw_metrics.worlds_breaker_failures.set(0),
+            ),
+            on_failure=lambda c: gw_metrics.worlds_breaker_failures.set(c),
+        )
+        gw_metrics.worlds_breaker_state.set(0)
+        gw_metrics.worlds_breaker_failures.set(0)
+        return WorldServiceClient(
+            url,
+            budget=budget,
+            breaker=breaker,
+            rebalance_schema_version=capabilities.rebalance_schema_version,
+            alpha_metrics_capable=capabilities.alpha_metrics_capable,
+        )
+    if world_client is not None:
+        world_client.configure_rebalance_capabilities(
+            schema_version=capabilities.rebalance_schema_version,
+            alpha_metrics_capable=capabilities.alpha_metrics_capable,
+        )
+    return world_client
+
+
+def _resolve_event_config(event_config: EventDescriptorConfig | None) -> EventDescriptorConfig:
+    if event_config is not None:
+        return event_config
+    secret = secrets.token_hex(32)
+    logger.warning("Gateway events.secret not configured; using a generated secret")
+    return EventDescriptorConfig(
+        keys={"default": secret},
+        active_kid="default",
+        ttl=300,
+        stream_url="wss://gateway/ws/evt",
+        fallback_url="wss://gateway/ws",
+    )
+
+
+async def _start_background(
+    *,
+    enable_background: bool,
+    controlbus_consumer: ControlBusConsumer | None,
+    commit_log_consumer: CommitLogConsumer | None,
+    commit_log_handler: Callable[[list[tuple[str, int, str, Any]]], Awaitable[None]] | None,
+    ws_hub: WebSocketHub | None,
+) -> asyncio.Task[None] | None:
+    commit_task: asyncio.Task[None] | None = None
+    if enable_background and controlbus_consumer:
+        if ws_hub and controlbus_consumer.ws_hub is None:
+            controlbus_consumer.ws_hub = ws_hub
+        await controlbus_consumer.start()
+
+    if enable_background and commit_log_consumer:
+        await commit_log_consumer.start()
+        handler = commit_log_handler or (lambda records: None)
+
+        async def _consume_loop() -> None:
+            while True:
+                await commit_log_consumer.consume(handler, timeout_ms=1000)
+
+        commit_task = asyncio.create_task(_consume_loop())
+
+    if enable_background and ws_hub:
+        await ws_hub.start()
+    return commit_task
+
+
+async def _stop_background(
+    *,
+    commit_task: asyncio.Task[None] | None,
+    ws_hub: WebSocketHub | None,
+    controlbus_consumer: ControlBusConsumer | None,
+    commit_log_consumer: CommitLogConsumer | None,
+    commit_log_writer: CommitLogWriter | None,
+    dagmanager: DagManagerClient,
+    database_obj: Database,
+    redis_conn: redis.Redis,
+    world_client: WorldServiceClient | None,
+) -> None:
+    if commit_task:
+        commit_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await commit_task
+    if ws_hub:
+        await ws_hub.stop()
+    if controlbus_consumer:
+        await controlbus_consumer.stop()
+    if commit_log_consumer:
+        await commit_log_consumer.stop()
+    if commit_log_writer is not None:
+        await _safe_stop_commit_writer(commit_log_writer)
+    await _close_dagmanager_and_db(dagmanager, database_obj)
+    await _close_redis(redis_conn)
+    await _close_world_client(world_client)
+
+
+async def _safe_stop_commit_writer(writer: CommitLogWriter) -> None:
+    try:
+        await writer._producer.stop()
+    except Exception:
+        logger.exception("Failed to close commit-log writer")
+
+
+async def _close_dagmanager_and_db(dagmanager: DagManagerClient, database_obj: Database) -> None:
+    if hasattr(dagmanager, "close"):
+        await dagmanager.close()
+    if hasattr(database_obj, "close"):
+        try:
+            await database_obj.close()  # type: ignore[attr-defined]
+        except Exception:
+            logger.exception("Failed to close database connection")
+
+
+async def _close_redis(redis_conn: redis.Redis) -> None:
+    try:
+        if hasattr(redis_conn, "aclose"):
+            await redis_conn.aclose()  # type: ignore[attr-defined]
+        elif hasattr(redis_conn, "close"):
+            await redis_conn.close()  # type: ignore[attr-defined]
+        pool = getattr(redis_conn, "connection_pool", None)
+        if pool is not None and hasattr(pool, "disconnect"):
+            await pool.disconnect()  # type: ignore[attr-defined]
+    except Exception:
+        logger.exception("Failed to close Redis connection")
+
+
+async def _close_world_client(world_client: WorldServiceClient | None) -> None:
+    if world_client is None or not hasattr(world_client._client, "aclose"):
+        return
+    try:
+        await world_client._client.aclose()  # type: ignore[attr-defined]
+    except Exception:
+        logger.exception("Failed to close world client")
