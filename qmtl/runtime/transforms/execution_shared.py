@@ -86,34 +86,50 @@ def apply_sizing(
     if symbol is None:
         return None
 
-    qty: float | None = None
-    if "value" in sized:
-        qty = order_value(symbol, _coerce_float(sized["value"]) or 0.0, price)
-    elif "percent" in sized:
-        percent = _coerce_float(sized["percent"])
-        if percent is not None:
-            qty = order_percent(portfolio, symbol, percent, price)
-    elif "target_percent" in sized:
-        target = _coerce_float(sized["target_percent"])
-        if target is not None:
-            qty = order_target_percent(portfolio, symbol, target, price)
-
+    qty = _resolve_quantity(sized, portfolio, symbol, price)
     if qty is None:
         return sized
 
-    if weight_fn is not None:
-        try:
-            weight = float(weight_fn(sized))
-            if weight < 0.0:
-                weight = 0.0
-            elif weight > 1.0:
-                weight = 1.0
-            qty *= weight
-        except Exception:  # pragma: no cover - defensive guard
-            pass
-
-    sized["quantity"] = qty
+    sized["quantity"] = _apply_weight(qty, sized, weight_fn)
     return sized
+
+
+def _resolve_quantity(
+    sized: Mapping[str, Any], portfolio: Portfolio, symbol: Any, price: float
+) -> float | None:
+    calculators: tuple[tuple[str, Callable[[float], float | None]], ...] = (
+        ("value", lambda amount: order_value(symbol, amount, price)),
+        ("percent", lambda percent: order_percent(portfolio, symbol, percent, price)),
+        (
+            "target_percent",
+            lambda target: order_target_percent(portfolio, symbol, target, price),
+        ),
+    )
+
+    for key, calc in calculators:
+        if key not in sized:
+            continue
+        candidate = _coerce_float(sized[key])
+        if candidate is None:
+            continue
+        return calc(candidate)
+
+    return None
+
+
+def _apply_weight(
+    qty: float, sized: Mapping[str, Any], weight_fn: Callable[[Mapping[str, Any]], float] | None
+) -> float:
+    if weight_fn is None:
+        return qty
+
+    try:
+        weight = float(weight_fn(sized))
+    except Exception:  # pragma: no cover - defensive guard
+        return qty
+
+    bounded = max(0.0, min(weight, 1.0))
+    return qty * bounded
 
 
 __all__ = ["run_pretrade_checks", "apply_sizing"]

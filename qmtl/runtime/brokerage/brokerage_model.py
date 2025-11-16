@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel
@@ -110,26 +110,38 @@ class BrokerageModel:
             fill.fee = 0.0
             return fill
 
-        borrow_fee = 0.0
-        if self.shortable is not None and fill.quantity < 0:
-            from datetime import date as _date
-            borrow_fee = self.shortable.borrow(
-                order.symbol, -fill.quantity, on=_date.today() if ts is None else ts.date()
-            )
-
+        borrow_fee = self._borrow_fee(order, fill, ts)
         fee = self.fee_model.calculate(order, fill.price) + borrow_fee
         fill.fee = fee
+        currency = self._resolve_currency(order, account)
+        self._apply_settlement(account, fill, currency, fee, ts)
+        return fill
+
+    def _borrow_fee(self, order: Order, fill: Fill, ts: Optional[datetime]) -> float:
+        if self.shortable is None or fill.quantity >= 0:
+            return 0.0
+        settlement_day = date.today() if ts is None else ts.date()
+        return self.shortable.borrow(order.symbol, -fill.quantity, on=settlement_day)
+
+    def _resolve_currency(self, order: Order, account: Account) -> str:
+        if self.symbols is None:
+            return account.base_currency
+        return self.symbols.get(order.symbol).currency
+
+    def _apply_settlement(
+        self,
+        account: Account,
+        fill: Fill,
+        currency: str,
+        fee: float,
+        ts: Optional[datetime],
+    ) -> None:
         cost = fill.price * fill.quantity + fee
-        currency = (
-            self.symbols.get(order.symbol).currency
-            if self.symbols is not None
-            else account.base_currency
-        )
         now_ts = ts or datetime.now(timezone.utc)
         if self.settlement and self.settlement.defer_cash:
             self.settlement.record(account, fill, currency, now_ts)
-        else:
-            account.cashbook.adjust(currency, -cost)
-            if self.settlement:
-                self.settlement.record(account, fill, currency, now_ts)
-        return fill
+            return
+
+        account.cashbook.adjust(currency, -cost)
+        if self.settlement:
+            self.settlement.record(account, fill, currency, now_ts)
