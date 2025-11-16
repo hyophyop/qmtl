@@ -219,62 +219,19 @@ class TagQueryManager:
 
     # ------------------------------------------------------------------
     async def start(self) -> None:
-        if self._started:
-            if self._poll_task is not None and self._poll_task.done():
-                self._poll_task = None
-                self._started = False
-            else:
-                return
-
-        if self.client:
-            await self.client.start()
-            if self.gateway_url:
-                self._stop_event.clear()
-                self._poll_task = asyncio.create_task(self._poll_loop())
-            self._started = True
-            return
-        if not self.gateway_url:
-            return
-
-        subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
-        try:
-            async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
-                topic = (
-                    f"w/{self.world_id}/queues" if self.world_id else "queues"
-                )
-                payload = {
-                    "topics": [topic],
-                    "world_id": self.world_id or "",
-                    "strategy_id": self.strategy_id or "",
-                }
-                resp = await client.post(subscribe_url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    stream_url = data.get("stream_url")
-                    token = data.get("token")
-                    if stream_url:
-                        self.client = WebSocketClient(
-                            stream_url, on_message=self.handle_message, token=token
-                        )
-                        await self.client.start()
-                        # Start periodic reconcile loop for explicit status queries
-                        self._stop_event.clear()
-                        self._poll_task = asyncio.create_task(self._poll_loop())
-                        self._started = True
-                        return
-        except Exception:
+        if self._started and not self._poll_task_done():
             return
 
         if self.client:
-            await self.client.start()
-            # Start reconcile loop even if WS path was injected
-            if self.gateway_url:
-                self._stop_event.clear()
-                self._poll_task = asyncio.create_task(self._poll_loop())
-            self._started = True
+            await self._start_client_with_polling()
             return
 
-        # No legacy watch fallback; WebSocket is required
+        if await self._subscribe_and_connect():
+            return
+
+        if self.client:
+            await self._start_client_with_polling()
+
     async def stop(self) -> None:
         if self.client:
             await self.client.stop()
@@ -288,6 +245,51 @@ class TagQueryManager:
             finally:
                 self._poll_task = None
         self._started = False
+
+    def _poll_task_done(self) -> bool:
+        if self._poll_task is None:
+            return False
+        if self._poll_task.done():
+            self._poll_task = None
+            self._started = False
+            return True
+        return False
+
+    async def _start_client_with_polling(self) -> None:
+        await self.client.start()  # type: ignore[union-attr]
+        if self.gateway_url:
+            self._stop_event.clear()
+            self._poll_task = asyncio.create_task(self._poll_loop())
+        self._started = True
+
+    async def _subscribe_and_connect(self) -> bool:
+        if not self.gateway_url:
+            return False
+
+        subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
+        try:
+            async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
+                topic = f"w/{self.world_id}/queues" if self.world_id else "queues"
+                payload = {
+                    "topics": [topic],
+                    "world_id": self.world_id or "",
+                    "strategy_id": self.strategy_id or "",
+                }
+                resp = await client.post(subscribe_url, json=payload)
+                if resp.status_code != 200:
+                    return False
+                data = resp.json()
+                stream_url = data.get("stream_url")
+                token = data.get("token")
+                if not stream_url:
+                    return False
+                self.client = WebSocketClient(
+                    stream_url, on_message=self.handle_message, token=token
+                )
+                await self._start_client_with_polling()
+                return True
+        except Exception:
+            return False
 
     async def _poll_loop(self) -> None:
         # Periodically reconcile tag queries via HTTP GET to avoid depending
