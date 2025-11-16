@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from asyncio import CancelledError
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Generic, Protocol, TypeVar
 
@@ -63,6 +64,8 @@ async def execute_rpc(
     try:
         response = await command.execute()
         return RpcOutcome(result=parser.parse(response))
+    except CancelledError:
+        raise
     except Exception as exc:  # pragma: no cover - specifics validated by callers
         if on_error is not None:
             error = on_error(exc)
