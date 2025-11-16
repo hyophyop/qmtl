@@ -161,32 +161,61 @@ class GatewayClient:
     def _parse_strategy_response(
         self, result: GatewayCallResult
     ) -> StrategyAck | dict[str, object]:
-        if result.error:
-            return {"error": result.error}
+        error = self._extract_error_message(result)
+        if error is not None:
+            return {"error": error}
 
         status = result.status_code or 0
-        if status == 202:
-            self._reset_breaker()
-            payload = result.payload or {}
-            if not isinstance(payload, dict):
-                return {"error": "invalid gateway response"}
+        if status != 202:
+            return {"error": self._status_error_message(status)}
 
-            if "queue_map" not in payload:
-                if isinstance(payload.get("strategy_id"), str):
-                    payload = {**payload, "queue_map": {}}
-                else:
-                    return {"error": "invalid gateway response"}
-            try:
-                if hasattr(StrategyAck, "model_validate"):
-                    return StrategyAck.model_validate(payload)  # type: ignore[attr-defined]
-                return StrategyAck.parse_obj(payload)  # type: ignore[attr-defined]
-            except ValidationError:
-                return {"error": "invalid gateway response"}
+        self._reset_breaker()
+        payload = self._strategy_payload_dict(result.payload)
+        if payload is None:
+            return {"error": "invalid gateway response"}
+
+        normalized = self._ensure_queue_map(payload)
+        if normalized is None:
+            return {"error": "invalid gateway response"}
+
+        try:
+            return self._build_strategy_ack(normalized)
+        except ValidationError:
+            return {"error": "invalid gateway response"}
+
+    def _extract_error_message(self, result: GatewayCallResult) -> str | None:
+        if result.error:
+            return result.error
+        return None
+
+    def _status_error_message(self, status: int) -> str:
         if status == 409:
-            return {"error": "duplicate strategy"}
+            return "duplicate strategy"
         if status == 422:
-            return {"error": "invalid strategy payload"}
-        return {"error": f"gateway error {status}"}
+            return "invalid strategy payload"
+        return f"gateway error {status}"
+
+    def _strategy_payload_dict(self, payload: Any | None) -> dict[str, object] | None:
+        if payload is None:
+            return {}
+        if not isinstance(payload, dict):
+            return None
+        return payload
+
+    def _ensure_queue_map(self, payload: dict[str, object]) -> dict[str, object] | None:
+        if "queue_map" in payload:
+            return payload
+        strategy_id = payload.get("strategy_id")
+        if isinstance(strategy_id, str):
+            merged: dict[str, object] = dict(payload)
+            merged.setdefault("queue_map", {})
+            return merged
+        return None
+
+    def _build_strategy_ack(self, payload: dict[str, object]) -> StrategyAck:
+        if hasattr(StrategyAck, "model_validate"):
+            return StrategyAck.model_validate(payload)  # type: ignore[attr-defined]
+        return StrategyAck.parse_obj(payload)  # type: ignore[attr-defined]
 
     def _reset_breaker(self) -> None:
         if self._circuit_breaker is not None:
