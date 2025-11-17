@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import math
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 
@@ -81,7 +81,10 @@ def _apply_correlation(
         return list(candidates)
     selected: List[str] = []
     for sid in candidates:
-        if all(abs(correlations.get(tuple(sorted((sid, other))), 0.0)) <= rule.max for other in selected):
+        if all(
+            abs(correlations.get((sid, other) if sid <= other else (other, sid), 0.0)) <= rule.max
+            for other in selected
+        ):
             selected.append(sid)
     return selected
 

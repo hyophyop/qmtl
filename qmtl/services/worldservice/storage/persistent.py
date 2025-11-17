@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import aiosqlite
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.worldservice.policy_engine import Policy

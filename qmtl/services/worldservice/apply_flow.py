@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NoReturn
 
 from fastapi import HTTPException
 
@@ -18,7 +18,7 @@ from .edge_overrides import EdgeOverrideManager, EdgeOverridePlan
 from .policy import GatingPolicy
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import ApplyAck, ApplyRequest
-from .storage import Storage
+from .storage import Storage, WorldActivation
 
 
 @dataclass(slots=True)
@@ -28,8 +28,8 @@ class ApplyContext:
     gating: GatingPolicy | None
     plan: EdgeOverridePlan
     target_active: List[str]
-    snapshot_full: Dict[str, Any]
-    snapshot_view: Dict[str, Any]
+    snapshot_full: WorldActivation
+    snapshot_view: Dict[str, Dict[str, Dict[str, Any]]]
     previous_decisions: List[str]
 
 
@@ -234,7 +234,7 @@ class ApplyCoordinator:
 
     async def _handle_failure(
         self, context: ApplyContext, state: ApplyRunState, exc: Exception
-    ) -> None:
+    ) -> NoReturn:
         await self.store.restore_activation(context.world_id, context.snapshot_full)
         await self.store.set_decisions(context.world_id, list(context.previous_decisions))
         await self.store.record_apply_stage(

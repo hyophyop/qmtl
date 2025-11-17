@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Mapping, Optional
 
 from .base import (
@@ -41,7 +41,7 @@ class MultiWorldRebalanceContext:
     strategy_alloc_before_total: Mapping[str, Mapping[str, float]] | None = None
     strategy_alloc_after_total: Mapping[str, Mapping[str, float]] | None = None
     # Positions across all worlds (world_id required)
-    positions: List[PositionSlice] = None
+    positions: List[PositionSlice] = field(default_factory=list)
     # Execution considerations
     min_trade_notional: float = 0.0
     lot_size_by_symbol: Mapping[str, float] | None = None

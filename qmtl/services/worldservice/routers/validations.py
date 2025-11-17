@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Response
 
 from ..schemas import (
@@ -8,10 +10,18 @@ from ..schemas import (
     ValidationCacheStoreRequest,
 )
 from ..services import WorldService
+from ..storage import ValidationCacheEntry
 
 
 def create_validations_router(service: WorldService) -> APIRouter:
     router = APIRouter()
+
+    def _coerce_entry(entry: ValidationCacheEntry | dict[str, Any] | None) -> ValidationCacheEntry | None:
+        if entry is None:
+            return None
+        if isinstance(entry, ValidationCacheEntry):
+            return entry
+        return ValidationCacheEntry(**entry)
 
     @router.post(
         '/worlds/{world_id}/validations/cache/lookup',
@@ -21,8 +31,8 @@ def create_validations_router(service: WorldService) -> APIRouter:
         world_id: str, payload: ValidationCacheLookupRequest
     ) -> ValidationCacheResponse:
         store = service.store
-        entry = await store.get_validation_cache(world_id, **payload.model_dump())
-        if not entry:
+        entry = _coerce_entry(await store.get_validation_cache(world_id, **payload.model_dump()))
+        if entry is None:
             return ValidationCacheResponse(cached=False)
         return ValidationCacheResponse(
             cached=True,
@@ -37,7 +47,9 @@ def create_validations_router(service: WorldService) -> APIRouter:
         world_id: str, payload: ValidationCacheStoreRequest
     ) -> ValidationCacheResponse:
         store = service.store
-        entry = await store.set_validation_cache(world_id, **payload.model_dump())
+        entry = _coerce_entry(await store.set_validation_cache(world_id, **payload.model_dump()))
+        if entry is None:
+            return ValidationCacheResponse(cached=False)
         return ValidationCacheResponse(
             cached=True,
             eval_key=entry.eval_key,

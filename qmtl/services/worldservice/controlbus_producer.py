@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import Any, Dict, Iterable
+from typing import TYPE_CHECKING, Any, Dict, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
+
+if TYPE_CHECKING:  # pragma: no cover - optional dependency
+    from aiokafka import AIOKafkaProducer  # type: ignore[import-not-found]
+else:
+    AIOKafkaProducer = Any
 
 
 class ControlBusProducer:
     """Publish updates to the internal ControlBus."""
 
-    def __init__(self, *, brokers: Iterable[str] | None = None, topic: str = "policy", producer: Any | None = None) -> None:
+    def __init__(self, *, brokers: Iterable[str] | None = None, topic: str = "policy", producer: AIOKafkaProducer | None = None) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
-        self._producer = producer
+        self._producer: AIOKafkaProducer | None = producer
 
     async def start(self) -> None:
         if self._producer is not None or not self.brokers:

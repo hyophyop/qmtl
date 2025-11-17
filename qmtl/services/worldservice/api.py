@@ -5,7 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 import redis.asyncio as redis
 from fastapi import FastAPI
@@ -64,10 +64,12 @@ def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Aw
 
     async def _factory() -> StorageHandle:
         redis_client = redis.from_url(config.redis, decode_responses=True)
-        storage = await PersistentStorage.create(db_dsn=config.dsn, redis_client=redis_client)
+        storage = cast(Storage, await PersistentStorage.create(db_dsn=config.dsn, redis_client=redis_client))
 
         async def _shutdown() -> None:
-            await storage.close()
+            close = getattr(storage, "close", None)
+            if close is not None:
+                await _maybe_await(close())
             try:
                 if hasattr(redis_client, "aclose"):
                     await _maybe_await(redis_client.aclose())
