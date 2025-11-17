@@ -1,24 +1,31 @@
-import math
 import importlib.util
-from types import ModuleType
-import sys
+import math
+import types
+from pathlib import Path
 
 
-def _load_portfolio_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "qmtl.runtime.sdk.portfolio", "qmtl/runtime/sdk/portfolio.py"
-    )
-    assert spec and spec.loader
+def _load_module(module_name: str, module_file: Path) -> types.ModuleType:
+    spec = importlib.util.spec_from_file_location(module_name, module_file)
+    if spec is None or spec.loader is None:
+        msg = f"Could not load module '{module_name}' from {module_file!s}"
+        raise ImportError(msg)
+
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # type: ignore[index]
-    spec.loader.exec_module(module)  # type: ignore[assignment]
-    return module  # type: ignore[return-value]
+    spec.loader.exec_module(module)
+    return module
 
 
-pf = _load_portfolio_module()
+pf = _load_module(
+    "qmtl.runtime.sdk.portfolio",
+    Path(__file__).resolve().parents[2] / "runtime" / "sdk" / "portfolio.py",
+)
 
-# Import example function directly (this import touches only the example module)
-from qmtl.examples.strategies.rebalance_strategy import compute_rebalance_quantity
+rebalance = _load_module(
+    "rebalance_strategy",
+    Path(__file__).resolve().parent.parent / "strategies" / "rebalance_strategy.py",
+)
+
+compute_rebalance_quantity = rebalance.compute_rebalance_quantity
 
 
 def test_compute_rebalance_quantity_progresses_toward_target():

@@ -179,16 +179,21 @@ class LayerComposer:
 from __future__ import annotations
 
 from qmtl.runtime.sdk import Runner
+from qmtl.runtime.plugin_loader import StrategyFactory, load_strategy_factory
 
-try:
-    from layers.signal.strategy import create_strategy  # type: ignore
-except ImportError as exc:  # pragma: no cover - exercised via integration tests
-    def create_strategy():
-        """Fallback when no signal layer is scaffolded."""
+def _missing_signal_layer() -> StrategyFactory:
+    def _raise_signal_missing():
         raise NotImplementedError(
             "Signal layer not available. Add a signal layer or implement "
             "create_strategy() in strategy.py."
-        ) from exc
+        )
+
+    return _raise_signal_missing
+
+
+create_strategy: StrategyFactory = load_strategy_factory(
+    "layers.signal.strategy", fallback=_missing_signal_layer()
+)
 
 
 def main() -> None:
@@ -238,12 +243,13 @@ data/*.csv
         test_template = '''"""Basic strategy tests."""
 
 import pytest
+from qmtl.runtime.plugin_loader import load_strategy_factory
 
 
 def test_strategy_import():
     """Test that strategy can be imported when a signal layer exists."""
     try:
-        from layers.signal.strategy import create_strategy
+        create_strategy = load_strategy_factory("layers.signal.strategy")
     except ImportError:
         pytest.skip("Signal layer not scaffolded")
     assert create_strategy is not None
