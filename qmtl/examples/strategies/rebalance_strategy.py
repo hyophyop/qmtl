@@ -5,15 +5,49 @@ weight for a symbol using the SDK's portfolio utilities.
 """
 from __future__ import annotations
 
+import importlib.util
+import sys
 from pathlib import Path
-
-from qmtl.runtime.plugin_loader import PortfolioModule, load_portfolio_module
+from typing import TYPE_CHECKING, Callable, Protocol
 
 _PORTFOLIO_FALLBACK = (
     Path(__file__).resolve().parents[2] / "runtime" / "sdk" / "portfolio.py"
 )
 
-pf: PortfolioModule = load_portfolio_module(module_file=_PORTFOLIO_FALLBACK)
+if TYPE_CHECKING:  # pragma: no cover - typing aid only
+    from qmtl.runtime.plugin_loader import PortfolioModule
+else:
+    # Minimal protocol to avoid importing qmtl in lean environments where optional
+    # dependencies are unavailable.
+    class PortfolioModule(Protocol):
+        Portfolio: type
+        Position: type
+        order_value: Callable[[str, float, float], float]
+
+
+def _load_module_from_path(module_name: str, module_file: Path) -> PortfolioModule:
+    spec = importlib.util.spec_from_file_location(module_name, module_file)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load module '{module_name}' from {module_file!s}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module  # type: ignore[return-value]
+
+
+def _load_portfolio_helpers(module_file: Path) -> PortfolioModule:
+    """Load the portfolio helpers without importing ``qmtl`` if unavailable."""
+
+    try:
+        from qmtl.runtime.plugin_loader import load_portfolio_module
+    except ModuleNotFoundError:
+        return _load_module_from_path("qmtl.runtime.sdk.portfolio", module_file)
+
+    return load_portfolio_module(module_file=module_file)
+
+
+pf: PortfolioModule = _load_portfolio_helpers(_PORTFOLIO_FALLBACK)
 
 
 def compute_rebalance_quantity(
