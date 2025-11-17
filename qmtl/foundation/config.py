@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Mapping
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from qmtl.services.gateway.config import GatewayConfig
 from qmtl.services.dagmanager.config import DagManagerConfig
