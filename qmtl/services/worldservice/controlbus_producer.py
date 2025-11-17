@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import json
 from typing import Any, Dict, Iterable
 
@@ -13,17 +14,21 @@ class ControlBusProducer:
     def __init__(self, *, brokers: Iterable[str] | None = None, topic: str = "policy", producer: Any | None = None) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
-        self._producer = producer
+        self._producer: Any | None = producer
 
     async def start(self) -> None:
         if self._producer is not None or not self.brokers:
             return
         try:  # pragma: no cover - optional dependency
-            from aiokafka import AIOKafkaProducer
+            module = importlib.import_module("aiokafka")
+            producer_cls = getattr(module, "AIOKafkaProducer", None)
+            if producer_cls is None:
+                return
         except Exception:
             return
-        self._producer = AIOKafkaProducer(bootstrap_servers=self.brokers)
-        await self._producer.start()
+        producer = producer_cls(bootstrap_servers=self.brokers)
+        self._producer = producer
+        await producer.start()
 
     async def stop(self) -> None:
         if self._producer is None:

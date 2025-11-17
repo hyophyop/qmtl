@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel
 
 from ..schemas import (
     EdgeOverrideResponse,
@@ -148,7 +149,7 @@ def create_worlds_router(service: WorldService) -> APIRouter:
         if isinstance(coverage, tuple):
             record['coverage_bounds'] = list(coverage)
         artifact = record.get('artifact')
-        if hasattr(artifact, 'model_dump'):
+        if isinstance(artifact, BaseModel):
             record['artifact'] = artifact.model_dump(exclude_unset=True)
         updated = record.get('updated_at')
         if not updated:

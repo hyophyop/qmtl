@@ -87,17 +87,14 @@ def create_rebalancing_router(
         intent_payload: RebalanceIntentModel | None = None
         if active_version >= 2:
             intent_payload = intent or RebalanceIntentModel()
-        response_kwargs: dict[str, object] = {
-            "schema_version": active_version,
-            "per_world": per_world,
-            "global_deltas": global_deltas,
-        }
-        if alpha_metrics is not None:
-            response_kwargs["alpha_metrics"] = alpha_metrics
-        if intent_payload is not None:
-            response_kwargs["rebalance_intent"] = intent_payload
         return (
-            MultiWorldRebalanceResponse(**response_kwargs),
+            MultiWorldRebalanceResponse(
+                schema_version=active_version,
+                per_world=per_world,
+                global_deltas=global_deltas,
+                alpha_metrics=alpha_metrics,
+                rebalance_intent=intent_payload,
+            ),
             alpha_metrics,
             per_world,
             global_deltas,
@@ -205,8 +202,8 @@ def create_rebalancing_router(
             pass
 
         # Emit a ControlBus event per world if a bus is configured
-        if getattr(service, "bus", None) is not None:
-            bus = service.bus
+        bus = service.bus
+        if bus is not None:
             alpha_metrics_dict = (
                 alpha_metrics.model_dump() if alpha_metrics is not None else None
             )

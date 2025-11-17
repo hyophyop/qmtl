@@ -5,7 +5,12 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Response
 
-from ..schemas import BindingsResponse, DecisionEnvelope, DecisionsRequest
+from ..schemas import (
+    BindingsResponse,
+    DecisionEnvelope,
+    DecisionsRequest,
+    SeamlessArtifactPayload,
+)
 from ..services import WorldService
 from qmtl.foundation.common.compute_context import canonicalize_world_mode
 
@@ -48,7 +53,7 @@ def create_bindings_router(service: WorldService) -> APIRouter:
                 rows = int(rows)
             except Exception:
                 rows = None
-        artifact_payload: Dict[str, Any] | None = None
+        artifact_payload: SeamlessArtifactPayload | None = None
         as_of_value = metadata.get('as_of') if metadata else None
         if metadata:
             raw_cov = metadata.get('coverage_bounds')
@@ -62,13 +67,13 @@ def create_bindings_router(service: WorldService) -> APIRouter:
                 conformance_warnings = [str(v) for v in raw_warnings]
             candidate_artifact = metadata.get('artifact')
             if isinstance(candidate_artifact, dict):
-                artifact_payload = dict(candidate_artifact)
-                artifact_as_of = artifact_payload.get('as_of')
+                artifact_payload = SeamlessArtifactPayload.model_validate(candidate_artifact)
+                artifact_as_of = artifact_payload.as_of
                 if artifact_as_of and not as_of_value:
                     as_of_value = str(artifact_as_of)
-                if rows is None and 'rows' in artifact_payload:
+                if rows is None and artifact_payload.rows is not None:
                     try:
-                        rows = int(artifact_payload['rows'])
+                        rows = int(artifact_payload.rows)
                     except Exception:
                         rows = rows
         if as_of_value is None:

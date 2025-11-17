@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -9,16 +9,22 @@ from .policy_engine import Policy
 from .storage import EXECUTION_DOMAINS, WORLD_NODE_STATUSES
 
 
-ExecutionDomainEnum = Enum(
-    "ExecutionDomainEnum",
-    {value.upper(): value for value in sorted(EXECUTION_DOMAINS)},
-    type=str,
-)
-WorldNodeStatusEnum = Enum(
-    "WorldNodeStatusEnum",
-    {value.upper(): value for value in sorted(WORLD_NODE_STATUSES)},
-    type=str,
-)
+class ExecutionDomainEnum(StrEnum):
+    BACKTEST = "backtest"
+    DRYRUN = "dryrun"
+    LIVE = "live"
+    SHADOW = "shadow"
+
+
+class WorldNodeStatusEnum(StrEnum):
+    UNKNOWN = "unknown"
+    VALIDATING = "validating"
+    VALID = "valid"
+    INVALID = "invalid"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    ARCHIVED = "archived"
 
 
 class StrategySeries(BaseModel):
@@ -279,7 +285,15 @@ class MultiWorldRebalanceResponse(BaseModel):
     overlay_deltas: List[SymbolDeltaModel] | None = None
     alpha_metrics: AlphaMetricsEnvelope | None = None
     rebalance_intent: RebalanceIntentModel | None = None
-    model_config = ConfigDict(ser_json_exclude_none=True)
+    model_config = ConfigDict()
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump(*args, **kwargs)
+
+    def model_dump_json(self, *args: Any, **kwargs: Any) -> str:
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump_json(*args, **kwargs)
 
 
 class OverlayConfigModel(BaseModel):
