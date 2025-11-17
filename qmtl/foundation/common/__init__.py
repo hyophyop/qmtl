@@ -1,5 +1,11 @@
 from .crc import crc32_of_list
-from .reconnect import ReconnectingRedis, ReconnectingNeo4j
+from .reconnect import (
+    Neo4jDriverLike,
+    Neo4jSessionLike,
+    ReconnectingRedis,
+    ReconnectingNeo4j,
+    create_neo4j_driver,
+)
 from .circuit_breaker import AsyncCircuitBreaker
 from .four_dim_cache import FourDimCache
 from .hashutils import hash_bytes
@@ -21,8 +27,11 @@ from .health import CheckResult, Code, classify_result, probe_http, probe_http_a
 
 __all__ = [
     "crc32_of_list",
+    "Neo4jDriverLike",
+    "Neo4jSessionLike",
     "ReconnectingRedis",
     "ReconnectingNeo4j",
+    "create_neo4j_driver",
     "AsyncCircuitBreaker",
     "FourDimCache",
     "hash_bytes",
