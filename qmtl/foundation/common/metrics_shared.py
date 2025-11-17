@@ -7,8 +7,10 @@ duplicate registration when both subsystems are imported in the same process.
 """
 
 from qmtl.foundation.common.metrics_factory import (
+    get_mapping_store,
     get_or_create_counter,
     get_or_create_gauge,
+    increment_mapping_store,
     reset_metrics,
 )
 
@@ -47,10 +49,11 @@ def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
     g = get_nodecache_resident_bytes()
     n = str(node_id)
     g.labels(node_id=n, scope="node").set(resident)
-    g._vals[(n, "node")] = resident  # type: ignore[attr-defined]
-    total = sum(v for (nid, sc), v in g._vals.items() if sc == "node")  # type: ignore[attr-defined]
+    store = get_mapping_store(g, dict)
+    store[(n, "node")] = resident
+    total = sum(v for (nid, sc), v in store.items() if sc == "node")
     g.labels(node_id="all", scope="total").set(total)
-    g._vals[("all", "total")] = total  # type: ignore[attr-defined]
+    store[("all", "total")] = total
 
 
 def clear_nodecache_resident_bytes() -> None:
@@ -101,7 +104,7 @@ def observe_cross_context_cache_hit(
     )
     counter.labels(**labels).inc()
     key = tuple(labels.values())
-    counter._vals[key] = counter._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+    increment_mapping_store(counter, key, factory=dict)
 
 
 def clear_cross_context_cache_hits() -> None:

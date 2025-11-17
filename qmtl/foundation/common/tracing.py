@@ -9,6 +9,7 @@ canonical YAML configuration. Setting the value to ``console`` retains the
 development-friendly behaviour of printing spans locally.
 """
 
+import importlib
 import logging
 from pathlib import Path
 from typing import Dict, Optional
@@ -17,20 +18,24 @@ from opentelemetry import trace
 from opentelemetry.propagate import inject
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-try:
-    # Optional dependency; only needed when an OTLP endpoint is configured
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore
-except Exception:  # pragma: no cover - optional dependency not present
-    OTLPSpanExporter = None  # type: ignore
-try:  # Console exporter is optional; avoid when not explicitly requested
-    from opentelemetry.sdk.trace.export import ConsoleSpanExporter  # type: ignore
-except Exception:  # pragma: no cover - optional dependency not present
-    ConsoleSpanExporter = None  # type: ignore
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
 logger = logging.getLogger(__name__)
 
 _INITIALISED = False
+
+
+def _load_exporter(module: str, attribute: str) -> type[SpanExporter] | None:
+    try:
+        module_ref = importlib.import_module(module)
+    except Exception:  # pragma: no cover - optional dependency not present
+        return None
+    exporter = getattr(module_ref, attribute, None)
+    if exporter is None:
+        return None
+    if not isinstance(exporter, type):  # pragma: no cover - defensive
+        return None
+    return exporter
 
 
 def _load_endpoint_from_config(config_path: str | Path | None) -> str | None:
@@ -99,12 +104,19 @@ def setup_tracing(
     # - Else if explicitly requested console via env value 'console' → Console exporter (when available)
     # - Else → no exporter (tests/local default) to avoid noisy/fragile shutdown warnings
     if endpoint:
-        if endpoint.strip().lower() == "console" and ConsoleSpanExporter is not None:
-            exporter = ConsoleSpanExporter()  # type: ignore[call-arg]
+        console_exporter_cls = _load_exporter(
+            "opentelemetry.sdk.trace.export", "ConsoleSpanExporter"
+        )
+        otlp_exporter_cls = _load_exporter(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+            "OTLPSpanExporter",
+        )
+        if endpoint.strip().lower() == "console" and console_exporter_cls is not None:
+            exporter = console_exporter_cls()
             provider.add_span_processor(BatchSpanProcessor(exporter))
         else:
-            if OTLPSpanExporter is not None:  # type: ignore[truthy-bool]
-                exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)  # type: ignore[call-arg]
+            if otlp_exporter_cls is not None:
+                exporter = otlp_exporter_cls(endpoint=endpoint, insecure=True)
                 provider.add_span_processor(BatchSpanProcessor(exporter))
             # else: silently skip when exporter package is unavailable
     # When no exporter configured, tracing remains enabled with a provider but nothing is exported.

@@ -13,6 +13,7 @@ from qmtl.services.dagmanager.topic import topic_name
 from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
 import httpx
 import time
+from qmtl.foundation.common.metrics_factory import get_mapping_store, get_metric_value
 from qmtl.services.dagmanager import metrics
 from qmtl.services.dagmanager.monitor import AckStatus
 
@@ -120,12 +121,12 @@ def test_diff_duration_and_error_metrics():
     metrics.reset_metrics()
     service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
     service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.diff_duration_ms_p95._value.get() > 0  # type: ignore[attr-defined]
+    assert get_metric_value(metrics.diff_duration_ms_p95) > 0
 
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())
     with pytest.raises(RuntimeError):
         service_err.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
-    assert metrics.queue_create_error_total._value.get() == 1  # type: ignore[attr-defined]
+    assert get_metric_value(metrics.queue_create_error_total) == 1
 
 
 def test_gc_sets_orphan_gauge():
@@ -142,7 +143,7 @@ def test_gc_sets_orphan_gauge():
 
     gc = GarbageCollector(Store(), DummyMetrics())
     gc.collect(now)
-    assert metrics.orphan_queue_total._value.get() == 1  # type: ignore[attr-defined]
+    assert get_metric_value(metrics.orphan_queue_total) == 1
 
 
 def test_metrics_server_exposes_http():
@@ -179,9 +180,10 @@ def test_cache_view_metrics_increment():
         upstream_id="u1", interval="60"
     )._value.get() == 1
     assert (
-        sdk_metrics.cache_last_read_timestamp.labels(
-            upstream_id="u1", interval="60"
-        )._value.get()
+        get_metric_value(
+            sdk_metrics.cache_last_read_timestamp,
+            {"upstream_id": "u1", "interval": "60"},
+        )
         > 0
     )
 
@@ -190,8 +192,9 @@ def test_dagmanager_nodecache_metric_aggregates():
     metrics.reset_metrics()
     metrics.observe_nodecache_resident_bytes("n1", 10)
     metrics.observe_nodecache_resident_bytes("n2", 20)
-    assert metrics.nodecache_resident_bytes._vals[("n1", "node")] == 10
-    assert metrics.nodecache_resident_bytes._vals[("all", "total")] == 30
+    store = get_mapping_store(metrics.nodecache_resident_bytes, dict)
+    assert store[("n1", "node")] == 10
+    assert store[("all", "total")] == 30
 
 
 def test_sdk_nodecache_metric_updates():
@@ -206,8 +209,9 @@ def test_sdk_nodecache_metric_updates():
     )
     Runner.feed_queue_data(node, src.node_id, 60, 60, {"v": 1})
     expected = node.cache.resident_bytes
-    assert sdk_metrics.nodecache_resident_bytes._vals[(node.node_id, "node")] == expected
-    assert sdk_metrics.nodecache_resident_bytes._vals[("all", "total")] == expected
+    node_store = get_mapping_store(sdk_metrics.nodecache_resident_bytes, dict)
+    assert node_store[(node.node_id, "node")] == expected
+    assert node_store[("all", "total")] == expected
 
 
 def test_metrics_cli_parses_port(monkeypatch):
