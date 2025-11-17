@@ -6,7 +6,7 @@ This module provides Binance brokerage integration.
 from __future__ import annotations
 
 try:
-    import ccxt
+    import ccxt  # type: ignore[import-untyped]
 except ImportError:
     ccxt = None
 

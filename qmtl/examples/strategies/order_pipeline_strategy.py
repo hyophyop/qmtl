@@ -5,6 +5,8 @@ from two upstreams at once. We combine the alpha history with the raw price
 stream to gate long signals when the short-term price trend is down.
 """
 
+from typing import Any, Mapping
+
 from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner, TradeExecutionService
 from qmtl.runtime.transforms import (
     alpha_history_node,
@@ -64,7 +66,7 @@ class OrderPipelineStrategy(Strategy):
         orders = TradeOrderPublisherNode(signal)
 
         # Route orders by symbol: simple example mapping suffix to exchange name
-        def route_fn(order: dict) -> str:
+        def route_fn(order: Mapping[str, Any]) -> str:
             sym = order.get("symbol", "") or ""
             return "binance" if str(sym).upper().endswith("USDT") else "ibkr"
 

@@ -1,5 +1,5 @@
 from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, Runner, MatchMode
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 class CorrelationStrategy(Strategy):
     def setup(self):

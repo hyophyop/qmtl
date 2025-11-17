@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.io import QuestDBRecorder
-from qmtl.runtime.sdk import StreamInput, Node, Runner, metrics, EventRecorderService
+from qmtl.runtime.io import QuestDBRecorder  # type: ignore[import-untyped]
+from qmtl.runtime.sdk import (
+    EventRecorderService,
+    Node,
+    Runner,
+    StreamInput,
+    metrics,
+)  # type: ignore[import-untyped]
 from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
 
 
@@ -50,22 +56,8 @@ class MA2(BaseMA2):
 
 async def main() -> None:
     metrics.start_metrics_server(port=8000)
-    task1 = asyncio.create_task(
-        Runner.run_async(
-            MA1,
-            world_id="parallel_ma1",
-            gateway_url="http://localhost:8000",
-            offline=True,
-        )
-    )
-    task2 = asyncio.create_task(
-        Runner.run_async(
-            MA2,
-            world_id="parallel_ma2",
-            gateway_url="http://localhost:8000",
-            offline=True,
-        )
-    )
+    task1 = asyncio.create_task(Runner.offline_async(MA1))
+    task2 = asyncio.create_task(Runner.offline_async(MA2))
     await asyncio.gather(task1, task2)
     print(metrics.collect_metrics())
 

@@ -18,12 +18,12 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.sdk import Node, StreamInput  # type: ignore[import-untyped]
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
 
 
 def _make_signal(symbol: str) -> Node:
-    price = StreamInput(interval="60s", period=1)
+    price = StreamInput(interval=60, period=1)
 
     def compute(view: Any) -> dict[str, Any]:
         return {
@@ -61,8 +61,8 @@ def main() -> None:
     # Prime upstream nodes so the recipe can process the order payload
     price = signal.input  # StreamInput from _make_signal
     assert isinstance(price, StreamInput)
-    price.feed(price.node_id, price.interval, 60, {"close": 1})
-    signal.feed(price.node_id, price.interval, 60, {"close": 1})
+    price.feed(price.node_id, price.interval or 0, 60, {"close": 1})
+    signal.feed(price.node_id, price.interval or 0, 60, {"close": 1})
 
     nodes = list(nodeset)
     pre, siz, exe, pub = nodes[0], nodes[1], nodes[2], nodes[3]

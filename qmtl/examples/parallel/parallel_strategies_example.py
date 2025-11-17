@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics
+from qmtl.runtime.sdk import (
+    Node,
+    Runner,
+    Strategy,
+    StreamInput,
+    metrics,
+)  # type: ignore[import-untyped]
 
 
 class MA1(Strategy):
@@ -32,22 +38,8 @@ class MA2(Strategy):
 
 async def main() -> None:
     metrics.start_metrics_server(port=8000)
-    task1 = asyncio.create_task(
-        Runner.run_async(
-            MA1,
-            world_id="parallel_ma1",
-            gateway_url="http://localhost:8000",
-            offline=True,
-        )
-    )
-    task2 = asyncio.create_task(
-        Runner.run_async(
-            MA2,
-            world_id="parallel_ma2",
-            gateway_url="http://localhost:8000",
-            offline=True,
-        )
-    )
+    task1 = asyncio.create_task(Runner.offline_async(MA1))
+    task2 = asyncio.create_task(Runner.offline_async(MA2))
     await asyncio.gather(task1, task2)
     print(metrics.collect_metrics())
 
