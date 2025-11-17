@@ -41,6 +41,8 @@ def sanitize_alpha_performance_metrics(raw: Mapping[str, Any]) -> dict[str, floa
 
     sanitized = default_alpha_performance_metrics()
     for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
         alpha_key = _is_alpha_performance_key(key)
         if alpha_key is None:
             continue
