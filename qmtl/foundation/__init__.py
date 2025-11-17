@@ -1,9 +1,10 @@
 """Foundation layer for shared infrastructure modules."""
 
-from . import common, kafka, proto, schema
+from . import adapters, common, kafka, proto, schema
 from .validation_core import Rule, RuleSet, ValidationMessage, ValidationResult
 
 __all__ = [
+    "adapters",
     "common",
     "kafka",
     "proto",
