@@ -3,7 +3,9 @@ from __future__ import annotations
 import contextlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Iterable
+
+from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
 
 
 class ControlBusProducer:
@@ -15,32 +17,33 @@ class ControlBusProducer:
         brokers: Iterable[str] | None = None,
         topic: str = "queue",
         sentinel_topic: str = "sentinel_weight",
-        producer: Any | None = None,
+        producer: KafkaProducerLike | None = None,
     ) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
         self.sentinel_topic = sentinel_topic
-        self._producer = producer
+        self._producer: KafkaProducerLike | None = producer
 
     async def start(self) -> None:
         if self._producer is not None or not self.brokers:
             return
-        try:  # pragma: no cover - optional dependency
-            from aiokafka import AIOKafkaProducer
-        except Exception:
+        producer = create_kafka_producer(self.brokers)
+        if producer is None:
             return
-        self._producer = AIOKafkaProducer(bootstrap_servers=self.brokers)
-        await self._producer.start()
+        self._producer = producer
+        await producer.start()
 
     async def stop(self) -> None:
-        if self._producer is None:
+        producer = self._producer
+        if producer is None:
             return
         with contextlib.suppress(Exception):  # pragma: no cover - best effort
-            await self._producer.stop()
+            await producer.stop()
         self._producer = None
 
     async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any", *, version: int = 1) -> None:
-        if self._producer is None:
+        producer = self._producer
+        if producer is None:
             return
         tags_list = list(tags)
         tags_hash = ".".join(sorted(tags_list))
@@ -58,7 +61,7 @@ class ControlBusProducer:
         }
         data = json.dumps(payload).encode()
         key = ",".join(tags_list).encode()
-        await self._producer.send_and_wait(self.topic, data, key=key)
+        await producer.send_and_wait(self.topic, data, key=key)
 
     async def publish_sentinel_weight(
         self,
@@ -71,7 +74,8 @@ class ControlBusProducer:
     ) -> None:
         """Publish a sentinel weight control event."""
 
-        if self._producer is None:
+        producer = self._producer
+        if producer is None:
             return
 
         ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -97,7 +101,7 @@ class ControlBusProducer:
             payload["world_id"] = world_id
         data = json.dumps(payload).encode()
         key = sentinel_id.encode()
-        await self._producer.send_and_wait(self.sentinel_topic, data, key=key)
+        await producer.send_and_wait(self.sentinel_topic, data, key=key)
 
 
 __all__ = ["ControlBusProducer"]

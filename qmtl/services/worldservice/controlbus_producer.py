@@ -1,49 +1,52 @@
 from __future__ import annotations
 
 import contextlib
-import importlib
 import json
 from typing import Any, Dict, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
+from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
 
 
 class ControlBusProducer:
     """Publish updates to the internal ControlBus."""
 
-    def __init__(self, *, brokers: Iterable[str] | None = None, topic: str = "policy", producer: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        brokers: Iterable[str] | None = None,
+        topic: str = "policy",
+        producer: KafkaProducerLike | None = None,
+    ) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
-        self._producer: Any | None = producer
+        self._producer: KafkaProducerLike | None = producer
 
     async def start(self) -> None:
         if self._producer is not None or not self.brokers:
             return
-        try:  # pragma: no cover - optional dependency
-            module = importlib.import_module("aiokafka")
-            producer_cls = getattr(module, "AIOKafkaProducer", None)
-            if producer_cls is None:
-                return
-        except Exception:
+        producer = create_kafka_producer(self.brokers)
+        if producer is None:
             return
-        producer = producer_cls(bootstrap_servers=self.brokers)
         self._producer = producer
         await producer.start()
 
     async def stop(self) -> None:
-        if self._producer is None:
+        producer = self._producer
+        if producer is None:
             return
         with contextlib.suppress(Exception):  # pragma: no cover - best effort
-            await self._producer.stop()
+            await producer.stop()
         self._producer = None
 
     async def _publish(self, event_type: str, world_id: str, payload: Dict[str, Any]) -> None:
-        if self._producer is None:
+        producer = self._producer
+        if producer is None:
             return
         event = format_event("qmtl.services.worldservice", event_type, payload)
         data = json.dumps(event).encode()
         key = world_id.encode()
-        await self._producer.send_and_wait(self.topic, data, key=key)
+        await producer.send_and_wait(self.topic, data, key=key)
 
     async def publish_policy_update(
         self,
