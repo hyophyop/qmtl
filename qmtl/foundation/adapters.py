@@ -43,6 +43,33 @@ class RedisClient(Protocol):
         ...
 
 
+class Neo4jSession(Protocol):
+    def run(self, query: str) -> object:
+        ...
+
+    def close(self) -> None:
+        ...
+
+    def __enter__(self) -> "Neo4jSession":
+        ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: Any,
+    ) -> object:
+        ...
+
+
+class Neo4jDriver(Protocol):
+    def session(self) -> Neo4jSession:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
 def create_kafka_admin_client(dsn: str) -> KafkaAdminClient:
     """Return a Kafka admin client adapter for ``dsn``."""
 
@@ -108,7 +135,56 @@ def create_redis_client(dsn: str) -> RedisClient:
     return redis.from_url(dsn)
 
 
+def create_neo4j_driver(
+    dsn: str, *, user: str | None = None, password: str | None = None
+) -> Neo4jDriver:
+    """Create a typed Neo4j driver adapter.
+
+    Raises ``ModuleNotFoundError`` when the optional ``neo4j`` dependency is
+    unavailable and propagates connection errors to the caller.
+    """
+
+    from neo4j import GraphDatabase
+
+    class _Neo4jSessionAdapter:
+        def __init__(self, session: Any) -> None:
+            self._session = session
+
+        def run(self, query: str) -> object:  # pragma: no cover - thin wrapper
+            return self._session.run(query)
+
+        def close(self) -> None:  # pragma: no cover - thin wrapper
+            self._session.close()
+
+        def __enter__(self) -> "Neo4jSession":  # pragma: no cover - thin wrapper
+            self._session.__enter__()
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: Any,
+        ) -> object:  # pragma: no cover - thin wrapper
+            return self._session.__exit__(exc_type, exc, tb)
+
+    class _Neo4jDriverAdapter:
+        def __init__(self, driver: Any) -> None:
+            self._driver = driver
+
+        def session(self) -> Neo4jSession:  # pragma: no cover - thin wrapper
+            return _Neo4jSessionAdapter(self._driver.session())
+
+        def close(self) -> None:  # pragma: no cover - thin wrapper
+            self._driver.close()
+
+    driver = GraphDatabase.driver(dsn, auth=(user, password))
+    return _Neo4jDriverAdapter(driver)
+
+
 __all__ = [
+    "Neo4jDriver",
+    "Neo4jSession",
     "AsyncpgConnection",
     "AioSqliteConnection",
     "BrokerReadinessProbe",
@@ -117,6 +193,7 @@ __all__ = [
     "create_aiokafka_readiness_probe",
     "create_kafka_admin_client",
     "create_redis_client",
+    "create_neo4j_driver",
     "open_aiosqlite_connection",
     "open_asyncpg_connection",
 ]
