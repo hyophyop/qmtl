@@ -5,17 +5,20 @@ import contextlib
 from dataclasses import dataclass, fields
 from typing import Any, Dict, Mapping, Sequence, get_type_hints
 
-import aiosqlite
-import asyncpg  # type: ignore[import-untyped]
-import redis.asyncio as redis
 import httpx  # test compatibility: referenced via monkeypatch in tests
 
+from qmtl.foundation.adapters import (
+    KafkaAdminClient,
+    create_aiokafka_readiness_probe,
+    create_kafka_admin_client,
+    create_redis_client,
+    open_aiosqlite_connection,
+    open_asyncpg_connection,
+)
 from qmtl.foundation.common.health import probe_http_async
 from qmtl.foundation.config import CONFIG_SECTION_NAMES, UnifiedConfig
 from qmtl.services.dagmanager.config import DagManagerConfig
-from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
 from qmtl.services.gateway.config import GatewayConfig
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer
 from qmtl.foundation.config_types import (
     _type_description,
     _type_matches,
@@ -55,11 +58,8 @@ def _count_topics(metadata: object) -> int:
         return 0
 
 
-async def _create_kafka_admin(dsn: str) -> KafkaAdmin:
-    from confluent_kafka.admin import AdminClient  # type: ignore[import]
-
-    client = AdminClient({"bootstrap.servers": dsn})
-    return KafkaAdmin(client)
+async def _create_kafka_admin(dsn: str) -> KafkaAdminClient:
+    return create_kafka_admin_client(dsn)
 
 
 async def _check_controlbus(
@@ -71,12 +71,11 @@ async def _check_controlbus(
     if offline:
         return ValidationIssue("warning", f"Offline mode: skipped ControlBus check for {broker_list}")
     try:
-        import aiokafka  # type: ignore[import]  # noqa: F401
+        probe = create_aiokafka_readiness_probe(brokers, group)
     except ModuleNotFoundError:
         return ValidationIssue("warning", "aiokafka not installed; skipping ControlBus validation")
 
-    consumer = ControlBusConsumer(brokers=list(brokers), topics=list(topics), group=group)
-    ready = await consumer._broker_ready()
+    ready = await probe.ready()
     if ready:
         return ValidationIssue("ok", f"ControlBus brokers reachable ({broker_list})")
     return ValidationIssue("error", f"ControlBus brokers unreachable ({broker_list})")
@@ -92,7 +91,7 @@ async def _validate_gateway_redis(dsn: str | None, *, offline: bool) -> Validati
 
     client = None
     try:
-        client = redis.from_url(dsn)
+        client = create_redis_client(dsn)
         await client.ping()
     except Exception as exc:
         return ValidationIssue("error", f"Redis connection failed: {exc}")
@@ -130,7 +129,7 @@ async def _validate_gateway_postgres(
 
     conn = None
     try:
-        conn = await asyncpg.connect(dsn)
+        conn = await open_asyncpg_connection(dsn)
     except Exception as exc:
         return ValidationIssue("error", f"Postgres connection failed: {exc}")
     finally:
@@ -145,7 +144,7 @@ async def _validate_gateway_sqlite(dsn: str | None) -> ValidationIssue:
     path = _normalise_sqlite_path(dsn)
     conn = None
     try:
-        conn = await aiosqlite.connect(path)
+        conn = await open_aiosqlite_connection(path)
     except Exception as exc:
         return ValidationIssue("error", f"SQLite open failed for {path}: {exc}")
     finally:
@@ -297,7 +296,7 @@ async def _validate_dagmanager_kafka(
     loop = asyncio.get_running_loop()
 
     def _fetch() -> object:
-        return admin.client.list_topics()
+        return admin.list_topics()
 
     try:
         metadata = await loop.run_in_executor(None, _fetch)
