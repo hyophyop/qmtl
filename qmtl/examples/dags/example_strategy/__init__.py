@@ -3,28 +3,33 @@
 import sys
 from typing import TYPE_CHECKING
 
+from qmtl.runtime.plugin_loader import load_dag_manager_class
+
+
+class _FallbackDagManager:
+    """Minimal DAG manager used when qmtl is not installed."""
+
+    def __init__(self):
+        self.nodes = []
+
+    def add_node(self, name, func, inputs=None):
+        self.nodes.append((name, func, inputs or {}))
+
+    def execute(self):
+        results = {}
+        for name, func, inputs in self.nodes:
+            kwargs = {k: results[v] for k, v in inputs.items()}
+            results[name] = func(**kwargs)
+        return results
+
+
 # Create qmtl.examples.dags.example_strategy module
 sys.modules["qmtl.examples.dags.example_strategy"] = sys.modules[__name__]
 
 if TYPE_CHECKING:
     from qmtl.dag_manager import DAGManager as _DagManager
 else:  # pragma: no cover - import at runtime only
-    try:
-        from qmtl.dag_manager import DAGManager as _DagManager
-    except ModuleNotFoundError:
-        class _DagManager:  # simple fallback for local execution
-            def __init__(self):
-                self.nodes = []
-
-            def add_node(self, name, func, inputs=None):
-                self.nodes.append((name, func, inputs or {}))
-
-            def execute(self):
-                results = {}
-                for name, func, inputs in self.nodes:
-                    kwargs = {k: results[v] for k, v in inputs.items()}
-                    results[name] = func(**kwargs)
-                return results
+    _DagManager = load_dag_manager_class(fallback=_FallbackDagManager)
 
 from qmtl.examples.nodes.generators import sequence_generator_node
 from qmtl.examples.nodes.indicators import average_indicator_node

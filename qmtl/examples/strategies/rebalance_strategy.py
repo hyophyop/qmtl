@@ -5,20 +5,15 @@ weight for a symbol using the SDK's portfolio utilities.
 """
 from __future__ import annotations
 
-# Prefer the public SDK import, but allow running without full dependencies
-try:
-    from qmtl.runtime.sdk import portfolio as pf  # type: ignore
-except Exception:  # pragma: no cover - fallback for lean test environments
-    import importlib.util, sys
+from pathlib import Path
 
-    spec = importlib.util.spec_from_file_location(
-        "qmtl.runtime.sdk.portfolio", "qmtl/runtime/sdk/portfolio.py"
-    )
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # type: ignore[index]
-    spec.loader.exec_module(module)  # type: ignore[assignment]
-    pf = module  # type: ignore[assignment]
+from qmtl.runtime.plugin_loader import PortfolioModule, load_portfolio_module
+
+_PORTFOLIO_FALLBACK = (
+    Path(__file__).resolve().parents[2] / "runtime" / "sdk" / "portfolio.py"
+)
+
+pf: PortfolioModule = load_portfolio_module(module_file=_PORTFOLIO_FALLBACK)
 
 
 def compute_rebalance_quantity(

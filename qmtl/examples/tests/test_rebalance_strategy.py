@@ -1,21 +1,12 @@
 import math
-import importlib.util
-from types import ModuleType
-import sys
+from pathlib import Path
+
+from qmtl.runtime.plugin_loader import load_portfolio_module
 
 
-def _load_portfolio_module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "qmtl.runtime.sdk.portfolio", "qmtl/runtime/sdk/portfolio.py"
-    )
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # type: ignore[index]
-    spec.loader.exec_module(module)  # type: ignore[assignment]
-    return module  # type: ignore[return-value]
-
-
-pf = _load_portfolio_module()
+pf = load_portfolio_module(
+    module_file=Path(__file__).resolve().parents[2] / "runtime" / "sdk" / "portfolio.py"
+)
 
 # Import example function directly (this import touches only the example module)
 from qmtl.examples.strategies.rebalance_strategy import compute_rebalance_quantity
