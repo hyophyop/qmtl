@@ -78,8 +78,10 @@ def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Aw
             except Exception:  # pragma: no cover - defensive cleanup
                 logger.exception("Failed to close WorldService Redis client")
             pool = getattr(redis_client, "connection_pool", None)
-            if pool is not None and hasattr(pool, "disconnect"):
-                await _maybe_await(pool.disconnect())  # type: ignore[misc]
+            if pool is not None:
+                disconnect = getattr(pool, "disconnect", None)
+                if disconnect is not None:
+                    await _maybe_await(disconnect())
 
         return StorageHandle(storage=storage, shutdown=_shutdown)
 
