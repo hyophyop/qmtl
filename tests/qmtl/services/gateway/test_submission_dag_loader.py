@@ -10,7 +10,7 @@ from qmtl.services.gateway.submission.dag_loader import DagLoader
 
 
 def test_decode_accepts_base64_payload() -> None:
-    dag = {"nodes": [], "meta": {}}
+    dag: dict[str, object] = {"nodes": [], "meta": {}}
     encoded = base64.b64encode(json.dumps(dag).encode()).decode()
 
     loader = DagLoader()
@@ -20,7 +20,7 @@ def test_decode_accepts_base64_payload() -> None:
 
 
 def test_load_validates_schema(monkeypatch) -> None:
-    dag = {"nodes": [], "meta": {}}
+    dag: dict[str, object] = {"nodes": [], "meta": {}}
     loader = DagLoader()
 
     calls: list[dict] = []
@@ -54,4 +54,6 @@ def test_load_raises_on_invalid_schema(monkeypatch) -> None:
         loader.load("{}")
 
     assert exc.value.status_code == 400
-    assert exc.value.detail["code"] == "E_SCHEMA_INVALID"
+    detail = exc.value.detail
+    assert isinstance(detail, dict)
+    assert detail["code"] == "E_SCHEMA_INVALID"

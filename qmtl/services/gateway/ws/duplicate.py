@@ -10,8 +10,8 @@ class DuplicateTracker:
     def __init__(self, window: int = 10000) -> None:
         if window <= 0:
             raise ValueError("window must be positive")
-        self._ids = deque(maxlen=window)
-        self._seen = set()
+        self._ids: deque[str] = deque(maxlen=window)
+        self._seen: set[str] = set()
 
     def seen(self, event: Mapping[str, Any] | None) -> bool:
         """Return ``True`` if the CloudEvent has been observed recently."""
