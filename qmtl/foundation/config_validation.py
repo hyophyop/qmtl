@@ -6,7 +6,7 @@ from dataclasses import dataclass, fields
 from typing import Any, Dict, Mapping, Sequence, get_type_hints
 
 import aiosqlite
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import redis.asyncio as redis
 import httpx  # test compatibility: referenced via monkeypatch in tests
 

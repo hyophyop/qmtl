@@ -46,7 +46,7 @@ class _ReconnectingSession:
         self._factory = factory
         self._reconnect = reconnect
         self._session = self._factory()
-        self._breaker = breaker
+        self._breaker: AsyncCircuitBreaker | None = breaker
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
         for attempt in range(2):
@@ -54,10 +54,17 @@ class _ReconnectingSession:
                 if self._breaker is None:
                     return self._session.run(*args, **kwargs)
                 else:
+                    breaker = self._breaker
+                    assert breaker is not None
+
                     async def _call() -> Any:
                         return await asyncio.to_thread(self._session.run, *args, **kwargs)
 
-                    return asyncio.run(self._breaker(_call)())
+                    async def _run_with_breaker() -> Any:
+                        breaker_call = breaker(_call)
+                        return await breaker_call()
+
+                    return asyncio.run(_run_with_breaker())
             except Exception:
                 if attempt == 1:
                     raise
@@ -80,7 +87,7 @@ class ReconnectingNeo4j:
     """Neo4j driver wrapper with reconnection logic."""
 
     def __init__(self, uri: str, user: str, password: str, *, attempts: int = 2) -> None:
-        from neo4j import GraphDatabase
+        from neo4j import GraphDatabase  # type: ignore[import-not-found]
 
         self._uri = uri
         self._auth = (user, password)

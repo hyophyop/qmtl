@@ -1,23 +1,26 @@
 from __future__ import annotations
 
-from typing import Mapping, TYPE_CHECKING
+from typing import Any, Mapping, TYPE_CHECKING
 
 from qmtl.runtime.sdk.exceptions import InvalidSchemaError
 
+_PANDAS_IMPORT_ERROR: ModuleNotFoundError | None
+pandas_module: Any | None
 try:  # pragma: no cover - optional dependency shim
-    import pandas as _pd
-    from pandas.api.types import DatetimeTZDtype
+    import pandas as _pandas_module  # type: ignore[import-untyped]
+    from pandas.api.types import DatetimeTZDtype  # type: ignore[import-untyped]
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised when pandas missing
     _PANDAS_IMPORT_ERROR = exc
-    _pd = None  # type: ignore[assignment]
-    DatetimeTZDtype = None  # type: ignore[assignment]
+    pandas_module = None
+    DatetimeTZDtype = None
 else:  # pragma: no cover - import side effects only
     _PANDAS_IMPORT_ERROR = None
+    pandas_module = _pandas_module
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    import pandas as pd
+    import pandas as pd  # type: ignore[import-untyped]
 else:  # pragma: no cover - optional dependency available at runtime
-    pd = _pd
+    pd = pandas_module
 
 # Built-in DataFrame schemas for node I/O
 SCHEMAS: dict[str, dict[str, str]] = {

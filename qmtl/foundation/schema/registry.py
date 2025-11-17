@@ -280,7 +280,10 @@ class RemoteSchemaRegistryClient(SchemaRegistryClient):
 
     def _register_impl(self, subject: str, schema_str: str, previous: Schema | None) -> Schema:
         out = self._req("POST", f"/subjects/{subject}/versions", {"schema": schema_str})
-        sid = int(out.get("id"))
+        raw_id = out.get("id")
+        if raw_id is None:
+            raise SchemaRegistryError("schema registry response missing id")
+        sid = int(raw_id)
         try:
             latest = self.latest(subject)
         except SchemaRegistryError:
