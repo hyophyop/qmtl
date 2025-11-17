@@ -79,8 +79,11 @@ def _extract_lang(argv: List[str]) -> tuple[List[str], str | None]:
     return rest, lang
 
 
-def main(argv: List[str] | None = None) -> None:
-    """Dispatch to subcommand module without consuming its ``--help`` flags."""
+def main(argv: List[str] | None = None) -> int:
+    """Dispatch to subcommand module without consuming its ``--help`` flags.
+
+    Returns an exit status suitable for ``sys.exit``.
+    """
 
     argv = list(argv) if argv is not None else sys.argv[1:]
 
@@ -91,14 +94,16 @@ def main(argv: List[str] | None = None) -> None:
     # No args or global help → print top-level help
     if not argv or argv[0] in {"-h", "--help"}:
         _build_top_help_parser().print_help()
-        return
+        return 0
 
     cmd = argv[0]
     rest = argv[1:]
     if cmd in PRIMARY_DISPATCH:
         module = import_module(PRIMARY_DISPATCH[cmd])
-        module.run(rest)
-        return
+        result = module.run(rest)
+        if isinstance(result, int):
+            return result
+        return 0
 
     parser = _build_top_help_parser()
     parser.print_help()

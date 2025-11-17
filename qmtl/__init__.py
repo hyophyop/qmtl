@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
+import sys
+from typing import Any
+
 from . import foundation, interfaces, runtime, services, examples
 from .runtime import io
 from .runtime.io import (
-    QuestDBLoader,
-    QuestDBRecorder,
     BinanceFetcher,
     DataFetcher,
-    HistoryProvider,
     EventRecorder,
+    HistoryProvider,
+    QuestDBLoader,
+    QuestDBRecorder,
 )
 from .runtime.pipeline import Pipeline
 
 # Create io alias
-import sys
-sys.modules[__name__ + '.io'] = io
+sys.modules[__name__ + ".io"] = io
 
 # Ensure ASGI transports from httpx are properly closed when garbage collected.
 try:  # pragma: no cover - best effort cleanup helper
@@ -25,7 +27,7 @@ try:  # pragma: no cover - best effort cleanup helper
     class _ClosingASGITransport(httpx.ASGITransport):
         """Ensure transports are closed and remain compatible with httpx>=0.28."""
 
-        def __init__(self, *args, lifespan=None, **kwargs):  # type: ignore[no-untyped-def]
+        def __init__(self, *args: Any, lifespan: Any = None, **kwargs: Any) -> None:
             # ``lifespan`` was removed in httpx 0.28 but is still passed by some
             # callers. Accept and discard it for backwards compatibility.
             if lifespan is not None:  # pragma: no cover - simple arg shim
@@ -34,11 +36,12 @@ try:  # pragma: no cover - best effort cleanup helper
 
         def __del__(self) -> None:
             try:
-                self.close()
+                # Rely on httpx.AsyncBaseTransport.aclose for cleanup.
+                self.aclose()
             except Exception:
                 pass
 
-    httpx.ASGITransport = _ClosingASGITransport
+    setattr(httpx, "ASGITransport", _ClosingASGITransport)
 except Exception:  # pragma: no cover - optional
     pass
 
