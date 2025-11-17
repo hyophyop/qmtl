@@ -35,10 +35,10 @@ def decode(value: bytes, headers: Dict[str, str] | None = None) -> Dict[str, Any
     JSON and placeholder "proto" are both JSON-encoded for now.
     """
     try:
-        return json.loads(value.decode())
+        payload: Dict[str, Any] = json.loads(value.decode())
+        return payload
     except Exception:
         return {}
 
 
 __all__ = ["encode", "decode", "PROTO_CONTENT_TYPE"]
-

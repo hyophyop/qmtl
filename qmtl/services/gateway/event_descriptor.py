@@ -77,16 +77,16 @@ def validate_event_token(
     """
 
     header_b64, payload_b64, sig_b64 = token.split(".")
-    header = json.loads(_b64url_decode(header_b64))
-    kid = header.get("kid")
-    secret = cfg.keys.get(kid)
+    header: dict[str, Any] = json.loads(_b64url_decode(header_b64))
+    kid_value = header.get("kid")
+    secret = cfg.keys.get(str(kid_value)) if kid_value is not None else None
     if secret is None:
         raise ValueError("unknown kid")
     signing_input = f"{header_b64}.{payload_b64}".encode()
     expected_sig = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
     if not hmac.compare_digest(_b64url_decode(sig_b64), expected_sig):
         raise ValueError("invalid signature")
-    payload = json.loads(_b64url_decode(payload_b64))
+    payload: dict[str, Any] = json.loads(_b64url_decode(payload_b64))
     if payload.get("aud") != audience:
         raise ValueError("invalid audience")
     exp = payload.get("exp")
@@ -99,7 +99,8 @@ def get_token_header(token: str) -> dict[str, Any]:
     """Return the decoded header for ``token``."""
 
     header_b64 = token.split(".")[0]
-    return json.loads(_b64url_decode(header_b64))
+    header: dict[str, Any] = json.loads(_b64url_decode(header_b64))
+    return header
 
 
 def jwks(cfg: EventDescriptorConfig) -> dict[str, Any]:
@@ -126,4 +127,3 @@ __all__ = [
     "get_token_header",
     "jwks",
 ]
-

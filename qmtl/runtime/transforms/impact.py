@@ -1,5 +1,7 @@
 """Simple square-root market impact helper."""
 
+from __future__ import annotations
+
 import math
 
 
@@ -19,7 +21,7 @@ def impact(Q: float, V: float, depth: float, beta: float) -> float:
     """
     if V <= 0 or depth <= 0:
         return 0.0
-    return math.sqrt(Q / V) / depth**beta
+    return float(math.sqrt(Q / V) / depth**beta)
 
 
 __all__ = ["impact"]

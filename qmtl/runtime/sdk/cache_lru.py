@@ -58,9 +58,8 @@ class LRUCache(Generic[K, V]):
             if entry.expires_at <= ts:
                 stale.append(key)
         for key in stale:
-            entry = self._data.pop(key, None)
-            if entry is not None:
-                self._resident_bytes -= max(0, entry.weight)
+            entry = self._data.pop(key)
+            self._resident_bytes -= max(0, entry.weight)
 
     # ------------------------------------------------------------------
     def get(self, key: K) -> V | None:
@@ -116,4 +115,3 @@ class LRUCache(Generic[K, V]):
 
 
 __all__ = ["LRUCache"]
-

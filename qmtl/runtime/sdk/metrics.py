@@ -482,37 +482,37 @@ snapshot_hydration_fallback_total = _counter(
 def record_order_published() -> None:
     w = _WORLD_ID
     orders_published_total.labels(world_id=w).inc()
-    orders_published_total._vals[w] = orders_published_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+    orders_published_total._vals[w] = orders_published_total._vals.get(w, 0) + 1
 
 
 def record_fill_ingested() -> None:
     w = _WORLD_ID
     fills_ingested_total.labels(world_id=w).inc()
-    fills_ingested_total._vals[w] = fills_ingested_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+    fills_ingested_total._vals[w] = fills_ingested_total._vals.get(w, 0) + 1
 
 
 def record_order_rejected(reason: str) -> None:
     w = _WORLD_ID
     orders_rejected_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
-    orders_rejected_total._vals[key] = orders_rejected_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+    orders_rejected_total._vals[key] = orders_rejected_total._vals.get(key, 0) + 1
 
 
 def _update_pretrade_ratio() -> None:
     w = _WORLD_ID
-    total = pretrade_attempts_total._vals.get(w, 0)  # type: ignore[attr-defined]
+    total = pretrade_attempts_total._vals.get(w, 0)
     rejected = sum(
         v for (wid, _), v in pretrade_rejections_total._vals.items() if wid == w
-    )  # type: ignore[attr-defined]
+    )
     ratio = (rejected / total) if total else 0.0
     pretrade_rejection_ratio.labels(world_id=w).set(ratio)
-    pretrade_rejection_ratio._vals[w] = ratio  # type: ignore[attr-defined]
+    pretrade_rejection_ratio._vals[w] = ratio
 
 
 def record_pretrade_attempt() -> None:
     w = _WORLD_ID
     pretrade_attempts_total.labels(world_id=w).inc()
-    pretrade_attempts_total._vals[w] = pretrade_attempts_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+    pretrade_attempts_total._vals[w] = pretrade_attempts_total._vals.get(w, 0) + 1
     _update_pretrade_ratio()
 
 
@@ -520,7 +520,7 @@ def record_pretrade_rejection(reason: str) -> None:
     w = _WORLD_ID
     pretrade_rejections_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
-    pretrade_rejections_total._vals[key] = pretrade_rejections_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+    pretrade_rejections_total._vals[key] = pretrade_rejections_total._vals.get(key, 0) + 1
     _update_pretrade_ratio()
 
 
@@ -529,10 +529,10 @@ def observe_cache_read(upstream_id: str, interval: int) -> None:
     u = str(upstream_id)
     i = str(interval)
     cache_read_total.labels(upstream_id=u, interval=i).inc()
-    cache_read_total._vals[(u, i)] = cache_read_total._vals.get((u, i), 0) + 1  # type: ignore[attr-defined]
+    cache_read_total._vals[(u, i)] = cache_read_total._vals.get((u, i), 0) + 1
     ts = time.time()
     cache_last_read_timestamp.labels(upstream_id=u, interval=i).set(ts)
-    cache_last_read_timestamp._vals[(u, i)] = ts  # type: ignore[attr-defined]
+    cache_last_read_timestamp._vals[(u, i)] = ts
 
 
 def observe_cross_context_cache_hit(
@@ -558,32 +558,32 @@ def observe_backfill_start(node_id: str, interval: int) -> None:
     n = str(node_id)
     i = str(interval)
     backfill_jobs_in_progress.inc()
-    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()  # type: ignore[attr-defined]
+    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()
 
 
 def observe_backfill_complete(node_id: str, interval: int, ts: int) -> None:
     n = str(node_id)
     i = str(interval)
     backfill_last_timestamp.labels(node_id=n, interval=i).set(ts)
-    backfill_last_timestamp._vals[(n, i)] = ts  # type: ignore[attr-defined]
+    backfill_last_timestamp._vals[(n, i)] = ts
     backfill_jobs_in_progress.dec()
-    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()  # type: ignore[attr-defined]
+    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()
 
 
 def observe_backfill_retry(node_id: str, interval: int) -> None:
     n = str(node_id)
     i = str(interval)
     backfill_retry_total.labels(node_id=n, interval=i).inc()
-    backfill_retry_total._vals[(n, i)] = backfill_retry_total._vals.get((n, i), 0) + 1  # type: ignore[attr-defined]
+    backfill_retry_total._vals[(n, i)] = backfill_retry_total._vals.get((n, i), 0) + 1
 
 
 def observe_backfill_failure(node_id: str, interval: int) -> None:
     n = str(node_id)
     i = str(interval)
     backfill_failure_total.labels(node_id=n, interval=i).inc()
-    backfill_failure_total._vals[(n, i)] = backfill_failure_total._vals.get((n, i), 0) + 1  # type: ignore[attr-defined]
+    backfill_failure_total._vals[(n, i)] = backfill_failure_total._vals.get((n, i), 0) + 1
     backfill_jobs_in_progress.dec()
-    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()  # type: ignore[attr-defined]
+    backfill_jobs_in_progress._val = backfill_jobs_in_progress._value.get()
 
 
 def observe_backfill_completion_ratio(
@@ -593,7 +593,7 @@ def observe_backfill_completion_ratio(
     i = str(interval)
     k = str(lease_key)
     backfill_completion_ratio.labels(node_id=n, interval=i, lease_key=k).set(ratio)
-    backfill_completion_ratio._vals[(n, i, k)] = ratio  # type: ignore[attr-defined]
+    backfill_completion_ratio._vals[(n, i, k)] = ratio
 
 
 def observe_sla_phase_duration(
@@ -604,21 +604,21 @@ def observe_sla_phase_duration(
     p = str(phase)
     seconds = duration_ms / 1000.0
     seamless_sla_deadline_seconds.labels(node_id=n, phase=p).observe(seconds)
-    seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(seconds)  # type: ignore[attr-defined]
+    seamless_sla_deadline_seconds._vals.setdefault((n, p), []).append(seconds)
 
     world = _WORLD_ID
     if p == "storage_wait":
         seamless_storage_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-        seamless_storage_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+        seamless_storage_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)
     elif p == "backfill_wait":
         seamless_backfill_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-        seamless_backfill_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+        seamless_backfill_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)
     elif p == "live_wait":
         seamless_live_wait_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-        seamless_live_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+        seamless_live_wait_ms._vals.setdefault((n, i, world), []).append(duration_ms)
     elif p == "total":
         seamless_total_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-        seamless_total_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+        seamless_total_ms._vals.setdefault((n, i, world), []).append(duration_ms)
 
 
 def observe_conformance_report(
@@ -641,17 +641,13 @@ def observe_conformance_report(
             node_id=n, interval=i, world_id=w, flag_type=ft
         ).inc(count)
         key = (n, i, w, ft)
-        seamless_conformance_flag_total._vals[key] = (  # type: ignore[attr-defined]
+        seamless_conformance_flag_total._vals[key] = (
             seamless_conformance_flag_total._vals.get(key, 0) + count
         )
     if warnings:
         seamless_conformance_warning_total.labels(
             node_id=n, interval=i, world_id=w
         ).inc(len(warnings))
-        key = (n, i, w)
-        seamless_conformance_warning_total._vals[key] = (  # type: ignore[attr-defined]
-            seamless_conformance_warning_total._vals.get(key, 0) + len(warnings)
-        )
 
 
 def observe_nodecache_resident_bytes(node_id: str, resident: int) -> None:
@@ -662,16 +658,16 @@ def observe_node_process(node_id: str, duration_ms: float) -> None:
     """Record execution duration and increment counter for ``node_id``."""
     n = str(node_id)
     node_processed_total.labels(node_id=n).inc()
-    node_processed_total._vals[n] = node_processed_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
+    node_processed_total._vals[n] = node_processed_total._vals.get(n, 0) + 1
     node_process_duration_ms.labels(node_id=n).observe(duration_ms)
-    node_process_duration_ms._vals.setdefault(n, []).append(duration_ms)  # type: ignore[attr-defined]
+    node_process_duration_ms._vals.setdefault(n, []).append(duration_ms)
 
 
 def observe_node_process_failure(node_id: str) -> None:
     """Increment failure counter for ``node_id``."""
     n = str(node_id)
     node_process_failure_total.labels(node_id=n).inc()
-    node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1  # type: ignore[attr-defined]
+    node_process_failure_total._vals[n] = node_process_failure_total._vals.get(n, 0) + 1
 
 
 def observe_warmup_ready(node_id: str, duration_ms: float) -> None:
@@ -685,7 +681,7 @@ def observe_gap_repair_latency(*, node_id: str, interval: str | int, duration_ms
     i = str(interval)
     world = _WORLD_ID
     gap_repair_latency_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-    gap_repair_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+    gap_repair_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)
 
 
 def observe_coverage_ratio(*, node_id: str, interval: str | int, ratio: float | None) -> None:
@@ -695,7 +691,7 @@ def observe_coverage_ratio(*, node_id: str, interval: str | int, ratio: float | 
     i = str(interval)
     world = _WORLD_ID
     coverage_ratio.labels(node_id=n, interval=i, world_id=world).set(ratio)
-    coverage_ratio._vals[(n, i, world)] = ratio  # type: ignore[attr-defined]
+    coverage_ratio._vals[(n, i, world)] = ratio
 
 
 def observe_seamless_cache_hit(
@@ -705,7 +701,7 @@ def observe_seamless_cache_hit(
     i = str(interval)
     world = str(world_id) if world_id is not None else _WORLD_ID
     seamless_cache_hit_total.labels(node_id=n, interval=i, world_id=world).inc()
-    seamless_cache_hit_total._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+    seamless_cache_hit_total._vals[(n, i, world)] = (
         seamless_cache_hit_total._vals.get((n, i, world), 0) + 1
     )
 
@@ -717,7 +713,7 @@ def observe_seamless_cache_miss(
     i = str(interval)
     world = str(world_id) if world_id is not None else _WORLD_ID
     seamless_cache_miss_total.labels(node_id=n, interval=i, world_id=world).inc()
-    seamless_cache_miss_total._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+    seamless_cache_miss_total._vals[(n, i, world)] = (
         seamless_cache_miss_total._vals.get((n, i, world), 0) + 1
     )
 
@@ -725,21 +721,21 @@ def observe_seamless_cache_miss(
 def observe_seamless_cache_resident_bytes(resident_bytes: int) -> None:
     value = max(0, int(resident_bytes))
     seamless_cache_resident_bytes.set(value)
-    seamless_cache_resident_bytes._val = value  # type: ignore[attr-defined]
+    seamless_cache_resident_bytes._val = value
 
 
 def observe_rate_limiter_tokens(*, limiter: str, tokens: float, capacity: float) -> None:
     key = str(limiter)
     world = _WORLD_ID
     seamless_rl_tokens_available.labels(limiter=key, world_id=world).set(tokens)
-    seamless_rl_tokens_available._vals[(key, world)] = tokens  # type: ignore[attr-defined]
+    seamless_rl_tokens_available._vals[(key, world)] = tokens
 
 
 def observe_rate_limiter_drop(*, limiter: str) -> None:
     key = str(limiter)
     world = _WORLD_ID
     seamless_rl_dropped_total.labels(limiter=key, world_id=world).inc()
-    seamless_rl_dropped_total._vals[(key, world)] = (  # type: ignore[attr-defined]
+    seamless_rl_dropped_total._vals[(key, world)] = (
         seamless_rl_dropped_total._vals.get((key, world), 0) + 1
     )
 
@@ -751,7 +747,7 @@ def observe_artifact_publish_latency(
     i = str(interval)
     world = _WORLD_ID
     artifact_publish_latency_ms.labels(node_id=n, interval=i, world_id=world).observe(duration_ms)
-    artifact_publish_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)  # type: ignore[attr-defined]
+    artifact_publish_latency_ms._vals.setdefault((n, i, world), []).append(duration_ms)
 
 
 def observe_artifact_bytes_written(
@@ -761,7 +757,7 @@ def observe_artifact_bytes_written(
     i = str(interval)
     world = _WORLD_ID
     artifact_bytes_written.labels(node_id=n, interval=i, world_id=world).inc(bytes_written)
-    artifact_bytes_written._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+    artifact_bytes_written._vals[(n, i, world)] = (
         artifact_bytes_written._vals.get((n, i, world), 0) + bytes_written
     )
 
@@ -771,7 +767,7 @@ def observe_fingerprint_collision(*, node_id: str, interval: str | int) -> None:
     i = str(interval)
     world = _WORLD_ID
     fingerprint_collisions.labels(node_id=n, interval=i, world_id=world).inc()
-    fingerprint_collisions._vals[(n, i, world)] = (  # type: ignore[attr-defined]
+    fingerprint_collisions._vals[(n, i, world)] = (
         fingerprint_collisions._vals.get((n, i, world), 0) + 1
     )
 
@@ -782,7 +778,7 @@ def observe_domain_hold(*, node_id: str, interval: str | int, reason: str) -> No
     r = str(reason)
     world = _WORLD_ID
     domain_gate_holds.labels(node_id=n, interval=i, world_id=world, reason=r).inc()
-    domain_gate_holds._vals[(n, i, world, r)] = (  # type: ignore[attr-defined]
+    domain_gate_holds._vals[(n, i, world, r)] = (
         domain_gate_holds._vals.get((n, i, world, r), 0) + 1
     )
 
@@ -793,7 +789,7 @@ def observe_partial_fill(*, node_id: str, interval: str | int, reason: str) -> N
     r = str(reason)
     world = _WORLD_ID
     partial_fill_returns.labels(node_id=n, interval=i, world_id=world, reason=r).inc()
-    partial_fill_returns._vals[(n, i, world, r)] = (  # type: ignore[attr-defined]
+    partial_fill_returns._vals[(n, i, world, r)] = (
         partial_fill_returns._vals.get((n, i, world, r), 0) + 1
     )
 
@@ -802,7 +798,7 @@ def observe_as_of_advancement_event(*, node_id: str, world_id: str | None) -> No
     n = str(node_id)
     world = str(world_id) if world_id is not None else ""
     as_of_advancement_events.labels(node_id=n, world_id=world).inc()
-    as_of_advancement_events._vals[(n, world)] = (  # type: ignore[attr-defined]
+    as_of_advancement_events._vals[(n, world)] = (
         as_of_advancement_events._vals.get((n, world), 0) + 1
     )
 
@@ -816,7 +812,7 @@ def observe_live_staleness(
     i = str(interval)
     world = _WORLD_ID
     live_staleness_seconds.labels(node_id=n, interval=i, world_id=world).set(staleness_seconds)
-    live_staleness_seconds._vals[(n, i, world)] = staleness_seconds  # type: ignore[attr-defined]
+    live_staleness_seconds._vals[(n, i, world)] = staleness_seconds
 
 
 def start_metrics_server(port: int = 8000) -> None:
@@ -826,7 +822,8 @@ def start_metrics_server(port: int = 8000) -> None:
 
 def collect_metrics() -> str:
     """Return metrics in text exposition format."""
-    return generate_latest(global_registry).decode()
+    text: str = generate_latest(global_registry).decode()
+    return text
 
 
 def reset_metrics() -> None:

@@ -28,7 +28,11 @@ class PersistentWorldRepository:
 
     async def list(self) -> list[Dict[str, Any]]:
         rows = await self._driver.fetchall("SELECT data FROM worlds ORDER BY id")
-        return [json.loads(row[0]) for row in rows]
+        result: list[Dict[str, Any]] = []
+        for row in rows:
+            data: Dict[str, Any] = json.loads(row[0])
+            result.append(data)
+        return result
 
     async def get(self, world_id: str) -> Optional[Dict[str, Any]]:
         row = await self._driver.fetchone(
@@ -37,7 +41,8 @@ class PersistentWorldRepository:
         )
         if not row:
             return None
-        return json.loads(row[0])
+        data: Dict[str, Any] = json.loads(row[0])
+        return data
 
     async def update(self, world_id: str, data: Mapping[str, Any]) -> Dict[str, Any]:
         current = await self.get(world_id)

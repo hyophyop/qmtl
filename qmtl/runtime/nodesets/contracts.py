@@ -13,8 +13,14 @@ class OrderIntent(TypedDict, total=False):
     target_percent: NotRequired[float]
 
 
-class SizedOrder(OrderIntent):
+class SizedOrder(TypedDict, total=False):
+    symbol: str
+    price: float
+    side: NotRequired[Literal["BUY", "SELL"]]
     quantity: float
+    value: NotRequired[float]
+    percent: NotRequired[float]
+    target_percent: NotRequired[float]
 
 
 class ExecutionFillEvent(TypedDict, total=False):
@@ -35,4 +41,3 @@ __all__ = [
     "ExecutionFillEvent",
     "PortfolioSnapshot",
 ]
-

@@ -51,7 +51,8 @@ def _try_load_po(domain: str, localedir: str, lang: str | None) -> Optional[_PoT
 
     def _unquote(s: str) -> str:
         try:
-            return ast.literal_eval(s)
+            value = ast.literal_eval(s)
+            return str(value)
         except (SyntaxError, ValueError):
             if s.startswith('"') and s.endswith('"'):
                 s = s[1:-1]
@@ -102,12 +103,10 @@ def set_language(lang: Optional[str]) -> None:
             languages=[lang] if lang else None,
             fallback=True,
         )
-        # If .mo not available, provide .po fallback
-        if isinstance(t, gettext.NullTranslations):
-            po_fallback = _try_load_po("qmtl", _locale_dir(), lang)
-            _translator = po_fallback or t
-        else:
-            _translator = t
+        # Prefer .po-based translations when present; otherwise fall back to
+        # the standard gettext translator.
+        po_fallback = _try_load_po("qmtl", _locale_dir(), lang)
+        _translator = po_fallback or t
     except Exception:
         # Be resilient; always provide a translator
         po_fallback = _try_load_po("qmtl", _locale_dir(), lang)
