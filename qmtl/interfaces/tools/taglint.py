@@ -9,7 +9,7 @@ import json
 import os
 import sys
 from collections import OrderedDict
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterator, List, Tuple
 
 from qmtl.utils.i18n import _, language_source, set_language
 
@@ -119,7 +119,9 @@ def write_tags(path: str, tree: ast.Module, node: ast.Assign | None, tags: Dict[
     if node is None:
         insert_line = 0
         if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant) and isinstance(tree.body[0].value.value, str):
-            insert_line = tree.body[0].end_lineno
+            end_lineno = tree.body[0].end_lineno
+            if end_lineno is not None:
+                insert_line = end_lineno
         new_lines = src_lines[:insert_line] + ["", *tag_lines, ""] + src_lines[insert_line:]
     else:
         new_lines = src_lines
@@ -152,7 +154,7 @@ def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:
     return not errors, "\n".join(errors)
 
 
-def iter_py_files(path: str):
+def iter_py_files(path: str) -> Iterator[str]:
     if os.path.isdir(path):
         for root, _, files in os.walk(path):
             for name in files:
@@ -166,9 +168,9 @@ def iter_py_files(path: str):
 def main(argv: list[str] | None = None):
     if language_source() is None:
         set_language(None)
-    argparse._ = _
+    setattr(argparse, "_", _)
     parser = argparse.ArgumentParser(description=_("Lint TAGS dictionaries"))
-    parser._ = _
+    setattr(parser, "_", _)
     parser.add_argument("files", nargs="+", help=_("Files or directories to lint"))
     parser.add_argument("--fix", action="store_true", help=_("Attempt to fix issues"))
     args = parser.parse_args(argv)

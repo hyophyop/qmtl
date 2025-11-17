@@ -112,7 +112,8 @@ def _issues_to_json(results: Mapping[str, Mapping[str, ValidationIssue]]) -> Dic
 
 def _format_checks(checks: Mapping[str, ValidationIssue]) -> Iterable[str]:
     if not checks:
-        return [_("  (no checks executed)")]
+        yield _("  (no checks executed)")
+        return
     width = max(len(name) for name in checks)
     for name, issue in checks.items():
         label = _STATUS_LABELS.get(issue.severity, issue.severity.upper())

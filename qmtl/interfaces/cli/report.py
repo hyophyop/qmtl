@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Protocol
 import sys
 from qmtl.utils.i18n import _
 
-from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
+class AlphaPerformanceFn(Protocol):
+    def __call__(
+        self,
+        returns: Sequence[float],
+        *,
+        risk_free_rate: float = ...,
+        transaction_cost: float = ...,
+        execution_fills: Optional[Sequence[object]] = ...,
+        use_realistic_costs: bool = ...,
+    ) -> dict[str, float]:
+        ...
 
 
 def _build_report(metrics: dict[str, float]) -> str:
@@ -48,6 +60,9 @@ def run(argv: List[str] | None = None) -> None:
     if returns is None:
         print(_("Input JSON must contain a 'returns' key"), file=sys.stderr)
         raise SystemExit(1)
+
+    alpha_performance_module = importlib.import_module("qmtl.runtime.transforms.alpha_performance")
+    alpha_performance_node: AlphaPerformanceFn = getattr(alpha_performance_module, "alpha_performance_node")
 
     metrics = alpha_performance_node(returns, risk_free_rate=args.risk_free, transaction_cost=args.transaction_cost)
     report_md = _build_report(metrics)
