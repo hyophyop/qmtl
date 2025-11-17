@@ -8,6 +8,12 @@ class DummyProducer:
     def __init__(self) -> None:
         self.sent: list[tuple[str, bytes, bytes | None]] = []
 
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        return None
+
     async def send_and_wait(self, topic: str, data: bytes, key: bytes | None = None) -> None:
         self.sent.append((topic, data, key))
 
