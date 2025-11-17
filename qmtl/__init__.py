@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
 import sys
-from typing import Any, cast
 
-foundation = importlib.import_module("qmtl.foundation")
-interfaces = importlib.import_module("qmtl.interfaces")
-runtime = importlib.import_module("qmtl.runtime")
-services = importlib.import_module("qmtl.services")
-examples = importlib.import_module("qmtl.examples")
-
-io = importlib.import_module("qmtl.runtime.io")
-QuestDBLoader = cast(Any, io).QuestDBLoader
-QuestDBRecorder = cast(Any, io).QuestDBRecorder
-BinanceFetcher = cast(Any, io).BinanceFetcher
-DataFetcher = cast(Any, io).DataFetcher
-HistoryProvider = cast(Any, io).HistoryProvider
-EventRecorder = cast(Any, io).EventRecorder
-
-Pipeline = cast(Any, importlib.import_module("qmtl.runtime.pipeline")).Pipeline
+from . import foundation, interfaces, runtime, services, examples
+from .runtime import io
+from .runtime.io import (
+    BinanceFetcher,
+    DataFetcher,
+    EventRecorder,
+    HistoryProvider,
+    QuestDBLoader,
+    QuestDBRecorder,
+)
+from .runtime.pipeline import Pipeline
 
 # Create io alias
-sys.modules[__name__ + '.io'] = io
+sys.modules[__name__ + ".io"] = io
 
 # Ensure ASGI transports from httpx are properly closed when garbage collected.
 try:  # pragma: no cover - best effort cleanup helper
@@ -41,11 +35,11 @@ try:  # pragma: no cover - best effort cleanup helper
 
         def __del__(self) -> None:
             try:
-                self.close()
+                self.close()  # type: ignore[attr-defined]
             except Exception:
                 pass
 
-    httpx.ASGITransport = _ClosingASGITransport
+    httpx.ASGITransport = _ClosingASGITransport  # type: ignore[misc]
 except Exception:  # pragma: no cover - optional
     pass
 
