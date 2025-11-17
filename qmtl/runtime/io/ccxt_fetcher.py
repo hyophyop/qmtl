@@ -8,7 +8,18 @@ SDK's standard schema with a ``ts`` (seconds) column.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence, Mapping, Awaitable, Callable, TypeVar
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Generic,
+    Iterable,
+    Mapping,
+    Protocol,
+    Sequence,
+    TypeVar,
+    cast,
+)
 import asyncio
 import re
 
@@ -58,6 +69,73 @@ class RateLimiterConfig:
     key_suffix: str | None = None  # e.g., account id
     key_template: str | None = None
     penalty_backoff_ms: int | None = None
+
+
+class CcxtClosableExchange(Protocol):
+    async def close(self) -> None:
+        ...
+
+
+class CcxtOHLCVExchange(CcxtClosableExchange, Protocol):
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str,
+        *,
+        since: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[Sequence[Any]]:
+        ...
+
+
+class CcxtTradesExchange(CcxtClosableExchange, Protocol):
+    async def fetch_trades(
+        self,
+        symbol: str,
+        *,
+        since: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        ...
+
+
+class CcxtRestExchange(CcxtOHLCVExchange, CcxtTradesExchange, Protocol):
+    """Protocol covering the async ccxt REST surface used by fetchers."""
+
+
+class CcxtWatchExchange(CcxtClosableExchange, Protocol):
+    async def watch_ohlcv(self, symbol: str, timeframe: str) -> Iterable[Sequence[Any]]:
+        ...
+
+    async def watch_trades(self, symbol: str) -> Iterable[Mapping[str, Any]]:
+        ...
+
+
+ExchangeProtocolT = TypeVar("ExchangeProtocolT", bound=CcxtClosableExchange)
+
+
+class CcxtExchangeFactory(Generic[ExchangeProtocolT]):
+    def __init__(self, module_loader: Callable[[], Any] | None = None) -> None:
+        self._module_loader = module_loader or self._import_ccxt_async_support
+
+    def create(self, exchange_id: str) -> ExchangeProtocolT:
+        module = self._module_loader()
+        eid = exchange_id.lower()
+        if not hasattr(module, eid):
+            raise ValueError(f"Unknown ccxt exchange id: {eid}")
+        klass = getattr(module, eid)
+        exchange = klass({"enableRateLimit": True})
+        return cast(ExchangeProtocolT, exchange)
+
+    @staticmethod
+    def _import_ccxt_async_support() -> Any:
+        try:  # pragma: no cover - import path
+            import ccxt.async_support as ccxt_async  # type: ignore
+        except Exception as exc:  # pragma: no cover - exercised when ccxt missing
+            raise RuntimeError(
+                "ccxt is required for CcxtExchangeFactory; install with [ccxt]"
+            ) from exc
+        return ccxt_async
 
 
 @dataclass(slots=True)
@@ -154,12 +232,21 @@ from .ccxt_rate_limiter import get_limiter
 T = TypeVar("T")
 
 
-class _BaseCcxtFetcher(DataFetcher):
+class _BaseCcxtFetcher(DataFetcher, Generic[ExchangeProtocolT]):
     """Shared helpers for CCXT-backed fetchers."""
 
-    def __init__(self, config: Any, *, exchange: Any | None = None) -> None:
+    def __init__(
+        self,
+        config: Any,
+        *,
+        exchange: ExchangeProtocolT | None = None,
+        exchange_factory: CcxtExchangeFactory[ExchangeProtocolT] | None = None,
+    ) -> None:
         self.config = config
-        self._exchange = exchange
+        self._exchange: ExchangeProtocolT | None = exchange
+        self._exchange_factory: CcxtExchangeFactory[ExchangeProtocolT] = (
+            exchange_factory or CcxtExchangeFactory()
+        )
         self._limiter = None
         penalty_ms = getattr(self.config.rate_limiter, "penalty_backoff_ms", None)
         self._penalty_backoff_s = max(
@@ -206,37 +293,23 @@ class _BaseCcxtFetcher(DataFetcher):
         )
         return self._limiter
 
-    async def _get_or_create_exchange(self) -> Any:
+    async def _get_or_create_exchange(self) -> ExchangeProtocolT:
         if self._exchange is not None:
             return self._exchange
-        # Lazy import to keep ccxt optional
-        try:  # pragma: no cover - import path
-            import ccxt.async_support as ccxt_async  # type: ignore
-        except Exception as e:  # pragma: no cover - exercised when ccxt missing
-            raise RuntimeError(
-                f"ccxt is required for {type(self).__name__}; install with [ccxt]"
-            ) from e
-
-        eid = self.config.exchange_id.lower()
-        if not hasattr(ccxt_async, eid):
-            raise ValueError(f"Unknown ccxt exchange id: {eid}")
-        klass = getattr(ccxt_async, eid)
-        self._exchange = klass({"enableRateLimit": True})
+        self._exchange = self._exchange_factory.create(self.config.exchange_id)
         return self._exchange
 
-    async def _maybe_close_exchange(self, exchange: Any) -> None:
+    async def _maybe_close_exchange(self, exchange: ExchangeProtocolT) -> None:
         if exchange is not self._exchange:
             # external exchange injected by tests; don't close
             return
-        close = getattr(exchange, "close", None)
-        if asyncio.iscoroutinefunction(close):  # type: ignore[arg-type]
-            try:
-                await close()  # type: ignore[misc]
-            except Exception:  # pragma: no cover - best-effort close
-                pass
+        try:
+            await exchange.close()
+        except Exception:  # pragma: no cover - best-effort close
+            pass
 
 
-class CcxtOHLCVFetcher(_BaseCcxtFetcher):
+class CcxtOHLCVFetcher(_BaseCcxtFetcher[CcxtOHLCVExchange]):
     """Asynchronous OHLCV fetcher backed by ccxt.async_support.
 
     Notes
@@ -250,9 +323,12 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher):
         self,
         config: CcxtBackfillConfig,
         *,
-        exchange: Any | None = None,
+        exchange: CcxtOHLCVExchange | None = None,
+        exchange_factory: CcxtExchangeFactory[CcxtOHLCVExchange] | None = None,
     ) -> None:
-        super().__init__(config, exchange=exchange)
+        super().__init__(
+            config, exchange=exchange, exchange_factory=exchange_factory
+        )
 
     # ------------------------------------------------------------------
     def _resolve_symbol_and_timeframe(self, node_id: str) -> tuple[str, str]:
@@ -274,7 +350,7 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher):
     async def _collect_ohlcv_batches(
         self,
         *,
-        exchange: Any,
+        exchange: CcxtOHLCVExchange,
         symbol: str,
         timeframe: str,
         start: int,
@@ -340,7 +416,7 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher):
     # ------------------------------------------------------------------
     async def _fetch_ohlcv_with_retry(
         self,
-        exchange: Any,
+        exchange: CcxtOHLCVExchange,
         symbol: str,
         timeframe: str,
         since_ms: int,
@@ -394,7 +470,7 @@ class CcxtTradesConfig:
     rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
 
 
-class CcxtTradesFetcher(_BaseCcxtFetcher):
+class CcxtTradesFetcher(_BaseCcxtFetcher[CcxtTradesExchange]):
     """Asynchronous Trades fetcher backed by ccxt.async_support.
 
     Returns a DataFrame with at least: ``ts, price, amount``. ``side`` is
@@ -407,9 +483,12 @@ class CcxtTradesFetcher(_BaseCcxtFetcher):
         self,
         config: CcxtTradesConfig,
         *,
-        exchange: Any | None = None,
+        exchange: CcxtTradesExchange | None = None,
+        exchange_factory: CcxtExchangeFactory[CcxtTradesExchange] | None = None,
     ) -> None:
-        super().__init__(config, exchange=exchange)
+        super().__init__(
+            config, exchange=exchange, exchange_factory=exchange_factory
+        )
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -448,7 +527,11 @@ class CcxtTradesFetcher(_BaseCcxtFetcher):
         return self._normalize_trades(rows, start, end)
 
     async def _fetch_trades_with_retry(
-        self, exchange: Any, symbol: str, since_ms: int, limit: int
+        self,
+        exchange: CcxtTradesExchange,
+        symbol: str,
+        since_ms: int,
+        limit: int,
     ) -> list[dict]:
         async def _operation() -> list[dict]:
             data = await exchange.fetch_trades(
@@ -486,11 +569,17 @@ class CcxtTradesFetcher(_BaseCcxtFetcher):
 
 
 __all__ = [
+    "CcxtClosableExchange",
+    "CcxtExchangeFactory",
+    "CcxtOHLCVExchange",
     "CcxtBackfillConfig",
     "RateLimiterConfig",
     "CcxtOHLCVFetcher",
+    "CcxtRestExchange",
     "CcxtTradesConfig",
+    "CcxtTradesExchange",
     "CcxtTradesFetcher",
+    "CcxtWatchExchange",
 ]
 
 

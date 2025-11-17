@@ -24,7 +24,7 @@ import pandas as pd
 
 from qmtl.runtime.sdk.ohlcv_nodeid import parse as _parse_ohlcv_node_id
 from qmtl.runtime.sdk.seamless_data_provider import LiveDataFeed
-from .ccxt_fetcher import _try_parse_timeframe_s as _tf_to_seconds
+from .ccxt_fetcher import CcxtWatchExchange, _try_parse_timeframe_s as _tf_to_seconds
 
 
 log = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class CcxtProLiveFeed(LiveDataFeed):
 
     def __init__(self, config: CcxtProConfig, *, exchange: Any | None = None) -> None:
         self.config = config
-        self._exchange = exchange  # optionally injected (tests)
+        self._exchange: CcxtWatchExchange | None = exchange  # optionally injected (tests)
         self._subs: dict[str, bool] = {}
         self._last_emitted_token: dict[str, int | tuple[int, str]] = {}
 
@@ -366,14 +366,14 @@ class CcxtProLiveFeed(LiveDataFeed):
         # fallback to config
         return (self.config.mode or "ohlcv").lower()
 
-    async def _get_or_create_exchange(self) -> Any:
+    async def _get_or_create_exchange(self) -> CcxtWatchExchange:
         if self._exchange is not None:
             return self._exchange
         klass = self._resolve_ccxt_exchange_class()
-        ex = klass({"enableRateLimit": True, "newUpdates": True})
-        await self._configure_exchange(ex)
-        self._exchange = ex
-        return ex
+        exchange: CcxtWatchExchange = klass({"enableRateLimit": True, "newUpdates": True})
+        await self._configure_exchange(exchange)
+        self._exchange = exchange
+        return exchange
 
     def _resolve_ccxt_exchange_class(self) -> Any:
         ccxtpro = self._import_ccxtpro_module()
@@ -396,7 +396,7 @@ class CcxtProLiveFeed(LiveDataFeed):
                 ) from exc
         return ccxtpro
 
-    async def _configure_exchange(self, ex: Any) -> None:
+    async def _configure_exchange(self, ex: CcxtWatchExchange) -> None:
         self._apply_sandbox_mode_if_needed(ex)
         await self._load_markets_if_available(ex)
 
@@ -471,12 +471,10 @@ class CcxtProLiveFeed(LiveDataFeed):
         self._exchange = None
         if not ex:
             return
-        close = getattr(ex, "close", None)
-        if asyncio.iscoroutinefunction(close):  # type: ignore[arg-type]
-            try:
-                await close()  # type: ignore[misc]
-            except Exception:
-                pass
+        try:
+            await ex.close()
+        except Exception:
+            pass
 
     def unsubscribe(self, *, node_id: str, interval: int) -> None:
         """Signal the subscribe loop to stop for a given node/interval."""
