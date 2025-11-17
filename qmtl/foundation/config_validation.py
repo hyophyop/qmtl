@@ -9,8 +9,10 @@ import httpx  # test compatibility: referenced via monkeypatch in tests
 
 from qmtl.foundation.adapters import (
     KafkaAdminClient,
+    Neo4jDriver,
     create_aiokafka_readiness_probe,
     create_kafka_admin_client,
+    create_neo4j_driver,
     create_redis_client,
     open_aiosqlite_connection,
     open_asyncpg_connection,
@@ -244,29 +246,35 @@ async def _validate_dagmanager_neo4j(
             "warning", f"Offline mode: skipped Neo4j check for {config.neo4j_dsn}"
         )
 
+    driver: Neo4jDriver | None = None
     try:
-        from neo4j import GraphDatabase  # type: ignore[import]
+        driver = create_neo4j_driver(
+            config.neo4j_dsn,
+            user=config.neo4j_user,
+            password=config.neo4j_password,
+        )
     except ModuleNotFoundError:
         return ValidationIssue(
             "warning", "neo4j driver not installed; skipping validation"
         )
+    except Exception as exc:
+        return ValidationIssue("error", f"Neo4j connection failed: {exc}")
 
     loop = asyncio.get_running_loop()
 
-    def _probe() -> None:
-        driver = GraphDatabase.driver(
-            config.neo4j_dsn, auth=(config.neo4j_user, config.neo4j_password)
-        )
-        try:
-            with driver.session() as session:
-                session.run("RETURN 1")
-        finally:
-            driver.close()
+    def _probe(active_driver: Neo4jDriver) -> None:
+        with active_driver.session() as session:
+            session.run("RETURN 1")
 
     try:
-        await loop.run_in_executor(None, _probe)
+        await loop.run_in_executor(None, _probe, driver)
     except Exception as exc:
         return ValidationIssue("error", f"Neo4j connection failed: {exc}")
+    finally:
+        if driver is not None:
+            with contextlib.suppress(Exception):
+                driver.close()
+
     return ValidationIssue("ok", f"Neo4j reachable at {config.neo4j_dsn}")
 
 
