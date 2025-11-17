@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 

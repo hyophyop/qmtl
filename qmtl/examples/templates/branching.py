@@ -15,7 +15,7 @@ ASCII DAG::
 from pathlib import Path
 import argparse
 from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 
 class BranchingStrategy(Strategy):

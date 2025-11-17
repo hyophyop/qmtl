@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics, EventRecorderService
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder

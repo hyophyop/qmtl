@@ -10,32 +10,27 @@ from datetime import datetime, timezone
 from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
-    MarketFillModel,
-    PercentFeeModel,
+    CashBuyingPowerModel,
     ConstantSlippageModel,
-    SymbolPropertiesProvider,
     ExchangeHoursProvider,
+    MarketFillModel,
     Order,
     OrderType,
+    PercentFeeModel,
+    SymbolPropertiesProvider,
     TimeInForce,
 )
 
 
 def main() -> None:
     model = BrokerageModel(
-        buying_power_model=lambda: None,  # type: ignore[assignment]
+        buying_power_model=CashBuyingPowerModel(symbols=SymbolPropertiesProvider()),
         fee_model=PercentFeeModel(rate=0.001, minimum=1.0),
         slippage_model=ConstantSlippageModel(0.0005),
         fill_model=MarketFillModel(),
         symbols=SymbolPropertiesProvider(),
         hours=ExchangeHoursProvider.with_us_sample_holidays(require_regular_hours=True),
     )
-    # Provide a trivial buying power model inline
-    class _BP:
-        def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
-            return account.cash >= order.price * abs(order.quantity)
-
-    model.buying_power_model = _BP()  # type: ignore[attr-defined]
 
     acct = Account(cash=10_000.0)
     ts = datetime.now(timezone.utc)

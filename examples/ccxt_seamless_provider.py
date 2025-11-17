@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -37,7 +37,7 @@ class ExampleSettings:
     """High-level knobs for the demo."""
 
     exchange: str = "binance"
-    symbols: list[str] = ("BTC/USDT",)
+    symbols: list[str] = field(default_factory=lambda: ["BTC/USDT"])
     timeframe: str = "1m"
     questdb_dsn: str = "postgresql://localhost:8812/qmtl"
     questdb_table: str = "ohlcv"
@@ -53,11 +53,10 @@ async def build_provider(settings: ExampleSettings) -> EnhancedQuestDBProvider:
     """Create a Seamless provider wired with CCXT fetchers and optional live feed."""
 
     backfill_config = CcxtBackfillConfig(
-        exchange=settings.exchange,
+        exchange_id=settings.exchange,
         symbols=list(settings.symbols),
         timeframe=settings.timeframe,
-        batch_limit=settings.backfill_batch,
-        earliest_ts=settings.earliest_ts,
+        window_size=settings.backfill_batch,
     )
     fetcher = CcxtOHLCVFetcher(backfill_config)
 
@@ -65,7 +64,7 @@ async def build_provider(settings: ExampleSettings) -> EnhancedQuestDBProvider:
     if settings.enable_live_feed:
         live_feed = CcxtProLiveFeed(
             CcxtProConfig(
-                exchange=settings.exchange,
+                exchange_id=settings.exchange,
                 symbols=list(settings.symbols),
                 timeframe=settings.timeframe,
             )

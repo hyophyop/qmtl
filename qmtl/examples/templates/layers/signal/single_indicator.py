@@ -18,7 +18,7 @@ class SingleIndicatorStrategy(Strategy):
     def setup(self):
         """Setup strategy nodes."""
         # Import data provider from data layer
-        from layers.data.providers import get_data_provider
+        from qmtl.examples.templates.layers.data.providers import get_data_provider
         
         price_stream = get_data_provider()
         

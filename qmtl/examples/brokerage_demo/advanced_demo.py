@@ -43,7 +43,9 @@ def build_model() -> tuple[BrokerageModel, SettlementModel]:
 def main() -> None:
     model, settlement = build_model()
     acct = Account(cash=100_000.0)
-    hours = model.hours  # type: ignore[attr-defined]
+    hours = model.hours
+    if hours is None:
+        raise RuntimeError("Exchange hours provider must be configured for this demo")
     today = datetime(2024, 1, 2, tzinfo=timezone.utc)
     open_ts = datetime.combine(today.date(), hours.market_hours.regular_start, tzinfo=timezone.utc)
     close_time = hours.early_closes.get(today.date(), hours.market_hours.regular_end)
