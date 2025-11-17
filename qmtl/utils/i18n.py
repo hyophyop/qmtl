@@ -4,10 +4,15 @@ import ast
 import gettext
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
 
-_translator: gettext.NullTranslations | _PoTranslations = gettext.NullTranslations()
+class Translator(Protocol):
+    def gettext(self, message: str) -> str:
+        ...
+
+
+_translator: Translator = gettext.NullTranslations()
 _current_language: Optional[str] = None
 _language_source: Optional[str] = None  # "explicit" or "auto"
 
