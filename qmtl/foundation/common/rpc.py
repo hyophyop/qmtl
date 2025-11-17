@@ -4,26 +4,26 @@ from asyncio import CancelledError
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Generic, Protocol, TypeVar
 
+TCommandResponse = TypeVar("TCommandResponse", covariant=True)
+TParseInput = TypeVar("TParseInput", contravariant=True)
+TResult = TypeVar("TResult", covariant=True)
 
-TResponse = TypeVar("TResponse")
-TResult = TypeVar("TResult")
 
-
-class RpcCommand(Protocol[TResponse]):
+class RpcCommand(Protocol[TCommandResponse]):
     """Command abstraction for a single RPC invocation.
 
     Implementations encapsulate request construction and the low-level
     transport call (HTTP/gRPC/etc.) and return a transport-level response.
     """
 
-    async def execute(self) -> TResponse:
+    async def execute(self) -> TCommandResponse:
         """Execute the underlying RPC and return a response."""
 
 
-class RpcResponseParser(Protocol[TResponse, TResult]):
+class RpcResponseParser(Protocol[TParseInput, TResult]):
     """Parser that converts transport responses into domain results."""
 
-    def parse(self, response: TResponse) -> TResult:
+    def parse(self, response: TParseInput) -> TResult:
         """Normalize and validate the transport response."""
 
 
@@ -49,8 +49,8 @@ class RpcOutcome(Generic[TResult]):
 
 
 async def execute_rpc(
-    command: RpcCommand[TResponse],
-    parser: RpcResponseParser[TResponse, TResult],
+    command: RpcCommand[TCommandResponse],
+    parser: RpcResponseParser[TCommandResponse, TResult],
     *,
     on_error: Callable[[Exception], RpcError] | None = None,
 ) -> RpcOutcome[TResult]:

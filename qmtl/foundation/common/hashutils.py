@@ -2,13 +2,16 @@ from __future__ import annotations
 
 """Common hashing utilities with graceful fallbacks."""
 
-from typing import Final
+from typing import Any, Callable, Final, cast
 import hashlib
 
+_blake3: Callable[[bytes], Any] | None
 try:  # pragma: no cover - import guard exercised in fallback tests
-    from blake3 import blake3 as _blake3
+    from blake3 import blake3 as _blake3_func
 except Exception:  # pragma: no cover - runtime environments may lack blake3
     _blake3 = None
+else:
+    _blake3 = cast(Callable[[bytes], Any], _blake3_func)
 
 _BLAKE3_PREFIX: Final[str] = "blake3:"
 _SHA256_PREFIX: Final[str] = "sha256:"

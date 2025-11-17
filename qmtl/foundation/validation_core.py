@@ -70,16 +70,17 @@ class ValidationResult:
         )
 
 
+RuleContextT = TypeVar("RuleContextT", contravariant=True)
 ContextT = TypeVar("ContextT")
 
 
-class Rule(Protocol, Generic[ContextT]):
+class Rule(Protocol, Generic[RuleContextT]):
     """Protocol for validation rules used across QMTL."""
 
     code: str
     description: str
 
-    def validate(self, context: ContextT) -> ValidationResult:  # pragma: no cover - interface
+    def validate(self, context: RuleContextT) -> ValidationResult:  # pragma: no cover - interface
         ...
 
 

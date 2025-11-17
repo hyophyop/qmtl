@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-from typing import Mapping, TYPE_CHECKING
+from typing import Any, Mapping, TYPE_CHECKING
 
 from qmtl.runtime.sdk.exceptions import InvalidSchemaError
 
-try:  # pragma: no cover - optional dependency shim
-    import pandas as _pd
-    from pandas.api.types import DatetimeTZDtype
-except ModuleNotFoundError as exc:  # pragma: no cover - exercised when pandas missing
-    _PANDAS_IMPORT_ERROR = exc
-    _pd = None  # type: ignore[assignment]
-    DatetimeTZDtype = None  # type: ignore[assignment]
-else:  # pragma: no cover - import side effects only
-    _PANDAS_IMPORT_ERROR = None
-
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import pandas as pd
-else:  # pragma: no cover - optional dependency available at runtime
-    pd = _pd
+
+_PANDAS_IMPORT_ERROR: ModuleNotFoundError | None
+pandas_module: Any | None
+try:  # pragma: no cover - optional dependency shim
+    import pandas as _pandas_module
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised when pandas missing
+    _PANDAS_IMPORT_ERROR = exc
+    pandas_module = None
+else:  # pragma: no cover - import side effects only
+    _PANDAS_IMPORT_ERROR = None
+    pandas_module = _pandas_module
 
 # Built-in DataFrame schemas for node I/O
 SCHEMAS: dict[str, dict[str, str]] = {
@@ -71,7 +70,7 @@ def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> No
         column dtypes do not match the schema.
     """
 
-    if pd is None or DatetimeTZDtype is None:
+    if pandas_module is None:
         raise ModuleNotFoundError(
             "pandas is required for schema validation; install the 'io' extra"
         ) from _PANDAS_IMPORT_ERROR
@@ -100,12 +99,6 @@ def _ensure_no_unexpected_columns(df: "pd.DataFrame", spec: Mapping[str, str]) -
 def _ensure_column_types_match(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
     for col, dtype in spec.items():
         series = df[col]
-        if col == "ts":
-            if not isinstance(series.dtype, DatetimeTZDtype):
-                raise InvalidSchemaError("ts column must be timezone-aware")
-            if str(series.dtype.tz) != "UTC":
-                raise InvalidSchemaError("ts column must be in UTC")
-            continue
         if str(series.dtype) != dtype:
             raise InvalidSchemaError(
                 f"column '{col}' expected dtype {dtype}, got {series.dtype}"
