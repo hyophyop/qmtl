@@ -45,6 +45,14 @@ dev = [
     "mkdocs-static-i18n",
     "websocket-client",
     "Babel>=2.13",
+    "mypy",
+    "types-protobuf",
+    "pandas-stubs",
+    "types-grpcio",
+    "types-PyYAML",
+    "types-networkx",
+    "types-psutil",
+    "types-cachetools",
 ]
 
 ray = ["ray"]
@@ -71,8 +79,15 @@ dev = [
     "mkdocs-static-i18n",
     "websocket-client",
     "Babel>=2.13",
+    "mypy",
+    "types-protobuf",
+    "pandas-stubs",
+    "types-grpcio",
+    "types-PyYAML",
+    "types-networkx",
+    "types-psutil",
+    "types-cachetools",
 ]
-
 [project.scripts]
 qmtl = "qmtl.interfaces.cli:main"
 qmtl-commitlog-consumer = "qmtl.services.gateway.commit_log_cli:main"
@@ -109,3 +124,26 @@ include = ["qmtl*"]
   "locale/*/LC_MESSAGES/*.mo",
   "locale/*/LC_MESSAGES/*.po",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+
+files = [
+  "qmtl",
+  "examples",
+]
+
+exclude = [
+  "build",
+  "\\.venv",
+  "\\.venv.*",
+]
+
+ignore_missing_imports = true
