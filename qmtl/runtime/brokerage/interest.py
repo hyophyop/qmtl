@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Tuple, Union
+from typing import Iterable, Tuple, TYPE_CHECKING, Union
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .cashbook import Cashbook
 
 RateTiers = Iterable[Tuple[float, float]]
 
@@ -45,11 +48,8 @@ class MarginInterestModel:
         return balance * (rate / 365.0)
 
     def accrue_daily(self, cashbook: "Cashbook", currency: str, now: datetime) -> float:
-        from .cashbook import Cashbook  # local import to avoid circular
-
         balance = cashbook.get(currency).balance
         interest = self.daily_interest(balance, now)
         if interest:
             cashbook.adjust(currency, interest)
         return interest
-

@@ -57,7 +57,7 @@ def build(exchange: str, symbol: str, timeframe: str) -> str:
     return f"{_PREFIX}:{exchange_norm}:{symbol_norm}:{timeframe_norm}"
 
 
-def parse(node_id: str) -> tuple[str, str, str] | None:
+def parse(node_id: object) -> tuple[str, str, str] | None:
     """Parse a canonical OHLCV node identifier.
 
     Returns ``None`` when ``node_id`` is not an OHLCV identifier in the
@@ -76,8 +76,6 @@ def parse(node_id: str) -> tuple[str, str, str] | None:
         return None
 
     exchange, symbol, timeframe = parts[1], parts[2], parts[3]
-    if not exchange or not symbol or not timeframe:
-        return None
     return exchange, symbol, timeframe
 
 
@@ -145,4 +143,3 @@ __all__ = [
     "parse",
     "validate",
 ]
-

@@ -87,4 +87,5 @@ class PersistentActivationRepository:
             return {"version": 0, "state": {}}
         if isinstance(raw, bytes):
             raw = raw.decode()
-        return json.loads(raw)
+        state: Dict[str, Any] = json.loads(raw)
+        return state

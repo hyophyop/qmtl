@@ -6,7 +6,7 @@ from qmtl.foundation.common.tagquery import split_tags
 
 
 def extract_message_payload(
-    message: dict[str, Any], *, expected_version: int = 1
+    message: Any, *, expected_version: int = 1
 ) -> tuple[str | None, dict[str, Any]] | None:
     if not isinstance(message, dict):
         return None

@@ -4,8 +4,8 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def alpha_history_node(
@@ -35,7 +35,7 @@ def alpha_history_node(
     """
 
     selector = select_fn or (lambda x: x)
-    history = deque(maxlen=window)
+    history: deque[Any] = deque(maxlen=window)
 
     def compute(view: CacheView):
         data = view[source][source.interval]

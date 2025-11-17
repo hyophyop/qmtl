@@ -27,10 +27,7 @@ def _build_report(metrics: dict[str, float]) -> str:
     lines = [_("# Backtest Report"), ""]
     for key, value in metrics.items():
         pretty = key.replace("_", " ").title()
-        if isinstance(value, float):
-            lines.append(f"- **{pretty}**: {value:.6f}")
-        else:
-            lines.append(f"- **{pretty}**: {value}")
+        lines.append(f"- **{pretty}**: {value:.6f}")
     lines.append("")
     return "\n".join(lines)
 

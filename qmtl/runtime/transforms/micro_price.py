@@ -103,7 +103,8 @@ def micro_price_node(
             if weight is None:
                 return None
         else:
-            imbalance = _latest_scalar(view, imbalance_node, interval)  # type: ignore[arg-type]
+            assert imbalance_node is not None
+            imbalance = _latest_scalar(view, imbalance_node, interval)
             if imbalance is None:
                 return None
             weight = imbalance_to_weight(
@@ -121,7 +122,8 @@ def micro_price_node(
     if weight_node is not None:
         inputs.append(weight_node)
     else:
-        inputs.append(imbalance_node)  # type: ignore[arg-type]
+        assert imbalance_node is not None
+        inputs.append(imbalance_node)
 
     return Node(
         input=inputs,

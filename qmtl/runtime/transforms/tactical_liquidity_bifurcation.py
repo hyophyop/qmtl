@@ -47,7 +47,7 @@ def tlbh_alpha(
     phi: float,
 ) -> float:
     """Compute Tactical Liquidity Bifurcation Hazard alpha."""
-    return max(hazard**gamma - tau, 0.0) * direction * pi * exp(-phi * cost)
+    return float(max(hazard**gamma - tau, 0.0) * direction * pi * exp(-phi * cost))
 
 
 __all__ = ["bifurcation_hazard", "direction_signal", "tlbh_alpha"]

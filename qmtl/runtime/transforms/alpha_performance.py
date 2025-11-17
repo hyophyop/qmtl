@@ -6,8 +6,8 @@ from typing import Optional
 from qmtl.runtime.helpers import (
     adjust_returns_for_costs,
     calculate_execution_metrics,
-    compute_alpha_performance_summary,
 )
+from qmtl.runtime.helpers.runtime import compute_alpha_performance_summary
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
 from qmtl.runtime.sdk.node import Node
@@ -19,8 +19,8 @@ def alpha_performance_node(
     risk_free_rate: float = 0.0,
     transaction_cost: float = 0.0,
     execution_fills: Optional[Sequence[ExecutionFill]] = None,
-    use_realistic_costs: bool = False
-) -> dict:
+    use_realistic_costs: bool = False,
+) -> dict[str, float]:
     """Return key performance metrics from a return series.
 
     NaN values in ``returns`` are ignored. If all entries are NaN (or the
@@ -42,18 +42,19 @@ def alpha_performance_node(
 
     Returns
     -------
-    dict
+    dict[str, float]
         Mapping containing ``sharpe``, ``max_drawdown``, ``win_ratio``,
         ``profit_factor``, ``car_mdd``, ``rar_mdd`` and execution quality metrics.
     """
 
-    return compute_alpha_performance_summary(
+    result: dict[str, float] = compute_alpha_performance_summary(
         returns,
         risk_free_rate=risk_free_rate,
         transaction_cost=transaction_cost,
         execution_fills=execution_fills or (),
         use_realistic_costs=use_realistic_costs,
     )
+    return result
 
 
 def alpha_performance_from_history_node(

@@ -40,7 +40,7 @@ class PresetLoader:
 
     def __init__(self):
         """Initialize preset loader with built-in presets."""
-        self._presets = self._load_builtin_presets()
+        self._presets: Dict[str, PresetConfig] = self._load_builtin_presets()
 
     def _load_builtin_presets(self) -> Dict[str, PresetConfig]:
         """Load built-in presets."""

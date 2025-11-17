@@ -129,7 +129,7 @@ class WorldNodeRepository(AuditableRepository):
                 audit_payload["dropped_domains"] = sorted(dropped_domains)
             self._emit_audit(world_id, audit_payload)
             return container
-        return bucket  # type: ignore[return-value]
+        return bucket
 
     def upsert(
         self,
@@ -153,7 +153,8 @@ class WorldNodeRepository(AuditableRepository):
                 "status": ref.status,
             },
         )
-        return ref.clone().to_dict()
+        payload: Dict[str, Any] = ref.to_dict()
+        return payload
 
     def get(
         self,
@@ -170,7 +171,8 @@ class WorldNodeRepository(AuditableRepository):
         ref = bucket.get(domain)
         if not ref:
             return None
-        return ref.clone().to_dict()
+        payload: Dict[str, Any] = ref.to_dict()
+        return payload
 
     def list(
         self,
@@ -199,13 +201,13 @@ class WorldNodeRepository(AuditableRepository):
             bucket = self._ensure_bucket(world_id, node_id)
             if include_all:
                 for domain in sorted(bucket.keys()):
-                    results.append(bucket[domain].clone().to_dict())
+                    results.append(bucket[domain].to_dict())
             else:
                 if domain_filter is None:
                     continue
                 ref = bucket.get(domain_filter)
                 if ref:
-                    results.append(ref.clone().to_dict())
+                    results.append(ref.to_dict())
         return results
 
     def delete(

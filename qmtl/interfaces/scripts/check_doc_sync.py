@@ -22,7 +22,6 @@ def _load() -> object:
     return module
 
 
-def check_doc_sync(*args, **kwargs):  # type: ignore[no-untyped-def]
+def check_doc_sync(*args, **kwargs):
     mod = _load()
     return mod.check_doc_sync(*args, **kwargs)
-
