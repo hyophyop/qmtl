@@ -75,7 +75,12 @@ async def _check_controlbus(
     except ModuleNotFoundError:
         return ValidationIssue("warning", "aiokafka not installed; skipping ControlBus validation")
 
-    ready = await probe.ready()
+    try:
+        ready = await probe.ready()
+    except Exception as exc:
+        return ValidationIssue(
+            "error", f"ControlBus brokers unreachable ({broker_list}): {exc}")
+
     if ready:
         return ValidationIssue("ok", f"ControlBus brokers reachable ({broker_list})")
     return ValidationIssue("error", f"ControlBus brokers unreachable ({broker_list})")
