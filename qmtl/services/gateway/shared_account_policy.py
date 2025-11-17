@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 
 def _lookup_mark(
@@ -97,7 +97,13 @@ class SharedAccountPolicy:
                 context=metrics,
             )
 
-        return self._enforce_limits(metrics, gross, projected_net_abs, margin_headroom)
+        return self._enforce_limits(
+            metrics,
+            gross,
+            projected_net_abs,
+            margin_headroom,
+            total_equity,
+        )
 
     def _baseline_metrics(self, total_equity: float, current_net: float) -> dict[str, object]:
         metrics: dict[str, object] = {"total_equity": float(total_equity)}
@@ -150,6 +156,7 @@ class SharedAccountPolicy:
         gross: float,
         projected_net_abs: float,
         margin_headroom: float,
+        total_equity: float,
     ) -> SharedAccountPolicyResult:
         cfg = self.config
         eps = 1e-9
@@ -176,7 +183,7 @@ class SharedAccountPolicy:
             )
 
         if cfg.min_margin_headroom is not None:
-            if metrics["total_equity"] <= 0:  # type: ignore[index]
+            if total_equity <= 0:
                 return SharedAccountPolicyResult(
                     allowed=False,
                     reason="margin headroom check requires positive total_equity",
@@ -195,7 +202,7 @@ class SharedAccountPolicy:
 
     def _safe_float(self, value: object) -> float | None:
         try:
-            return float(value)
+            return float(cast(Any, value))
         except Exception:
             return None
 
