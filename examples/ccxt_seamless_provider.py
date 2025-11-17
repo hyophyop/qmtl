@@ -20,16 +20,16 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 from qmtl.runtime.io import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
     CcxtProConfig,
     CcxtProLiveFeed,
-)  # type: ignore[import-untyped]
-from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider  # type: ignore[import-untyped]
-from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy  # type: ignore[import-untyped]
+)
+from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
+from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
 
 
 @dataclass(slots=True)

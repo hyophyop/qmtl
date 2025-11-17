@@ -6,11 +6,11 @@ for transparent auto-backfill and live data integration.
 """
 
 import asyncio
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
-from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider  # type: ignore[import-untyped]
-from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy  # type: ignore[import-untyped]
-from qmtl.runtime.sdk import build_seamless_assembly  # type: ignore[import-untyped]
+from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
+from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
+from qmtl.runtime.sdk import build_seamless_assembly
 
 
 # Example DataFetcher implementation for demonstration
