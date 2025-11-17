@@ -9,7 +9,7 @@ need to manipulate Prometheus internals directly.
 """
 
 from collections.abc import Callable, Iterable, MutableMapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, Hashable, Tuple, TypeVar, cast
 
 from prometheus_client import (
@@ -49,6 +49,7 @@ TestValueT = TypeVar("TestValueT")
 class _TestStore(Generic[TestValueT]):
     factory: Callable[[], TestValueT]
     value: TestValueT
+    attrs: set[str] = field(default_factory=set)
 
     def reset(self) -> None:
         self.value = self.factory()
@@ -220,9 +221,14 @@ def _ensure_test_store(
     # signals that a test store should be initialised.
     if attr is None and factory is None:
         return
-    _TEST_STORES.setdefault(
-        metric, _TestStore(factory=factory or dict, value=(factory or dict)())
-    )
+    creator = factory or dict
+    store = _TEST_STORES.get(metric)
+    if store is None:
+        store = _TestStore(factory=creator, value=creator())
+        _TEST_STORES[metric] = store
+    if attr is not None:
+        store.attrs.add(attr)
+        setattr(metric, attr, store.value)
 
 
 def _register_reset(
@@ -277,6 +283,11 @@ def _labels_match(metric: MetricWrapperBase, expected: Sequence[str]) -> bool:
     return current == tuple(expected)
 
 
+def _sync_metric_test_attrs(metric: MetricWrapperBase, store: _TestStore[Any]) -> None:
+    for attr in store.attrs:
+        setattr(metric, attr, store.value)
+
+
 def _reset_test_store(
     metric: MetricWrapperBase,
     test_value_attr: str | None,
@@ -287,9 +298,15 @@ def _reset_test_store(
     store = _TEST_STORES.get(metric)
     if store is None:
         creator = test_value_factory or dict
-        _TEST_STORES[metric] = _TestStore(factory=creator, value=creator())
-        return
-    store.reset()
+        store = _TestStore(factory=creator, value=creator())
+        if test_value_attr is not None:
+            store.attrs.add(test_value_attr)
+        _TEST_STORES[metric] = store
+    else:
+        if test_value_attr is not None:
+            store.attrs.add(test_value_attr)
+        store.reset()
+    _sync_metric_test_attrs(metric, store)
 
 
 def get_test_store(
@@ -325,7 +342,8 @@ def set_test_value(
             return
         store = _TestStore(factory=factory, value=factory())
         _TEST_STORES[metric] = store
-    _TEST_STORES[metric].value = value
+    store.value = value
+    _sync_metric_test_attrs(metric, store)
 
 
 def get_mapping_store(
