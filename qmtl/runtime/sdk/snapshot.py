@@ -18,28 +18,64 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple, Mapping
+from typing import Any, Dict, Mapping, NamedTuple, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 
-try:  # optional
-    import pyarrow as pa  # type: ignore
-    import pyarrow.parquet as pq  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    pa = None  # type: ignore
-    pq = None  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    logger.exception("unexpected error importing pyarrow")
-    pa = None  # type: ignore
-    pq = None  # type: ignore
 
-try:  # optional
-    import fsspec  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    fsspec = None  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    logger.exception("unexpected error importing fsspec")
-    fsspec = None  # type: ignore
+def _get_arrow_context() -> ArrowContext | None:
+    try:  # optional
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:  # pragma: no cover - optional dependency
+        return None
+    except Exception:  # pragma: no cover - optional dependency
+        logger.exception("unexpected error importing pyarrow")
+        return None
+    return ArrowContext(pa=pa, parquet=pq)
+
+
+def _get_filesystem(url: str | None) -> tuple[str | None, FileSystemLike | None]:
+    if not url:
+        return None, None
+    try:  # optional
+        import fsspec
+    except ImportError:  # pragma: no cover - optional dependency
+        return None, None
+    except Exception:  # pragma: no cover - optional dependency
+        logger.exception("unexpected error importing fsspec")
+        return None, None
+    try:
+        fs, _, paths = fsspec.get_fs_token_paths(url)
+        base = paths[0] if paths else url
+        return (base, fs)
+    except Exception:
+        return None, None
+
+
+class ArrowTableWriter(Protocol):
+    """Subset of the pyarrow.parquet API used by this module."""
+
+    def write_table(self, table: Any, where: Any) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def read_table(self, source: Any) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+
+class FileSystemLike(Protocol):
+    """Minimal filesystem interface used for remote snapshots."""
+
+    def open(self, path: str, mode: str = ...) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def glob(self, path: str) -> list[Any]:  # pragma: no cover - protocol signature
+        ...
+
+
+class ArrowContext(NamedTuple):
+    pa: Any
+    parquet: ArrowTableWriter
 
 from . import metrics as sdk_metrics
 
@@ -89,21 +125,14 @@ def _snapshot_dir() -> Path:
     return p
 
 
-def _remote_base() -> Tuple[str | None, Any | None]:
+def _remote_base() -> Tuple[str | None, FileSystemLike | None]:
     """Return (base_url, filesystem) when remote snapshots are configured.
 
     Uses ``QMTL_SNAPSHOT_URL`` (e.g. ``s3://bucket/prefix``). Returns ``(None, None)``
     when not configured or when ``fsspec`` is unavailable.
     """
     url = os.getenv("QMTL_SNAPSHOT_URL")
-    if not url or fsspec is None:
-        return None, None
-    try:
-        fs, _, paths = fsspec.get_fs_token_paths(url)  # type: ignore[attr-defined]
-        base = paths[0] if paths else url
-        return (url, fs)
-    except Exception:
-        return None, None
+    return _get_filesystem(url)
 
 
 def _node_key(node) -> str:
@@ -130,10 +159,12 @@ def write_snapshot(node) -> Path | None:
 
     key = _node_key(node)
     remote_url, filesystem = _remote_base()
+    arrow = _get_arrow_context()
     base_dir = _snapshot_dir()
 
     start = time.perf_counter()
-    if _should_use_parquet(meta["format"]):
+    if _should_use_parquet(meta["format"], arrow):
+        assert arrow is not None
         path_obj = _write_parquet_snapshot(
             data=data,
             meta=meta,
@@ -141,6 +172,7 @@ def write_snapshot(node) -> Path | None:
             remote_url=remote_url,
             filesystem=filesystem,
             base_dir=base_dir,
+            arrow=arrow,
         )
     else:
         path_obj = _write_json_snapshot(
@@ -206,8 +238,8 @@ def _build_snapshot_meta(
     return meta
 
 
-def _should_use_parquet(fmt: str) -> bool:
-    return fmt == "parquet" and pa is not None and pq is not None
+def _should_use_parquet(fmt: str, arrow: ArrowContext | None) -> bool:
+    return fmt == "parquet" and arrow is not None
 
 
 def _write_parquet_snapshot(
@@ -216,8 +248,9 @@ def _write_parquet_snapshot(
     meta: Dict[str, Any],
     key: str,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
     base_dir: Path,
+    arrow: ArrowContext,
 ):
     rows_u: list[str] = []
     rows_i: list[int] = []
@@ -230,24 +263,24 @@ def _write_parquet_snapshot(
                 rows_i.append(int(interval))
                 rows_t.append(int(ts))
                 rows_v.append(_b64d(encoded))
-    table = pa.table({
-        "u": pa.array(rows_u, pa.string()),
-        "i": pa.array(rows_i, pa.int64()),
-        "t": pa.array(rows_t, pa.int64()),
-        "v": pa.array(rows_v, pa.binary()),
+    table = arrow.pa.table({
+        "u": arrow.pa.array(rows_u, arrow.pa.string()),
+        "i": arrow.pa.array(rows_i, arrow.pa.int64()),
+        "t": arrow.pa.array(rows_t, arrow.pa.int64()),
+        "v": arrow.pa.array(rows_v, arrow.pa.binary()),
     })
 
     if remote_url and filesystem is not None:
         pq_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
-        with filesystem.open(pq_path, "wb") as handle:  # type: ignore[attr-defined]
-            pq.write_table(table, handle)
+        with filesystem.open(pq_path, "wb") as handle:
+            arrow.parquet.write_table(table, handle)
         meta_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
-        with filesystem.open(meta_path, "w") as meta_handle:  # type: ignore[attr-defined]
+        with filesystem.open(meta_path, "w") as meta_handle:
             json.dump({"meta": meta}, meta_handle)
         return Path(pq_path) if not isinstance(pq_path, Path) else pq_path
 
     pq_path = base_dir / f"{key}_{meta['wm_ts']}.snap.parquet"
-    pq.write_table(table, pq_path)
+    arrow.parquet.write_table(table, pq_path)
     meta_path = base_dir / f"{key}_{meta['wm_ts']}.meta.json"
     with meta_path.open("w") as meta_handle:
         json.dump({"meta": meta}, meta_handle)
@@ -260,12 +293,12 @@ def _write_json_snapshot(
     meta: Dict[str, Any],
     key: str,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
     base_dir: Path,
 ):
     if remote_url and filesystem is not None:
         path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
-        with filesystem.open(path, "w") as handle:  # type: ignore[attr-defined]
+        with filesystem.open(path, "w") as handle:
             json.dump({"meta": meta, "data": data}, handle)
         return Path(path) if not isinstance(path, Path) else path
 
@@ -309,6 +342,7 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
         else strict_runtime
     )
     remote_url, fs = _remote_base()
+    arrow = _get_arrow_context()
     candidates = _snapshot_candidates(
         key=_node_key(node),
         base_dir=_snapshot_dir(),
@@ -319,7 +353,7 @@ def hydrate(node, *, strict_runtime: bool | None = None) -> bool:
         return False
     for path in candidates:
         try:
-            payload = _load_snapshot_payload(path, remote_url, fs)
+            payload = _load_snapshot_payload(path, remote_url, fs, arrow)
         except Exception:
             continue
         if payload is None:
@@ -344,18 +378,18 @@ def _snapshot_candidates(
     key: str,
     base_dir: Path,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
 ) -> list[Any]:
     pq_candidates: list[Any] = []
     json_candidates: list[Any] = []
     if remote_url and filesystem is not None:
         try:
             pq_candidates = sorted(
-                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.parquet"),  # type: ignore[attr-defined]
+                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.parquet"),
                 reverse=True,
             )
             json_candidates = sorted(
-                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.json"),  # type: ignore[attr-defined]
+                filesystem.glob(f"{remote_url.rstrip('/')}/{key}_*.snap.json"),
                 reverse=True,
             )
         except Exception:
@@ -369,10 +403,11 @@ def _snapshot_candidates(
 def _load_snapshot_payload(
     path: Any,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
+    arrow: ArrowContext | None,
 ) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
     if _is_parquet_path(path):
-        return _load_parquet_payload(path, remote_url, filesystem)
+        return _load_parquet_payload(path, remote_url, filesystem, arrow)
     return _load_json_payload(path, remote_url, filesystem)
 
 
@@ -387,18 +422,19 @@ def _is_parquet_path(path: Any) -> bool:
 def _load_parquet_payload(
     path: Any,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
+    arrow: ArrowContext | None,
 ) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
-    if pa is None or pq is None:
+    if arrow is None:
         return None
     meta = _read_parquet_meta(path, remote_url, filesystem)
     if meta is None:
         return None
     if remote_url and filesystem is not None and isinstance(path, str):
-        with filesystem.open(path, "rb") as handle:  # type: ignore[attr-defined]
-            table = pq.read_table(handle)
+        with filesystem.open(path, "rb") as handle:
+            table = arrow.parquet.read_table(handle)
     else:
-        table = pq.read_table(path)
+        table = arrow.parquet.read_table(path)
     data: Dict[str, Dict[int, list[tuple[int, Any]]]] = {}
     for u, i, t, v in zip(
         table.column("u").to_pylist(),
@@ -413,12 +449,12 @@ def _load_parquet_payload(
 def _read_parquet_meta(
     path: Any,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
 ) -> Dict[str, Any] | None:
     if remote_url and filesystem is not None and isinstance(path, str):
         meta_path = path.replace(".snap.parquet", ".meta.json")
         try:
-            with filesystem.open(meta_path, "r") as handle:  # type: ignore[attr-defined]
+            with filesystem.open(meta_path, "r") as handle:
                 obj = json.load(handle)
         except Exception:
             return None
@@ -432,10 +468,10 @@ def _read_parquet_meta(
 def _load_json_payload(
     path: Any,
     remote_url: str | None,
-    filesystem: Any | None,
+    filesystem: FileSystemLike | None,
 ) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
     if remote_url and filesystem is not None and isinstance(path, str):
-        with filesystem.open(path, "r") as handle:  # type: ignore[attr-defined]
+        with filesystem.open(path, "r") as handle:
             obj = json.load(handle)
     else:
         text = Path(path).read_text() if isinstance(path, (str, Path)) else path.read_text()
