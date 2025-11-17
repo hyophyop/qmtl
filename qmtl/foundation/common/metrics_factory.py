@@ -8,8 +8,9 @@ It also exposes a registry-aware reset helper so individual modules no longer
 need to manipulate Prometheus internals directly.
 """
 
-from collections.abc import Callable, Iterable, Sequence
-from typing import Any, Dict, Tuple, TypeVar
+from collections.abc import Callable, Iterable, MutableMapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Dict, Generic, Hashable, Tuple, TypeVar, cast
 
 from prometheus_client import (
     CollectorRegistry,
@@ -24,8 +25,13 @@ __all__ = [
     "get_or_create_counter",
     "get_or_create_gauge",
     "get_or_create_histogram",
+    "get_mapping_store",
+    "get_metric_value",
+    "get_test_store",
+    "increment_mapping_store",
     "register_reset_hook",
     "reset_metrics",
+    "set_test_value",
 ]
 
 MetricT = TypeVar("MetricT", bound=MetricWrapperBase)
@@ -33,6 +39,19 @@ RegistryKey = Tuple[CollectorRegistry, str]
 
 _METRIC_CACHE: Dict[RegistryKey, MetricWrapperBase] = {}
 _RESET_CALLBACKS: Dict[RegistryKey, Callable[[], None]] = {}
+_TEST_STORES: Dict[MetricWrapperBase, "_TestStore[Any]"] = {}
+
+
+TestValueT = TypeVar("TestValueT")
+
+
+@dataclass
+class _TestStore(Generic[TestValueT]):
+    factory: Callable[[], TestValueT]
+    value: TestValueT
+
+    def reset(self) -> None:
+        self.value = self.factory()
 
 
 def get_or_create_counter(
@@ -55,7 +74,7 @@ def get_or_create_counter(
         labelnames,
         registry=reg,
     )
-    _ensure_test_attr(metric, test_value_attr, test_value_factory)
+    _ensure_test_store(metric, test_value_attr, test_value_factory)
     _register_reset(metric, reg, reset, test_value_attr, test_value_factory)
     return metric
 
@@ -80,7 +99,7 @@ def get_or_create_gauge(
         labelnames,
         registry=reg,
     )
-    _ensure_test_attr(metric, test_value_attr, test_value_factory)
+    _ensure_test_store(metric, test_value_attr, test_value_factory)
     _register_reset(metric, reg, reset, test_value_attr, test_value_factory)
     return metric
 
@@ -105,7 +124,7 @@ def get_or_create_histogram(
         labelnames,
         registry=reg,
     )
-    _ensure_test_attr(metric, test_value_attr, test_value_factory)
+    _ensure_test_store(metric, test_value_attr, test_value_factory)
     _register_reset(metric, reg, reset, test_value_attr, test_value_factory)
     return metric
 
@@ -191,16 +210,19 @@ def _get_or_create_metric(
     return metric  # type: ignore[return-value]
 
 
-def _ensure_test_attr(
+def _ensure_test_store(
     metric: MetricWrapperBase,
     attr: str | None,
     factory: Callable[[], Any] | None,
 ) -> None:
-    if not attr:
+    # ``attr`` is retained for backward compatibility with existing call sites
+    # but is no longer used to mutate the metric. The presence of the argument
+    # signals that a test store should be initialised.
+    if attr is None and factory is None:
         return
-    if not hasattr(metric, attr):
-        creator = factory or dict
-        setattr(metric, attr, creator())
+    _TEST_STORES.setdefault(
+        metric, _TestStore(factory=factory or dict, value=(factory or dict)())
+    )
 
 
 def _register_reset(
@@ -219,9 +241,7 @@ def _register_reset(
             reset(metric)
         else:
             _default_reset(metric)
-        if test_value_attr:
-            creator = test_value_factory or dict
-            setattr(metric, test_value_attr, creator())
+        _reset_test_store(metric, test_value_attr, test_value_factory)
 
     _RESET_CALLBACKS[(registry, name)] = _reset
 
@@ -255,5 +275,111 @@ def _lookup_metric(registry: CollectorRegistry, name: str) -> MetricWrapperBase 
 def _labels_match(metric: MetricWrapperBase, expected: Sequence[str]) -> bool:
     current = tuple(getattr(metric, "_labelnames", ()))
     return current == tuple(expected)
+
+
+def _reset_test_store(
+    metric: MetricWrapperBase,
+    test_value_attr: str | None,
+    test_value_factory: Callable[[], Any] | None,
+) -> None:
+    if test_value_attr is None and test_value_factory is None:
+        return
+    store = _TEST_STORES.get(metric)
+    if store is None:
+        creator = test_value_factory or dict
+        _TEST_STORES[metric] = _TestStore(factory=creator, value=creator())
+        return
+    store.reset()
+
+
+def get_test_store(
+    metric: MetricWrapperBase, factory: Callable[[], TestValueT] | None = None
+) -> TestValueT | None:
+    """Return the test store associated with ``metric`` if registered.
+
+    Passing ``factory`` ensures the store exists with a predictable type,
+    creating it on demand when necessary. This keeps test-only state separate
+    from the wrapped Prometheus metric.
+    """
+
+    store = _TEST_STORES.get(metric)
+    if store is None:
+        if factory is None:
+            return None
+        store = _TestStore(factory=factory, value=factory())
+        _TEST_STORES[metric] = store
+    return cast(TestValueT, store.value)
+
+
+def set_test_value(
+    metric: MetricWrapperBase,
+    value: TestValueT,
+    *,
+    factory: Callable[[], TestValueT] | None = None,
+) -> None:
+    """Assign a value to the test store for ``metric``."""
+
+    store = _TEST_STORES.get(metric)
+    if store is None:
+        if factory is None:
+            return
+        store = _TestStore(factory=factory, value=factory())
+        _TEST_STORES[metric] = store
+    _TEST_STORES[metric].value = value
+
+
+def get_mapping_store(
+    metric: MetricWrapperBase,
+    factory: Callable[[], MutableMapping[Hashable, Any]] | None = None,
+) -> MutableMapping[Hashable, Any]:
+    """Return a mutable mapping store for ``metric``.
+
+    The mapping is created on demand using ``factory`` when provided; otherwise
+    a ``dict`` is used. Raises ``TypeError`` if an incompatible store already
+    exists.
+    """
+
+    store = get_test_store(metric, factory or dict)
+    if store is None:
+        raise ValueError(f"No test store registered for metric {metric!r}")
+    if not isinstance(store, MutableMapping):
+        raise TypeError(
+            f"Test store for metric {metric!r} is not a mapping (found {type(store)!r})"
+        )
+    return store
+
+
+def increment_mapping_store(
+    metric: MetricWrapperBase,
+    key: Hashable,
+    amount: int | float = 1,
+    *,
+    factory: Callable[[], MutableMapping[Hashable, Any]] | None = None,
+) -> Any:
+    """Increment the mapping-backed test store entry for ``key``."""
+
+    store = get_mapping_store(metric, factory or dict)
+    current = store.get(key, 0)
+    store[key] = current + amount
+    return store[key]
+
+
+def get_metric_value(
+    metric: MetricWrapperBase, labels: MutableMapping[str, str] | None = None
+) -> float:
+    """Return the most recent sample value for ``metric``.
+
+    When ``labels`` are provided the matching labelled sample is returned,
+    otherwise the first unlabelled sample is used.
+    """
+
+    for family in metric.collect():
+        for sample in family.samples:
+            if labels is None and sample.labels:
+                continue
+            if labels is not None and sample.labels != labels:
+                continue
+            return float(sample.value)
+    return 0.0
 
 

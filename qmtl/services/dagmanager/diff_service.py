@@ -48,6 +48,7 @@ from .topic import (
 )
 from qmtl.foundation.common import AsyncCircuitBreaker, crc32_of_list
 from qmtl.foundation.common.compute_context import ComputeContext, coerce_compute_context
+from qmtl.foundation.common.metrics_factory import increment_mapping_store
 from qmtl.foundation.common.metrics_shared import observe_cross_context_cache_hit
 from .monitor import AckStatus
 from .repository import NodeRepository
@@ -567,9 +568,7 @@ class DiffService:
         )
         counter.inc()
         key = (str(node.node_id), str(world_label), str(domain_label))
-        cross_context_cache_violation_total._vals[key] = (  # type: ignore[attr-defined]
-            cross_context_cache_violation_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
-        )
+        increment_mapping_store(cross_context_cache_violation_total, key, factory=dict)
 
     def _handle_cross_context_violation(
         self, node: NodeInfo, compute_context: ComputeContext, bindings: Dict[str, _CachedBinding]
