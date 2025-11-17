@@ -17,7 +17,7 @@ class PresetConfig:
     description: str
     layers: List[Layer]
     template_choices: Dict[Layer, str] = field(default_factory=dict)
-    config: Dict[str, bool] = field(default_factory=dict)
+    config: Dict[str, bool | str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict) -> PresetConfig:

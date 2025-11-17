@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 
-_translator: object = gettext.NullTranslations()
+_translator: gettext.NullTranslations | _PoTranslations = gettext.NullTranslations()
 _current_language: Optional[str] = None
 _language_source: Optional[str] = None  # "explicit" or "auto"
 

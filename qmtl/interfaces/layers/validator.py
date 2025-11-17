@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Set
 
 from .metadata import Layer, get_layer_dependencies, get_transitive_dependencies
@@ -13,14 +13,8 @@ class ValidationResult:
     """Result of layer validation."""
 
     valid: bool
-    errors: List[str] = None
-    warnings: List[str] = None
-
-    def __post_init__(self):
-        if self.errors is None:
-            self.errors = []
-        if self.warnings is None:
-            self.warnings = []
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
 
 
 class LayerValidator:

@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 import importlib.resources as resources
+from typing import cast
 
 from .config_templates import write_template
 
 
 _EXAMPLES_PKG = "qmtl.examples"
+
+
+def _examples_root() -> Path:
+    """Return the examples package as a concrete filesystem path."""
+
+    return cast(Path, resources.files(_EXAMPLES_PKG))
 
 # Mapping of template names to example files relative to ``qmtl.examples``
 TEMPLATES = {
@@ -21,7 +28,7 @@ TEMPLATES = {
 def copy_nodes(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     nodes_src = examples.joinpath("nodes")
     nodes_dest = dest / "nodes"
     nodes_dest.mkdir(exist_ok=True)
@@ -40,7 +47,7 @@ def copy_nodes(dest: Path) -> None:
 def copy_dags(dest: Path, template: str) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     dags_src = examples.joinpath("dags")
     dags_dest = dest / "dags"
     if dags_src.is_dir():
@@ -67,7 +74,7 @@ def copy_dags(dest: Path, template: str) -> None:
 def copy_docs(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     docs_src = examples.joinpath("docs")
     docs_dest = dest / "docs"
     if docs_src.is_dir():
@@ -81,7 +88,7 @@ def copy_docs(dest: Path) -> None:
 def copy_scripts(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     scripts_src = examples.joinpath("scripts")
     scripts_dest = dest / "scripts"
     if scripts_src.is_dir():
@@ -95,7 +102,7 @@ def copy_scripts(dest: Path) -> None:
 def copy_sample_data(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     data_dir = dest / "data"
     data_dir.mkdir(exist_ok=True)
     sample = examples.joinpath("data/sample_ohlcv.csv")
@@ -113,7 +120,7 @@ def copy_sample_data(dest: Path) -> None:
 def copy_pyproject(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     py_src = examples.joinpath("pyproject.toml")
     if py_src.is_file():
         (dest / "pyproject.toml").write_bytes(py_src.read_bytes())
@@ -122,7 +129,7 @@ def copy_pyproject(dest: Path) -> None:
 def copy_backend_templates(dest: Path) -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     templates_dest = dest / "templates"
     templates_dest.mkdir(exist_ok=True)
     for name in ("local_stack.example.yml", "backend_stack.example.yml"):
@@ -134,7 +141,7 @@ def copy_backend_templates(dest: Path) -> None:
 def copy_base_files(dest: Path, *, config_profile: str = "minimal") -> None:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    examples = resources.files(_EXAMPLES_PKG)
+    examples = _examples_root()
     write_template(config_profile, dest / "qmtl.yml", force=True)
     (dest / "config.example.yml").write_bytes(
         examples.joinpath("config.example.yml").read_bytes()
