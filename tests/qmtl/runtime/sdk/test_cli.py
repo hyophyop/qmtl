@@ -60,6 +60,77 @@ async def test_cli_sets_no_ray(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cli_offline_uses_config_history(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def _fake_offline_async(
+        strategy_cls,
+        *,
+        history_start,
+        history_end,
+        **kwargs,
+    ):
+        captured.update(
+            {
+                "strategy_cls": strategy_cls,
+                "history_start": history_start,
+                "history_end": history_end,
+            }
+        )
+
+    monkeypatch.setattr(sdk_cli.Runner, "offline_async", staticmethod(_fake_offline_async))
+
+    config = UnifiedConfig(test=FoundationTestConfig(history_start="11", history_end="29"))
+    with runtime_config_override(config):
+        await sdk_cli._main(
+            [
+                "offline",
+                STRATEGY_PATH,
+            ]
+        )
+
+    assert captured["history_start"] == 11
+    assert captured["history_end"] == 29
+
+
+@pytest.mark.asyncio
+async def test_cli_offline_defaults_history_when_test_mode(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def _fake_offline_async(
+        strategy_cls,
+        *,
+        history_start,
+        history_end,
+        **kwargs,
+    ):
+        captured.update(
+            {
+                "history_start": history_start,
+                "history_end": history_end,
+            }
+        )
+
+    monkeypatch.setattr(sdk_cli.Runner, "offline_async", staticmethod(_fake_offline_async))
+
+    previous_test_mode = runtime.TEST_MODE
+    runtime.TEST_MODE = True
+    try:
+        with runtime_config_override(UnifiedConfig()):
+            await sdk_cli._main(
+                [
+                    "offline",
+                    STRATEGY_PATH,
+                ]
+            )
+    finally:
+        runtime.TEST_MODE = previous_test_mode
+
+    assert captured["history_start"] == 1
+    assert captured["history_end"] == 2
+
+
+@pytest.mark.asyncio
 async def test_cli_run_uses_config_history(monkeypatch):
     captured: dict[str, object] = {}
 

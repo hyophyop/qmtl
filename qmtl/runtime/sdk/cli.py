@@ -85,7 +85,14 @@ async def _main(argv: List[str] | None = None) -> int:
             history_end=history_end,
         )
     else:
-        await Runner.offline_async(strategy_cls)
+        history_start, history_end = _resolve_history_bounds()
+        if runtime.TEST_MODE and history_start is None and history_end is None:
+            history_start, history_end = 1, 2
+        await Runner.offline_async(
+            strategy_cls,
+            history_start=history_start,
+            history_end=history_end,
+        )
     return 0
 
 

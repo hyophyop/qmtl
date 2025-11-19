@@ -45,6 +45,7 @@ from .history_coverage import (
     compute_missing_ranges as _compute_missing_ranges,
     WarmupWindow,
 )
+from .data_io import HistoryProvider
 from . import metrics as sdk_metrics
 from .cache_lru import LRUCache
 from .conformance import ConformancePipeline, ConformanceReport
@@ -547,7 +548,7 @@ class ConformancePipelineError(RuntimeError):
         super().__init__(message)
 
 
-class SeamlessDataProvider(ABC):
+class SeamlessDataProvider(HistoryProvider):
     """
     Provides transparent data access across multiple sources.
     
@@ -1512,7 +1513,30 @@ class SeamlessDataProvider(ABC):
         except Exception:
             # Fallback to simple merge if utilities are unavailable
             return self._merge_ranges(all_ranges)
-    
+
+    async def fill_missing(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        """Bridge ``HistoryProvider`` gap-filling to Seamless backfill.
+
+        This method reuses :meth:`ensure_data_available` to populate missing
+        ranges so that :class:`HistoryWarmupService` and
+        :class:`HistoryWarmupPoller` can treat Seamless providers as standard
+        history sources.
+        """
+
+        await self.ensure_data_available(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
+
     async def ensure_data_available(
         self,
         start: int,

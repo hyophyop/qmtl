@@ -33,6 +33,7 @@ nav:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
+      - History Data Quickstart: guides/history_data_quickstart.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Microstructure Signals: guides/microstructure_signals.md
       - Short-Term Microstructure Filters: guides/short_term_microstructure.md
@@ -166,6 +167,7 @@ plugins:
             "Testing & Pytest": "테스트 & Pytest"
             "Python Environment": "Python 환경"
             "CCXT Seamless Data Provider": "CCXT 심리스 데이터 프로바이더"
+            "History Data Quickstart": "히스토리 데이터 퀵스타트"
             "Microstructure Signals": "마이크로스트럭처 신호"
             "Short-Term Microstructure Filters": "단기 마이크로스트럭처 필터"
             "IO & Integrations": "IO & 통합"

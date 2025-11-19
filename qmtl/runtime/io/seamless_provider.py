@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Optional
+from pathlib import Path
 import pandas as pd
 import asyncio
 import logging
@@ -512,6 +513,71 @@ class LiveDataFeedImpl:
         self._subscriptions[key] = False
 
 
+class _FrameMappingDataSource(DataSource):
+    """In-memory :class:`DataSource` backed by per-stream DataFrames.
+
+    Frames are indexed by ``(node_id, interval)`` and must contain a ``ts``
+    column with epoch-second timestamps. This is intended for lightweight
+    offline integrations and examples.
+    """
+
+    def __init__(self) -> None:
+        self.priority = DataSourcePriority.STORAGE
+        self._frames: dict[tuple[str, int], pd.DataFrame] = {}
+
+    def register(self, *, node_id: str, interval: int, frame: pd.DataFrame) -> None:
+        if "ts" not in frame.columns:
+            raise KeyError("frame missing 'ts' column")
+        normalized = frame.copy()
+        ts = normalized["ts"]
+        if not pd.api.types.is_integer_dtype(ts):
+            # Best-effort coercion from datetime-like values to epoch seconds.
+            try:
+                dt = pd.to_datetime(ts, utc=True)
+                normalized["ts"] = (dt.view("int64") // 1_000_000_000).astype("int64")
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise TypeError("ts column must be integer seconds or datetime-like") from exc
+        else:
+            normalized["ts"] = ts.astype("int64")
+
+        normalized = normalized.sort_values("ts").reset_index(drop=True)
+        self._frames[(str(node_id), int(interval))] = normalized
+
+    async def is_available(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> bool:
+        frame = self._frames.get((str(node_id), int(interval)))
+        if frame is None or frame.empty:
+            return False
+        ts_min = int(frame["ts"].iloc[0])
+        ts_max = int(frame["ts"].iloc[-1])
+        # Treat data as available when the requested window intersects the
+        # stored range. Fail-fast semantics are enforced by the caller.
+        return not (end <= ts_min or start > ts_max)
+
+    async def fetch(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> pd.DataFrame:
+        frame = self._frames.get((str(node_id), int(interval)))
+        if frame is None or frame.empty:
+            return pd.DataFrame(columns=["ts"])
+        mask = (frame["ts"] >= int(start)) & (frame["ts"] < int(end))
+        result = frame.loc[mask]
+        if result.empty:
+            return pd.DataFrame(columns=frame.columns)
+        return result.reset_index(drop=True)
+
+    async def coverage(
+        self, *, node_id: str, interval: int
+    ) -> list[tuple[int, int]]:
+        frame = self._frames.get((str(node_id), int(interval)))
+        if frame is None or frame.empty:
+            return []
+        ts_min = int(frame["ts"].iloc[0])
+        ts_max = int(frame["ts"].iloc[-1])
+        return [(ts_min, ts_max)]
+
+
 class EnhancedQuestDBProvider(SeamlessDataProvider):
     """
     Enhanced QuestDB provider with seamless data access capabilities.
@@ -724,6 +790,79 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         return builder.build()
 
 
+class InMemorySeamlessProvider(SeamlessDataProvider):
+    """Seamless provider backed by in-memory DataFrames.
+
+    This helper is intended for local development and examples where history
+    lives in CSV/Parquet files or pre-loaded DataFrames rather than an
+    external storage backend. It wires an internal :class:`DataSource`
+    so that the existing Seamless orchestration, coverage, and history
+    warm-up paths can be reused unchanged.
+    """
+
+    def __init__(
+        self,
+        *,
+        strategy: DataAvailabilityStrategy = DataAvailabilityStrategy.FAIL_FAST,
+    ) -> None:
+        storage = _FrameMappingDataSource()
+        super().__init__(
+            strategy=strategy,
+            cache_source=None,
+            storage_source=storage,
+            backfiller=None,
+            live_feed=None,
+            conformance=None,
+            partial_ok=True,
+            registrar=None,
+            stabilization_bars=0,
+        )
+        self._storage = storage
+
+    def register_frame(
+        self,
+        stream: Any,
+        frame: pd.DataFrame,
+        *,
+        ts_col: str = "ts",
+    ) -> None:
+        """Register a DataFrame as history for ``stream``.
+
+        The stream must expose ``node_id`` and ``interval`` attributes
+        (e.g. a :class:`qmtl.runtime.sdk.StreamInput` instance). If
+        ``ts_col`` differs from ``\"ts\"``, it is renamed before
+        normalization.
+        """
+
+        node_id = getattr(stream, "node_id", None)
+        interval = getattr(stream, "interval", None)
+        if node_id is None or interval is None:
+            raise ValueError("stream must provide node_id and interval")
+        payload = frame
+        if ts_col != "ts":
+            if ts_col not in payload.columns:
+                raise KeyError(f"timestamp column {ts_col!r} not found")
+            payload = payload.rename(columns={ts_col: "ts"})
+        self._storage.register(node_id=str(node_id), interval=int(interval), frame=payload)
+
+    def register_csv(
+        self,
+        stream: Any,
+        path: str | Path,
+        *,
+        ts_col: str = "ts",
+        **read_csv_kwargs: Any,
+    ) -> None:
+        """Register a CSV file as history for ``stream``.
+
+        The CSV is loaded via :func:`pandas.read_csv` and passed to
+        :meth:`register_frame`.
+        """
+
+        frame = pd.read_csv(path, **read_csv_kwargs)
+        self.register_frame(stream, frame, ts_col=ts_col)
+
+
 __all__ = [
     "HistoryProviderDataSource",
     "CacheDataSource",
@@ -733,4 +872,5 @@ __all__ = [
     "FingerprintPolicy",
     "EnhancedQuestDBProviderSettings",
     "EnhancedQuestDBProvider",
+    "InMemorySeamlessProvider",
 ]

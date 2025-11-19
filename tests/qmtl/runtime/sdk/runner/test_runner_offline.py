@@ -5,6 +5,7 @@ import pytest
 from qmtl.runtime.sdk import ProcessingNode, StreamInput, Strategy
 from qmtl.runtime.sdk import runtime
 from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider, DataAvailabilityStrategy
 from tests.sample_strategy import SampleStrategy
 
 
@@ -108,6 +109,95 @@ def test_load_history_called(monkeypatch, runner_with_gateway):
     runner_with_gateway()
 
     assert calls == [(1, 2)]
+
+
+def test_offline_history_window(monkeypatch):
+    calls: list[tuple[int, int]] = []
+
+    async def dummy_load_history(self, start, end):
+        calls.append((start, end))
+
+    monkeypatch.setattr(StreamInput, "load_history", dummy_load_history)
+
+    class Strat(Strategy):
+        def setup(self):
+            src = StreamInput(interval="60s", period=2)
+
+            def compute(view):
+                return view[src][60].latest()[1]
+
+            node = ProcessingNode(
+                input=src,
+                compute_fn=compute,
+                name="out",
+                interval="60s",
+                period=2,
+            )
+            self.add_nodes([src, node])
+
+    Runner.offline(Strat, history_start=10, history_end=100)
+
+    assert calls == [(10, 100)]
+
+
+class _OfflineSeamlessProvider(SeamlessDataProvider):
+    """Minimal Seamless provider for offline data binding tests."""
+
+    def __init__(self) -> None:
+        super().__init__(strategy=DataAvailabilityStrategy.FAIL_FAST)
+        self.coverage_calls: list[tuple[str, int]] = []
+        self.fetch_calls: list[tuple[int, int, str, int]] = []
+
+    async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
+        self.coverage_calls.append((node_id, interval))
+        # Claim broad coverage so warm-up does not attempt backfill.
+        return [(0, 10_000_000_000)]
+
+    async def fetch(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+        **kwargs,
+    ) -> pd.DataFrame:
+        self.fetch_calls.append((start, end, node_id, interval))
+        # Return an empty frame; the cache machinery only cares that the call succeeds.
+        return pd.DataFrame(columns=["ts"])
+
+
+@pytest.mark.asyncio
+async def test_offline_binds_seamless_provider(monkeypatch):
+    provider = _OfflineSeamlessProvider()
+
+    class Strat(Strategy):
+        def setup(self):
+            self.src = StreamInput(interval="60s", period=2)
+
+            def compute(view):
+                # No-op compute; history warm-up is exercised via the cache path.
+                return None
+
+            node = ProcessingNode(
+                input=self.src,
+                compute_fn=compute,
+                name="out",
+                interval="60s",
+                period=2,
+            )
+            self.add_nodes([self.src, node])
+
+    strategy = await Runner.offline_async(
+        Strat,
+        history_start=10,
+        history_end=70,
+        data=provider,
+    )
+
+    assert provider.coverage_calls
+    assert provider.fetch_calls
+    assert getattr(strategy, "src").history_provider is provider
 
 
 def test_history_gap_fill(monkeypatch):

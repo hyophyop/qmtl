@@ -17,6 +17,7 @@ from .seamless_provider import (
     EnhancedQuestDBProvider,
     EnhancedQuestDBProviderSettings,
     FingerprintPolicy,
+    InMemorySeamlessProvider,
 )
 from .artifact import ArtifactRegistrar, ArtifactPublication
 from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
@@ -34,6 +35,7 @@ __all__ = [
     "EnhancedQuestDBProvider",
     "EnhancedQuestDBProviderSettings",
     "FingerprintPolicy",
+    "InMemorySeamlessProvider",
     "CcxtBackfillConfig",
     "RateLimiterConfig",
     "CcxtOHLCVFetcher",
