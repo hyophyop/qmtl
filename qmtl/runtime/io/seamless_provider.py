@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Optional
 from pathlib import Path
 import pandas as pd
+import numpy as np
 import asyncio
 import logging
 
@@ -530,15 +531,33 @@ class _FrameMappingDataSource(DataSource):
             raise KeyError("frame missing 'ts' column")
         normalized = frame.copy()
         ts = normalized["ts"]
-        if not pd.api.types.is_integer_dtype(ts):
-            # Best-effort coercion from datetime-like values to epoch seconds.
-            try:
-                dt = pd.to_datetime(ts, utc=True)
-                normalized["ts"] = (dt.view("int64") // 1_000_000_000).astype("int64")
-            except Exception as exc:  # pragma: no cover - defensive guard
-                raise TypeError("ts column must be integer seconds or datetime-like") from exc
+        normalized_ts: pd.Series
+        if pd.api.types.is_integer_dtype(ts):
+            normalized_ts = ts.astype("int64")
         else:
-            normalized["ts"] = ts.astype("int64")
+            numeric = pd.to_numeric(ts, errors="coerce")
+            if numeric.notna().all():
+                # ``ts`` already encodes epoch seconds but may be stored as
+                # floats/objects (e.g., CSV with missing values). Ensure the
+                # representation is integral rather than interpreting it as
+                # nanosecond timestamps.
+                remainder = np.modf(numeric.to_numpy(dtype="float64"))[0]
+                if not np.allclose(remainder, 0):
+                    raise TypeError(
+                        "ts column must be integer seconds or datetime-like"
+                    )
+                normalized_ts = numeric.astype("int64")
+            else:
+                # Best-effort coercion from datetime-like values to epoch seconds.
+                try:
+                    dt = pd.to_datetime(ts, utc=True)
+                    normalized_ts = (dt.view("int64") // 1_000_000_000).astype("int64")
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    raise TypeError(
+                        "ts column must be integer seconds or datetime-like"
+                    ) from exc
+
+        normalized["ts"] = normalized_ts
 
         normalized = normalized.sort_values("ts").reset_index(drop=True)
         self._frames[(str(node_id), int(interval))] = normalized

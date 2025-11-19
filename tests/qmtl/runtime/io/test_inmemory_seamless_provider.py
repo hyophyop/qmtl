@@ -40,3 +40,15 @@ async def test_inmemory_provider_register_csv(tmp_path) -> None:
     df = await provider.fetch(60, 180, node_id=stream.node_id, interval=60)
     assert df["ts"].tolist() == [60, 120]
 
+
+@pytest.mark.asyncio
+async def test_inmemory_provider_preserves_numeric_timestamps() -> None:
+    provider = InMemorySeamlessProvider()
+    stream = StreamInput(interval="60s", period=2)
+
+    frame = pd.DataFrame({"ts": [60.0, 120.0, 180.0], "v": [1, 2, 3]})
+    provider.register_frame(stream, frame)
+
+    df = await provider.fetch(60, 181, node_id=stream.node_id, interval=60)
+    assert df["ts"].tolist() == [60, 120, 180]
+
