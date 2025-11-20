@@ -230,19 +230,17 @@ class CacheView:
         if length is not None and count is not None:
             raise ValueError("specify only one of length or count")
 
-        if count is not None:
+        if count is not None or length is None:
             entries = self[node][interval]
             if isinstance(entries, CacheView):
                 entries = object.__getattribute__(entries, "_data")
             if not isinstance(entries, Sequence):
                 raise TypeError("Cache entry is not sequence-like; cannot build window")
 
-            subset = [] if count <= 0 else list(entries[-count:])
+            effective_count = count if count is not None else len(entries)
+            subset = [] if effective_count <= 0 else list(entries[-effective_count:])
             node_id = node.node_id if hasattr(node, "node_id") else node
             return CacheWindow(node_id=node_id, interval=interval, _rows=subset)
-
-        if length is None:
-            raise ValueError("length is required when count is not provided")
 
         from .cache_view_tools import window as _window
 
