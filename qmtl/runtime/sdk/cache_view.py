@@ -135,3 +135,38 @@ class CacheView:
             start=start,
             end=end,
         )
+
+    # ------------------------------------------------------------------
+    def as_frame(
+        self,
+        node: "Node" | str,
+        interval: int,
+        *,
+        window: int | None = None,
+        columns: Sequence[str] | None = None,
+    ):
+        """Delegate to :func:`cache_view_tools.as_frame`."""
+
+        from .cache_view_tools import as_frame as _as_frame
+
+        return _as_frame(self, node, interval, window=window, columns=columns)
+
+    def window(self, node: "Node" | str, interval: int, length: int):
+        """Delegate to :func:`cache_view_tools.window`."""
+
+        from .cache_view_tools import window as _window
+
+        return _window(self, node, interval, length)
+
+    def align_frames(
+        self,
+        specs: Sequence[tuple["Node" | str, int]],
+        *,
+        window: int | None = None,
+        columns: Mapping["Node" | str, Sequence[str]] | Sequence[str] | None = None,
+    ):
+        """Delegate to :func:`cache_view_tools.align_frames`."""
+
+        from .cache_view_tools import align_frames as _align_frames
+
+        return _align_frames(self, specs, window=window, columns=columns)
