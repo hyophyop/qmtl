@@ -23,7 +23,7 @@ class GatewayHealthCapabilities:
     compute_context_contract: str | None = None
 
     def as_payload(self) -> dict[str, Any]:
-        payload = {
+        payload: dict[str, Any] = {
             "rebalance_schema_version": self.rebalance_schema_version,
             "alpha_metrics_capable": self.alpha_metrics_capable,
         }
@@ -77,21 +77,23 @@ class GatewayHealthCollector:
         return await self._probe(lambda: self.redis_client.ping())
 
     async def _probe_postgres(self) -> str:
-        if self.database is None or not hasattr(self.database, "healthy"):
+        db = self.database
+        if db is None or not hasattr(db, "healthy"):
             return "unknown"
 
         async def _call() -> bool:
-            result = await self.database.healthy()
+            result = await db.healthy()
             return bool(result)
 
         return await self._probe(_call)
 
     async def _probe_dagmanager(self) -> str:
-        if self.dag_client is None:
+        dag_client = self.dag_client
+        if dag_client is None:
             return "unknown"
 
         async def _call() -> bool:
-            return bool(await self.dag_client.status())
+            return bool(await dag_client.status())
 
         return await self._probe(_call)
 

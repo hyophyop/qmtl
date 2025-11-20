@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Sequence
-from typing import Any, Deque, Mapping
+from typing import Any, Deque, Mapping, cast
 import time
 
 from prometheus_client import (
@@ -24,6 +24,19 @@ _sentinel_weight_updates: dict[str, float] = {}
 
 _WORLD_ID = "default"
 _REGISTERED_METRICS: set[str] = set()
+
+
+def _vals(metric: object) -> dict[Any, Any]:
+    metric_any = cast(Any, metric)
+    vals = getattr(metric_any, "_vals", None)
+    if vals is None:
+        vals = {}
+        metric_any._vals = vals
+    return vals
+
+
+def _value(metric: object) -> Any:
+    return getattr(cast(Any, metric), "_value", {})
 
 
 def _counter(
@@ -404,7 +417,8 @@ pretrade_rejection_ratio = _gauge(
 def record_pretrade_attempt() -> None:
     w = _WORLD_ID
     pretrade_attempts_total.labels(world_id=w).inc()
-    pretrade_attempts_total._vals[w] = pretrade_attempts_total._vals.get(w, 0) + 1  # type: ignore[attr-defined]
+    attempts = _vals(pretrade_attempts_total)
+    attempts[w] = attempts.get(w, 0) + 1
     _update_pretrade_ratio()
 
 
@@ -412,19 +426,19 @@ def record_pretrade_rejection(reason: str) -> None:
     w = _WORLD_ID
     pretrade_rejections_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
-    pretrade_rejections_total._vals[key] = pretrade_rejections_total._vals.get(key, 0) + 1  # type: ignore[attr-defined]
+    rejections = _vals(pretrade_rejections_total)
+    rejections[key] = rejections.get(key, 0) + 1
     _update_pretrade_ratio()
 
 
 def _update_pretrade_ratio() -> None:
     w = _WORLD_ID
-    total = pretrade_attempts_total._vals.get(w, 0)  # type: ignore[attr-defined]
-    rejected = sum(
-        v for (wid, _), v in pretrade_rejections_total._vals.items() if wid == w
-    )  # type: ignore[attr-defined]
+    attempts = _vals(pretrade_attempts_total)
+    total = attempts.get(w, 0)
+    rejected = sum(v for (wid, _), v in _vals(pretrade_rejections_total).items() if wid == w)
     ratio = (rejected / total) if total else 0.0
     pretrade_rejection_ratio.labels(world_id=w).set(ratio)
-    pretrade_rejection_ratio._vals[w] = ratio  # type: ignore[attr-defined]
+    _vals(pretrade_rejection_ratio)[w] = ratio
 
 
 def get_pretrade_stats() -> dict[str, object]:
@@ -432,13 +446,13 @@ def get_pretrade_stats() -> dict[str, object]:
 
     w = _WORLD_ID
     return {
-        "attempts": int(pretrade_attempts_total._vals.get(w, 0)),  # type: ignore[attr-defined]
+        "attempts": int(_vals(pretrade_attempts_total).get(w, 0)),
         "rejections": {
             reason: count
-            for (wid, reason), count in pretrade_rejections_total._vals.items()  # type: ignore[attr-defined]
+            for (wid, reason), count in _vals(pretrade_rejections_total).items()
             if wid == w
         },
-        "ratio": float(pretrade_rejection_ratio._vals.get(w, 0.0)),  # type: ignore[attr-defined]
+        "ratio": float(_vals(pretrade_rejection_ratio).get(w, 0.0)),
     }
 
 
@@ -451,13 +465,12 @@ def record_sentinel_weight_update(sentinel_id: str) -> None:
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
     """Update the live traffic ratio for a sentinel version."""
     gateway_sentinel_traffic_ratio.labels(sentinel_id=sentinel_id).set(ratio)
-    gateway_sentinel_traffic_ratio._vals[sentinel_id] = ratio  # type: ignore[attr-defined]
+    _vals(gateway_sentinel_traffic_ratio)[sentinel_id] = ratio
     if sentinel_id in _sentinel_weight_updates:
         skew = time.time() - _sentinel_weight_updates[sentinel_id]
         sentinel_skew_seconds.labels(sentinel_id=sentinel_id).set(skew)
-        sentinel_skew_seconds._vals[sentinel_id] = sentinel_skew_seconds.labels(  # type: ignore[attr-defined]
-            sentinel_id=sentinel_id
-        )._value.get()
+        sentinel_label = cast(Any, sentinel_skew_seconds.labels(sentinel_id=sentinel_id))
+        _vals(sentinel_skew_seconds)[sentinel_id] = sentinel_label._value.get()
 
 
 def observe_gateway_latency(duration_ms: float) -> None:
@@ -468,7 +481,7 @@ def observe_gateway_latency(duration_ms: float) -> None:
     ordered = sorted(_e2e_samples)
     idx = max(0, int(len(ordered) * 0.95) - 1)
     gateway_e2e_latency_p95.set(ordered[idx])
-    gateway_e2e_latency_p95._val = gateway_e2e_latency_p95._value.get()  # type: ignore[attr-defined]
+    cast(Any, gateway_e2e_latency_p95)._val = cast(Any, gateway_e2e_latency_p95)._value.get()
 
 
 def observe_worlds_proxy_latency(duration_ms: float) -> None:
@@ -478,30 +491,30 @@ def observe_worlds_proxy_latency(duration_ms: float) -> None:
     if ordered:
         idx = max(0, int(len(ordered) * 0.95) - 1)
         worlds_proxy_latency_p95.set(ordered[idx])
-        worlds_proxy_latency_p95._val = worlds_proxy_latency_p95._value.get()  # type: ignore[attr-defined]
+        cast(Any, worlds_proxy_latency_p95)._val = cast(Any, worlds_proxy_latency_p95)._value.get()
     worlds_proxy_requests_total.inc()
-    worlds_proxy_requests_total._val = worlds_proxy_requests_total._value.get()  # type: ignore[attr-defined]
+    cast(Any, worlds_proxy_requests_total)._val = cast(Any, worlds_proxy_requests_total)._value.get()
     _update_worlds_cache_ratio()
 
 
 def record_worlds_cache_hit() -> None:
     """Record a cache hit for WorldService proxy."""
     worlds_cache_hits_total.inc()
-    worlds_cache_hits_total._val = worlds_cache_hits_total._value.get()  # type: ignore[attr-defined]
+    cast(Any, worlds_cache_hits_total)._val = cast(Any, worlds_cache_hits_total)._value.get()
     _update_worlds_cache_ratio()
 
 
 def record_worlds_stale_response() -> None:
     """Record serving a stale WorldService cache entry."""
     worlds_stale_responses_total.inc()
-    worlds_stale_responses_total._val = worlds_stale_responses_total._value.get()  # type: ignore[attr-defined]
+    cast(Any, worlds_stale_responses_total)._val = cast(Any, worlds_stale_responses_total)._value.get()
 
 
 def _update_worlds_cache_ratio() -> None:
     total = worlds_cache_hits_total._value.get() + worlds_proxy_requests_total._value.get()
     ratio = worlds_cache_hits_total._value.get() / total if total else 0
     worlds_cache_hit_ratio.set(ratio)
-    worlds_cache_hit_ratio._val = worlds_cache_hit_ratio._value.get()  # type: ignore[attr-defined]
+    cast(Any, worlds_cache_hit_ratio)._val = cast(Any, worlds_cache_hit_ratio)._value.get()
 
 
 def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:
@@ -527,10 +540,10 @@ def record_event_fanout(topic: str, recipients: int) -> None:
 def update_ws_subscribers(counts: dict[str, int]) -> None:
     """Update active WebSocket subscriber counts per topic."""
     ws_subscribers.clear()
-    ws_subscribers._vals = {}  # type: ignore[attr-defined]
+    _vals(ws_subscribers).clear()
     for topic, count in counts.items():
         ws_subscribers.labels(topic=topic).set(count)
-        ws_subscribers._vals[topic] = count  # type: ignore[attr-defined]
+        _vals(ws_subscribers)[topic] = count
 
 
 def record_ws_drop(count: int = 1) -> None:
@@ -592,6 +605,6 @@ def reset_metrics() -> None:
         rebalance_plan_execution_failures_total,
     ):
         if hasattr(metric, "_metrics"):
-            metric._metrics.clear()  # type: ignore[attr-defined]
+            cast(Any, metric)._metrics.clear()
         if hasattr(metric, "_vals"):
-            metric._vals.clear()  # type: ignore[attr-defined]
+            _vals(metric).clear()

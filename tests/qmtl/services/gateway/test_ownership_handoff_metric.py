@@ -1,4 +1,5 @@
 import pytest
+from typing import Any, cast
 
 from qmtl.services.gateway.database import PostgresDatabase
 from qmtl.services.gateway.ownership import OwnershipManager
@@ -43,7 +44,7 @@ class _KafkaOwner:
 async def test_ownership_handoff_metric_increments_on_owner_change():
     gw_metrics.reset_metrics()
     db = PostgresDatabase("dsn")
-    db._pool = _Pool(_Conn())  # type: ignore[assignment]
+    db._pool = cast(Any, _Pool(_Conn()))
     kafka = _KafkaOwner()
     mgr = OwnershipManager(db, kafka)
 
@@ -52,4 +53,3 @@ async def test_ownership_handoff_metric_increments_on_owner_change():
     # Different owner acquires same key -> increment handoff metric
     assert await mgr.acquire(123, owner="w2")
     assert gw_metrics.owner_reassign_total._value.get() >= 1
-

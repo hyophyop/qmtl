@@ -2,6 +2,7 @@ import asyncio
 import zlib
 from collections import deque
 from types import SimpleNamespace
+from typing import cast
 
 import asyncio
 import pytest
@@ -13,6 +14,7 @@ from qmtl.services.gateway.database import PostgresDatabase, Database
 from qmtl.services.gateway.ownership import OwnershipManager
 from qmtl.services.gateway.redis_queue import RedisTaskQueue
 from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
@@ -119,7 +121,7 @@ async def test_two_workers_single_commit_no_duplicates() -> None:
     metrics.reset_metrics()
     conn = FakeConn()
     db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
+    db._pool = FakePool(conn)
     manager = OwnershipManager(db)
 
     producer = FakeProducer()
@@ -173,20 +175,26 @@ async def test_worker_takeover_increments_reassign_metric_once(fake_redis) -> No
     metrics.reset_metrics()
     conn = FakeConn()
     lock_db = PostgresDatabase("dsn")
-    lock_db._pool = FakePool(conn)  # type: ignore[assignment]
+    lock_db._pool = FakePool(conn)
     manager = OwnershipManager(lock_db)
 
     redis = fake_redis
     queue = RedisTaskQueue(redis, "strategy_queue")
     db = FakeDB()
-    fsm = StrategyFSM(redis, db)
+    fsm = StrategyFSM(redis, cast(PostgresDatabase, db))
 
     async def diff(sid: str, dag: str, **_kwargs):
         return SimpleNamespace(queue_map={}, sentinel_id="s")
 
-    dag_client = SimpleNamespace(diff=diff)
+    dag_client = cast(DagManagerClient, SimpleNamespace(diff=diff))
     worker = StrategyWorker(
-        redis, db, fsm, queue, dag_client, ws_hub=None, manager=manager
+        redis,
+        cast(PostgresDatabase, db),
+        fsm,
+        queue,
+        dag_client,
+        ws_hub=None,
+        manager=manager,
     )
 
     strategy_id = "sid"

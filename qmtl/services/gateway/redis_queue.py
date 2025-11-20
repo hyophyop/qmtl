@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Awaitable, Callable, Optional
 
 import logging
@@ -22,10 +23,13 @@ class RedisTaskQueue:
         self._lock_ttl_ms = lock_ttl_ms
 
     async def _safe_redis_call(
-        self, op: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
+        self, op: Callable[..., Awaitable[Any] | Any], *args: Any, **kwargs: Any
     ) -> Any | None:
         try:
-            return await op(*args, **kwargs)
+            result = op(*args, **kwargs)
+            if inspect.isawaitable(result):
+                return await result
+            return result
         except Exception as e:  # pragma: no cover - logging
             operation_name = getattr(op, "__name__", op.__class__.__name__)
             logging.error("Redis queue %s %s failed: %s", self.name, operation_name, e)

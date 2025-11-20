@@ -21,14 +21,15 @@ class DummyHub(WebSocketHub):
 
     async def send_queue_update(
         self,
-        tags,
-        interval,
-        queues,
+        tags: list[str],
+        interval: int,
+        queues: list[dict[str, object]],
         match_mode: MatchMode = MatchMode.ANY,
         *,
+        world_id: str | None = None,
         etag: str | None = None,
         ts: str | None = None,
-    ) -> None:  # type: ignore[override]
+    ) -> None:
         await self.client._handle(
             {
                 "type": "queue_update",
@@ -37,6 +38,7 @@ class DummyHub(WebSocketHub):
                     "interval": interval,
                     "queues": queues,
                     "match_mode": match_mode.value,
+                    "world_id": world_id,
                     "etag": etag,
                     "ts": ts,
                     "version": 1,

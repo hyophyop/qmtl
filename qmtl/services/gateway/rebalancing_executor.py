@@ -205,9 +205,11 @@ def _apply_constraints(
         return None, resolved
 
     mark, mark_source = _lookup_mark(resolved, options=options)
-    meets_notional, violation = _evaluate_notional(rounded_qty, resolved, mark, mark_source)
+    meets_notional, notional_violation = _evaluate_notional(rounded_qty, resolved, mark, mark_source)
     if not meets_notional:
-        _handle_violation(violation, options=options)
+        if notional_violation is None:
+            raise ValueError("notional constraint violation details missing")
+        _handle_violation(notional_violation, options=options)
         return None, resolved
 
     return rounded_qty, resolved

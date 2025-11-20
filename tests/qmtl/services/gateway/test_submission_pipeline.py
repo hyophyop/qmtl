@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from qmtl.foundation.common.compute_context import ComputeContext
+from typing import Any
 from qmtl.services.gateway.submission import (
     PreparedSubmission,
     StrategyComputeContext,
@@ -15,7 +16,7 @@ class _Loader:
     def __init__(self) -> None:
         self.called = False
 
-    def load(self, dag_json: str):  # type: ignore[override]
+    def load(self, dag_json: str):
         self.called = True
         class _Loaded:
             dag = {"nodes": ["n"]}
@@ -24,9 +25,9 @@ class _Loader:
 
 class _Validator:
     def __init__(self) -> None:
-        self.calls: list[tuple[dict, int]] = []
+        self.calls: list[tuple[dict[str, object], int]] = []
 
-    def validate(self, dag, crc):
+    def validate(self, dag: dict[str, object], crc: int):
         self.calls.append((dag, crc))
         class _Report:
             computed_checksum = 0
@@ -42,9 +43,9 @@ class _ContextService:
 
 class _DiffExecutor:
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: list[dict[str, object]] = []
 
-    async def run(self, **kwargs):
+    async def run(self, **kwargs: object):
         self.calls.append(kwargs)
         return DiffOutcome(
             sentinel_id="sentinel",
@@ -54,9 +55,15 @@ class _DiffExecutor:
 
 class _QueueMapResolver:
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: list[tuple[dict[str, Any], list[str], str | None, str | None]] = []
 
-    async def build(self, dag, worlds, default_world, execution_domain):
+    async def build(
+        self,
+        dag: dict[str, Any],
+        worlds: list[str],
+        default_world: str | None,
+        execution_domain: str | None,
+    ):
         self.calls.append((dag, worlds, default_world, execution_domain))
         return {"nid": []}
 

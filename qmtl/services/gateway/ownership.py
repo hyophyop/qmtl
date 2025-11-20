@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Protocol, Dict, Set
+from typing import Any, Optional, Protocol, Dict, Set, cast
 
 from .database import PostgresDatabase, pg_try_advisory_lock, pg_advisory_unlock
 from . import metrics as gw_metrics
@@ -45,7 +45,8 @@ class OwnershipManager:
                         last = self._last_owner.get(key)
                         if last is not None and last != owner:
                             gw_metrics.owner_reassign_total.inc()
-                            gw_metrics.owner_reassign_total._val = gw_metrics.owner_reassign_total._value.get()  # type: ignore[attr-defined]
+                            metric = cast(Any, gw_metrics.owner_reassign_total)
+                            metric._val = metric._value.get()
                     if owner is not None:
                         self._last_owner[key] = owner
                     return True
@@ -65,7 +66,8 @@ class OwnershipManager:
                     last = self._last_owner.get(key)
                     if last is not None and last != owner:
                         gw_metrics.owner_reassign_total.inc()
-                        gw_metrics.owner_reassign_total._val = gw_metrics.owner_reassign_total._value.get()  # type: ignore[attr-defined]
+                        metric = cast(Any, gw_metrics.owner_reassign_total)
+                        metric._val = metric._value.get()
                 if owner is not None:
                     self._last_owner[key] = owner
                 return True

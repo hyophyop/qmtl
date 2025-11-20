@@ -63,21 +63,21 @@ class DegradationManager:
 
         async def check_redis() -> bool:
             try:
-                return await self.redis.ping()
+                return bool(await self.redis.ping())
             except Exception:
                 return False
 
         async def check_db() -> bool:
             if healthy_attr is not None and func is not Database.healthy:
                 try:
-                    return await healthy_attr()
+                    return bool(await healthy_attr())
                 except Exception:
                     return False
             return True
 
         async def check_dag() -> bool:
             try:
-                return await self.dag_client.status()
+                return bool(await self.dag_client.status())
             except Exception:
                 return False
 

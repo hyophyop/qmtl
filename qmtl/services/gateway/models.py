@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import importlib
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
+ConfigDictType: Any
 try:
-    # Pydantic v2 style config
-    from pydantic import ConfigDict  # type: ignore
+    ConfigDictType = importlib.import_module("pydantic").ConfigDict
 except Exception:  # pragma: no cover - fallback for older environments
-    ConfigDict = None  # type: ignore
+    ConfigDictType = None
 
 
 class StrategySubmit(BaseModel):
@@ -39,10 +40,10 @@ class QueueDescriptor(BaseModel):
     queue: str
     global_: bool = Field(alias="global")
     # Use Pydantic v2 config; avoid deprecated class-based Config
-    if 'ConfigDict' in globals() and ConfigDict is not None:  # type: ignore
-        model_config = ConfigDict(populate_by_name=True)  # type: ignore
+    if ConfigDictType is not None:
+        model_config = ConfigDictType(populate_by_name=True)
     else:  # pragma: no cover - legacy fallback
-        class Config:  # type: ignore
+        class Config:
             populate_by_name = True
 
 
@@ -80,11 +81,11 @@ class ExecutionFillEvent(BaseModel):
     status: StrictStr | None = None
     seq: StrictInt | None = None
     etag: StrictStr | None = None
-    if 'ConfigDict' in globals() and ConfigDict is not None:  # type: ignore
-        model_config = ConfigDict(extra='ignore')  # type: ignore
+    if ConfigDictType is not None:
+        model_config = ConfigDictType(extra="ignore")
     else:  # pragma: no cover - legacy fallback
-        class Config:  # type: ignore
-            extra = 'ignore'
+        class Config:
+            extra = "ignore"
 
 
 class SeamlessArtifactPayload(BaseModel):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, cast
 
 import redis.asyncio as redis
 
@@ -30,8 +30,9 @@ class StrategyStorage:
         self, strategy_id: str, dag_hash: str, encoded_dag: str
     ) -> tuple[str, bool]:
         try:
-            res = await self._redis.eval(
-                self._LUA_DEDUPE, 1, dag_hash, strategy_id, encoded_dag
+            res = await cast(
+                Awaitable[Any],
+                self._redis.eval(self._LUA_DEDUPE, 1, dag_hash, strategy_id, encoded_dag),
             )
         except Exception:
             res = await self._fallback_dedupe(strategy_id, dag_hash, encoded_dag)
@@ -63,8 +64,11 @@ class StrategyStorage:
             if isinstance(existing, bytes):
                 existing = existing.decode()
             return [existing or "", 1]
-        await self._redis.hset(
-            f"strategy:{strategy_id}", mapping={"dag": encoded_dag, "hash": dag_hash}
+        await cast(
+            Awaitable[Any],
+            self._redis.hset(
+                f"strategy:{strategy_id}", mapping={"dag": encoded_dag, "hash": dag_hash}
+            ),
         )
         return [strategy_id, 0]
 
@@ -104,7 +108,7 @@ class StrategyQueue:
         ):
             degradation.local_queue.append(strategy_id)
             return
-        await self._redis.rpush("strategy_queue", strategy_id)
+        await cast(Awaitable[Any], self._redis.rpush("strategy_queue", strategy_id))
 
 
 __all__ = ["StrategyQueue", "StrategyStorage"]

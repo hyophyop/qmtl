@@ -1,4 +1,6 @@
 import time
+from typing import Any, cast
+
 import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
@@ -39,9 +41,10 @@ def test_refresh_updates_topics_and_filters():
             ws.send_json({"type": "refresh", "token": tok2})
             ack = ws.receive_json()
             assert ack["type"] == "refresh_ack"
-            topics = next(iter(hub._registry._topics.values()))  # type: ignore[attr-defined]
+            registry = cast(Any, hub)._registry
+            topics = next(iter(registry._topics.values()))
             assert topics == {"policy"}
-            filt = next(iter(hub._registry._filters.values()))  # type: ignore[attr-defined]
+            filt = next(iter(registry._filters.values()))
             assert filt.world_id == "w2"
             assert filt.strategy_id == "s2"
 

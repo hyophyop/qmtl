@@ -115,7 +115,7 @@ async def test_get_queues_uses_breaker(monkeypatch):
         assert await client.get_queues_by_tag(["t"], 60) == []
     assert await client.get_queues_by_tag(["t"], 60) == []
     assert metrics.dagclient_breaker_state._value.get() == 1
-    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
+    assert int(metrics.dagclient_breaker_open_total._value.get()) == 1
     await client.close()
 
 
@@ -136,7 +136,7 @@ async def test_status_uses_breaker(monkeypatch):
     assert await client.status() is False
     assert client.breaker.is_open
     assert metrics.dagclient_breaker_state._value.get() == 1
-    assert metrics.dagclient_breaker_open_total._value.get() == 1  # type: ignore[attr-defined]
+    assert int(metrics.dagclient_breaker_open_total._value.get()) == 1
     assert await client.status() is False
     client.breaker.reset()
     assert await client.status() is True

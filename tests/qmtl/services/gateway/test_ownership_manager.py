@@ -1,4 +1,5 @@
 import pytest
+from typing import Any, cast
 
 from qmtl.services.gateway.database import PostgresDatabase
 from qmtl.services.gateway.ownership import OwnershipManager
@@ -48,7 +49,7 @@ class FakeKafkaOwner:
 async def test_kafka_preferred_over_db() -> None:
     conn = FakeConn()
     db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
+    db._pool = cast(Any, FakePool(conn))
     kafka = FakeKafkaOwner(result=True)
     manager = OwnershipManager(db, kafka)
 
@@ -61,7 +62,7 @@ async def test_kafka_preferred_over_db() -> None:
 async def test_fallback_to_db_when_kafka_unavailable() -> None:
     conn = FakeConn()
     db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
+    db._pool = cast(Any, FakePool(conn))
     kafka = FakeKafkaOwner(result=False)
     manager = OwnershipManager(db, kafka)
 
@@ -73,7 +74,7 @@ async def test_fallback_to_db_when_kafka_unavailable() -> None:
 async def test_release_uses_db_when_no_kafka_owner() -> None:
     conn = FakeConn()
     db = PostgresDatabase("dsn")
-    db._pool = FakePool(conn)  # type: ignore[assignment]
+    db._pool = cast(Any, FakePool(conn))
     manager = OwnershipManager(db)
 
     await manager.release(30)

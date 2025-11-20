@@ -49,15 +49,9 @@ class WorldServiceClient:
         self._decision_cache: TTLCache[Any] = TTLCache()
         self._activation_cache: ActivationCache[Any] = ActivationCache()
         self._breaker = breaker or AsyncCircuitBreaker(
-            on_open=lambda: (
-                gw_metrics.worlds_breaker_state.set(1),
-                gw_metrics.worlds_breaker_open_total.inc(),
-            ),
-            on_close=lambda: (
-                gw_metrics.worlds_breaker_state.set(0),
-                gw_metrics.worlds_breaker_failures.set(0),
-            ),
-            on_failure=lambda c: gw_metrics.worlds_breaker_failures.set(c),
+            on_open=self._on_breaker_open,
+            on_close=self._on_breaker_close,
+            on_failure=self._on_breaker_failure,
         )
         gw_metrics.worlds_breaker_state.set(0)
         gw_metrics.worlds_breaker_failures.set(0)
@@ -79,6 +73,17 @@ class WorldServiceClient:
         )
         self._rebalance_schema_version = max(1, rebalance_schema_version or 1)
         self._alpha_metrics_capable = bool(alpha_metrics_capable)
+
+    def _on_breaker_open(self) -> None:
+        gw_metrics.worlds_breaker_state.set(1)
+        gw_metrics.worlds_breaker_open_total.inc()
+
+    def _on_breaker_close(self) -> None:
+        gw_metrics.worlds_breaker_state.set(0)
+        gw_metrics.worlds_breaker_failures.set(0)
+
+    def _on_breaker_failure(self, count: int) -> None:
+        gw_metrics.worlds_breaker_failures.set(count)
 
     def configure_rebalance_capabilities(
         self,

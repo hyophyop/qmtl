@@ -60,6 +60,7 @@ async def test_publish_bucket_key_layout_is_stable(compute_hint: str | None) -> 
     cache.append("u1", 60, 120, {"v": 2})
     h = cache.input_window_hash()
 
+    records: list[tuple[str, str, dict[str, int]] | tuple[str, str, dict[str, int], str | None]]
     if compute_hint is None:
         records = [("n1", h, {"a": 1})]
     else:

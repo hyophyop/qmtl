@@ -4,11 +4,12 @@ from dataclasses import dataclass
 import json
 import logging
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Awaitable, cast
 
 from fastapi import HTTPException
 from httpx import HTTPStatusError
 
+from qmtl.foundation.common.compute_context import DowngradeReason
 from . import metrics as gw_metrics
 from .models import StrategySubmit
 from .submission import SubmissionPipeline, StrategyComputeContext
@@ -40,7 +41,7 @@ class StrategySubmissionResult:
     sentinel_id: str
     node_ids_crc32: int
     downgraded: bool = False
-    downgrade_reason: "DowngradeReason | str | None" = None
+    downgrade_reason: DowngradeReason | str | None = None
     safe_mode: bool = False
     queue_map_source: str | None = None
     diff_error: bool = False
@@ -58,7 +59,7 @@ class DiffOutcome:
 class QueueResolution:
     """Represents queue-map resolution across diff and fallback paths."""
 
-    sentinel_id: str | None
+    sentinel_id: str
     queue_map: dict[str, list[dict[str, Any] | Any]]
     source: str
     diff_error: bool = False
@@ -142,10 +143,13 @@ class StrategySubmissionHelper:
         if config.submit:
             if self._manager is None:
                 raise RuntimeError("StrategyManager is required for submission")
-            return await self._manager.submit(
-                payload,
-                skip_downgrade_metric=downgraded,
-                strategy_context=strategy_ctx,
+            return cast(
+                tuple[str, bool],
+                await self._manager.submit(
+                    payload,
+                    skip_downgrade_metric=downgraded,
+                    strategy_context=strategy_ctx,
+                ),
             )
         strategy_id = config.strategy_id or "dryrun"
         return strategy_id, False
@@ -157,7 +161,7 @@ class StrategySubmissionHelper:
         return f"dryrun:{crc:08x}"
 
     def _record_downgrade_metric(
-        self, downgraded: bool, downgrade_reason: "DowngradeReason | str | None"
+        self, downgraded: bool, downgrade_reason: DowngradeReason | str | None
     ) -> None:
         if not downgraded or not downgrade_reason:
             return
@@ -238,10 +242,11 @@ class StrategySubmissionHelper:
         config: StrategySubmissionConfig,
         diff_outcome: DiffOutcome,
     ) -> QueueResolution:
+        diff_sentinel = diff_outcome.sentinel_id or ""
         prefer_diff = config.prefer_diff_queue_map
         if prefer_diff and not diff_outcome.error and diff_outcome.queue_map is not None:
             return QueueResolution(
-                sentinel_id=diff_outcome.sentinel_id,
+                sentinel_id=diff_sentinel,
                 queue_map=diff_outcome.queue_map,
                 source="diff",
             )
@@ -249,7 +254,7 @@ class StrategySubmissionHelper:
         queue_map = await self._pipeline.build_queue_map(
             dag, worlds, payload.world_id, exec_domain
         )
-        sentinel_id = diff_outcome.sentinel_id
+        sentinel_id = diff_sentinel
         crc_fallback = False
 
         if prefer_diff and diff_outcome.error and not sentinel_id:
@@ -317,7 +322,9 @@ class StrategySubmissionHelper:
     def _binding_targets(
         self, worlds: list[str], default_world: str | None
     ) -> list[str]:
-        return [w for w in (worlds or [default_world]) if w]
+        if worlds:
+            return [w for w in worlds if w]
+        return [default_world] if default_world else []
 
     async def _persist_world_binding(self, world_id: str, strategy_id: str) -> None:
         try:

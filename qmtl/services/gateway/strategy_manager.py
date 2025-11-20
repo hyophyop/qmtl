@@ -8,7 +8,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Awaitable, cast
 
 import redis.asyncio as redis
 from fastapi import HTTPException
@@ -16,7 +16,7 @@ from opentelemetry import trace
 
 from . import metrics as gw_metrics
 from .commit_log import CommitLogWriter
-from .database import Database
+from .database import Database, PostgresDatabase
 from .degradation import DegradationManager
 from .fsm import StrategyFSM
 from .history_metadata import build_history_metadata_envelope
@@ -41,7 +41,7 @@ class DecodedDag:
 @dataclass
 class StrategyManager:
     redis: redis.Redis
-    database: Database
+    database: PostgresDatabase
     fsm: StrategyFSM
     degrade: Optional[DegradationManager] = None
     insert_sentinel: bool = True
@@ -71,9 +71,7 @@ class StrategyManager:
             strategy_ctx = await self._resolve_strategy_context(
                 payload, strategy_context
             )
-            self._record_downgrade_metric(
-                strategy_ctx.context, skip_downgrade_metric
-            )
+            self._record_downgrade_metric(strategy_ctx, skip_downgrade_metric)
 
             strategy_id, existed = await self._register_strategy(decoded)
             if existed:
@@ -93,9 +91,8 @@ class StrategyManager:
     def _increment_lost_requests(self) -> None:
         gw_metrics.lost_requests_total.inc()
         try:
-            gw_metrics.lost_requests_total._val = (
-                gw_metrics.lost_requests_total._value.get()
-            )  # type: ignore[attr-defined]
+            metric = cast(Any, gw_metrics.lost_requests_total)
+            metric._val = metric._value.get()
         except AttributeError:
             pass
 
@@ -267,13 +264,16 @@ class StrategyManager:
         envelope = build_history_metadata_envelope(strategy_id, report)
 
         if envelope.redis_mapping:
-            await self.redis.hset(storage_key, mapping=envelope.redis_mapping)
+            await cast(Awaitable[Any], self.redis.hset(storage_key, mapping=envelope.redis_mapping))
 
-        await self.redis.hset(
-            storage_key,
-            mapping={
-                envelope.redis_key: json.dumps(envelope.redis_payload),
-            },
+        await cast(
+            Awaitable[Any],
+            self.redis.hset(
+                storage_key,
+                mapping={
+                    envelope.redis_key: json.dumps(envelope.redis_payload),
+                },
+            ),
         )
 
         if (
@@ -381,6 +381,6 @@ class StrategyManager:
         context_mapping = strategy_ctx.redis_mapping()
         if not context_mapping:
             return
-        await self.redis.hset(
-            f"strategy:{strategy_id}", mapping=context_mapping
+        await cast(
+            Awaitable[Any], self.redis.hset(f"strategy:{strategy_id}", mapping=context_mapping)
         )

@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _create_consumer(bootstrap: str, topic: str, group: str) -> Any:
     try:
-        from aiokafka import AIOKafkaConsumer  # type: ignore
+        from aiokafka import AIOKafkaConsumer
     except Exception as e:  # pragma: no cover - optional dependency
         raise RuntimeError("aiokafka is required to run the consumer") from e
     consumer = AIOKafkaConsumer(
