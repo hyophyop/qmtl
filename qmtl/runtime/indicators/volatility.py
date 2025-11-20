@@ -16,13 +16,14 @@ def volatility_node(source: Node, window: int, *, name: str | None = None) -> No
     """
 
     def compute(view: CacheView):
-        data = [v for _, v in view[source][source.interval][-(window + 1):]]
-        if len(data) < window + 1:
+        frame = view.as_frame(source, source.interval, window=window + 1)
+        if len(frame.frame) < window + 1:
             return None
-        returns = [(data[i] / data[i - 1]) - 1 for i in range(1, len(data))]
+
+        returns = frame.returns()
         if len(returns) < 2:
             return 0.0
-        return stdev(returns)
+        return stdev(list(returns)[-window:])
 
     return Node(
         input=source,

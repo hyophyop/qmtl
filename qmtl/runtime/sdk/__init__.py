@@ -12,6 +12,7 @@ from .node import (
 from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
 from .cache_view import CacheView
+from .cache_view_tools import CacheFrame
 from .auto_backfill import (
     AutoBackfillStrategy,
     FetcherBackfillStrategy,
@@ -87,6 +88,7 @@ __all__ = [
     "NodeCacheArrow",
     "BackfillState",
     "CacheView",
+    "CacheFrame",
     "Strategy",
     "buy_signal",
     "Runner",
