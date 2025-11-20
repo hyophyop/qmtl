@@ -20,8 +20,10 @@ class GeneralStrategy(Strategy):
         )
 
         def generate_signal(view):
-            price = pd.DataFrame([v for _, v in view[price_stream][60]])
-            momentum = price["close"].pct_change().rolling(5).mean()
+            price_frame = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(
+                ["close"]
+            )
+            momentum = price_frame.frame["close"].pct_change().rolling(5).mean()
             signal = (momentum > 0).astype(int)
             return pd.DataFrame({"signal": signal})
 

@@ -403,13 +403,6 @@ Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `p
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
 import pandas as pd
 
-# 사용자 정의 시그널 생성 함수
-def generate_signal(view) -> pd.DataFrame:
-    price = pd.DataFrame([v for _, v in view[price_stream][60]])
-    momentum = price["close"].pct_change().rolling(5).mean()
-    signal = (momentum > 0).astype(int)
-    return pd.DataFrame({"signal": signal})
-
 # 전략 정의
 class GeneralStrategy(Strategy):
     def setup(self):
@@ -417,6 +410,12 @@ class GeneralStrategy(Strategy):
             interval="60s",    # 1분 간격 데이터
             period=30       # 최소 30개 필요
         )
+
+        def generate_signal(view) -> pd.DataFrame:
+            price = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(["close"])
+            momentum = price.frame["close"].pct_change().rolling(5).mean()
+            signal = (momentum > 0).astype(int)
+            return pd.DataFrame({"signal": signal})
 
         signal_node = Node(
             input=price_stream,
@@ -454,14 +453,17 @@ if __name__ == "__main__":
 아래 예시는 글로벌 DAG에 이미 존재하는 1시간 단위 RSI, MFI 지표 노드들이 `tags=["ta-indicator"]` 로 태깅되어 있을 때, 이를 **TagQueryNode** 를 통해 한 번에 업스트림으로 끌어와 상관계수를 계산(correlation)하는 전략이다.
 
 ```python
-from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, run_strategy, MatchMode
+from qmtl.runtime.sdk import Strategy, Node, Runner, TagQueryNode, MatchMode
 import pandas as pd
 
 # 사용자 정의 상관계수 계산 함수
 def calc_corr(view) -> pd.DataFrame:
-    indicator_df = pd.concat([pd.DataFrame([v for _, v in view[u][3600]]) for u in view], axis=1)
-    # 컬럼 간 피어슨 상관계수 행렬 반환
-    corr = indicator_df.corr(method="pearson")
+    aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
+    frames = [frame.frame for frame in aligned if not frame.frame.empty]
+    if not frames:
+        return pd.DataFrame()
+
+    corr = pd.concat(frames, axis=1).corr(method="pearson")
     return corr
 
 class CorrelationStrategy(Strategy):
