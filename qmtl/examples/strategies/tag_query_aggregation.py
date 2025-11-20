@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import Strategy, Node, TagQueryNode, Runner, EventRecorderService, MatchMode
+from qmtl.runtime.sdk import EventRecorderService, MatchMode, Node, Runner, Strategy, TagQueryNode
 from qmtl.runtime.io import QuestDBRecorder
 
 
@@ -19,7 +19,8 @@ class TagQueryAggregationStrategy(Strategy):
         # Runner takes care of queue resolution and subscriptions via TagQueryManager
 
         def calc_corr(view) -> pd.DataFrame:
-            frames = [pd.DataFrame([v for _, v in view[u][3600]]) for u in view]
+            aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
+            frames = [frame.frame for frame in aligned if not frame.frame.empty]
             if not frames:
                 return pd.DataFrame()
             df = pd.concat(frames, axis=1)

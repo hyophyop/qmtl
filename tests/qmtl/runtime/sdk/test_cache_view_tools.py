@@ -55,3 +55,27 @@ def test_track_access_and_pct_change():
     pct = frame.pct_change(window=2)
     assert isinstance(pct, pd.Series)
     assert pct.tolist() == [3.0]
+
+
+def test_compute_fn_end_to_end_alignment():
+    view = CacheView(
+        {
+            "price": {60: [(1, {"close": 100}), (2, {"close": 102}), (3, {"close": 104})]},
+            "signal": {60: [(1, {"flag": 0}), (2, {"flag": 1}), (3, {"flag": 1})]},
+        }
+    )
+
+    def compute(cache_view: CacheView) -> pd.DataFrame:
+        price_frame, signal_frame = cache_view.align_frames([("price", 60), ("signal", 60)], window=3)
+
+        returns = price_frame.validate_columns(["close"]).returns(window=1, dropna=False)
+        flags = signal_frame.validate_columns(["flag"]).frame["flag"]
+
+        return returns.to_frame("close_return").assign(flag=flags.values)
+
+    result = compute(view)
+
+    assert list(result.index) == [1, 2, 3]
+    assert result["flag"].tolist() == [0, 1, 1]
+    assert pd.isna(result["close_return"].iloc[0])
+    assert pytest.approx(result["close_return"].iloc[-1]) == 0.0196078431372549

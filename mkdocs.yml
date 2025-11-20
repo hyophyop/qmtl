@@ -35,6 +35,7 @@ nav:
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - History Data Quickstart: guides/history_data_quickstart.md
       - Strategy Workflow: guides/strategy_workflow.md
+      - Ergonomic compute_fn patterns: guides/ergonomic_compute_fn_patterns.md
       - Microstructure Signals: guides/microstructure_signals.md
       - Short-Term Microstructure Filters: guides/short_term_microstructure.md
       - Docs Internationalization: guides/docs_internationalization.md

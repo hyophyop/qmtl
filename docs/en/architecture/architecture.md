@@ -342,6 +342,99 @@ emit world-scoped labels.
 
 ---
 
+## Appendix: General strategy example (Runner API)
+
+The following sample aligns with the core architectural rules: user-defined
+compute functions operate on a read-only `CacheView`, nodes reference each
+other directly inside the DAG, and all warmup/period/interval constraints are
+respected.
+
+```python
+from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
+import pandas as pd
+
+# Strategy definition
+class GeneralStrategy(Strategy):
+    def setup(self):
+        price_stream = StreamInput(
+            interval="60s",    # 1-minute bars
+            period=30           # require the last 30 bars
+        )
+
+        def generate_signal(view) -> pd.DataFrame:
+            price = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(["close"])
+            momentum = price.frame["close"].pct_change().rolling(5).mean()
+            signal = (momentum > 0).astype(int)
+            return pd.DataFrame({"signal": signal})
+
+        signal_node = Node(
+            input=price_stream,
+            compute_fn=generate_signal,
+            name="momentum_signal"
+        )
+
+        self.add_nodes([price_stream, signal_node])
+
+# World-driven execution entry point
+if __name__ == "__main__":
+    Runner.run(
+        GeneralStrategy,
+        world_id="general_demo",
+        gateway_url="http://gateway.local"
+    )
+```
+
+---
+
+### Appendix: Tag Query strategy example (automatic multi-upstream selection)
+
+This example assumes existing hourly RSI/MFI indicator nodes tagged with
+`["ta-indicator"]`. `TagQueryNode` pulls all matching streams into the strategy
+and computes a correlation matrix.
+
+```python
+from qmtl.runtime.sdk import Strategy, Node, Runner, TagQueryNode, MatchMode
+import pandas as pd
+
+# User-defined correlation helper
+def calc_corr(view) -> pd.DataFrame:
+    aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
+    frames = [frame.frame for frame in aligned if not frame.frame.empty]
+    if not frames:
+        return pd.DataFrame()
+
+    corr = pd.concat(frames, axis=1).corr(method="pearson")
+    return corr
+
+class CorrelationStrategy(Strategy):
+    def setup(self):
+        # TagQueryNode: automatically resolves upstreams matching the tag/interval
+        indicators = TagQueryNode(
+            query_tags=["ta-indicator"],  # match existing RSI, MFI, etc.
+            interval="1h",               # hourly bars
+            period=24,                    # keep the last 24 hours
+            match_mode=MatchMode.ANY,     # OR-matching by default
+            compute_fn=calc_corr          # compute correlation directly
+        )
+
+        corr_node = Node(
+            input=indicators,
+            compute_fn=calc_corr,
+            name="indicator_corr"
+        )
+
+        self.add_nodes([indicators, corr_node])
+
+        # match_mode=MatchMode.ANY matches queues with any tag; MatchMode.ALL
+        # restricts to queues containing all tags.
+
+# Live execution example (world-driven)
+if __name__ == "__main__":
+    Runner.run(CorrelationStrategy, world_id="corr_demo", gateway_url="http://gateway.local")
+```
+
+---
+
 ## 5. Component Responsibilities & Technology Stack
 
 | Component    | Responsibility                                         | Primary Stack                               |
