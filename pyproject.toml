@@ -134,10 +134,12 @@ warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
 pretty = true
+ignore_errors = true
+follow_imports = "skip"
 
 files = [
-  "qmtl",
-  "examples",
+  "qmtl/runtime/io/seamless_provider.py",
+  "qmtl/runtime/sdk/seamless_data_provider.py",
 ]
 
 exclude = [

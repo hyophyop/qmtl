@@ -12,7 +12,9 @@ from typing import (
     Mapping,
     MutableMapping,
     Literal,
+    cast,
 )
+from types import MappingProxyType
 from abc import ABC
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
@@ -45,6 +47,7 @@ from .history_coverage import (
     compute_missing_ranges as _compute_missing_ranges,
     WarmupWindow,
 )
+from .data_io import HistoryProvider
 from . import metrics as sdk_metrics
 from .cache_lru import LRUCache
 from .conformance import ConformancePipeline, ConformanceReport
@@ -189,6 +192,8 @@ def _resolve_publish_override(config: SeamlessConfig) -> bool | None:
 def _load_presets_document(config: SeamlessConfig) -> tuple[dict[str, Any], str | None]:
     """Return the parsed presets mapping and the source identifier."""
 
+    data: dict[str, Any]
+    source: str | None
     path = _resolve_presets_path(config)
     if path is not None:
         data, source = _load_presets_from_path(path)
@@ -547,7 +552,7 @@ class ConformancePipelineError(RuntimeError):
         super().__init__(message)
 
 
-class SeamlessDataProvider(ABC):
+class SeamlessDataProvider(HistoryProvider):
     """
     Provides transparent data access across multiple sources.
     
@@ -839,7 +844,7 @@ class SeamlessDataProvider(ABC):
         sdk_metrics.observe_seamless_cache_hit(
             node_id=node_id, interval=interval, world_id=world_id
         )
-        return entry
+        return cast(_CacheEntry, entry)
 
     def _update_cache_resident_bytes(self) -> None:
         if self._cache is None:
@@ -1001,11 +1006,11 @@ class SeamlessDataProvider(ABC):
             func = getattr(self.backfiller, "backfill")  # type: ignore[union-attr]
             try:
                 sig = inspect.signature(func)
-                params = sig.parameters
+                params: Mapping[str, inspect.Parameter] = sig.parameters
                 has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
             except (TypeError, ValueError):  # pragma: no cover - extremely defensive
                 # If inspection fails, fall back to the minimal set guaranteed by Protocol
-                params = {}
+                params = MappingProxyType({})
                 has_var_kw = False
 
             def _supports(name: str) -> bool:
@@ -1132,7 +1137,7 @@ class SeamlessDataProvider(ABC):
 
     def _normalize_as_of(self, value: Any | None) -> str | None:
         text = normalize_context_value(value)
-        return text
+        return text or None
 
     def _normalize_float(self, value: Any | None) -> float | None:
         if value is None:
@@ -1486,7 +1491,7 @@ class SeamlessDataProvider(ABC):
             cache_hit=cache_hit,
         )
 
-        return response
+        return response.frame
     
     async def coverage(
         self, *, node_id: str, interval: int
@@ -1512,7 +1517,30 @@ class SeamlessDataProvider(ABC):
         except Exception:
             # Fallback to simple merge if utilities are unavailable
             return self._merge_ranges(all_ranges)
-    
+
+    async def fill_missing(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        """Bridge ``HistoryProvider`` gap-filling to Seamless backfill.
+
+        This method reuses :meth:`ensure_data_available` to populate missing
+        ranges so that :class:`HistoryWarmupService` and
+        :class:`HistoryWarmupPoller` can treat Seamless providers as standard
+        history sources.
+        """
+
+        await self.ensure_data_available(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
+
     async def ensure_data_available(
         self,
         start: int,
@@ -1805,8 +1833,6 @@ class SeamlessDataProvider(ABC):
         request_context: _RequestContext | None = None,
         cache_key: str | None = None,
     ) -> SeamlessFetchResult:
-        if not isinstance(frame, pd.DataFrame):
-            frame = pd.DataFrame()
 
         (
             world_id,

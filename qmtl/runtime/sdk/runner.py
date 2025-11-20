@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .activation_manager import ActivationManager
     from .gateway_client import GatewayClient
     from .feature_store import FeatureArtifactPlane
+    from .seamless_data_provider import SeamlessDataProvider
 
 
 if "_runner_services" not in globals():
@@ -488,11 +489,35 @@ class Runner:
 
     @staticmethod
     def offline(
-        strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
+        strategy_cls: type[Strategy],
+        *,
+        schema_enforcement: str = "fail",
+        history_start: object | None = None,
+        history_end: object | None = None,
+        data: "SeamlessDataProvider | None" = None,
     ) -> Strategy:
-        """Execute ``strategy_cls`` locally without Gateway interaction."""
+        """Execute ``strategy_cls`` locally without Gateway interaction.
+
+        Parameters
+        ----------
+        strategy_cls:
+            Strategy class to execute.
+        schema_enforcement:
+            Controls node schema validation behaviour (``\"fail\"`` or
+            ``\"warn\"``).
+        history_start, history_end:
+            Optional epoch-second boundaries for history warm-up. When both
+            are ``None``, the warm-up service falls back to its offline
+            baseline window or provider-driven coverage.
+        """
         return asyncio.run(
-            Runner.offline_async(strategy_cls, schema_enforcement=schema_enforcement)
+            Runner.offline_async(
+                strategy_cls,
+                schema_enforcement=schema_enforcement,
+                history_start=history_start,
+                history_end=history_end,
+                data=data,
+            )
         )
 
     @staticmethod
@@ -552,7 +577,12 @@ class Runner:
 
     @staticmethod
     async def offline_async(
-        strategy_cls: type[Strategy], *, schema_enforcement: str = "fail"
+        strategy_cls: type[Strategy],
+        *,
+        schema_enforcement: str = "fail",
+        history_start: object | None = None,
+        history_end: object | None = None,
+        data: "SeamlessDataProvider | None" = None,
     ) -> Strategy:
         services = Runner.services()
         strategy = Runner._prepare(strategy_cls)
@@ -580,13 +610,15 @@ class Runner:
         setattr(strategy, "compute_context", {"world_id": "w", "execution_domain": "offline"})
         tag_service.apply_queue_map(strategy, {})
         await manager.resolve_tags(offline=True)
+        if data is not None:
+            Runner._attach_history_provider(strategy, data)
         # Hydrate + warm-up history (provider-driven when available), then replay
         history_service = services.history_service
         await history_service.warmup_strategy(
             strategy,
             offline_mode=True,
-            history_start=None,
-            history_end=None,
+            history_start=history_start,
+            history_end=history_end,
         )
         # After replay, write a fresh snapshot for faster next start
         history_service.write_snapshots(strategy)
@@ -597,6 +629,37 @@ class Runner:
             strategy.on_error(e)
             raise
         return strategy
+
+    @staticmethod
+    def _attach_history_provider(strategy: Strategy, provider: "SeamlessDataProvider") -> None:
+        """Attach a history provider to stream inputs that lack one.
+
+        This helper is used by :meth:`offline_async` to wire a Seamless
+        provider into strategies without requiring them to modify ``setup``.
+        Explicitly configured providers on individual streams are left
+        untouched.
+        """
+        try:
+            from .node import StreamInput
+        except Exception:
+            return
+
+        for node in getattr(strategy, "nodes", []):
+            if not isinstance(node, StreamInput):
+                continue
+            existing = getattr(node, "history_provider", None)
+            if existing is not None:
+                continue
+            try:
+                coerced = node._coerce_history_provider(provider)  # type: ignore[attr-defined]
+            except Exception:
+                coerced = provider
+            setattr(node, "_history_provider", coerced)
+            if coerced is not None and hasattr(coerced, "bind_stream"):
+                try:
+                    coerced.bind_stream(node)
+                except Exception:
+                    logger.debug("failed to bind history provider to stream", exc_info=True)
 
     # ------------------------------------------------------------------
     # Convenience context manager for tests
