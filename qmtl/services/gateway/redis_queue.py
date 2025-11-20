@@ -108,7 +108,8 @@ class RedisTaskQueue:
     async def healthy(self) -> bool:
         """Return ``True`` if the underlying Redis connection is alive."""
         try:
-            pong = await self.redis.ping()
+            ping_result = self.redis.ping()
+            pong = await ping_result if hasattr(ping_result, "__await__") else ping_result
             return bool(pong)
         except Exception:
             return False

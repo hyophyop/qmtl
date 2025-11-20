@@ -71,7 +71,8 @@ class StrategyWorker:
     async def healthy(self) -> bool:
         """Return ``True`` if all critical dependencies are reachable."""
         try:
-            redis_ok = bool(await self.redis.ping())
+            ping_result = self.redis.ping()
+            redis_ok = bool(await ping_result if hasattr(ping_result, "__await__") else ping_result)
         except Exception:
             redis_ok = False
         db_ok = True
