@@ -8,6 +8,8 @@ from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.routes.strategies import _ack_from_result
 from qmtl.services.gateway.strategy_submission import StrategySubmissionResult
 from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from typing import Any, cast
+
 from qmtl.foundation.proto import dagmanager_pb2
 from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
 
@@ -57,7 +59,8 @@ class DummyDagClient:
         # Return a single-chunk result mapping to topics used above
         decoded = json.loads(base64.b64decode(dag_json).decode())
         crc = node_ids_crc32(decoded.get("nodes", []))
-        return dagmanager_pb2.DiffChunk(
+        dag_pb = cast(Any, dagmanager_pb2)
+        return dag_pb.DiffChunk(
             queue_map={
                 partition_key(
                     _TAGQUERY_NODE_ID,

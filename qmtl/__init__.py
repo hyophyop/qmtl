@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from typing import Any
 
@@ -37,7 +38,13 @@ try:  # pragma: no cover - best effort cleanup helper
         def __del__(self) -> None:
             try:
                 # Rely on httpx.AsyncBaseTransport.aclose for cleanup.
-                self.aclose()
+                closer = self.aclose()
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    asyncio.run(closer)
+                else:
+                    loop.create_task(closer)
             except Exception:
                 pass
 

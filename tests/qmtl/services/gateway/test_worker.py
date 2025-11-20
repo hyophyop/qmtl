@@ -90,10 +90,10 @@ class DummyHub(WebSocketHub):
         self.progress: list[tuple[str, str]] = []
         self.maps: list[tuple[str, dict]] = []
 
-    async def send_progress(self, strategy_id: str, status: str) -> None:  # type: ignore[override]
+    async def send_progress(self, strategy_id: str, status: str) -> None:
         self.progress.append((strategy_id, status))
 
-    async def send_queue_map(self, strategy_id: str, queue_map: dict[str, list[str] | str]) -> None:  # type: ignore[override]
+    async def send_queue_map(self, strategy_id: str, queue_map: dict[str, list[str] | str]) -> None:
         self.maps.append((strategy_id, queue_map))
 
 
@@ -270,4 +270,3 @@ async def test_worker_alerts_on_consecutive_diff_failures(fake_redis):
     assert await worker._process("sid-2") is False
     assert alerts.slack_messages == ["gRPC diff repeatedly failed"]
     assert worker._grpc_fail_count == 0
-

@@ -1,12 +1,15 @@
 import base64
 import json
 from dataclasses import dataclass, field
+from typing import Awaitable
 
 import pytest
+import redis.asyncio as redis
+from typing import Any, cast
 from fastapi import HTTPException
 
 from qmtl.services.gateway import metrics
-from qmtl.services.gateway.database import MemoryDatabase
+from qmtl.services.gateway.database import MemoryDatabase, PostgresDatabase
 from qmtl.services.gateway.degradation import DegradationLevel
 from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.gateway.models import StrategySubmit
@@ -14,11 +17,11 @@ from qmtl.services.gateway.redis_client import InMemoryRedis
 from qmtl.services.gateway.strategy_manager import StrategyManager
 
 
-def _encode_dag(nodes: list[dict]) -> str:
+def _encode_dag(nodes: list[dict[str, Any]]) -> str:
     return base64.b64encode(json.dumps({"nodes": nodes}).encode()).decode()
 
 
-def _make_payload(meta: dict | None = None) -> StrategySubmit:
+def _make_payload(meta: dict[str, Any] | None = None) -> StrategySubmit:
     dag_json = _encode_dag([{"node_id": "n1", "node_type": "Base"}])
     return StrategySubmit(dag_json=dag_json, meta=meta, node_ids_crc32=0)
 
@@ -33,11 +36,11 @@ def _build_manager(
     commit_log_writer=None,
     degrade=None,
 ) -> StrategyManager:
-    redis = InMemoryRedis()
-    database = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=database)
+    redis_client = cast(redis.Redis, InMemoryRedis())
+    database = cast(PostgresDatabase, MemoryDatabase())
+    fsm = StrategyFSM(redis=redis_client, database=database)
     return StrategyManager(
-        redis=redis,
+        redis=redis_client,
         database=database,
         fsm=fsm,
         commit_log_writer=commit_log_writer,
@@ -84,13 +87,13 @@ async def test_submit_enriches_dag_with_version_sentinel() -> None:
     assert sentinel["node_type"] == "VersionSentinel"
     assert sentinel["version"] == "1.2.3"
 
-    stored = await manager.redis.hget(f"strategy:{strategy_id}", "dag")
+    stored = await cast(Awaitable[Any], manager.redis.hget(f"strategy:{strategy_id}", "dag"))
     dag_payload = json.loads(base64.b64decode(stored).decode())
     sentinel_copy = dag_payload["nodes"][-1]
     assert sentinel_copy["node_type"] == "VersionSentinel"
     assert sentinel_copy["version"] == "1.2.3"
 
-    queued = await manager.redis.lpop("strategy_queue")
+    queued = await cast(Awaitable[Any], manager.redis.lpop("strategy_queue"))
     assert queued == strategy_id
 
 
@@ -108,8 +111,8 @@ async def test_submit_deduplicates_existing_hash() -> None:
     assert second_id == first_id
     assert len(writer.calls) == 1, "dedupe should skip additional commit log writes"
 
-    first_queue_item = await manager.redis.lpop("strategy_queue")
-    second_queue_item = await manager.redis.lpop("strategy_queue")
+    first_queue_item = await cast(Awaitable[Any], manager.redis.lpop("strategy_queue"))
+    second_queue_item = await cast(Awaitable[Any], manager.redis.lpop("strategy_queue"))
     assert first_queue_item == first_id
     assert second_queue_item is None
 
@@ -127,11 +130,11 @@ async def test_submit_rolls_back_on_commit_log_failure() -> None:
     strategy_id, record = writer.calls[0]
     dag_hash = record["dag_hash"]
 
-    dag_entry = await manager.redis.hget(f"strategy:{strategy_id}", "dag")
+    dag_entry = await cast(Awaitable[Any], manager.redis.hget(f"strategy:{strategy_id}", "dag"))
     assert dag_entry is None, "failed submissions must be rolled back"
     stored_hash = await manager.redis.get(f"dag_hash:{dag_hash}")
     assert stored_hash is None
-    assert metrics.lost_requests_total._value.get() == 1  # type: ignore[attr-defined]
+    assert int(metrics.lost_requests_total._value.get()) == 1
 
 
 @pytest.mark.asyncio
@@ -144,5 +147,5 @@ async def test_submit_respects_degradation_queueing() -> None:
 
     assert not existed
     assert degrade.local_queue == [strategy_id], "strategy should queue locally during degradation"
-    queued = await manager.redis.lpop("strategy_queue")
+    queued = await cast(Awaitable[Any], manager.redis.lpop("strategy_queue"))
     assert queued is None

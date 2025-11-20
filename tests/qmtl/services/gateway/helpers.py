@@ -4,7 +4,7 @@ import base64
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Coroutine, cast
 
 import httpx
 
@@ -14,7 +14,10 @@ from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.world_client import WorldServiceClient
 
 
-Handler = Callable[[httpx.Request], Awaitable[httpx.Response]]
+Handler = (
+    Callable[[httpx.Request], httpx.Response]
+    | Callable[[httpx.Request], Coroutine[None, None, httpx.Response]]
+)
 
 
 @dataclass(slots=True)
@@ -90,8 +93,10 @@ async def gateway_app(
     """Spin up a Gateway ASGI app wired to a mocked WorldService client."""
 
     db = database or StubGatewayDatabase()
-    transport = transport or httpx.MockTransport(handler)
-    http_client = httpx.AsyncClient(transport=transport)
+    transport_obj = transport or httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(
+        transport=cast(httpx.AsyncBaseTransport, transport_obj)
+    )
     world_client = WorldServiceClient(
         world_url,
         client=http_client,
@@ -112,10 +117,11 @@ async def gateway_app(
 
     try:
         async with httpx.ASGITransport(app=app) as asgi:
-            params = {"transport": asgi, "base_url": base_url}
-            if client_kwargs:
-                params.update(client_kwargs)
-            async with httpx.AsyncClient(**params) as api_client:
+            async with httpx.AsyncClient(
+                transport=cast(httpx.AsyncBaseTransport, asgi),
+                base_url=base_url,
+                **(client_kwargs or {}),
+            ) as api_client:
                 yield GatewayTestContext(
                     client=api_client,
                     world_client=world_client,

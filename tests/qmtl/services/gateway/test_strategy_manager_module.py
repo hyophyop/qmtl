@@ -2,31 +2,39 @@ import base64
 import hashlib
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Awaitable, cast
 
 import pytest
+import redis.asyncio as redis
 from fastapi import HTTPException
 
 from qmtl.foundation.common.compute_context import ComputeContext, DowngradeReason
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.commit_log import CommitLogWriter
-from qmtl.services.gateway.database import MemoryDatabase
+from qmtl.services.gateway.database import MemoryDatabase, PostgresDatabase
 from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.redis_client import InMemoryRedis
 from qmtl.services.gateway.strategy_manager import StrategyManager
-from qmtl.services.gateway.submission.context_service import StrategyComputeContext
+from qmtl.services.gateway.submission.context_service import (
+    StrategyComputeContext,
+    ComputeContextService,
+)
 from tests.qmtl.runtime.sdk.factories import canonical_node_payload
+
+
+def _redis_and_db() -> tuple[redis.Redis, PostgresDatabase]:
+    return cast(redis.Redis, InMemoryRedis()), cast(PostgresDatabase, MemoryDatabase())
+from typing import cast
 
 
 @pytest.mark.asyncio
 async def test_strategy_manager_submit_and_status():
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
-    manager = StrategyManager(redis=redis, database=db, fsm=fsm, insert_sentinel=False)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
+    manager = StrategyManager(redis=redis_client, database=db, fsm=fsm, insert_sentinel=False)
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
@@ -39,12 +47,11 @@ async def test_strategy_manager_submit_and_status():
 
 @pytest.mark.asyncio
 async def test_strategy_manager_submit_deduplicates() -> None:
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
-    manager = StrategyManager(redis=redis, database=db, fsm=fsm, insert_sentinel=False)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
+    manager = StrategyManager(redis=redis_client, database=db, fsm=fsm, insert_sentinel=False)
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -87,13 +94,12 @@ class RecordingProducer:
 @pytest.mark.asyncio
 async def test_strategy_manager_writes_commit_log() -> None:
     metrics.reset_metrics()
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
     producer = RecordingProducer()
     writer = CommitLogWriter(producer, "gateway.ingest")
     manager = StrategyManager(
-        redis=redis,
+        redis=redis_client,
         database=db,
         fsm=fsm,
         insert_sentinel=True,
@@ -111,7 +117,7 @@ async def test_strategy_manager_writes_commit_log() -> None:
         include_node_id=False,
     )
     node["node_id"] = "n1"
-    dag = {"nodes": [node]}
+    dag: dict[str, Any] = {"nodes": [node]}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -166,20 +172,19 @@ async def test_strategy_manager_writes_commit_log() -> None:
 @pytest.mark.asyncio
 async def test_strategy_manager_commit_log_includes_downgrade_metadata() -> None:
     metrics.reset_metrics()
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
     producer = RecordingProducer()
     writer = CommitLogWriter(producer, "gateway.ingest")
     manager = StrategyManager(
-        redis=redis,
+        redis=redis_client,
         database=db,
         fsm=fsm,
         insert_sentinel=False,
         commit_log_writer=writer,
     )
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -202,7 +207,9 @@ async def test_strategy_manager_commit_log_includes_downgrade_metadata() -> None
     assert context["safe_mode"] is True
     assert submission["world_ids"] == ["primary"]
 
-    stored_reason = await redis.hget(f"strategy:{sid}", "compute_downgrade_reason")
+    stored_reason = await cast(
+        Awaitable[Any], redis_client.hget(f"strategy:{sid}", "compute_downgrade_reason")
+    )
     assert stored_reason == DowngradeReason.MISSING_AS_OF
 
 
@@ -213,18 +220,17 @@ class _FailingContextService:
 
 @pytest.mark.asyncio
 async def test_strategy_manager_submit_uses_supplied_context() -> None:
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
     manager = StrategyManager(
-        redis=redis,
+        redis=redis_client,
         database=db,
         fsm=fsm,
         insert_sentinel=False,
-        context_service=_FailingContextService(),
+        context_service=cast(ComputeContextService, _FailingContextService()),
     )
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -262,19 +268,18 @@ class ExplodingProducer:
 @pytest.mark.asyncio
 async def test_strategy_manager_rollback_on_commit_log_failure() -> None:
     metrics.reset_metrics()
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
     writer = CommitLogWriter(ExplodingProducer(), "gateway.ingest")
     manager = StrategyManager(
-        redis=redis,
+        redis=redis_client,
         database=db,
         fsm=fsm,
         insert_sentinel=False,
         commit_log_writer=writer,
     )
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -289,19 +294,18 @@ async def test_strategy_manager_rollback_on_commit_log_failure() -> None:
     assert excinfo.value.status_code == 503
     # dedupe keys should be removed to keep submission idempotent
     hash_key = hashlib.sha256(json.dumps(dag, sort_keys=True).encode()).hexdigest()
-    assert await redis.get(f"dag_hash:{hash_key}") is None
+    assert await redis_client.get(f"dag_hash:{hash_key}") is None
     assert metrics.lost_requests_total._value.get() == 1
 
 
 @pytest.mark.asyncio
 async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
     metrics.reset_metrics()
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
-    manager = StrategyManager(redis=redis, database=db, fsm=fsm, insert_sentinel=False)
+    redis_client, db = _redis_and_db()
+    fsm = StrategyFSM(redis=redis_client, database=db)
+    manager = StrategyManager(redis=redis_client, database=db, fsm=fsm, insert_sentinel=False)
 
-    dag = {"nodes": []}
+    dag: dict[str, Any] = {"nodes": []}
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     payload = StrategySubmit(
         dag_json=dag_json,
@@ -327,7 +331,11 @@ async def test_strategy_manager_missing_as_of_triggers_safe_mode() -> None:
         )._value.get()
     )
     assert metric_value == 1
-    stored_domain = await redis.hget(f"strategy:{sid}", "compute_execution_domain")
+    stored_domain = await cast(
+        Awaitable[Any], redis_client.hget(f"strategy:{sid}", "compute_execution_domain")
+    )
     assert stored_domain == "backtest"
-    stored_reason = await redis.hget(f"strategy:{sid}", "compute_downgrade_reason")
+    stored_reason = await cast(
+        Awaitable[Any], redis_client.hget(f"strategy:{sid}", "compute_downgrade_reason")
+    )
     assert stored_reason == DowngradeReason.MISSING_AS_OF

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING, Dict
+from typing import Optional, TYPE_CHECKING, Dict, Any, Awaitable, cast
 
 import logging
 import redis.asyncio as redis
@@ -103,7 +103,7 @@ class StrategyFSM:
     async def create(self, strategy_id: str, meta: Optional[dict]) -> None:
         state = self.machine.initial_state.value
         try:
-            await self.redis.hset(f"strategy:{strategy_id}", "state", state)
+            await cast(Awaitable[Any], self.redis.hset(f"strategy:{strategy_id}", "state", state))
         except redis.RedisError as exc:
             logger.exception("Redis error creating strategy %s", strategy_id)
             raise FSMError("failed to create strategy") from exc
@@ -125,8 +125,9 @@ class StrategyFSM:
         state = self.machine.state_from(current)
         new_state = self.machine.transition(state, event)
         try:
-            await self.redis.hset(
-                f"strategy:{strategy_id}", "state", new_state.value
+            await cast(
+                Awaitable[Any],
+                self.redis.hset(f"strategy:{strategy_id}", "state", new_state.value),
             )
         except redis.RedisError as exc:
             logger.exception("Redis error during transition for %s", strategy_id)
@@ -141,7 +142,10 @@ class StrategyFSM:
 
     async def get(self, strategy_id: str) -> Optional[str]:
         try:
-            data = await self.redis.hget(f"strategy:{strategy_id}", "state")
+            data = await cast(
+                Awaitable[Any],
+                self.redis.hget(f"strategy:{strategy_id}", "state"),
+            )
         except redis.RedisError as exc:
             logger.exception(
                 "Redis error retrieving strategy %s; falling back to DB", strategy_id
@@ -158,7 +162,10 @@ class StrategyFSM:
             if state is None:
                 return None
             try:
-                await self.redis.hset(f"strategy:{strategy_id}", "state", state)
+                await cast(
+                    Awaitable[Any],
+                    self.redis.hset(f"strategy:{strategy_id}", "state", state),
+                )
             except redis.RedisError as exc:
                 logger.exception("Redis error caching strategy %s", strategy_id)
             return state

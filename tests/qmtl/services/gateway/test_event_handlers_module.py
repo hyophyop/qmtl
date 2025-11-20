@@ -12,10 +12,10 @@ from qmtl.services.gateway.api import create_app
 
 
 class NoServerHub(WebSocketHub):
-    async def start(self, *, start_server: bool = False) -> int:  # type: ignore[override]
+    async def start(self, *, start_server: bool = False) -> int:
         return await super().start(start_server=False)
 
-    async def stop(self) -> None:  # type: ignore[override]
+    async def stop(self) -> None:
         await super().stop()
 
 

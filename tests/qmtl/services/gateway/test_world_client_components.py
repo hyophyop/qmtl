@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from typing import cast
 
 from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.compute_context import DowngradeReason
@@ -88,7 +89,7 @@ async def test_breaker_transport_retries_and_recovers() -> None:
         wait_calls.append((attempt, exc))
 
     transport = BreakerRetryTransport(
-        client,
+        cast(httpx.AsyncClient, client),
         AsyncCircuitBreaker(max_failures=2),
         timeout=0.05,
         retries=1,
@@ -112,7 +113,7 @@ async def test_breaker_transport_opens_circuit() -> None:
     breaker = AsyncCircuitBreaker(max_failures=1, on_open=lambda: events.append("open"))
     client = StubAsyncClient([httpx.ConnectError("boom")])
     transport = BreakerRetryTransport(
-        client,
+        cast(httpx.AsyncClient, client),
         breaker,
         timeout=0.05,
         retries=0,

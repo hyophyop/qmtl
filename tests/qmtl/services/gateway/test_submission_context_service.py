@@ -1,4 +1,5 @@
 import pytest
+from typing import cast
 
 from qmtl.foundation.common.compute_context import DowngradeReason
 from qmtl.foundation.common.compute_key import compute_compute_key
@@ -7,6 +8,7 @@ from qmtl.services.gateway.submission.context_service import (
     ComputeContextService,
     StrategyComputeContext,
 )
+from qmtl.services.gateway.world_client import WorldServiceClient
 
 
 class _StubWorldClient:
@@ -49,7 +51,7 @@ async def test_build_uses_worldservice_decision() -> None:
             "dataset_fingerprint": "lake:ws",
         }
     )
-    service = ComputeContextService(world_client=client)
+    service = ComputeContextService(world_client=cast(WorldServiceClient, client))
     payload = _make_payload(partition="tenant-b", dataset_fingerprint="lake:override")
 
     strategy_ctx = await service.build(payload)
@@ -85,7 +87,7 @@ async def test_build_marks_safe_mode_on_stale_decision() -> None:
         {"effective_mode": "live", "as_of": "2024-02-01T00:00:00Z"},
         stale=True,
     )
-    service = ComputeContextService(world_client=client)
+    service = ComputeContextService(world_client=cast(WorldServiceClient, client))
     payload = _make_payload()
 
     strategy_ctx = await service.build(payload)
@@ -98,7 +100,7 @@ async def test_build_marks_safe_mode_on_stale_decision() -> None:
 @pytest.mark.asyncio
 async def test_build_safe_mode_when_worldservice_unavailable() -> None:
     client = _StubWorldClient({}, fail=True)
-    service = ComputeContextService(world_client=client)
+    service = ComputeContextService(world_client=cast(WorldServiceClient, client))
     payload = _make_payload()
 
     strategy_ctx = await service.build(payload)

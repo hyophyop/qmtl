@@ -30,13 +30,13 @@ async def pg_try_advisory_lock(conn: asyncpg.Connection, key: int) -> bool:
         ``True`` if the lock was acquired, ``False`` otherwise.
     """
 
-    return await conn.fetchval("SELECT pg_try_advisory_lock($1)", key)
+    return bool(await conn.fetchval("SELECT pg_try_advisory_lock($1)", key))
 
 
 async def pg_advisory_unlock(conn: asyncpg.Connection, key: int) -> bool:
     """Release a previously acquired PostgreSQL advisory lock."""
 
-    return await conn.fetchval("SELECT pg_advisory_unlock($1)", key)
+    return bool(await conn.fetchval("SELECT pg_advisory_unlock($1)", key))
 
 
 class Database:

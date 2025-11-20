@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable, Iterable, Iterator, Tuple
+from typing import Any, Awaitable, Callable, Iterable, Iterator, Tuple, cast
 
 from cachetools import TTLCache
 
@@ -29,9 +29,8 @@ class CommitLogDeduplicator:
             key = (node_id, bucket_ts, input_hash)
             if key in self._seen:
                 gw_metrics.commit_duplicate_total.inc()
-                gw_metrics.commit_duplicate_total._val = (
-                    gw_metrics.commit_duplicate_total._value.get()
-                )  # type: ignore[attr-defined]
+                metric = cast(Any, gw_metrics.commit_duplicate_total)
+                metric._val = metric._value.get()
                 continue
             self._seen[key] = None
             yield (node_id, bucket_ts, input_hash, payload)
@@ -40,7 +39,7 @@ class CommitLogDeduplicator:
 try:  # pragma: no cover - aiokafka optional
     from aiokafka import AIOKafkaConsumer
 except Exception:  # pragma: no cover - import guard
-    AIOKafkaConsumer = Any  # type: ignore[misc]
+    AIOKafkaConsumer = Any
 
 
 class CommitLogConsumer:
@@ -54,7 +53,7 @@ class CommitLogConsumer:
 
     def __init__(
         self,
-        consumer: AIOKafkaConsumer,  # type: ignore[misc]
+        consumer: AIOKafkaConsumer,
         *,
         topic: str,
         group_id: str,
@@ -84,9 +83,8 @@ class CommitLogConsumer:
                     node_id, bucket_ts, input_hash, payload = json.loads(msg.value)
                 except json.JSONDecodeError:
                     gw_metrics.commit_invalid_total.inc()
-                    gw_metrics.commit_invalid_total._val = (
-                        gw_metrics.commit_invalid_total._value.get()
-                    )  # type: ignore[attr-defined]
+                    metric = cast(Any, gw_metrics.commit_invalid_total)
+                    metric._val = metric._value.get()
                     continue
                 records.append((node_id, bucket_ts, input_hash, payload))
         return records

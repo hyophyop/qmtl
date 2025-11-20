@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import Dict
+from typing import Any, TYPE_CHECKING
 
-
-from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.foundation.proto import dagmanager_pb2 as _dagmanager_pb2
+from qmtl.foundation.proto import dagmanager_pb2_grpc as _dagmanager_pb2_grpc
 from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.services.dagmanager.topic import (
     build_namespace,
@@ -15,6 +15,12 @@ from qmtl.services.dagmanager.topic import (
     topic_namespace_enabled,
 )
 from . import metrics as gw_metrics
+
+if TYPE_CHECKING:
+    import grpc
+
+dagmanager_pb2: Any = _dagmanager_pb2
+dagmanager_pb2_grpc: Any = _dagmanager_pb2_grpc
 
 
 @dataclass(frozen=True)
@@ -48,7 +54,7 @@ class DiffStreamClient:
         self._stub = stub
 
     async def collect(self, request: dagmanager_pb2.DiffRequest) -> dagmanager_pb2.DiffChunk:
-        queue_map: Dict[str, str] = {}
+        queue_map: dict[str, str] = {}
         sentinel_id = ""
         version = ""
         buffer_nodes: list[dagmanager_pb2.BufferInstruction] = []
@@ -107,27 +113,32 @@ class DagManagerClient:
         # Do not create or set a global event loop here; the ASGI runtime
         # guarantees a running loop when RPCs are awaited. Creating a loop
         # at import time leaks resources under pytest's unraisable warnings.
-        self._created_loop = None
+        self._created_loop: asyncio.AbstractEventLoop | None = None
         # Lazily create channel/stubs on first use to avoid touching the
         # event loop at import time (prevents resource warnings under pytest).
-        self._channel = None
-        self._health_stub = None
-        self._diff_stub = None
-        self._tag_stub = None
+        self._channel: Any = None
+        self._health_stub: Any = None
+        self._diff_stub: Any = None
+        self._tag_stub: Any = None
         self._breaker = AsyncCircuitBreaker(
             max_failures=breaker_max_failures,
-            on_open=lambda: (
-                gw_metrics.dagclient_breaker_state.set(1),
-                gw_metrics.dagclient_breaker_open_total.inc(),
-            ),
-            on_close=lambda: (
-                gw_metrics.dagclient_breaker_state.set(0),
-                gw_metrics.dagclient_breaker_failures.set(0),
-            ),
-            on_failure=lambda c: gw_metrics.dagclient_breaker_failures.set(c),
+            on_open=self._on_breaker_open,
+            on_close=self._on_breaker_close,
+            on_failure=self._on_breaker_failure,
         )
         gw_metrics.dagclient_breaker_state.set(0)
         gw_metrics.dagclient_breaker_failures.set(0)
+
+    def _on_breaker_open(self) -> None:
+        gw_metrics.dagclient_breaker_state.set(1)
+        gw_metrics.dagclient_breaker_open_total.inc()
+
+    def _on_breaker_close(self) -> None:
+        gw_metrics.dagclient_breaker_state.set(0)
+        gw_metrics.dagclient_breaker_failures.set(0)
+
+    def _on_breaker_failure(self, count: int) -> None:
+        gw_metrics.dagclient_breaker_failures.set(count)
 
     def _ensure_channel(self) -> None:
         if self._channel is None:
@@ -171,8 +182,10 @@ class DagManagerClient:
         """Close the underlying gRPC channel."""
         if self._channel is not None:
             await self._channel.close()
+            self._channel = None
         if self._created_loop is not None:
             self._created_loop.close()
+            self._created_loop = None
 
     @property
     def breaker(self) -> AsyncCircuitBreaker:
@@ -185,7 +198,7 @@ class DagManagerClient:
         async def _call() -> bool:
             self._ensure_channel()
             reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
-            return reply.neo4j == "ok" and reply.state == "running"
+            return bool(reply.neo4j == "ok" and reply.state == "running")
 
         try:
             result = await _call()

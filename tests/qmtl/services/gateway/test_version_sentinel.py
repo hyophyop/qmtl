@@ -2,8 +2,10 @@ import base64
 import json
 
 import pytest
+import redis.asyncio as redis
+from typing import Any, Awaitable, cast
 
-from qmtl.services.gateway.database import MemoryDatabase
+from qmtl.services.gateway.database import MemoryDatabase, PostgresDatabase
 from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.redis_client import InMemoryRedis
@@ -12,10 +14,10 @@ from qmtl.services.gateway.strategy_manager import StrategyManager
 
 @pytest.mark.asyncio
 async def test_gateway_auto_inserts_version_sentinel_with_metadata() -> None:
-    redis = InMemoryRedis()
-    db = MemoryDatabase()
-    fsm = StrategyFSM(redis=redis, database=db)
-    manager = StrategyManager(redis=redis, database=db, fsm=fsm)
+    redis_client = cast(redis.Redis, InMemoryRedis())
+    db = cast(PostgresDatabase, MemoryDatabase())
+    fsm = StrategyFSM(redis=redis_client, database=db)
+    manager = StrategyManager(redis=redis_client, database=db, fsm=fsm)
 
     dag = {
         "nodes": [
@@ -38,7 +40,7 @@ async def test_gateway_auto_inserts_version_sentinel_with_metadata() -> None:
     strategy_id, existed = await manager.submit(payload)
 
     assert not existed
-    stored = await redis.hget(f"strategy:{strategy_id}", "dag")
+    stored = await cast(Awaitable[Any], redis_client.hget(f"strategy:{strategy_id}", "dag"))
     assert stored is not None
     decoded = json.loads(base64.b64decode(stored).decode())
 
@@ -50,4 +52,3 @@ async def test_gateway_auto_inserts_version_sentinel_with_metadata() -> None:
     assert sentinel["node_id"] == f"{strategy_id}-sentinel"
     assert sentinel["version"] == "release-2025.10"
     assert decoded["nodes"][0]["node_id"] == "node-a"
-

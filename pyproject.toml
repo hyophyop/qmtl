@@ -134,12 +134,11 @@ warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
 pretty = true
-ignore_errors = true
-follow_imports = "skip"
+follow_imports = "normal"
 
 files = [
-  "qmtl/runtime/io/seamless_provider.py",
-  "qmtl/runtime/sdk/seamless_data_provider.py",
+  "qmtl",
+  "examples",
 ]
 
 exclude = [
@@ -149,3 +148,47 @@ exclude = [
 ]
 
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.runtime.*",
+  "qmtl.services.*",
+  "qmtl.foundation.*",
+  "qmtl.examples.*",
+  "tests.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.services.gateway.dagmanager_client",
+]
+ignore_errors = false
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.services.gateway.redis_queue",
+  "qmtl.services.gateway.fsm",
+  "qmtl.services.gateway.database",
+  "qmtl.services.gateway.world_client",
+  "qmtl.services.gateway.metrics",
+  "qmtl.services.gateway.rebalancing_executor",
+  "qmtl.services.gateway.ownership",
+  "qmtl.services.gateway.degradation",
+  "qmtl.services.gateway.gateway_health",
+  "qmtl.services.gateway.strategy_persistence",
+  "qmtl.services.gateway.strategy_manager",
+  "qmtl.services.gateway.strategy_submission",
+  "qmtl.services.gateway.worker",
+  "qmtl.services.gateway.commit_log",
+  "qmtl.services.gateway.commit_log_consumer",
+  "qmtl.services.gateway.commit_log_cli",
+  "qmtl.services.gateway.models",
+]
+ignore_errors = false
+
+[[tool.mypy.overrides]]
+module = [
+  "tests.qmtl.services.gateway.*",
+]
+ignore_errors = false

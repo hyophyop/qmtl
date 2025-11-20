@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -147,7 +147,7 @@ async def test_status_reports_worldservice_breaker(
     breaker = AsyncCircuitBreaker(max_failures=1)
     from qmtl.services.gateway import gateway_health
 
-    gateway_health._STATUS_CACHE = None
+    cast(Any, gateway_health)._STATUS_CACHE = None
     gateway_health._STATUS_CACHE_TS = 0.0
 
     async with gateway_app_factory(

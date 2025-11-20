@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, cast
 
 import logging
 import zlib
 import redis.asyncio as redis
 
-from .database import Database
+from .database import PostgresDatabase
 from .dagmanager_client import DagManagerClient
 from .ws import WebSocketHub
 from .fsm import StrategyFSM
@@ -44,7 +44,7 @@ class StrategyWorker:
     def __init__(
         self,
         redis_client: redis.Redis,
-        database: Database,
+        database: PostgresDatabase,
         fsm: StrategyFSM,
         queue: RedisTaskQueue,
         dag_client: DagManagerClient,
@@ -71,17 +71,17 @@ class StrategyWorker:
     async def healthy(self) -> bool:
         """Return ``True`` if all critical dependencies are reachable."""
         try:
-            redis_ok = await self.redis.ping()
+            redis_ok = bool(await self.redis.ping())
         except Exception:
             redis_ok = False
         db_ok = True
         if hasattr(self.database, "healthy"):
             try:
-                db_ok = await self.database.healthy()
+                db_ok = bool(await self.database.healthy())
             except Exception:
                 db_ok = False
         try:
-            dag_ok = await self.dag_client.status()
+            dag_ok = bool(await self.dag_client.status())
         except Exception:
             dag_ok = False
         return bool(redis_ok) and dag_ok and db_ok
@@ -116,7 +116,7 @@ class StrategyWorker:
         await self._transition(strategy_id, "PROCESS")
 
     async def _load_context(self, strategy_id: str) -> StrategyContext:
-        dag_json = await self.redis.hget(f"strategy:{strategy_id}", "dag")
+        dag_json = await cast(Awaitable[Any], self.redis.hget(f"strategy:{strategy_id}", "dag"))
         if isinstance(dag_json, bytes):
             dag_json = dag_json.decode()
         if dag_json is None:
@@ -125,13 +125,18 @@ class StrategyWorker:
         return StrategyContext(strategy_id=strategy_id, dag_json=dag_json, compute=compute)
 
     async def _load_compute_context(self, strategy_id: str) -> ComputeContext:
-        raw_context = await self.redis.hmget(
-            f"strategy:{strategy_id}",
-            "compute_world_id",
-            "compute_execution_domain",
-            "compute_as_of",
-            "compute_partition",
-            "compute_dataset_fingerprint",
+        raw_context = await cast(
+            Awaitable[list[Any]],
+            self.redis.hmget(
+                f"strategy:{strategy_id}",
+                [
+                    "compute_world_id",
+                    "compute_execution_domain",
+                    "compute_as_of",
+                    "compute_partition",
+                    "compute_dataset_fingerprint",
+                ],
+            ),
         )
         world_id, execution_domain, as_of, partition, dataset_fingerprint = (
             self._decode_field(raw_context[0]),

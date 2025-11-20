@@ -6,6 +6,8 @@ import json
 import pytest
 from fastapi import HTTPException
 
+from typing import Any, cast
+
 from qmtl.services.gateway.submission.dag_loader import DagLoader
 
 
@@ -25,7 +27,7 @@ def test_load_validates_schema(monkeypatch) -> None:
 
     calls: list[dict] = []
 
-    def fake_validate(data):  # type: ignore[compatible-type]
+    def fake_validate(data: dict[str, object]) -> tuple[bool, str, list[str]]:
         calls.append(data)
         return True, "v1", []
 
@@ -42,7 +44,7 @@ def test_load_validates_schema(monkeypatch) -> None:
 def test_load_raises_on_invalid_schema(monkeypatch) -> None:
     loader = DagLoader()
 
-    def fake_validate(_dag):  # type: ignore[compatible-type]
+    def fake_validate(_dag: dict[str, Any]) -> tuple[bool, str, list[str]]:
         return False, "v1", ["broken"]
 
     monkeypatch.setattr(
@@ -54,6 +56,5 @@ def test_load_raises_on_invalid_schema(monkeypatch) -> None:
         loader.load("{}")
 
     assert exc.value.status_code == 400
-    detail = exc.value.detail
-    assert isinstance(detail, dict)
-    assert detail["code"] == "E_SCHEMA_INVALID"
+    detail_dict = cast(dict[str, object], exc.value.detail)
+    assert detail_dict["code"] == "E_SCHEMA_INVALID"

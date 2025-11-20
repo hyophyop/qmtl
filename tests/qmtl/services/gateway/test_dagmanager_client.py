@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 import pytest
 import grpc
@@ -12,7 +13,7 @@ from qmtl.services.dagmanager.topic import (
 
 
 class FakeDiffStub:
-    def __init__(self, chunks: list[dagmanager_pb2.DiffChunk]) -> None:
+    def __init__(self, chunks: list[Any]) -> None:
         self.chunks = chunks
         self.acks: list[tuple[str, int]] = []
         self.calls = 0
@@ -22,7 +23,7 @@ class FakeDiffStub:
         for chunk in self.chunks:
             yield chunk
 
-    async def AckChunk(self, ack: dagmanager_pb2.ChunkAck):
+    async def AckChunk(self, ack: Any):
         self.acks.append((ack.sentinel_id, ack.chunk_id))
 
 class DummyChannel:

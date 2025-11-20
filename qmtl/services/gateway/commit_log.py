@@ -11,7 +11,7 @@ from qmtl.runtime.sdk.snapshot import runtime_fingerprint
 try:
     from aiokafka import AIOKafkaProducer
 except Exception:  # pragma: no cover - aiokafka optional
-    AIOKafkaProducer = Any  # type: ignore
+    AIOKafkaProducer = Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class CommitLogWriter:
     bucket within a single transaction which is either committed or aborted.
     """
 
-    def __init__(self, producer: AIOKafkaProducer, topic: str) -> None:  # type: ignore[misc]
+    def __init__(self, producer: AIOKafkaProducer, topic: str) -> None:
         self._producer = producer
         self._topic = topic
 
@@ -145,9 +145,9 @@ class CommitLogWriter:
             for record in records:
                 parts = tuple(record)
                 if len(parts) == 4:
-                    node_id, input_window_hash, payload, compute_key_hint = parts  # type: ignore[misc]
+                    node_id, input_window_hash, payload, compute_key_hint = parts
                 elif len(parts) == 3:
-                    node_id, input_window_hash, payload = parts  # type: ignore[misc]
+                    node_id, input_window_hash, payload = parts
                     compute_key_hint = None
                 else:  # pragma: no cover - defensive argument validation
                     raise ValueError(

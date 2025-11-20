@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, cast
 
 import httpx
 import pytest
@@ -57,15 +57,18 @@ def gateway_app_factory(
         commit_log_writer: Any | None = None,
     ) -> AsyncIterator[GatewayTestContext]:
         transport = mock_world_service(handler)
-        return gateway_app(
-            handler,
-            redis_client=redis_client or fake_redis,
-            database=database or gateway_stub_db,
-            client_kwargs=client_kwargs,
-            world_client_kwargs=world_client_kwargs,
-            create_app_kwargs=app_kwargs,
-            transport=transport,
-            commit_log_writer=commit_log_writer,
+        return cast(
+            AsyncIterator[GatewayTestContext],
+            gateway_app(
+                handler,
+                redis_client=redis_client or fake_redis,
+                database=database or gateway_stub_db,
+                client_kwargs=client_kwargs,
+                world_client_kwargs=world_client_kwargs,
+                create_app_kwargs=app_kwargs,
+                transport=transport,
+                commit_log_writer=commit_log_writer,
+            ),
         )
 
     return factory
@@ -83,10 +86,11 @@ def asgi_client_factory():
         client_kwargs: dict[str, Any] | None = None,
     ) -> AsyncIterator[httpx.AsyncClient]:
         async with httpx.ASGITransport(app=app) as asgi:
-            params = {"transport": asgi, "base_url": base_url}
-            if client_kwargs:
-                params.update(client_kwargs)
-            async with httpx.AsyncClient(**params) as api_client:
+            async with httpx.AsyncClient(
+                transport=asgi,
+                base_url=base_url,
+                **(client_kwargs or {}),
+            ) as api_client:
                 yield api_client
 
     return factory
