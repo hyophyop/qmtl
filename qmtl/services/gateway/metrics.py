@@ -3,7 +3,7 @@ from __future__ import annotations
 """Prometheus metrics for Gateway."""
 
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from typing import Any, Deque, Mapping, cast
 import time
 
@@ -27,7 +27,7 @@ _WORLD_ID = "default"
 _REGISTERED_METRICS: set[str] = set()
 
 
-def _vals(metric: object) -> dict[Any, Any]:
+def _vals(metric: object) -> MutableMapping[Any, Any]:
     return get_mapping_store(cast(Any, metric), dict)
 
 
