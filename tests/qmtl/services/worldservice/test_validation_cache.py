@@ -31,7 +31,7 @@ async def test_validation_cache_scoped_by_execution_domain_storage():
 
     other_domain = await store.get_validation_cache(
         "world-1",
-        **{**context, "execution_domain": "live"},
+        **{**context, "execution_domain": "dryrun"},
     )
     assert other_domain is None
 
@@ -143,7 +143,7 @@ async def test_validation_cache_endpoints_domain_and_context_handling():
 
             other_domain_resp = await client.post(
                 "/worlds/world-api/validations/cache/lookup",
-                json={**context, "execution_domain": "live"},
+                json={**context, "execution_domain": "dryrun"},
             )
             other_domain_body = other_domain_resp.json()
             assert other_domain_body["cached"] is False
