@@ -56,6 +56,19 @@ def test_determine_execution_mode_defaults_to_live_when_gateway() -> None:
     assert mode == "live"
 
 
+def test_determine_execution_mode_retains_shadow_domain() -> None:
+    mode = determine_execution_mode(
+        explicit_mode=None,
+        execution_domain="shadow",
+        merged_context={},
+        trade_mode="backtest",
+        offline_requested=False,
+        gateway_url=None,
+    )
+
+    assert mode == "shadow"
+
+
 def test_normalize_clock_value_applies_expected_clock() -> None:
     merged: dict[str, str] = {}
 
@@ -65,6 +78,14 @@ def test_normalize_clock_value_applies_expected_clock() -> None:
 
     with pytest.raises(ValueError):
         normalize_clock_value({}, clock="invalid", mode="live")
+
+
+def test_normalize_clock_value_prefers_wall_for_shadow() -> None:
+    merged: dict[str, str] = {}
+
+    normalize_clock_value(merged, clock=None, mode="shadow")
+
+    assert merged["clock"] == "wall"
 
 
 def test_apply_temporal_requirements_force_offline() -> None:
@@ -99,6 +120,23 @@ def test_apply_temporal_requirements_keeps_complete_fields() -> None:
     assert force_offline is False
     assert merged["as_of"] == "123"
     assert merged["dataset_fingerprint"] == "abc"
+
+
+def test_apply_temporal_requirements_treats_shadow_as_live() -> None:
+    merged: dict[str, str] = {}
+
+    force_offline = apply_temporal_requirements(
+        merged,
+        mode="shadow",
+        as_of="2024-01-01",
+        dataset_fingerprint="dfp",
+        gateway_url="https://gateway",
+        offline_requested=False,
+    )
+
+    assert force_offline is False
+    assert "as_of" not in merged
+    assert "dataset_fingerprint" not in merged
 
 
 def test_parse_activation_update_clamps_weight() -> None:
