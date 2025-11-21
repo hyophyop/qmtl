@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.dagmanager.diff_service import (
     CrossContextTopicReuseError,
     DiffRequest,
@@ -97,11 +98,11 @@ def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, 
     assert "A" in str(exc.value)
     assert len(fake_queue.calls) == 1
     key = ("A", "w2", "backtest", "__unset__", "__unset__")
-    assert diff_metrics.cross_context_cache_hit_total._vals.get(key) == 1  # type: ignore[attr-defined]
+    hit_store = get_mapping_store(diff_metrics.cross_context_cache_hit_total, dict)
+    assert hit_store.get(key) == 1
     violation_key = ("A", "w2", "backtest")
-    assert (
-        diff_metrics.cross_context_cache_violation_total._vals.get(violation_key) == 1
-    )  # type: ignore[attr-defined]
+    violation_store = get_mapping_store(diff_metrics.cross_context_cache_violation_total, dict)
+    assert violation_store.get(violation_key) == 1
 
 
 def test_sentinel_insert_and_stream(diff_service, fake_repo, fake_stream):
