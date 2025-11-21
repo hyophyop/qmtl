@@ -14,7 +14,7 @@ WORLD_NODE_STATUSES: set[str] = {
 }
 
 EXECUTION_DOMAINS: set[str] = {"backtest", "dryrun", "live", "shadow"}
-DEFAULT_EXECUTION_DOMAIN = "live"
+DEFAULT_EXECUTION_DOMAIN = "backtest"
 DEFAULT_WORLD_NODE_STATUS = "unknown"
 
 DEFAULT_EDGE_OVERRIDES: tuple[tuple[str, str, str]] = (

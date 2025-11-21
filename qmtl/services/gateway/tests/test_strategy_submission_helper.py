@@ -88,7 +88,7 @@ def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
             lambda bundle: setattr(bundle.payload, "world_ids", ["world-2"]),
             "diff-sentinel",
             _assert_query_queue_map,
-            "backtest",
+            "dryrun",
             [
                 ("world-1", "strategy-abc"),
                 ("world-2", "strategy-abc"),

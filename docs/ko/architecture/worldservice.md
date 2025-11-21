@@ -20,8 +20,14 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - 감사 및 RBAC: 각 정책/업데이트/결정/적용 이벤트를 로깅하고 권한을 검사
 - 이벤트: 내부 ControlBus로 활성화/정책 업데이트 발행
 
+!!! warning "안전 기본값"
+- 입력이 모호하거나 부족하면 live로 기본 설정하지 않고 compute-only(backtest)로 강등해야 합니다. `execution_domain`을 비우거나 생략한 WS API 호출이 live로 저장되면 안 됩니다.
+- `allow_live=false`(기본)일 때는 운영자가 요청하더라도 활성/도메인이 live로 전환되지 않습니다. 정책 검증(필수 지표, 히스테리시스, dataset_fingerprint 고정)이 통과될 때에만 승격을 허용하세요.
+- 클라이언트가 `execution_domain`을 생략하면 월드 노드·검증 캐시는 기본적으로 `backtest`로 저장됩니다. 의도한 도메인을 명시적으로 넣어야 live 범위로 잘못 저장되는 일을 막을 수 있습니다.
+
 !!! note "설계 의도"
 - WS는 `effective_mode`(정책 문자열)를 산출하고, Gateway는 이를 `execution_domain`으로 매핑해 공유 컴퓨트 컨텍스트로 전파합니다. SDK/Runner는 모드를 선택하지 않으며 입력으로만 취급합니다. 오래되었거나 알 수 없는 결정은 기본적으로 compute‑only(주문 게이트 OFF)로 처리합니다.
+- 제출 메타의 `execution_domain` 값은 참조용 힌트일 뿐이며, 권한 있는 도메인 값은 WS가 산출한 `effective_mode`에서만 파생됩니다.
 
 비목표: 전략 인제스트, DAG diff, 큐/태그 디스커버리(각각 Gateway/DAG Manager 소유). 주문 I/O는 여기에서 다루지 않습니다.
 
@@ -142,7 +148,7 @@ Field semantics and precedence
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
-- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper/sim → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus 팬아웃 시 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})가 `phase`(`freeze|unfreeze`), `requires_ack`, `sequence`를 주입한다. `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 run별 단조 증가 값으로 생성된다.
 - `requires_ack=true`는 Gateway/SDK가 해당 `sequence`까지의 상태 변화를 수신하고 order gate를 계속 잠근 채 ACK를 반환해야 함을 뜻한다(SHALL). Freeze 단계 ACK가 도착하기 전에는 동일 run의 Unfreeze 이벤트를 적용하거나 주문 게이트를 열어서는 안 된다.
 

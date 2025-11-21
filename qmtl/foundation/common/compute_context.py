@@ -30,9 +30,6 @@ _BACKTEST_TOKENS = {
     "computeonly",
     "offline",
     "sandbox",
-    "sim",
-    "simulation",
-    "simulated",
     "validate",
     "validation",
 }
@@ -44,6 +41,9 @@ _DRYRUN_TOKENS = {
     "papertrade",
     "papertrading",
     "papertrader",
+    "sim",
+    "simulation",
+    "simulated",
 }
 _LIVE_TOKENS = {"live", "prod", "production"}
 _SHADOW_TOKENS = {"shadow"}

@@ -57,6 +57,8 @@ def _mode_from_domain(domain: str | None) -> str | None:
     key = str(domain).strip().lower()
     if key == DEFAULT_EXECUTION_DOMAIN:
         return None
+    if key == "shadow":
+        return "backtest"  # shadow is operator-only; treat as gated backtest
     if key in _VALID_MODES:
         return key
     return None
@@ -66,6 +68,8 @@ def _normalize_mode(value: str | None) -> str:
     if value is None:
         raise ValueError("execution_mode must be provided")
     mode = str(value).strip().lower()
+    if mode == "shadow":
+        return "backtest"  # safe fallback; shadow not an executable Runner mode
     if mode not in _VALID_MODES:
         raise ValueError("execution_mode must be one of 'backtest', 'dryrun', or 'live'")
     return mode

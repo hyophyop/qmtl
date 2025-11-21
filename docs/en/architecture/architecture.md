@@ -27,6 +27,14 @@ Bootstrap workflows and operational validation steps live in
 
 ---
 
+### Default-Safe Principle
+
+- When configuration is thin or ambiguous, **downgrade to compute-only (backtest)**. Missing `execution_domain`/`as_of` must never yield live/dryrun promotion.
+- WorldService must not default to live. Without `allow_live` and policy validation (required signals, hysteresis, dataset_fingerprint), activation/domain switches stay compute-only.
+- Even if operators request live, activation stays closed until validation/policy gates pass. Minimal-config or sandbox runs must not open real trading; enforce “safe by default → explicit promotion.”
+
+---
+
 ## 0. Overview: Motivation and Systemization Goals
 
 QMTL is a strategy-centric data processing platform that executes complex DAGs
@@ -159,7 +167,10 @@ examples are catalogued under [operations/](../operations/README.md) and
 - **Domains:** `backtest | dryrun | live | shadow`. Execution domains are owned
   by WorldService. Gating and promotion follow a backend-driven two-phase
   apply (Freeze/Drain -> Switch -> Unfreeze). The SDK/Runner never chooses a
-  domain; it simply consumes the outcome of world decisions.
+  domain; it simply consumes the outcome of world decisions. The submission
+  `meta.execution_domain` is treated only as a **hint**; Gateway normalises it
+  against the WorldService decision (e.g., `live` hints are ignored and
+  downgraded to compute-only when no fresh WS decision exists).
 - **NodeID vs ComputeKey:** NodeID is a global, world-agnostic identifier.
   Runtime isolation relies on `ComputeKey = blake3(NodeHash + world_id + execution_domain + as_of + partition)`.
   Cross-context cache hits are policy violations with an SLO of zero. SDKs do
@@ -174,7 +185,10 @@ examples are catalogued under [operations/](../operations/README.md) and
   `DecisionEnvelope` objects with an `execution_domain` field derived from
   `effective_mode`. The canonical WS schema omits this field. The mapping is
   `validate -> backtest (orders gated OFF)`, `compute-only -> backtest`,
-  `paper -> dryrun`, `live -> live`, while `shadow` remains operator-only.
+  `paper/sim -> dryrun`, `live -> live`, while `shadow` remains operator-only.
+  Runner/SDK does not execute in `shadow`; any such input is safely treated as
+  backtest. Ambiguous aliases like `offline`/`sandbox` also downgrade to
+  backtest.
 - **Queue namespaces:** Production deployments SHALL partition topics with the
   prefix `{world_id}.{execution_domain}.<topic>` and enforce cross-domain access
   via ACLs. Operational namespace defaults to `live`. If a world decision is
@@ -285,7 +299,7 @@ examples are catalogued under [operations/](../operations/README.md) and
 ### 4.1 EvalKey (BLAKE3, namespaced)
 
 ```
-EvalKey = blake3(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
+EvalKey = blake3(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
 ```
 
 Different worlds, datasets, policies, code, or resource allocations force
@@ -294,7 +308,8 @@ independent validation cycles even when the underlying NodeID matches.
 Design intent summary:
 - **NodeID** provides global content addressing.
 - **ComputeKey** isolates runtime execution (world, domain, as_of, partition).
-- **EvalKey** anchors policy decisions for reproducible promotion workflows.
+- **EvalKey** anchors policy decisions for reproducible promotion workflows and
+  is scoped per execution domain.
 
 ### 4.2 World ID Propagation
 

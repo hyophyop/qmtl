@@ -164,6 +164,11 @@ Content‑Type: application/json
 > with downgrade reason `decision_unavailable`, ensuring live domains cannot
 > execute without an authoritative decision envelope.
 
+`meta.execution_domain`는 호출자 힌트일 뿐 최종 도메인은 WorldService의 `effective_mode`
+결과를 Gateway가 정규화한 값입니다. 별칭 매핑은 `compute-only/validate → backtest`,
+`paper/sim → dryrun`, `live → live`, `shadow`(운영자 전용)이며, WS 결정이 없거나 오래된
+상태에서 `live` 요청은 compute-only(backtest)로 강등됩니다.
+
 **Example Queue Lookup**
 
 ```http
@@ -297,7 +302,7 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - 전략 제출과 월드:
   - 클라이언트는 `world_id`(단일) 또는 `world_ids[]`(다중)를 포함할 수 있습니다. Gateway는 각 월드에 대해 **WorldStrategyBinding(WSB)**을 upsert하고, WVG에서 해당 `WorldNodeRef(root)`가 존재하도록 보장합니다. 실행 모드는 여전히 WorldService 결정만으로 정해집니다.
   - `gateway.worldservice_url`이 설정되어 있거나 `WorldServiceClient`가 주입된 경우, 제출 헬퍼는 `POST /worlds/{world_id}/bindings`로 각 바인딩을 WorldService에 미러링합니다. 중복 바인딩은 HTTP 409를 반환하며 성공으로 간주합니다. 일시 오류는 로깅되지만 인제스트를 차단하지 않습니다.
-  - Gateway는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑해 중계하는 봉투에 기록합니다: `validate → backtest(주문 게이트 기본 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. 동일 매핑은 프록시된 ActivationEnvelope에도 적용되어, WorldService가 필드를 생략하더라도 클라이언트가 명시적 `execution_domain`을 받도록 합니다. `shadow`는 예약된 값으로 운영자가 명시적으로 요청해야 합니다. SDK/Runner는 이 매핑을 입력으로만 취급합니다.
+  - Gateway는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 매핑해 중계하는 봉투에 기록합니다: `validate → backtest(주문 게이트 기본 OFF)`, `compute-only → backtest`, `paper/sim → dryrun`, `live → live`. 동일 매핑은 프록시된 ActivationEnvelope에도 적용되어, WorldService가 필드를 생략하더라도 클라이언트가 명시적 `execution_domain`을 받도록 합니다. `shadow`는 예약된 값으로 운영자가 명시적으로 요청해야 합니다. SDK/Runner는 이 매핑을 입력으로만 취급합니다.
   - Gateway는 diff/ingest 요청과 함께 `{ world_id, execution_domain, as_of(백테스트 시), partition }` 컴퓨트 컨텍스트를 전달하여 DAG Manager가 도메인 스코프 ComputeKey를 파생하고 캐시를 도메인별로 격리하도록 합니다. 호출자가 백테스트 메타데이터를 제공하지 않으면, Gateway는 WS에서 컨텍스트를 도출하거나 선택 필드를 생략합니다. DAG Manager는 안전한 기본값과 컨텍스트 스코프 격리를 적용합니다.
   - HTTP `/strategies` 플로우는 `qmtl/services/gateway/submission/`의 합성 가능한 서비스들(예: `SubmissionPipeline`)로 구현됩니다. DAG 디코딩/검증, 노드 ID 검증, 컴퓨트 컨텍스트 정규화, diff 실행, TagQuery 폴백 각 단계는 집중 커버리지를 가지며, 향후 변경이 관련 모듈에만 영향을 주도록 의도되었습니다.
   - 백테스트/드라이런 제출은 `as_of`(데이터셋 커밋)를 반드시 포함해야 하며, `dataset_fingerprint`를 포함할 수 있습니다. 누락 시 Gateway는 요청을 거부하거나 데이터셋 혼합을 피하기 위해 compute‑only 모드로 강등합니다.

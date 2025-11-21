@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from qmtl.foundation.common.compute_key import ComputeContext
+from qmtl.foundation.common.compute_context import resolve_execution_domain
 from qmtl.services.dagmanager.topic import build_namespace, topic_namespace_enabled
 from qmtl.services.gateway.models import StrategyAck
 
@@ -154,7 +155,9 @@ class StrategyBootstrapper:
         execution_domain_override: str | None = None
         raw_domain = meta_payload.get("execution_domain")
         if isinstance(raw_domain, str) and raw_domain.strip():
-            execution_domain_override = raw_domain.strip()
+            canonical = resolve_execution_domain(raw_domain)
+            execution_domain_override = canonical or raw_domain.strip().lower()
+            meta_payload["execution_domain"] = execution_domain_override
         raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
             "datasetFingerprint"
         )

@@ -11,7 +11,7 @@ last_modified: 2025-09-22
 
 - DecisionEnvelope: World decision result containing `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`.
 - effective_mode: Policy output string in DecisionEnvelope. Values: `validate | compute-only | paper | live`. Consumers MUST map to an ExecutionDomain for compute/routing; see mapping below.
-- execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs.
+- execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs. Caller-supplied `meta.execution_domain` is only a hint; the authoritative value derives from WS `effective_mode`. Runner does not accept `shadow` as an executable mode and safely treats it as backtest.
 - ActivationEnvelope: Activation state for a `(world_id, strategy_id, side)` with `active`, `weight`, `etag`, `run_id`, `ts` and optional `state_hash`.
 - ControlBus: Internal control bus (Kafka/Redpanda) carrying versioned control events (ActivationUpdated, QueueUpdated, PolicyUpdated); not a public API.
 - EventStreamDescriptor: Opaque WS descriptor from Gateway (`stream_url`, `token`, `topics`, `expires_at`, optional `fallback_url`, `alt_stream_url`).
@@ -45,8 +45,9 @@ last_modified: 2025-09-22
 Execution mode -> ExecutionDomain mapping (normative)
 - `validate` -> same as `compute-only` with orders gated OFF; defaults to `backtest` unless operators request `shadow` explicitly
 - `compute-only` -> `backtest`
-- `paper` -> `dryrun`
+- `paper` / `sim` -> `dryrun`
 - `live` -> `live`
+- `offline`/`sandbox` and other ambiguous aliases -> `backtest`
 
 Auxiliary terms
 - as_of: Dataset snapshot timestamp or commit identifier that binds backtests to a fixed input view for deterministic replay.
