@@ -860,7 +860,8 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
 
             resp = await client.get(f"/worlds/w1/nodes/{node_id}")
             assert resp.status_code == 200
-            assert resp.json()["execution_domain"] == "live"
+            # Default domain is backtest unless explicitly requested
+            assert resp.json()["execution_domain"] == "backtest"
 
             resp = await client.get(
                 f"/worlds/w1/nodes/{node_id}", params={"execution_domain": "backtest"}
