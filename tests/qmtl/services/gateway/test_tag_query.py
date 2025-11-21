@@ -145,6 +145,22 @@ def test_queues_by_tag_route_all_mode(client):
     assert dag.called_with == (["t1", "t2"], 60, "all", None, None)
 
 
+def test_queues_by_tag_route_shadow(client):
+    c, dag = client
+    resp = c.get(
+        "/queues/by_tag",
+        params={
+            "tags": "t1",
+            "interval": "60",
+            "match_mode": "any",
+            "world_id": "w-1",
+            "execution_domain": "shadow",
+        },
+    )
+    assert resp.status_code == 200
+    assert dag.called_with == (["t1"], 60, "any", "w-1", "shadow")
+
+
 def test_submit_tag_query_node(client):
     c, dag = client
     node = tag_query_node_payload(
@@ -172,6 +188,30 @@ def test_submit_tag_query_node(client):
         ]
     }
     assert dag.called_with == (["t1"], 60, "any", None, "backtest")
+
+
+def test_submit_tag_query_node_shadow_domain(client):
+    c, dag = client
+    node = tag_query_node_payload(
+        tags=["t1"],
+        interval=60,
+        period=2,
+        code_hash="ch",
+        config_hash="cfg",
+        schema_hash="sh",
+        schema_compat_id="sh-major",
+        inputs=[],
+    )
+    dag_json = {"nodes": [node]}
+    payload = {
+        "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+        "meta": {"execution_domain": "shadow"},
+        "world_id": "shadow-world",
+        "node_ids_crc32": node_ids_crc32([node]),
+    }
+    resp = c.post("/strategies", json=payload)
+    assert resp.status_code == 202
+    assert dag.called_with == (["t1"], 60, "any", "shadow-world", "shadow")
 
 
 def test_multiple_tag_query_nodes_handle_errors(fake_redis):

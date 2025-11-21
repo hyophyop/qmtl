@@ -62,7 +62,7 @@ class ControlBusConsumer:
         self._consumer: Any | None = None
         self._last_seen: dict[tuple[str, str], tuple[Any, ...]] = {}
         # Track discovered tag+interval combinations to emit upsert events
-        self._known_tag_intervals: set[tuple[tuple[str, ...], int]] = set()
+        self._known_tag_intervals: set[tuple[tuple[str, ...], int, str]] = set()
 
     async def start(self) -> None:
         """Start the background consumer task."""
@@ -366,19 +366,30 @@ class ControlBusConsumer:
         match_mode = msg.data.get("match_mode", MatchMode.ANY.value)
         etag = msg.data.get("etag", msg.etag)
         ts = msg.data.get("ts")
+        world_id = msg.data.get("world_id")
+        execution_domain = msg.data.get("execution_domain")
 
         try:
             mode = MatchMode(match_mode)
         except ValueError:
             mode = MatchMode.ANY
 
-        await self.ws_hub.send_queue_update(tags, interval, queues, mode, etag=etag, ts=ts)
-        await self._maybe_emit_tagquery_upsert(tags, interval, queues)
+        await self.ws_hub.send_queue_update(
+            tags,
+            interval,
+            queues,
+            mode,
+            world_id=world_id,
+            execution_domain=execution_domain,
+            etag=etag,
+            ts=ts,
+        )
+        await self._maybe_emit_tagquery_upsert(tags, interval, queues, execution_domain)
 
     async def _maybe_emit_tagquery_upsert(
-        self, tags: list[str], interval: int, queues: list[Any]
+        self, tags: list[str], interval: int, queues: list[Any], execution_domain: str | None
     ) -> None:
-        key = (tuple(sorted(tags)), int(interval))
+        key = (tuple(sorted(tags)), int(interval), execution_domain or "")
         if key in self._known_tag_intervals:
             return
 

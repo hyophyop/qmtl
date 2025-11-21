@@ -18,6 +18,8 @@
       "items": { "type": "string" },
       "minItems": 0
     },
+    "world_id": { "type": "string" },
+    "execution_domain": { "type": "string" },
     "etag": { "type": "string" },
     "ts": { "type": "string", "format": "date-time" }
   },

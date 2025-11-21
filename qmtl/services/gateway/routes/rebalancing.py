@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
@@ -28,6 +29,7 @@ from ..routes.dependencies import GatewayDependencyProvider
 from ..shared_account_policy import SharedAccountPolicy
 from ..strategy_manager import StrategyManager
 from ..world_client import WorldServiceClient
+from ..compute_context import resolve_execution_domain
 from qmtl.services.worldservice.rebalancing import allocate_strategy_deltas, PositionSlice
 from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest
 
@@ -362,18 +364,20 @@ async def _publish_per_world(
     writer,
     database: Database,
     per_world_orders: Mapping[str, Sequence[Mapping[str, Any]]],
-    world_modes: Mapping[str, str],
+    world_modes: Mapping[str, "WorldMode"],
     shared_account: bool,
 ) -> bool:
     submitted_any = False
     for wid, orders in per_world_orders.items():
+        world_mode = world_modes.get(wid)
         submitted_any |= await _publish_batch(
             writer,
             database,
             wid,
             "per_world",
             list(orders),
-            world_modes.get(wid),
+            world_mode.mode if world_mode else None,
+            execution_domain=world_mode.execution_domain if world_mode else None,
             shared_account=shared_account,
         )
     return submitted_any
@@ -393,6 +397,7 @@ async def _publish_global(
         "global",
         list(orders_global),
         None,
+        execution_domain=None,
         shared_account=True,
     )
 
@@ -401,7 +406,7 @@ async def _publish_per_strategy(
     writer,
     database: Database,
     orders_per_strategy: Sequence[Mapping[str, Any]] | None,
-    world_modes: Mapping[str, str],
+    world_modes: Mapping[str, "WorldMode"],
 ) -> bool:
     if not orders_per_strategy:
         return False
@@ -412,13 +417,15 @@ async def _publish_per_strategy(
     submitted_any = False
     for wid, entries in per_world_entries.items():
         orders_only = [entry["order"] for entry in entries]
+        world_mode = world_modes.get(wid)
         submitted_any |= await _publish_batch(
             writer,
             database,
             wid,
             "per_strategy",
             orders_only,
-            world_modes.get(wid),
+            world_mode.mode if world_mode else None,
+            execution_domain=world_mode.execution_domain if world_mode else None,
             shared_account=False,
             extra_orders_payload=entries,
         )
@@ -433,9 +440,19 @@ async def _publish_batch(
     orders: Sequence[Mapping[str, Any]],
     mode: str | None,
     *,
+    execution_domain: str | None,
     shared_account: bool,
     extra_orders_payload: Sequence[Mapping[str, Any]] | None = None,
 ) -> bool:
+    normalized_domain = (execution_domain or "").lower()
+    if mode == "shadow" or normalized_domain == "shadow":
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail={
+                "code": "E_SHADOW_ORDERS_BLOCKED",
+                "message": "shadow execution_domain blocks order submission",
+            },
+        )
     if not orders:
         return False
     total, reduce_only_count, ratio = _summarize_orders(orders)
@@ -522,8 +539,8 @@ async def _record_rebalance_audit(
 async def _resolve_world_modes(
     world_client: WorldServiceClient,
     world_ids: Iterable[str | None],
-) -> dict[str, str]:
-    modes: dict[str, str] = {}
+) -> dict[str, "WorldMode"]:
+    modes: dict[str, "WorldMode"] = {}
     for wid in world_ids:
         if not wid:
             continue
@@ -532,14 +549,39 @@ async def _resolve_world_modes(
         except Exception:
             continue
         mode = None
+        execution_domain = None
         if isinstance(data, Mapping):
-            if isinstance(data.get("world"), Mapping):
-                mode = data["world"].get("mode")
+            world_payload = data.get("world") if isinstance(data.get("world"), Mapping) else None
+            if world_payload:
+                mode = world_payload.get("mode")
+                execution_domain = world_payload.get("execution_domain")
             if mode is None:
                 mode = data.get("mode") or data.get("effective_mode")
-        if isinstance(mode, str):
-            modes[wid] = mode
+            if execution_domain is None:
+                execution_domain = data.get("execution_domain")
+        normalized_domain = _normalize_execution_domain(execution_domain)
+        normalized_mode = mode if isinstance(mode, str) else None
+        if normalized_mode is not None or normalized_domain is not None:
+            modes[wid] = WorldMode(mode=normalized_mode, execution_domain=normalized_domain)
     return modes
+
+
+@dataclass(frozen=True)
+class WorldMode:
+    mode: str | None
+    execution_domain: str | None
+
+
+def _normalize_execution_domain(execution_domain: Any) -> str | None:
+    if not isinstance(execution_domain, str):
+        return None
+    candidate = execution_domain.strip()
+    if not candidate:
+        return None
+    try:
+        return resolve_execution_domain(candidate)
+    except Exception:
+        return candidate.lower()
 
 
 def _summarize_orders(orders: Sequence[Mapping[str, Any]]) -> tuple[int, int, float]:

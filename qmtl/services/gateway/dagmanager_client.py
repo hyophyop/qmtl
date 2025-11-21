@@ -14,6 +14,7 @@ from qmtl.services.dagmanager.topic import (
     normalize_namespace,
     topic_namespace_enabled,
 )
+from qmtl.services.gateway.compute_context import resolve_execution_domain
 from . import metrics as gw_metrics
 
 if TYPE_CHECKING:
@@ -354,7 +355,8 @@ class DagManagerClient:
 
         namespace: str | None = None
         if topic_namespace_enabled() and world_id:
-            namespace = build_namespace(world_id, execution_domain or "live")
+            normalized_domain = resolve_execution_domain(execution_domain)
+            namespace = build_namespace(world_id, normalized_domain or "live")
 
         @self._breaker
         async def _call() -> list[dict[str, object]]:

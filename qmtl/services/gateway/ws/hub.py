@@ -157,6 +157,7 @@ class WebSocketHub:
         match_mode: MatchMode = MatchMode.ANY,
         *,
         world_id: str | None = None,
+        execution_domain: str | None = None,
         etag: str | None = None,
         ts: str | None = None,
     ) -> None:
@@ -166,6 +167,7 @@ class WebSocketHub:
             "queues": queues,
             "match_mode": match_mode.value,
             **({"world_id": world_id} if world_id else {}),
+            **({"execution_domain": execution_domain} if execution_domain else {}),
             **({"etag": etag} if etag is not None else {}),
             **({"ts": ts} if ts is not None else {}),
             "version": 1,

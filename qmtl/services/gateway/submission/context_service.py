@@ -162,8 +162,17 @@ class ComputeContextService:
 
     def _downgrade_unavailable(self, context: ComputeContext) -> ComputeContext:
         current_domain = (context.execution_domain or "").lower()
-        target_domain = "backtest" if current_domain != "dryrun" else "dryrun"
-        downgraded = context.with_overrides(execution_domain=target_domain)
+        target_domain = None
+        if current_domain not in {"dryrun", "shadow"}:
+            target_domain = "backtest"
+        elif current_domain == "dryrun":
+            target_domain = "dryrun"
+
+        downgraded = (
+            context
+            if target_domain is None
+            else context.with_overrides(execution_domain=target_domain)
+        )
         reason = context.downgrade_reason or DowngradeReason.DECISION_UNAVAILABLE
         return replace(
             downgraded,
