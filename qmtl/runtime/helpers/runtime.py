@@ -10,7 +10,7 @@ from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 from qmtl.runtime.alpha_metrics import alpha_metric_key, default_alpha_performance_metrics
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
 
-_VALID_MODES = {"backtest", "dryrun", "live"}
+_VALID_MODES = {"backtest", "dryrun", "live", "shadow"}
 _CLOCKS = {"virtual", "wall"}
 
 
@@ -57,8 +57,6 @@ def _mode_from_domain(domain: str | None) -> str | None:
     key = str(domain).strip().lower()
     if key == DEFAULT_EXECUTION_DOMAIN:
         return None
-    if key == "shadow":
-        return "backtest"  # shadow is operator-only; treat as gated backtest
     if key in _VALID_MODES:
         return key
     return None
@@ -68,10 +66,10 @@ def _normalize_mode(value: str | None) -> str:
     if value is None:
         raise ValueError("execution_mode must be provided")
     mode = str(value).strip().lower()
-    if mode == "shadow":
-        return "backtest"  # safe fallback; shadow not an executable Runner mode
     if mode not in _VALID_MODES:
-        raise ValueError("execution_mode must be one of 'backtest', 'dryrun', or 'live'")
+        raise ValueError(
+            "execution_mode must be one of 'backtest', 'dryrun', 'live', or 'shadow'"
+        )
     return mode
 
 
@@ -129,7 +127,7 @@ def normalize_clock_value(
 ) -> None:
     """Normalize the clock entry for an execution context."""
 
-    expected_clock = "wall" if mode == "live" else "virtual"
+    expected_clock = "wall" if mode in {"live", "shadow"} else "virtual"
     if clock is not None:
         merged["clock"] = _validate_clock(clock, expected=expected_clock, mode=mode)
         return
@@ -179,7 +177,7 @@ def apply_temporal_requirements(
     _apply_optional_field(merged, "as_of", as_of)
     _apply_optional_field(merged, "dataset_fingerprint", dataset_fingerprint)
 
-    if mode == "live":
+    if mode in {"live", "shadow"}:
         merged.pop("as_of", None)
         merged.pop("dataset_fingerprint", None)
         return False

@@ -800,8 +800,16 @@ class Runner:
             Runner._handle_alpha_performance(result)
 
         # Check if this is a trade order publisher node
-        if "TradeOrderPublisher" in node_class_name and Runner._enable_trade_submission:
-            Runner._handle_trade_order(result)
+        if "TradeOrderPublisher" in node_class_name:
+            execution_domain = getattr(
+                getattr(node, "compute_context", None), "execution_domain", None
+            )
+            if str(execution_domain or "").strip().lower() == "shadow":
+                logger.info("Skipping trade dispatch in shadow execution_domain")
+                return
+
+            if Runner._enable_trade_submission:
+                Runner._handle_trade_order(result)
 
     # ----------------------------
     # Utilities for tests/ops
