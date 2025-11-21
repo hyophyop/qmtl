@@ -27,7 +27,7 @@ _WORLD_ID = "default"
 _REGISTERED_METRICS: set[str] = set()
 
 
-def _vals(metric: object) -> MutableMapping[Any, Any]:
+def _metric_store(metric: object) -> MutableMapping[Any, Any]:
     return get_mapping_store(cast(Any, metric), dict)
 
 
@@ -413,7 +413,7 @@ pretrade_rejection_ratio = _gauge(
 def record_pretrade_attempt() -> None:
     w = _WORLD_ID
     pretrade_attempts_total.labels(world_id=w).inc()
-    attempts = _vals(pretrade_attempts_total)
+    attempts = _metric_store(pretrade_attempts_total)
     attempts[w] = attempts.get(w, 0) + 1
     _update_pretrade_ratio()
 
@@ -422,19 +422,19 @@ def record_pretrade_rejection(reason: str) -> None:
     w = _WORLD_ID
     pretrade_rejections_total.labels(world_id=w, reason=reason).inc()
     key = (w, reason)
-    rejections = _vals(pretrade_rejections_total)
+    rejections = _metric_store(pretrade_rejections_total)
     rejections[key] = rejections.get(key, 0) + 1
     _update_pretrade_ratio()
 
 
 def _update_pretrade_ratio() -> None:
     w = _WORLD_ID
-    attempts = _vals(pretrade_attempts_total)
+    attempts = _metric_store(pretrade_attempts_total)
     total = attempts.get(w, 0)
-    rejected = sum(v for (wid, _), v in _vals(pretrade_rejections_total).items() if wid == w)
+    rejected = sum(v for (wid, _), v in _metric_store(pretrade_rejections_total).items() if wid == w)
     ratio = (rejected / total) if total else 0.0
     pretrade_rejection_ratio.labels(world_id=w).set(ratio)
-    _vals(pretrade_rejection_ratio)[w] = ratio
+    _metric_store(pretrade_rejection_ratio)[w] = ratio
 
 
 def get_pretrade_stats() -> dict[str, object]:
@@ -442,13 +442,13 @@ def get_pretrade_stats() -> dict[str, object]:
 
     w = _WORLD_ID
     return {
-        "attempts": int(_vals(pretrade_attempts_total).get(w, 0)),
+        "attempts": int(_metric_store(pretrade_attempts_total).get(w, 0)),
         "rejections": {
             reason: count
-            for (wid, reason), count in _vals(pretrade_rejections_total).items()
+            for (wid, reason), count in _metric_store(pretrade_rejections_total).items()
             if wid == w
         },
-        "ratio": float(_vals(pretrade_rejection_ratio).get(w, 0.0)),
+        "ratio": float(_metric_store(pretrade_rejection_ratio).get(w, 0.0)),
     }
 
 
@@ -461,12 +461,12 @@ def record_sentinel_weight_update(sentinel_id: str) -> None:
 def set_sentinel_traffic_ratio(sentinel_id: str, ratio: float) -> None:
     """Update the live traffic ratio for a sentinel version."""
     gateway_sentinel_traffic_ratio.labels(sentinel_id=sentinel_id).set(ratio)
-    _vals(gateway_sentinel_traffic_ratio)[sentinel_id] = ratio
+    _metric_store(gateway_sentinel_traffic_ratio)[sentinel_id] = ratio
     if sentinel_id in _sentinel_weight_updates:
         skew = time.time() - _sentinel_weight_updates[sentinel_id]
         sentinel_skew_seconds.labels(sentinel_id=sentinel_id).set(skew)
         sentinel_label = cast(Any, sentinel_skew_seconds.labels(sentinel_id=sentinel_id))
-        _vals(sentinel_skew_seconds)[sentinel_id] = sentinel_label._value.get()
+        _metric_store(sentinel_skew_seconds)[sentinel_id] = sentinel_label._value.get()
 
 
 def observe_gateway_latency(duration_ms: float) -> None:
@@ -536,10 +536,10 @@ def record_event_fanout(topic: str, recipients: int) -> None:
 def update_ws_subscribers(counts: dict[str, int]) -> None:
     """Update active WebSocket subscriber counts per topic."""
     ws_subscribers.clear()
-    _vals(ws_subscribers).clear()
+    _metric_store(ws_subscribers).clear()
     for topic, count in counts.items():
         ws_subscribers.labels(topic=topic).set(count)
-        _vals(ws_subscribers)[topic] = count
+        _metric_store(ws_subscribers)[topic] = count
 
 
 def record_ws_drop(count: int = 1) -> None:
@@ -603,4 +603,4 @@ def reset_metrics() -> None:
         if hasattr(metric, "_metrics"):
             cast(Any, metric)._metrics.clear()
         if hasattr(metric, "_vals"):
-            _vals(metric).clear()
+            _metric_store(metric).clear()
