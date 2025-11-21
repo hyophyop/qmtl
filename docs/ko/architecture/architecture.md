@@ -35,6 +35,14 @@ QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 
 
 ---
 
+### 기본 안전 운용 원칙 (Default-Safe)
+
+- 설정이 부족하거나 모호할수록 **compute-only(backtest) 안전 모드**로 강등한다. `execution_domain`이나 `as_of`가 비어 있을 때 live/dryrun으로 승격되어서는 안 된다.
+- WorldService는 기본적으로 live를 가리키지 않는다. `allow_live`와 정책 검증(필수 지표·히스테리시스·dataset_fingerprint)이 통과되지 않으면 활성화나 도메인 스위치는 compute-only 상태를 유지해야 한다.
+- 운영자가 명시적으로 live를 요청하더라도, 검증·정책 기준을 만족하기 전에는 활성화를 열지 않는다. 최소 설정 테스트나 샌드박스 시나리오에서 실매매가 열리지 않도록 “안전 기본값 → 명시적 승격” 흐름을 강제한다.
+
+---
+
 ## 1. 시스템 구성: 계층 간 상호작용과 처리 흐름
 
 ```mermaid
@@ -126,10 +134,11 @@ sequenceDiagram
 
 ### 1.3 Execution Domains & Isolation (new)
 
-- Domains: `backtest | dryrun | live | shadow`. ExecutionDomain은 WorldService가 소유·결정하는 1급 개념이며, 게이팅과 프로모션은 2‑Phase Apply(Freeze/Drain → Switch → Unfreeze)로 백엔드에서 구동한다. SDK/Runner는 도메인을 “선택”하지 않으며, 오직 월드 결정의 결과를 반영한다.
+- Domains: `backtest | dryrun | live | shadow`. ExecutionDomain은 WorldService가 소유·결정하는 1급 개념이며, 게이팅과 프로모션은 2‑Phase Apply(Freeze/Drain → Switch → Unfreeze)로 백엔드에서 구동한다. SDK/Runner는 도메인을 “선택”하지 않으며, 오직 월드 결정의 결과를 반영한다. 제출 메타의 `execution_domain` 값은 **힌트**일 뿐이며 Gateway가 WS 결정과 일치하도록 정규화·강등한다(특히 `live` 요청은 WS 결정 부재 시 무시되고 compute‑only로 강등됨).
 - NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다. SDK는 ComputeKey를 “제안”하거나 “주입”하지 않는다 — 런타임/서비스가 WS 결정과 제출 메타를 근거로 도출·검증한다.
 - WVG 확장: `WorldNodeRef = (world_id, node_id, execution_domain)`로 도메인별 상태/검증이 분리된다. WVG 스코프의 `EdgeOverride`로 기본 교차‑도메인 경로(예: backtest→live)를 비활성화하고, 프로모션 후 정책으로만 활성화한다. 구현은 [`EdgeOverrideRepository`]({{ code_url('qmtl/services/worldservice/storage/edge_overrides.py#L13') }})와 WorldService [`/worlds/{world_id}/edges/overrides`]({{ code_url('qmtl/services/worldservice/routers/worlds.py#L109') }}) 라우트가 담당한다.
-- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 “표시만” 하여 ControlBus/WebSocket 사본에 `execution_domain` 필드를 덧붙여 중계한다(WS의 정규 스키마에는 포함되지 않는다). SDK/Runner는 이를 입력으로만 취급하며 도메인을 자의적으로 변경하지 않는다. 매핑은 `validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper→dryrun`, `live→live`이며, `shadow`는 운영자 전용이다.
+- Envelope 매핑: Gateway/SDK는 `DecisionEnvelope.effective_mode`를 ExecutionDomain으로 “표시만” 하여 ControlBus/WebSocket 사본에 `execution_domain` 필드를 덧붙여 중계한다(WS의 정규 스키마에는 포함되지 않는다). SDK/Runner는 이를 입력으로만 취급하며 도메인을 자의적으로 변경하지 않는다. 매핑은 `validate→backtest(주문 게이트 OFF)`, `compute-only→backtest`, `paper/sim→dryrun`, `live→live`이며, `shadow`는 운영자 전용이다.
+- Runner/SDK는 `shadow` 실행 모드 입력을 지원하지 않으며, 전달되더라도 안전하게 backtest로 처리한다. `offline`/`sandbox` 등의 모호 토큰도 backtest로 강등된다.
 - Queue 네임스페이스: 프로덕션 배포에서는 `{world_id}.{execution_domain}.<topic>` 프리픽스로 토픽을 분리해야 한다(SHALL). 교차 도메인 구독·발행은 ACL로 금지하며, 운영 환경에서만 예외를 명시적으로 허용한다. 기본 도메인 표기는 운영적 네임스페이스 목적의 “live”를 따른다. 단, 실행 모드 기본값은 WS 결정 부재·만료 시 “compute‑only(backtest, 주문 게이트 OFF)”이다.
 - WorldNodeRef 독립성: 서로 다른 `execution_domain` 조합은 상태·큐·검증 결과를 공유할 수 없다(SHALL). 공유가 필요한 경우 Feature Artifact Plane(§1.4)처럼 불변 아티팩트만 사용한다.
 - Promotion guard: WVG의 `EdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
@@ -168,9 +177,9 @@ sequenceDiagram
 - 월드-로컬 에지 오버라이드: 특정 월드에서 비활성화할 에지는 **WVG**의 `EdgeOverride`로 기록(MAY).
 - EvalKey (BLAKE3, namespaced)
 ```
-EvalKey = blake3:(NodeID || WorldID || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
+EvalKey = blake3:(NodeID || WorldID || ExecutionDomain || ContractID || DatasetFingerprint || CodeVersion || ResourcePolicy)
 ```
-같은 노드여도 월드/데이터/정책/코드/자원이 다르면 재평가한다.
+같은 노드여도 월드/도메인/데이터/정책/코드/자원이 다르면 재평가한다.
 
 키 경계 요약(Design intent)
 - NodeID: 전역 내용주소(불변·월드 무관). 동일 코드/파라미터/의존이면 하나의 ID만 존재해야 한다.

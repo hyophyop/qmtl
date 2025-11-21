@@ -36,7 +36,10 @@ from itertools import count
 import yaml
 
 from qmtl.foundation.config import SeamlessConfig
-from qmtl.foundation.common.compute_context import normalize_context_value
+from qmtl.foundation.common.compute_context import (
+    normalize_context_value,
+    resolve_execution_domain,
+)
 from qmtl.runtime.sdk.configuration import (
     get_runtime_config_path,
     get_seamless_config,
@@ -1133,7 +1136,7 @@ class SeamlessDataProvider(HistoryProvider):
         text = normalize_context_value(value)
         if not text:
             return ""
-        return text.lower()
+        return resolve_execution_domain(text) or text.lower()
 
     def _normalize_as_of(self, value: Any | None) -> str | None:
         text = normalize_context_value(value)

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from qmtl.foundation.common.compute_context import resolve_execution_domain
+
 
 @dataclass(frozen=True)
 class WorldMetadataRequest:
@@ -74,8 +76,13 @@ def _build_history_mapping(
     if world_id:
         mapping["compute_world_id"] = str(world_id)
     execution_domain = getattr(report, "execution_domain", None)
-    if execution_domain:
-        mapping["compute_execution_domain"] = str(execution_domain)
+    domain = (
+        resolve_execution_domain(str(execution_domain))
+        if execution_domain is not None
+        else None
+    )
+    if domain:
+        mapping["compute_execution_domain"] = domain
     if as_of_value:
         mapping["compute_as_of"] = str(as_of_value)
     if dataset_fp:
@@ -91,6 +98,11 @@ def _build_meta_payload(
 ) -> dict[str, Any]:
     world_id = getattr(report, "world_id", None)
     execution_domain = getattr(report, "execution_domain", None)
+    domain = (
+        resolve_execution_domain(str(execution_domain))
+        if execution_domain is not None
+        else None
+    )
     coverage_bounds = getattr(report, "coverage_bounds", None)
     artifact_payload: Any | None = None
     if artifact is not None:
@@ -117,8 +129,8 @@ def _build_meta_payload(
     }
     if world_id:
         payload["world_id"] = str(world_id)
-    if execution_domain:
-        payload["execution_domain"] = str(execution_domain)
+    if domain:
+        payload["execution_domain"] = domain
     return payload
 
 

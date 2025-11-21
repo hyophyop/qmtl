@@ -133,7 +133,7 @@ def test_build_history_metadata_envelope_with_artifact():
     assert envelope.redis_key == "seamless:node-1"
     assert envelope.redis_mapping == {
         "compute_world_id": "world-9",
-        "compute_execution_domain": "sim",
+        "compute_execution_domain": "dryrun",
         "compute_dataset_fingerprint": "fp-artifact",
         "compute_as_of": "2025-02-01T00:00:00Z",
     }

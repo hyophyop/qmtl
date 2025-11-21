@@ -20,8 +20,14 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
 - Events: emits activation/policy updates to the internal ControlBus
 
+!!! warning "Default-safe"
+- Do not default to live when inputs are missing or ambiguous; downgrade to compute-only (backtest) if `execution_domain` is empty or omitted. WS API calls must not persist live by default.
+- With `allow_live=false` (default), activation/domain switches must not move to live even if operators request it. Only promote when policy validation passes (required signals, hysteresis, dataset_fingerprint anchored).
+- When clients omit `execution_domain`, world nodes and validation caches are stored under `backtest` by default. Explicitly set the intended domain in API payloads to avoid accidental live scope.
+
 !!! note "Design intent"
 - WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute-only with order gates OFF.
+- Submission `meta.execution_domain` values are treated only as hints; the authoritative domain always derives from the WS `effective_mode`.
 
 Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 
@@ -146,7 +152,7 @@ Field semantics and precedence
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft-scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
 - `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
-- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper/sim -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
 - `requires_ack=true` signals that Gateway/SDK MUST keep order gates closed and emit an acknowledgement for that `sequence` through the ControlBus response channel before propagating subsequent events. Freeze-phase acks must arrive before the corresponding Unfreeze event is applied.
 

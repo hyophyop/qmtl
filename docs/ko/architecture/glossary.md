@@ -11,7 +11,7 @@ last_modified: 2025-09-22
 
 - DecisionEnvelope: 월드 결정 결과로 `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`를 포함합니다.
 - effective_mode: DecisionEnvelope의 정책 결과 문자열. 값: `validate | compute-only | paper | live`. 소비자는 계산/라우팅을 위해 ExecutionDomain으로 매핑해야 합니다(아래 규범 참조).
-- execution_domain: Gateway/SDK가 `effective_mode`를 매핑한 파생 필드 (`backtest | dryrun | live | shadow`). SDK로 중계되는 봉투(envelope)에 유지됩니다.
+- execution_domain: Gateway/SDK가 `effective_mode`를 매핑한 파생 필드 (`backtest | dryrun | live | shadow`). SDK로 중계되는 봉투(envelope)에 유지됩니다. 제출자의 `meta.execution_domain`은 힌트이며, 권한 있는 값은 WS `effective_mode`에서만 파생됩니다. Runner 입력의 `shadow`는 지원하지 않으며 안전하게 backtest로 처리됩니다.
 - ActivationEnvelope: `(world_id, strategy_id, side)`에 대한 활성화 상태. `active`, `weight`, `etag`, `run_id`, `ts`, 선택적 `state_hash` 포함.
 - ControlBus: 버전이 명시된 제어 이벤트(ActivationUpdated, QueueUpdated, PolicyUpdated)를 운반하는 내부 제어 버스(Kafka/Redpanda). 공개 API가 아닙니다.
 - EventStreamDescriptor: Gateway가 발급하는 불투명(opaque) WS 디스크립터 (`stream_url`, `token`, `topics`, `expires_at`, 선택적 `fallback_url`, `alt_stream_url`).
@@ -45,8 +45,9 @@ last_modified: 2025-09-22
 실행 모드 → ExecutionDomain 매핑(규범)
 - `validate` → `compute-only`와 동일하며 오더 게이트 OFF; 기본은 `backtest`(운영자가 명시적으로 `shadow`를 요청하지 않는 한)
 - `compute-only` → `backtest`
-- `paper` → `dryrun`
+- `paper`/`sim` → `dryrun`
 - `live` → `live`
+- `offline`/`sandbox` 등 기타 모호 토큰은 backtest로 강등
 
 보조 용어
 - as_of: 결정적 리플레이를 위해 백테스트를 고정 입력 뷰에 묶는 데이터 스냅샷 타임스탬프 또는 커밋 ID.
