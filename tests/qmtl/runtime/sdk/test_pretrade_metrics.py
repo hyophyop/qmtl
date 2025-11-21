@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.pretrade import check_pretrade, Activation
 from qmtl.foundation.common.pretrade import RejectionReason
@@ -39,9 +40,11 @@ def test_sdk_pretrade_metrics_activation_reject():
     assert not res.allowed
     assert res.reason == RejectionReason.ACTIVATION_DISABLED
     # Attempt and rejection counters should update
-    assert sdk_metrics.pretrade_attempts_total._vals["w1"] == 1  # type: ignore[attr-defined]
+    attempts_store = get_mapping_store(sdk_metrics.pretrade_attempts_total, dict)
+    rejections_store = get_mapping_store(sdk_metrics.pretrade_rejections_total, dict)
+    assert attempts_store["w1"] == 1
     key = ("w1", RejectionReason.ACTIVATION_DISABLED.value)
-    assert sdk_metrics.pretrade_rejections_total._vals.get(key, 0) == 1  # type: ignore[attr-defined]
+    assert rejections_store.get(key, 0) == 1  # type: ignore[attr-defined]
 
 
 def test_gateway_status_includes_pretrade_metrics():
@@ -76,4 +79,3 @@ def test_gateway_status_includes_pretrade_metrics():
     result = asyncio.run(status_func())
     assert "pretrade" in result
     assert "degrade_level" in result
-

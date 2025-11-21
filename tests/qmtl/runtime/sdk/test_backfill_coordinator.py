@@ -4,6 +4,7 @@ import logging
 import httpx
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.backfill_coordinator import DistributedBackfillCoordinator
 
@@ -69,7 +70,8 @@ async def test_distributed_coordinator_updates_metrics() -> None:
     await coordinator.complete(lease)
 
     key = ("nodeA", "60", "nodeA:60:0:600")
-    assert sdk_metrics.backfill_completion_ratio._vals[key] == 1.0  # type: ignore[attr-defined]
+    store = get_mapping_store(sdk_metrics.backfill_completion_ratio, dict)
+    assert store[key] == 1.0
     assert len(factory.calls) == 2
 
 

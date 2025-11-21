@@ -28,6 +28,24 @@ The `test_value_attr` and `test_value_factory` parameters mirror the historical
 pattern where tests inspect an internal dictionary/list of recorded values.
 Metrics without bespoke storage can omit these arguments.
 
+## Reading metrics in tests
+
+Prefer the shared helpers instead of touching private attributes (`_vals`, `_val`)
+directly in tests:
+
+```python
+from qmtl.foundation.common.metrics_factory import get_mapping_store, get_test_store
+
+store = get_mapping_store(orders_published_total, dict)
+assert store[("world-main",)] == 1
+
+latency = get_test_store(gateway_e2e_latency_p95, float)
+assert latency >= 0
+```
+
+Using the helpers keeps tests resilient to implementation changes and aligns
+Gateway/SDK/DAG Manager with a single access pattern.
+
 ## Resetting metrics
 
 `metrics_factory` tracks every metric constructed through the helpers and exposes

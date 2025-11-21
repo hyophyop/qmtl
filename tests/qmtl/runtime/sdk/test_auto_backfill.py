@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk.auto_backfill import (
     FetcherBackfillStrategy,
     LiveReplayBackfillStrategy,
@@ -96,10 +97,14 @@ async def test_fetcher_backfill_strategy_records_metrics() -> None:
     assert list(data["ts"]) == [120, 180]
 
     key = ("fetcher", "node", "60")
-    assert metrics.history_auto_backfill_requests_total._vals[key] == 1  # type: ignore[attr-defined]
-    assert metrics.history_auto_backfill_missing_ranges_total._vals[key] == 1  # type: ignore[attr-defined]
-    assert metrics.history_auto_backfill_rows_total._vals[key] == 2  # type: ignore[attr-defined]
-    assert key[0] in metrics.history_auto_backfill_duration_ms._vals  # type: ignore[attr-defined]
+    requests_store = get_mapping_store(metrics.history_auto_backfill_requests_total, dict)
+    missing_store = get_mapping_store(metrics.history_auto_backfill_missing_ranges_total, dict)
+    rows_store = get_mapping_store(metrics.history_auto_backfill_rows_total, dict)
+    duration_store = get_mapping_store(metrics.history_auto_backfill_duration_ms, dict)
+    assert requests_store[key] == 1
+    assert missing_store[key] == 1
+    assert rows_store[key] == 2
+    assert key[0] in duration_store
 
 
 @pytest.mark.asyncio
@@ -123,5 +128,7 @@ async def test_live_replay_strategy_replays_from_buffer() -> None:
     assert coverage == [(60, 120)]
 
     key = ("live_replay", "node", "60")
-    assert metrics.history_auto_backfill_rows_total._vals[key] == 2  # type: ignore[attr-defined]
-    assert metrics.history_auto_backfill_requests_total._vals[key] == 1  # type: ignore[attr-defined]
+    rows_store = get_mapping_store(metrics.history_auto_backfill_rows_total, dict)
+    requests_store = get_mapping_store(metrics.history_auto_backfill_requests_total, dict)
+    assert rows_store[key] == 2
+    assert requests_store[key] == 1

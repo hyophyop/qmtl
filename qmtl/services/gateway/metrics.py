@@ -13,6 +13,7 @@ from prometheus_client import (
     REGISTRY as global_registry,
 )
 from qmtl.foundation.common.metrics_factory import (
+    get_mapping_store,
     get_or_create_counter,
     get_or_create_gauge,
     reset_metrics as reset_registered_metrics,
@@ -27,12 +28,7 @@ _REGISTERED_METRICS: set[str] = set()
 
 
 def _vals(metric: object) -> dict[Any, Any]:
-    metric_any = cast(Any, metric)
-    vals = getattr(metric_any, "_vals", None)
-    if vals is None:
-        vals = {}
-        metric_any._vals = vals
-    return vals
+    return get_mapping_store(cast(Any, metric), dict)
 
 
 def _value(metric: object) -> Any:

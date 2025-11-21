@@ -6,6 +6,7 @@ import time
 import uuid
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.foundation.config import ConnectorsConfig, UnifiedConfig
 
 from qmtl.runtime.io.ccxt_fetcher import (
@@ -145,13 +146,12 @@ async def test_cluster_rate_limiter_records_metrics() -> None:
     allowed = await limiter._reserve_token()
     assert allowed is False
     metric_key = ("rl:test", "default")
-    assert (
-        sdk_metrics.seamless_rl_dropped_total._vals[metric_key] == 1  # type: ignore[attr-defined]
-    )
-    assert sdk_metrics.seamless_rl_tokens_available._vals[metric_key] == 0.5  # type: ignore[attr-defined]
+    drop_store = get_mapping_store(sdk_metrics.seamless_rl_dropped_total, dict)
+    token_store = get_mapping_store(sdk_metrics.seamless_rl_tokens_available, dict)
+    assert drop_store[metric_key] == 1
+    assert token_store[metric_key] == 0.5
 
     redis.store["tokens"] = 1.5
     allowed = await limiter._reserve_token()
     assert allowed is True
-    assert pytest.approx(0.5) == sdk_metrics.seamless_rl_tokens_available._vals[metric_key]  # type: ignore[attr-defined]
-
+    assert pytest.approx(0.5) == token_store[metric_key]

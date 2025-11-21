@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.ws import WebSocketHub
 from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
@@ -130,7 +131,8 @@ async def test_ws_metrics_fanout_and_drops():
     await hub.broadcast({"msg": 1}, topic="t")
     await hub.drain()
     assert metrics.event_fanout_total.labels(topic="t")._value.get() == 2
-    assert metrics.ws_subscribers._vals["t"] == 2
+    subs_store = get_mapping_store(metrics.ws_subscribers, dict)
+    assert subs_store["t"] == 2
 
     class BadWS:
         client = ("bad", 0)
@@ -146,11 +148,11 @@ async def test_ws_metrics_fanout_and_drops():
     await hub.broadcast({"msg": 2}, topic="t")
     await hub.drain()
     assert metrics.ws_dropped_subscribers_total._value.get() == 1
-    assert metrics.ws_subscribers._vals["t"] == 2
+    assert subs_store["t"] == 2
 
     await hub.disconnect(ws1)
     assert metrics.ws_dropped_subscribers_total._value.get() == 2
-    assert metrics.ws_subscribers._vals["t"] == 1
+    assert subs_store["t"] == 1
     await hub.stop()
 
 

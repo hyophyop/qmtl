@@ -13,6 +13,7 @@ import pytest
 import json
 from pathlib import Path
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
 from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
@@ -39,6 +40,10 @@ from qmtl.runtime.sdk.configuration import (
     reset_runtime_config_cache,
     runtime_config_override,
 )
+
+
+def _store(metric):
+    return get_mapping_store(metric, dict)
 
 
 def _override_seamless(**kwargs: object):
@@ -221,8 +226,10 @@ async def test_fetch_response_includes_metadata() -> None:
         == seamless_module.CONFORMANCE_VERSION
     )
     ratio_key = ("node", "10", "default")
-    assert sdk_metrics.coverage_ratio._vals[ratio_key]  # type: ignore[attr-defined]
-    assert sdk_metrics.live_staleness_seconds._vals[ratio_key] >= 0  # type: ignore[attr-defined]
+    coverage_store = _store(sdk_metrics.coverage_ratio)
+    staleness_store = _store(sdk_metrics.live_staleness_seconds)
+    assert coverage_store[ratio_key]
+    assert staleness_store[ratio_key] >= 0
 
 
 @pytest.mark.asyncio
@@ -242,9 +249,8 @@ async def test_fetch_fingerprint_stable_across_calls() -> None:
     assert first.metadata.dataset_fingerprint == second.metadata.dataset_fingerprint
     assert len(registrar.calls) == 2
     collision_key = ("node", "10", "default")
-    assert (
-        sdk_metrics.fingerprint_collisions._vals[collision_key] == 1  # type: ignore[attr-defined]
-    )
+    collision_store = _store(sdk_metrics.fingerprint_collisions)
+    assert collision_store[collision_key] == 1
 
 
 @pytest.mark.asyncio
@@ -492,12 +498,10 @@ async def test_in_memory_cache_hits_same_context() -> None:
     assert first.metadata.cache_key == second.metadata.cache_key
     miss_key = ("node", "10", "world-a")
     hit_key = miss_key
-    assert (
-        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 1  # type: ignore[attr-defined]
-    )
-    assert (
-        sdk_metrics.seamless_cache_hit_total._vals[hit_key] == 1  # type: ignore[attr-defined]
-    )
+    miss_store = _store(sdk_metrics.seamless_cache_miss_total)
+    hit_store = _store(sdk_metrics.seamless_cache_hit_total)
+    assert miss_store[miss_key] == 1
+    assert hit_store[hit_key] == 1
     assert sdk_metrics.seamless_cache_resident_bytes._val > 0  # type: ignore[attr-defined]
 
 
@@ -574,9 +578,8 @@ async def test_in_memory_cache_includes_as_of_in_key() -> None:
 
     assert storage.fetch_calls == 2
     miss_key = ("node", "10", "world-a")
-    assert (
-        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 2  # type: ignore[attr-defined]
-    )
+    miss_store = _store(sdk_metrics.seamless_cache_miss_total)
+    assert miss_store[miss_key] == 2
 
 
 @pytest.mark.asyncio
@@ -610,12 +613,10 @@ async def test_in_memory_cache_ttl_expiry() -> None:
 
     assert storage.fetch_calls == 2
     miss_key = ("node", "10", "world-a")
-    assert (
-        sdk_metrics.seamless_cache_miss_total._vals[miss_key] == 2  # type: ignore[attr-defined]
-    )
-    assert (
-        sdk_metrics.seamless_cache_hit_total._vals.get(miss_key, 0) == 0  # type: ignore[attr-defined]
-    )
+    miss_store = _store(sdk_metrics.seamless_cache_miss_total)
+    hit_store = _store(sdk_metrics.seamless_cache_hit_total)
+    assert miss_store[miss_key] == 2
+    assert hit_store.get(miss_key, 0) == 0
     assert sdk_metrics.seamless_cache_resident_bytes._val > 0  # type: ignore[attr-defined]
 
 
@@ -670,9 +671,8 @@ async def test_live_as_of_regression_triggers_hold_downgrade() -> None:
     assert result.metadata.downgrade_mode == SLAViolationMode.HOLD.value
     assert result.metadata.downgrade_reason == "as_of_regression"
     hold_key = ("node", "10", "default", "as_of_regression")
-    assert (
-        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
-    )
+    hold_store = _store(sdk_metrics.domain_gate_holds)
+    assert hold_store[hold_key] == 1
 
 
 @pytest.mark.asyncio
@@ -689,9 +689,8 @@ async def test_live_as_of_advancement_metric_tracks_progression() -> None:
     await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_initial)
 
     metric_key = ("node", "world-live")
-    assert (
-        sdk_metrics.as_of_advancement_events._vals[metric_key] == 1  # type: ignore[attr-defined]
-    )
+    advancement_store = _store(sdk_metrics.as_of_advancement_events)
+    assert advancement_store[metric_key] == 1
 
     ctx_same = ComputeContext(
         world_id="world-live",
@@ -699,9 +698,7 @@ async def test_live_as_of_advancement_metric_tracks_progression() -> None:
         as_of="2025-01-01T00:00:00Z",
     )
     await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_same)
-    assert (
-        sdk_metrics.as_of_advancement_events._vals[metric_key] == 1  # type: ignore[attr-defined]
-    )
+    assert advancement_store[metric_key] == 1
 
     ctx_later = ComputeContext(
         world_id="world-live",
@@ -709,9 +706,7 @@ async def test_live_as_of_advancement_metric_tracks_progression() -> None:
         as_of="2025-01-01T00:30:00Z",
     )
     await provider.fetch(0, 120, node_id="node", interval=10, compute_context=ctx_later)
-    assert (
-        sdk_metrics.as_of_advancement_events._vals[metric_key] == 2  # type: ignore[attr-defined]
-    )
+    assert advancement_store[metric_key] == 2
 
 
 @pytest.mark.asyncio
@@ -774,10 +769,10 @@ async def test_filesystem_registrar_writes_manifest(tmp_path) -> None:
     data_path = Path(data_uri)
     assert data_path.exists()
     latency_key = ("node", "10", "default")
-    assert sdk_metrics.artifact_publish_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
-    assert (
-        sdk_metrics.artifact_bytes_written._vals[latency_key] > 0  # type: ignore[attr-defined]
-    )
+    publish_latency_store = _store(sdk_metrics.artifact_publish_latency_ms)
+    bytes_written_store = _store(sdk_metrics.artifact_bytes_written)
+    assert publish_latency_store[latency_key]
+    assert bytes_written_store[latency_key] > 0
 
 
 class _CountingBackfiller:
@@ -1090,7 +1085,8 @@ async def test_background_backfill_single_flight_dedup() -> None:
     assert len(backfiller.calls) == 1
     # Metrics recorded: last ts and jobs back to zero
     key = ("n", "10")
-    assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    last_ts_store = _store(sdk_metrics.backfill_last_timestamp)
+    assert last_ts_store.get(key) == 100
     assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
 
 
@@ -1351,9 +1347,11 @@ async def test_ensure_data_available_sync_returns_true() -> None:
     assert ok is True
     assert len(backfiller.calls) == 1
     key = ("n", "10")
-    assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    last_ts_store = _store(sdk_metrics.backfill_last_timestamp)
+    gap_latency_store = _store(sdk_metrics.gap_repair_latency_ms)
+    assert last_ts_store.get(key) == 100
     latency_key = ("n", "10", "default")
-    assert sdk_metrics.gap_repair_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
+    assert gap_latency_store[latency_key]
 
 
 @pytest.mark.asyncio
@@ -1366,9 +1364,11 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     result = await provider.fetch(0, 100, node_id="n", interval=10)
     assert isinstance(result.frame, pd.DataFrame)
     key = ("n", "10")
-    assert sdk_metrics.backfill_last_timestamp._vals.get(key) == 100  # type: ignore[attr-defined]
+    last_ts_store = _store(sdk_metrics.backfill_last_timestamp)
+    gap_latency_store = _store(sdk_metrics.gap_repair_latency_ms)
+    assert last_ts_store.get(key) == 100
     latency_key = ("n", "10", "default")
-    assert sdk_metrics.gap_repair_latency_ms._vals[latency_key]  # type: ignore[attr-defined]
+    assert gap_latency_store[latency_key]
 
 
 @pytest.mark.asyncio
@@ -1437,7 +1437,8 @@ async def test_backfill_retry_respects_zero_jitter_ratio(monkeypatch) -> None:
     assert ok is True
     assert called is False
     retry_key = ("n", "10")
-    assert sdk_metrics.backfill_retry_total._vals[retry_key] == 1  # type: ignore[attr-defined]
+    retry_store = _store(sdk_metrics.backfill_retry_total)
+    assert retry_store[retry_key] == 1
 
 
 @pytest.mark.asyncio
@@ -1598,10 +1599,13 @@ async def test_sla_total_metric_recorded(monkeypatch) -> None:
     df = await provider.fetch(0, 20, node_id="node", interval=10)
     assert not df.empty
     key = ("node", "total")
-    assert sdk_metrics.seamless_sla_deadline_seconds._vals[key]  # type: ignore[attr-defined]
+    sla_store = _store(sdk_metrics.seamless_sla_deadline_seconds)
+    total_ms_store = _store(sdk_metrics.seamless_total_ms)
+    storage_wait_store = _store(sdk_metrics.seamless_storage_wait_ms)
+    assert sla_store[key]
     latency_key = ("node", "10", "default")
-    assert sdk_metrics.seamless_total_ms._vals[latency_key]  # type: ignore[attr-defined]
-    assert sdk_metrics.seamless_storage_wait_ms._vals[latency_key]  # type: ignore[attr-defined]
+    assert total_ms_store[latency_key]
+    assert storage_wait_store[latency_key]
 
 
 @pytest.mark.asyncio
@@ -1664,9 +1668,8 @@ async def test_sla_violation_partial_fill_downgrades(monkeypatch, caplog) -> Non
     assert getattr(record, "dataset_fingerprint", None) == result.metadata.dataset_fingerprint
     assert getattr(record, "as_of", None) == result.metadata.as_of
     metric_key = ("node", "10", "default", "sla_violation")
-    assert (
-        sdk_metrics.partial_fill_returns._vals[metric_key] == 1  # type: ignore[attr-defined]
-    )
+    partial_fill_store = _store(sdk_metrics.partial_fill_returns)
+    assert partial_fill_store[metric_key] == 1
 
 
 @pytest.mark.asyncio
@@ -1689,13 +1692,11 @@ async def test_sla_min_coverage_enforces_hold() -> None:
     assert result.metadata.coverage_ratio is not None
     assert result.metadata.coverage_ratio < 0.9
     ratio_key = ("node", "10", "default")
-    assert (
-        sdk_metrics.coverage_ratio._vals[ratio_key] == result.metadata.coverage_ratio  # type: ignore[attr-defined]
-    )
+    coverage_store = _store(sdk_metrics.coverage_ratio)
+    hold_store = _store(sdk_metrics.domain_gate_holds)
+    assert coverage_store[ratio_key] == result.metadata.coverage_ratio
     hold_key = ("node", "10", "default", "coverage_breach")
-    assert (
-        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
-    )
+    assert hold_store[hold_key] == 1
 
 
 @pytest.mark.asyncio
@@ -1720,14 +1721,11 @@ async def test_sla_max_lag_enforces_hold(monkeypatch) -> None:
     assert result.metadata.staleness_ms is not None
     assert result.metadata.staleness_ms > 1_000
     staleness_key = ("node", "10", "default")
-    assert (
-        sdk_metrics.live_staleness_seconds._vals[staleness_key]  # type: ignore[attr-defined]
-        >= result.metadata.staleness_ms / 1000.0
-    )
+    staleness_store = _store(sdk_metrics.live_staleness_seconds)
+    hold_store = _store(sdk_metrics.domain_gate_holds)
+    assert staleness_store[staleness_key] >= result.metadata.staleness_ms / 1000.0
     hold_key = ("node", "10", "default", "freshness_breach")
-    assert (
-        sdk_metrics.domain_gate_holds._vals[hold_key] == 1  # type: ignore[attr-defined]
-    )
+    assert hold_store[hold_key] == 1
 
 
 @pytest.mark.asyncio
@@ -1783,7 +1781,8 @@ async def test_observability_snapshot_captures_backfill_failure(caplog) -> None:
             await asyncio.sleep(0)
 
     key = ("node", "5")
-    assert sdk_metrics.backfill_failure_total._vals[key] == 1  # type: ignore[attr-defined]
+    failure_store = _store(sdk_metrics.backfill_failure_total)
+    assert failure_store[key] == 1  # type: ignore[attr-defined]
     snapshot = sdk_metrics.collect_metrics()
     assert "backfill_failure_total" in snapshot
     assert 'node_id="node"' in snapshot
@@ -1828,7 +1827,8 @@ async def test_background_backfill_failure_marks_lease_failed() -> None:
     assert lease.key == "node:10:0:100::"
     assert "background_backfill_failed" in reason
     key = ("node", "10")
-    assert sdk_metrics.backfill_failure_total._vals[key] == 1  # type: ignore[attr-defined]
+    failure_store = _store(sdk_metrics.backfill_failure_total)
+    assert failure_store[key] == 1  # type: ignore[attr-defined]
     assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]
 
 
@@ -1855,5 +1855,6 @@ async def test_sync_backfill_claims_and_completes_lease() -> None:
     assert lease.key == "node:10:0:100::"
     assert lease.token.startswith("token-")
     key = ("node", "10")
-    assert sdk_metrics.backfill_last_timestamp._vals[key] == 100  # type: ignore[attr-defined]
+    last_ts_store = _store(sdk_metrics.backfill_last_timestamp)
+    assert last_ts_store[key] == 100  # type: ignore[attr-defined]
     assert sdk_metrics.backfill_jobs_in_progress._val == 0  # type: ignore[attr-defined]

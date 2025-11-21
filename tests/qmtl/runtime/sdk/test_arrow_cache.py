@@ -1,6 +1,7 @@
 import time
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk import arrow_cache
 from qmtl.runtime.sdk.cache_view import CacheView
 
@@ -131,7 +132,8 @@ def test_arrow_cache_compute_context_switch_records_metric():
     assert cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
 
     key = ("node", "w", "live", "__unset__", "__unset__")
-    assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
+    store = get_mapping_store(sdk_metrics.cross_context_cache_hit_total, dict)
+    assert store.get(key) == 1
 
 
 @pytest.mark.skipif(not arrow_cache.ARROW_AVAILABLE, reason="pyarrow missing")

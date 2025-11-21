@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk.node import SourceNode, StreamInput
 from qmtl.runtime.sdk.backfill_engine import BackfillEngine
 
@@ -101,9 +102,12 @@ async def test_metrics_and_logs(caplog):
 
     node_id = node.node_id
     assert sdk_metrics.backfill_jobs_in_progress._val == 0
-    assert sdk_metrics.backfill_last_timestamp._vals[(node_id, "60")] == 60
-    assert sdk_metrics.backfill_retry_total._vals[(node_id, "60")] == 1
-    assert sdk_metrics.backfill_failure_total._vals.get((node_id, "60"), 0) == 0
+    timestamp_store = get_mapping_store(sdk_metrics.backfill_last_timestamp, dict)
+    retry_store = get_mapping_store(sdk_metrics.backfill_retry_total, dict)
+    failure_store = get_mapping_store(sdk_metrics.backfill_failure_total, dict)
+    assert timestamp_store[(node_id, "60")] == 60
+    assert retry_store[(node_id, "60")] == 1
+    assert failure_store.get((node_id, "60"), 0) == 0
 
     msgs = [r.message for r in caplog.records]
     assert "backfill.start" in msgs
@@ -127,8 +131,10 @@ async def test_failure_metrics_and_logs(caplog):
             await engine.wait()
 
     key = (node.node_id, "60")
-    assert sdk_metrics.backfill_failure_total._vals[key] == 1
-    assert sdk_metrics.backfill_retry_total._vals[key] == 3
+    failure_store = get_mapping_store(sdk_metrics.backfill_failure_total, dict)
+    retry_store = get_mapping_store(sdk_metrics.backfill_retry_total, dict)
+    assert failure_store[key] == 1
+    assert retry_store[key] == 3
     assert sdk_metrics.backfill_jobs_in_progress._val == 0
     msgs = [r.message for r in caplog.records]
     assert msgs.count("backfill.retry") >= 3

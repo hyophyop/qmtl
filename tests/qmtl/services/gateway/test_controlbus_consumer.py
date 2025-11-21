@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 from qmtl.services.gateway.api import Database
 from qmtl.services.gateway import metrics
@@ -241,7 +242,8 @@ async def test_sentinel_weight_updates_metrics_and_ws():
     assert hub.events == [
         ("sentinel_weight", {"sentinel_id": "v1", "weight": 0.75, "version": 1})
     ]
-    assert metrics.gateway_sentinel_traffic_ratio._vals["v1"] == pytest.approx(0.75)
+    traffic_store = get_mapping_store(metrics.gateway_sentinel_traffic_ratio, dict)
+    assert traffic_store["v1"] == pytest.approx(0.75)
     assert "v1" in metrics._sentinel_weight_updates
     assert (
         metrics.event_relay_events_total.labels(topic="sentinel_weight")._value.get()

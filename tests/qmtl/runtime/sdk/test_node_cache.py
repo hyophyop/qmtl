@@ -1,6 +1,7 @@
 import pytest
 import pytest
 import xarray as xr
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk import ProcessingNode, StreamInput, Runner, NodeCache
 from qmtl.foundation.common.compute_key import ComputeContext
 from qmtl.runtime.sdk import metrics as sdk_metrics
@@ -183,7 +184,8 @@ def test_compute_context_switch_clears_cache_and_records_metric():
     assert node.cache.get_slice("u1", 60, count=2) == [(180, {"v": 3})]
 
     key = (node.node_id, "w", "live", "__unset__", "__unset__")
-    assert sdk_metrics.cross_context_cache_hit_total._vals.get(key) == 1
+    store = get_mapping_store(sdk_metrics.cross_context_cache_hit_total, dict)
+    assert store.get(key) == 1
 
 
 class _RecordingMetrics:
