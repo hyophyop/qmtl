@@ -895,7 +895,7 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
 
             resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "all"})
             remaining = [n for n in resp.json() if n["node_id"] == node_id]
-            assert {n["execution_domain"] for n in remaining} == {"live"}
+            assert remaining == []
 
             audit_resp = await client.get("/worlds/w1/audit")
             assert audit_resp.status_code == 200
