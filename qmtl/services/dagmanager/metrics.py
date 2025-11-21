@@ -11,6 +11,8 @@ from typing import Deque, Sequence
 
 from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
 from qmtl.foundation.common.metrics_factory import (
+    get_or_create_counter,
+    get_or_create_gauge,
     get_mapping_store,
     get_metric_value,
     increment_mapping_store,
@@ -54,11 +56,13 @@ diff_failures_total = Counter(
 
 cross_context_cache_hit_total = get_cross_context_cache_hit_counter()
 
-cross_context_cache_violation_total = Counter(
+cross_context_cache_violation_total = get_or_create_counter(
     "cross_context_cache_violation_total",
     "Total number of cross-context cache violations detected during diff",
     ["node_id", "world_id", "execution_domain"],
     registry=global_registry,
+    test_value_attr="_vals",
+    test_value_factory=dict,
 )
 get_mapping_store(cross_context_cache_violation_total, dict)
 
@@ -105,36 +109,34 @@ queues_total = Gauge(
 set_test_value(queues_total, 0, factory=lambda: 0)
 
 # Per-topic Kafka consumer lag in seconds and configured alert thresholds.
-queue_lag_seconds = Gauge(
+queue_lag_seconds = get_or_create_gauge(
     "queue_lag_seconds",
     "Estimated consumer lag for each topic in seconds",
     ["topic"],
     registry=global_registry,
+    test_value_attr="_vals",
+    test_value_factory=dict,
 )
-get_mapping_store(queue_lag_seconds, dict)
 
-queue_lag_threshold_seconds = Gauge(
+queue_lag_threshold_seconds = get_or_create_gauge(
     "queue_lag_threshold_seconds",
     "Lag alert threshold configured for each topic",
     ["topic"],
     registry=global_registry,
+    test_value_attr="_vals",
+    test_value_factory=dict,
 )
-get_mapping_store(queue_lag_threshold_seconds, dict)
 
 # Expose the active traffic weight per version. Guard against duplicate
 # registration when this module is reloaded during tests.
-if "dagmanager_active_version_weight" in global_registry._names_to_collectors:
-    dagmanager_active_version_weight = global_registry._names_to_collectors[
-        "dagmanager_active_version_weight"
-    ]
-else:
-    dagmanager_active_version_weight = Gauge(
-        "dagmanager_active_version_weight",
-        "Live traffic weight seen by Gateway for each model version",
-        ["version"],
-        registry=global_registry,
-    )
-
+dagmanager_active_version_weight = get_or_create_gauge(
+    "dagmanager_active_version_weight",
+    "Live traffic weight seen by Gateway for each model version",
+    ["version"],
+    registry=global_registry,
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
 get_mapping_store(dagmanager_active_version_weight, dict)
 
 def set_active_version_weight(version: str, weight: float) -> None:

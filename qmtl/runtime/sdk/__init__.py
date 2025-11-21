@@ -11,7 +11,7 @@ from .node import (
 )
 from .arrow_cache import NodeCacheArrow
 from .backfill_state import BackfillState
-from .cache_view import CacheView
+from .cache_view import CacheView, CacheWindow
 from .cache_view_tools import CacheFrame
 from .auto_backfill import (
     AutoBackfillStrategy,
@@ -88,6 +88,7 @@ __all__ = [
     "NodeCacheArrow",
     "BackfillState",
     "CacheView",
+    "CacheWindow",
     "CacheFrame",
     "Strategy",
     "buy_signal",

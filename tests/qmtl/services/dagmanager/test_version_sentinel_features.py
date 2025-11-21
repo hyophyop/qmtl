@@ -1,5 +1,6 @@
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.dagmanager.models import DiffRequest
 from qmtl.services.dagmanager import metrics
 
@@ -44,7 +45,8 @@ def test_canary_weight_inferred_from_meta(diff_service, diff_metrics):
     assert event.sentinel_version == "release-2025.10"
     assert event.weight == pytest.approx(0.25)
     assert event.world_id == "world-main"
-    assert metrics.dagmanager_active_version_weight._vals["release-2025.10"] == pytest.approx(0.25)  # type: ignore[attr-defined]
+    weight_store = get_mapping_store(metrics.dagmanager_active_version_weight, dict)
+    assert weight_store["release-2025.10"] == pytest.approx(0.25)
 
 
 def test_sentinel_weight_cache_is_world_scoped(diff_service):
@@ -112,4 +114,3 @@ def test_queue_topics_reuse_across_version_bumps(diff_service, fake_queue):
 
     assert second_queue == first_queue
     assert len(fake_queue.calls) == 1
-

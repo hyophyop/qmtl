@@ -14,6 +14,7 @@ and demotion.
 - Repo boundary: only reusable utilities/nodes/gateway extensions live under
   `qmtl/`. Strategy (alpha) implementations belong under repository‑root
   `strategies/`.
+- Data handler baseline (#1653): `SeamlessDataProvider` (`qmtl/runtime/sdk/seamless_data_provider.py`) is the default data handler for history/backfill flows. Do not replace the default; extend or wrap it via the seamless presets/plugins described in [Seamless DP v2](../architecture/seamless_data_provider_v2.md) when customization is required.
 
 ## 1. Scope and Non‑Goals
 
@@ -155,4 +156,3 @@ Phase 3 — SDK order gate (optional)
 
 Phase 4 — multi‑world optimization (optional)
 - Gateway: shared node namespaces/partition views; Mark‑&‑Sweep with drain.
-

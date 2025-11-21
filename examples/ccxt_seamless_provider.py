@@ -30,6 +30,7 @@ from qmtl.runtime.io import (
 )
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
+import qmtl.runtime.sdk.seamless_data_provider as seamless_module
 
 
 @dataclass(slots=True)
@@ -81,18 +82,21 @@ async def build_provider(settings: ExampleSettings) -> EnhancedQuestDBProvider:
     return provider
 
 
-async def fetch_history(provider: EnhancedQuestDBProvider, settings: ExampleSettings) -> pd.DataFrame:
+async def fetch_history(
+    provider: EnhancedQuestDBProvider, settings: ExampleSettings
+) -> seamless_module.SeamlessFetchResult:
     """Fetch the requested range and print a short summary."""
 
     node_id = f"ohlcv:{settings.exchange}:{settings.symbols[0]}:{settings.timeframe}"
 
     print("▶ Fetching historical window")
-    frame = await provider.fetch(
+    result = await provider.fetch(
         start=settings.start,
         end=settings.end,
         node_id=node_id,
         interval=settings.interval_seconds,
     )
+    frame = result.frame
     print(f"- rows: {len(frame)}")
     if not frame.empty:
         print(frame.head())
@@ -102,7 +106,7 @@ async def fetch_history(provider: EnhancedQuestDBProvider, settings: ExampleSett
     for covered_start, covered_end in coverage:
         print(f"  - {covered_start} → {covered_end}")
 
-    return frame
+    return result
 
 
 async def main() -> None:
@@ -120,12 +124,13 @@ async def main() -> None:
         await asyncio.sleep(5)
 
         node_id = f"ohlcv:{settings.exchange}:{settings.symbols[0]}:{settings.timeframe}"
-        latest = await provider.fetch(
+        latest_result = await provider.fetch(
             start=settings.end - settings.interval_seconds * 5,
             end=settings.end,
             node_id=node_id,
             interval=settings.interval_seconds,
         )
+        latest = latest_result.frame
         if not latest.empty:
             print("- latest bars")
             print(latest.tail())

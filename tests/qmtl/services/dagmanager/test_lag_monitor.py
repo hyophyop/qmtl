@@ -1,5 +1,6 @@
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient
 from qmtl.services.dagmanager.lag_monitor import LagMonitor, QueueLagInfo
 from qmtl.services.dagmanager import metrics
@@ -36,5 +37,7 @@ def test_lag_monitor_records_metrics():
     lags = monitor.record_lag()
 
     assert lags["q1"] == 10
-    assert metrics.queue_lag_seconds._vals["q1"] == 10
-    assert metrics.queue_lag_threshold_seconds._vals["q1"] == 10
+    lag_store = get_mapping_store(metrics.queue_lag_seconds, dict)
+    threshold_store = get_mapping_store(metrics.queue_lag_threshold_seconds, dict)
+    assert lag_store["q1"] == 10
+    assert threshold_store["q1"] == 10

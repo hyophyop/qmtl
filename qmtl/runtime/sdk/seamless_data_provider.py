@@ -1414,7 +1414,7 @@ class SeamlessDataProvider(HistoryProvider):
         as_of: Any | None = None,
         min_coverage: Any | None = None,
         max_lag_seconds: Any | None = None,
-    ) -> pd.DataFrame:
+    ) -> SeamlessFetchResult:
         """
         Fetch data transparently from available sources while enforcing domain policies.
         """
@@ -1491,7 +1491,9 @@ class SeamlessDataProvider(HistoryProvider):
             cache_hit=cache_hit,
         )
 
-        return response.frame
+        # Preserve metadata on the returned frame for callers expecting attributes.
+        response.frame.metadata = response.metadata  # type: ignore[attr-defined]
+        return response
     
     async def coverage(
         self, *, node_id: str, interval: int

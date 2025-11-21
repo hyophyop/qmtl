@@ -13,6 +13,7 @@ last_modified: 2025-08-21
 
 - 기준 문서: ./docs/architecture/architecture.md, ./docs/architecture/gateway.md, ./docs/architecture/dag-manager.md
 - 저장소 경계: qmtl/에는 재사용 가능한 유틸/노드/게이트웨이 확장만 추가한다. 전략(알파) 구현은 루트 strategies/ 폴더에 둔다.
+- 데이터 핸들러 기본값(결정 #1653): `SeamlessDataProvider`(`qmtl/runtime/sdk/seamless_data_provider.py`)가 히스토리/백필 경로의 기본 데이터 핸들러다. 기본값을 다른 핸들러로 바꾸지 말고, 필요한 경우 [심리스 v2 설계](../architecture/seamless_data_provider_v2.md)의 프리셋·플러그인 경로 안에서 확장하거나 감싸서 사용한다.
 
 ## 1. 목적과 비범위
 

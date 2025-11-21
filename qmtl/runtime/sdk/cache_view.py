@@ -2,11 +2,72 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
+from dataclasses import dataclass
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from .node import Node
 
 from . import metrics as sdk_metrics
+
+
+@dataclass(slots=True)
+class CacheWindow:
+    """Windowed slice of cache entries for a single ``(node_id, interval)``."""
+
+    node_id: str
+    interval: int | str
+    _rows: Sequence[tuple[int, Any]]
+
+    def latest(self) -> Any:
+        return self._rows[-1][1] if self._rows else None
+
+    def as_frame(self, *, ts_col: str = "ts"):
+        """Return a pandas DataFrame with a timestamp column."""
+
+        import pandas as pd
+
+        if not self._rows:
+            return pd.DataFrame(columns=[ts_col])
+
+        timestamps, payloads = zip(*self._rows)
+        if payloads and isinstance(payloads[0], Mapping):
+            frame = pd.DataFrame(list(payloads))
+        else:
+            frame = pd.DataFrame({"value": payloads})
+        frame.insert(0, ts_col, list(timestamps))
+        return frame
+
+    def require_columns(self, columns: Sequence[str], *, ts_col: str = "ts") -> None:
+        """Raise if any ``columns`` are missing from the window payload."""
+
+        frame = self.as_frame(ts_col=ts_col)
+        missing = [col for col in columns if col not in frame]
+        if missing:
+            raise ValueError(
+                f"CacheWindow[{self.node_id!r}, {self.interval!r}] missing columns: {missing}"
+            )
+
+    def to_series(
+        self,
+        column: str,
+        *,
+        ts_col: str = "ts",
+        dropna: bool = True,
+    ):
+        """Return a pandas Series indexed by ``ts_col`` for ``column``."""
+
+        frame = self.as_frame(ts_col=ts_col)
+        if column not in frame:
+            raise KeyError(
+                f"column={column!r} not found in CacheWindow[{self.node_id!r}, {self.interval!r}]"
+            )
+        series = frame.set_index(ts_col)[column]
+        return series.dropna() if dropna else series
+
+    def rows(self) -> list[tuple[int, Any]]:
+        """Return the underlying rows (ts, payload) as a new list."""
+
+        return list(self._rows)
 
 
 class CacheView:
@@ -151,8 +212,35 @@ class CacheView:
 
         return _as_frame(self, node, interval, window=window, columns=columns)
 
-    def window(self, node: "Node" | str, interval: int, length: int):
-        """Delegate to :func:`cache_view_tools.window`."""
+    def window(
+        self,
+        node: "Node" | str,
+        interval: int,
+        length: int | None = None,
+        *,
+        count: int | None = None,
+    ):
+        """Return a cache slice for ``(node, interval)``.
+
+        - Legacy mode: ``length`` (positional) → delegate to ``cache_view_tools.window`` and
+          return a ``list[(ts, value)]``.
+        - Helper mode: ``count=`` → return a :class:`CacheWindow` with DataFrame/Series helpers.
+        """
+
+        if length is not None and count is not None:
+            raise ValueError("specify only one of length or count")
+
+        if count is not None or length is None:
+            entries = self[node][interval]
+            if isinstance(entries, CacheView):
+                entries = object.__getattribute__(entries, "_data")
+            if not isinstance(entries, Sequence):
+                raise TypeError("Cache entry is not sequence-like; cannot build window")
+
+            effective_count = count if count is not None else len(entries)
+            subset = [] if effective_count <= 0 else list(entries[-effective_count:])
+            node_id = node.node_id if hasattr(node, "node_id") else node
+            return CacheWindow(node_id=node_id, interval=interval, _rows=subset)
 
         from .cache_view_tools import window as _window
 
