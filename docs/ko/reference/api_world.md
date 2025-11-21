@@ -89,6 +89,7 @@ Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합�
 }
 ```
 `effective_mode` 는 WorldService 정책 문자열을 담으며 기존 호환성을 유지합니다 (`validate|compute-only|paper|live`). WorldService ActivationEnvelope 원본 스키마에는 파생 필드인 `execution_domain` 이 없지만, Gateway 프록시는 다음 규칙을 적용해 값을 추가합니다: `validate → backtest (주문 차단)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` 는 운영자가 제어하는 듀얼 런을 위해 예약되어 있습니다. SDK는 이 매핑을 로컬 상태/메트릭을 위한 읽기 전용 주석으로 취급해야 하며, 백엔드 결정을 덮어쓰거나 클라이언트 실행 동작을 변경해서는 안 됩니다.
+`execution_domain=shadow` 가 활성화되면 Gateway는 값을 그대로 전달(ControlBus/WebSocket 릴레이, 큐 맵/태그 쿼리)하면서 주문 발행 경로를 차단합니다. 섀도우 런은 라이브 입력을 분리된 네임스페이스에서 미러링하며, HTTP `X-Allow-Live` 헤더나 `allow_live` 정책 게이트 같은 운영자 검증은 계속 적용됩니다.
 스키마: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash

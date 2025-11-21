@@ -20,6 +20,7 @@ class QueueUpdateData(BaseModel):
     queues: List[QueueRef]
     match_mode: Literal["any", "all"] = "any"
     world_id: Optional[StrictStr] = None
+    execution_domain: Optional[StrictStr] = None
     version: StrictInt
     etag: StrictStr
     ts: StrictStr

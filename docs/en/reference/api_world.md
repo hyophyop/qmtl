@@ -97,6 +97,12 @@ normative mapping: `validate → backtest (orders gated OFF)`,
 remains reserved for operator-controlled dual runs. SDKs treat this
 mapping as read-only annotation for local state/metrics; it MUST NOT
 override backend decisions or change execution behavior client-side.
+When `execution_domain=shadow` is active, Gateway preserves the value
+end-to-end (ControlBus/WebSocket relays, queue maps/tag queries) while
+enforcing that order publishing paths are disabled. Shadow runs mirror
+live inputs in an isolated namespace; operator gates such as
+`X-Allow-Live` (for HTTP) and policy-based `allow_live` checks still
+apply to connections and subscriptions.
 Schema: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash

@@ -105,6 +105,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         interval: int,
         match_mode: str | None = None,
         world_id: str = "",
+        execution_domain: str | None = None,
         dagmanager: DagManagerClient = Depends(deps.provide_dagmanager),
     ) -> QueuesByTagResponse:
         from qmtl.foundation.common.tagquery import split_tags, normalize_match_mode
@@ -112,7 +113,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         tag_list = split_tags(tags)
         mode = normalize_match_mode(match_mode).value
         queues = await dagmanager.get_queues_by_tag(
-            tag_list, interval, mode, world_id or None
+            tag_list, interval, mode, world_id or None, execution_domain
         )
         return {"queues": queues}
 

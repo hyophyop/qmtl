@@ -436,6 +436,14 @@ async def _publish_batch(
     shared_account: bool,
     extra_orders_payload: Sequence[Mapping[str, Any]] | None = None,
 ) -> bool:
+    if mode == "shadow":
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail={
+                "code": "E_SHADOW_ORDERS_BLOCKED",
+                "message": "shadow execution_domain blocks order submission",
+            },
+        )
     if not orders:
         return False
     total, reduce_only_count, ratio = _summarize_orders(orders)
