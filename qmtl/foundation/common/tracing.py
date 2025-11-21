@@ -20,6 +20,11 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
+try:  # optional dependency; presence is not guaranteed in all environments
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter  # type: ignore
+except Exception:  # pragma: no cover - optional
+    ConsoleSpanExporter = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 _INITIALISED = False
@@ -104,17 +109,19 @@ def setup_tracing(
     # - Else if explicitly requested console via env value 'console' → Console exporter (when available)
     # - Else → no exporter (tests/local default) to avoid noisy/fragile shutdown warnings
     if endpoint:
-        console_exporter_cls = _load_exporter(
-            "opentelemetry.sdk.trace.export", "ConsoleSpanExporter"
-        )
-        otlp_exporter_cls = _load_exporter(
-            "opentelemetry.exporter.otlp.proto.http.trace_exporter",
-            "OTLPSpanExporter",
-        )
-        if endpoint.strip().lower() == "console" and console_exporter_cls is not None:
-            exporter = console_exporter_cls()
-            provider.add_span_processor(BatchSpanProcessor(exporter))
+        normalized = endpoint.strip().lower()
+        if normalized == "console":
+            exporter_factory = ConsoleSpanExporter or _load_exporter(
+                "opentelemetry.sdk.trace.export", "ConsoleSpanExporter"
+            )
+            if exporter_factory is not None:  # type: ignore[truthy-bool]
+                exporter = exporter_factory()  # type: ignore[operator]
+                provider.add_span_processor(BatchSpanProcessor(exporter))
         else:
+            otlp_exporter_cls = _load_exporter(
+                "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+                "OTLPSpanExporter",
+            )
             if otlp_exporter_cls is not None:
                 exporter = otlp_exporter_cls(endpoint=endpoint, insecure=True)
                 provider.add_span_processor(BatchSpanProcessor(exporter))
