@@ -844,7 +844,7 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
             resp = await client.put(f"/worlds/w1/nodes/{node_id}", json=live_payload)
             assert resp.status_code == 200
             data = resp.json()
-            assert data["execution_domain"] == "live"
+            assert data["execution_domain"] == "backtest"
             assert data["status"] == "valid"
 
             backtest_payload = {
@@ -871,13 +871,13 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
             resp = await client.get("/worlds/w1/nodes")
             assert resp.status_code == 200
             default_nodes = resp.json()
-            assert all(n["execution_domain"] == "live" for n in default_nodes)
+            assert all(n["execution_domain"] == "backtest" for n in default_nodes)
             assert {n["node_id"] for n in default_nodes} == {node_id, "legacy"}
 
             resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "all"})
             assert resp.status_code == 200
             nodes = resp.json()
-            assert {n["execution_domain"] for n in nodes} == {"live", "backtest"}
+            assert {n["execution_domain"] for n in nodes} == {"backtest"}
             assert any(n["node_id"] == "legacy" for n in nodes)
 
             legacy_resp = await client.get("/worlds/w1/nodes/legacy")
