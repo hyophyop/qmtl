@@ -909,8 +909,8 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
         assert legacy_event.get("domains") == ["backtest"]
         assert legacy_event.get("source") == "legacy-single"
 
-            bad_resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "invalid"})
-            assert bad_resp.status_code == 400
+        bad_resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "invalid"})
+        assert bad_resp.status_code == 400
 
 
 @pytest.mark.asyncio
