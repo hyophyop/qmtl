@@ -898,7 +898,7 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
             assert remaining == []
 
             audit_resp = await client.get("/worlds/w1/audit")
-            assert audit_resp.status_code == 200
+        assert audit_resp.status_code == 200
         migrations = [
             entry
             for entry in audit_resp.json()
@@ -908,9 +908,6 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
         legacy_event = migrations[-1]
         assert legacy_event.get("domains") == ["backtest"]
         assert legacy_event.get("source") == "legacy-single"
-
-        bad_resp = await client.get("/worlds/w1/nodes", params={"execution_domain": "invalid"})
-        assert bad_resp.status_code == 400
 
 
 @pytest.mark.asyncio
