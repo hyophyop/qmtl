@@ -9,6 +9,7 @@ from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 from ..backfill_state import BackfillState
 from .. import configuration
+from ..cache_context import ComputeContext as CacheComputeContext
 from .dependencies import ARROW_AVAILABLE, ARROW_CACHE_ENABLED, pa
 from .eviction import EvictionStrategy, create_default_eviction_strategy
 from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION, default_instrumentation
@@ -186,6 +187,20 @@ class NodeCacheArrow:
             track_access=track_access,
             artifact_plane=artifact_plane,
             metrics=self._metrics,
+        )
+
+    @property
+    def active_context(self) -> CacheComputeContext | None:
+        """Return the currently active compute context, if any."""
+
+        if self._active_compute_key is None:
+            return None
+        return CacheComputeContext(
+            compute_key=self._active_compute_key,
+            world_id=self._active_world_id,
+            execution_domain=self._active_execution_domain,
+            as_of=self._active_as_of,
+            partition=self._active_partition,
         )
 
     def missing_flags(self) -> Dict[str, Dict[int, bool]]:
