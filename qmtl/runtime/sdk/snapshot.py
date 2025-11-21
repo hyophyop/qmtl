@@ -38,12 +38,7 @@ def _get_arrow_context() -> ArrowContext | None:
 def _get_filesystem(url: str | None) -> tuple[str | None, FileSystemLike | None]:
     if not url:
         return None, None
-    try:  # optional
-        import fsspec
-    except ImportError:  # pragma: no cover - optional dependency
-        return None, None
-    except Exception:  # pragma: no cover - optional dependency
-        logger.exception("unexpected error importing fsspec")
+    if fsspec is None:
         return None, None
     try:
         fs, _, paths = fsspec.get_fs_token_paths(url)
@@ -78,6 +73,21 @@ class ArrowContext(NamedTuple):
     parquet: ArrowTableWriter
 
 from . import metrics as sdk_metrics
+
+# Optional pyarrow context (exported for tests expecting module-level access)
+_arrow_ctx = _get_arrow_context()
+pa = _arrow_ctx.pa if _arrow_ctx else None  # type: ignore[attr-defined]
+pq = _arrow_ctx.parquet if _arrow_ctx else None  # type: ignore[attr-defined]
+
+# Optional fsspec context (exported for tests expecting module-level access)
+try:  # optional
+    import fsspec as _fsspec  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    _fsspec = None  # type: ignore
+except Exception:  # pragma: no cover - defensive
+    logger.exception("unexpected error importing fsspec")
+    _fsspec = None  # type: ignore
+fsspec = _fsspec
 
 
 def _b64(obj: Any) -> str:
