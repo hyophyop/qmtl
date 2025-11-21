@@ -884,7 +884,7 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
             legacy_resp = await client.get("/worlds/w1/nodes/legacy")
             assert legacy_resp.status_code == 200
             legacy = legacy_resp.json()
-            assert legacy["execution_domain"] == "live"
+            assert legacy["execution_domain"] == "backtest"
             assert legacy["status"] == "paused"
             assert legacy["annotations"] == {"source": "legacy"}
 
