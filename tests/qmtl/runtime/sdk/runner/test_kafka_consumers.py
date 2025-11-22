@@ -30,7 +30,7 @@ async def test_single_node_consumption(monkeypatch):
         Runner.feed_queue_data(n, n.kafka_topic, 60, 120, {"v": 2})
         stop_event.set()
 
-    monkeypatch.setattr(Runner, "_consume_node", fake_consume)
+    monkeypatch.setattr("qmtl.runtime.sdk.runner.Runner._consume_node", fake_consume, raising=True)
     tasks = Runner.spawn_consumer_tasks(
         strategy, bootstrap_servers="kafka", stop_event=stop_event
     )
@@ -69,7 +69,7 @@ async def test_multi_node_consumption(monkeypatch):
         if counter["c"] == 2:
             stop_event.set()
 
-    monkeypatch.setattr(Runner, "_consume_node", fake_consume)
+    monkeypatch.setattr("qmtl.runtime.sdk.runner.Runner._consume_node", fake_consume, raising=True)
     tasks = Runner.spawn_consumer_tasks(
         strategy, bootstrap_servers="kafka", stop_event=stop_event
     )
@@ -77,4 +77,3 @@ async def test_multi_node_consumption(monkeypatch):
 
     assert calls.count("n1") == 1
     assert calls.count("n2") == 1
-
