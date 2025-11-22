@@ -6,12 +6,13 @@ import time
 import pytest
 
 from qmtl.foundation.common.compute_key import ComputeContext as RunnerComputeContext, compute_compute_key
+from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.runtime.sdk.node import Node
+from qmtl.runtime.sdk.services import RunnerServices
 from qmtl.runtime.transforms.publisher import TradeOrderPublisherNode
 from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.submission.context_service import ComputeContextService, StrategyComputeContext
-from qmtl.foundation.common.tagquery import MatchMode
 
 
 class _StubWorldClient:
@@ -159,21 +160,17 @@ async def test_shadow_end_to_end_submission_queue_and_runner(monkeypatch) -> Non
     }
 
     # Runner: the same shadow context reaches the strategy; orders are gated off.
-    import qmtl.runtime.sdk.runner as runner_module
+    from qmtl.runtime.sdk.runner import Runner
 
-    # Reload to reset Runner state for isolation
-    import importlib
-
-    importlib.reload(runner_module)
-    from qmtl.runtime.sdk.runner import Runner  # re-import after reload
-
-    Runner.set_enable_trade_submission(True)
-    trade_service = DummyService()
-    original_trade_service = Runner.services().trade_execution_service
+    original_services = Runner.services()
     original_trade_submission_enabled = Runner._enable_trade_submission
-    Runner.set_trade_execution_service(trade_service)
+    Runner.set_services(RunnerServices.default())
 
     try:
+        Runner.set_enable_trade_submission(True)
+        trade_service = DummyService()
+        Runner.set_trade_execution_service(trade_service)
+
         src = Node(name="sig", interval=1, period=1)
         pub = TradeOrderPublisherNode(src)
         runner_context = RunnerComputeContext(world_id="shadow-world", execution_domain="shadow")
@@ -191,8 +188,8 @@ async def test_shadow_end_to_end_submission_queue_and_runner(monkeypatch) -> Non
         assert result is not None and result.get("side") == "BUY"
         assert trade_service.orders == []  # shadow domain blocks order dispatch
     finally:
-        Runner.set_trade_execution_service(original_trade_service)
         Runner.set_enable_trade_submission(original_trade_submission_enabled)
+        Runner.set_services(original_services)
 
     active_context = pub.cache.active_context
     assert active_context is not None
@@ -200,6 +197,3 @@ async def test_shadow_end_to_end_submission_queue_and_runner(monkeypatch) -> Non
 
     shadow_key = compute_compute_key(pub.node_hash, runner_context)
     assert pub.compute_key == shadow_key
-
-    # Cleanup: avoid leaking custom trade execution service into subsequent tests
-    Runner.set_trade_execution_service(None)
