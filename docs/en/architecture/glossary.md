@@ -2,7 +2,7 @@
 title: "Architecture Glossary"
 tags: [architecture, glossary]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-11-22
 ---
 
 {{ nav_links() }}
@@ -11,7 +11,7 @@ last_modified: 2025-09-22
 
 - DecisionEnvelope: World decision result containing `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`.
 - effective_mode: Policy output string in DecisionEnvelope. Values: `validate | compute-only | paper | live`. Consumers MUST map to an ExecutionDomain for compute/routing; see mapping below.
-- execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs. Caller-supplied `meta.execution_domain` is only a hint; the authoritative value derives from WS `effective_mode`. Runner does not accept `shadow` as an executable mode and safely treats it as backtest.
+- execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs. Caller-supplied `meta.execution_domain` is only a hint; the authoritative value derives from WS `effective_mode`. Runner/SDK retain `shadow` (no backtest downgrade) while hard-blocking order publish.
 - ActivationEnvelope: Activation state for a `(world_id, strategy_id, side)` with `active`, `weight`, `etag`, `run_id`, `ts` and optional `state_hash`.
 - ControlBus: Internal control bus (Kafka/Redpanda) carrying versioned control events (ActivationUpdated, QueueUpdated, PolicyUpdated); not a public API.
 - EventStreamDescriptor: Opaque WS descriptor from Gateway (`stream_url`, `token`, `topics`, `expires_at`, optional `fallback_url`, `alt_stream_url`).
@@ -48,6 +48,13 @@ Execution mode -> ExecutionDomain mapping (normative)
 - `paper` / `sim` -> `dryrun`
 - `live` -> `live`
 - `offline`/`sandbox` and other ambiguous aliases -> `backtest`
+
+<a id="shadow-execution-domain"></a>
+### Shadow execution_domain parallel agreement
+- Shared contract: `shadow` is a live-input mirror with orders hard-blocked and its namespace isolated. Caller `meta.execution_domain=shadow` is only a hint; the authoritative value comes from WS `effective_mode`.
+- Field/tag/error consistency: Keep `execution_domain=shadow` across all Runner/SDK/Gateway/WS paths and apply the same label to ComputeKey/EvalKey/caches (including arrow), ControlBus/WebSocket relays, metrics/history/tag queries. Order publish paths must ignore or explicitly reject shadow.
+- Test ownership split: Runner/SDK validate queue/node execution, no order publish, and cache keys containing shadow on shadow submissions. Gateway/WS cover submission/context passthrough, relay tagging, tag-query/queue-map tests, and operator doc updates.
+- Merge/interop: Shadow workstreams on Runner/SDK and Gateway/WS can land in parallel; once both are in, run an end-to-end shadow path check.
 
 Auxiliary terms
 - as_of: Dataset snapshot timestamp or commit identifier that binds backtests to a fixed input view for deterministic replay.

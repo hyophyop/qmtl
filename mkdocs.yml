@@ -38,6 +38,7 @@ nav:
       - Ergonomic compute_fn patterns: guides/ergonomic_compute_fn_patterns.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Strategy Submission & Gating: guides/strategy_submission_gating.md
+      - Shadow Execution E2E: guides/shadow_end_to_end.md
       - Multi-Asset Factor Patterns: guides/multi_asset_factor_patterns.md
       - Microstructure Signals: guides/microstructure_signals.md
       - Short-Term Microstructure Filters: guides/short_term_microstructure.md
@@ -177,6 +178,7 @@ plugins:
             "CacheView Helpers": "CacheView 헬퍼"
             "Ergonomic compute_fn patterns": "compute_fn 편의 패턴"
             "Strategy Submission & Gating": "전략 제출·게이팅 흐름"
+            "Shadow Execution E2E": "섀도우 실행 E2E"
             "Multi-Asset Factor Patterns": "멀티자산 팩터 패턴"
             "IO & Integrations": "IO & 통합"
             Operations: 운영
