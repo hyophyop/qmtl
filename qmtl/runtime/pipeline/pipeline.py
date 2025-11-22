@@ -4,7 +4,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from qmtl.foundation.kafka import Producer
 from qmtl.runtime.sdk import Node
-from qmtl.runtime.sdk.runner import Runner
 
 
 class Pipeline:
@@ -19,7 +18,7 @@ class Pipeline:
     ) -> None:
         self.nodes = nodes
         self.producer = producer
-        self._feed_fn: Callable[..., Any] = feed_fn or Runner.feed_queue_data
+        self._feed_fn: Callable[..., Any] | None = feed_fn
         self.downstream: Dict[Node, List[Node]] = {n: [] for n in nodes}
         for node in nodes:
             for inp in node.inputs:
@@ -41,8 +40,13 @@ class Pipeline:
         *,
         on_missing: str = "skip",
     ) -> None:
+        feed_fn = self._feed_fn
+        if feed_fn is None:
+            from qmtl.runtime.sdk.runner import Runner
+
+            feed_fn = Runner.feed_queue_data
         for child in self.downstream.get(node, []):
-            result = self._feed_fn(
+            result = feed_fn(
                 child,
                 node.node_id,
                 interval,

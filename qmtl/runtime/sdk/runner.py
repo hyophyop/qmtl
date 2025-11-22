@@ -327,8 +327,10 @@ class Runner:
     @staticmethod
     def run_pipeline(strategy: Strategy) -> None:
         """Execute a :class:`Pipeline` using cached history from ``strategy``."""
-        from qmtl.runtime.pipeline import Pipeline
+        import importlib
 
+        pipeline_mod = importlib.import_module("qmtl.runtime.pipeline")
+        Pipeline = getattr(pipeline_mod, "Pipeline")
         pipeline = Pipeline(strategy.nodes)
         events = Runner._collect_history_events(strategy, None, None)
         for ts, node, payload in events:

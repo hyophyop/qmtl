@@ -404,8 +404,11 @@ class HistoryWarmupService:
         *,
         on_missing: str = "skip",
     ) -> None:
+        import importlib
         from .node import StreamInput
-        from qmtl.runtime.pipeline import Pipeline
+
+        pipeline_mod = importlib.import_module("qmtl.runtime.pipeline")
+        Pipeline = getattr(pipeline_mod, "Pipeline")
 
         pipeline = Pipeline(strategy.nodes)
 

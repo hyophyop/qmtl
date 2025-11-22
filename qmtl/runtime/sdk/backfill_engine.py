@@ -206,8 +206,10 @@ class BackfillEngine:
         if self._gateway_client is not None:
             return self._gateway_client
         try:
-            from qmtl.runtime.sdk.runner import Runner
+            import importlib
 
+            runner_mod = importlib.import_module("qmtl.runtime.sdk.runner")
+            Runner = getattr(runner_mod, "Runner")
             return getattr(Runner.services(), "gateway_client", None)
         except Exception:
             logger.debug("gateway client unavailable for metadata publish", exc_info=True)

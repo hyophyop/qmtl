@@ -122,10 +122,9 @@ def _slice_series(
 
 
 def _as_sequence(series_view: Any) -> Sequence[Any]:
-    from qmtl.runtime.sdk.cache_view import CacheView  # local import to avoid circulars
-
     data = series_view
-    if isinstance(series_view, CacheView):
+    # CacheView exposes its backing data via _data; avoid importing to keep module decoupled
+    if hasattr(series_view, "_data"):
         data = object.__getattribute__(series_view, "_data")
     if data is None:
         return []

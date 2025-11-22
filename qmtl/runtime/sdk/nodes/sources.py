@@ -101,8 +101,11 @@ class StreamInput(SourceNode):
     async def load_history(self, start: int, end: int) -> None:
         if not self.history_provider or self.interval is None:
             return
-        from ..backfill_engine import BackfillEngine
+        import importlib
 
+        BackfillEngine = getattr(
+            importlib.import_module("qmtl.runtime.sdk.backfill_engine"), "BackfillEngine"
+        )
         engine = BackfillEngine(self.history_provider)
         engine.submit(self, start, end)
         await engine.wait()
@@ -225,4 +228,3 @@ class TagQueryNode(SourceNode):
                     "warmup_reset": warmup_reset,
                 },
             )
-
