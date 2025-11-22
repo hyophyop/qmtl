@@ -200,3 +200,6 @@ async def test_shadow_end_to_end_submission_queue_and_runner(monkeypatch) -> Non
 
     shadow_key = compute_compute_key(pub.node_hash, runner_context)
     assert pub.compute_key == shadow_key
+
+    # Cleanup: avoid leaking custom trade execution service into subsequent tests
+    Runner.set_trade_execution_service(None)
