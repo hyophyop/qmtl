@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Any, Mapping, Sequence
 
 import pandas as pd
 
-from .cache_view import CacheView
-from .node import Node
 
 
 @dataclass(frozen=True)
@@ -47,7 +46,7 @@ class CacheFrame:
         return [CacheFrame(frame.loc[common_index]) for frame in frames]
 
 
-def window(view: CacheView, node: Node | str, interval: int, length: int) -> list[tuple[Any, Any]]:
+def window(view, node: "Node" | str, interval: int, length: int) -> list[tuple[Any, Any]]:
     """Return the trailing ``length`` entries for ``(node, interval)``."""
 
     if length < 0:
@@ -61,8 +60,8 @@ def window(view: CacheView, node: Node | str, interval: int, length: int) -> lis
 
 
 def as_frame(
-    view: CacheView,
-    node: Node | str,
+    view,
+    node: "Node" | str,
     interval: int,
     *,
     window: int | None = None,
@@ -87,8 +86,8 @@ def as_frame(
 
 
 def align_frames(
-    view: CacheView,
-    specs: Sequence[tuple[Node | str, int]],
+    view,
+    specs: Sequence[tuple["Node" | str, int]],
     *,
     window: int | None = None,
     columns: Mapping[Node | str, Sequence[str]] | Sequence[str] | None = None,
@@ -110,7 +109,7 @@ def align_frames(
 
 
 def _slice_series(
-    view: CacheView, node: Node | str, interval: int, window: int | None
+    view, node: "Node" | str, interval: int, window: int | None
 ) -> Sequence[Any]:
     series_view = view[node][interval]
     data = _as_sequence(series_view)
@@ -125,13 +124,19 @@ def _slice_series(
 
 def _as_sequence(series_view: Any) -> Sequence[Any]:
     data = series_view
-    if isinstance(series_view, CacheView):
+    series_cls = series_view.__class__
+    # CacheView exposes its backing data via _data; avoid importing to keep module decoupled
+    if series_cls.__name__ == "CacheView" and series_cls.__module__ == "qmtl.runtime.sdk.cache_view":
         data = object.__getattribute__(series_view, "_data")
     if data is None:
         return []
-    if not isinstance(data, Sequence) or isinstance(data, (str, bytes, bytearray)):
+    if isinstance(data, (str, bytes, bytearray)):
         raise TypeError("cache leaf must be a sequence of (timestamp, value) pairs")
-    return data
+    if isinstance(data, Sequence):
+        return data
+    if isinstance(data, Iterable):
+        return list(data)
+    raise TypeError("cache leaf must be a sequence of (timestamp, value) pairs")
 
 
 def _build_frame(

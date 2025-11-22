@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Mapping, Sequence, get_type_hints
+from typing import Any, Dict, Mapping, Sequence, TYPE_CHECKING, get_type_hints
 
 import httpx  # test compatibility: referenced via monkeypatch in tests
 
@@ -19,13 +19,15 @@ from qmtl.foundation.adapters import (
 )
 from qmtl.foundation.common.health import probe_http_async
 from qmtl.foundation.config import CONFIG_SECTION_NAMES, UnifiedConfig
-from qmtl.services.dagmanager.config import DagManagerConfig
-from qmtl.services.gateway.config import GatewayConfig
 from qmtl.foundation.config_types import (
     _type_description,
     _type_matches,
     _value_type_name,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qmtl.services.dagmanager.config import DagManagerConfig
+    from qmtl.services.gateway.config import GatewayConfig
 
 
 @dataclass(slots=True)
@@ -106,7 +108,7 @@ async def _validate_gateway_redis(dsn: str | None, *, offline: bool) -> Validati
 
 
 async def _validate_gateway_database(
-    config: GatewayConfig, *, offline: bool
+    config: "GatewayConfig", *, offline: bool
 ) -> ValidationIssue:
     backend = (config.database_backend or "").lower()
     if backend == "postgres":
@@ -158,7 +160,7 @@ async def _validate_gateway_sqlite(dsn: str | None) -> ValidationIssue:
 
 
 async def _validate_gateway_worldservice(
-    config: GatewayConfig, *, offline: bool
+    config: "GatewayConfig", *, offline: bool
 ) -> ValidationIssue:
     if not config.enable_worldservice_proxy or not config.worldservice_url:
         return ValidationIssue("ok", "WorldService proxy disabled")
@@ -209,7 +211,7 @@ def _format_worldservice_probe(result: object) -> str:
 
 
 async def validate_gateway_config(
-    config: GatewayConfig, *, offline: bool = False
+    config: "GatewayConfig", *, offline: bool = False
 ) -> Dict[str, ValidationIssue]:
     issues: Dict[str, ValidationIssue] = {}
 
@@ -227,7 +229,7 @@ async def validate_gateway_config(
 
 
 async def validate_dagmanager_config(
-    config: DagManagerConfig, *, offline: bool = False
+    config: "DagManagerConfig", *, offline: bool = False
 ) -> Dict[str, ValidationIssue]:
     return {
         "neo4j": await _validate_dagmanager_neo4j(config, offline=offline),
@@ -237,7 +239,7 @@ async def validate_dagmanager_config(
 
 
 async def _validate_dagmanager_neo4j(
-    config: DagManagerConfig, *, offline: bool
+    config: "DagManagerConfig", *, offline: bool
 ) -> ValidationIssue:
     if not config.neo4j_dsn:
         return ValidationIssue("ok", "Neo4j disabled; using memory repository")
@@ -279,7 +281,7 @@ async def _validate_dagmanager_neo4j(
 
 
 async def _validate_dagmanager_kafka(
-    config: DagManagerConfig, *, offline: bool
+    config: "DagManagerConfig", *, offline: bool
 ) -> ValidationIssue:
     if not config.kafka_dsn:
         return ValidationIssue(
@@ -318,7 +320,7 @@ async def _validate_dagmanager_kafka(
 
 
 async def _validate_dagmanager_controlbus(
-    config: DagManagerConfig, *, offline: bool
+    config: "DagManagerConfig", *, offline: bool
 ) -> ValidationIssue:
     brokers = [config.controlbus_dsn] if config.controlbus_dsn else []
     topics = [config.controlbus_queue_topic] if config.controlbus_queue_topic else []

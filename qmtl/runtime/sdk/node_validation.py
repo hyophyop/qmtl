@@ -107,17 +107,21 @@ class _MappingParamsRule(Rule[_NodeParamsContext]):
 
 def normalize_inputs(inp: Any) -> list:
     """Normalize ``inp`` into a list of upstream nodes."""
-    from .node import Node  # local import to avoid circular dependency
-
     if inp is None:
         return []
-    if isinstance(inp, Node):
+    if _looks_like_node(inp):
         return [inp]
     if isinstance(inp, Mapping):
         raise TypeError("mapping inputs no longer supported")
     if isinstance(inp, Iterable):
         return list(inp)
     raise TypeError("invalid input type")
+
+
+def _looks_like_node(obj: Any) -> bool:
+    """Heuristically determine whether *obj* behaves like a Node."""
+
+    return hasattr(obj, "node_id") and hasattr(obj, "node_type")
 
 
 def validate_node_params(

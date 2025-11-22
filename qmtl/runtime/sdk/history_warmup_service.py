@@ -382,12 +382,12 @@ class HistoryWarmupService:
         *,
         on_missing: str = "skip",
     ) -> None:
+        runner = _get_runner()
         for ts, src, payload in events:
             for node in strategy.nodes:
                 if src in getattr(node, "inputs", []):
-                    from .runner import Runner
-
-                    Runner.feed_queue_data(
+                    feed = runner.feed_queue_data if runner else lambda *args, **kwargs: None
+                    feed(
                         node,
                         src.node_id,
                         src.interval,
@@ -404,8 +404,11 @@ class HistoryWarmupService:
         *,
         on_missing: str = "skip",
     ) -> None:
+        import importlib
         from .node import StreamInput
-        from qmtl.runtime.pipeline import Pipeline
+
+        pipeline_mod = importlib.import_module("qmtl.runtime.pipeline")
+        Pipeline = getattr(pipeline_mod, "Pipeline")
 
         pipeline = Pipeline(strategy.nodes)
 
@@ -492,11 +495,12 @@ class HistoryWarmupService:
     @staticmethod
     def _execute_node(node: Any, event_values: dict[str, dict[int, list[tuple[int, Any]]]]) -> Any:
         from .cache_view import CacheView
-        from .runner import Runner
 
         view = CacheView(event_values)
         result = node.compute_fn(view)
-        Runner._postprocess_result(node, result)
+        runner = _get_runner()
+        if runner is not None:
+            runner._postprocess_result(node, result)
         return result
 
     @staticmethod
@@ -670,5 +674,16 @@ class HistoryWarmupService:
             needs_replay=offline_mode and inventory.has_provider,
             enforce_strict=offline_mode and environment.strict_mode,
         )
+
+
+def _get_runner():
+    import importlib
+
+    try:
+        module = importlib.import_module("qmtl.runtime.sdk.runner")
+        return module.Runner
+    except Exception:
+        return None
+
 
 __all__ = ["HistoryWarmupService"]

@@ -20,7 +20,6 @@ from ..schemas import (
     SymbolDeltaModel,
 )
 from ..services import WorldService
-from . import rebalancing as _unused  # ensure package init
 
 
 def _convert_positions(models: List[PositionSliceModel]) -> List[PositionSlice]:

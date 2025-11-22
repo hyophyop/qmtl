@@ -20,8 +20,11 @@ from qmtl.runtime.sdk.seamless_data_provider import (
 from qmtl.runtime.sdk.seamless.builder import SeamlessAssembly, SeamlessBuilder
 from qmtl.runtime.sdk.conformance import ConformancePipeline
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
-from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
 from qmtl.runtime.sdk.sla import SLAPolicy
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
 
 logger = logging.getLogger(__name__)
 
@@ -771,6 +774,8 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
     ) -> ArtifactRegistrar:
         if registrar is not None:
             return registrar
+        from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
+
         runtime_registrar = FileSystemArtifactRegistrar.from_runtime_config()
         if runtime_registrar is not None:
             return runtime_registrar

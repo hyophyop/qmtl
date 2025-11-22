@@ -1,7 +1,27 @@
 """Developer-facing interfaces such as CLI tools and scripts."""
 
-from . import cli, scripts, tools
-from .scaffold import *  # noqa: F401,F403
+from __future__ import annotations
 
-__all__ = ["cli", "scripts", "tools"]
-__all__ += [name for name in globals() if name not in __all__ and not name.startswith("_")]
+import importlib
+
+__all__ = ["cli", "scripts", "tools", "scaffold"]
+
+_MODULES = {
+    "cli": "qmtl.interfaces.cli",
+    "scripts": "qmtl.interfaces.scripts",
+    "tools": "qmtl.interfaces.tools",
+    "scaffold": "qmtl.interfaces.scaffold",
+}
+
+
+def __getattr__(name: str):
+    module_path = _MODULES.get(name)
+    if module_path is None:
+        raise AttributeError(name)
+    module = importlib.import_module(module_path)
+    globals()[name] = module
+    return module
+
+
+def __dir__():
+    return sorted(set(__all__))

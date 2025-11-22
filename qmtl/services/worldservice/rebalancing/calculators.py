@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Tuple, TYPE_CHECKING
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Tuple
 
 from .base import PositionSlice, RebalancePlan, SymbolDelta
-
-if TYPE_CHECKING:  # pragma: no cover - for typing only
-    from .multi import MultiWorldRebalanceContext
 
 
 @dataclass(frozen=True)
@@ -106,4 +103,3 @@ class GlobalDeltaAggregator:
             venue, symbol = key
             deltas.append(SymbolDelta(symbol=symbol, delta_qty=delta_qty, venue=venue))
         return deltas
-

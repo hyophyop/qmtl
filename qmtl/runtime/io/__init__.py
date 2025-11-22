@@ -1,27 +1,8 @@
 """Data fetching and persistence helpers."""
 
-from .datafetcher import DataFetcher
-from qmtl.runtime.sdk.data_io import HistoryProvider, EventRecorder
-from .historyprovider import QuestDBBackend, QuestDBHistoryProvider, QuestDBLoader
-from .eventrecorder import QuestDBRecorder
-from .binance_fetcher import BinanceFetcher
-from .ccxt_fetcher import (
-    CcxtBackfillConfig,
-    RateLimiterConfig,
-    CcxtOHLCVFetcher,
-    CcxtTradesConfig,
-    CcxtTradesFetcher,
-)
-from .ccxt_provider import CcxtQuestDBProvider
-from .seamless_provider import (
-    EnhancedQuestDBProvider,
-    EnhancedQuestDBProviderSettings,
-    FingerprintPolicy,
-    InMemorySeamlessProvider,
-)
-from .artifact import ArtifactRegistrar, ArtifactPublication
-from .ccxt_live_feed import CcxtProLiveFeed, CcxtProConfig
-from . import seamless_presets as _seamless_presets  # noqa: F401 - ensure preset registration
+from __future__ import annotations
+
+import importlib
 
 __all__ = [
     "DataFetcher",
@@ -47,3 +28,42 @@ __all__ = [
     "ArtifactRegistrar",
     "ArtifactPublication",
 ]
+
+_ATTR_MAP = {
+    "DataFetcher": ("qmtl.runtime.io.datafetcher", "DataFetcher"),
+    "HistoryProvider": ("qmtl.runtime.sdk.data_io", "HistoryProvider"),
+    "EventRecorder": ("qmtl.runtime.sdk.data_io", "EventRecorder"),
+    "QuestDBBackend": ("qmtl.runtime.io.historyprovider", "QuestDBBackend"),
+    "QuestDBHistoryProvider": ("qmtl.runtime.io.historyprovider", "QuestDBHistoryProvider"),
+    "QuestDBLoader": ("qmtl.runtime.io.historyprovider", "QuestDBLoader"),
+    "QuestDBRecorder": ("qmtl.runtime.io.eventrecorder", "QuestDBRecorder"),
+    "BinanceFetcher": ("qmtl.runtime.io.binance_fetcher", "BinanceFetcher"),
+    "EnhancedQuestDBProvider": ("qmtl.runtime.io.seamless_provider", "EnhancedQuestDBProvider"),
+    "EnhancedQuestDBProviderSettings": ("qmtl.runtime.io.seamless_provider", "EnhancedQuestDBProviderSettings"),
+    "FingerprintPolicy": ("qmtl.runtime.io.seamless_provider", "FingerprintPolicy"),
+    "InMemorySeamlessProvider": ("qmtl.runtime.io.seamless_provider", "InMemorySeamlessProvider"),
+    "CcxtBackfillConfig": ("qmtl.runtime.io.ccxt_fetcher", "CcxtBackfillConfig"),
+    "RateLimiterConfig": ("qmtl.runtime.io.ccxt_fetcher", "RateLimiterConfig"),
+    "CcxtOHLCVFetcher": ("qmtl.runtime.io.ccxt_fetcher", "CcxtOHLCVFetcher"),
+    "CcxtTradesConfig": ("qmtl.runtime.io.ccxt_fetcher", "CcxtTradesConfig"),
+    "CcxtTradesFetcher": ("qmtl.runtime.io.ccxt_fetcher", "CcxtTradesFetcher"),
+    "CcxtQuestDBProvider": ("qmtl.runtime.io.ccxt_provider", "CcxtQuestDBProvider"),
+    "CcxtProLiveFeed": ("qmtl.runtime.io.ccxt_live_feed", "CcxtProLiveFeed"),
+    "CcxtProConfig": ("qmtl.runtime.io.ccxt_live_feed", "CcxtProConfig"),
+    "ArtifactRegistrar": ("qmtl.runtime.io.artifact", "ArtifactRegistrar"),
+    "ArtifactPublication": ("qmtl.runtime.io.artifact", "ArtifactPublication"),
+}
+
+def __getattr__(name: str):
+    target = _ATTR_MAP.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module_path, attr = target
+    module = importlib.import_module(module_path)
+    value = getattr(module, attr)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(__all__))

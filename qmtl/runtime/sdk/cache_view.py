@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, TYPE_CHECKING
+from typing import Any
 from dataclasses import dataclass
-
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from .node import Node
 
 from . import metrics as sdk_metrics
 
@@ -96,8 +93,7 @@ class CacheView:
         # Use direct attribute access to avoid any accidental recursion
         data = object.__getattribute__(self, "_data")
         if isinstance(data, Mapping):
-            from .node import Node  # local import to avoid circular dependency
-            if isinstance(key, Node):
+            if _looks_like_node(key):
                 key = key.node_id
 
             new_path = self._path + (key,)
@@ -258,3 +254,7 @@ class CacheView:
         from .cache_view_tools import align_frames as _align_frames
 
         return _align_frames(self, specs, window=window, columns=columns)
+
+
+def _looks_like_node(obj: Any) -> bool:
+    return hasattr(obj, "node_id") and hasattr(obj, "node_type")
