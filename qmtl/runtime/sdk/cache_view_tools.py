@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Any, Mapping, Sequence
 
 import pandas as pd
@@ -123,14 +124,19 @@ def _slice_series(
 
 def _as_sequence(series_view: Any) -> Sequence[Any]:
     data = series_view
+    series_cls = series_view.__class__
     # CacheView exposes its backing data via _data; avoid importing to keep module decoupled
-    if hasattr(series_view, "_data"):
+    if series_cls.__name__ == "CacheView" and series_cls.__module__ == "qmtl.runtime.sdk.cache_view":
         data = object.__getattribute__(series_view, "_data")
     if data is None:
         return []
-    if not isinstance(data, Sequence) or isinstance(data, (str, bytes, bytearray)):
+    if isinstance(data, (str, bytes, bytearray)):
         raise TypeError("cache leaf must be a sequence of (timestamp, value) pairs")
-    return data
+    if isinstance(data, Sequence):
+        return data
+    if isinstance(data, Iterable):
+        return list(data)
+    raise TypeError("cache leaf must be a sequence of (timestamp, value) pairs")
 
 
 def _build_frame(

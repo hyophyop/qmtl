@@ -16,6 +16,16 @@ def test_window_and_as_frame_single_node():
     assert pytest.approx(frame.returns().tolist()) == [0.5]
 
 
+def test_as_frame_accepts_pandas_series_cache_leaf():
+    series = pd.Series([(1, {"price": 1}), (2, {"price": 2})])
+    view = CacheView({"a": {1: series}})
+
+    frame = view.as_frame("a", 1)
+
+    assert list(frame.frame.index) == [1, 2]
+    assert frame.frame["price"].tolist() == [1, 2]
+
+
 def test_align_frames_with_shared_timestamps():
     view = CacheView(
         {
