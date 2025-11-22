@@ -74,6 +74,9 @@ jobs:
       - name: Lint DSN keys (canonical *_dsn)
         run: uv run python scripts/lint_dsn_keys.py
 
+      - name: Check import cycles (grimp baseline)
+        run: uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json
+
       - name: Seamless runtime health verification
         if: ${{ vars.RUN_SEAMLESS_HEALTH_CHECK == '1' }}
         env:

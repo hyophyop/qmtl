@@ -23,11 +23,9 @@ class Strategy:
         so callers can pass a Node Set directly without unpacking.
         """
 
-        from .node import Node as _Node  # local import to avoid cycles
-
         def _flatten(obj):
             # Single node
-            if isinstance(obj, _Node):
+            if _is_node(obj):
                 return [obj]
             # Treat None as empty
             if obj is None:
@@ -106,3 +104,7 @@ def buy_signal(condition: bool, target_percent: float = 1.0) -> dict:
     if condition:
         return {"action": "BUY", "target_percent": float(target_percent)}
     return {"action": "HOLD"}
+
+
+def _is_node(obj) -> bool:
+    return hasattr(obj, "interval") and hasattr(obj, "period") and hasattr(obj, "cache")

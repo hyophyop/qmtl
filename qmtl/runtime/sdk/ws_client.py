@@ -3,16 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import contextlib
-from typing import Awaitable, Callable, Optional, TYPE_CHECKING
+from typing import Awaitable, Callable, Optional
 
 from urllib.parse import urlparse, urlunparse
 
 import websockets
 import logging
 from . import runtime
-
-if TYPE_CHECKING:  # pragma: no cover - only for typing
-    from .node import TagQueryNode
 
 
 class WebSocketClient:

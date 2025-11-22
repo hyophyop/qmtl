@@ -3,18 +3,46 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, Mapping
+from typing import Any, Dict, FrozenSet, Mapping, TYPE_CHECKING
 
 import yaml
 
-from qmtl.services.gateway.config import GatewayConfig
-from qmtl.services.dagmanager.config import DagManagerConfig
-from qmtl.services.worldservice.config import (
-    WorldServiceServerConfig,
-    load_worldservice_server_config,
-)
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qmtl.services.dagmanager.config import DagManagerConfig
+    from qmtl.services.gateway.config import GatewayConfig
+    from qmtl.services.worldservice.config import WorldServiceServerConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _gateway_config_cls():
+    from qmtl.services.gateway.config import GatewayConfig
+
+    return GatewayConfig
+
+
+def _dagmanager_config_cls():
+    from qmtl.services.dagmanager.config import DagManagerConfig
+
+    return DagManagerConfig
+
+
+def _load_worldservice_server_config():
+    from qmtl.services.worldservice.config import load_worldservice_server_config
+
+    return load_worldservice_server_config
+
+
+def _worldservice_server_cls():
+    from qmtl.services.worldservice.config import WorldServiceServerConfig
+
+    return WorldServiceServerConfig
+
+
+# Bind forward-referenced config classes for typing introspection.
+GatewayConfig = _gateway_config_cls()
+DagManagerConfig = _dagmanager_config_cls()
+WorldServiceServerConfig = _worldservice_server_cls()
 
 
 _GATEWAY_ALIASES: dict[str, str] = {
@@ -334,8 +362,8 @@ class UnifiedConfig:
     """Configuration aggregating service, runtime, and tooling settings."""
 
     worldservice: WorldServiceConfig = field(default_factory=WorldServiceConfig)
-    gateway: GatewayConfig = field(default_factory=GatewayConfig)
-    dagmanager: DagManagerConfig = field(default_factory=DagManagerConfig)
+    gateway: "GatewayConfig" = field(default_factory=lambda: _gateway_config_cls()())
+    dagmanager: "DagManagerConfig" = field(default_factory=lambda: _dagmanager_config_cls()())
     seamless: SeamlessConfig = field(default_factory=SeamlessConfig)
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
@@ -474,7 +502,7 @@ def _prepare_worldservice(
 def _mirror_worldservice_to_gateway(
     world_data: Mapping[str, Any],
     worldservice_cfg: WorldServiceConfig,
-    gateway_cfg: GatewayConfig,
+    gateway_cfg: "GatewayConfig",
 ) -> None:
     if not world_data:
         return
@@ -495,6 +523,9 @@ def load_config(path: str) -> UnifiedConfig:
     """Parse YAML/JSON and populate :class:`UnifiedConfig`."""
     data = _read_config_mapping(path)
     sections, present_sections = _extract_sections(data)
+    GatewayConfig = _gateway_config_cls()
+    DagManagerConfig = _dagmanager_config_cls()
+    load_worldservice_server_config = _load_worldservice_server_config()
 
     gateway_data = _apply_aliases(sections["gateway"], _GATEWAY_ALIASES, logger_prefix="gateway")
     dagmanager_data = _apply_aliases(

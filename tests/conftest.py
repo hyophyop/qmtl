@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 import yaml
@@ -57,3 +59,19 @@ def configure_sdk(tmp_path, monkeypatch):
         sdk_configuration.reset_runtime_config_cache()
         runtime.reload()
         reload_arrow_cache()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _close_event_loop():
+    """Ensure the default asyncio loop is closed to avoid ResourceWarning at teardown."""
+
+    yield
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        return
+    if loop.is_running():
+        loop.call_soon(loop.stop)
+        loop.run_until_complete(asyncio.sleep(0))
+    if not loop.is_closed():
+        loop.close()

@@ -7,6 +7,7 @@ Seamless providers by wiring storage, backfill, live, and governance
 components without hard-coding those decisions inside provider subclasses.
 """
 
+import importlib
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Generic, Mapping, Optional, Protocol, TypeVar
 
@@ -107,6 +108,7 @@ class SeamlessPresetRegistry:
     """Global registry mapping preset names to builder customisations."""
 
     _presets: Dict[str, PresetFactory] = {}
+    _loaded: bool = False
 
     @classmethod
     def register(cls, name: str, factory: PresetFactory) -> None:
@@ -120,11 +122,21 @@ class SeamlessPresetRegistry:
         builder: Optional["SeamlessBuilder"] = None,
         config: Optional[Mapping[str, object]] = None,
     ) -> "SeamlessBuilder":
+        cls._ensure_presets_loaded()
         if name not in cls._presets:
             raise KeyError(f"unknown seamless preset: {name}")
         base = builder or SeamlessBuilder()
         cfg = config or {}
         return cls._presets[name](base, cfg)
+
+    @classmethod
+    def _ensure_presets_loaded(cls) -> None:
+        if cls._loaded:
+            return
+        try:
+            importlib.import_module("qmtl.runtime.io.seamless_presets")
+        finally:
+            cls._loaded = True
 
 
 __all__ = [

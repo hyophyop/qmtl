@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from qmtl.foundation.kafka import Producer
 from qmtl.runtime.sdk import Node
@@ -10,9 +10,16 @@ from qmtl.runtime.sdk.runner import Runner
 class Pipeline:
     """Simple in-process execution pipeline for ``Node`` graphs."""
 
-    def __init__(self, nodes: List[Node], *, producer: Optional[Producer] = None) -> None:
+    def __init__(
+        self,
+        nodes: List[Node],
+        *,
+        producer: Optional[Producer] = None,
+        feed_fn: Callable[..., Any] | None = None,
+    ) -> None:
         self.nodes = nodes
         self.producer = producer
+        self._feed_fn: Callable[..., Any] = feed_fn or Runner.feed_queue_data
         self.downstream: Dict[Node, List[Node]] = {n: [] for n in nodes}
         for node in nodes:
             for inp in node.inputs:
@@ -35,7 +42,7 @@ class Pipeline:
         on_missing: str = "skip",
     ) -> None:
         for child in self.downstream.get(node, []):
-            result = Runner.feed_queue_data(
+            result = self._feed_fn(
                 child,
                 node.node_id,
                 interval,

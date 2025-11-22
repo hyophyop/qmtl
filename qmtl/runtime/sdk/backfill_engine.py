@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
-from qmtl.runtime.io import HistoryProvider
-from .node import Node
+from qmtl.runtime.sdk.data_io import HistoryProvider
 from . import metrics as sdk_metrics
 
 logger = logging.getLogger(__name__)
@@ -15,13 +15,20 @@ logger = logging.getLogger(__name__)
 class BackfillEngine:
     """Run backfill jobs concurrently using ``asyncio`` tasks."""
 
-    def __init__(self, source: HistoryProvider, *, max_retries: int = 3) -> None:
+    def __init__(
+        self,
+        source: HistoryProvider,
+        *,
+        max_retries: int = 3,
+        gateway_client: Any | None = None,
+    ) -> None:
         self.source = source
         self.max_retries = max_retries
         self._tasks: set[asyncio.Task] = set()
+        self._gateway_client = gateway_client
 
     # --------------------------------------------------------------
-    async def _run_job(self, node: Node, start: int, end: int) -> None:
+    async def _run_job(self, node: Any, start: int, end: int) -> None:
         sdk_metrics.observe_backfill_start(node.node_id, node.interval)
         logger.info(
             "backfill.start",
@@ -98,7 +105,7 @@ class BackfillEngine:
                 await self.poll_source_ready()
 
     # --------------------------------------------------------------
-    def submit(self, node: Node, start: int, end: int) -> asyncio.Task:
+    def submit(self, node: Any, start: int, end: int) -> asyncio.Task:
         """Schedule a backfill job and return the created task."""
         task = asyncio.create_task(self._run_job(node, start, end))
         self._tasks.add(task)
@@ -123,7 +130,7 @@ class BackfillEngine:
         else:
             await asyncio.sleep(0)
 
-    async def _process_metadata(self, node: Node, metadata) -> None:
+    async def _process_metadata(self, node: Any, metadata) -> None:
         if metadata is None:
             return
         try:
@@ -165,7 +172,7 @@ class BackfillEngine:
 
         await self._publish_metadata(node, metadata)
 
-    async def _publish_metadata(self, node: Node, metadata) -> None:
+    async def _publish_metadata(self, node: Any, metadata) -> None:
         gateway_url = getattr(node, "gateway_url", None)
         strategy_id = getattr(node, "strategy_id", None)
         if not gateway_url or not strategy_id:
@@ -196,16 +203,17 @@ class BackfillEngine:
             logger.debug("failed to publish seamless metadata", exc_info=True)
 
     def _resolve_gateway_client(self):
+        if self._gateway_client is not None:
+            return self._gateway_client
         try:
-            from .runner import Runner
+            from qmtl.runtime.sdk.runner import Runner
 
-            services = Runner.services()
-            return getattr(services, "gateway_client", None)
+            return getattr(Runner.services(), "gateway_client", None)
         except Exception:
             logger.debug("gateway client unavailable for metadata publish", exc_info=True)
             return None
 
-    def _resolve_dataset_fingerprint(self, metadata, artifact, node: Node):
+    def _resolve_dataset_fingerprint(self, metadata, artifact, node: Any):
         dataset_fp = getattr(metadata, "dataset_fingerprint", None)
         if dataset_fp is None and artifact is not None:
             dataset_fp = getattr(artifact, "dataset_fingerprint", None)
@@ -213,7 +221,7 @@ class BackfillEngine:
             dataset_fp = node.dataset_fingerprint
         return dataset_fp
 
-    def _resolve_as_of(self, metadata, artifact, node: Node):
+    def _resolve_as_of(self, metadata, artifact, node: Any):
         as_of_value = getattr(metadata, "as_of", None)
         if as_of_value is None and artifact is not None:
             as_of_value = getattr(artifact, "as_of", None)
@@ -224,7 +232,7 @@ class BackfillEngine:
     def _build_metadata_payload(
         self,
         *,
-        node: Node,
+        node: Any,
         metadata,
         dataset_fp,
         as_of_value,
