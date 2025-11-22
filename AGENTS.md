@@ -10,6 +10,13 @@ canonical-guidelines: ../CONTRIBUTING.md
 
 For general contribution and testing policies, see the repository root [AGENTS.md](../AGENTS.md).
 
+## Quick Checklist (TL;DR)
+- Env: use `uv` for installs/builds (commands in *Environment*).
+- Tests: always run preflight + full suite (commands in *Testing* / *Hang Detection Preflight*).
+- Docs/i18n: `docs/ko`가 기준; en은 동시 반영. Mermaid만 사용, nav는 `mkdocs.yml`에서 관리.
+- Shadow contract: `execution_domain=shadow` = 라이브 입력 미러, 주문 OFF, 네임스페이스 격리; Gateway/SDK/Runner/WS 전 경로에서 라벨 유지.
+- GitHub 액션: 이슈/PR은 `gh` CLI 사용; 이슈 닫기 키워드 포함.
+
 ## Environment
 
 - Manage the Python environment using **uv**. Install dependencies with
@@ -144,7 +151,7 @@ Notes:
 Example strategies under `qmtl/examples/` follow the same conventions as the rest of the
 project:
 
-- Run tests with `uv run -m pytest -W error -n auto`.
+- Run tests following the *Testing* guidelines above.
 - Place node processors under `nodes/` and tests under `tests/`.
 - Keep functions pure and free of side effects.
 
