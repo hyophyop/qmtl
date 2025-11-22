@@ -169,24 +169,30 @@ async def test_shadow_end_to_end_submission_queue_and_runner(monkeypatch) -> Non
 
     Runner.set_enable_trade_submission(True)
     trade_service = DummyService()
+    original_trade_service = Runner.services().trade_execution_service
+    original_trade_submission_enabled = Runner._enable_trade_submission
     Runner.set_trade_execution_service(trade_service)
 
-    src = Node(name="sig", interval=1, period=1)
-    pub = TradeOrderPublisherNode(src)
-    runner_context = RunnerComputeContext(world_id="shadow-world", execution_domain="shadow")
-    src.apply_compute_context(runner_context)
-    pub.apply_compute_context(runner_context)
+    try:
+        src = Node(name="sig", interval=1, period=1)
+        pub = TradeOrderPublisherNode(src)
+        runner_context = RunnerComputeContext(world_id="shadow-world", execution_domain="shadow")
+        src.apply_compute_context(runner_context)
+        pub.apply_compute_context(runner_context)
 
-    result = Runner.feed_queue_data(
-        pub,
-        src.node_id,
-        1,
-        0,
-        {"action": "BUY", "size": 1.0},
-    )
+        result = Runner.feed_queue_data(
+            pub,
+            src.node_id,
+            1,
+            0,
+            {"action": "BUY", "size": 1.0},
+        )
 
-    assert result is not None and result.get("side") == "BUY"
-    assert trade_service.orders == []  # shadow domain blocks order dispatch
+        assert result is not None and result.get("side") == "BUY"
+        assert trade_service.orders == []  # shadow domain blocks order dispatch
+    finally:
+        Runner.set_trade_execution_service(original_trade_service)
+        Runner.set_enable_trade_submission(original_trade_submission_enabled)
 
     active_context = pub.cache.active_context
     assert active_context is not None
