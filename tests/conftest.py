@@ -66,9 +66,9 @@ def _close_event_loop():
     """Ensure the default asyncio loop is closed to avoid ResourceWarning at teardown."""
 
     yield
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
+    policy = asyncio.get_event_loop_policy()
+    loop = getattr(getattr(policy, "_local", None), "_loop", None)
+    if loop is None:
         return
     if loop.is_running():
         loop.call_soon(loop.stop)

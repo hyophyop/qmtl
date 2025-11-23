@@ -41,3 +41,53 @@ def test_lag_monitor_records_metrics():
     threshold_store = get_mapping_store(metrics.queue_lag_threshold_seconds, dict)
     assert lag_store["q1"] == 10
     assert threshold_store["q1"] == 10
+
+
+def test_lag_monitor_defaults_missing_lag_to_zero():
+    client = InMemoryAdminClient()
+    client.create_topic("q1", num_partitions=1, replication_factor=1)
+    admin = KafkaAdmin(client)
+
+    store = DummyStore(
+        [QueueLagInfo(topic="q1", committed_offset=7, lag_alert_threshold=3)]
+    )
+
+    metrics.reset_metrics()
+    monitor = LagMonitor(admin, store)
+
+    lags = monitor.record_lag()
+
+    assert lags == {"q1": 0}
+    lag_store = get_mapping_store(metrics.queue_lag_seconds, dict)
+    threshold_store = get_mapping_store(metrics.queue_lag_threshold_seconds, dict)
+    assert lag_store["q1"] == 0
+    assert threshold_store["q1"] == 3
+
+
+def test_lag_monitor_updates_existing_metrics():
+    client = InMemoryAdminClient()
+    client.create_topic("q1", num_partitions=1, replication_factor=1)
+    client.set_offsets("q1", high=120, low=0)
+    admin = KafkaAdmin(client)
+
+    store = DummyStore(
+        [QueueLagInfo(topic="q1", committed_offset=60, lag_alert_threshold=30)]
+    )
+
+    metrics.reset_metrics()
+    monitor = LagMonitor(admin, store)
+
+    first_lags = monitor.record_lag()
+    assert first_lags["q1"] == 60
+
+    # Simulate catching up to the head offset and ensure the gauges clear.
+    store._infos = [QueueLagInfo(topic="q1", committed_offset=120, lag_alert_threshold=30)]
+    client.set_offsets("q1", high=120, low=0)
+
+    updated_lags = monitor.record_lag()
+
+    lag_store = get_mapping_store(metrics.queue_lag_seconds, dict)
+    threshold_store = get_mapping_store(metrics.queue_lag_threshold_seconds, dict)
+    assert updated_lags["q1"] == 0
+    assert lag_store["q1"] == 0
+    assert threshold_store["q1"] == 30
