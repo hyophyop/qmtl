@@ -93,6 +93,7 @@ uv.lock
 # Snapshots
 .qmtl_snapshots/
 .qmtl_tagmap.json
+memrepo.gpickle
 
 # Test artifacts
 .artifacts/
