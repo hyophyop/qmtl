@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from qmtl.services.dagmanager.completion import QueueCompletionMonitor
@@ -179,3 +181,26 @@ async def test_completion_requires_metadata():
 
     assert bus.published == []
     assert monitor._completed == set()
+
+
+@pytest.mark.asyncio
+async def test_completion_monitor_start_stop_marks_completion():
+    done = asyncio.Event()
+
+    class SignalingAdmin(FixedAdmin):
+        def get_topic_sizes(self):  # type: ignore[override]
+            size = super().get_topic_sizes()
+            if self._calls >= 2:
+                done.set()
+            return size
+
+    repo = DummyRepo()
+    admin = SignalingAdmin([{"q1": 0}, {"q1": 0}])
+    monitor = QueueCompletionMonitor(repo, admin, bus=None, interval=0.01, threshold=1)
+
+    await monitor.start()
+    await asyncio.wait_for(done.wait(), timeout=0.1)
+    await monitor.stop()
+
+    assert monitor._task is None
+    assert monitor._completed == {"q1"}

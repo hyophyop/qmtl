@@ -50,6 +50,8 @@ def load_dagmanager_config(path: str) -> DagManagerConfig:
         "controlbus_uri": "controlbus_dsn",
     }
     for alias, canonical in aliases.items():
-        if canonical not in data and alias in data:
+        if canonical in data:
+            data.pop(alias, None)
+        elif alias in data:
             data[canonical] = data.pop(alias)
     return DagManagerConfig(**data)

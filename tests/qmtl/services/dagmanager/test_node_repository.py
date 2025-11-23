@@ -57,6 +57,15 @@ def test_load_graph_falls_back_to_json(tmp_path: Path):
     assert nodes["n1"].node_type == "N"
 
 
+def test_load_graph_recovers_from_corruption(tmp_path: Path):
+    graph_path = tmp_path / "graph.gpickle"
+    graph_path.write_text("not a graph")
+
+    repo = node_repository.MemoryNodeRepository(str(graph_path))
+
+    assert repo.get_nodes(["missing"]) == {}
+
+
 def test_save_graph_falls_back_to_node_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     graph_path = tmp_path / "graph.gpickle"
     repo = node_repository.MemoryNodeRepository(str(graph_path))
@@ -86,6 +95,31 @@ def test_save_graph_falls_back_to_node_link(tmp_path: Path, monkeypatch: pytest.
     persisted = json.loads(graph_path.read_text())
     assert persisted["nodes"][0]["id"] == "n1"
     assert persisted["nodes"][0]["topic"] == "q1"
+
+
+def test_get_nodes_filters_non_compute(tmp_path: Path):
+    repo = node_repository.MemoryNodeRepository(str(tmp_path / "graph.gpickle"))
+    repo.add_node(
+        NodeRecord(
+            node_id="compute",
+            node_type="N",
+            code_hash="c1",
+            schema_hash="s1",
+            schema_id="id1",
+            interval=30,
+            period=None,
+            tags=["t1"],
+            bucket=None,
+            is_global=True,
+            topic="q1",
+        )
+    )
+    repo.insert_sentinel("sentinel", ["compute"], version="v1")
+
+    records = repo.get_nodes(["compute", "sentinel", "missing"])
+
+    assert set(records) == {"compute"}
+    assert records["compute"].is_global is True
 
 
 def test_buffering_state_transitions(tmp_path: Path):
