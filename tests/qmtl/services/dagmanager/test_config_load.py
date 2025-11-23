@@ -53,3 +53,19 @@ def test_load_config_propagates_missing_file(tmp_path: Path):
 
     with pytest.raises(FileNotFoundError):
         load_dagmanager_config(str(missing_path))
+
+
+def test_load_config_preserves_canonical_over_alias(tmp_path: Path):
+    config_path = tmp_path / "prefer_canonical.yml"
+    config_path.write_text(
+        """
+neo4j_dsn: bolt://primary
+neo4j_url: bolt://alias
+grpc_port: 5555
+""".strip()
+    )
+
+    cfg = load_dagmanager_config(str(config_path))
+
+    assert cfg.neo4j_dsn == "bolt://primary"
+    assert cfg.grpc_port == 5555

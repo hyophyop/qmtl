@@ -1,8 +1,10 @@
+import asyncio
+
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient
-from qmtl.services.dagmanager.lag_monitor import LagMonitor, QueueLagInfo
+from qmtl.services.dagmanager.lag_monitor import LagMonitor, LagMonitorLoop, QueueLagInfo
 from qmtl.services.dagmanager import metrics
 
 
@@ -91,3 +93,28 @@ def test_lag_monitor_updates_existing_metrics():
     assert updated_lags["q1"] == 0
     assert lag_store["q1"] == 0
     assert threshold_store["q1"] == 30
+
+
+@pytest.mark.asyncio
+async def test_lag_monitor_loop_runs_and_stops():
+    calls = 0
+    ready = asyncio.Event()
+
+    class RecordingMonitor(LagMonitor):
+        def __init__(self) -> None:
+            super().__init__(admin=None, store=None)  # type: ignore[arg-type]
+
+        def record_lag(self):  # type: ignore[override]
+            nonlocal calls
+            calls += 1
+            if calls >= 2:
+                ready.set()
+
+    loop = LagMonitorLoop(RecordingMonitor(), interval=0.01)
+
+    await loop.start()
+    await asyncio.wait_for(ready.wait(), timeout=0.2)
+    await loop.stop()
+
+    assert calls >= 2
+    assert loop._task is None
