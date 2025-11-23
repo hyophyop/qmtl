@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -125,6 +126,19 @@ class RecordingPolicy:
 
     async def execute(self, event: Any) -> None:
         self.executed.append(event)
+
+
+class FailingPolicy:
+    def __init__(self, exc: Exception | None = None) -> None:
+        self.exc = exc or RuntimeError("policy failure")
+        self.checked: list[Any] = []
+
+    async def should_execute(self, event: Any) -> bool:
+        self.checked.append(event)
+        return True
+
+    async def execute(self, event: Any) -> None:
+        raise self.exc
 
 
 class DummyDB(Database):
@@ -396,6 +410,209 @@ async def test_rebalancing_plan_broadcasts_v2_metadata():
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_policy_failure_records_metrics(caplog):
+    metrics.reset_metrics()
+    hub = FakeHub()
+    policy = FailingPolicy()
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["rebalancing_planned"],
+        group="g",
+        ws_hub=hub,
+        rebalancing_policy=policy,
+    )
+    await consumer.start()
+    ts = time.time() * 1000
+    plan_payload = {
+        "world_id": "world-error",
+        "plan": {"scale_world": 1.0, "scale_by_strategy": {}, "deltas": []},
+        "version": 1,
+    }
+    msg = ControlBusMessage(
+        topic="rebalancing_planned",
+        key="world-error",
+        etag="",
+        run_id="",
+        data=plan_payload,
+        timestamp_ms=ts,
+    )
+
+    with caplog.at_level(logging.ERROR):
+        await consumer.publish(msg)
+        await consumer._queue.join()
+    await consumer.stop()
+
+    assert len(policy.checked) == 1
+    assert (
+        metrics.rebalance_plan_execution_attempts_total
+        .labels(world_id="world-error")
+        ._value.get()
+        == 1
+    )
+    assert (
+        metrics.rebalance_plan_execution_failures_total
+        .labels(world_id="world-error")
+        ._value.get()
+        == 1
+    )
+    assert any(
+        "Failed to execute rebalancing plan" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_rebalancing_payload_warns_and_skips(caplog):
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["rebalancing_planned"], group="g", ws_hub=hub
+    )
+    await consumer.start()
+    msg = ControlBusMessage(
+        topic="rebalancing_planned",
+        key="world-3",
+        etag="",
+        run_id="",
+        data={"world_id": "world-3"},
+        timestamp_ms=time.time() * 1000,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await consumer.publish(msg)
+        await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == []
+    assert (
+        metrics.rebalance_plans_observed_total.labels(world_id="world-3")._value.get()
+        == 0
+    )
+    assert any(
+        "invalid rebalancing_planned payload" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_generic_message_invalid_version_logs_warning(caplog):
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["activation"], group="g", ws_hub=hub
+    )
+    await consumer.start()
+    msg = ControlBusMessage(
+        topic="activation",
+        key="a",
+        etag="ea",
+        run_id="ra",
+        data={"version": 2},
+        timestamp_ms=time.time() * 1000,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await consumer.publish(msg)
+        await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == []
+    assert (
+        metrics.event_relay_events_total.labels(topic="activation")._value.get()
+        == 1
+    )
+    assert any(
+        "unsupported controlbus message version" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_queue_update_emits_tagquery_once():
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["queue"], group="g", ws_hub=hub
+    )
+    await consumer.start()
+    ts = time.time() * 1000
+    base_payload = {
+        "tags": ["x", "y"],
+        "interval": 30,
+        "queues": [{"queue": "q1", "global": False}],
+        "match_mode": "any",
+        "version": 1,
+        "etag": "e1",
+        "ts": "2024-01-01T00:00:00Z",
+    }
+    msg1 = ControlBusMessage(
+        topic="queue",
+        key="k1",
+        etag="e1",
+        run_id="r1",
+        data=base_payload,
+        timestamp_ms=ts,
+    )
+    msg2 = ControlBusMessage(
+        topic="queue",
+        key="k1",
+        etag="e2",
+        run_id="r2",
+        data={**base_payload, "etag": "e2"},
+        timestamp_ms=ts,
+    )
+
+    await consumer.publish(msg1)
+    await consumer.publish(msg2)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == [
+        (
+            "queue_update",
+            {
+                "tags": ["x", "y"],
+                "interval": 30,
+                "queues": [{"queue": "q1", "global": False}],
+                "match_mode": MatchMode.ANY,
+                "world_id": None,
+                "execution_domain": None,
+                "etag": "e1",
+                "ts": "2024-01-01T00:00:00Z",
+                "version": 1,
+            },
+        ),
+        (
+            "tagquery.upsert",
+            {
+                "tags": ["x", "y"],
+                "interval": 30,
+                "queues": [{"queue": "q1", "global": False}],
+                "version": 1,
+            },
+        ),
+        (
+            "queue_update",
+            {
+                "tags": ["x", "y"],
+                "interval": 30,
+                "queues": [{"queue": "q1", "global": False}],
+                "match_mode": MatchMode.ANY,
+                "world_id": None,
+                "execution_domain": None,
+                "etag": "e2",
+                "ts": "2024-01-01T00:00:00Z",
+                "version": 1,
+            },
+        ),
+    ]
+    assert (
+        metrics.event_relay_events_total.labels(topic="queue")._value.get() == 2
+    )
+    assert metrics.event_relay_dropped_total.labels(topic="queue")._value.get() == 0
 
 
 class StartStopConsumer(ControlBusConsumer):
