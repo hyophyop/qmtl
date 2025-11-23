@@ -27,6 +27,7 @@ from qmtl.foundation.common.metrics_shared import (
     clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
 )
+from .protocols import MetricWithValueProtocol
 
 _WORLD_ID = "default"
 _REGISTERED_METRICS: set[str] = set()
@@ -411,7 +412,7 @@ orders_rejected_total = _counter(
 # ---------------------------------------------------------------------------
 # Alpha performance metrics
 # ---------------------------------------------------------------------------
-alpha_sharpe = _gauge(
+alpha_sharpe: MetricWithValueProtocol = _gauge(
     "alpha_sharpe",
     "Alpha strategy Sharpe ratio",
     reset=lambda g: g.set(0.0),
@@ -419,7 +420,7 @@ alpha_sharpe = _gauge(
     test_value_factory=lambda: 0.0,
 )
 
-alpha_max_drawdown = _gauge(
+alpha_max_drawdown: MetricWithValueProtocol = _gauge(
     "alpha_max_drawdown",
     "Alpha strategy maximum drawdown",
     reset=lambda g: g.set(0.0),
