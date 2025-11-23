@@ -18,12 +18,17 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Mapping, NamedTuple, Protocol, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Protocol, Tuple
+
+if TYPE_CHECKING:
+    import pyarrow as _pyarrow
+    import pyarrow.parquet as _pyarrow_parquet
+    import fsspec as _fsspec
 
 logger = logging.getLogger(__name__)
 
 
-def _get_arrow_context() -> ArrowContext | None:
+def _import_pyarrow() -> ArrowContext | None:
     try:  # optional
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -69,25 +74,34 @@ class FileSystemLike(Protocol):
 
 
 class ArrowContext(NamedTuple):
-    pa: Any
-    parquet: ArrowTableWriter
+    pa: "_pyarrow"
+    parquet: "_pyarrow_parquet"
+
+
+def _get_arrow_context() -> ArrowContext | None:
+    return _import_pyarrow()
 
 from . import metrics as sdk_metrics
 
 # Optional pyarrow context (exported for tests expecting module-level access)
 _arrow_ctx = _get_arrow_context()
-pa = _arrow_ctx.pa if _arrow_ctx else None  # type: ignore[attr-defined]
-pq = _arrow_ctx.parquet if _arrow_ctx else None  # type: ignore[attr-defined]
+pa: "_pyarrow | None" = _arrow_ctx.pa if _arrow_ctx else None
+pq: "_pyarrow_parquet | None" = _arrow_ctx.parquet if _arrow_ctx else None
+
+
+def _import_fsspec() -> "_fsspec | None":
+    try:  # optional
+        import fsspec as fsspec_module
+    except ImportError:  # pragma: no cover - optional dependency
+        return None
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("unexpected error importing fsspec")
+        return None
+    return fsspec_module
+
 
 # Optional fsspec context (exported for tests expecting module-level access)
-try:  # optional
-    import fsspec as _fsspec  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    _fsspec = None  # type: ignore
-except Exception:  # pragma: no cover - defensive
-    logger.exception("unexpected error importing fsspec")
-    _fsspec = None  # type: ignore
-fsspec = _fsspec
+fsspec: "_fsspec | None" = _import_fsspec()
 
 
 def _b64(obj: Any) -> str:

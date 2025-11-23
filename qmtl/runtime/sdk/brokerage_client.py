@@ -12,7 +12,7 @@ is included as a reference connector when ``ccxt`` is available.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Protocol, TypedDict
 
 from .trade_execution_service import TradeExecutionService
 
@@ -28,6 +28,26 @@ def _call_exchange_method(target: Any, method_names: tuple[str, ...], *args: Any
         except Exception:
             continue
     return False
+
+
+def _enable_sandbox_mode(exchange: CcxtExchange, sandbox: bool) -> None:
+    if not sandbox:
+        return
+    _call_exchange_method(exchange, ("set_sandbox_mode", "setSandboxMode"), True)
+
+
+def _build_ccxt_config(kwargs: dict[str, Any]) -> tuple[CcxtClientConfig, bool]:
+    sandbox = bool(kwargs.pop("sandbox", kwargs.pop("testnet", False)))
+    enable_rate_limit = kwargs.pop("enableRateLimit", True)
+    config: CcxtClientConfig = {
+        "apiKey": kwargs.pop("apiKey", None) or kwargs.pop("api_key", None),
+        "secret": kwargs.pop("secret", None),
+        "enableRateLimit": enable_rate_limit,
+    }
+    options = kwargs.pop("options", None)
+    if options is not None:
+        config["options"] = options
+    return config, sandbox
 
 
 class BrokerageClient(ABC):
@@ -132,35 +152,22 @@ class CcxtBrokerageClient(BrokerageClient):
     - API credentials are read from the provided kwargs or ``CCXT_API_KEY``/``CCXT_SECRET`` env vars.
     - This is a thin demo; production deployments should manage auth, nonce, rate-limits,
       and exchange-specific nuances carefully.
+    - Constructor kwargs follow :class:`CcxtClientConfig` for the documented parameters; any
+      additional keys are forwarded directly to the CCXT exchange constructor.
     """
 
     def __init__(self, exchange: str, **kwargs: Any) -> None:
         try:
-            import ccxt  # type: ignore
+            import ccxt
         except Exception as exc:  # pragma: no cover - optional dependency
             raise RuntimeError("ccxt is required for CcxtBrokerageClient") from exc
 
-        api_key = kwargs.pop("apiKey", None) or kwargs.pop("api_key", None)
-        secret = kwargs.pop("secret", None)
-        enable_rate_limit = kwargs.pop("enableRateLimit", True)
-        sandbox = bool(kwargs.pop("sandbox", kwargs.pop("testnet", False)))
+        config, sandbox = _build_ccxt_config(kwargs)
+        ccxt_kwargs: dict[str, Any] = {**kwargs, **config}
+
         klass = getattr(ccxt, exchange)
-        self._ex = klass({
-            "apiKey": api_key,
-            "secret": secret,
-            "enableRateLimit": enable_rate_limit,
-            **kwargs,
-        })
-        # Enable exchange-provided sandbox/testnet endpoints when available
-        try:  # ccxt >=4
-            if sandbox and hasattr(self._ex, "set_sandbox_mode"):
-                self._ex.set_sandbox_mode(True)  # type: ignore[attr-defined]
-        except Exception:
-            try:  # ccxt <4
-                if sandbox and hasattr(self._ex, "setSandboxMode"):
-                    getattr(self._ex, "setSandboxMode")(True)
-            except Exception:
-                pass
+        self._ex: CcxtExchange = klass(ccxt_kwargs)
+        _enable_sandbox_mode(self._ex, sandbox)
 
     def post_order(self, order: dict[str, Any]) -> Any:
         symbol = order.get("symbol")
@@ -226,27 +233,18 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
     ) -> None:
         ccxt_module = self._import_ccxt_module()
 
-        api_key = kwargs.pop("apiKey", None) or kwargs.pop("api_key", None)
-        secret = kwargs.pop("secret", None)
-        enable_rate_limit = kwargs.pop("enableRateLimit", True)
-        sandbox = bool(kwargs.pop("sandbox", kwargs.pop("testnet", False)))
         options = kwargs.pop("options", {}) or {}
         options.setdefault("defaultType", "future")
+        kwargs["options"] = options
+        config, sandbox = _build_ccxt_config(kwargs)
 
         klass = getattr(ccxt_module, exchange)
-        self._ex = klass({
-            "apiKey": api_key,
-            "secret": secret,
-            "enableRateLimit": enable_rate_limit,
-            "options": options,
-            **kwargs,
-        })
+        self._ex: CcxtExchange = klass({**kwargs, **config})
         self._default_margin_mode = margin_mode
         self._default_leverage = leverage
         self._symbol_prefs_applied: set[str] = set()
 
-        if sandbox:
-            _call_exchange_method(self._ex, ("set_sandbox_mode", "setSandboxMode"), True)
+        _enable_sandbox_mode(self._ex, sandbox)
 
         self._apply_position_mode(hedge_mode)
         self._apply_symbol_defaults(symbol, margin_mode=margin_mode, leverage=leverage)
@@ -288,9 +286,9 @@ class FuturesCcxtBrokerageClient(BrokerageClient):
             return None
 
     @staticmethod
-    def _import_ccxt_module():
+    def _import_ccxt_module() -> CcxtModule:
         try:
-            import ccxt  # type: ignore
+            import ccxt
         except Exception as exc:  # pragma: no cover - optional dependency
             raise RuntimeError("ccxt is required for FuturesCcxtBrokerageClient") from exc
         return ccxt
@@ -376,3 +374,47 @@ __all__ = [
     "CcxtBrokerageClient",
     "FuturesCcxtBrokerageClient",
 ]
+class CcxtExchange(Protocol):
+    def create_order(
+        self,
+        symbol: str,
+        typ: str,
+        side: str,
+        amount: Any,
+        price: Any,
+        params: dict[str, Any] | None = None,
+    ) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def fetch_order(self, order_id: Any, symbol: str | None = None) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def cancel_order(self, order_id: str, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def set_sandbox_mode(self, enabled: bool) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def setSandboxMode(self, enabled: bool) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def set_position_mode(self, hedge_mode: bool) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def set_margin_mode(self, mode: str, symbol: str) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def set_leverage(self, leverage: int, symbol: str) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+
+class CcxtClientConfig(TypedDict, total=False):
+    apiKey: str | None
+    secret: str | None
+    enableRateLimit: bool
+    options: dict[str, Any]
+
+
+class CcxtModule(Protocol):
+    def __getattr__(self, name: str) -> type[CcxtExchange]:  # pragma: no cover - protocol signature
+        ...

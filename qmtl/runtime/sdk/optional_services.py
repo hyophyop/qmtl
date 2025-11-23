@@ -2,9 +2,25 @@ from __future__ import annotations
 
 """Adapters for optional runtime integrations used by Runner."""
 
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from . import runtime
+
+
+class RayHandle(Protocol):
+    def remote(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+
+class RayRuntime(Protocol):
+    def is_initialized(self) -> bool:  # pragma: no cover - protocol signature
+        ...
+
+    def init(self, *, ignore_reinit_error: bool = ...) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    def remote(self, fn: Callable[[Any], Any]) -> RayHandle:  # pragma: no cover - protocol signature
+        ...
 
 
 class RayExecutor:
@@ -13,9 +29,9 @@ class RayExecutor:
     def __init__(self, *, disabled: bool | None = None) -> None:
         self._disabled = bool(disabled) if disabled is not None else False
         try:  # Optional Ray dependency
-            import ray  # type: ignore
+            import ray
         except Exception:  # pragma: no cover - Ray not installed
-            self._ray: Any | None = None
+            self._ray: RayRuntime | None = None
         else:  # pragma: no cover - exercised when Ray is installed
             self._ray = ray
 
@@ -35,14 +51,32 @@ class RayExecutor:
             return fn(cache_view)
 
         ray = self._ray
-        assert ray is not None  # mypy appeasement
-        if not ray.is_initialized():  # type: ignore[attr-defined]
-            ray.init(ignore_reinit_error=True)  # type: ignore[attr-defined]
-        ray.remote(fn).remote(cache_view)  # type: ignore[attr-defined]
+        assert ray is not None
+        if not ray.is_initialized():
+            ray.init(ignore_reinit_error=True)
+        ray.remote(fn).remote(cache_view)
         return None
 
     def set_disabled(self, disabled: bool) -> None:
         self._disabled = bool(disabled)
+
+
+class KafkaConsumerProtocol(Protocol):
+    async def start(self) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    async def stop(self) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+    async def getmany(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover - protocol signature
+        ...
+
+
+class KafkaConsumerConstructor(Protocol):
+    def __call__(
+        self, topic: str, *, bootstrap_servers: str, enable_auto_commit: bool = ...
+    ) -> KafkaConsumerProtocol:  # pragma: no cover - protocol signature
+        ...
 
 
 class KafkaConsumerFactory:
@@ -50,9 +84,9 @@ class KafkaConsumerFactory:
 
     def __init__(self) -> None:
         try:  # Optional aiokafka dependency
-            from aiokafka import AIOKafkaConsumer  # type: ignore
+            from aiokafka import AIOKafkaConsumer
         except Exception:  # pragma: no cover - aiokafka not installed
-            self._consumer_cls: Any | None = None
+            self._consumer_cls: KafkaConsumerConstructor | None = None
         else:  # pragma: no cover - exercised when aiokafka is installed
             self._consumer_cls = AIOKafkaConsumer
 
@@ -60,10 +94,12 @@ class KafkaConsumerFactory:
     def available(self) -> bool:
         return self._consumer_cls is not None
 
-    def create_consumer(self, topic: str, *, bootstrap_servers: str) -> Any:
+    def create_consumer(
+        self, topic: str, *, bootstrap_servers: str
+    ) -> KafkaConsumerProtocol:
         if self._consumer_cls is None:
             raise RuntimeError("aiokafka not available")
-        return self._consumer_cls(  # type: ignore[call-arg]
+        return self._consumer_cls(
             topic,
             bootstrap_servers=bootstrap_servers,
             enable_auto_commit=True,

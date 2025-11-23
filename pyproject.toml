@@ -141,6 +141,8 @@ files = [
   "examples",
 ]
 
+mypy_path = ["qmtl/runtime/sdk/_stubs"]
+
 exclude = [
   "build",
   "\\.venv",
