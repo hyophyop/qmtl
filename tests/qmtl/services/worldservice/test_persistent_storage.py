@@ -272,3 +272,177 @@ async def test_allocation_runs_and_world_allocations(persistent_storage):
     assert state.run_id == "run-1"
     assert state.etag == "etag-2"
     assert state.strategy_alloc_total == {"s1": 0.2}
+
+
+@pytest.mark.asyncio
+async def test_update_world_invalidates_validation_cache(persistent_storage):
+    world_id = "world-update"
+    await persistent_storage.create_world({"id": world_id, "contract_id": "cid-1"})
+
+    await persistent_storage.set_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="LIVE",
+        contract_id="cid-1",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+        result="pass",
+        metrics={},
+    )
+    assert await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="live",
+        contract_id="cid-1",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    ) is not None
+
+    await persistent_storage.update_world(world_id, {"contract_id": "cid-2"})
+
+    assert await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="live",
+        contract_id="cid-1",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    ) is None
+    audit_events = [entry["event"] for entry in await persistent_storage.get_audit(world_id)]
+    assert "validation_cache_invalidated" in audit_events
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_invalidation_scoped_by_node_and_domain(persistent_storage):
+    world_id = "world-cache-scope"
+    await persistent_storage.create_world({"id": world_id})
+
+    await persistent_storage.set_validation_cache(
+        world_id,
+        node_id="node-a",
+        execution_domain="live",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+        result="pass",
+        metrics={},
+    )
+    await persistent_storage.set_validation_cache(
+        world_id,
+        node_id="node-a",
+        execution_domain="backtest",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+        result="pass",
+        metrics={},
+    )
+
+    await persistent_storage.invalidate_validation_cache(
+        world_id, node_id="node-a", execution_domain="LIVE"
+    )
+
+    assert await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-a",
+        execution_domain="live",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    ) is None
+    remaining = await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-a",
+        execution_domain="backtest",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    )
+    assert remaining is not None and remaining["execution_domain"] == "backtest"
+    last_audit = (await persistent_storage.get_audit(world_id))[-1]
+    assert last_audit == {
+        "event": "validation_cache_invalidated",
+        "node_id": "node-a",
+        "execution_domain": "live",
+    }
+
+
+@pytest.mark.asyncio
+async def test_world_node_crud_and_normalization(persistent_storage):
+    world_id = "world-nodes"
+    await persistent_storage.create_world({"id": world_id})
+
+    upserted = await persistent_storage.upsert_world_node(
+        world_id,
+        "node-1",
+        execution_domain="LIVE",
+        status="RUNNING",
+        annotations={"note": True},
+    )
+    assert upserted == {
+        "world_id": world_id,
+        "node_id": "node-1",
+        "execution_domain": "live",
+        "status": "running",
+        "last_eval_key": None,
+        "annotations": {"note": True},
+    }
+
+    await persistent_storage.upsert_world_node(
+        world_id,
+        "node-1",
+        execution_domain="shadow",
+        status="paused",
+        last_eval_key="eval-2",
+    )
+
+    all_nodes = await persistent_storage.list_world_nodes(world_id)
+    assert {entry["execution_domain"] for entry in all_nodes} == {"live", "shadow"}
+
+    live_node = await persistent_storage.get_world_node(
+        world_id, "node-1", execution_domain="live"
+    )
+    assert live_node is not None and live_node["status"] == "running"
+
+    await persistent_storage.delete_world_node(world_id, "node-1", execution_domain="shadow")
+    assert [entry["execution_domain"] for entry in await persistent_storage.list_world_nodes(world_id)] == ["live"]
+
+    await persistent_storage.delete_world_node(world_id, "node-1")
+    assert await persistent_storage.list_world_nodes(world_id) == []
+
+
+@pytest.mark.asyncio
+async def test_history_metadata_ordering_and_latest_selection(persistent_storage):
+    world_id = "world-history"
+    await persistent_storage.create_world({"id": world_id})
+
+    await persistent_storage.upsert_history_metadata(
+        world_id,
+        "strategy-a",
+        {"dataset_fingerprint": "fp1", "as_of": "2024-01-01T00:00:00Z", "updated_at": "2024-01-02T00:00:00Z"},
+    )
+    await persistent_storage.upsert_history_metadata(
+        world_id,
+        "strategy-b",
+        {"dataset_fingerprint": "fp2", "updated_at": "2024-04-01T00:00:00Z"},
+    )
+    await persistent_storage.upsert_history_metadata(
+        world_id,
+        "strategy-c",
+        {"dataset_fingerprint": "fp3", "as_of": "2024-02-01T00:00:00Z", "updated_at": "2024-02-02T00:00:00Z"},
+    )
+
+    listed = await persistent_storage.list_history_metadata(world_id)
+    assert {entry["strategy_id"] for entry in listed} == {"strategy-a", "strategy-b", "strategy-c"}
+
+    latest = await persistent_storage.latest_history_metadata(world_id)
+    assert latest is not None
+    assert latest["strategy_id"] == "strategy-c"
+    assert latest["as_of"] == "2024-02-01T00:00:00Z"

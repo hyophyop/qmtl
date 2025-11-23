@@ -1,3 +1,5 @@
+import yaml
+
 from qmtl.services.worldservice.policy_engine import (
     CorrelationRule,
     HysteresisRule,
@@ -96,3 +98,32 @@ def test_parse_policy_from_yaml_payload():
     assert parsed.thresholds["sharpe"].min == 0.7
     assert parsed.top_k == TopKRule(metric="sharpe", k=2)
     assert parsed.hysteresis == HysteresisRule(metric="sharpe", enter=1.0, exit=0.8)
+
+
+def test_parse_policy_from_bytes_with_combined_rules():
+    raw = yaml.safe_dump(
+        {
+            "thresholds": {"score": {"metric": "score", "min": 0.3}},
+            "top_k": {"metric": "score", "k": 3},
+            "correlation": {"max": 0.4},
+            "hysteresis": {"metric": "score", "enter": 0.6, "exit": 0.4},
+        }
+    ).encode()
+
+    policy = parse_policy(raw)
+    metrics = {
+        "s1": {"score": 0.9},
+        "s2": {"score": 0.7},
+        "s3": {"score": 0.45},
+    }
+    correlations = {("s1", "s2"): 0.1, ("s1", "s3"): 0.3, ("s2", "s3"): 0.2}
+
+    selected = evaluate_policy(
+        metrics,
+        policy,
+        prev_active=["s3"],
+        correlations=correlations,
+    )
+
+    assert policy.thresholds["score"].min == 0.3
+    assert set(selected) == {"s1", "s2", "s3"}
