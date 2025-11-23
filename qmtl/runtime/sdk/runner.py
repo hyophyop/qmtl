@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Mapping, Optional, TYPE_CHECKING
+from typing import Mapping, Optional, TYPE_CHECKING, cast
 
 from opentelemetry import trace
 
@@ -20,6 +20,11 @@ from .execution_context import (
     resolve_execution_context,
 )
 from .optional_services import KafkaConsumerFactory, RayExecutor
+from .protocols import (
+    HistoryProviderProtocol,
+    MetricWithValueProtocol,
+    TagQueryManagerProtocol,
+)
 from .services import RunnerServices
 from .strategy import Strategy
 from .strategy_bootstrapper import StrategyBootstrapper
@@ -29,7 +34,10 @@ if TYPE_CHECKING:
     from .activation_manager import ActivationManager
     from .gateway_client import GatewayClient
     from .feature_store import FeatureArtifactPlane
+    from .data_io import HistoryBackend, HistoryProvider
     from .seamless_data_provider import SeamlessDataProvider
+else:  # pragma: no cover - runtime placeholders for type-only imports
+    HistoryBackend = HistoryProvider = object
 
 
 if "_runner_services" not in globals():
@@ -633,7 +641,10 @@ class Runner:
         return strategy
 
     @staticmethod
-    def _attach_history_provider(strategy: Strategy, provider: "SeamlessDataProvider") -> None:
+    def _attach_history_provider(
+        strategy: Strategy,
+        provider: HistoryProviderProtocol | "SeamlessDataProvider" | None,
+    ) -> None:
         """Attach a history provider to stream inputs that lack one.
 
         This helper is used by :meth:`offline_async` to wire a Seamless
@@ -652,16 +663,24 @@ class Runner:
             existing = getattr(node, "history_provider", None)
             if existing is not None:
                 continue
+            provider_for_node = cast(HistoryProvider | HistoryBackend | None, provider)
             try:
-                coerced = node._coerce_history_provider(provider)  # type: ignore[attr-defined]
+                coerced = node._coerce_history_provider(provider_for_node)
             except Exception:
-                coerced = provider
+                coerced = provider_for_node
             setattr(node, "_history_provider", coerced)
-            if coerced is not None and hasattr(coerced, "bind_stream"):
+            if isinstance(coerced, HistoryProviderProtocol):
                 try:
                     coerced.bind_stream(node)
                 except Exception:
                     logger.debug("failed to bind history provider to stream", exc_info=True)
+            elif coerced is not None:
+                bind_fn = getattr(coerced, "bind_stream", None)
+                if callable(bind_fn):
+                    try:
+                        bind_fn(node)
+                    except Exception:
+                        logger.debug("failed to bind history provider to stream", exc_info=True)
 
     # ------------------------------------------------------------------
     # Convenience context manager for tests
@@ -696,7 +715,7 @@ class Runner:
         # Stop TagQueryManager attached to strategy
         first_error: Exception | None = None
         if strategy is not None:
-            mgr = getattr(strategy, "tag_query_manager", None)
+            mgr = cast(TagQueryManagerProtocol | None, getattr(strategy, "tag_query_manager", None))
             if mgr is not None:
                 try:
                     await mgr.stop()
@@ -760,27 +779,42 @@ class Runner:
         cls._enable_trade_submission = bool(enabled)
 
     @staticmethod
-    def _handle_alpha_performance(result: dict) -> None:
+    def _extract_alpha_value(result: Mapping[str, object], name: str) -> float | None:
+        prefixed = f"alpha_performance.{name}"
+        candidates = (prefixed, name)
+        for key in candidates:
+            if key in result:
+                raw_value = result[key]
+                if isinstance(raw_value, (int, float)):
+                    return float(raw_value)
+                if isinstance(raw_value, str):
+                    try:
+                        return float(raw_value)
+                    except ValueError:
+                        return None
+                return None
+        return None
+
+    @staticmethod
+    def _set_metric_value(metric: MetricWithValueProtocol, value: float) -> None:
+        metric.set(value)
+        metric._val = value
+
+    @staticmethod
+    def _handle_alpha_performance(result: object) -> None:
         """Handle alpha performance metrics."""
         from . import metrics as sdk_metrics
 
-        if isinstance(result, dict):
-            def _value(name: str) -> float | None:
-                prefixed = f"alpha_performance.{name}"
-                if prefixed in result:
-                    return result[prefixed]
-                if name in result:
-                    return result[name]
-                return None
+        if not isinstance(result, Mapping):
+            return
 
-            sharpe_value = _value("sharpe")
-            if sharpe_value is not None:
-                sdk_metrics.alpha_sharpe.set(sharpe_value)
-                sdk_metrics.alpha_sharpe._val = sharpe_value  # type: ignore[attr-defined]
-            max_dd_value = _value("max_drawdown")
-            if max_dd_value is not None:
-                sdk_metrics.alpha_max_drawdown.set(max_dd_value)
-                sdk_metrics.alpha_max_drawdown._val = max_dd_value  # type: ignore[attr-defined]
+        sharpe_value = Runner._extract_alpha_value(result, "sharpe")
+        if sharpe_value is not None:
+            Runner._set_metric_value(sdk_metrics.alpha_sharpe, sharpe_value)
+
+        max_dd_value = Runner._extract_alpha_value(result, "max_drawdown")
+        if max_dd_value is not None:
+            Runner._set_metric_value(sdk_metrics.alpha_max_drawdown, max_dd_value)
 
     @classmethod
     def _handle_trade_order(cls, order: dict) -> None:
