@@ -9,9 +9,9 @@ from dataclasses import dataclass
 import redis.asyncio as redis
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
+    from .dagmanager_client import DagManagerClient
     from .database import Database
     from .world_client import WorldServiceClient
-from .dagmanager_client import DagManagerClient
 
 
 @dataclass(frozen=True, slots=True)
