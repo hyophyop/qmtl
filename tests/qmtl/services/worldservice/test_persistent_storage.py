@@ -11,6 +11,7 @@ from qmtl.services.worldservice.storage.repositories import (
     PersistentBindingRepository,
     PersistentPolicyRepository,
     PersistentWorldRepository,
+    _REASON_UNSET,
 )
 
 
@@ -145,3 +146,129 @@ async def test_persistent_storage_facade_delegates(persistent_storage):
     storage._activation_repo.get.assert_awaited_once_with(
         "delegated", strategy_id=None, side=None
     )
+
+
+@pytest.mark.asyncio
+async def test_persistent_storage_validation_cache_and_invalidation(
+    persistent_storage,
+):
+    world_id = "world-validation"
+    await persistent_storage.create_world({"id": world_id})
+
+    recorded = await persistent_storage.set_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="Live",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+        result="pass",
+        metrics={"latency_ms": 10},
+    )
+    assert recorded["execution_domain"] == "live"
+    fetched = await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="live",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    )
+    assert fetched is not None
+    assert fetched["result"] == "pass"
+
+    await persistent_storage.set_validation_cache(
+        world_id,
+        node_id="node-2",
+        execution_domain="backtest",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+        result="pass",
+        metrics={},
+    )
+    await persistent_storage.invalidate_validation_cache(
+        world_id, execution_domain="LIVE"
+    )
+
+    cleared = await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-1",
+        execution_domain="live",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    )
+    assert cleared is None
+    remaining = await persistent_storage.get_validation_cache(
+        world_id,
+        node_id="node-2",
+        execution_domain="backtest",
+        contract_id="cid",
+        dataset_fingerprint="dfp",
+        code_version="v1",
+        resource_policy="p1",
+    )
+    assert remaining is not None
+
+
+@pytest.mark.asyncio
+async def test_persistent_storage_edge_overrides_audit_and_reason(persistent_storage):
+    world_id = "world-edge"
+    await persistent_storage.create_world({"id": world_id})
+
+    override = await persistent_storage.upsert_edge_override(
+        world_id,
+        "src",
+        "dst",
+        active=True,
+        reason="initial",
+    )
+    assert override["active"] is True
+
+    updated = await persistent_storage.upsert_edge_override(
+        world_id,
+        "src",
+        "dst",
+        active=False,
+        reason=_REASON_UNSET,
+    )
+    assert updated["reason"] == "initial"
+
+    overrides = await persistent_storage.list_edge_overrides(world_id)
+    assert any(ovr["src_node_id"] == "src" and ovr["dst_node_id"] == "dst" for ovr in overrides)
+
+    audit_events = [entry["event"] for entry in await persistent_storage.get_audit(world_id)]
+    assert audit_events[-1] == "edge_override_upserted"
+
+
+@pytest.mark.asyncio
+async def test_allocation_runs_and_world_allocations(persistent_storage):
+    world_id = "world-allocation"
+    await persistent_storage.create_world({"id": world_id})
+
+    payload = {"allocations": {"a": 1}}
+    await persistent_storage.record_allocation_run("run-1", "etag-1", payload)
+    run = await persistent_storage.get_allocation_run("run-1")
+    assert run is not None and run["executed"] is False
+
+    await persistent_storage.mark_allocation_run_executed("run-1")
+    executed = await persistent_storage.get_allocation_run("run-1")
+    assert executed is not None and executed["executed"] is True
+
+    await persistent_storage.set_world_allocations(
+        {world_id: 0.42},
+        run_id="run-1",
+        etag="etag-2",
+        strategy_allocations={world_id: {"s1": 0.2}},
+    )
+    state = await persistent_storage.get_world_allocation_state(world_id)
+    assert state is not None
+    assert state.allocation == 0.42
+    assert state.run_id == "run-1"
+    assert state.etag == "etag-2"
+    assert state.strategy_alloc_total == {"s1": 0.2}
