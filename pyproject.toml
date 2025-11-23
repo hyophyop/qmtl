@@ -151,13 +151,29 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
-  "qmtl.runtime.*",
+  "qmtl.runtime.alpha_metrics",
+  "qmtl.runtime.plugin_loader",
+  "qmtl.runtime.brokerage.*",
+  "qmtl.runtime.generators.*",
+  "qmtl.runtime.helpers.*",
+  "qmtl.runtime.indicators.*",
+  "qmtl.runtime.io.*",
+  "qmtl.runtime.nodesets.*",
+  "qmtl.runtime.pipeline.*",
+  "qmtl.runtime.reference_models.*",
+  "qmtl.runtime.transforms.*",
   "qmtl.services.*",
   "qmtl.foundation.*",
   "qmtl.examples.*",
   "tests.*",
 ]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.runtime.sdk.*",
+]
+ignore_errors = false
 
 [[tool.mypy.overrides]]
 module = [
