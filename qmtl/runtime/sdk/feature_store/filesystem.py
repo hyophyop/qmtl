@@ -119,7 +119,10 @@ class FileSystemFeatureStore(FeatureStoreBackend):
         results: list[tuple[int, Any]] = []
         for rec in records:
             try:
-                ts = int(rec.get("t"))
+                ts_raw = rec.get("t")
+                if ts_raw is None:
+                    continue
+                ts = int(ts_raw)
             except (TypeError, ValueError):
                 continue
             if start is not None and ts < start:

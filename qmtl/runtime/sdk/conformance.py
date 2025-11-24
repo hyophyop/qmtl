@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from pandas._typing import DtypeArg
 
 from .exceptions import NodeValidationError
 from .schema_validation import validate_schema
@@ -90,7 +93,7 @@ class ConformancePipeline:
         if isinstance(schema, dict):
             if "fields" in schema and isinstance(schema["fields"], Iterable):
                 mapping: dict[str, str] = {}
-                for field in schema["fields"]:  # type: ignore[assignment]
+                for field in schema["fields"]:
                     if not isinstance(field, dict):
                         continue
                     name = field.get("name")
@@ -132,7 +135,8 @@ class ConformancePipeline:
             if current_dtype == dtype:
                 continue
             try:
-                df[column] = df[column].astype(dtype)
+                target_dtype = pd.api.types.pandas_dtype(dtype)
+                df[column] = df[column].astype(target_dtype)
                 flags[self._FLAG_DTYPE_CAST] = (
                     flags.get(self._FLAG_DTYPE_CAST, 0) + 1
                 )
@@ -205,8 +209,6 @@ class ConformancePipeline:
             return
 
         self._sort_and_dedupe_timestamps(df, flags, warnings)
-        if df.empty:
-            return
 
         if interval is None or interval <= 0 or len(df) < 2:
             return
@@ -227,7 +229,7 @@ class ConformancePipeline:
     def _cast_timestamp_column(
         self,
         df: pd.DataFrame,
-        dtype: object,
+        dtype: Any,
         flags: dict[str, int],
         warnings: list[str],
     ) -> tuple[int, int]:
@@ -242,12 +244,11 @@ class ConformancePipeline:
         if pd.api.types.is_integer_dtype(dtype):
             cast_rows = self._normalize_integer_epoch(df, flags, warnings)
             return cast_rows, 0
-        return self._cast_flexible_timestamps(df, dtype, flags, warnings)
+        return self._cast_flexible_timestamps(df, flags, warnings)
 
     def _cast_flexible_timestamps(
         self,
         df: pd.DataFrame,
-        dtype: object,
         flags: dict[str, int],
         warnings: list[str],
     ) -> tuple[int, int]:
@@ -268,7 +269,7 @@ class ConformancePipeline:
 
         df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
         timezone_adjusted = 0
-        if isinstance(dtype, pd.DatetimeTZDtype) or getattr(dtype, "tz", None) is not None:
+        if isinstance(df[self._TS_COLUMN].dtype, pd.DatetimeTZDtype):
             timezone_adjusted = len(df)
         return len(df), timezone_adjusted
 

@@ -32,7 +32,9 @@ class OCOOrder:
         resp_second = client.post_order(self.second)
 
         def _done(resp: dict[str, Any] | None) -> bool:
-            return bool(resp) and str(resp.get("status")).lower() in {"completed", "filled"}
+            if resp is None:
+                return False
+            return str(resp.get("status")).lower() in {"completed", "filled"}
 
         # If the first leg filled, cancel the second if not already done.
         if _done(resp_first) and not _done(resp_second):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from .risk import (
     DrawdownControl,
@@ -26,7 +26,7 @@ class RiskManager:
     def __init__(
         self,
         config: Optional[RiskConfig] = None,
-        **config_overrides: object,
+        **config_overrides: Any,
     ) -> None:
         """Create a :class:`RiskManager` using ``RiskConfig`` thresholds.
 
@@ -47,7 +47,66 @@ class RiskManager:
             if unknown:
                 unknown_str = ", ".join(sorted(unknown))
                 raise TypeError(f"Unknown risk config overrides: {unknown_str}")
-            base_config = replace(base_config, **config_overrides)
+
+            def _maybe_float(val: Any) -> float | None:
+                return None if val is None else float(val)
+
+            if "max_position_size" in config_overrides:
+                base_config = replace(
+                    base_config,
+                    max_position_size=_maybe_float(config_overrides["max_position_size"]),
+                )
+            if "max_leverage" in config_overrides and config_overrides["max_leverage"] is not None:
+                base_config = replace(base_config, max_leverage=float(config_overrides["max_leverage"]))
+            if (
+                "max_drawdown_pct" in config_overrides
+                and config_overrides["max_drawdown_pct"] is not None
+            ):
+                base_config = replace(
+                    base_config, max_drawdown_pct=float(config_overrides["max_drawdown_pct"])
+                )
+            if (
+                "max_concentration_pct" in config_overrides
+                and config_overrides["max_concentration_pct"] is not None
+            ):
+                base_config = replace(
+                    base_config,
+                    max_concentration_pct=float(config_overrides["max_concentration_pct"]),
+                )
+            if (
+                "max_portfolio_volatility" in config_overrides
+                and config_overrides["max_portfolio_volatility"] is not None
+            ):
+                base_config = replace(
+                    base_config,
+                    max_portfolio_volatility=float(config_overrides["max_portfolio_volatility"]),
+                )
+            if (
+                "position_size_limit_pct" in config_overrides
+                and config_overrides["position_size_limit_pct"] is not None
+            ):
+                base_config = replace(
+                    base_config,
+                    position_size_limit_pct=float(config_overrides["position_size_limit_pct"]),
+                )
+            if "enable_dynamic_sizing" in config_overrides:
+                base_config = replace(
+                    base_config, enable_dynamic_sizing=bool(config_overrides["enable_dynamic_sizing"])
+                )
+            if (
+                "volatility_lookback" in config_overrides
+                and config_overrides["volatility_lookback"] is not None
+            ):
+                base_config = replace(
+                    base_config, volatility_lookback=int(config_overrides["volatility_lookback"])
+                )
+            if (
+                "volatility_min_samples" in config_overrides
+                and config_overrides["volatility_min_samples"] is not None
+            ):
+                base_config = replace(
+                    base_config, volatility_min_samples=int(config_overrides["volatility_min_samples"])
+                )
 
         self.config = base_config
         self.violations: List[RiskViolation] = []

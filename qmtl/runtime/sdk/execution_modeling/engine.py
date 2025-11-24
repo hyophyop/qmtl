@@ -145,7 +145,7 @@ class ExecutionModel:
             allow_partial=allow_partial,
             max_partial_fill=self.max_partial_fill,
         )
-        if qty in (None, 0.0):
+        if qty is None or qty == 0.0:
             return fills
 
         fill = self.simulate_execution(

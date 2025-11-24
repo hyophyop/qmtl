@@ -18,7 +18,9 @@ from qmtl.runtime.helpers import (
 )
 
 
-def normalize_default_context(context: Mapping[str, str] | None) -> dict[str, str] | None:
+def normalize_default_context(
+    context: Mapping[str, str | None] | None,
+) -> dict[str, str] | None:
     """Normalize a default execution context mapping.
 
     ``Runner.set_default_context`` historically accepted arbitrary
@@ -39,7 +41,9 @@ def normalize_default_context(context: Mapping[str, str] | None) -> dict[str, st
     return normalized or None
 
 
-def merge_context(base: MutableMapping[str, str], source: Mapping[str, str] | None) -> None:
+def merge_context(
+    base: MutableMapping[str, str], source: Mapping[str, str | None] | None
+) -> None:
     """Merge ``source`` context values into ``base`` in-place."""
 
     if not source:
@@ -53,9 +57,9 @@ def merge_context(base: MutableMapping[str, str], source: Mapping[str, str] | No
 
 
 def resolve_execution_context(
-    default_context: Mapping[str, str] | None,
+    default_context: Mapping[str, str | None] | None,
     *,
-    context: Mapping[str, str] | None,
+    context: Mapping[str, str | None] | None,
     execution_mode: str | None,
     execution_domain: str | None,
     clock: str | None,

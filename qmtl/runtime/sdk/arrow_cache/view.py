@@ -1,7 +1,7 @@
 """Read-only views over Arrow-backed cache storage."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, cast
 
 from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION
 from .slices import _Slice, _SliceView
@@ -55,13 +55,14 @@ class ArrowCacheView:
     ) -> list[tuple[int, Any]]:
         if self._artifact_plane is None:
             return []
-        return self._artifact_plane.load_series(
+        result = self._artifact_plane.load_series(
             factor,
             instrument=instrument,
             dataset_fingerprint=dataset_fingerprint,
             start=start,
             end=end,
         )
+        return cast(list[tuple[int, Any]], result)
 
 
 class _SecondLevelView:

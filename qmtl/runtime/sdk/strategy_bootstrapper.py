@@ -219,7 +219,7 @@ class StrategyBootstrapper:
         )
 
         strategy_id: str | None = None
-        queue_map: dict[str, Any] | Any = {}
+        queue_map: dict[str, Any] = {}
 
         if isinstance(ack, dict):
             if "error" in ack:
@@ -229,14 +229,15 @@ class StrategyBootstrapper:
                     f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
                     f"gateway_url={gateway_url})"
                 )
-            if isinstance(ack.get("strategy_id"), str):
-                strategy_id = ack["strategy_id"]
-            queue_map = ack.get("queue_map", ack)
+            strategy_val = ack.get("strategy_id")
+            if isinstance(strategy_val, str):
+                strategy_id = strategy_val
+            queue_map_val = ack.get("queue_map", ack)
+            if isinstance(queue_map_val, dict):
+                queue_map = queue_map_val
         elif isinstance(ack, StrategyAck):
             strategy_id = ack.strategy_id
             queue_map = ack.queue_map
-        else:
-            queue_map = ack
         return strategy_id, queue_map
 
     def _init_tag_manager(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from . import configuration
 
@@ -48,16 +48,19 @@ def _reload_from_config(cfg: Any | None = None) -> None:
     FIXED_NOW = _maybe_int(test_cfg.fixed_now)
 
     HTTP_TIMEOUT_SECONDS = float(
-        _select(runtime_cfg.http_timeout_seconds, runtime_cfg.http_timeout_seconds_test)
+        cast(float, _select(runtime_cfg.http_timeout_seconds, runtime_cfg.http_timeout_seconds_test))
     )
     WS_RECV_TIMEOUT_SECONDS = float(
-        _select(runtime_cfg.ws_recv_timeout_seconds, runtime_cfg.ws_recv_timeout_seconds_test)
+        cast(
+            float,
+            _select(runtime_cfg.ws_recv_timeout_seconds, runtime_cfg.ws_recv_timeout_seconds_test),
+        )
     )
     WS_MAX_TOTAL_TIME_SECONDS = _select(
         runtime_cfg.ws_max_total_time_seconds, runtime_cfg.ws_max_total_time_seconds_test
     )
     POLL_INTERVAL_SECONDS = float(
-        _select(runtime_cfg.poll_interval_seconds, runtime_cfg.poll_interval_seconds_test)
+        cast(float, _select(runtime_cfg.poll_interval_seconds, runtime_cfg.poll_interval_seconds_test))
     )
 
 

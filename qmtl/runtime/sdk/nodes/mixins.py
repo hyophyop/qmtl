@@ -22,6 +22,7 @@ class CacheActivationMixin:
     cache: Any
     node_id: str
     _compute_context: ComputeContext
+    compute_key: Any
 
     def _activate_cache_key(self) -> None:
         self.cache.activate_compute_key(
@@ -156,6 +157,8 @@ class NodeFeedMixin(CacheActivationMixin):
     allowed_lateness: int
     cache: Any
     _late_events: list[tuple[str, int, Any]]
+    name: str | None
+    on_late: str
 
     def feed(
         self,
@@ -222,7 +225,7 @@ class NodeFeedMixin(CacheActivationMixin):
 
     def _should_validate_schema(self, payload: Any) -> bool:
         try:  # Optional pandas dependency
-            import pandas as pd  # type: ignore
+            import pandas as pd
         except Exception:  # pragma: no cover - pandas not installed
             return False
 
@@ -267,4 +270,3 @@ __all__ = [
     "LateEventPolicy",
     "NodeFeedMixin",
 ]
-

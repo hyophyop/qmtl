@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Iterable
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk.nodes import Node
 
 
 
@@ -158,7 +161,10 @@ def _build_frame(
         inferred_columns = columns or [f"value_{i}" for i in range(len(first_value))]
         if columns is not None and len(first_value) != len(columns):
             raise ValueError("sequence values must match the number of columns")
-        rows = [list(value) for value in values]
+        rows = [
+            {column: value[i] for i, column in enumerate(inferred_columns)}
+            for value in values
+        ]
         return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
 
     inferred_columns = columns or ["value"]

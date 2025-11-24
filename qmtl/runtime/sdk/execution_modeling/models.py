@@ -120,10 +120,10 @@ class OpenOrder:
     requested_price: float
     tif: TimeInForce = TimeInForce.GTC
     status: OrderStatus = OrderStatus.NEW
-    remaining: float | None = None
+    remaining: float = 0.0
     fills: list[ExecutionFill] = field(default_factory=list)
     submitted_time: int = 0
 
     def __post_init__(self) -> None:
-        if self.remaining is None:
+        if self.remaining <= 0:
             self.remaining = self.quantity

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, TYPE_CHECKING, cast
 from dataclasses import dataclass
 
 from . import metrics as sdk_metrics
+
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk.nodes import Node
 
 
 @dataclass(slots=True)
@@ -185,13 +188,14 @@ class CacheView:
 
         if self._artifact_plane is None:
             return []
-        return self._artifact_plane.load_series(
+        result = self._artifact_plane.load_series(
             factor,
             instrument=instrument,
             dataset_fingerprint=dataset_fingerprint,
             start=start,
             end=end,
         )
+        return cast(list[tuple[int, Any]], result)
 
     # ------------------------------------------------------------------
     def as_frame(

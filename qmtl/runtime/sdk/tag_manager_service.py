@@ -120,13 +120,15 @@ class TagManagerService:
             global_flag = bool(mapping_val.get("global"))
         else:
             queue = mapping_val
+        queue_str: str | None = None
         if queue:
+            queue_str = str(queue)
             node.execute = False
-            node.kafka_topic = queue  # type: ignore[assignment]
+            node.kafka_topic = queue_str
         else:
             node.execute = not global_flag
             node.kafka_topic = None
-        return queue
+        return queue_str
 
     def _log_execute_change(self, node, old_execute: bool, mapping) -> None:
         if node.execute == old_execute:

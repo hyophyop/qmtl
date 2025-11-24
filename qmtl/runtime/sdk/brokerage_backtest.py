@@ -118,7 +118,7 @@ class BrokerageBacktestEngine:
 
         # Fees using brokerage fee model if it's Percent-like; otherwise approximate
         try:
-            fee = self._brokerage.fee_model.calculate(br_order, fill_price)  # type: ignore[attr-defined]
+            fee = self._brokerage.fee_model.calculate(br_order, fill_price)
         except Exception:
             fee = PercentFeeModel(rate=self._compat.commission_rate, minimum=self._compat.commission_minimum).calculate(br_order, fill_price)
 
@@ -151,7 +151,7 @@ def make_brokerage_model_for_compat(params: ExecCompatParams) -> BrokerageModel:
     from qmtl.runtime.brokerage import CashBuyingPowerModel
 
     class _AllBP(CashBuyingPowerModel):
-        def has_sufficient_buying_power(self, account: Account, order: BrOrder) -> bool:  # type: ignore[override]
+        def has_sufficient_buying_power(self, account: Account, order: BrOrder) -> bool:
             return True
 
     brokerage = BrokerageModel(
@@ -168,4 +168,3 @@ __all__ = [
     "ExecCompatParams",
     "make_brokerage_model_for_compat",
 ]
-

@@ -130,7 +130,7 @@ class HttpSubmitStep:
 
     def __init__(
         self,
-        http_poster: type,
+        http_poster: Any,
         trade_order_http_url: str | None,
     ) -> None:
         self._http_poster = http_poster

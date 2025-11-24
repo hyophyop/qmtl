@@ -983,6 +983,9 @@ class SeamlessDataProvider(HistoryProvider):
     ) -> list[pd.DataFrame]:
         if not chunks:
             return []
+        if self.backfiller is None:
+            return []
+        backfiller = self.backfiller
 
         semaphore = asyncio.Semaphore(
             max(1, int(self._backfill_config.max_concurrent_requests))
@@ -1006,7 +1009,7 @@ class SeamlessDataProvider(HistoryProvider):
             TypeError from unexpected kwargs, inspect the callable and pass only
             supported parameters (or all if it accepts **kwargs).
             """
-            func = getattr(self.backfiller, "backfill")  # type: ignore[union-attr]
+            func = getattr(backfiller, "backfill")
             try:
                 sig = inspect.signature(func)
                 params: Mapping[str, inspect.Parameter] = sig.parameters
@@ -1404,7 +1407,7 @@ class SeamlessDataProvider(HistoryProvider):
             interval=interval,
         )
 
-    async def fetch(
+    async def fetch(  # type: ignore[override]
         self,
         start: int,
         end: int,
@@ -1495,7 +1498,8 @@ class SeamlessDataProvider(HistoryProvider):
         )
 
         # Preserve metadata on the returned frame for callers expecting attributes.
-        response.frame.metadata = response.metadata  # type: ignore[attr-defined]
+        frame_with_meta = cast(Any, response.frame)
+        frame_with_meta.metadata = response.metadata
         return response
     
     async def coverage(
@@ -2059,8 +2063,9 @@ class SeamlessDataProvider(HistoryProvider):
         as_of: str,
     ) -> tuple[Any | None, str | None]:
         publish_call: Any | None = None
+        registrar = cast(Any, self._registrar)
         try:
-            publish_call = self._registrar.publish(  # type: ignore[union-attr]
+            publish_call = registrar.publish(
                 stabilized,
                 node_id=node_id,
                 interval=interval,
@@ -2079,7 +2084,7 @@ class SeamlessDataProvider(HistoryProvider):
                             legacy_metadata=legacy_metadata,
                             mode=self._fingerprint_mode,
                         )
-                    publish_call = self._registrar.publish(  # type: ignore[misc,union-attr]
+                    publish_call = registrar.publish(
                         stabilized,
                         node_id=node_id,
                         interval=interval,
@@ -2122,7 +2127,7 @@ class SeamlessDataProvider(HistoryProvider):
                 interval=interval,
                 duration_ms=elapsed_ms,
             )
-        return publication
+        return cast(ArtifactPublication | None, publication)
 
     async def _handle_artifact_publication(
         self,
@@ -2349,11 +2354,14 @@ class SeamlessDataProvider(HistoryProvider):
         ):
             logger.warning(
                 "seamless.fingerprint.preview_mismatch",
-                canonical=canonical_for_preview,
-                preview=preview_fingerprint,
+                extra={
+                    "canonical": canonical_for_preview,
+                    "preview": preview_fingerprint,
+                },
             )
         try:
-            publication.dataset_fingerprint = normalized_fp  # type: ignore[misc]
+            publication_any = cast(Any, publication)
+            publication_any.dataset_fingerprint = normalized_fp
         except Exception:  # pragma: no cover - defensive guard
             pass
 
@@ -2607,8 +2615,8 @@ class SeamlessDataProvider(HistoryProvider):
         self,
         frame: pd.DataFrame,
         *,
-        canonical_metadata: dict[str, Any],
-        legacy_metadata: dict[str, Any],
+        canonical_metadata: Mapping[str, Any],
+        legacy_metadata: Mapping[str, Any],
         mode: str,
     ) -> str:
         if mode == _FINGERPRINT_MODE_LEGACY:
@@ -3245,8 +3253,6 @@ class _AvailabilityPipeline:
         interval: int,
     ) -> tuple[Lease | None, bool]:
         coordinator = self._provider._coordinator
-        if coordinator is None:
-            return None, False
         try:
             lease_key = self._provider._backfill_key(
                 node_id=node_id,

@@ -76,7 +76,7 @@ __all__ = [
     "build_seamless_assembly",
 ]
 
-_ATTR_MAP: Mapping[str, tuple[str, str]] = {
+_ATTR_MAP: Mapping[str, tuple[str, str | None]] = {
     # Nodes and cache
     "Node": ("qmtl.runtime.sdk.node", "Node"),
     "SourceNode": ("qmtl.runtime.sdk.node", "SourceNode"),

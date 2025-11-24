@@ -104,7 +104,7 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         self.base_dir = Path(base_dir).expanduser()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._partition_template = partition_template
-        self._producer_identity = producer or None
+        self._producer_identity = producer or ""
         super().__init__(
             store=self._store,
             stabilization_bars=stabilization_bars,

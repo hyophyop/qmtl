@@ -87,11 +87,11 @@ class StreamInput(SourceNode):
         raise AttributeError("event_recorder is read-only and must be provided via __init__")
 
     @property
-    def event_service(self) -> EventRecorderService | None:  # type: ignore[override]
+    def event_service(self) -> EventRecorderService | None:
         return getattr(self, "_event_service", None)
 
     @event_service.setter
-    def event_service(self, value: EventRecorderService | None) -> None:  # type: ignore[override]
+    def event_service(self, value: EventRecorderService | None) -> None:
         if getattr(self, "_allow_event_service_set", False) and not hasattr(self, "_event_service_initialized"):
             self._event_service = value
             self._event_service_initialized = True

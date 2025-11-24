@@ -27,7 +27,8 @@ def ensure_event_loop():
         yield
     finally:
         loop.close()
-        asyncio.set_event_loop(None)
+        # Reset the event loop policy so subsequent async tests get a fresh loop.
+        asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
 
 
 def test_load_graph_falls_back_to_json(tmp_path: Path):

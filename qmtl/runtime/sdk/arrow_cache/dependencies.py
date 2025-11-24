@@ -2,18 +2,21 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from .. import configuration
 
+pa: Any | None = None
 try:  # pragma: no cover - optional dependency
     import pyarrow as pa  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
-    pa = None  # type: ignore
+    pa = None
 
+ray: Any | None = None
 try:  # pragma: no cover - optional dependency
     import ray  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
-    ray = None  # type: ignore
+    ray = None
 
 def _resolve_enabled() -> bool:
     if pa is None:
