@@ -5,7 +5,7 @@ import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 from .history_coverage import (
     WarmupWindow,
@@ -15,7 +15,7 @@ from .history_coverage import (
 )
 from .history_loader import HistoryLoader
 from .history_snapshot import hydrate_strategy_snapshots, write_strategy_snapshots
-from .history_warmup_polling import HistoryWarmupPoller, WarmupRequest
+from .history_warmup_polling import HistoryProviderProtocol, HistoryWarmupPoller, WarmupRequest
 from .strategy import Strategy
 
 logger = logging.getLogger(__name__)
@@ -237,7 +237,8 @@ class HistoryWarmupService:
     async def _poll_history_provider(
         self, node: Any, plan: NodeWarmupPlan
     ) -> Any:
-        poller = HistoryWarmupPoller(plan.provider)
+        provider = cast(HistoryProviderProtocol, plan.provider)
+        poller = HistoryWarmupPoller(provider)
         result = await poller.poll(
             WarmupRequest(
                 node_id=plan.node_id,

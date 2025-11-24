@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import contextlib
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, TYPE_CHECKING
 
 from urllib.parse import urlparse, urlunparse
 
-import websockets
 import logging
+import websockets
 from . import runtime
+
+WebSocketClientProtocol = Any
 
 
 class WebSocketClient:
@@ -42,7 +44,7 @@ class WebSocketClient:
         self.sentinel_weights: dict[str, float] = {}
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
-        self._ws: websockets.WebSocketClientProtocol | None = None
+        self._ws: WebSocketClientProtocol | None = None
         self.max_retries = max_retries
         self.max_total_time = max_total_time if max_total_time is not None else runtime.WS_MAX_TOTAL_TIME_SECONDS
         self._base_delay = base_delay
@@ -56,12 +58,12 @@ class WebSocketClient:
         if event != "ack" and not self._is_supported_version(payload, event):
             return
 
-        handlers = {
+        handlers: dict[str, Callable[[dict], Awaitable[None]]] = {
             "queue_created": self._handle_queue_created,
             "queue_update": self._handle_queue_update,
             "sentinel_weight": self._handle_sentinel_weight,
         }
-        handler = handlers.get(event)
+        handler = handlers.get(event) if isinstance(event, str) else None
         if handler:
             await handler(payload)
         if self.on_message:
@@ -74,7 +76,12 @@ class WebSocketClient:
         start = loop.time()
         while not self._stop_event.is_set():
             try:
-                async with websockets.connect(self.url, **self._connect_kwargs()) as ws:
+                headers = self._auth_headers()
+                if headers:
+                    ws_ctx = websockets.connect(self.url, extra_headers=headers)
+                else:
+                    ws_ctx = websockets.connect(self.url)
+                async with ws_ctx as ws:
                     self._ws = ws
                     delay = self._base_delay
                     await self._consume_ws(ws)
@@ -92,12 +99,12 @@ class WebSocketClient:
             await self._poll_reconnect(delay)
             delay = min(delay * self._backoff_factor, self._max_delay)
 
-    def _connect_kwargs(self) -> dict:
+    def _auth_headers(self) -> dict[str, str]:
         if not self.token:
             return {}
-        return {"extra_headers": {"Authorization": f"Bearer {self.token}"}}
+        return {"Authorization": f"Bearer {self.token}"}
 
-    async def _consume_ws(self, ws: websockets.WebSocketClientProtocol) -> None:
+    async def _consume_ws(self, ws: WebSocketClientProtocol) -> None:
         heartbeat = asyncio.create_task(self._heartbeat(ws))
         try:
             while not self._stop_event.is_set():
@@ -122,10 +129,12 @@ class WebSocketClient:
         return True
 
     @staticmethod
-    def _safe_loads(msg: str) -> dict | None:
+    def _safe_loads(msg: str | bytes) -> dict[str, object] | None:
         try:
-            return json.loads(msg)
-        except json.JSONDecodeError:
+            text = msg.decode() if isinstance(msg, (bytes, bytearray)) else msg
+            loaded = json.loads(text)
+            return loaded if isinstance(loaded, dict) else None
+        except Exception:
             return None
 
     async def _handle_queue_created(self, payload: dict) -> None:
@@ -171,7 +180,7 @@ class WebSocketClient:
             # ResourceWarning: unclosed socket warnings under -W error.
             await self._ws.close()
             try:
-                await self._ws.wait_closed()  # type: ignore[attr-defined]
+                await self._ws.wait_closed()
             except Exception:
                 pass
             self._ws = None
@@ -187,7 +196,7 @@ class WebSocketClient:
             finally:
                 self._task = None
 
-    async def _heartbeat(self, ws: websockets.WebSocketClientProtocol) -> None:
+    async def _heartbeat(self, ws: WebSocketClientProtocol) -> None:
         """Send periodic pings to ensure connection liveness."""
         while not self._stop_event.is_set():
             await asyncio.sleep(runtime.WS_RECV_TIMEOUT_SECONDS)
@@ -200,14 +209,14 @@ class WebSocketClient:
         """Poll server readiness before reconnecting."""
         loop = asyncio.get_running_loop()
         end = loop.time() + delay
-        connect_kwargs = {}
-        if self.token:
-            connect_kwargs["extra_headers"] = {
-                "Authorization": f"Bearer {self.token}"
-            }
+        headers = self._auth_headers()
         while not self._stop_event.is_set() and loop.time() < end:
             try:
-                async with websockets.connect(self.url, **connect_kwargs):
-                    return
+                if headers:
+                    async with websockets.connect(self.url, extra_headers=headers):
+                        return
+                else:
+                    async with websockets.connect(self.url):
+                        return
             except Exception:
                 await asyncio.sleep(0.1)

@@ -6,10 +6,13 @@ This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import Protocol, Any, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
+
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk.nodes.sources import StreamInput
 
 
 class DataFetcher(Protocol):

@@ -127,14 +127,14 @@ def runtime_fingerprint() -> str:
         f"os={platform.system().lower()}-{platform.machine().lower()}",
     ]
     try:
-        import qmtl  # type: ignore
+        import qmtl
 
         ver = getattr(qmtl, "__version__", None) or "0"
         parts.append(f"qmtl={ver}")
     except Exception:
         parts.append("qmtl=0")
     try:
-        import numpy as _np  # type: ignore
+        import numpy as _np
 
         parts.append(f"numpy={_np.__version__}")
     except Exception:
@@ -228,9 +228,13 @@ def _collect_snapshot_payload(cache, node, last_ts: Mapping[str, Mapping[Any, An
 
 def _compute_state_hash(cache) -> str | None:
     try:
-        return cache.input_window_hash()  # type: ignore[attr-defined]
+        hasher = getattr(cache, "input_window_hash", None)
+        if callable(hasher):
+            result = hasher()
+            return str(result) if result is not None else None
     except Exception:
         return None
+    return None
 
 
 def _build_snapshot_meta(
@@ -275,7 +279,7 @@ def _write_parquet_snapshot(
     filesystem: FileSystemLike | None,
     base_dir: Path,
     arrow: ArrowContext,
-):
+) -> Path:
     rows_u: list[str] = []
     rows_i: list[int] = []
     rows_t: list[int] = []
@@ -295,13 +299,13 @@ def _write_parquet_snapshot(
     })
 
     if remote_url and filesystem is not None:
-        pq_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
-        with filesystem.open(pq_path, "wb") as handle:
+        pq_path_str = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.parquet"
+        with filesystem.open(pq_path_str, "wb") as handle:
             arrow.parquet.write_table(table, handle)
-        meta_path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
-        with filesystem.open(meta_path, "w") as meta_handle:
+        meta_path_str = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.meta.json"
+        with filesystem.open(meta_path_str, "w") as meta_handle:
             json.dump({"meta": meta}, meta_handle)
-        return Path(pq_path) if not isinstance(pq_path, Path) else pq_path
+        return Path(pq_path_str)
 
     pq_path = base_dir / f"{key}_{meta['wm_ts']}.snap.parquet"
     arrow.parquet.write_table(table, pq_path)
@@ -319,12 +323,12 @@ def _write_json_snapshot(
     remote_url: str | None,
     filesystem: FileSystemLike | None,
     base_dir: Path,
-):
+) -> Path:
     if remote_url and filesystem is not None:
-        path = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
-        with filesystem.open(path, "w") as handle:
+        path_str = f"{remote_url.rstrip('/')}/{key}_{meta['wm_ts']}.snap.json"
+        with filesystem.open(path_str, "w") as handle:
             json.dump({"meta": meta, "data": data}, handle)
-        return Path(path) if not isinstance(path, Path) else path
+        return Path(path_str)
 
     path = base_dir / f"{key}_{meta['wm_ts']}.snap.json"
     with path.open("w") as handle:
@@ -334,22 +338,17 @@ def _write_json_snapshot(
 
 def _record_snapshot_metrics(path: Path | str, duration_ms: float) -> None:
     try:
-        sdk_metrics.node_processed_total  # type: ignore[attr-defined]
-        if hasattr(sdk_metrics, "snapshot_write_duration_ms"):
-            sdk_metrics.snapshot_write_duration_ms.observe(duration_ms)  # type: ignore[attr-defined]
-        if hasattr(sdk_metrics, "snapshot_bytes_total"):
-            size = None
-            if isinstance(path, Path):
-                if path.exists():
-                    size = path.stat().st_size
-            elif hasattr(path, "stat"):
-                size = path.stat().st_size  # type: ignore[attr-defined]
-            elif isinstance(path, str):
-                candidate = Path(path)
-                if candidate.exists():
-                    size = candidate.stat().st_size
+        writer_duration = getattr(sdk_metrics, "snapshot_write_duration_ms", None)
+        bytes_total = getattr(sdk_metrics, "snapshot_bytes_total", None)
+        if writer_duration is not None:
+            writer_duration.observe(duration_ms)
+        if bytes_total is not None:
+            size: int | None = None
+            path_obj = Path(path)
+            if path_obj.exists():
+                size = path_obj.stat().st_size
             if size is not None:
-                sdk_metrics.snapshot_bytes_total.inc(size)  # type: ignore[attr-defined]
+                bytes_total.inc(size)
     except Exception:
         pass
 
@@ -482,11 +481,17 @@ def _read_parquet_meta(
                 obj = json.load(handle)
         except Exception:
             return None
-        return obj.get("meta", {})
-    meta_path = Path(path).with_suffix(".meta.json")
-    if not meta_path.exists():
+        meta_obj = obj.get("meta")
+        return meta_obj if isinstance(meta_obj, dict) else None
+    local_path = Path(path) if isinstance(path, Path) else Path(str(path))
+    meta_file = local_path.with_suffix(".meta.json")
+    if not meta_file.exists():
         return None
-    return json.loads(meta_path.read_text()).get("meta", {})
+    try:
+        meta_obj = json.loads(meta_file.read_text()).get("meta")
+    except Exception:
+        return None
+    return meta_obj if isinstance(meta_obj, dict) else None
 
 
 def _load_json_payload(
@@ -500,8 +505,10 @@ def _load_json_payload(
     else:
         text = Path(path).read_text() if isinstance(path, (str, Path)) else path.read_text()
         obj = json.loads(text)
-    meta = obj.get("meta", {})
-    data = obj.get("data", {})
+    meta_obj = obj.get("meta")
+    data_obj = obj.get("data")
+    meta: Dict[str, Any] = meta_obj if isinstance(meta_obj, dict) else {}
+    data: Dict[str, Any] = data_obj if isinstance(data_obj, dict) else {}
     return meta, data
 
 
@@ -563,8 +570,11 @@ def _validate_state_hash(node, meta: Mapping[str, Any]) -> bool:
         cache = getattr(node, "cache", None)
         if cache is None:
             return True
-        current = cache.input_window_hash()  # type: ignore[attr-defined]
-        return current == expected
+        hasher = getattr(cache, "input_window_hash", None)
+        if callable(hasher):
+            current = hasher()
+            return str(current) == str(expected)
+        return True
     except Exception:
         return True
 
@@ -574,7 +584,7 @@ def _handle_hydration_fallback(node) -> None:
     if cache is None:
         return
     try:
-        last_ts = cache.last_timestamps()  # type: ignore[attr-defined]
+        last_ts = cache.last_timestamps()
     except Exception:
         last_ts = {}
     items = last_ts.items() if hasattr(last_ts, "items") else []
@@ -582,19 +592,21 @@ def _handle_hydration_fallback(node) -> None:
         interval_keys = intervals.keys() if hasattr(intervals, "keys") else []
         for interval in list(interval_keys):
             try:
-                cache.drop(universe, interval)  # type: ignore[attr-defined]
+                cache.drop(universe, interval)
             except Exception:
                 continue
-    if hasattr(sdk_metrics, "snapshot_hydration_fallback_total"):
+    fallback_metric = getattr(sdk_metrics, "snapshot_hydration_fallback_total", None)
+    if fallback_metric is not None:
         try:
-            sdk_metrics.snapshot_hydration_fallback_total.inc()  # type: ignore[attr-defined]
+            fallback_metric.inc()
         except Exception:
             pass
 
 
 def _record_hydration_success() -> None:
-    if hasattr(sdk_metrics, "snapshot_hydration_success_total"):
+    success_metric = getattr(sdk_metrics, "snapshot_hydration_success_total", None)
+    if success_metric is not None:
         try:
-            sdk_metrics.snapshot_hydration_success_total.inc()  # type: ignore[attr-defined]
+            success_metric.inc()
         except Exception:
             pass

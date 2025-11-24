@@ -141,7 +141,7 @@ files = [
   "examples",
 ]
 
-mypy_path = ["qmtl/runtime/sdk/_stubs"]
+mypy_path = ["typings"]
 
 exclude = [
   "build",

@@ -36,8 +36,6 @@ def compute_missing_ranges(
     coverage: Iterable[tuple[int, int]] | None,
     window: WarmupWindow,
 ) -> list[CoverageRange]:
-    if window.start is None or window.end is None:
-        return []
     merged = merge_coverage(coverage or [], window.interval)
     return _compute_missing_ranges_within_window(merged, window)
 

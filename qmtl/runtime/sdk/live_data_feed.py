@@ -94,13 +94,14 @@ class FakeLiveDataFeed(LiveDataFeed):
 
     async def start(self) -> None:
         self._stopped.clear()
-        if self._on_message is None:
+        handler = self._on_message
+        if handler is None:
             return
 
         async def _worker() -> None:
             while not self._stopped.is_set():
                 msg = await self._queue.get()
-                await self._on_message(msg)
+                await handler(msg)
 
         self._task = asyncio.create_task(_worker())
 
@@ -118,4 +119,3 @@ class FakeLiveDataFeed(LiveDataFeed):
 
 
 __all__ = ["LiveDataFeed", "WebSocketFeed", "FakeLiveDataFeed"]
-

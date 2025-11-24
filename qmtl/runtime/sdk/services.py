@@ -154,3 +154,34 @@ class RunnerServices:
 
 
 __all__ = ["RunnerServices"]
+
+# ---------------------------------------------------------------------------
+# Global singleton helpers to preserve services across module reloads
+# ---------------------------------------------------------------------------
+
+_GLOBAL_RUNNER_SERVICES: RunnerServices | None = None
+
+
+def get_global_services() -> RunnerServices:
+    """Return a process-wide RunnerServices instance (persists across reloads)."""
+
+    global _GLOBAL_RUNNER_SERVICES
+    if _GLOBAL_RUNNER_SERVICES is None:
+        _GLOBAL_RUNNER_SERVICES = RunnerServices.default()
+    else:
+        # Refresh optional service availability (e.g., Ray) across reloads.
+        try:
+            _GLOBAL_RUNNER_SERVICES.ray_executor = RayExecutor()
+        except Exception:
+            pass
+    return _GLOBAL_RUNNER_SERVICES
+
+
+def set_global_services(services: RunnerServices) -> None:
+    """Override the process-wide services instance."""
+
+    global _GLOBAL_RUNNER_SERVICES
+    _GLOBAL_RUNNER_SERVICES = services
+
+
+__all__ = ["RunnerServices", "get_global_services", "set_global_services"]

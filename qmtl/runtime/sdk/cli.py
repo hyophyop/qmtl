@@ -18,6 +18,9 @@ def _parse_history_boundary(value: object | None, source: str) -> int | None:
 
     if value is None:
         return None
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        logger.warning("Ignoring non-integer value for %s: %s", source, value)
+        return None
     try:
         return int(value)
     except (TypeError, ValueError):

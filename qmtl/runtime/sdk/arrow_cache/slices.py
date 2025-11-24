@@ -12,7 +12,7 @@ class _Slice:
 
     def __init__(self, period: int) -> None:
         self.period = period
-        if not ARROW_AVAILABLE:
+        if not ARROW_AVAILABLE or pa is None:
             raise RuntimeError("pyarrow is required for Arrow cache")
         import pickle
 
@@ -21,6 +21,7 @@ class _Slice:
         self.vals = pa.array([], pa.binary())
 
     def append(self, timestamp: int, payload: Any) -> None:
+        assert pa is not None  # for type checker
         self.ts = pa.concat_arrays([self.ts, pa.array([timestamp], pa.int64())])
         buf = self._pickle.dumps(payload)
         self.vals = pa.concat_arrays([self.vals, pa.array([buf], pa.binary())])
@@ -44,9 +45,11 @@ class _Slice:
 
     @property
     def table(self):
+        assert pa is not None  # runtime check already enforced in __init__
         return pa.table({"t": self.ts, "v": self.vals})
 
     def slice_table(self, start: int, end: int):
+        assert pa is not None  # for type checker
         start = max(0, start)
         end = min(len(self.ts), end)
         length = max(0, end - start)

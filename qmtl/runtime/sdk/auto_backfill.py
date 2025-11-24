@@ -68,14 +68,14 @@ class AutoBackfillStrategy(ABC):
         counter.labels(**labels).inc(amount)
         if hasattr(counter, "_vals"):
             key = self._metric_key(request)
-            counter._vals[key] = counter._vals.get(key, 0) + amount  # type: ignore[attr-defined]
+            counter._vals[key] = counter._vals.get(key, 0) + amount
 
     def _observe_duration(self, started_at: float) -> None:
         duration_ms = (time.perf_counter() - started_at) * 1000.0
         histogram = metrics.history_auto_backfill_duration_ms
         histogram.labels(strategy=self.metric_name).observe(duration_ms)
         if hasattr(histogram, "_vals"):
-            histogram._vals.setdefault(self.metric_name, []).append(duration_ms)  # type: ignore[attr-defined]
+            histogram._vals.setdefault(self.metric_name, []).append(duration_ms)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -200,10 +200,10 @@ class FetcherBackfillStrategy(AutoBackfillStrategy):
             )
 
         if refresh_post_write:
-            refreshed = await backend.coverage(
+            refreshed_ranges = await backend.coverage(
                 node_id=request.node_id, interval=request.interval
             )
-            updated = self._merge_ranges([], refreshed, request.interval)
+            updated = self._merge_ranges([], refreshed_ranges, request.interval)
 
         coverage_cache[key] = updated
         if rows_written:
@@ -317,10 +317,10 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
             )
 
         if refresh_post_write:
-            refreshed = await backend.coverage(
+            refreshed_ranges = await backend.coverage(
                 node_id=request.node_id, interval=request.interval
             )
-            updated = self._merge_ranges([], refreshed, request.interval)
+            updated = self._merge_ranges([], refreshed_ranges, request.interval)
 
         coverage_cache[key] = updated
         if rows_written:
@@ -335,16 +335,18 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
     # ------------------------------------------------------------------
     async def _collect_events(
         self, start: int, end: int, node_id: str, interval: int
-    ) -> Iterable[ReplayEvent]:
+    ) -> list[ReplayEvent]:
         if self._replay_source is not None:
-            return await self._replay_source(start, end, node_id, interval)
+            result = await self._replay_source(start, end, node_id, interval)
+            return list(result)
         recorder = getattr(self._event_service, "recorder", None)
         if recorder is None:
             return []
         # Prefer explicit replay helpers
         replay_fn = getattr(recorder, "replay", None)
         if callable(replay_fn):
-            return await replay_fn(start, end, node_id=node_id, interval=interval)
+            result = await replay_fn(start, end, node_id=node_id, interval=interval)
+            return list(result)
         read_fn = getattr(recorder, "read_range", None)
         if callable(read_fn):
             result = await read_fn(start, end, node_id=node_id, interval=interval)
@@ -353,7 +355,7 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
                     (int(row["ts"]), {k: row[k] for k in row.index if k != "ts"})
                     for _, row in result.iterrows()
                 ]
-            return result
+            return list(result)
         buffer_attr = getattr(recorder, "buffer", None)
         if buffer_attr is None:
             return []

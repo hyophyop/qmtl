@@ -35,7 +35,9 @@ class CacheWindowReader:
         for (upstream, interval), buffer in sorted(self._buffers.items()):
             ordered.append((upstream, interval, buffer.items()))
         blob = json.dumps(ordered, sort_keys=True, default=repr).encode()
-        return hash_utils._sha256(blob)
+        from typing import cast
+
+        return cast(str, hash_utils._sha256(blob))
 
     def as_xarray(self) -> xr.DataArray:
         upstreams = sorted({u for u, _ in self._buffers.keys()})

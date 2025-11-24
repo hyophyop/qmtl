@@ -34,7 +34,7 @@ def _from_cache_config(cfg: _CacheConfig) -> "FeatureArtifactPlane | None":
         return None
 
     base = cfg.feature_artifact_dir
-    max_versions = cfg.feature_artifact_versions
+    max_versions: Any = cfg.feature_artifact_versions
     write_domains = list(cfg.feature_artifact_write_domains)
 
     if isinstance(max_versions, str):

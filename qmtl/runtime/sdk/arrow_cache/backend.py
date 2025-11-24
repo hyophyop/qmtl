@@ -27,8 +27,9 @@ class NodeCacheArrow:
         metrics: CacheInstrumentation | None = None,
         eviction_strategy: EvictionStrategy | None = None,
     ) -> None:
-        if not ARROW_AVAILABLE:
+        if not ARROW_AVAILABLE or pa is None:
             raise RuntimeError("pyarrow not installed")
+        self._pa: Any = pa
         self.period = period
         self._slices: Dict[tuple[str, int], _Slice] = {}
         self._last_ts: Dict[tuple[str, int], int | None] = {}
@@ -44,8 +45,6 @@ class NodeCacheArrow:
         self._active_node_id: str | None = None
 
         self._metrics = metrics or default_instrumentation()
-        if self._metrics is None:  # pragma: no cover - defensive
-            self._metrics = NOOP_INSTRUMENTATION
 
         cfg = configuration.get_runtime_config()
         interval = int(cfg.cache.cache_evict_interval) if cfg is not None else 60
@@ -240,8 +239,8 @@ class NodeCacheArrow:
         if sl is None:
             if count is not None:
                 return []
-            import numpy as np  # type: ignore
-            import xarray as xr  # type: ignore
+            import numpy as np
+            import xarray as xr
 
             return xr.DataArray(
                 np.empty((0, 2), dtype=object),
@@ -255,8 +254,8 @@ class NodeCacheArrow:
                 return []
             return items[-min(count, len(items)) :]
 
-        import numpy as np  # type: ignore
-        import xarray as xr  # type: ignore
+        import numpy as np
+        import xarray as xr
 
         arr = np.empty((self.period, 2), dtype=object)
         arr[:] = None
@@ -330,8 +329,8 @@ class NodeCacheArrow:
 
             ts_list = [int(t) for t, _ in merged]
             val_list = [pickle.dumps(v) for _, v in merged]
-            sl.ts = pa.array(ts_list, pa.int64())
-            sl.vals = pa.array(val_list, pa.binary())
+            sl.ts = self._pa.array(ts_list, self._pa.int64())
+            sl.vals = self._pa.array(val_list, self._pa.binary())
         else:  # pragma: no cover - safety guard
             for ts, v in merged:
                 sl.append(int(ts), v)

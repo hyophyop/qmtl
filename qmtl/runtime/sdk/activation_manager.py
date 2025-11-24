@@ -219,6 +219,8 @@ class ActivationManager:
         self._mark_started()
 
     async def _start_via_gateway(self) -> None:
+        if not self.gateway_url:
+            return
         subscribe_url = self.gateway_url.rstrip("/") + "/events/subscribe"
         await self._maybe_reconcile_activation()
         data = await self._subscribe_for_events(subscribe_url)
@@ -238,15 +240,17 @@ class ActivationManager:
             }
             resp = await client.post(subscribe_url, json=payload)
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                return data if isinstance(data, Mapping) else None
         return None
 
     async def _bootstrap_stream(self, data: Mapping[str, object]) -> None:
         stream_url = data.get("stream_url")
         if not stream_url:
             return
-        token = data.get("token")
-        self.client = WebSocketClient(stream_url, on_message=self._on_message, token=token)
+        token_val = data.get("token")
+        token = str(token_val) if token_val is not None else None
+        self.client = WebSocketClient(str(stream_url), on_message=self._on_message, token=token)
         await self.client.start()
         self._mark_started()
 

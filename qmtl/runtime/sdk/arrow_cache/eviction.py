@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Protocol
+from typing import Any, Protocol
 
 from .dependencies import RAY_AVAILABLE, ray
 
@@ -55,25 +55,20 @@ class ThreadedEvictionStrategy:
         self._stop_event = threading.Event()
 
 
-if RAY_AVAILABLE:
+class _RayEvictor:
+    """Ray actor implementation that periodically evicts cache entries."""
 
-    @ray.remote  # type: ignore[misc]
-    class _RayEvictor:
-        def __init__(self, interval: int) -> None:
-            self._interval = interval
-            self._stop_event = threading.Event()
+    def __init__(self, interval: int) -> None:
+        self._interval = interval
+        self._stop_event = threading.Event()
 
-        def start(self, cache: EvictableCache) -> None:
-            while not self._stop_event.is_set():
-                self._stop_event.wait(self._interval)
-                cache.evict_expired()
+    def start(self, cache: EvictableCache) -> None:
+        while not self._stop_event.is_set():
+            self._stop_event.wait(self._interval)
+            cache.evict_expired()
 
-        def stop(self) -> None:
-            self._stop_event.set()
-else:  # pragma: no cover - optional dependency shim
-
-    class _RayEvictor:  # type: ignore[too-many-ancestors]
-        pass
+    def stop(self) -> None:
+        self._stop_event.set()
 
 
 class RayEvictionStrategy:
@@ -81,14 +76,15 @@ class RayEvictionStrategy:
 
     def __init__(self, interval: int) -> None:
         self._interval = interval
-        self._actor = None
+        self._actor: Any | None = None
         self._cache: EvictableCache | None = None
 
     def start(self, cache: EvictableCache) -> None:
         if not RAY_AVAILABLE or ray is None:
             raise RuntimeError("ray is not available")
         self._cache = cache
-        self._actor = _RayEvictor.options(name=f"evictor_{id(cache)}").remote(self._interval)
+        RayEvictorRemote = ray.remote(_RayEvictor)
+        self._actor = RayEvictorRemote.options(name=f"evictor_{id(cache)}").remote(self._interval)
         self._actor.start.remote(cache)
 
     def tick(self) -> None:

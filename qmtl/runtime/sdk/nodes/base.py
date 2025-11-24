@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
 from qmtl.foundation.common.compute_key import compute_compute_key
@@ -81,6 +81,7 @@ class Node(ComputeContextMixin, NodeFeedMixin):
 
         self.cache = self._create_cache(config_payload.period)
         self._setup_compute_context()
+        self._node_id = compute_node_id(self._canonical_spec())
         self._activate_cache_key()
 
         self._last_watermark: int | None = None
@@ -134,19 +135,23 @@ class Node(ComputeContextMixin, NodeFeedMixin):
 
     @property
     def code_hash(self) -> str:
-        return self.hash_utils.code_hash(self.compute_fn)
+        return cast(str, self.hash_utils.code_hash(self.compute_fn))
 
     @property
     def config_hash(self) -> str:
-        return self.hash_utils.config_hash(self.config)
+        return cast(str, self.hash_utils.config_hash(self.config))
 
     @property
     def schema_hash(self) -> str:
-        return self.hash_utils.schema_hash(self.schema)
+        return cast(str, self.hash_utils.schema_hash(self.schema))
 
     @property
     def node_id(self) -> str:
-        return compute_node_id(self._canonical_spec())
+        return self._node_id
+
+    @node_id.setter
+    def node_id(self, value: str) -> None:
+        self._node_id = value
 
     @property
     def node_hash(self) -> str:

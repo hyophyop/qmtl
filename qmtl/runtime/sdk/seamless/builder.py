@@ -9,7 +9,7 @@ components without hard-coding those decisions inside provider subclasses.
 
 import importlib
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Generic, Mapping, Optional, Protocol, TypeVar
+from typing import Callable, Dict, Generic, Mapping, Optional, Protocol, TypeVar, cast
 
 from qmtl.runtime.sdk.artifacts import ArtifactRegistrar
 from qmtl.runtime.sdk.seamless_data_provider import (
@@ -18,7 +18,7 @@ from qmtl.runtime.sdk.seamless_data_provider import (
     LiveDataFeed,
 )
 
-T_co = TypeVar("T_co")
+T_co = TypeVar("T_co", covariant=True)
 
 
 class ComponentFactory(Protocol, Generic[T_co]):
@@ -32,8 +32,8 @@ def _normalize_factory(value: Optional[Callable[[], T_co] | T_co]) -> Optional[C
     if value is None:
         return None
     if callable(value):
-        return value  # type: ignore[return-value]
-    return lambda: value  # type: ignore[return-value]
+        return cast(ComponentFactory[T_co], value)
+    return cast(ComponentFactory[T_co], lambda: value)
 
 
 def _instantiate(name: str, factory: Optional[ComponentFactory[T_co]]) -> Optional[T_co]:

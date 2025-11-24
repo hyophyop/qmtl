@@ -31,10 +31,10 @@ class AugmentedHistoryProvider(HistoryProvider):
         self._locks: Dict[tuple[str, int], asyncio.Lock] = defaultdict(asyncio.Lock)
 
     # ------------------------------------------------------------------
-    def bind_stream(self, stream) -> None:  # type: ignore[override]
+    def bind_stream(self, stream) -> None:
         super().bind_stream(stream)
         if hasattr(self.backend, "bind_stream"):
-            self.backend.bind_stream(stream)  # type: ignore[attr-defined]
+            self.backend.bind_stream(stream)
 
     # ------------------------------------------------------------------
     async def fetch(
@@ -136,8 +136,6 @@ class AugmentedHistoryProvider(HistoryProvider):
             self.backend,
             coverage_cache=self._coverage_cache,
         )
-        if updated is None:  # pragma: no cover - defensive
-            updated = self._coverage_cache.get(key, [])
         self._coverage_cache[key] = self._normalize_ranges(
             updated, request.interval
         )
@@ -183,4 +181,3 @@ class AugmentedHistoryProvider(HistoryProvider):
 
 
 __all__ = ["AugmentedHistoryProvider"]
-

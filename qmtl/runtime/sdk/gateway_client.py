@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Callable, Awaitable, cast
 
 import httpx
 from opentelemetry.propagate import inject
@@ -72,7 +72,7 @@ class GatewayClient:
         status = result.status_code or 0
         if status >= 400:
             return {"error": f"gateway error {status}"}
-        if result.payload is not None:
+        if isinstance(result.payload, dict):
             return result.payload
         return None
 
@@ -90,7 +90,8 @@ class GatewayClient:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 if resp.content:
-                    return resp.json()
+                    payload = resp.json()
+                    return payload if isinstance(payload, dict) else {}
                 return {}
         except Exception:
             return {}
@@ -124,10 +125,11 @@ class GatewayClient:
         except TypeError:
             return httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS)
 
-    def _wrap_post(self, client: httpx.AsyncClient):
-        post_fn = client.post
+    def _wrap_post(self, client: httpx.AsyncClient) -> Callable[..., Awaitable[httpx.Response]]:
+        post_fn: Callable[..., Awaitable[httpx.Response]] = client.post
         if self._circuit_breaker is not None:
-            post_fn = self._circuit_breaker(post_fn)
+            wrapped = self._circuit_breaker(post_fn)
+            post_fn = cast(Callable[..., Awaitable[httpx.Response]], wrapped)
         return post_fn
 
     async def _post(
@@ -148,7 +150,7 @@ class GatewayClient:
 
     def _attach_headers(self, client: httpx.AsyncClient, headers: dict[str, str]) -> None:
         try:
-            client.headers.update(headers)  # type: ignore[attr-defined]
+            client.headers.update(headers)
         except Exception:
             pass
 
@@ -214,8 +216,9 @@ class GatewayClient:
 
     def _build_strategy_ack(self, payload: dict[str, object]) -> StrategyAck:
         if hasattr(StrategyAck, "model_validate"):
-            return StrategyAck.model_validate(payload)  # type: ignore[attr-defined]
-        return StrategyAck.parse_obj(payload)  # type: ignore[attr-defined]
+            model_validate = getattr(StrategyAck, "model_validate")
+            return cast(StrategyAck, model_validate(payload))
+        return StrategyAck.parse_obj(payload)
 
     def _reset_breaker(self) -> None:
         if self._circuit_breaker is not None:

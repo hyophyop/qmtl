@@ -31,15 +31,16 @@ def code_hash(compute_fn: Any) -> str:
     """Hash the source of ``compute_fn`` for reproducible node ids."""
     if compute_fn is None:
         return _sha256(b"null")
+    source_bytes: bytes
     try:
-        source = inspect.getsource(compute_fn).encode()
+        source_bytes = inspect.getsource(compute_fn).encode()
     except (OSError, TypeError):
-        source = getattr(compute_fn, "__code__", None)
-        if source is not None:
-            source = source.co_code
+        code_obj = getattr(compute_fn, "__code__", None)
+        if code_obj is not None and hasattr(code_obj, "co_code"):
+            source_bytes = code_obj.co_code
         else:
-            source = repr(compute_fn).encode()
-    return _sha256(source)
+            source_bytes = repr(compute_fn).encode()
+    return _sha256(source_bytes)
 
 
 def config_hash(config: dict) -> str:

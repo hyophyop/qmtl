@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Mapping, Optional, TYPE_CHECKING, cast
+from typing import Any, Mapping, Optional, TYPE_CHECKING, cast
 
 from opentelemetry import trace
 
@@ -25,7 +25,7 @@ from .protocols import (
     MetricWithValueProtocol,
     TagQueryManagerProtocol,
 )
-from .services import RunnerServices
+from .services import RunnerServices, get_global_services, set_global_services
 from .strategy import Strategy
 from .strategy_bootstrapper import StrategyBootstrapper
 from .tag_manager_service import TagManagerService
@@ -40,11 +40,7 @@ else:  # pragma: no cover - runtime placeholders for type-only imports
     HistoryBackend = HistoryProvider = object
 
 
-if "_runner_services" not in globals():
-    _runner_services = RunnerServices.default()
-else:
-    _runner_services.ray_executor = RayExecutor()
-    _runner_services.kafka_factory = KafkaConsumerFactory()
+_runner_services = get_global_services()
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +65,7 @@ class Runner:
         except Exception:
             logger.debug("Failed to fetch gateway health for %s", gateway_url, exc_info=True)
             return
-        if not isinstance(health, dict):
+        if not health:
             return
         runtime.set_gateway_capabilities(
             rebalance_schema_version=health.get("rebalance_schema_version"),
@@ -83,6 +79,7 @@ class Runner:
     @classmethod
     def set_services(cls, services: RunnerServices) -> None:
         cls._services = services
+        set_global_services(services)
 
     # ------------------------------------------------------------------
     # Backward mode-specific APIs removed; Runner adheres to WS decisions.
@@ -325,7 +322,7 @@ class Runner:
     @staticmethod
     def _collect_history_events(
         strategy: Strategy, start: int | None, end: int | None
-    ) -> list[tuple[int, any, any]]:
+    ) -> list[tuple[int, Any, Any]]:
         """Proxy to history service for backwards compatibility."""
 
         return Runner.services().history_service.collect_history_events(
@@ -374,7 +371,7 @@ class Runner:
     @staticmethod
     def _replay_history_events(
         strategy: Strategy,
-        events: list[tuple[int, any, any]],
+        events: list[tuple[int, Any, Any]],
         *,
         on_missing: str = "skip",
     ) -> None:
@@ -664,23 +661,20 @@ class Runner:
             if existing is not None:
                 continue
             provider_for_node = cast(HistoryProvider | HistoryBackend | None, provider)
+            coerced: HistoryProviderProtocol | HistoryProvider | HistoryBackend | None
             try:
                 coerced = node._coerce_history_provider(provider_for_node)
             except Exception:
                 coerced = provider_for_node
             setattr(node, "_history_provider", coerced)
-            if isinstance(coerced, HistoryProviderProtocol):
+            if coerced is None:
+                continue
+            bind_fn = getattr(coerced, "bind_stream", None)
+            if callable(bind_fn):
                 try:
-                    coerced.bind_stream(node)
+                    bind_fn(node)
                 except Exception:
                     logger.debug("failed to bind history provider to stream", exc_info=True)
-            elif coerced is not None:
-                bind_fn = getattr(coerced, "bind_stream", None)
-                if callable(bind_fn):
-                    try:
-                        bind_fn(node)
-                    except Exception:
-                        logger.debug("failed to bind history provider to stream", exc_info=True)
 
     # ------------------------------------------------------------------
     # Convenience context manager for tests

@@ -49,7 +49,7 @@ def ensure_ccxt_exchange(exchange_id: str | CcxtExchange, *, strict: bool = True
     """
     eid = normalize_exchange_id(exchange_id)
     try:  # pragma: no cover - optional dependency import path
-        import ccxt  # type: ignore
+        import ccxt
     except Exception:
         # ccxt not installed — skip validation
         return eid

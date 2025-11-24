@@ -135,11 +135,17 @@ class TagQueryManager:
 
     # ------------------------------------------------------------------
     def register(self, node: TagQueryNode) -> None:
-        key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
+        if node.interval is None:
+            raise ValueError("TagQueryNode interval is required")
+        interval = int(node.interval)
+        key = (tuple(sorted(node.query_tags)), interval, node.match_mode)
         self._nodes.setdefault(key, []).append(node)
 
     def unregister(self, node: TagQueryNode) -> None:
-        key = (tuple(sorted(node.query_tags)), node.interval, node.match_mode)
+        if node.interval is None:
+            raise ValueError("TagQueryNode interval is required")
+        interval = int(node.interval)
+        key = (tuple(sorted(node.query_tags)), interval, node.match_mode)
         lst = self._nodes.get(key)
         if lst and node in lst:
             lst.remove(node)
@@ -158,10 +164,10 @@ class TagQueryManager:
             return
 
         url = self.gateway_url.rstrip("/") + "/queues/by_tag"
-        cache: Dict[str, list[str]] = {}
+        resolved_cache: Dict[str, list[str]] = {}
         async with httpx.AsyncClient(timeout=runtime.HTTP_TIMEOUT_SECONDS) as client:
             for (tags, interval, match_mode), nodes in self._nodes.items():
-                params = {
+                params: dict[str, str | int] = {
                     "tags": ",".join(tags),
                     "interval": interval,
                     "match_mode": match_mode.value,
@@ -174,11 +180,11 @@ class TagQueryManager:
                 except httpx.RequestError:
                     raw = []
                 queues = normalize_queues(raw)
-                cache[self._key_str((tags, interval, match_mode))] = list(queues)
+                resolved_cache[self._key_str((tags, interval, match_mode))] = list(queues)
                 for n in nodes:
                     n.update_queues(list(queues))
-        if cache:
-            self._write_cache(cache)
+        if resolved_cache:
+            self._write_cache(resolved_cache)
 
     # ------------------------------------------------------------------
     async def handle_message(self, data: dict) -> None:
