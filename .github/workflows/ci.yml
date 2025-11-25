@@ -77,6 +77,9 @@ jobs:
       - name: Check import cycles (grimp baseline)
         run: uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json
 
+      - name: Check SDK layer guard (core -> nodes)
+        run: uv run --with grimp python scripts/check_sdk_layers.py
+
       - name: Seamless runtime health verification
         if: ${{ vars.RUN_SEAMLESS_HEALTH_CHECK == '1' }}
         env:
