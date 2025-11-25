@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, TYPE_CHECKING, cast
+from typing import Any, Protocol, cast
 from dataclasses import dataclass
 
 from . import metrics as sdk_metrics
 
-if TYPE_CHECKING:
-    from qmtl.runtime.sdk.nodes import Node
+
+class NodeLike(Protocol):
+    node_id: str
+    node_type: str
 
 
 @dataclass(slots=True)
@@ -200,7 +202,7 @@ class CacheView:
     # ------------------------------------------------------------------
     def as_frame(
         self,
-        node: "Node" | str,
+        node: "NodeLike" | str,
         interval: int,
         *,
         window: int | None = None,
@@ -214,7 +216,7 @@ class CacheView:
 
     def window(
         self,
-        node: "Node" | str,
+        node: "NodeLike" | str,
         interval: int,
         length: int | None = None,
         *,
@@ -248,10 +250,10 @@ class CacheView:
 
     def align_frames(
         self,
-        specs: Sequence[tuple["Node" | str, int]],
+        specs: Sequence[tuple["NodeLike" | str, int]],
         *,
         window: int | None = None,
-        columns: Mapping["Node" | str, Sequence[str]] | Sequence[str] | None = None,
+        columns: Mapping[object, Sequence[str]] | Sequence[str] | None = None,
     ):
         """Delegate to :func:`cache_view_tools.align_frames`."""
 

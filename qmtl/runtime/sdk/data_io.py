@@ -6,13 +6,16 @@ This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
 
-if TYPE_CHECKING:
-    from qmtl.runtime.sdk.nodes.sources import StreamInput
+
+class StreamLike(Protocol):
+    """Minimal protocol for stream inputs accepted by history providers."""
+
+    node_id: str
 
 
 class DataFetcher(Protocol):
@@ -60,7 +63,7 @@ class AutoBackfillRequest:
 class HistoryProvider(ABC):
     """Load historical data into node caches."""
 
-    def bind_stream(self, stream: "StreamInput") -> None:
+    def bind_stream(self, stream: StreamLike) -> None:
         """Associate this provider with ``stream``.
 
         The default implementation stores ``stream.node_id`` in
@@ -101,7 +104,7 @@ class HistoryProvider(ABC):
 class EventRecorder(ABC):
     """Persist processed node data."""
 
-    def bind_stream(self, stream: "StreamInput") -> None:
+    def bind_stream(self, stream: StreamLike) -> None:
         """Associate this recorder with ``stream``.
 
         The default implementation records ``stream.node_id`` in
