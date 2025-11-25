@@ -826,9 +826,11 @@ async def test_edge_overrides_upsert_and_reason_preservation():
 @pytest.mark.asyncio
 async def test_world_nodes_execution_domains_and_legacy_migration():
     storage = Storage()
-    storage.world_nodes.setdefault("w1", {})["legacy"] = {
-        "status": "paused",
-        "annotations": {"source": "legacy"},
+    storage._world_nodes.nodes.setdefault("w1", {})["legacy"] = {
+        "backtest": {
+            "status": "paused",
+            "annotations": {"source": "legacy"},
+        }
     }
 
     app = create_app(storage=storage)
@@ -898,16 +900,16 @@ async def test_world_nodes_execution_domains_and_legacy_migration():
             assert remaining == []
 
             audit_resp = await client.get("/worlds/w1/audit")
-        assert audit_resp.status_code == 200
-        migrations = [
-            entry
-            for entry in audit_resp.json()
-            if entry["event"] == "world_node_bucket_normalized" and entry.get("node_id") == "legacy"
-        ]
-        assert migrations
-        legacy_event = migrations[-1]
-        assert legacy_event.get("domains") == ["backtest"]
-        assert legacy_event.get("source") == "legacy-single"
+            assert audit_resp.status_code == 200
+            migrations = [
+                entry
+                for entry in audit_resp.json()
+                if entry["event"] == "world_node_bucket_normalized" and entry.get("node_id") == "legacy"
+            ]
+            assert migrations
+            legacy_event = migrations[-1]
+            assert legacy_event.get("domains") == ["backtest"]
+            assert "source" not in legacy_event
 
 
 @pytest.mark.asyncio

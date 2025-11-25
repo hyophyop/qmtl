@@ -39,13 +39,12 @@ def _make_payload(dag: dict[str, object]) -> StrategySubmit:
     return StrategySubmit(
         dag_json=encoded,
         meta=None,
-        world_id=None,
         node_ids_crc32=0,
     )
 
 
 def test_parse_dag_payload_returns_hash(strategy_manager):
-    dag = {"nodes": [{"node_id": "node-1"}]}
+    dag = {"schema_version": "v1", "nodes": [{"node_id": "node-1"}]}
     payload = _make_payload(dag)
 
     dag_dict, dag_copy, dag_hash = strategy_manager._parse_dag_payload(payload)
@@ -60,11 +59,10 @@ def test_parse_dag_payload_returns_hash(strategy_manager):
 
 
 def test_parse_dag_payload_handles_plain_json(strategy_manager):
-    dag = {"nodes": [{"node_id": "node-plain"}]}
+    dag = {"schema_version": "v1", "nodes": [{"node_id": "node-plain"}]}
     payload = StrategySubmit(
         dag_json=json.dumps(dag),
         meta=None,
-        world_id=None,
         node_ids_crc32=0,
     )
 
@@ -74,7 +72,7 @@ def test_parse_dag_payload_handles_plain_json(strategy_manager):
 
 
 def test_inject_version_sentinel_adds_version(strategy_manager):
-    dag = {"nodes": []}
+    dag = {"schema_version": "v1", "nodes": []}
     meta = {"strategy_version": " 1.2.3 "}
 
     updated = strategy_manager._inject_version_sentinel("strategy-1", dag, meta)
@@ -92,7 +90,7 @@ def test_inject_version_sentinel_skips_when_disabled(fake_redis):
         fsm=_StubFSM(),
         insert_sentinel=False,
     )
-    dag = {"nodes": []}
+    dag = {"schema_version": "v1", "nodes": []}
 
     updated = manager._inject_version_sentinel("strategy-2", dag, None)
 

@@ -181,6 +181,7 @@ def build_strategy_payload(
             }
         ]
     }
+    dag["schema_version"] = "v1"
     dag_json = base64.b64encode(json.dumps(dag).encode()).decode()
     node_crc = crc32_of_list([node_id])
 
@@ -193,7 +194,7 @@ def build_strategy_payload(
     payload = StrategySubmit(
         dag_json=dag_json,
         meta=meta or None,
-        world_id="world-1",
+        world_ids=["world-1"],
         node_ids_crc32=node_crc,
     )
 

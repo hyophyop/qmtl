@@ -121,7 +121,7 @@ DecisionEnvelope
 }
 ```
 
-`effective_mode` remains the legacy policy string. Gateway/SDK derive an
+`effective_mode` remains the policy string. Gateway/SDK derive an
 ExecutionDomain from it and only attach `execution_domain` on the
 ControlBus/WebSocket copies they relay downstream; the field is not part of
 the canonical WorldService schema.
@@ -151,7 +151,7 @@ Field semantics and precedence
 - `drain=true` blocks new orders but allows existing opens to complete naturally.
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft-scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
-- `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
+- `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper/sim -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
 - `requires_ack=true` signals that Gateway/SDK MUST keep order gates closed and emit an acknowledgement for that `sequence` through the ControlBus response channel before propagating subsequent events. Freeze-phase acks must arrive before the corresponding Unfreeze event is applied.

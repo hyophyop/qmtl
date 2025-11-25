@@ -175,7 +175,7 @@ def test_minimal_blocks_submission(fake_redis):
     app = make_app(fake_redis)
     app.state.degradation.level = DegradationLevel.MINIMAL
     payload = StrategySubmit(
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         meta=None,
         node_ids_crc32=crc32_of_list([]),
     )

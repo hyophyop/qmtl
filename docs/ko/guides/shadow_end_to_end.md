@@ -25,7 +25,7 @@ last_modified: 2025-11-22
    from qmtl.services.gateway.submission.context_service import ComputeContextService
    from qmtl.services.gateway.models import StrategySubmit
 
-   submit = StrategySubmit(dag_json="{}", meta={"execution_domain": "shadow"}, world_id="shadow-world", node_ids_crc32=0)
+   submit = StrategySubmit(dag_json="{}", meta={"execution_domain": "shadow"}, world_ids=["shadow-world"], node_ids_crc32=0)
    svc = ComputeContextService(world_client=None)  # WS가 없어도 shadow를 유지
    ctx = await svc.build(submit)
    assert ctx.execution_domain == "shadow"

@@ -87,20 +87,20 @@ You can add layers to an existing project:
 cd my_strategy
 
 # Add monitoring layer
-qmtl project add-layer monitoring
+qmtl project layer add monitoring
 
 # Add execution layer (requires signal layer)
-qmtl project add-layer execution
+qmtl project layer add execution
 ```
 
 ### 4. Inspect metadata and validate structure
 
 ```bash
 # Show available layers and templates
-qmtl project list-layers --show-templates
+qmtl project layer list --show-templates
 
 # Validate project structure
-qmtl project validate --path my_strategy
+qmtl project layer validate --path my_strategy
 ```
 
 ---
@@ -268,7 +268,7 @@ qmtl project init --path my_exec --layers execution
 ### 2. List available layers
 
 ```bash
-qmtl project list-layers
+qmtl project layer list
 ```
 
 ### 3. Validate the project
@@ -276,34 +276,8 @@ qmtl project list-layers
 Verify that the generated structure is correct:
 
 ```bash
-# TODO: to be added later
-qmtl project validate
+qmtl project layer validate
 ```
-
----
-
-## Migration from legacy templates
-
-The legacy `--strategy` switch still works but is deprecated:
-
-```bash
-# Legacy (deprecated)
-qmtl project init --path old_style --strategy general
-# Warning: --strategy is deprecated, use --preset instead
-
-# New (recommended)
-qmtl project init --path new_style --preset minimal
-```
-
-### Template → preset mapping
-
-| Legacy template | New preset |
-|-------------|-----------|
-| `general` | `minimal` |
-| `single_indicator` | `minimal` |
-| `multi_indicator` | `minimal` |
-| `branching` | `research` |
-| `state_machine` | `research` |
 
 ---
 
@@ -341,8 +315,8 @@ If an add‑layer command fails due to missing dependencies, add the required la
 
 ```bash
 # EXECUTION requires SIGNAL
-qmtl project add-layer signal
-qmtl project add-layer execution
+qmtl project layer add signal
+qmtl project layer add execution
 ```
 
 ### Editing templates

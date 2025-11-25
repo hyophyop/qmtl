@@ -14,7 +14,6 @@ last_modified: 2025-08-21
 - [CCXT × QuestDB IO 레시피](../io/ccxt-questdb.md)
 - 기존에 `ccxt-seamless-gpt5codex.md`로 공개되었던 거버넌스 노트는 본 문서에 흡수되어 폐기되었습니다.
 - 기존에 `ccxt-seamless-gpt5high.md`로 공개되었던 런타임 노트 역시 본 설계에 흡수되어 폐기되었습니다.
-- 마이그레이션 기록과 외부 링크 인벤토리는 [CCXT × Seamless Legacy Audit](../archive/ccxt-seamless-legacy-audit.md)에 정리되어 있습니다.
 
 ## 범위와 상태
 

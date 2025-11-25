@@ -225,23 +225,5 @@ def run(argv: List[str] | None = None) -> None:
     handler(rest)
 
 
-def run_add(argv: List[str] | None = None) -> None:
-    """Compatibility wrapper for legacy ``add-layer`` entry point."""
-
-    _handle_add(argv)
-
-
-def run_list(argv: List[str] | None = None) -> None:
-    """Compatibility wrapper for legacy ``list-layers`` entry point."""
-
-    _handle_list(argv)
-
-
-def run_validate(argv: List[str] | None = None) -> None:
-    """Compatibility wrapper for legacy ``validate`` entry point."""
-
-    _handle_validate(argv)
-
-
 if __name__ == "__main__":  # pragma: no cover
     run()

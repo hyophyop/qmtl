@@ -134,11 +134,6 @@ class TopicConfigLoader:
         for name in topics:
             try:
                 resource = config_cls(config_cls.Type.TOPIC, name)
-            except AttributeError:  # pragma: no cover - legacy API
-                try:
-                    resource = config_cls("topic", name)
-                except Exception:  # pragma: no cover - defensive
-                    continue
             except Exception:  # pragma: no cover - defensive
                 continue
             resources.append(resource)

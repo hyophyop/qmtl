@@ -160,50 +160,6 @@ class Runner:
         strategy.setup()
         return strategy
 
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _missing_ranges(
-        coverage, start: int, end: int, interval: int
-    ) -> list[tuple[int, int]]:
-        """Proxy to :class:`HistoryWarmupService` for compatibility."""
-
-        return Runner.services().history_service.missing_ranges(
-            coverage, start, end, interval
-        )
-
-    @staticmethod
-    async def _ensure_history(
-        strategy: Strategy,
-        start: int | None = None,
-        end: int | None = None,
-        *,
-        stop_on_ready: bool = False,
-        strict: bool = False,
-    ) -> None:
-        """Proxy to history service for backward compatibility."""
-
-        await Runner.services().history_service.ensure_history(
-            strategy,
-            start,
-            end,
-            stop_on_ready=stop_on_ready,
-            strict=strict,
-        )
-
-    @staticmethod
-    def _hydrate_snapshots(strategy: Strategy) -> int:
-        """Proxy to history service for backwards compatibility."""
-
-        return Runner.services().history_service.hydrate_snapshots(strategy)
-
-    @staticmethod
-    def _write_snapshots(strategy: Strategy) -> int:
-        """Proxy to history service for backwards compatibility."""
-
-        return Runner.services().history_service.write_snapshots(strategy)
-
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
     @staticmethod
     def feed_queue_data(
         node,
@@ -320,16 +276,6 @@ class Runner:
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _collect_history_events(
-        strategy: Strategy, start: int | None, end: int | None
-    ) -> list[tuple[int, Any, Any]]:
-        """Proxy to history service for backwards compatibility."""
-
-        return Runner.services().history_service.collect_history_events(
-            strategy, start, end
-        )
-
-    @staticmethod
     def run_pipeline(strategy: Strategy) -> None:
         """Execute a :class:`Pipeline` using cached history from ``strategy``."""
         import importlib
@@ -337,15 +283,11 @@ class Runner:
         pipeline_mod = importlib.import_module("qmtl.runtime.pipeline")
         Pipeline = getattr(pipeline_mod, "Pipeline")
         pipeline = Pipeline(strategy.nodes)
-        events = Runner._collect_history_events(strategy, None, None)
+        events = Runner.services().history_service.collect_history_events(
+            strategy, None, None
+        )
         for ts, node, payload in events:
             pipeline.feed(node, ts, payload)
-
-    @staticmethod
-    def _replay_events_simple(strategy: Strategy) -> None:
-        """Proxy to history service for deterministic replay."""
-
-        Runner.services().history_service.replay_events_simple(strategy)
 
     @staticmethod
     def _maybe_int(value) -> int | None:
@@ -353,33 +295,6 @@ class Runner:
             return int(value)
         except Exception:
             return None
-
-    @staticmethod
-    async def _replay_history(
-        strategy: Strategy,
-        start: int | None,
-        end: int | None,
-        *,
-        on_missing: str = "skip",
-    ) -> None:
-        """Proxy to history service for backward compatibility."""
-
-        await Runner.services().history_service.replay_history(
-            strategy, start, end, on_missing=on_missing
-        )
-
-    @staticmethod
-    def _replay_history_events(
-        strategy: Strategy,
-        events: list[tuple[int, Any, Any]],
-        *,
-        on_missing: str = "skip",
-    ) -> None:
-        """Proxy to history service for backward compatibility."""
-
-        Runner.services().history_service.replay_history_events(
-            strategy, events, on_missing=on_missing
-        )
 
     @staticmethod
     async def run_async(

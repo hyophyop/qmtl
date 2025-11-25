@@ -7,16 +7,6 @@ from qmtl.runtime.sdk.node import Node
 
 from .options import NodeSetOptions, PortfolioScope
 from .resources import ExecutionResources, get_execution_resources
-from .stubs import (
-    StubPreTradeGateNode,
-    StubSizingNode,
-    StubExecutionNode,
-    StubOrderPublishNode,
-    StubFillIngestNode,
-    StubPortfolioNode,
-    StubRiskControlNode,
-    StubTimingGateNode,
-)
 
 
 @dataclass(frozen=True)
@@ -187,33 +177,89 @@ class NodeSetBuilder:
             setattr(node, "world_id", ctx.world_id)
             return node
 
-        def _default_pretrade(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubPreTradeGateNode(upstream)
+        def _latest_payload(view: CacheView, upstream: Node) -> dict | None:
+            data = view[upstream][upstream.interval]
+            if not data:
+                return None
+            _, payload = data[-1]
+            return payload
 
-        def _default_sizing(upstream: Node, context: NodeSetContext) -> Node:
-            return StubSizingNode(
-                upstream,
-                portfolio=context.resources.portfolio,
-                weight_fn=context.resources.weight_fn,
+        def _default_pretrade(upstream: Node, _ctx: NodeSetContext) -> Node:
+            return Node(
+                input=upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_pretrade",
+                interval=upstream.interval,
+                period=1,
             )
 
+        def _default_sizing(upstream: Node, context: NodeSetContext) -> Node:
+            node = Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_sizing",
+                interval=upstream.interval,
+                period=1,
+            )
+            setattr(node, "portfolio", context.resources.portfolio)
+            setattr(node, "weight_fn", context.resources.weight_fn)
+            return node
+
         def _default_execution(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubExecutionNode(upstream)
+            return Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_exec",
+                interval=upstream.interval,
+                period=1,
+            )
 
         def _default_publish(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubOrderPublishNode(upstream)
+            return Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_publish",
+                interval=upstream.interval,
+                period=1,
+            )
 
         def _default_fills(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubFillIngestNode(upstream)
+            return Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_fills",
+                interval=upstream.interval,
+                period=1,
+            )
 
         def _default_portfolio(upstream: Node, context: NodeSetContext) -> Node:
-            return StubPortfolioNode(upstream, portfolio=context.resources.portfolio)
+            node = Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_portfolio",
+                interval=upstream.interval,
+                period=1,
+            )
+            setattr(node, "portfolio", context.resources.portfolio)
+            return node
 
         def _default_risk(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubRiskControlNode(upstream)
+            return Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_risk",
+                interval=upstream.interval,
+                period=1,
+            )
 
         def _default_timing(upstream: Node, _ctx: NodeSetContext) -> Node:
-            return StubTimingGateNode(upstream)
+            return Node(
+                upstream,
+                compute_fn=lambda view: _latest_payload(view, upstream),
+                name=f"{upstream.name}_timing",
+                interval=upstream.interval,
+                period=1,
+            )
 
         pre = _mark(_resolve(pretrade, signal, _default_pretrade))
 

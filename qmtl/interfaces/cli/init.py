@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import List
 from qmtl.utils.i18n import _
 
-from ..scaffold import copy_docs, copy_pyproject, copy_sample_data, copy_scripts, create_project
+from ..scaffold import copy_docs, copy_pyproject, copy_sample_data, copy_scripts
 from ..layers import Layer, LayerComposer, PresetLoader, LayerValidator
 from ..config_templates import available_profiles
 
@@ -21,38 +20,19 @@ def run(argv: List[str] | None = None) -> None:
     parser.epilog = _("More docs: docs/reference/templates.md")
     parser.add_argument(
         "--path",
+        required=True,
         help=_("Project directory to create scaffolding"),
     )
 
     # Preset/layer options (new system)
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument(
         "--preset",
         help=_("Preset configuration to use (see docs/architecture/layered_template_system.md)"),
     )
-    parser.add_argument(
+    selection.add_argument(
         "--layers",
         help=_("Comma-separated list of layers to include (e.g., data,signal)"),
-    )
-    parser.add_argument(
-        "--list-presets",
-        action="store_true",
-        help=_("(Deprecated: use 'qmtl project list-presets') List available presets and exit"),
-    )
-    parser.add_argument(
-        "--list-layers",
-        action="store_true",
-        help=_("(Deprecated: use 'qmtl project list-layers') List available layers and exit"),
-    )
-
-    # Legacy options (deprecated)
-    parser.add_argument(
-        "--strategy",
-        help=_("(Deprecated: use --preset) Strategy template to use"),
-    )
-    parser.add_argument(
-        "--list-templates",
-        action="store_true",
-        help=_("(Deprecated: use --list-presets) List available templates and exit"),
     )
 
     # Additional options
@@ -79,51 +59,6 @@ def run(argv: List[str] | None = None) -> None:
     composer = LayerComposer()
     validator = LayerValidator()
 
-    # Handle list commands via dedicated subcommands
-    if args.list_templates:
-        print(_("Warning: --list-templates is deprecated, use --list-presets instead"), file=sys.stderr)
-        from . import presets as presets_cli  # Local import to avoid circular dependency
-
-        presets_cli.run(["--show-legacy-templates"])
-        return
-
-    if args.list_presets:
-        print(
-            _("Warning: --list-presets is deprecated, use 'qmtl project list-presets'"),
-            file=sys.stderr,
-        )
-        from . import presets as presets_cli  # Local import to avoid circular dependency
-
-        presets_cli.run([])
-        return
-
-    if args.list_layers:
-        print(
-            _("Warning: --list-layers is deprecated, use 'qmtl project list-layers'"),
-            file=sys.stderr,
-        )
-        from . import list_layers as list_layers_cli  # Local import to avoid circular dependency
-
-        list_layers_cli.run([])
-        return
-
-    # Check that --path is provided for actual project creation
-    if not args.path:
-        parser.error("the following arguments are required: --path")
-
-    # Determine if using new layer system or legacy
-    use_legacy = False
-
-    if args.strategy:
-        print(_("Warning: --strategy is deprecated, use --preset instead"), file=sys.stderr)
-        use_legacy = True
-
-    # Use legacy system when no layer/preset selection is provided
-    if use_legacy or (not args.preset and not args.layers):
-        _run_legacy(args)
-        return
-
-    # Use new layer system
     if args.preset:
         _run_with_preset(args, preset_loader, composer)
     else:
@@ -140,20 +75,6 @@ def _apply_optional_components(dest: Path, args: argparse.Namespace) -> None:
         copy_scripts(dest)
     if args.with_pyproject:
         copy_pyproject(dest)
-
-
-def _run_legacy(args) -> None:
-    """Run using legacy template system."""
-    create_project(
-        Path(args.path),
-        template=args.strategy or "general",
-        with_sample_data=args.with_sample_data,
-        with_docs=args.with_docs,
-        with_scripts=args.with_scripts,
-        with_pyproject=args.with_pyproject,
-        config_profile=args.config_profile,
-    )
-    print(_("Project created at {path} using legacy template '{template}'").format(path=args.path, template=(args.strategy or 'general')))
 
 
 def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer) -> None:
@@ -191,7 +112,7 @@ def _run_with_preset(args, preset_loader: PresetLoader, composer: LayerComposer)
 def _run_with_layers(args, composer: LayerComposer, validator: LayerValidator) -> None:
     """Run with explicit layer selection."""
     layer_names = [name.strip() for name in args.layers.split(",")]
-    
+
     try:
         layers = [Layer(name) for name in layer_names]
     except ValueError as e:

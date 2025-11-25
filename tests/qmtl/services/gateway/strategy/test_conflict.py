@@ -47,7 +47,7 @@ def test_duplicate_strategy_returns_409(client):
         schema_compat_id="sh-major",
         params={"window": 5},
     )
-    dag = {"nodes": [node]}
+    dag = {"schema_version": "v1", "nodes": [node]}
     payload = make_payload(dag)
     first = client.post("/strategies", json=payload.model_dump())
     assert first.status_code == 202

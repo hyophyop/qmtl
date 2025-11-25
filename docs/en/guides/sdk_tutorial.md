@@ -10,7 +10,7 @@ last_modified: 2025-09-24
 # Learning Path Overview
 
 1. [MVP Strategy Example]({{ code_url('qmtl/examples/templates/single_indicator.py') }})  
-   Run `qmtl project init --path mvp --strategy single_indicator --with-sample-data`, then  
+   Run `qmtl project init --path mvp --preset minimal --with-sample-data`, then  
    `uv run python strategy.py` followed by `uv run qmtl report run.log`.
 2. [Strategy Template Library](../reference/templates.md)
 3. [Architecture Deep Dive](../architecture/architecture.md)

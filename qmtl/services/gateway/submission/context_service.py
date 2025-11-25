@@ -182,12 +182,8 @@ class ComputeContextService:
         )
 
     def _unique_worlds(self, payload: "StrategySubmit") -> List[str]:
-        candidates: list[str] = []
-        if payload.world_id:
-            candidates.append(str(payload.world_id))
-        wid_list = getattr(payload, "world_ids", None)
-        if wid_list:
-            candidates.extend(str(item) for item in wid_list if item)
+        wid_list = getattr(payload, "world_ids", None) or []
+        candidates = [str(item) for item in wid_list if item is not None]
         unique: list[str] = []
         seen: set[str] = set()
         for value in candidates:

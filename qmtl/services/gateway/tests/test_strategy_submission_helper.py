@@ -62,7 +62,8 @@ def assert_submission_result(
 def _assert_query_queue_map(queue_map: dict, bundle) -> None:
     assert set(queue_map) == {bundle.expected_node_id}
     entry = queue_map[bundle.expected_node_id][0]
-    assert entry["queue"] == f"{bundle.payload.world_id}:alpha"
+    primary_world = bundle.payload.world_ids[0]
+    assert entry["queue"] == f"{primary_world}:alpha"
 
 
 def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
@@ -85,18 +86,16 @@ def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
     [
         pytest.param(
             StrategySubmissionConfig(submit=True, diff_timeout=0.1),
-            lambda bundle: setattr(bundle.payload, "world_ids", ["world-2"]),
-            "diff-sentinel",
-            _assert_query_queue_map,
-            "dryrun",
-            [
-                ("world-1", "strategy-abc"),
-                ("world-2", "strategy-abc"),
-            ],
-            [
-                ("world-1", {"strategies": ["strategy-abc"]}),
-                ("world-2", {"strategies": ["strategy-abc"]}),
-            ],
+                lambda bundle: setattr(bundle.payload, "world_ids", ["world-2"]),
+                "diff-sentinel",
+                _assert_query_queue_map,
+                "dryrun",
+                [
+                    ("world-2", "strategy-abc"),
+                ],
+                [
+                    ("world-2", {"strategies": ["strategy-abc"]}),
+                ],
             "tag_query",
             False,
             False,

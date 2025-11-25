@@ -3,7 +3,7 @@
 The unified `qmtl.yml` schema replaces ad-hoc environment variables with a
 structured document that can be linted and version-controlled. Each section maps
 cleanly onto the runtime services so that `qmtl config env export` can generate
-legacy environment assignments when required.
+environment assignments when required.
 
 ```mermaid
 flowchart TB
@@ -127,7 +127,7 @@ Sample configurations for common environments live under
 
 | Key | Type | Default | Environment variable | Required |
 | --- | --- | --- | --- | --- |
-| `otel_exporter_endpoint` | string or null | `null` | — (legacy env removed) | No |
+| `otel_exporter_endpoint` | string or null | `null` | — | No |
 | `enable_fastapi_otel` | boolean | `False` | `QMTL_ENABLE_FASTAPI_OTEL` | No |
 | `prometheus_url` | string or null | `null` | `QMTL_PROMETHEUS_URL` | No |
 
@@ -175,7 +175,7 @@ Sample configurations for common environments live under
 | `history_end` | string or null | `null` | `QMTL_HISTORY_END` | No |
 
 > **Note:** `qmtl tools sdk run` now reads history boundaries exclusively from
-> the `test.history_start` and `test.history_end` keys in `qmtl.yml`. The legacy
+> the `test.history_start` and `test.history_end` keys in `qmtl.yml`.
 > `QMTL_HISTORY_START` and `QMTL_HISTORY_END` environment variable overrides are
 > ignored during command execution.
 
@@ -185,4 +185,3 @@ Sample configurations for common environments live under
 * `qmtl config validate --target gateway` and `--target dagmanager` perform the
   existing connectivity probes for Redis, Postgres, Neo4j, Kafka, and related
   services.
-

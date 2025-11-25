@@ -48,6 +48,8 @@ def test_brokerage_e2e_scenarios():
         model.can_submit_order(acct, order_moo, ts=holiday_ts)
 
     # Deferred settlement keeps cash unchanged until applied
-    assert acct.cash == pytest.approx(100_000.0)
+    balance = acct.cashbook.get(acct.base_currency).balance
+    assert balance == pytest.approx(100_000.0)
     settlement.apply_due(acct, now=close_ts + timedelta(days=1))
-    assert acct.cash < 100_000.0
+    updated_balance = acct.cashbook.get(acct.base_currency).balance
+    assert updated_balance < 100_000.0

@@ -12,7 +12,7 @@ from qmtl.services.gateway.submission.dag_loader import DagLoader
 
 
 def test_decode_accepts_base64_payload() -> None:
-    dag: dict[str, object] = {"nodes": [], "meta": {}}
+    dag: dict[str, object] = {"schema_version": "v1", "nodes": [], "meta": {}}
     encoded = base64.b64encode(json.dumps(dag).encode()).decode()
 
     loader = DagLoader()
@@ -22,7 +22,7 @@ def test_decode_accepts_base64_payload() -> None:
 
 
 def test_load_validates_schema(monkeypatch) -> None:
-    dag: dict[str, object] = {"nodes": [], "meta": {}}
+    dag: dict[str, object] = {"schema_version": "v1", "nodes": [], "meta": {}}
     loader = DagLoader()
 
     calls: list[dict] = []

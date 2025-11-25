@@ -125,12 +125,6 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         base = cfg.artifact_dir or ".qmtl_seamless_artifacts"
         return cls(base)
 
-    @classmethod
-    def from_env(cls) -> "FileSystemArtifactRegistrar | None":
-        """Backward-compatible alias for :meth:`from_runtime_config`."""
-
-        return cls.from_runtime_config()
-
     # ------------------------------------------------------------------
     def _target_dir(self, manifest: MutableMapping[str, Any]) -> Path:
         node_id = str(manifest.get("node_id", "unknown"))

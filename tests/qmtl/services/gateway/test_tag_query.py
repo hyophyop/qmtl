@@ -173,7 +173,7 @@ def test_submit_tag_query_node(client):
         schema_compat_id="sh-major",
         inputs=[],
     )
-    dag_json = {"nodes": [node]}
+    dag_json = {"schema_version": "v1", "nodes": [node]}
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
@@ -202,11 +202,11 @@ def test_submit_tag_query_node_shadow_domain(client):
         schema_compat_id="sh-major",
         inputs=[],
     )
-    dag_json = {"nodes": [node]}
+    dag_json = {"schema_version": "v1", "nodes": [node]}
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": {"execution_domain": "shadow"},
-        "world_id": "shadow-world",
+        "world_ids": ["shadow-world"],
         "node_ids_crc32": node_ids_crc32([node]),
     }
     resp = c.post("/strategies", json=payload)
@@ -253,7 +253,7 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
             )
             good_node_id = good_node["node_id"]
             bad_node_id = bad_node["node_id"]
-            dag_json = {"nodes": [good_node, bad_node]}
+            dag_json = {"schema_version": "v1", "nodes": [good_node, bad_node]}
             payload = {
                 "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
                 "meta": None,

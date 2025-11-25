@@ -85,17 +85,17 @@ qmtl project
   |   +--- --preset          # Select a preset (fast start)
   |   +--- --layers          # Choose layers explicitly
   |   `--- --path            # Target project path
-  +--- add-layer             # Add a layer to an existing project
-  |   +--- <layer>           # Layer to add (positional)
-  |   +--- --path            # Project path (defaults to CWD)
-  |   `--- --template        # Select a concrete template
-  +--- list-layers           # Print layer and template metadata
-  |   +--- --show-templates  # Display template list
-  |   `--- --show-requires   # Display template dependencies
-  +--- list-presets          # Print preset descriptions
-  |   `--- --show-legacy-templates  # Include deprecated template names
-  `--- validate              # Validate project structure
-      `--- --path            # Project path (defaults to CWD)
+  +--- layer                 # Manage layers on an existing project
+  |   +--- add               # Add a layer to an existing project
+  |   |    +--- <layer>      # Layer to add (positional)
+  |   |    +--- --path       # Project path (defaults to CWD)
+  |   |    `--- --template   # Select a concrete template
+  |   +--- list              # Print layer and template metadata
+  |   |    +--- --show-templates  # Display template list
+  |   |    `--- --show-requires   # Display template dependencies
+  |   `--- validate          # Validate project structure
+  |        `--- --path       # Project path (defaults to CWD)
+  `--- list-presets          # Print preset descriptions
 ```
 
 ### Usage Examples
@@ -134,19 +134,19 @@ qmtl project init --path my_strategy --layers data,signal,execution,brokerage,mo
 ```bash
 # Add the execution layer to an existing project
 cd my_strategy
-qmtl project add-layer execution
+qmtl project layer add execution
 
 # Add brokerage layer with a specific template
-qmtl project add-layer brokerage --template ccxt_binance
+qmtl project layer add brokerage --template ccxt_binance
 
 # Add monitoring layer
-qmtl project add-layer monitoring
+qmtl project layer add monitoring
 
 # Inspect available layers and templates in the current environment
-qmtl project list-layers --show-templates --show-requires
+qmtl project layer list --show-templates --show-requires
 
 # Validate the resulting project structure
-qmtl project validate --path my_strategy
+qmtl project layer validate --path my_strategy
 ```
 
 ---
@@ -302,7 +302,7 @@ templates/
 ```
 
 Metadata drives both CLI prompts and documentation (e.g., surfaced through
-`qmtl project list-layers --show-templates`).
+`qmtl project layer list --show-templates`).
 
 ---
 

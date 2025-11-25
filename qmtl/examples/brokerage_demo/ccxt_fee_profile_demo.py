@@ -64,6 +64,7 @@ def build_futures_model(
 def _exec(model, order: Order, *, market_price: float, cash: float = 100_000.0):
     acct = Account(cash=cash, base_currency="USDT")
     fill = model.execute_order(acct, order, market_price)
+    balance = acct.cashbook.get(acct.base_currency).balance
     return {
         "order": {
             "symbol": order.symbol,
@@ -74,7 +75,7 @@ def _exec(model, order: Order, *, market_price: float, cash: float = 100_000.0):
             "limit": order.limit_price,
         },
         "fill": {"qty": fill.quantity, "price": fill.price, "fee": fill.fee},
-        "cash_after": acct.cash,
+        "cash_after": balance,
     }
 
 
@@ -131,4 +132,3 @@ if __name__ == "__main__":  # pragma: no cover - manual demo
 
     out = run_demo()
     print(json.dumps(out, indent=2, sort_keys=True))
-

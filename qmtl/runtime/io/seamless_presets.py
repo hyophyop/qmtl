@@ -256,7 +256,7 @@ _register_ccxt_live_pro_preset()
 def _register_filesystem_registrar_preset() -> None:
     def _apply(builder, config: Mapping[str, Any]):
         def registrar_factory():
-            reg = FileSystemArtifactRegistrar.from_env()
+            reg = FileSystemArtifactRegistrar.from_runtime_config()
             if reg is None:
                 # fall back to IO registrar with default path
                 from qmtl.runtime.io.artifact import ArtifactRegistrar as IORegistrar

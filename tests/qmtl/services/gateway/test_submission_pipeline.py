@@ -19,7 +19,7 @@ class _Loader:
     def load(self, dag_json: str):
         self.called = True
         class _Loaded:
-            dag = {"nodes": ["n"]}
+            dag = {"schema_version": "v1", "nodes": ["n"]}
         return _Loaded()
 
 
@@ -69,7 +69,7 @@ class _QueueMapResolver:
 
 
 class _Payload:
-    dag_json = "{}"
+    dag_json = '{"schema_version": "v1", "nodes": []}'
     node_ids_crc32 = 0
 
 
@@ -92,7 +92,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
 
     prepared = await pipeline.prepare(_Payload())
     assert isinstance(prepared, PreparedSubmission)
-    assert prepared.dag == {"nodes": ["n"]}
+    assert prepared.dag == {"schema_version": "v1", "nodes": ["n"]}
     assert prepared.compute_context.execution_domain == "live"
     assert prepared.worlds == ["w1"]
     assert prepared.node_ids_crc32 == 0
@@ -100,7 +100,7 @@ async def test_pipeline_prepare_and_diff(monkeypatch):
 
     outcome = await pipeline.run_diff(
         strategy_id="sid",
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         worlds=["w1"],
         fallback_world_id=None,
         compute_ctx=prepared.compute_context,

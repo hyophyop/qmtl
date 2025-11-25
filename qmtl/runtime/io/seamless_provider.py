@@ -52,14 +52,7 @@ class EnhancedQuestDBProviderSettings:
     """Encapsulate optional knobs for :class:`EnhancedQuestDBProvider`.
 
     The settings object provides a single place to aggregate strategy, SLA,
-    conformance and fingerprint configuration while keeping backwards
-    compatibility with legacy keyword arguments. Call sites can migrate in two
-    phases:
-
-    1. Instantiate :class:`EnhancedQuestDBProviderSettings` with the
-       configuration currently supplied through keyword arguments.
-    2. Pass the instance via the ``settings`` parameter. Once all call sites
-       adopt the object we can deprecate the legacy keyword arguments.
+    conformance and fingerprint configuration.
     """
 
     table: str | None = None
@@ -90,12 +83,6 @@ class HistoryProviderDataSource:
     def __init__(self, provider: HistoryProvider, priority: DataSourcePriority):
         self.provider = provider
         self.priority = priority
-
-        # Preserve legacy attribute names for downstream compatibility.
-        if priority is DataSourcePriority.CACHE:
-            self.cache_provider = provider
-        elif priority is DataSourcePriority.STORAGE:
-            self.storage_provider = provider
 
     async def is_available(
         self, start: int, end: int, *, node_id: str, interval: int
@@ -198,8 +185,6 @@ class DataFetcherAutoBackfiller:
         if not self._should_use_storage(target_storage):
             return None
         storage_provider = getattr(target_storage, "provider", None) if target_storage else None
-        if storage_provider is None and target_storage is not None:
-            storage_provider = getattr(target_storage, "storage_provider", None)
         if storage_provider and hasattr(storage_provider, "fill_missing") and hasattr(
             storage_provider, "fetch"
         ):
@@ -667,8 +652,6 @@ class EnhancedQuestDBProvider(SeamlessDataProvider):
         # Also bind cache if available
         if self.cache_source:
             cache_provider = getattr(self.cache_source, "provider", None)
-            if cache_provider is None:
-                cache_provider = getattr(self.cache_source, "cache_provider", None)
             if cache_provider and hasattr(cache_provider, "bind_stream"):
                 cache_provider.bind_stream(stream)
 

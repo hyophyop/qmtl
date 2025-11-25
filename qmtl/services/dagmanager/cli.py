@@ -229,64 +229,6 @@ def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
     return rest, lang
 
 
-_LEGACY_TARGET_COMMANDS = {"diff", "queue-stats", "gc", "redo-diff"}
-
-
-def _find_legacy_subcommand(args: list[str]) -> tuple[int | None, str | None]:
-    for idx, token in enumerate(args):
-        if token in _LEGACY_TARGET_COMMANDS:
-            return idx, token
-    return None, None
-
-
-def _extract_target_override(tokens: list[str]) -> tuple[str | None, list[str]]:
-    target_value: str | None = None
-    normalized: list[str] = []
-    skip_next = False
-
-    for i, token in enumerate(tokens):
-        if skip_next:
-            skip_next = False
-            continue
-        if token == "--target":
-            if i < len(tokens) - 1:
-                target_value = tokens[i + 1]
-                skip_next = True
-            else:
-                normalized.append(token)
-            continue
-        if token.startswith("--target="):
-            target_value = token.split("=", 1)[1]
-            continue
-        normalized.append(token)
-
-    return target_value, normalized
-
-
-def _tail_has_target(tokens: list[str]) -> bool:
-    return any(part == "--target" or part.startswith("--target=") for part in tokens)
-
-
-def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
-    """Rewrite legacy dagmanager CLI arguments for compatibility."""
-
-    args = list(sys.argv[1:] if argv is None else argv)
-    subcmd_index, subcmd = _find_legacy_subcommand(args)
-    if subcmd_index is None or subcmd is None:
-        return args
-
-    leading = args[:subcmd_index]
-    target_value, normalized_leading = _extract_target_override(leading)
-    if target_value is None:
-        return args
-
-    tail = args[subcmd_index + 1 :]
-    if _tail_has_target(tail):
-        return normalized_leading + [subcmd, *tail]
-
-    return normalized_leading + [subcmd, "--target", target_value, *tail]
-
-
 def _prepare_language(argv: list[str], original_is_none: bool) -> list[str]:
     raw_argv, lang = _extract_lang(argv)
     if lang is not None:
@@ -487,7 +429,7 @@ async def _dispatch_command(args: argparse.Namespace) -> None:
 
 async def _main(argv: list[str] | None = None) -> None:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
-    normalized_argv = _normalize_argv(_prepare_language(raw_argv, argv is None))
+    normalized_argv = _prepare_language(raw_argv, argv is None)
 
     parser = _build_parser()
     args = parser.parse_args(normalized_argv)

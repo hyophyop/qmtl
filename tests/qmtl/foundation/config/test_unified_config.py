@@ -126,29 +126,19 @@ def test_load_unified_config_worldservice_server_flags(tmp_path: Path) -> None:
     assert config.worldservice.server.alpha_metrics_required is True
 
 
-def test_load_unified_config_aliases(tmp_path: Path) -> None:
+def test_load_unified_config_rejects_aliases(tmp_path: Path) -> None:
     data = {
         "gateway": {
             "redis_url": "redis://test:6379",
-            "database_uri": "sqlite:///:memory:",
-            "controlbus_url": "kafka://brokers",
         },
         "dagmanager": {
-            "neo4j_uri": "bolt://db:7687",
-            "kafka_url": "localhost:9092",
-            "controlbus_uri": "localhost:9093",
+            "neo4j_url": "bolt://db:7687",
         },
     }
     config_file = tmp_path / "cfg.yml"
     config_file.write_text(yaml.safe_dump(data))
-    config = load_config(str(config_file))
-    assert config.gateway.redis_dsn == "redis://test:6379"
-    assert config.gateway.database_dsn == "sqlite:///:memory:"
-    assert config.gateway.controlbus_dsn == "kafka://brokers"
-    assert config.dagmanager.neo4j_dsn == "bolt://db:7687"
-    assert config.dagmanager.kafka_dsn == "localhost:9092"
-    assert config.dagmanager.controlbus_dsn == "localhost:9093"
-    assert config.present_sections == frozenset({"gateway", "dagmanager"})
+    with pytest.raises(TypeError):
+        load_config(str(config_file))
 
 
 def test_load_unified_config_bad_gateway(tmp_path: Path) -> None:

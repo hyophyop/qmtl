@@ -72,6 +72,7 @@ def main() -> None:
         closed = str(exc)
 
     settlement.apply_due(acct, now=close_ts + timedelta(days=1))
+    balance = acct.cashbook.get(acct.base_currency).balance
 
     print(
         {
@@ -80,7 +81,7 @@ def main() -> None:
             "fok": fill_fok,
             "moc": fill_moc,
             "closed": closed,
-            "cash": acct.cash,
+            "cash": balance,
         }
     )
 

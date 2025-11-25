@@ -64,7 +64,7 @@ async def test_queue_map_strategy_aggregates_unique_bindings() -> None:
     executor = DiffExecutor(dagmanager)
     outcome = await executor.run(
         strategy_id="strat",
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         worlds=["w1", "w2"],
         fallback_world_id=None,
         compute_ctx=ctx,
@@ -96,7 +96,7 @@ async def test_single_world_strategy_returns_sentinel_and_queue_map() -> None:
     executor = DiffExecutor(dagmanager)
     outcome = await executor.run(
         strategy_id="strat",
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         worlds=["w1"],
         fallback_world_id="fallback",
         compute_ctx=ctx,
@@ -129,7 +129,7 @@ async def test_raises_on_crc_mismatch() -> None:
     with pytest.raises(ValueError, match="CRC32 mismatch"):
         await executor.run(
             strategy_id="strat",
-            dag_json="{}",
+            dag_json='{"schema_version": "v1", "nodes": []}',
             worlds=["w1"],
             fallback_world_id=None,
             compute_ctx=ctx,

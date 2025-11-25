@@ -7,7 +7,6 @@ from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.recipes import NodeSetRecipe
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 from qmtl.runtime.nodesets.steps import StepSpec
-from qmtl.runtime.nodesets.stubs import StubSizingNode
 from qmtl.runtime.pipeline.execution_nodes import (
     PortfolioNode as RealPortfolioNode,
     SizingNode as RealSizingNode,
@@ -19,7 +18,7 @@ def _collect_contract(nodeset: NodeSet) -> dict[str, object]:
     nodes = nodeset.nodes
     return {
         "world_ids": {getattr(node, "world_id", None) for node in nodes},
-        "sizing": next((node for node in nodes if isinstance(node, (StubSizingNode, RealSizingNode))), None),
+        "sizing": next((node for node in nodes if isinstance(node, RealSizingNode) or getattr(node, "name", "").endswith("_sizing")), None),
         "portfolio": next((node for node in nodes if isinstance(node, (RealPortfolioNode,))), None),
     }
 
@@ -163,7 +162,8 @@ def test_step_spec_default_resets_recipe_override():
     assert isinstance(_collect_contract(sized_nodeset)["sizing"], RealSizingNode)
 
     reverted = recipe.compose(signal, "world-reset", steps={"sizing": StepSpec.default()})
-    assert isinstance(_collect_contract(reverted)["sizing"], StubSizingNode)
+    reverted_sizing = _collect_contract(reverted)["sizing"]
+    assert isinstance(reverted_sizing, Node)
 
 
 def test_step_spec_requires_node_instance():

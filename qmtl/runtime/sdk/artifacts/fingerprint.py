@@ -10,12 +10,10 @@ import pandas as pd
 
 __all__ = [
     "compute_artifact_fingerprint",
-    "compute_legacy_artifact_fingerprint",
 ]
 
 
 _CANONICAL_PREFIX = "sha256:"
-_LEGACY_PREFIX = "lake:sha256:"
 
 
 def _canonicalize_value(value: Any) -> Any:
@@ -101,12 +99,3 @@ def compute_artifact_fingerprint(frame: pd.DataFrame, metadata: Mapping[str, Any
     serialized = _serialize_payload(frame, metadata, sort_metadata=True)
     digest = hashlib.sha256(serialized).hexdigest()
     return f"{_CANONICAL_PREFIX}{digest}"
-
-
-def compute_legacy_artifact_fingerprint(frame: pd.DataFrame, metadata: Mapping[str, Any]) -> str:
-    """Return the legacy ``lake:sha256:<digest>`` fingerprint for compatibility."""
-
-    serialized = _serialize_payload(frame, metadata, sort_metadata=False)
-    digest = hashlib.sha256(serialized).hexdigest()
-    return f"{_LEGACY_PREFIX}{digest}"
-

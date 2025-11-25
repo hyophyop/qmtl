@@ -47,7 +47,7 @@ def test_checksum_rejects_tampered_ids(client):
         params={"window": 10},
         dependencies=["dep-a"],
     )
-    dag = {"nodes": [node_a, node_b]}
+    dag = {"schema_version": "v1", "nodes": [node_a, node_b]}
     checksum = node_ids_crc32(dag["nodes"])
     good = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),

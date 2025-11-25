@@ -38,6 +38,8 @@ def test_maker_taker_fee_affects_pnl():
     fill_taker = brokerage.execute_order(taker_account, market_order, market_price=100)
 
     assert fill_taker.fee > fill_maker.fee
-    assert maker_account.cash - taker_account.cash == pytest.approx(
+    maker_balance = maker_account.cashbook.get(maker_account.base_currency).balance
+    taker_balance = taker_account.cashbook.get(taker_account.base_currency).balance
+    assert maker_balance - taker_balance == pytest.approx(
         fill_taker.fee - fill_maker.fee
     )

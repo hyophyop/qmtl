@@ -29,17 +29,6 @@ def test_from_config_enabled_with_flag_and_dir(tmp_path) -> None:
         assert isinstance(registrar, FileSystemArtifactRegistrar)
         assert registrar.base_dir == Path(tmp_path)
 
-
-def test_from_config_alias_from_env(tmp_path) -> None:
-    with runtime_config_override(
-        _make_config(artifacts_enabled=True, artifact_dir=str(tmp_path))
-    ):
-        registrar = FileSystemArtifactRegistrar.from_env()
-
-        assert isinstance(registrar, FileSystemArtifactRegistrar)
-        assert registrar.base_dir == Path(tmp_path)
-
-
 @pytest.mark.asyncio
 async def test_filesystem_registrar_applies_partition_template(tmp_path) -> None:
     frame = pd.DataFrame(

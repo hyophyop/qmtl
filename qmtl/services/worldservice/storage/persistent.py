@@ -130,11 +130,6 @@ class PersistentStorage:
             self._redis, self._append_audit
         )
         self.apply_runs: Dict[str, Dict[str, Any]] = {}
-        # Legacy compatibility surfaces – kept as empty proxies for tests that
-        # introspect the in-memory façade.
-        self.audit: Dict[str, Any] = {}
-        self.validation_cache: Dict[str, Any] = {}
-        self.world_nodes: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Construction helpers

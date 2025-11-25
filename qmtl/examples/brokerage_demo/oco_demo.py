@@ -51,7 +51,8 @@ def main() -> None:
     )
     oco = OCOOrder(take_profit, stop_loss)
     fill_tp, fill_sl = oco.execute(brk, acct, market_price=110.0)
-    print({"take_profit": fill_tp, "stop_loss": fill_sl, "cash": acct.cash})
+    balance = acct.cashbook.get(acct.base_currency).balance
+    print({"take_profit": fill_tp, "stop_loss": fill_sl, "cash": balance})
 
 
 if __name__ == "__main__":

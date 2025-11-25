@@ -51,7 +51,6 @@ last_modified: 2025-08-26
 
 - `docs/archive/README.md`
 - `docs/archive/realm_rename_eval.md`
-- `docs/archive/ccxt-seamless-legacy-audit.md`
 
 ## 설계(Design)
 *소유자: Design Council*

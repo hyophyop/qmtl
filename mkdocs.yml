@@ -128,7 +128,7 @@ nav:
   - Archive:
       - Overview: archive/README.md
       - Realm Terminology Evaluation: archive/realm_rename_eval.md
-      - CCXT × Seamless Legacy Audit: archive/ccxt-seamless-legacy-audit.md
+      - Backward Compatibility Cleanup Notes: archive/backward_compat_cleanup.md
   - Tags: tags.md
   - Templates:
       - Index: templates/index.md
@@ -187,6 +187,7 @@ plugins:
             Reference: 레퍼런스
             World: 월드
             Archive: 보관
+            "Backward Compatibility Cleanup Notes": "하위호환 제거 메모"
             Tags: 태그
             Templates: 템플릿
   - search

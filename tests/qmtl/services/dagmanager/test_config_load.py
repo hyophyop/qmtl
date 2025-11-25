@@ -10,9 +10,9 @@ def test_load_config_maps_aliases(tmp_path: Path):
     config_path = tmp_path / "dag.yml"
     config_path.write_text(
         """
-neo4j_url: bolt://neo4j.local
-kafka_uri: kafka://broker.local
-controlbus_url: kafka://controlbus.local
+neo4j_dsn: bolt://neo4j.local
+kafka_dsn: kafka://broker.local
+controlbus_dsn: kafka://controlbus.local
 memory_repo_path: repo.gpickle
 grpc_port: 1234
 """.strip()
@@ -60,7 +60,6 @@ def test_load_config_preserves_canonical_over_alias(tmp_path: Path):
     config_path.write_text(
         """
 neo4j_dsn: bolt://primary
-neo4j_url: bolt://alias
 grpc_port: 5555
 """.strip()
     )
@@ -69,3 +68,16 @@ grpc_port: 5555
 
     assert cfg.neo4j_dsn == "bolt://primary"
     assert cfg.grpc_port == 5555
+
+
+def test_load_config_rejects_aliases(tmp_path: Path):
+    config_path = tmp_path / "alias.yml"
+    config_path.write_text(
+        """
+neo4j_url: bolt://alias
+kafka_url: kafka://broker
+""".strip()
+    )
+
+    with pytest.raises(TypeError):
+        load_dagmanager_config(str(config_path))

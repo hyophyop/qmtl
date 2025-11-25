@@ -124,7 +124,7 @@ class BrokerageBacktestEngine:
 
         # Update account cash similar to BrokerageModel immediate settlement
         cost = fill_price * signed_qty + fee
-        self._account.cash -= cost
+        self._account.cashbook.adjust(self._account.base_currency, -cost)
 
         return ExecutionFill(
             order_id=order_id,

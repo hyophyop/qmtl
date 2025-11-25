@@ -37,7 +37,7 @@ def client_and_redis(fake_redis):
 
 
 def _payload_for(node: dict) -> StrategySubmit:
-    dag = {"nodes": [node]}
+    dag = {"schema_version": "v1", "nodes": [node]}
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
@@ -124,7 +124,7 @@ async def test_legacy_node_id_rejected(client_and_redis):
         "node_id": legacy_like,
     }
     payload = StrategySubmit(
-        dag_json=base64.b64encode(json.dumps({"nodes": [node]}).encode()).decode(),
+        dag_json=base64.b64encode(json.dumps({"schema_version": "v1", "nodes": [node]}).encode()).decode(),
         meta=None,
         world_id="w1",
         node_ids_crc32=crc32_of_list([legacy_like]),
@@ -158,7 +158,7 @@ async def test_tag_query_node_id_mismatch(client_and_redis):
 @pytest.mark.asyncio
 async def test_sentinel_inserted(client_and_redis):
     client, redis = client_and_redis
-    dag = {"nodes": []}
+    dag = {"schema_version": "v1", "nodes": []}
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
@@ -180,7 +180,7 @@ async def test_sentinel_skip(fake_redis):
         redis_client=redis, database=db, insert_sentinel=False, enable_background=False
     )
     with TestClient(app) as client:
-        dag = {"nodes": []}
+        dag = {"schema_version": "v1", "nodes": []}
         payload = StrategySubmit(
             dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
             meta=None,

@@ -31,11 +31,13 @@ def test_deferred_settlement_reserves_cash_and_applies_later():
     fill = model.execute_order(acct, order, market_price=100.0, ts=ts)
     assert fill.quantity == 5
     # Cash not moved immediately
-    assert acct.cash == 1000.0
+    balance = acct.cashbook.get(acct.base_currency).balance
+    assert balance == 1000.0
     # But reserved increased
     assert settlement.reserved >= 500.0
     # Next day, apply settlement reduces cash
     next_day = ts + timedelta(days=1)
     applied = settlement.apply_due(acct, now=next_day)
     assert applied >= 1
-    assert acct.cash == 500.0
+    balance_after = acct.cashbook.get(acct.base_currency).balance
+    assert balance_after == 500.0

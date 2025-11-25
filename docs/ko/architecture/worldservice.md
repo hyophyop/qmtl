@@ -117,7 +117,7 @@ DecisionEnvelope
 }
 ```
 
-`effective_mode` remains the legacy policy string. Gateway/SDK derive an
+`effective_mode` remains the policy string. Gateway/SDK derive an
 ExecutionDomain from it and only attach `execution_domain` on the
 ControlBus/WebSocket copies they relay downstream; the field is not part of
 the canonical WorldService schema.
@@ -147,7 +147,7 @@ Field semantics and precedence
 - `drain=true` blocks new orders but allows existing opens to complete naturally.
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
 - `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
-- `effective_mode` communicates the legacy policy string from WorldService (`validate|compute-only|paper|live`).
+- `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper/sim → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus 팬아웃 시 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})가 `phase`(`freeze|unfreeze`), `requires_ack`, `sequence`를 주입한다. `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 run별 단조 증가 값으로 생성된다.
 - `requires_ack=true`는 Gateway/SDK가 해당 `sequence`까지의 상태 변화를 수신하고 order gate를 계속 잠근 채 ACK를 반환해야 함을 뜻한다(SHALL). Freeze 단계 ACK가 도착하기 전에는 동일 run의 Unfreeze 이벤트를 적용하거나 주문 게이트를 열어서는 안 된다.

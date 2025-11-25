@@ -128,7 +128,6 @@ async def test_strategy_manager_writes_commit_log() -> None:
             "dataset_fingerprint": "abc123",
             "other": 5,
         },
-        world_id="world-main",
         world_ids=["world-main", "world-shadow"],
         node_ids_crc32=0,
     )
@@ -158,7 +157,6 @@ async def test_strategy_manager_writes_commit_log() -> None:
         "partition": "p0",
         "dataset_fingerprint": "abc123",
     }
-    assert submission.get("world_id") == "world-main"
     assert submission["insert_sentinel"] is True
     # dag_base64 should round-trip to the stored dag (with sentinel appended)
     stored_dag = json.loads(base64.b64decode(submission["dag_base64"]).decode())
@@ -189,7 +187,7 @@ async def test_strategy_manager_commit_log_includes_downgrade_metadata() -> None
     payload = StrategySubmit(
         dag_json=dag_json,
         meta={"execution_domain": "backtest"},
-        world_id="primary",
+        world_ids=["primary"],
         node_ids_crc32=0,
     )
 

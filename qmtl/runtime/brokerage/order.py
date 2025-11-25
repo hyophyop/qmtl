@@ -100,11 +100,3 @@ class Account:
         self.type = account_type
         self.leverage = leverage
         self.required_free_buying_power_percent = required_free_buying_power_percent
-
-    @property
-    def cash(self) -> float:  # backwards compatibility for single-currency tests
-        return self.cashbook.get(self.base_currency).balance
-
-    @cash.setter
-    def cash(self, value: float) -> None:
-        self.cashbook.set(self.base_currency, value)

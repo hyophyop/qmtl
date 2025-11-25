@@ -41,7 +41,7 @@ DEFAULT_EXECUTION_DOMAIN = "dryrun"
 
 
 def _connectors_config():
-    return sdk_configuration.get_unified_config().connectors
+    return sdk_configuration.get_connectors_config()
 
 
 def _resolve_execution_domain() -> str:
@@ -108,7 +108,6 @@ def _configure_live() -> None:
 
 
 def main() -> None:
-    sdk_configuration.reload()
     runtime.reload()
     domain = _resolve_execution_domain()
 

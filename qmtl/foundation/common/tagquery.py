@@ -47,12 +47,11 @@ def normalize_queues(raw: Iterable[Any]) -> list[str]:
     queues: list[str] = []
     for q in raw:
         if not isinstance(q, dict):
-            # Canonical shape is a descriptor object; skip legacy strings
-            continue
+            raise TypeError("queue descriptors must be objects")
         if q.get("global"):
             continue
-        # Only accept unified 'queue' key; legacy 'topic' is not supported
         val = q.get("queue")
-        if val:
-            queues.append(str(val))
+        if not val:
+            raise ValueError("queue descriptor missing 'queue'")
+        queues.append(str(val))
     return queues

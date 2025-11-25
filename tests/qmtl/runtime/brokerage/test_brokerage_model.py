@@ -23,7 +23,7 @@ def test_can_submit_order_based_on_buying_power():
         ImmediateFillModel(),
     )
     assert brokerage.can_submit_order(account, order)
-    account.cash = 100
+    account.cashbook.set(account.base_currency, 100)
     assert not brokerage.can_submit_order(account, order)
 
 
@@ -41,7 +41,9 @@ def test_execute_order_applies_slippage_and_fee():
     expected_fee = 5 * 0.5
     assert fill.price == expected_price
     assert fill.fee == expected_fee
-    assert account.cash == 1000 - (expected_price * 5 + expected_fee)
+    assert account.cashbook.get(account.base_currency).balance == 1000 - (
+        expected_price * 5 + expected_fee
+    )
 
 
 def test_execute_order_rejects_when_insufficient_cash():

@@ -55,7 +55,8 @@ def main() -> None:
 
     fill_entry, fill_tp, fill_sl = bracket.execute(brk, acct, market_price=100.0)
     fill_entry, fill_tp, fill_sl = bracket.execute(brk, acct, market_price=110.0)
-    print({"entry": fill_entry, "take_profit": fill_tp, "stop_loss": fill_sl, "cash": acct.cash})
+    balance = acct.cashbook.get(acct.base_currency).balance
+    print({"entry": fill_entry, "take_profit": fill_tp, "stop_loss": fill_sl, "cash": balance})
 
 
 if __name__ == "__main__":

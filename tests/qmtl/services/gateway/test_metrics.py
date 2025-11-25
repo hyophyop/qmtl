@@ -1,5 +1,6 @@
 import time
 import warnings
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,7 +54,7 @@ def test_latency_metric_recorded(app):
     metrics.reset_metrics()
     with TestClient(app, raise_server_exceptions=False) as client:
         payload = StrategySubmit(
-            dag_json="{}",
+            dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
             meta=None,
             node_ids_crc32=crc32_of_list([]),
         )
@@ -72,7 +73,7 @@ def test_lost_requests_counter(monkeypatch, fake_redis):
     app = create_app(redis_client=redis, database=db, enable_background=False)
     with TestClient(app, raise_server_exceptions=False) as client:
         payload = StrategySubmit(
-            dag_json="{}",
+            dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
             meta=None,
             node_ids_crc32=crc32_of_list([]),
         )

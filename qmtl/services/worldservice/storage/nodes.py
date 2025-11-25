@@ -47,39 +47,9 @@ class WorldNodeRepository(AuditableRepository):
             return bucket
         if isinstance(bucket, dict) and bucket and isinstance(next(iter(bucket.values())), WorldNodeRef):
             return bucket
-        if isinstance(bucket, dict) and "status" in bucket:
-            return self._normalize_legacy_single_bucket(world_id, node_id, world_bucket, bucket)
         if isinstance(bucket, dict):
             return self._normalize_bucket(world_id, node_id, world_bucket, bucket)
         raise TypeError(f"unexpected world node container for {world_id}/{node_id}: {bucket!r}")
-
-    def _normalize_legacy_single_bucket(
-        self,
-        world_id: str,
-        node_id: str,
-        world_bucket: Dict[str, Dict[str, WorldNodeRef]],
-        bucket: Dict[str, Any],
-    ) -> Dict[str, WorldNodeRef]:
-        ref = self._make_ref(
-            world_id,
-            node_id,
-            bucket.get("execution_domain"),
-            bucket.get("status"),
-            bucket.get("last_eval_key"),
-            bucket.get("annotations"),
-        )
-        container = {ref.execution_domain: ref}
-        world_bucket[node_id] = container
-        self._emit_audit(
-            world_id,
-            {
-                "event": "world_node_bucket_normalized",
-                "node_id": node_id,
-                "domains": [ref.execution_domain],
-                "source": "legacy-single",
-            },
-        )
-        return container
 
     def _normalize_bucket(
         self,
@@ -121,7 +91,6 @@ class WorldNodeRepository(AuditableRepository):
                 "event": "world_node_bucket_normalized",
                 "node_id": node_id,
                 "domains": sorted(container.keys()),
-                "source": "bucket",
             }
             if updated_domains:
                 audit_payload["updated_domains"] = sorted(updated_domains)

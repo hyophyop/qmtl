@@ -117,4 +117,4 @@ async def test_upsert_allocations_executes_pending_existing_plan():
 
     assert response.executed is True
     assert executor.calls and executor.calls[0]["world_allocations"] == {"w1": 1.0}
-    assert store.allocation_runs[payload.run_id].executed is True
+    assert store._allocation_runs[payload.run_id].executed is True

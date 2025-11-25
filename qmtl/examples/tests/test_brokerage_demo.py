@@ -27,7 +27,8 @@ def test_demo_executes_market_order():
 
     class _BP:
         def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
-            return account.cash >= order.price * abs(order.quantity)
+            balance = account.cashbook.get(account.base_currency).balance
+            return balance >= order.price * abs(order.quantity)
 
     model.buying_power_model = _BP()  # type: ignore[attr-defined]
 
@@ -39,5 +40,5 @@ def test_demo_executes_market_order():
     assert fill.quantity == 5
     # Fee minimum applies: $1
     assert fill.fee >= 1.0
-    assert acct.cash <= 1_000.0 - (fill.price * 5)
-
+    balance = acct.cashbook.get(acct.base_currency).balance
+    assert balance <= 1_000.0 - (fill.price * 5)

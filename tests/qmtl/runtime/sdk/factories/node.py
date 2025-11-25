@@ -180,7 +180,7 @@ def indicator_node_payload(
 def canonical_dag(*nodes: Mapping[str, Any]) -> dict[str, Any]:
     """Return a canonical DAG wrapper for ``nodes``."""
 
-    return {"nodes": [dict(node) for node in nodes]}
+    return {"schema_version": "v1", "nodes": [dict(node) for node in nodes]}
 
 
 def node_ids_crc32(nodes: Iterable[Mapping[str, Any]] | None) -> int:

@@ -63,7 +63,15 @@ def test_init_wheel(tmp_path: Path) -> None:
         extra_paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(extra_paths)
     subprocess.run(
-        [str(qmtl), *PROJECT_INIT_TOKENS, "--with-sample-data", "--path", str(dest)],
+        [
+            str(qmtl),
+            *PROJECT_INIT_TOKENS,
+            "--with-sample-data",
+            "--path",
+            str(dest),
+            "--preset",
+            "minimal",
+        ],
         check=True,
         env=env,
     )

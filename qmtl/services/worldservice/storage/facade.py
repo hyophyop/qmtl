@@ -38,17 +38,7 @@ class Storage:
         self._edge_overrides = EdgeOverrideRepository(self._audit)
         self._world_allocations: Dict[str, AllocationState] = {}
         self._allocation_runs: Dict[str, AllocationRun] = {}
-
-        # Compatibility accessors for legacy tests that inspect the raw state.
-        self.audit: Dict[str, WorldAuditLog] = self._audit.logs
-        self.validation_cache: Dict[str, Dict[str, Dict[str, ValidationCacheEntry]]] = (
-            self._validation_cache.cache
-        )
-        self.world_nodes = self._world_nodes.nodes
-        self.apply_runs: Dict[str, Dict[str, Any]] = {}
         self._history_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {}
-        self.world_allocations: Dict[str, AllocationState] = self._world_allocations
-        self.allocation_runs: Dict[str, AllocationRun] = self._allocation_runs
 
     async def create_world(self, world: Dict[str, Any]) -> None:
         record = self._worlds.create(world)
@@ -424,30 +414,6 @@ class Storage:
         execution_domain: str | None = None,
     ) -> None:
         self._world_nodes.delete(world_id, node_id, execution_domain=execution_domain)
-
-    def _compute_eval_key(
-        self,
-        *,
-        node_id: str,
-        world_id: str,
-        execution_domain: str,
-        contract_id: str,
-        dataset_fingerprint: str,
-        code_version: str,
-        resource_policy: str,
-    ) -> str:
-        """Backwards-compatible helper for tests touching the legacy API."""
-
-        normalized_domain = _normalize_execution_domain(execution_domain)
-        return self._validation_cache._compute_eval_key(  # type: ignore[attr-defined]
-            node_id=node_id,
-            world_id=world_id,
-            execution_domain=normalized_domain,
-            contract_id=contract_id,
-            dataset_fingerprint=dataset_fingerprint,
-            code_version=code_version,
-            resource_policy=resource_policy,
-        )
 
 
 def datetime_now() -> str:

@@ -84,6 +84,7 @@ class DummyDagClient:
 
 
 def _payload_for(dag: dict) -> StrategySubmit:
+    dag.setdefault("schema_version", "v1")
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,

@@ -91,7 +91,7 @@ def _make_submit(meta: dict | None = None) -> StrategySubmit:
     return StrategySubmit(
         dag_json="{}",
         meta=meta_payload,
-        world_id="shadow-world",
+        world_ids=["shadow-world"],
         node_ids_crc32=0,
     )
 

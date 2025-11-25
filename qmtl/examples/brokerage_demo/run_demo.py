@@ -36,9 +36,9 @@ def main() -> None:
     ts = datetime.now(timezone.utc)
     order = Order(symbol="AAPL", quantity=10, price=100.0, type=OrderType.MARKET, tif=TimeInForce.DAY)
     fill = model.execute_order(acct, order, market_price=100.0, ts=ts)
-    print({"fill": fill, "cash": acct.cash})
+    balance = acct.cashbook.get(acct.base_currency).balance
+    print({"fill": fill, "cash": balance})
 
 
 if __name__ == "__main__":
     main()
-

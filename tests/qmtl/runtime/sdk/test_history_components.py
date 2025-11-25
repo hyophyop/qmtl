@@ -35,10 +35,26 @@ class ProxyHistoryProvider(HistoryProvider):
         interval: int,
     ) -> None:
         self.fill_calls.append((start, end, node_id, interval))
+        return None
+
+    async def ensure_range(
+        self,
+        start: int,
+        end: int,
+        *,
+        node_id: str,
+        interval: int,
+    ) -> None:
+        await self.fill_missing(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
 
 
 @pytest.mark.asyncio
-async def test_history_provider_default_ensure_range_proxies_fill_missing() -> None:
+async def test_history_provider_ensure_range_can_delegate_fill_missing() -> None:
     provider = ProxyHistoryProvider()
 
     await provider.ensure_range(0, 60, node_id="n1", interval=60)

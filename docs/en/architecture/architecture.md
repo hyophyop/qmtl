@@ -349,7 +349,7 @@ emit world-scoped labels.
 - **Definition:** `WSB = (world_id, strategy_id)` binding. Created idempotently
   per world during submission.
 - **Submission:** `POST /strategies` accepts `world_ids[]` (preferred) or
-  `world_id` (legacy). The SDK still recommends running a dedicated process per
+  `world_ids`. The SDK still recommends running a dedicated process per
   world when operating multi-world strategies.
 - **Behaviour:** Gateway upserts the WSB via WorldService after each diff so the
   WVG contains a `WorldNodeRef(root)` anchor. Activation and decision records

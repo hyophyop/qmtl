@@ -34,9 +34,8 @@ def _make_payload(**meta_overrides) -> StrategySubmit:
     }
     meta.update(meta_overrides)
     return StrategySubmit(
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         meta=meta,
-        world_id="world-1",
         world_ids=["world-1", "world-2"],
         node_ids_crc32=0,
     )
@@ -140,9 +139,8 @@ async def test_build_preserves_live_domain_without_worldservice() -> None:
 async def test_build_without_worlds() -> None:
     service = ComputeContextService()
     payload = StrategySubmit(
-        dag_json="{}",
+        dag_json='{"schema_version": "v1", "nodes": []}',
         meta=None,
-        world_id=None,
         node_ids_crc32=0,
     )
 

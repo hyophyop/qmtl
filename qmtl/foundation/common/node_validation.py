@@ -89,7 +89,7 @@ class NodeValidationError(Exception):
                 "code": "E_NODE_ID_MISMATCH",
                 "message": "node_id does not match canonical compute_node_id output",
                 "node_id_mismatch": [item.to_payload() for item in mismatches],
-                "hint": "Ensure legacy world-coupled or pre-BLAKE3 node_ids are regenerated using compute_node_id().",
+                "hint": "Regenerate node_ids using compute_node_id() with all canonical fields populated.",
             }
         )
 

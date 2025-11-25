@@ -290,37 +290,6 @@ async def test_publish_toggle_respects_config() -> None:
     assert registrar.calls and registrar.calls[0]["publish_fingerprint"] is False
 
 
-def test_legacy_mode_disables_publish_by_default() -> None:
-    provider = _DummyProvider(
-        seamless_config=SeamlessConfig(fingerprint_mode="legacy"),
-    )
-
-    assert provider._publish_fingerprint is False
-
-
-def test_legacy_mode_allows_publish_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = tmp_path / "qmtl.yml"
-    config_path.write_text(
-        textwrap.dedent(
-            """
-            seamless:
-              fingerprint_mode: legacy
-              publish_fingerprint: true
-            """
-        )
-    )
-
-    monkeypatch.chdir(tmp_path)
-    reset_runtime_config_cache()
-    try:
-        provider = _DummyProvider()
-        assert provider._publish_fingerprint is True
-    finally:
-        reset_runtime_config_cache()
-
-
 def test_publish_override_none_when_no_config(monkeypatch: pytest.MonkeyPatch) -> None:
     seamless_module._reset_publish_override_cache()
     monkeypatch.setattr(seamless_module, "get_runtime_config_path", lambda: None)

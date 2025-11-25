@@ -1,5 +1,6 @@
 import pytest
 import httpx
+import json
 
 from qmtl.services.gateway.api import create_app, Database
 from qmtl.services.gateway.models import StrategySubmit
@@ -37,7 +38,7 @@ async def test_ingest_and_status(app):
     async with httpx.ASGITransport(app=app) as transport:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             payload = StrategySubmit(
-                dag_json="{}",
+                dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
                 meta={"user": "alice"},
                 node_ids_crc32=crc32_of_list([]),
             )

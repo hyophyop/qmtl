@@ -149,7 +149,7 @@ Content-Type: application/json
     "as_of": "2025-01-01T00:00:00Z",
     "partition": "tenant-a"
   },
-  "world_ids": ["crypto_mom_1h", "crypto_alt_1h"]  // or legacy single field: "world_id"
+  "world_ids": ["crypto_mom_1h", "crypto_alt_1h"]
 }
 ```
 

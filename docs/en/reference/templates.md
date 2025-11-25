@@ -14,20 +14,12 @@ last_modified: 2025-08-21
 QMTL ships with starter strategies that can be used when running `qmtl project init`.
 For a step-by-step introduction and a minimal working example, see the
 [SDK Tutorial](../guides/sdk_tutorial.md).
-List them with:
-
-```bash
-qmtl project list-presets --show-legacy-templates
-```
 
 Add sample data and an analysis notebook with `--with-sample-data`:
 
 ```bash
-qmtl project init --path my_proj --with-sample-data
+qmtl project init --path my_proj --preset minimal --with-sample-data
 ```
-
-Choose a template using the `--strategy` option. Each template below shows the
-node flow and offers quick usage notes.
 
 ## general
 
@@ -39,10 +31,6 @@ graph LR
 *Basic example used by default.* Demonstrates a minimal momentum signal
 calculation and serves as a starting point for new projects.
 
-```bash
-qmtl project init --path my_proj --strategy general
-```
-
 ## single_indicator
 
 ```mermaid
@@ -52,10 +40,6 @@ graph LR
 
 *Single EMA indicator.* Shows how to attach one indicator to a price stream.
 Recommended as the [MVP example](../guides/sdk_tutorial.md) starting point.
-
-```bash
-qmtl project init --path my_proj --strategy single_indicator
-```
 
 ## multi_indicator
 
@@ -69,10 +53,6 @@ graph LR
 *Multiple indicators from one stream.* Useful when comparing different
 indicators over the same data source.
 
-```bash
-qmtl project init --path my_proj --strategy multi_indicator
-```
-
 ## branching
 
 ```mermaid
@@ -84,10 +64,6 @@ graph LR
 *Two computation branches from one input.* Demonstrates branching logic within a
 strategy.
 
-```bash
-qmtl project init --path my_proj --strategy branching
-```
-
 ## state_machine
 
 ```mermaid
@@ -97,10 +73,6 @@ graph LR
 
 *Keeps track of trend direction between runs.* Shows how to maintain simple
 state inside a strategy.
-
-```bash
-qmtl project init --path my_proj --strategy state_machine
-```
 
 ## Backend configuration templates
 

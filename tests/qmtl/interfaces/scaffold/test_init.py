@@ -67,36 +67,47 @@ def test_create_project_with_optionals(tmp_path: Path):
         (["--with-sample-data"], {"with_sample_data": True, "with_docs": False, "with_scripts": False, "with_pyproject": False}),
     ],
 )
-def test_init_cli_dispatch(monkeypatch, tmp_path: Path, extra_args, expected_flags):
+def test_init_cli_with_layers(monkeypatch, tmp_path: Path, extra_args, expected_flags):
     dest = tmp_path / "cli_proj"
     calls: dict[str, object] = {}
 
-    def fake_create_project(
-        path: Path,
-        *,
-        template: str = "general",
-        with_sample_data: bool = False,
-        with_docs: bool = False,
-        with_scripts: bool = False,
-        with_pyproject: bool = False,
-        config_profile: str = "minimal",
-    ) -> None:
-        calls["path"] = path
-        calls["kwargs"] = {
-            "template": template,
-            "with_sample_data": with_sample_data,
-            "with_docs": with_docs,
-            "with_scripts": with_scripts,
-            "with_pyproject": with_pyproject,
-            "config_profile": config_profile,
-        }
+    class DummyValidator:
+        def get_minimal_layer_set(self, layers):
+            calls["target_layers"] = list(layers)
+            return [Layer.DATA, Layer.SIGNAL]
 
-    monkeypatch.setattr("qmtl.interfaces.cli.init.create_project", fake_create_project)
+    class DummyComposer:
+        def compose(self, *, layers, dest, template_choices=None, force=False, config_profile="minimal"):
+            calls["compose"] = {
+                "layers": layers,
+                "dest": dest,
+                "template_choices": template_choices,
+                "force": force,
+                "config_profile": config_profile,
+            }
+            return ValidationResult(valid=True)
 
-    cli_main([*PROJECT_INIT_TOKENS, "--path", str(dest), "--strategy", "general", *extra_args])
+    monkeypatch.setattr("qmtl.interfaces.cli.init.LayerValidator", lambda: DummyValidator())
+    monkeypatch.setattr("qmtl.interfaces.cli.init.LayerComposer", lambda: DummyComposer())
+    monkeypatch.setattr("qmtl.interfaces.cli.init.copy_sample_data", lambda d: calls.setdefault("copy_sample_data", True))
+    monkeypatch.setattr("qmtl.interfaces.cli.init.copy_docs", lambda d: calls.setdefault("copy_docs", True))
+    monkeypatch.setattr("qmtl.interfaces.cli.init.copy_scripts", lambda d: calls.setdefault("copy_scripts", True))
+    monkeypatch.setattr("qmtl.interfaces.cli.init.copy_pyproject", lambda d: calls.setdefault("copy_pyproject", True))
 
-    assert calls["path"] == dest
-    assert calls["kwargs"] == {"template": "general", "config_profile": "minimal", **expected_flags}
+    cli_main([*PROJECT_INIT_TOKENS, "--path", str(dest), "--layers", "data,signal", *extra_args])
+
+    assert calls["target_layers"] == ["data", "signal"]
+    assert calls["compose"] == {
+        "layers": [Layer.DATA, Layer.SIGNAL],
+        "dest": dest,
+        "template_choices": None,
+        "force": False,
+        "config_profile": "minimal",
+    }
+    assert bool(calls.get("copy_sample_data")) is expected_flags["with_sample_data"]
+    assert bool(calls.get("copy_docs")) is expected_flags["with_docs"]
+    assert bool(calls.get("copy_scripts")) is expected_flags["with_scripts"]
+    assert bool(calls.get("copy_pyproject")) is expected_flags["with_pyproject"]
 
 
 def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture):
@@ -148,59 +159,10 @@ def test_init_cli_with_preset(monkeypatch, tmp_path: Path, capsys: pytest.Captur
     assert "Project created at" in out
 
 
-def test_init_cli_with_layers(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture):
-    dest = tmp_path / "layers_proj"
-    calls: dict[str, object] = {}
-
-    class DummyValidator:
-        def __init__(self):
-            self.seen = {}
-
-        def get_minimal_layer_set(self, target_layers):
-            self.seen["target"] = target_layers
-            return [Layer.DATA, Layer.SIGNAL, Layer.EXECUTION]
-
-        def validate_layers(self, layers):
-            calls["validated_layers"] = list(layers)
-            return ValidationResult(valid=True)
-
-        def validate_add_layer(self, existing_layers, new_layer):
-            raise AssertionError("validate_add_layer should not be called in init")
-
-    class DummyComposer:
-        def __init__(self):
-            self.validator = DummyValidator()
-
-        def compose(
-            self,
-            *,
-            layers,
-            dest,
-            template_choices=None,
-            force=False,
-            config_profile: str = "minimal",
-        ):
-            calls["compose"] = {
-                "layers": layers,
-                "dest": dest,
-                "template_choices": template_choices,
-                "force": force,
-                "config_profile": config_profile,
-            }
-            return ValidationResult(valid=True)
-
-    dummy_validator = DummyValidator()
-
-    monkeypatch.setattr("qmtl.interfaces.cli.init.LayerValidator", lambda: dummy_validator)
-    monkeypatch.setattr("qmtl.interfaces.cli.init.LayerComposer", lambda: DummyComposer())
-
-    cli_main([*PROJECT_INIT_TOKENS, "--path", str(dest), "--layers", "execution"])
-    out = capsys.readouterr().out
-
-    assert dummy_validator.seen["target"] == [Layer.EXECUTION]
-    assert calls["compose"]["layers"] == [Layer.DATA, Layer.SIGNAL, Layer.EXECUTION]
-    assert calls["compose"]["config_profile"] == "minimal"
-    assert "Project created at" in out
+def test_init_cli_requires_selection(tmp_path: Path):
+    dest = tmp_path / "missing_selection"
+    with pytest.raises(SystemExit):
+        cli_main([*PROJECT_INIT_TOKENS, "--path", str(dest)])
 
 
 def test_list_presets_cli(monkeypatch, capsys: pytest.CaptureFixture):
@@ -223,19 +185,6 @@ def test_list_presets_cli(monkeypatch, capsys: pytest.CaptureFixture):
     assert "Available presets:" in out
     assert "minimal" in out
     assert "production" in out
-
-
-def test_init_cli_list_layers_shim(monkeypatch):
-    captured: dict[str, list[str] | None] = {}
-
-    def fake_run(argv=None):
-        captured["argv"] = argv
-
-    monkeypatch.setattr("qmtl.interfaces.cli.list_layers.run", fake_run)
-
-    cli_main([*PROJECT_INIT_TOKENS, "--list-layers"])
-
-    assert captured["argv"] == []
 
 
 def test_add_layer_cli(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture):
@@ -303,22 +252,3 @@ def test_validate_cli_failure(tmp_path: Path, capsys: pytest.CaptureFixture):
 
     out = capsys.readouterr().out
     assert "Validation failed" in out or "does not exist" in out
-
-
-def test_project_cli_legacy_aliases(monkeypatch):
-    captured: dict[str, list[str]] = {}
-
-    def fake_layer_run(argv):
-        captured.setdefault("calls", []).append(argv)
-
-    monkeypatch.setattr("qmtl.interfaces.cli.layer.run", fake_layer_run)
-
-    cli_main([*PROJECT_ROOT_TOKEN, "add-layer", "foo"])
-    cli_main([*PROJECT_ROOT_TOKEN, "list-layers", "--flag"])
-    cli_main([*PROJECT_ROOT_TOKEN, "validate", "--path", "proj"])
-
-    assert captured["calls"] == [
-        ["add", "foo"],
-        ["list", "--flag"],
-        ["validate", "--path", "proj"],
-    ]

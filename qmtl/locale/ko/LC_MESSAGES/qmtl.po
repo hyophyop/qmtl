@@ -86,20 +86,16 @@ msgid """
 
             Available commands:
               init          Create a new strategy project from templates or presets.
-              add-layer     Add a layer to an existing project.
-              list-layers   List available layers and metadata.
-              list-presets  List available presets (and optional legacy templates).
-              validate      Validate an existing layered project.
+              layer         Manage project layers (add, list, validate).
+              list-presets  List available presets.
             """
 msgstr """
             프로젝트 스캐폴딩 유틸리티.
 
             사용 가능한 명령:
               init          템플릿 또는 프리셋으로 새 프로젝트를 생성합니다.
-              add-layer     기존 프로젝트에 레이어를 추가합니다.
-              list-layers   사용 가능한 레이어와 메타데이터를 표시합니다.
-              list-presets  사용 가능한 프리셋(및 선택적 레거시 템플릿)을 표시합니다.
-              validate      기존 레이어드 프로젝트를 검증합니다.
+              layer         레이어 추가/목록/검증을 수행합니다.
+              list-presets  사용 가능한 프리셋을 표시합니다.
             """
 
 # init.py options
@@ -117,18 +113,6 @@ msgstr "사용할 프리셋 구성 (docs/architecture/layered_template_system.md
 
 msgid "Comma-separated list of layers to include (e.g., data,signal)"
 msgstr "포함할 레이어의 쉼표-구분 목록 (예: data,signal)"
-
-msgid "(Deprecated: use 'qmtl project list-presets') List available presets and exit"
-msgstr "(폐기 예정: 'qmtl project list-presets' 사용) 사용 가능한 프리셋을 표시하고 종료"
-
-msgid "(Deprecated: use 'qmtl project list-layers') List available layers and exit"
-msgstr "(폐기 예정: 'qmtl project list-layers' 사용) 사용 가능한 레이어를 표시하고 종료"
-
-msgid "(Deprecated: use --preset) Strategy template to use"
-msgstr "(폐기 예정: --preset 사용) 사용할 전략 템플릿"
-
-msgid "(Deprecated: use --list-presets) List available templates and exit"
-msgstr "(폐기 예정: --list-presets 사용) 템플릿 목록을 표시하고 종료"
 
 msgid "Include sample OHLCV CSV and notebook"
 msgstr "샘플 OHLCV CSV 및 노트북 포함"
@@ -148,26 +132,8 @@ msgstr "기존 디렉터리 덮어쓰기"
 msgid "Select configuration template for qmtl.yml"
 msgstr "qmtl.yml에 사용할 구성 템플릿 선택"
 
-msgid "Warning: --list-templates is deprecated, use --list-presets instead"
-msgstr "경고: --list-templates는 폐기 예정입니다. 대신 --list-presets를 사용하세요."
-
-msgid "Warning: --list-presets is deprecated, use 'qmtl project list-presets'"
-msgstr "경고: --list-presets는 폐기 예정입니다. 'qmtl project list-presets'를 사용하세요."
-
-msgid "Warning: --list-layers is deprecated, use 'qmtl project list-layers'"
-msgstr "경고: --list-layers는 폐기 예정입니다. 'qmtl project list-layers'를 사용하세요."
-
 msgid "List available presets for layered project scaffolds"
 msgstr "레이어드 프로젝트 스캐폴드를 위한 사용 가능한 프리셋을 표시"
-
-msgid "Include deprecated template names (from qmtl.interfaces.scaffold.TEMPLATES)"
-msgstr "폐기 예정 템플릿 이름 포함 (qmtl.interfaces.scaffold.TEMPLATES)"
-
-msgid "Available legacy templates:"
-msgstr "사용 가능한 레거시 템플릿:"
-
-msgid "Available templates:"
-msgstr "사용 가능한 템플릿:"
 
 msgid "Available presets:"
 msgstr "사용 가능한 프리셋:"
@@ -177,12 +143,6 @@ msgstr "  {name:15} - {desc}"
 
 msgid "Available layers:"
 msgstr "사용 가능한 레이어:"
-
-msgid "  {value:15} - {name}"
-msgstr "  {value:15} - {name}"
-
-msgid "Warning: --strategy is deprecated, use --preset instead"
-msgstr "경고: --strategy는 폐기 예정입니다. 대신 --preset를 사용하세요."
 
 msgid "Error: Unknown preset '{preset}'"
 msgstr "오류: 알 수 없는 프리셋 '{preset}'"
@@ -207,9 +167,6 @@ msgstr "  {value}"
 
 msgid "Project created at {path}"
 msgstr "프로젝트 생성 위치: {path}"
-
-msgid "Project created at {path} using legacy template '{template}'"
-msgstr "레거시 템플릿 '{template}'으로 {path}에 프로젝트를 생성했습니다"
 
 # dagmanager cli
 msgid "Failed to read file '{path}': {error}"
@@ -374,4 +331,3 @@ msgstr "옵션:"
 
 msgid "optional arguments:"
 msgstr "선택적 인수:"
-

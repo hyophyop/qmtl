@@ -7,10 +7,11 @@ def test_dryrun_fallback_sentinel_helper_crc32(monkeypatch):
 
     # Build a minimal DAG with stable node_ids
     dag = {
+        "schema_version": "v1",
         "nodes": [
             {"node_id": "n1", "node_type": "TagQueryNode", "tags": ["t"], "interval": 60},
             {"node_id": "n2", "node_type": "ComputeNode", "interval": 60},
-        ]
+        ],
     }
 
     # Use the same logic as the route for CRC32 derivation
@@ -21,4 +22,3 @@ def test_dryrun_fallback_sentinel_helper_crc32(monkeypatch):
 
     # The helper is not exported; validate by recomputing here to assert format
     assert expected.startswith("dryrun:") and len(expected) == len("dryrun:") + 8
-

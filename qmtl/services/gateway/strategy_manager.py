@@ -229,8 +229,6 @@ class StrategyManager:
             "world_ids": world_ids,
             "submitted_at": submitted_at,
         }
-        if payload.world_id:
-            log_payload["world_id"] = self._ctx_value(payload.world_id)
         meta = payload.meta if isinstance(payload.meta, dict) else None
         if meta:
             log_payload["meta"] = self._json_safe(meta)

@@ -63,10 +63,7 @@ from .backfill_coordinator import (
 from .sla import SLAPolicy, SLAViolationMode
 from .exceptions import SeamlessSLAExceeded
 from .artifacts import ArtifactRegistrar, ArtifactPublication
-from .artifacts.fingerprint import (
-    compute_artifact_fingerprint,
-    compute_legacy_artifact_fingerprint,
-)
+from .artifacts.fingerprint import compute_artifact_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +78,6 @@ CONFORMANCE_VERSION = "v2"
 _FINGERPRINT_HISTORY_LIMIT = 32
 
 _FINGERPRINT_MODE_CANONICAL = "canonical"
-_FINGERPRINT_MODE_LEGACY = "legacy"
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
@@ -756,7 +752,6 @@ class SeamlessDataProvider(HistoryProvider):
         early_override: bool | None,
     ) -> _FingerprintSettings:
         mode_value = str(config.fingerprint_mode or "").strip().lower()
-        legacy_requested = mode_value == _FINGERPRINT_MODE_LEGACY
         canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
 
         publish_override_value = _resolve_publish_override(config)
@@ -765,8 +760,6 @@ class SeamlessDataProvider(HistoryProvider):
                 config.publish_fingerprint,
                 default=True,
             )
-            if legacy_requested:
-                publish_default = False
         else:
             publish_default = publish_override_value
 
@@ -781,18 +774,7 @@ class SeamlessDataProvider(HistoryProvider):
             default=early_default,
         )
 
-        if canonical_requested or legacy_requested:
-            fingerprint_mode = mode_value or (
-                _FINGERPRINT_MODE_CANONICAL
-                if publish_flag
-                else _FINGERPRINT_MODE_LEGACY
-            )
-        else:
-            fingerprint_mode = (
-                _FINGERPRINT_MODE_CANONICAL
-                if publish_flag
-                else _FINGERPRINT_MODE_LEGACY
-            )
+        fingerprint_mode = _FINGERPRINT_MODE_CANONICAL if publish_flag else _FINGERPRINT_MODE_CANONICAL
 
         preview_flag = _coerce_bool(config.preview_fingerprint, default=False)
 
@@ -1527,6 +1509,16 @@ class SeamlessDataProvider(HistoryProvider):
             # Fallback to simple merge if utilities are unavailable
             return self._merge_ranges(all_ranges)
 
+    async def ensure_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        await self.ensure_data_available(
+            start,
+            end,
+            node_id=node_id,
+            interval=interval,
+        )
+
     async def fill_missing(
         self,
         start: int,
@@ -1893,11 +1885,6 @@ class SeamlessDataProvider(HistoryProvider):
             "coverage_bounds": coverage_bounds,
             "conformance_version": CONFORMANCE_VERSION,
         }
-        legacy_metadata = {
-            **canonical_metadata,
-            "requested_bounds": (int(start), int(end)),
-        }
-
         publication_ctx = await self._handle_artifact_publication(
             stabilized,
             report,
@@ -1907,7 +1894,6 @@ class SeamlessDataProvider(HistoryProvider):
             interval=interval,
             coverage_bounds=coverage_bounds,
             canonical_metadata=canonical_metadata,
-            legacy_metadata=legacy_metadata,
         )
 
         metadata = SeamlessFetchMetadata(
@@ -2024,7 +2010,6 @@ class SeamlessDataProvider(HistoryProvider):
         stabilized: pd.DataFrame,
         *,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
     ) -> tuple[str | None, str | None]:
         fingerprint: str | None = None
         preview_fingerprint: str | None = None
@@ -2035,14 +2020,12 @@ class SeamlessDataProvider(HistoryProvider):
             fingerprint = self._compute_fingerprint_value(
                 stabilized,
                 canonical_metadata=canonical_metadata,
-                legacy_metadata=legacy_metadata,
                 mode=self._fingerprint_mode,
             )
         elif self._preview_fingerprint:
             preview_fingerprint = self._compute_fingerprint_value(
                 stabilized,
                 canonical_metadata=canonical_metadata,
-                legacy_metadata=legacy_metadata,
                 mode=_FINGERPRINT_MODE_CANONICAL,
             )
         return fingerprint, preview_fingerprint
@@ -2058,7 +2041,6 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         coverage_bounds: tuple[int, int] | None,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
         fingerprint: str | None,
         as_of: str,
     ) -> tuple[Any | None, str | None]:
@@ -2081,7 +2063,6 @@ class SeamlessDataProvider(HistoryProvider):
                         fingerprint = self._compute_fingerprint_value(
                             stabilized,
                             canonical_metadata=canonical_metadata,
-                            legacy_metadata=legacy_metadata,
                             mode=self._fingerprint_mode,
                         )
                     publish_call = registrar.publish(
@@ -2140,12 +2121,10 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         coverage_bounds: tuple[int, int] | None,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
     ) -> _PublicationContext:
         fingerprint, preview_fingerprint = self._compute_initial_fingerprints(
             stabilized,
             canonical_metadata=canonical_metadata,
-            legacy_metadata=legacy_metadata,
         )
         as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         manifest_uri: str | None = None
@@ -2164,7 +2143,6 @@ class SeamlessDataProvider(HistoryProvider):
                 interval=interval,
                 coverage_bounds=coverage_bounds,
                 canonical_metadata=canonical_metadata,
-                legacy_metadata=legacy_metadata,
                 fingerprint=fingerprint,
                 as_of=as_of,
             )
@@ -2185,7 +2163,6 @@ class SeamlessDataProvider(HistoryProvider):
                 stabilized,
                 coverage_bounds,
                 canonical_metadata,
-                legacy_metadata,
                 fingerprint,
                 preview_fingerprint,
                 node_id=node_id,
@@ -2200,7 +2177,6 @@ class SeamlessDataProvider(HistoryProvider):
             fingerprint = self._compute_fingerprint_value(
                 stabilized,
                 canonical_metadata=canonical_metadata,
-                legacy_metadata=legacy_metadata,
                 mode=self._fingerprint_mode,
             )
 
@@ -2218,7 +2194,6 @@ class SeamlessDataProvider(HistoryProvider):
         stabilized: pd.DataFrame,
         coverage_bounds: tuple[int, int] | None,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
         fingerprint: str | None,
         preview_fingerprint: str | None,
         *,
@@ -2236,7 +2211,6 @@ class SeamlessDataProvider(HistoryProvider):
                 pub_fingerprint,
                 stabilized,
                 canonical_metadata,
-                legacy_metadata,
                 fingerprint,
                 preview_fingerprint,
             )
@@ -2263,7 +2237,6 @@ class SeamlessDataProvider(HistoryProvider):
         pub_fingerprint: str,
         stabilized: pd.DataFrame,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
         fingerprint: str | None,
         preview_fingerprint: str | None,
     ) -> str | None:
@@ -2275,7 +2248,6 @@ class SeamlessDataProvider(HistoryProvider):
             pub_fingerprint=pub_fingerprint,
             stabilized=stabilized,
             canonical_metadata=canonical_metadata,
-            legacy_metadata=legacy_metadata,
             fingerprint=fingerprint,
         )
         self._update_publication_manifest(
@@ -2296,7 +2268,6 @@ class SeamlessDataProvider(HistoryProvider):
         pub_fingerprint: str,
         stabilized: pd.DataFrame,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
         fingerprint: str | None,
     ) -> tuple[str, str | None, str | None]:
         normalized_fp = pub_fingerprint
@@ -2308,31 +2279,10 @@ class SeamlessDataProvider(HistoryProvider):
         elif self._looks_like_raw_sha256(normalized_fp):
             canonical_normalized = f"sha256:{normalized_fp.lower()}"
 
-        if self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY:
-            if fingerprint is None:
-                fingerprint = self._compute_fingerprint_value(
-                    stabilized,
-                    canonical_metadata=canonical_metadata,
-                    legacy_metadata=legacy_metadata,
-                    mode=_FINGERPRINT_MODE_LEGACY,
-                )
-            normalized_fp = fingerprint
-        else:
-            if canonical_normalized:
-                normalized_fp = canonical_normalized
-            fingerprint = normalized_fp
-
+        if canonical_normalized:
+            normalized_fp = canonical_normalized
+        fingerprint = normalized_fp
         canonical_for_preview = canonical_normalized
-        if (
-            canonical_for_preview is None
-            and self._fingerprint_mode == _FINGERPRINT_MODE_LEGACY
-        ):
-            canonical_for_preview = self._compute_fingerprint_value(
-                stabilized,
-                canonical_metadata=canonical_metadata,
-                legacy_metadata=legacy_metadata,
-                mode=_FINGERPRINT_MODE_CANONICAL,
-            )
 
         return normalized_fp, canonical_for_preview, fingerprint
 
@@ -2616,11 +2566,8 @@ class SeamlessDataProvider(HistoryProvider):
         frame: pd.DataFrame,
         *,
         canonical_metadata: Mapping[str, Any],
-        legacy_metadata: Mapping[str, Any],
         mode: str,
     ) -> str:
-        if mode == _FINGERPRINT_MODE_LEGACY:
-            return compute_legacy_artifact_fingerprint(frame, legacy_metadata)
         return compute_artifact_fingerprint(frame, canonical_metadata)
 
     def _record_fingerprint(

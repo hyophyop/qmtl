@@ -7,10 +7,10 @@ last_modified: 2025-09-24
 
 {{ nav_links() }}
 
-# **러닝 경로 요약**
+ # **러닝 경로 요약**
 
 1. [MVP 전략 예제]({{ code_url('qmtl/examples/templates/single_indicator.py') }})
-   - `qmtl project init --path mvp --strategy single_indicator --with-sample-data`
+   - `qmtl project init --path mvp --preset minimal --with-sample-data`
    - `uv run python strategy.py` 실행 후 `uv run qmtl report run.log`로 리포트 생성
 2. [전략 템플릿 모음](../reference/templates.md)
 3. [아키텍처 상세](../architecture/architecture.md)

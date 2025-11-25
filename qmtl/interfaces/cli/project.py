@@ -13,12 +13,6 @@ PROJECT_DISPATCH = {
     "list-presets": "qmtl.interfaces.cli.presets",
 }
 
-LEGACY_LAYER_ALIASES = {
-    "add-layer": "add",
-    "list-layers": "list",
-    "validate": "validate",
-}
-
 
 def _build_help_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="qmtl project", add_help=True)
@@ -30,12 +24,7 @@ def _build_help_parser() -> argparse.ArgumentParser:
             Available commands:
               init          Create a new strategy project from templates or presets.
               layer         Manage project layers (add, list, validate).
-              list-presets  List available presets (and optional legacy templates).
-
-            Legacy aliases:
-              add-layer     → layer add
-              list-layers   → layer list
-              validate      → layer validate
+              list-presets  List available presets.
             """
         )
     ).strip()
@@ -57,12 +46,6 @@ def run(argv: List[str] | None = None) -> None:
 
     cmd = argv[0]
     rest = argv[1:]
-    if cmd in LEGACY_LAYER_ALIASES:
-        from . import layer as layer_module
-
-        layer_module.run([LEGACY_LAYER_ALIASES[cmd], *rest])
-        return
-
     if cmd not in PROJECT_DISPATCH:
         _build_help_parser().print_help()
         raise SystemExit(2)

@@ -82,17 +82,17 @@ qmtl project
   │   ├── --preset          # 프리셋 선택 (빠른 시작)
   │   ├── --layers          # 레이어 직접 선택
   │   └── --path            # 프로젝트 경로
-  ├── add-layer             # 기존 프로젝트에 레이어 추가
-  │   ├── <layer>           # 추가할 레이어 (위치 인자)
-  │   ├── --path            # 프로젝트 경로 (기본값: 현재 디렉터리)
-  │   └── --template        # 사용할 템플릿 선택
-  ├── list-layers           # 레이어 및 템플릿 메타데이터 출력
-  │   ├── --show-templates  # 템플릿 목록 표시
-  │   └── --show-requires   # 템플릿 의존 패키지 표시
-  ├── list-presets          # 프리셋 설명 출력
-  │   └── --show-legacy-templates  # 폐기 예정 템플릿 이름 포함
-  └── validate              # 프로젝트 구조 검증
-      └── --path            # 검증할 프로젝트 경로 (기본값: 현재 디렉터리)
+  ├── layer                 # 기존 프로젝트 레이어 관리
+  │   ├── add               # 레이어 추가
+  │   │   ├── <layer>       # 추가할 레이어 (위치 인자)
+  │   │   ├── --path        # 프로젝트 경로 (기본값: 현재 디렉터리)
+  │   │   └── --template    # 사용할 템플릿 선택
+  │   ├── list              # 레이어 및 템플릿 메타데이터 출력
+  │   │   ├── --show-templates  # 템플릿 목록 표시
+  │   │   └── --show-requires   # 템플릿 의존 패키지 표시
+  │   └── validate          # 프로젝트 구조 검증
+  │       └── --path        # 검증할 프로젝트 경로 (기본값: 현재 디렉터리)
+  └── list-presets          # 프리셋 설명 출력
 ```
 
 ### 사용 예시
@@ -131,19 +131,19 @@ qmtl project init --path my_strategy --layers data,signal,execution,brokerage,mo
 ```bash
 # 기존 프로젝트에 실행 레이어 추가
 cd my_strategy
-qmtl project add-layer execution
+qmtl project layer add execution
 
 # 브로커리지 레이어 추가 (특정 템플릿 선택)
-qmtl project add-layer brokerage --template ccxt_binance
+qmtl project layer add brokerage --template ccxt_binance
 
 # 모니터링 레이어 추가
-qmtl project add-layer monitoring
+qmtl project layer add monitoring
 
 # 사용 가능한 레이어 및 템플릿 확인
-qmtl project list-layers --show-templates --show-requires
+qmtl project layer list --show-templates --show-requires
 
 # 프로젝트 구조 검증
-qmtl project validate --path my_strategy
+qmtl project layer validate --path my_strategy
 ```
 
 ---
@@ -388,9 +388,9 @@ templates:
    ```
 
 3. **CLI 명령어 구현**
-   - `qmtl project add-layer`
-   - `qmtl project list-layers`
-   - `qmtl project validate`
+   - `qmtl project layer add`
+   - `qmtl project layer list`
+   - `qmtl project layer validate`
 
 ### Phase 3: 프리셋 확장
 

@@ -45,24 +45,6 @@ DagManagerConfig = _dagmanager_config_cls()
 WorldServiceServerConfig = _worldservice_server_cls()
 
 
-_GATEWAY_ALIASES: dict[str, str] = {
-    "redis_url": "redis_dsn",
-    "redis_uri": "redis_dsn",
-    "database_url": "database_dsn",
-    "database_uri": "database_dsn",
-    "controlbus_url": "controlbus_dsn",
-    "controlbus_uri": "controlbus_dsn",
-}
-
-_DAGMANAGER_ALIASES: dict[str, str] = {
-    "neo4j_url": "neo4j_dsn",
-    "neo4j_uri": "neo4j_dsn",
-    "kafka_url": "kafka_dsn",
-    "kafka_uri": "kafka_dsn",
-    "controlbus_url": "controlbus_dsn",
-    "controlbus_uri": "controlbus_dsn",
-}
-
 _WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = (
     "dsn",
     "redis",
@@ -71,14 +53,6 @@ _WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = (
     "compat_rebalance_v2",
     "alpha_metrics_required",
 )
-
-_LEGACY_WORLDSERVICE_KEYS: dict[str, str] = {
-    "worldservice_url": "url",
-    "worldservice_timeout": "timeout",
-    "worldservice_retries": "retries",
-    "enable_worldservice_proxy": "enable_proxy",
-    "enforce_live_guard": "enforce_live_guard",
-}
 
 
 @dataclass
@@ -437,22 +411,6 @@ def _extract_sections(data: Mapping[str, Any]) -> tuple[dict[str, dict[str, Any]
     return sections, present_sections
 
 
-def _apply_aliases(section: Mapping[str, Any], aliases: Mapping[str, str], *, logger_prefix: str) -> dict[str, Any]:
-    normalized = dict(section)
-    for alias, canonical in aliases.items():
-        if canonical in normalized:
-            continue
-        if alias in normalized:
-            logger.warning(
-                "%s: key '%s' is deprecated; use '%s' instead",
-                logger_prefix,
-                alias,
-                canonical,
-            )
-            normalized[canonical] = normalized.pop(alias)
-    return normalized
-
-
 def _collect_inline_worldservice_server(world_data: dict[str, Any]) -> dict[str, Any]:
     inline_server: dict[str, Any] = {}
     for inline_key in _WORLD_INLINE_SERVER_KEYS:
@@ -479,23 +437,12 @@ def _merge_worldservice_server(
     return merged_server
 
 
-def _backfill_legacy_worldservice(
-    normalized_world: dict[str, Any], gateway_data: Mapping[str, Any]
-) -> None:
-    for legacy_key, canonical_key in _LEGACY_WORLDSERVICE_KEYS.items():
-        if canonical_key in normalized_world:
-            continue
-        if legacy_key in gateway_data:
-            normalized_world[canonical_key] = gateway_data[legacy_key]
-
-
 def _prepare_worldservice(
-    world_data: Mapping[str, Any], gateway_data: Mapping[str, Any]
+    world_data: Mapping[str, Any]
 ) -> tuple[dict[str, Any], Mapping[str, Any] | None]:
     normalized_world = dict(world_data)
     inline_server = _collect_inline_worldservice_server(normalized_world)
     server_data = _merge_worldservice_server(normalized_world, inline_server)
-    _backfill_legacy_worldservice(normalized_world, gateway_data)
     return normalized_world, server_data
 
 
@@ -527,11 +474,9 @@ def load_config(path: str) -> UnifiedConfig:
     DagManagerConfig = _dagmanager_config_cls()
     load_worldservice_server_config = _load_worldservice_server_config()
 
-    gateway_data = _apply_aliases(sections["gateway"], _GATEWAY_ALIASES, logger_prefix="gateway")
-    dagmanager_data = _apply_aliases(
-        sections["dagmanager"], _DAGMANAGER_ALIASES, logger_prefix="dagmanager"
-    )
-    world_data, server_data = _prepare_worldservice(sections["worldservice"], gateway_data)
+    gateway_data = sections["gateway"]
+    dagmanager_data = sections["dagmanager"]
+    world_data, server_data = _prepare_worldservice(sections["worldservice"])
 
     seamless_data = sections["seamless"]
     connectors_data = sections["connectors"]

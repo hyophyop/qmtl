@@ -22,10 +22,15 @@ def node_factory() -> NodeFactory:
     return NodeFactory()
 
 
+def _with_version(dag: dict) -> dict:
+    dag["schema_version"] = "v1"
+    return dag
+
+
 def test_validate_accepts_matching_ids(node_factory: NodeFactory) -> None:
     validator = NodeIdentityValidator()
     node = node_factory.build()
-    dag = {"nodes": [node]}
+    dag = _with_version({"nodes": [node]})
     validator.validate(dag, node_ids_crc32([node]))
 
 
@@ -33,7 +38,7 @@ def test_validate_missing_fields_raises(node_factory: NodeFactory) -> None:
     validator = NodeIdentityValidator()
     node = node_factory.build(assign_id=False, schema_hash="", schema_compat_id="")
     node["node_id"] = "abc"
-    dag = {"nodes": [node]}
+    dag = _with_version({"nodes": [node]})
 
     with pytest.raises(Exception) as exc:
         validator.validate(dag, node_ids_crc32([node]))
@@ -45,7 +50,7 @@ def test_validate_missing_fields_raises(node_factory: NodeFactory) -> None:
 def test_validate_crc_mismatch_raises(node_factory: NodeFactory) -> None:
     validator = NodeIdentityValidator()
     node = node_factory.build()
-    dag = {"nodes": [node]}
+    dag = _with_version({"nodes": [node]})
 
     with pytest.raises(Exception) as exc:
         validator.validate(dag, 0)
@@ -58,7 +63,7 @@ def test_validate_detects_mismatch(node_factory: NodeFactory) -> None:
     validator = NodeIdentityValidator()
     node = node_factory.build(assign_id=False)
     node["node_id"] = "not-matching"
-    dag = {"nodes": [node]}
+    dag = _with_version({"nodes": [node]})
     with pytest.raises(Exception) as exc:
         validator.validate(dag, node_ids_crc32([node]))
 
@@ -83,7 +88,7 @@ def test_validate_ignores_nondeterministic_params(node_factory: NodeFactory) -> 
     )
     mutated["params"] = mutated_params
 
-    dag = {"nodes": [mutated]}
+    dag = _with_version({"nodes": [mutated]})
 
     # The CRC is computed from ``node_id`` values and remains unchanged because
     # canonicalisation ignores the injected non-deterministic fields.

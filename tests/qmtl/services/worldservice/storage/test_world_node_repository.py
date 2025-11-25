@@ -43,19 +43,8 @@ def test_world_node_repository_normalizes_legacy_bucket() -> None:
         }
     }
 
-    record = repo.get("world-legacy", "node-legacy", execution_domain="live")
-
-    assert record == {
-        "world_id": "world-legacy",
-        "node_id": "node-legacy",
-        "execution_domain": "live",
-        "status": "running",
-        "last_eval_key": "eval-1",
-        "annotations": {"note": True},
-    }
-    normalized_bucket = repo.nodes["world-legacy"]["node-legacy"]
-    assert set(normalized_bucket.keys()) == {"live"}
-    assert audit.list_entries("world-legacy")[-1]["event"] == "world_node_bucket_normalized"
+    with pytest.raises(TypeError):
+        repo.get("world-legacy", "node-legacy", execution_domain="live")
 
 
 def test_world_node_repository_bucket_normalization_and_filters() -> None:

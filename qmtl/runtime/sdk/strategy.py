@@ -86,6 +86,7 @@ class Strategy:
     def serialize(self) -> dict:
         """Serialize strategy DAG using node IDs."""
         return {
+            "schema_version": "v1",
             "nodes": [node.to_dict() for node in self.nodes],
         }
 

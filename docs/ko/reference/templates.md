@@ -14,19 +14,12 @@ last_modified: 2025-08-21
 `qmtl project init` 실행 시 사용할 수 있는 스타터 전략 템플릿이 함께 제공됩니다.
 단계별 소개와 최소 동작 예시는
 [SDK 사용 가이드](../guides/sdk_tutorial.md)를 참고하세요.
-사용 가능한 템플릿 목록 보기:
-
-```bash
-qmtl project list-presets --show-legacy-templates
-```
 
 `--with-sample-data` 옵션으로 샘플 데이터와 분석 노트북을 함께 추가할 수 있습니다:
 
 ```bash
-qmtl project init --path my_proj --with-sample-data
+qmtl project init --path my_proj --preset minimal --with-sample-data
 ```
-
-`--strategy` 옵션으로 템플릿을 선택합니다. 아래 템플릿들은 노드 흐름과 간단한 사용 팁을 함께 제공합니다.
 
 ## general
 
@@ -37,10 +30,6 @@ graph LR
 
 *기본으로 사용되는 예제.* 최소한의 모멘텀 시그널 계산을 보여주며 새 프로젝트의 출발점으로 적합합니다.
 
-```bash
-qmtl project init --path my_proj --strategy general
-```
-
 ## single_indicator
 
 ```mermaid
@@ -50,10 +39,6 @@ graph LR
 
 *단일 EMA 인디케이터 예제.* 가격 스트림에 하나의 인디케이터를 연결하는 방법을 보여줍니다.
 [MVP 전략 예제](../guides/sdk_tutorial.md)의 시작점으로 추천합니다.
-
-```bash
-qmtl project init --path my_proj --strategy single_indicator
-```
 
 ## multi_indicator
 
@@ -66,10 +51,6 @@ graph LR
 
 *하나의 입력 스트림에서 여러 인디케이터 계산.* 동일한 데이터 소스에서 서로 다른 인디케이터를 비교할 때 유용합니다.
 
-```bash
-qmtl project init --path my_proj --strategy multi_indicator
-```
-
 ## branching
 
 ```mermaid
@@ -80,10 +61,6 @@ graph LR
 
 *하나의 입력에서 두 개의 계산 분기.* 전략 내 브랜칭 로직을 보여줍니다.
 
-```bash
-qmtl project init --path my_proj --strategy branching
-```
-
 ## state_machine
 
 ```mermaid
@@ -92,10 +69,6 @@ graph LR
 ```
 
 *실행 간 추세 방향을 추적.* 전략 내부에서 간단한 상태를 유지하는 방법을 보여줍니다.
-
-```bash
-qmtl project init --path my_proj --strategy state_machine
-```
 
 ## 백엔드 구성 템플릿
 

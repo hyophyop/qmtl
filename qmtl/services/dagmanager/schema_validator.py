@@ -4,8 +4,7 @@ from __future__ import annotations
 Lightweight DAG schema validator with version tagging.
 
 Goals:
-- Accept legacy DAGs that omit a version tag to avoid breaking changes.
-- If a version tag is present, ensure it is supported.
+- Require an explicit schema version and ensure it is supported.
 - Provide a structured error payload that callers can surface with a
   standardized error code (E_SCHEMA_INVALID).
 
@@ -31,9 +30,9 @@ def validate_dag(dag: dict) -> tuple[bool, str, list[dict[str, Any]]]:
     """Validate a DAG document and return (ok, version, errors).
 
     Rules (initial version):
-    - Version tag is optional. If present at the DAG root as "schema_version"
-      or at nodes as "schema_version", it must be one of SUPPORTED_VERSIONS.
-    - If missing everywhere, default to "v1" and do not error.
+    - Version tag is required. Accept it at the DAG root as "schema_version" or
+      at nodes as "schema_version".
+    - Provided version must be one of SUPPORTED_VERSIONS.
 
     The returned errors are structured dictionaries suitable for HTTP error
     responses. Callers should raise a 400 with code "E_SCHEMA_INVALID" when
@@ -50,16 +49,17 @@ def validate_dag(dag: dict) -> tuple[bool, str, list[dict[str, Any]]]:
                 version = v
                 break
 
-    # Default to v1 to preserve backward compatibility
-    if not isinstance(version, str) or not version:
-        version = "v1"
-
-    # If explicitly provided and unsupported, flag an error
-    explicit = dag.get("schema_version") is not None or any(
-        isinstance(n.get("schema_version"), str) and n.get("schema_version")
-        for n in _iter_nodes(dag)
-    )
-    if explicit and (version not in SUPPORTED_VERSIONS):
+    explicit = isinstance(version, str) and bool(version)
+    if not explicit:
+        errors.append(
+            {
+                "path": ["schema_version"],
+                "message": "schema_version is required",
+                "supported": sorted(SUPPORTED_VERSIONS),
+            }
+        )
+        version = ""
+    elif version not in SUPPORTED_VERSIONS:
         errors.append(
             {
                 "path": ["schema_version"],
@@ -72,4 +72,3 @@ def validate_dag(dag: dict) -> tuple[bool, str, list[dict[str, Any]]]:
 
 
 __all__ = ["validate_dag", "SUPPORTED_VERSIONS"]
-

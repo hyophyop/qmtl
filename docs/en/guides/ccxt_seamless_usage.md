@@ -14,7 +14,7 @@ for immediate use in real strategies.
 | --- | --- | --- |
 | Python env | Install QMTL + ccxt extras | `uv pip install -e .[dev,ccxt,questdb]` |
 | QuestDB | Historical store | `docker run -p 8812:8812 -p 9000:9000 questdb/questdb:latest` |
-| (optional) Redis | Cluster rate limiting | `docker run -p 6379:6379 redis:7-alpine`; set `connectors.ccxt_rate_limiter_redis: redis://localhost:6379/0` (legacy `QMTL_CCXT_RATE_LIMITER_REDIS` supported) |
+| (optional) Redis | Cluster rate limiting | `docker run -p 6379:6379 redis:7-alpine`; set `connectors.ccxt_rate_limiter_redis: redis://localhost:6379/0` |
 | CCXT API keys | Required for private endpoints/high QPS | Issue in exchange console; export `CCXT_APIKEY`, `CCXT_SECRET` |
 
 ## Core Components
@@ -132,5 +132,5 @@ the DAG's requested window is fully covered. Enabling
 ## Further Reading
 
 - `examples/ccxt_seamless_provider.py` – complete example
-- [Seamless Migration to v2](seamless_migration_v2.md) – transition from the legacy history stack
+- [Seamless Migration to v2](seamless_migration_v2.md) – transition from the v1 history stack
 - [CCXT × QuestDB (IO)](../io/ccxt-questdb.md) – QuestDB backend details and rate‑limit strategies

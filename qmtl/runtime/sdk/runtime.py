@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from . import configuration
+from qmtl.foundation.config import UnifiedConfig
 
 # Global flag to disable Ray usage across SDK components.
 NO_RAY: bool = False
@@ -39,7 +40,7 @@ def _reload_from_config(cfg: Any | None = None) -> None:
     global TEST_MODE, FIXED_NOW, HTTP_TIMEOUT_SECONDS, WS_RECV_TIMEOUT_SECONDS
     global WS_MAX_TOTAL_TIME_SECONDS, FAIL_ON_HISTORY_GAP, POLL_INTERVAL_SECONDS
 
-    unified = cfg or configuration.get_unified_config()
+    unified = cfg or configuration.get_runtime_config() or UnifiedConfig()
     test_cfg = unified.test
     runtime_cfg = unified.runtime
 
@@ -67,8 +68,9 @@ def _reload_from_config(cfg: Any | None = None) -> None:
 def reload() -> None:
     """Reload runtime settings from the unified configuration."""
 
-    cfg = configuration.reload()
-    _reload_from_config(cfg)
+    configuration.reset_runtime_config_cache()
+    cfg = configuration.get_runtime_config()
+    _reload_from_config(cfg or UnifiedConfig())
 
 
 def set_gateway_capabilities(

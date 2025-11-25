@@ -19,16 +19,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
 
 from qmtl.runtime.sdk import Node
-from qmtl.runtime.nodesets.stubs import (
-    StubPreTradeGateNode,
-    StubSizingNode,
-    StubExecutionNode,
-    StubOrderPublishNode,
-    StubFillIngestNode,
-    StubPortfolioNode,
-    StubRiskControlNode,
-    StubTimingGateNode,
-)
 
 if TYPE_CHECKING:
     from qmtl.runtime.nodesets.base import NodeSetContext, NodeSet
@@ -60,6 +50,14 @@ STEP_ORDER: tuple[StepName, ...] = (
     "risk",
     "timing",
 )
+
+
+def _latest_payload(upstream: Node, view) -> dict | None:
+    data = view[upstream][upstream.interval]
+    if not data:
+        return None
+    _, payload = data[-1]
+    return payload
 
 
 @dataclass(frozen=True)
@@ -206,26 +204,35 @@ class StepSpec:
 
 
 def pretrade(*, name: str | None = None) -> Step:
-    return lambda upstream: StubPreTradeGateNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_pretrade",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def sizing(*, name: str | None = None) -> Step:
-    return lambda upstream: StubSizingNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_sizing",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def execution(*, compute_fn=None, name: str | None = None) -> Step:
     """Execution step.
 
-    - When `compute_fn` is None, returns a `StubExecutionNode`.
+    - When `compute_fn` is None, returns a pass-through Node.
     - Otherwise builds a plain `Node` with the provided `compute_fn`.
     """
 
-    if compute_fn is None:
-        return lambda upstream: StubExecutionNode(upstream, name=name)
-
     def _mk(upstream: Node) -> Node:
         def _bound(view):
-            return compute_fn(view, upstream)
+            return compute_fn(view, upstream) if compute_fn is not None else _latest_payload(upstream, view)
 
         return Node(
             input=upstream,
@@ -241,12 +248,9 @@ def execution(*, compute_fn=None, name: str | None = None) -> Step:
 def order_publish(*, compute_fn=None, name: str | None = None) -> Step:
     """Order publish step."""
 
-    if compute_fn is None:
-        return lambda upstream: StubOrderPublishNode(upstream, name=name)
-
     def _mk(upstream: Node) -> Node:
         def _bound(view):
-            return compute_fn(view, upstream)
+            return compute_fn(view, upstream) if compute_fn is not None else _latest_payload(upstream, view)
 
         return Node(
             input=upstream,
@@ -260,19 +264,43 @@ def order_publish(*, compute_fn=None, name: str | None = None) -> Step:
 
 
 def fills(*, name: str | None = None) -> Step:
-    return lambda upstream: StubFillIngestNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_fills",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def portfolio(*, name: str | None = None) -> Step:
-    return lambda upstream: StubPortfolioNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_portfolio",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def risk(*, name: str | None = None) -> Step:
-    return lambda upstream: StubRiskControlNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_risk",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def timing(*, name: str | None = None) -> Step:
-    return lambda upstream: StubTimingGateNode(upstream, name=name)
+    return lambda upstream: Node(
+        input=upstream,
+        compute_fn=lambda view: _latest_payload(upstream, view),
+        name=name or f"{upstream.name}_timing",
+        interval=upstream.interval,
+        period=1,
+    )
 
 
 def compose(

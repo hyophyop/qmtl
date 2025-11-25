@@ -51,7 +51,6 @@ last_modified: 2025-08-26
 
 - `docs/archive/README.md`
 - `docs/archive/realm_rename_eval.md`
-- `docs/archive/ccxt-seamless-legacy-audit.md`
 
 ## Design
 *Owner: Design Council*
@@ -202,4 +201,3 @@ last_modified: 2025-08-26
 - `tests/e2e/world_smoke/README.md`
 
 {{ nav_links() }}
-

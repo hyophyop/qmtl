@@ -92,6 +92,7 @@ class StrategySubmissionHelper:
         node_crc32 = prepared.node_ids_crc32
         strategy_ctx = prepared.compute_context
         worlds = prepared.worlds
+        default_world = worlds[0] if worlds else None
         downgraded = strategy_ctx.downgraded
         downgrade_reason = strategy_ctx.downgrade_reason
         safe_mode = strategy_ctx.safe_mode
@@ -108,7 +109,7 @@ class StrategySubmissionHelper:
             )
 
         if config.submit and self._database is not None:
-            await self._persist_world_bindings(worlds, payload.world_id, strategy_id)
+            await self._persist_world_bindings(worlds, default_world, strategy_id)
 
         resolution = await self._build_queue_outputs(
             dag,
@@ -118,6 +119,7 @@ class StrategySubmissionHelper:
             config,
             node_crc32,
             strategy_id,
+            default_world,
         )
 
         return StrategySubmissionResult(
@@ -179,6 +181,7 @@ class StrategySubmissionHelper:
         config: StrategySubmissionConfig,
         node_crc32: int,
         strategy_id: str,
+        default_world: str | None,
     ) -> QueueResolution:
         exec_domain = strategy_ctx.execution_domain or None
         diff_outcome = await self._compute_diff_outcome(
@@ -189,6 +192,7 @@ class StrategySubmissionHelper:
             config,
             node_crc32,
             strategy_id,
+            default_world,
         )
 
         resolution = await self._resolve_queue_map(
@@ -198,6 +202,7 @@ class StrategySubmissionHelper:
             exec_domain,
             config,
             diff_outcome,
+            default_world,
         )
 
         sentinel = resolution.sentinel_id or self._sentinel_default(
@@ -220,6 +225,7 @@ class StrategySubmissionHelper:
         config: StrategySubmissionConfig,
         node_crc32: int,
         strategy_id: str,
+        default_world: str | None,
     ) -> DiffOutcome:
         diff_strategy_id = config.diff_strategy_id or strategy_id
         return await self._run_diff(
@@ -231,6 +237,7 @@ class StrategySubmissionHelper:
             strategy_ctx,
             config,
             node_crc32,
+            default_world,
         )
 
     async def _resolve_queue_map(
@@ -241,6 +248,7 @@ class StrategySubmissionHelper:
         exec_domain: str | None,
         config: StrategySubmissionConfig,
         diff_outcome: DiffOutcome,
+        default_world: str | None,
     ) -> QueueResolution:
         diff_sentinel = diff_outcome.sentinel_id or ""
         prefer_diff = config.prefer_diff_queue_map
@@ -252,7 +260,7 @@ class StrategySubmissionHelper:
             )
 
         queue_map = await self._pipeline.build_queue_map(
-            dag, worlds, payload.world_id, exec_domain
+            dag, worlds, default_world, exec_domain
         )
         sentinel_id = diff_sentinel
         crc_fallback = False
@@ -290,6 +298,7 @@ class StrategySubmissionHelper:
         strategy_ctx: StrategyComputeContext,
         config: StrategySubmissionConfig,
         node_crc32: int,
+        default_world: str | None,
     ) -> DiffOutcome:
         dag_json = json.dumps(dag)
         try:
@@ -297,7 +306,7 @@ class StrategySubmissionHelper:
                 strategy_id=diff_strategy_id,
                 dag_json=dag_json,
                 worlds=worlds,
-                fallback_world_id=payload.world_id,
+                fallback_world_id=default_world,
                 compute_ctx=strategy_ctx,
                 timeout=config.diff_timeout,
                 prefer_queue_map=prefer_diff,

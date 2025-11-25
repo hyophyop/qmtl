@@ -23,6 +23,11 @@ class _DummyHistoryProvider(HistoryProvider):
     ) -> None:
         return None
 
+    async def ensure_range(
+        self, start: int, end: int, *, node_id: str, interval: int
+    ) -> None:
+        await self.fill_missing(start, end, node_id=node_id, interval=interval)
+
 
 def test_cache_data_source_wrapper_sets_cache_priority() -> None:
     provider = _DummyHistoryProvider()
@@ -32,7 +37,6 @@ def test_cache_data_source_wrapper_sets_cache_priority() -> None:
     assert isinstance(wrapper, HistoryProviderDataSource)
     assert wrapper.priority is DataSourcePriority.CACHE
     assert wrapper.provider is provider
-    assert getattr(wrapper, "cache_provider") is provider
 
 
 def test_storage_data_source_wrapper_sets_storage_priority() -> None:
@@ -43,4 +47,3 @@ def test_storage_data_source_wrapper_sets_storage_priority() -> None:
     assert isinstance(wrapper, HistoryProviderDataSource)
     assert wrapper.priority is DataSourcePriority.STORAGE
     assert wrapper.provider is provider
-    assert getattr(wrapper, "storage_provider") is provider

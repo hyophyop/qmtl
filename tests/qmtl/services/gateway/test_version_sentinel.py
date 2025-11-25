@@ -20,6 +20,7 @@ async def test_gateway_auto_inserts_version_sentinel_with_metadata() -> None:
     manager = StrategyManager(redis=redis_client, database=db, fsm=fsm)
 
     dag = {
+        "schema_version": "v1",
         "nodes": [
             {
                 "node_id": "node-a",
@@ -33,7 +34,7 @@ async def test_gateway_auto_inserts_version_sentinel_with_metadata() -> None:
     payload = StrategySubmit(
         dag_json=dag_json,
         meta={"strategy_version": "release-2025.10"},
-        world_id="world-main",
+        world_ids=["world-main"],
         node_ids_crc32=0,
     )
 

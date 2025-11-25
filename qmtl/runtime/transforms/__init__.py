@@ -63,10 +63,6 @@ from .linearity_metrics import (
     equity_linearity_metrics,
     equity_linearity_metrics_v2,
 )
-from .equity_linearity import (
-    equity_linearity_from_history_node,
-    equity_linearity_v2_from_history_node,
-)
 
 __all__ = [
     "rate_of_change",
@@ -128,7 +124,5 @@ __all__ = [
     "obii_from_survival",
     "order_book_inertia",
     "equity_linearity_metrics",
-    "equity_linearity_from_history_node",
     "equity_linearity_metrics_v2",
-    "equity_linearity_v2_from_history_node",
 ]

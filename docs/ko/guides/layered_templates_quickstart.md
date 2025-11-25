@@ -84,20 +84,20 @@ my_strategy/
 cd my_strategy
 
 # 모니터링 레이어 추가
-qmtl project add-layer monitoring
+qmtl project layer add monitoring
 
 # 실행 레이어 추가 (signal 레이어 필요)
-qmtl project add-layer execution
+qmtl project layer add execution
 ```
 
 ### 4. 레이어 메타데이터와 구조 검증
 
 ```bash
 # 사용 가능한 레이어와 템플릿 확인
-qmtl project list-layers --show-templates
+qmtl project layer list --show-templates
 
 # 프로젝트 구조 검증
-qmtl project validate --path my_strategy
+qmtl project layer validate --path my_strategy
 ```
 
 ---
@@ -265,7 +265,7 @@ qmtl project init --path my_exec --layers execution
 ### 2. 사용 가능한 레이어 확인
 
 ```bash
-qmtl project list-layers
+qmtl project layer list
 ```
 
 ### 3. 프로젝트 검증
@@ -273,34 +273,8 @@ qmtl project list-layers
 프로젝트 구조가 올바른지 검증합니다.
 
 ```bash
-# TODO: 향후 추가 예정
-qmtl project validate
+qmtl project layer validate
 ```
-
----
-
-## 기존 템플릿에서 마이그레이션
-
-기존 `--strategy` 옵션은 계속 작동하지만 사용 중단(deprecated)되었습니다.
-
-```bash
-# 기존 방식 (deprecated)
-qmtl project init --path old_style --strategy general
-# Warning: --strategy is deprecated, use --preset instead
-
-# 새 방식 (권장)
-qmtl project init --path new_style --preset minimal
-```
-
-### 템플릿 → 프리셋 매핑
-
-| 기존 템플릿 | 새 프리셋 |
-|-------------|-----------|
-| `general` | `minimal` |
-| `single_indicator` | `minimal` |
-| `multi_indicator` | `minimal` |
-| `branching` | `research` |
-| `state_machine` | `research` |
 
 ---
 
@@ -338,8 +312,8 @@ python strategy.py
 
 ```bash
 # EXECUTION은 SIGNAL을 요구
-qmtl project add-layer signal  # 먼저 추가
-qmtl project add-layer execution  # 그 다음 추가
+qmtl project layer add signal  # 먼저 추가
+qmtl project layer add execution  # 그 다음 추가
 ```
 
 ### 템플릿 파일 수정

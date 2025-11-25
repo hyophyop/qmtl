@@ -7,7 +7,6 @@ import argparse
 from qmtl.utils.i18n import _
 
 from ..layers import PresetLoader
-from ..scaffold import TEMPLATES
 
 
 def run(argv: list[str] | None = None) -> None:
@@ -16,11 +15,6 @@ def run(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="qmtl project list-presets",
         description=_("List available presets for layered project scaffolds"),
-    )
-    parser.add_argument(
-        "--show-legacy-templates",
-        action="store_true",
-        help=_("Include deprecated template names (from qmtl.interfaces.scaffold.TEMPLATES)"),
     )
     args = parser.parse_args(argv)
 
@@ -36,11 +30,6 @@ def run(argv: list[str] | None = None) -> None:
                 desc=preset.description,
             )
         )
-
-    if args.show_legacy_templates:
-        print(_("\nAvailable legacy templates:"))
-        for template_name in sorted(TEMPLATES):
-            print(template_name)
 
 
 if __name__ == "__main__":  # pragma: no cover
