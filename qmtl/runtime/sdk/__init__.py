@@ -27,6 +27,8 @@ __all__ = [
     "HistoryBackend",
     "DataFetcher",
     "EventRecorder",
+    "StreamLike",
+    "NodeLike",
     "AutoBackfillRequest",
     "AugmentedHistoryProvider",
     "AutoBackfillStrategy",
@@ -90,6 +92,8 @@ _ATTR_MAP: Mapping[str, tuple[str, str | None]] = {
     "CacheView": ("qmtl.runtime.sdk.cache_view", "CacheView"),
     "CacheWindow": ("qmtl.runtime.sdk.cache_view", "CacheWindow"),
     "CacheFrame": ("qmtl.runtime.sdk.cache_view_tools", "CacheFrame"),
+    "StreamLike": ("qmtl.runtime.sdk.protocols", "StreamLike"),
+    "NodeLike": ("qmtl.runtime.sdk.protocols", "NodeLike"),
     # Strategies
     "Strategy": ("qmtl.runtime.sdk.strategy", "Strategy"),
     "buy_signal": ("qmtl.runtime.sdk.strategy", "buy_signal"),

@@ -4,6 +4,7 @@ nav:
   - Maintenance Schedule: MAINTENANCE_SCHEDULE.md
   - Architecture:
       - Overview: architecture/README.md
+      - SDK Layering: architecture/sdk_layers.md
       - Architecture & World ID Flow: architecture/architecture.md
       - Layered Template System: architecture/layered_template_system.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
