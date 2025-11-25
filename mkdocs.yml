@@ -155,6 +155,7 @@ plugins:
             Docs Internationalization: 문서 국제화
             "Layered Template System": "레이어드 템플릿 시스템"
             "Seamless Data Provider v2": "심리스 데이터 프로바이더 v2"
+            "SDK Layering": "SDK 레이어"
             "CCXT × Seamless Integrated (High + Codex)": "CCXT × Seamless 통합 (High + Codex)"
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
