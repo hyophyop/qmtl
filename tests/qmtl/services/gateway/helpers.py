@@ -173,7 +173,7 @@ def build_strategy_payload(
     }
     expected_node_id = compute_node_id(base_node)
     node_id = "bad-node" if mismatch else expected_node_id
-    dag = {
+    dag: dict[str, Any] = {
         "nodes": [
             {
                 "node_id": node_id,

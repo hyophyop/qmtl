@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
+
+import pandas as pd
 
 from qmtl.runtime.sdk.data_io import HistoryProvider
 from . import metrics as sdk_metrics
@@ -43,11 +45,14 @@ class BackfillEngine:
         attempts = 0
         while True:
             try:
-                df = await self.source.fetch(
-                    start,
-                    end,
-                    node_id=node.node_id,
-                    interval=node.interval,
+                df = cast(
+                    pd.DataFrame | None,
+                    await self.source.fetch(
+                        start,
+                        end,
+                        node_id=node.node_id,
+                        interval=node.interval,
+                    ),
                 )
                 metadata = getattr(self.source, "last_fetch_metadata", None)
                 if df is None:

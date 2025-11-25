@@ -11,7 +11,6 @@ from typing import Any, Awaitable, Callable, MutableMapping, Sequence
 import pandas as pd
 
 from qmtl.runtime.sdk.conformance import ConformanceReport
-from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +182,8 @@ class ArtifactRegistrar:
         start: int,
         end: int,
     ) -> str:
+        from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
+
         fingerprint_metadata = {
             "node_id": node_id,
             "interval": int(interval),

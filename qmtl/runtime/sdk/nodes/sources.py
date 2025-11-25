@@ -41,7 +41,7 @@ class StreamInput(SourceNode):
         interval: int | str | None = None,
         period: int | None = None,
         *,
-        history_provider: HistoryProvider | HistoryBackend | None = None,
+        history_provider: HistoryProvider | HistoryBackend | object | None = None,
         event_service: EventRecorderService | None = None,
         validator=default_validator,
         hash_utils=default_hash_utils,
@@ -113,7 +113,7 @@ class StreamInput(SourceNode):
     # ------------------------------------------------------------------
     def _coerce_history_provider(
         self,
-        provider: HistoryProvider | HistoryBackend | None,
+        provider: HistoryProvider | HistoryBackend | object | None,
     ) -> HistoryProvider | None:
         if provider is None:
             return None
