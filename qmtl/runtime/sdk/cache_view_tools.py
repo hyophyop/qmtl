@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Iterable
-from typing import Any, Mapping, Sequence, TYPE_CHECKING
+from typing import Any, Mapping, Protocol, Sequence
 
 import pandas as pd
 
-if TYPE_CHECKING:
-    from qmtl.runtime.sdk.nodes import Node
 
+class NodeLike(Protocol):
+    node_id: str
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class CacheFrame:
         return [CacheFrame(frame.loc[common_index]) for frame in frames]
 
 
-def window(view, node: "Node" | str, interval: int, length: int) -> list[tuple[Any, Any]]:
+def window(view, node: "NodeLike" | str, interval: int, length: int) -> list[tuple[Any, Any]]:
     """Return the trailing ``length`` entries for ``(node, interval)``."""
 
     if length < 0:
@@ -64,7 +64,7 @@ def window(view, node: "Node" | str, interval: int, length: int) -> list[tuple[A
 
 def as_frame(
     view,
-    node: "Node" | str,
+    node: "NodeLike" | str,
     interval: int,
     *,
     window: int | None = None,
@@ -90,10 +90,10 @@ def as_frame(
 
 def align_frames(
     view,
-    specs: Sequence[tuple["Node" | str, int]],
+    specs: Sequence[tuple["NodeLike" | str, int]],
     *,
     window: int | None = None,
-    columns: Mapping[Node | str, Sequence[str]] | Sequence[str] | None = None,
+    columns: Mapping[object, Sequence[str]] | Sequence[str] | None = None,
 ) -> list[CacheFrame]:
     """Materialize and align multiple cache leaves on their shared timestamps."""
 
@@ -112,7 +112,7 @@ def align_frames(
 
 
 def _slice_series(
-    view, node: "Node" | str, interval: int, window: int | None
+    view, node: "NodeLike" | str, interval: int, window: int | None
 ) -> Sequence[Any]:
     series_view = view[node][interval]
     data = _as_sequence(series_view)
