@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Iterable
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Sequence
 
 import pandas as pd
 
-
-class NodeLike(Protocol):
-    node_id: str
+from .protocols import NodeLike
 
 
 @dataclass(frozen=True)
@@ -93,7 +91,7 @@ def align_frames(
     specs: Sequence[tuple["NodeLike" | str, int]],
     *,
     window: int | None = None,
-    columns: Mapping[object, Sequence[str]] | Sequence[str] | None = None,
+    columns: Mapping["NodeLike" | str, Sequence[str]] | Sequence[str] | None = None,
 ) -> list[CacheFrame]:
     """Materialize and align multiple cache leaves on their shared timestamps."""
 

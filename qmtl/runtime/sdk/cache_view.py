@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, cast
+from typing import Any, cast
 from dataclasses import dataclass
 
 from . import metrics as sdk_metrics
-
-
-class NodeLike(Protocol):
-    node_id: str
-    node_type: str
+from .protocols import NodeLike
 
 
 @dataclass(slots=True)
@@ -253,7 +249,7 @@ class CacheView:
         specs: Sequence[tuple["NodeLike" | str, int]],
         *,
         window: int | None = None,
-        columns: Mapping[object, Sequence[str]] | Sequence[str] | None = None,
+        columns: Mapping["NodeLike" | str, Sequence[str]] | Sequence[str] | None = None,
     ):
         """Delegate to :func:`cache_view_tools.align_frames`."""
 

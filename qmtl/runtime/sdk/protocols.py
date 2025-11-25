@@ -5,6 +5,19 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 
+class StreamLike(Protocol):
+    """Minimal interface for stream inputs accepted by providers/recorders."""
+
+    node_id: str
+
+
+class NodeLike(Protocol):
+    """Minimal interface for cache-facing node accessors."""
+
+    node_id: str
+    node_type: str
+
+
 @runtime_checkable
 class HistoryProviderProtocol(Protocol):
     """Minimal interface for history providers consumed by :mod:`runner`."""

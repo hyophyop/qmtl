@@ -11,11 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
 
-
-class StreamLike(Protocol):
-    """Minimal protocol for stream inputs accepted by history providers."""
-
-    node_id: str
+from .protocols import StreamLike
 
 
 class DataFetcher(Protocol):
