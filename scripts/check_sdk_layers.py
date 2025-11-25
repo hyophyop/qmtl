@@ -32,19 +32,31 @@ NODE_PREFIXES: tuple[str, ...] = (
     "qmtl.runtime.sdk.node",
 )
 
+EDGE_PREFIXES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    # Core must not reach into node implementations.
+    (CORE_PREFIXES, NODE_PREFIXES),
+    # IO and seamless layers should depend on interfaces, not node implementations.
+    (("qmtl.runtime.io", "qmtl.runtime.sdk.seamless"), NODE_PREFIXES),
+)
+
 
 def _is_under(module: str, prefixes: Sequence[str]) -> bool:
     return any(module == prefix or module.startswith(prefix + ".") for prefix in prefixes)
 
 
-def _find_violations(modules: Iterable[str], edges: dict[str, set[str]]) -> list[tuple[str, str]]:
-    violations: list[tuple[str, str]] = []
+def _find_violations(
+    modules: Iterable[str], edges: dict[str, set[str]]
+) -> list[tuple[str, str, str]]:
+    violations: list[tuple[str, str, str]] = []
     for source in modules:
-        if not _is_under(source, CORE_PREFIXES):
-            continue
-        for target in edges.get(source, ()):
-            if _is_under(target, NODE_PREFIXES):
-                violations.append((source, target))
+        for allowed_sources, forbidden_targets in EDGE_PREFIXES:
+            if not _is_under(source, allowed_sources):
+                continue
+            for target in edges.get(source, ()):
+                if _is_under(target, forbidden_targets):
+                    violations.append(
+                        (" -> ".join([allowed_sources[0], forbidden_targets[0]]), source, target)
+                    )
     return sorted(violations)
 
 
@@ -63,12 +75,12 @@ def main() -> int:
 
     violations = _find_violations(modules, edges)
     if violations:
-        print("Layer violations detected (core -> nodes):")
-        for source, target in violations:
-            print(f"- {source} -> {target}")
+        print("Layer violations detected:")
+        for label, source, target in violations:
+            print(f"- ({label}) {source} -> {target}")
         return 1
 
-    print("Layer check passed: no core->nodes imports detected.")
+    print("Layer check passed: no forbidden imports detected.")
     return 0
 
 

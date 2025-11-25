@@ -4,7 +4,8 @@ from qmtl.foundation.common.tagquery import MatchMode
 
 from .cache import NodeCache
 from .cache_view import CacheView
-from .nodes import Node, ProcessingNode, SourceNode, StreamInput, TagQueryNode
+from .nodes.domain import Node, ProcessingNode
+from .nodes.wiring import SourceNode, StreamInput, TagQueryNode
 
 __all__ = [
     "Node",
@@ -16,4 +17,3 @@ __all__ = [
     "CacheView",
     "MatchMode",
 ]
-

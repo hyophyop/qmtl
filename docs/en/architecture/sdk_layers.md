@@ -10,4 +10,4 @@ This note summarizes the intended dependency flow inside the SDK so we avoid new
 ## Validation
 
 - Import cycles: `uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json`
-- Layer guard (core → nodes): `uv run --with grimp python scripts/check_sdk_layers.py`
+- Layer guard (core/io/seamless → nodes): `uv run --with grimp python scripts/check_sdk_layers.py`

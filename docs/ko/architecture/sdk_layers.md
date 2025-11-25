@@ -10,4 +10,4 @@
 ## 검증
 
 - import 순환: `uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json`
-- 레이어 가드(core → nodes): `uv run --with grimp python scripts/check_sdk_layers.py`
+- 레이어 가드(core/io/seamless → nodes): `uv run --with grimp python scripts/check_sdk_layers.py`
