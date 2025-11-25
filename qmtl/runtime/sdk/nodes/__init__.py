@@ -1,6 +1,5 @@
-from .base import Node
-from .processors import ProcessingNode
-from .sources import SourceNode, StreamInput, TagQueryNode
+from .domain import Node, ProcessingNode
+from .wiring import SourceNode, StreamInput, TagQueryNode
 
 __all__ = [
     "Node",
@@ -9,4 +8,3 @@ __all__ = [
     "StreamInput",
     "TagQueryNode",
 ]
-
