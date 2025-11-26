@@ -15,7 +15,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Sequence
 
 if TYPE_CHECKING:
     from .strategy import Strategy
@@ -31,7 +31,7 @@ from qmtl.services.worldservice.policy_engine import (
     evaluate_policy,
 )
 
-from .presets import PolicyPreset, PresetPolicy, get_preset
+from .presets import PolicyPreset, PresetPolicy, ThresholdConfig, get_preset
 
 logger = logging.getLogger(__name__)
 
@@ -249,10 +249,11 @@ def _check_thresholds(
     violations: List[ThresholdViolation] = []
     metric_values = metrics.to_policy_metrics()
 
+    thresholds: Iterable[ThresholdConfig | ThresholdRule]
     if isinstance(policy, PresetPolicy):
         thresholds = policy.thresholds
     else:
-        thresholds = list(policy.thresholds.values())
+        thresholds = policy.thresholds.values()
 
     for threshold in thresholds:
         if isinstance(threshold, ThresholdRule):

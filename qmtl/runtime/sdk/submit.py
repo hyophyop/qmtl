@@ -117,7 +117,7 @@ def _policy_to_human_readable(policy: Any) -> str:
         preset = policy.get("preset")
     else:
         try:
-            data = policy.model_dump()  # type: ignore[attr-defined]
+            data = policy.model_dump()
             preset = None
         except Exception:
             data = {}
@@ -501,18 +501,16 @@ async def submit_async(
                 # If WS explicitly rejects or reports violations, treat as rejected
                 if ws_eval and (ws_eval.active is False or (ws_eval.violations and len(ws_eval.violations) > 0)):
                     rejection_reason = "WorldService evaluation rejected strategy"
-                    extra_violations: list[dict] = []
+                    ws_reject_violations: list[dict[str, object]] = []
                     if ws_eval.violations:
-                        for v in ws_eval.violations:
-                            if not isinstance(v, dict):
-                                continue
-                            extra_violations.append(
+                        for ws_violation in ws_eval.violations:
+                            ws_reject_violations.append(
                                 {
-                                    "metric": v.get("metric"),
-                                    "value": v.get("value"),
-                                    "threshold_type": v.get("threshold_type") or v.get("type"),
-                                    "threshold_value": v.get("threshold_value") or v.get("threshold"),
-                                    "message": v.get("message"),
+                                    "metric": ws_violation.get("metric"),
+                                    "value": ws_violation.get("value"),
+                                    "threshold_type": ws_violation.get("threshold_type") or ws_violation.get("type"),
+                                    "threshold_value": ws_violation.get("threshold_value") or ws_violation.get("threshold"),
+                                    "message": ws_violation.get("message"),
                                 }
                             )
                     return SubmitResult(
@@ -531,7 +529,7 @@ async def submit_async(
                                 "message": v.message,
                             }
                             for v in validation_result.violations
-                        ] + extra_violations,
+                        ] + ws_reject_violations,
                         metrics=StrategyMetrics(
                             sharpe=validation_result.metrics.sharpe,
                             max_drawdown=validation_result.metrics.max_drawdown,
@@ -549,9 +547,9 @@ async def submit_async(
                     )
                     else "validated"
                 )
-                weight = validation_result.weight
-                rank = validation_result.rank
-                contribution = validation_result.contribution
+                weight: float | None = validation_result.weight
+                rank: int | None = validation_result.rank
+                contribution: float | None = validation_result.contribution
                 # Convert PerformanceMetrics to StrategyMetrics for consistent return type
                 metrics_out = StrategyMetrics(
                     sharpe=validation_result.metrics.sharpe,
@@ -693,25 +691,23 @@ async def submit_async(
                     rejection_reason = "WorldService evaluation rejected strategy"
                 if ws_eval and ws_eval.error:
                     rejection_reason += f" (WS error: {ws_eval.error})"
-                extra_violations: list[dict] = []
+                ws_extra_violations: list[dict[str, object]] = []
                 if ws_eval and ws_eval.violations:
                     validation_result.improvement_hints.extend(
                         [
-                            str(v.get("message", ""))
-                            for v in ws_eval.violations
-                            if isinstance(v, dict) and v.get("message")
+                            str(ws_violation.get("message", ""))
+                            for ws_violation in ws_eval.violations
+                            if ws_violation.get("message")
                         ]
                     )
-                    for v in ws_eval.violations:
-                        if not isinstance(v, dict):
-                            continue
-                        extra_violations.append(
+                    for ws_violation in ws_eval.violations:
+                        ws_extra_violations.append(
                             {
-                                "metric": v.get("metric"),
-                                "value": v.get("value"),
-                                "threshold_type": v.get("threshold_type") or v.get("type"),
-                                "threshold_value": v.get("threshold_value") or v.get("threshold"),
-                                "message": v.get("message"),
+                                "metric": ws_violation.get("metric"),
+                                "value": ws_violation.get("value"),
+                                "threshold_type": ws_violation.get("threshold_type") or ws_violation.get("type"),
+                                "threshold_value": ws_violation.get("threshold_value") or ws_violation.get("threshold"),
+                                "message": ws_violation.get("message"),
                             }
                         )
                 return SubmitResult(
@@ -730,7 +726,7 @@ async def submit_async(
                             "message": v.message,
                         }
                         for v in validation_result.violations
-                    ] + extra_violations,
+                    ] + ws_extra_violations,
                     metrics=StrategyMetrics(
                         sharpe=validation_result.metrics.sharpe,
                         max_drawdown=validation_result.metrics.max_drawdown,
@@ -784,13 +780,13 @@ async def submit_async(
 
 def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:
     """Extract returns from a strategy instance if available."""
-    # Try returns directly
-    if hasattr(strategy, "returns") and strategy.returns:  # type: ignore[attr-defined]
-        return list(strategy.returns)  # type: ignore[attr-defined]
-    
-    # Try equity curve (convert to returns)
-    if hasattr(strategy, "equity") and strategy.equity:  # type: ignore[attr-defined]
-        equity = list(strategy.equity)  # type: ignore[attr-defined]
+    returns_attr = getattr(strategy, "returns", None)
+    if returns_attr:
+        return list(returns_attr)
+
+    equity_attr = getattr(strategy, "equity", None)
+    if equity_attr:
+        equity = list(equity_attr)
         if len(equity) >= 2:
             returns = []
             for i in range(1, len(equity)):
@@ -799,11 +795,11 @@ def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:
                 else:
                     returns.append(0.0)
             return returns
-    
-    # Try PnL
-    if hasattr(strategy, "pnl") and strategy.pnl:  # type: ignore[attr-defined]
-        return list(strategy.pnl)  # type: ignore[attr-defined]
-    
+
+    pnl_attr = getattr(strategy, "pnl", None)
+    if pnl_attr:
+        return list(pnl_attr)
+
     return []
 
 

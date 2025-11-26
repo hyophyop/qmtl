@@ -17,9 +17,10 @@ import sys
 import textwrap
 from importlib import import_module
 from pathlib import Path
-from typing import List
+from typing import Any, Callable, List, Mapping, Sequence, cast
 
 import httpx
+from httpx import _types as httpx_types
 
 from qmtl.utils.i18n import set_language
 from qmtl.utils.i18n import _ as _t  # Alias to avoid shadowing in loops
@@ -31,10 +32,30 @@ def _gateway_url() -> str:
     return os.environ.get("QMTL_GATEWAY_URL", DEFAULT_GATEWAY_URL).rstrip("/")
 
 
+QueryParamValue = str | int | float | bool | None
+QueryParams = Mapping[str, QueryParamValue] | Sequence[tuple[str, QueryParamValue]]
+
+
+def _normalize_params(params: dict[str, object] | None) -> QueryParams | None:
+    """Coerce loose dict params into httpx-friendly query params."""
+    if params is None:
+        return None
+    normalized: dict[str, QueryParamValue] = {}
+    for key, value in params.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            normalized[key] = value
+        else:
+            normalized[key] = str(value)
+    return normalized
+
+
 def _http_get(path: str, params: dict[str, object] | None = None) -> tuple[int, object | None]:
     try:
         with httpx.Client(timeout=5.0) as client:
-            resp = client.get(f"{_gateway_url()}{path}", params=params)
+            resp = client.get(
+                f"{_gateway_url()}{path}",
+                params=cast(httpx_types.QueryParamTypes | None, _normalize_params(params)),
+            )
             payload = None
             try:
                 payload = resp.json()
@@ -582,7 +603,10 @@ def cmd_version(argv: List[str]) -> int:
     return 0
 
 
-def _command_tables(admin: bool = False) -> tuple[dict[str, callable], dict[str, str]]:
+CommandHandler = Callable[[List[str]], int]
+
+
+def _command_tables(admin: bool = False) -> tuple[dict[str, CommandHandler], dict[str, str]]:
     """Return (commands, legacy) tables; admin includes operator commands."""
     commands = {
         "submit": cmd_submit,
@@ -602,24 +626,24 @@ def _command_tables(admin: bool = False) -> tuple[dict[str, callable], dict[str,
     if admin:
         commands = {
             **commands,
-            "gw": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
-            "gateway": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
-            "dagmanager-server": lambda argv: import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0,
-            "taglint": lambda argv: import_module("qmtl.interfaces.cli.taglint").run(argv) or 0,
+            "gw": lambda argv: int(import_module("qmtl.interfaces.cli.gateway").run(argv) or 0),
+            "gateway": lambda argv: int(import_module("qmtl.interfaces.cli.gateway").run(argv) or 0),
+            "dagmanager-server": lambda argv: int(import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0),
+            "taglint": lambda argv: int(import_module("qmtl.interfaces.cli.taglint").run(argv) or 0),
         }
     else:
         commands = {
             **commands,
-            "gw": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
-            "gateway": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
-            "dagmanager-server": lambda argv: import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0,
+            "gw": lambda argv: int(import_module("qmtl.interfaces.cli.gateway").run(argv) or 0),
+            "gateway": lambda argv: int(import_module("qmtl.interfaces.cli.gateway").run(argv) or 0),
+            "dagmanager-server": lambda argv: int(import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0),
         }
-    return commands, legacy
+    return cast(tuple[dict[str, CommandHandler], dict[str, str]], (commands, legacy))
 
 
 # Export command registries for test/inspection without invoking argument parsing
 _ALL_COMMANDS, LEGACY_COMMANDS = _command_tables(admin=False)
-COMMANDS = {
+COMMANDS: dict[str, CommandHandler] = {
     "submit": cmd_submit,
     "status": cmd_status,
     "world": cmd_world,
