@@ -28,8 +28,10 @@ import httpx
 if TYPE_CHECKING:
     from .strategy import Strategy
     from .gateway_client import GatewayClient
+    from .services import RunnerServices
 
 from .mode import Mode, mode_to_execution_domain
+from .services import get_global_services
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +263,6 @@ async def submit_async(
     >>> for hint in result.improvement_hints:
     ...     print(hint)
     """
-    from .runner import Runner
     from qmtl.foundation.common.compute_key import ComputeContext
     from .validation_pipeline import ValidationPipeline, ValidationStatus
     
@@ -278,11 +279,11 @@ async def submit_async(
     # Map mode to internal execution domain
     execution_domain = mode_to_execution_domain(mode)
     
-    services = Runner.services()
+    services = get_global_services()
     
     # Handle both class and instance
     if isinstance(strategy_cls, type):
-        strategy = Runner._prepare(strategy_cls)
+        strategy = _prepare_strategy(strategy_cls)
         strategy_class_name = strategy_cls.__name__
     else:
         # Already an instance
@@ -409,12 +410,12 @@ async def submit_async(
             
             # Configure activation for non-backtest modes
             if mode != Mode.BACKTEST and not bootstrap_result.offline_mode:
-                await Runner._configure_activation(
-                    services,
-                    strategy_id,
-                    gateway_url,
-                    resolved_world,
-                    bootstrap_result.offline_mode,
+                await _configure_activation(
+                    services=services,
+                    strategy_id=strategy_id,
+                    gateway_url=gateway_url,
+                    world_id=resolved_world,
+                    offline_mode=bootstrap_result.offline_mode,
                 )
         else:
             # Offline mode - local validation only
@@ -801,6 +802,39 @@ def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:
         return list(pnl_attr)
 
     return []
+
+
+def _prepare_strategy(strategy_cls: type["Strategy"]) -> "Strategy":
+    """Instantiate and set up a Strategy."""
+    strategy = strategy_cls()
+    strategy.setup()
+    return strategy
+
+
+async def _configure_activation(
+    *,
+    services: "RunnerServices",
+    strategy_id: str | None,
+    gateway_url: str | None,
+    world_id: str,
+    offline_mode: bool,
+) -> None:
+    """Configure activation manager and trade dispatcher for live modes."""
+    if gateway_url and not offline_mode:
+        try:
+            activation_manager = services.ensure_activation_manager(
+                gateway_url=gateway_url,
+                world_id=world_id,
+                strategy_id=strategy_id,
+            )
+            services.trade_dispatcher.set_activation_manager(activation_manager)
+            await activation_manager.start()
+            return
+        except Exception:
+            logger.warning(
+                "Activation manager failed to start; proceeding with gates OFF by default"
+            )
+    services.trade_dispatcher.set_activation_manager(services.activation_manager)
 
 
 def submit(
