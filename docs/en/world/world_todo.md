@@ -8,7 +8,8 @@ Design the lifecycle from submission through validation to live operation. Only
 strategies that pass sufficient simulation should trade live. Worlds group
 strategies and apply policies to automate state transitions. Legacy
 `--mode`/`backtest|dry-run|live` APIs are removed; execution follows WS decisions
-via `Runner.run(world_id=..., gateway_url=...)` or local `Runner.offline(...)`.
+via `Runner.submit(world=...)` (Gateway URL via `QMTL_GATEWAY_URL`) or local
+`Runner.submit(mode="backtest")`.
 
 - World: portfolio scope and policy owner
 - Strategy: user‑submitted trading logic
@@ -34,4 +35,3 @@ Worlds
 
 The rest of this document enumerates the policy structure, CLI/API surfaces,
 automatic transition flows, and work items for implementation.
-

@@ -11,6 +11,9 @@ last_modified: 2025-09-22
 
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
+!!! warning
+    문서 내 `Runner.run`/`Runner.offline` 예시는 더 이상 사용되지 않습니다. 모든 실행/제출 진입점은 `Runner.submit(..., world=..., mode=...)` 하나로 통일되었습니다.
+
 ## 관련 문서
 - [Architecture Overview](README.md)
 - [Gateway](gateway.md)
@@ -32,6 +35,32 @@ last_modified: 2025-09-22
 QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 DAG(Directed Acyclic Graph)를 효율적으로 실행하고, 반복적 계산을 피하면서 재사용 가능한 컴퓨팅 자원을 최대한 활용하는 것을 주요 목표로 한다. 특히 DAG의 구성요소를 연산 단위로 분해하고 이를 전역적으로 식별·재활용할 수 있도록 함으로써, 유사하거나 동일한 전략 간에 불필요한 계산 자원 낭비를 최소화할 수 있다. 예를 들어 A 전략과 B 전략이 공통적으로 사용하는 가격 신호 처리 노드가 있다면, 해당 노드는 한 번만 실행되고 그 결과는 두 전략에서 모두 참조할 수 있게 된다. 이는 고빈도 실행 환경 또는 다중 전략 포트폴리오 환경에서 시간 복잡도와 메모리 사용량을 획기적으로 줄이는 데 기여한다.
 
 본 문서는 이러한 구조적 재사용성을 달성하기 위한 QMTL 아키텍처의 설계 철학, 계층 구조 정의, 컴포넌트 간의 통신 프로토콜, 상태 복원 메커니즘, 큐 오케스트레이션에 필요한 결정론적 조건들을 이론적·실무적 관점에서 조망하며, 전체 시스템 구현을 위한 종합적 로드맵을 제시한다.
+
+QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 요약된다.
+
+> **“전략 로직에만 집중하면 시스템이 알아서 최적화하고 수익을 낸다.”**
+
+따라서 이 문서에서 정의하는 모든 컴포넌트(Gateway, DAG Manager, WorldService, SDK/Runner 등)는 다음 원칙을 공유한다.
+- 전략 작성자는 **전략 DAG와 월드 선택, 모드 선택** 정도에만 신경 쓰고, 나머지(큐 생성·스케일링·ExecutionDomain·2‑Phase Apply·Feature Artifact 관리·리스크/타이밍 게이트)는 시스템 내부 레이어가 맡는다.
+- 내부 레이어는 복잡해질 수 있지만, **외부 인터페이스는 `전략 작성 → 제출 → (자동 평가/배포) → 수익 기여 확인` 흐름을 중심으로 설계**한다.
+- 새로운 기능을 추가할 때도 “사용자가 더 많은 옵션을 알게 만드는 대신, 시스템이 자동 결정하고 필요 시에만 override 하게 한다”는 방향을 기본으로 삼는다.
+
+### 기본 원칙: 단순성 > 하위 호환성
+
+!!! danger "Breaking Change 원칙"
+    **하위 호환성을 유지하기 위해 레거시를 장기 보관하지 않는다.**
+    
+    하위 호환성 유지를 위해 기존 API/설정을 병존시키면:
+    - 문서가 두 배로 늘어남 ("구 방식" vs "신 방식")
+    - 코드베이스에 분기가 누적됨
+    - 신규 사용자가 "어떤 방식이 맞는지" 혼란
+    - 결국 단순화 목적 자체가 무효화됨
+    
+    **단순성을 잃는 것이 하위 호환성을 깨는 것보다 치명적이다.**
+
+실무 가이드:
+- 메이저 변경(예: Runner API, ExecutionDomain, World 정책 스키마)을 도입할 때는 **마이그레이션 가이드와 보조 도구**를 제공하되, 런타임 플래그나 영구적인 호환 모드는 두지 않는다.
+- 문서·예제·CLI는 항상 한 세대의 “신 방식”만을 가리키며, “구 방식 vs 신 방식” 이중 경로가 남아 있지 않도록 정기적으로 정리한다.
 
 ---
 
@@ -210,7 +239,7 @@ class FlowExample(Strategy):
         price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
         self.add_nodes([price])
 
-Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
+Runner.submit(FlowExample, world="arch_world")
 ```
 
 위 호출에서 `TagQueryManager`는 `GET /queues/by_tag` 요청에 `world_id`를 포함하고, `ActivationManager`는 `/worlds/{world_id}/activation`을 주기적으로 조회하여 주문 게이트와 메트릭에 반영합니다.
@@ -397,7 +426,7 @@ Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `p
 
 핵심 동작 원칙:
 - 제출 시 `(world_id, strategy_id)` 바인딩(WSB)이 WorldService에 생성/보장된다.
-- 호출자는 `Runner.run(strategy_cls, world_id=..., gateway_url=...)`만 사용한다.
+- 호출자는 `Runner.submit(strategy_cls, world=...)` 단일 진입점만 사용한다.
 - WS의 `effective_mode`는 내부 정책 결과이며, Runner는 이를 입력으로만 취급한다.
 - 활성 정보가 미상·만료 상태이거나 결정 TTL이 만료되면, Runner는 안전기본(compute‑only, 주문 게이트 OFF)로 유지한다.
 - 검증→프로모션(실전 활성화)은 WS의 히스테리시스·게이트 정책과 2‑Phase Apply에 의해 수행된다.
@@ -448,11 +477,7 @@ Seamless DP는 히스토리 데이터의 단일 진입점이며, 캐시/스토�
 
 # 실행 예시 (월드 주도)
 if __name__ == "__main__":
-    Runner.run(
-        GeneralStrategy,
-        world_id="general_demo",
-        gateway_url="http://gateway.local"
-    )
+    Runner.submit(GeneralStrategy, world="general_demo")
 ```
 
 ---
@@ -499,7 +524,7 @@ class CorrelationStrategy(Strategy):
 
 # 실시간 실행 예시 (월드 주도)
 if __name__ == "__main__":
-    Runner.run(CorrelationStrategy, world_id="corr_demo", gateway_url="http://gateway.local")
+    Runner.submit(CorrelationStrategy, world="corr_demo")
 ```
 
 
@@ -558,7 +583,7 @@ class CrossMarketLagStrategy(Strategy):
         self.add_nodes([btc_price, mstr_price, corr_node])
 
 # 실시간 실행: 월드 결정에 따른 게이팅/활성
-Runner.run(CrossMarketLagStrategy, world_id="cross_market_lag", gateway_url="http://gateway.local")
+Runner.submit(CrossMarketLagStrategy, world="cross_market_lag")
 ```
 
 > **동작 요약**

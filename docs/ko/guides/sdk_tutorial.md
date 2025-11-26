@@ -79,124 +79,54 @@ class MyStrategy(Strategy):
         self.add_nodes([price, out])
 ```
 
-## 실행 방법 (월드 주도)
+## 실행 방법 (Submit-only)
 
-전략 실행은 월드(WorldService) 결정에 따릅니다. `Runner`는 단일 진입점만 제공합니다.
+전략 실행은 월드(WorldService) 결정에 따릅니다. QMTL v2에서 `Runner.submit` 하나로 통일되었습니다.
 
-- `Runner.run(MyStrategy, world_id="...", gateway_url="http://gw")` — WS 결정과 활성 이벤트를 따르는 실행. 게이트는 WS 활성 상태에 따라 ON/OFF 됩니다. 결정이 부재/만료일 때는 기본적으로 compute‑only(주문 OFF)로 동작합니다.
-- `Runner.offline(MyStrategy)` — Gateway 없이 로컬에서만 실행합니다. 태그 기반 노드는 빈 큐 목록으로 초기화됩니다.
+- `Runner.submit(MyStrategy, world="...", mode="paper|live|backtest")` — 월드 결정/활성에 따라 주문 게이트가 자동으로 ON/OFF 되며, 결정이 부재/만료되면 compute‑only(주문 OFF)로 안전하게 동작합니다.
 
 ```python
-from qmtl.runtime.sdk import Runner
+from qmtl.runtime.sdk import Runner, Mode
 
 # 월드 주도 실행
-Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
+Runner.submit(MyStrategy, world="my_world", mode=Mode.PAPER)
 
-# 오프라인 실행
-Runner.offline(MyStrategy)
+# 백테스트/로컬 검증
+Runner.submit(MyStrategy, mode=Mode.BACKTEST)
 ```
 
-`Runner`는 각 `TagQueryNode`가 등록된 후 자동으로 Gateway와 통신하여 해당 태그에
-매칭되는 큐를 조회하고, `TagQueryManager.start()` 단계에서 이벤트 디스크립터/토큰을 교환해 WebSocket 구독을 시작합니다. 핸드셰이크 결과는 매니저 내부에서 관리되므로 호출자가 별도로 반환값을 저장할 필요는 없습니다. 모든 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
+`Runner`는 `TagQueryNode` 등록 후 Gateway로 제출해 매칭 큐를 조회하고,
+`TagQueryManager.start()` 단계에서 이벤트 디스크립터/토큰을 교환해 WebSocket 구독을 시작합니다. 정책 판단은 WorldService가 수행하며, SDK는 전달받은 결정/활성에 따라 동작만 조정합니다.
 
-### Backtest/Dry‑Run 요구사항
+### world 전달과 mode
 
-Backtest/Dry‑Run에 필요한 Clock/스냅샷 메타데이터(as_of, dataset_fingerprint)는
-서버 측(WorldService/Gateway)에서 강제·검증됩니다. SDK `Runner`는 실행 도메인이나
-클록을 설정하지 않으며, WS 결정과 활성 상태를 그대로 따릅니다.
-
-- Gateway/WS는 backtest/dry‑run에 스냅샷 메타데이터가 누락되면 요청을 거부하거나
-  안전 모드(compute‑only, 주문 게이트 OFF)로 강등합니다.
-- 결정이 부재/만료 상태이거나 활성 정보가 없으면 SDK는 기본적으로
-  compute‑only로 유지합니다.
-
-로컬 재현/테스트에는 `Runner.offline(MyStrategy)`를 사용하세요. 태그 기반 노드는
-빈 큐 목록으로 초기화되며, 필요 시 스냅샷/피처 아티팩트를 직접 주입해 재현성을 확보합니다.
-
-### world_id 전달 흐름
-
-`world_id`는 실행 시점에서 `Runner`가 받아 `TagQueryManager`와 `ActivationManager`에 전파됩니다. 두 관리자는 각 노드와 메트릭에 동일한 `world_id`를 주입해 큐·활성 상태와 지표가 월드별로 분리되도록 보장합니다.
-
-```mermaid
-sequenceDiagram
-    participant R as Runner
-    participant T as TagQueryManager
-    participant A as ActivationManager
-    participant N as Nodes / Metrics
-    R->>T: world_id
-    R->>A: world_id
-    T->>N: register(world_id)
-    A->>N: activation(world_id)
-```
+- `world` 값은 `TagQueryManager`/`ActivationManager`에 전파되어 큐 해석과 관측치가 월드 단위로 구분됩니다.
+- `mode`는 `backtest | paper | live` 세 가지로만 노출되며, 내부 ExecutionDomain 매핑은 숨겨집니다.
 
 ```python
-from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner, Mode
 
 class WorldStrategy(Strategy):
     def setup(self):
         price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
         self.add_nodes([price])
 
-# world_id는 노드 등록과 메트릭 레이블에 자동으로 반영됩니다.
-Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
+# world는 노드 등록과 메트릭 레이블에 자동으로 반영됩니다.
+Runner.submit(WorldStrategy, world="demo_world", mode=Mode.PAPER)
 ```
-
-### ExecutionDomain 매핑
-
-- WorldService는 정책 평가 결과를 `effective_mode` (`validate|compute-only|paper|live`)로 전달합니다.
-- Gateway와 SDK는 이 값을 ExecutionDomain으로 매핑해 `execution_domain` 필드를 채웁니다.
-- **매핑 규칙:** `validate → backtest (주문 게이트 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow`는 운영자 전용입니다.
-- 실행 예시: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})는 `connectors.execution_domain` 설정으로 `dryrun`/`live`를 전환합니다. 레거시 `trade_mode` 값 `paper`는 자동으로 `dryrun`으로 변환됩니다.
-- 오프라인 실행(`Runner.offline`)은 기본적으로 `backtest` 도메인과 동일한 게이팅을 적용합니다. WorldService가 `effective_mode="validate"`를 전달하면 SDK는 자동으로 `backtest` ExecutionDomain을 사용해 주문을 차단합니다.
 
 ## CLI 도움말
 
-`qmtl tools sdk run` 명령으로 전략을 실행할 때는 `--world-id`를 반드시 지정합니다.
+`qmtl submit`은 `Runner.submit`과 동일하게 동작합니다.
 
 ```bash
-qmtl tools sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
+qmtl submit strategy.py --world demo_world --mode paper
+qmtl submit strategy.py --mode backtest
 ```
 
-환경 변수로 값을 주입할 수도 있습니다.
-
-```bash
-export WORLD_ID=demo_world
-qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
-```
-
-구성 파일에서 값을 읽어오는 방법의 예시는 다음과 같습니다.
-
-```yaml
-# config.yml
-world_id: demo_world
-gateway_url: http://gw
-```
-
-```bash
-WORLD_ID=$(yq '.world_id' config.yml)
-GATEWAY_URL=$(yq '.gateway_url' config.yml)
-qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWAY_URL
-```
-
-전체 옵션은 아래 명령으로 확인할 수 있습니다.
-
-```bash
-qmtl tools sdk --help
-```
-
-`qmtl tools sdk run` 명령은 Clock/데이터 메타데이터를 직접 설정할 수 있는 옵션을 제공합니다.
-
-```bash
-qmtl tools sdk run strategies.my:MyStrategy \
-  --world-id demo_world \
-  --gateway-url http://gw \
-  --mode backtest \
-  --clock virtual \
-  --as-of 2025-09-30T23:59:59Z \
-  --dataset-fingerprint lake:blake3:ohlcv:20250930
-```
-
-`--mode live`를 사용할 경우 `--clock wall`만 허용되며, 잘못된 조합은 즉시 실패합니다. 백테스트/드라이런에서 `--as-of` 또는 `--dataset-fingerprint`를 생략하면 Runner가 Gateway 호출을 차단하고 compute-only 모드로 전환합니다. 이 동작은 혼합 데이터셋이 라이브 큐에 섞이는 것을 방지하기 위한 방어선입니다.
+환경 변수:
+- `QMTL_GATEWAY_URL`: Gateway URL (`http://localhost:8000` 기본)
+- `QMTL_DEFAULT_WORLD`: 기본 월드 이름 (`__default__` 기본)
 
 ## 캐시 조회
 

@@ -32,9 +32,9 @@ price = SourceNode(
 - `off`: 검증을 건너뜀
 
 ```python
-from qmtl.runtime.sdk import Runner
+from qmtl.runtime.sdk import Runner, Mode
 
-Runner.offline(MyStrategy, schema_enforcement="warn")
+Runner.submit(MyStrategy, mode=Mode.BACKTEST, schema_enforcement="warn")
 ```
 
 ## 오류 메시지

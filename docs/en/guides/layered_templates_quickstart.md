@@ -292,7 +292,7 @@ cd my_strategy
 python strategy.py
 
 # Production mode (requires Gateway)
-# after changing strategy.py to call Runner.run():
+# after changing strategy.py to call Runner.submit():
 python strategy.py
 ```
 

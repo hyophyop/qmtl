@@ -44,6 +44,11 @@ Gateway는 일시적인 전략 제출과 DAG Manager가 관리하는 영속적 �
 **Ax‑2** Neo4j causal 클러스터는 단일 리더 일관성을 노출하며, 리드 리플리카는 지연될 수 있습니다.
 **Ax‑3** Gateway는 `{ world_id, execution_domain, as_of, partition }` 컴퓨트 컨텍스트를 구성해 하위 서비스로 전달합니다. SDK는 이 컨텍스트를 선택하지 않으며, Gateway가 WorldService 결정(및 필요 시 제출 메타데이터)에서 도출합니다. DAG Manager는 이를 통해 도메인 스코프 ComputeKey를 파생하고, WorldService는 정책 권한/적용에 사용합니다. 이 계약의 정식 구현은 `qmtl/foundation/common/compute_context.py`에 있으며, 커밋 로그 직렬화/다운그레이드 추적/인제스트 흐름용 Redis 매핑을 담당하는 `StrategyComputeContext`(`qmtl/services/gateway/submission/context_service.py`)로 래핑됩니다.
 
+**사용자 관점 설계 의도:** Gateway는 “전략 로직에만 집중하면 시스템이 알아서 최적화하고 수익을 낸다”는 QMTL의 핵심 가치를 **네트워크 경계에서 보장하는 역할**을 합니다.
+- SDK 사용자는 `Runner.submit(MyStrategy)` 또는 단순 REST 호출만으로 전략을 제출하고, Gateway는 **WorldService/DAG Manager 복잡도를 숨긴 채** 필요한 컨텍스트를 자동 구성합니다.
+- 새로운 엔드포인트나 메타데이터를 추가할 때도, 먼저 “전략 작성/제출 플로우가 더 복잡해지지 않는가?”를 검토하고, 가능하면 **기본값·추론·프리셋**으로 해결하도록 합니다.
+- 하위 호환성을 위해 구/신 경로를 장기간 병존시키지 않고, 한 시점에는 항상 하나의 **정식 엔드포인트 집합**만을 유지합니다(호환 레이어는 명시적 마이그레이션 기간 후 제거).
+
 ### 비목표
 - Gateway는 월드 정책 결정을 계산하지 않으며, 월드/큐의 SSOT가 아닙니다.
 - Gateway는 브로커리지 실행을 관리하지 않고, 요청 중재와 제어 이벤트 중계만 담당합니다.

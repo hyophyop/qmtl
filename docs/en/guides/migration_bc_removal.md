@@ -11,41 +11,31 @@ last_modified: 2025-09-04
 
 This guide summarizes the removal of legacy compatibility layers and shows how to migrate your code.
 
-## Runner API
+## Runner API (single entrypoint)
 
-**Before**
+**Before (legacy, removed)**: multiple entrypoints (`backtest/dryrun/live/run/offline`)
 
-```python
-from qmtl import Runner
-
-runner = Runner(...)
-runner.backtest(strategy)
-```
-
-**After**
+**After (submit-only)**
 
 ```python
-from qmtl.runtime.sdk import Runner
+from qmtl.runtime.sdk import Runner, Mode
 
-runner = Runner(...)
-runner.run(strategy, world_id="demo", gateway_url="http://localhost:8000")
-# or for local runs
-runner.offline(strategy)
+result = Runner.submit(MyStrategy, world="demo", mode=Mode.LIVE, preset="moderate")
+print(result.status, result.world, result.mode)
 ```
 
 ## CLI
 
-**Before**
-
 ```bash
-qmtl tools sdk --mode backtest --world-id demo --gateway-url http://localhost:8000
-```
+# Submit strategy with preset policy
+qmtl submit my_strategy.py --world demo --mode live --preset aggressive
 
-**After**
+# Create/inspect worlds with preset policies
+qmtl world create demo --policy conservative
+qmtl world info demo
 
-```bash
-qmtl tools sdk run --world-id demo --gateway-url http://localhost:8000
-qmtl tools sdk offline  # local execution
+# Operator commands require --admin
+qmtl --admin gw --config qmtl.yml
 ```
 
 ## Gateway `/strategies`
@@ -84,10 +74,11 @@ from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 
 ## Checklist
 
-- [ ] Replace `Runner.backtest`, `Runner.dryrun`, and `Runner.live` with `Runner.run` or `Runner.offline`.
-- [ ] Update CLI usage from `--mode` to `run`/`offline` subcommands.
-- [ ] Drop `run_type` from Gateway `/strategies` requests and pass `world_id` if needed.
+- [ ] Replace all `Runner.backtest`/`Runner.dryrun`/`Runner.live`/`Runner.run`/`Runner.offline` with `Runner.submit(..., mode=...)`.
+- [ ] CLI: use `qmtl submit --mode <backtest|paper|live> [--preset <name>]` instead of legacy `service sdk run/offline`.
+- [ ] Configure world policy via `qmtl world create --policy <preset>` or `POST /worlds/{id}/policies` (preset + overrides supported).
+- [ ] Inspect world policy via `qmtl world info` or `GET /worlds/{id}/describe` (returns preset, version, human-readable summary).
+- [ ] Drop `run_type` from Gateway `/strategies` requests and rely on `mode` with `world`.
 - [ ] Import brokerage helpers from `qmtl.runtime.brokerage`, not `qmtl.runtime.brokerage.simple`.
 
 {{ nav_links() }}
-

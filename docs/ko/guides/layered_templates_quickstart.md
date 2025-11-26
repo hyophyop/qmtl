@@ -289,7 +289,7 @@ cd my_strategy
 python strategy.py
 
 # 프로덕션 모드 (Gateway 필요)
-# strategy.py에서 Runner.run() 사용하도록 수정 후:
+# strategy.py에서 Runner.submit() 사용하도록 수정 후:
 python strategy.py
 ```
 

@@ -70,9 +70,9 @@ when no external services are configured:
 ```bash
 python strategy.py
 ```
-The scaffolded script uses `Runner.offline()` by default, so no external
+The scaffolded script uses `Runner.submit()` by default, so no external
 services are required. To connect to your environment, update the script to call
-`Runner.run(world_id=..., gateway_url=...)`, which follows WorldService decisions
+`Runner.submit(world=...)`, which follows WorldService decisions
 and activation events.
 
 The Gateway proxies the WorldService, and SDKs receive control events over the tokenized WebSocket returned by `/events/subscribe`. Activation and queue updates arrive through this opaque control stream instead of being read directly from Gateway state.
@@ -93,12 +93,12 @@ transforms
 ...
 ```
 
-If the script calls `Runner.run(...)` without a reachable Gateway/WorldService,
+If the script calls `Runner.submit(...)` without a reachable Gateway/WorldService,
 the strategy will remain in a safe compute‑only state (order gates OFF) until
 the control connection is restored.
 
 > **Common issues**
-> - Missing Gateway URL: add `--gateway-url` or use `Runner.offline()`
+> - Missing Gateway URL: add `--gateway-url` or use `Runner.submit()`
 > - Dependency conflicts: reinstall via `uv pip install -e .[dev]`
 
 ## 3. Develop Your Strategy
@@ -160,8 +160,8 @@ for parameter details.
 
 ## 4. Execute with Worlds
 
-Use `Runner.offline()` for local testing without dependencies. For integrated runs,
-switch to `Runner.run(strategy_cls, world_id=..., gateway_url=...)`. Activation and queue
+Use `Runner.submit()` for local testing without dependencies. For integrated runs,
+switch to `Runner.submit(strategy_cls, world=...)`. Activation and queue
 updates are delivered via the Gateway's opaque control stream on the `/events/subscribe`
 WebSocket; WS remains the authority for policy and activation.
 
@@ -203,7 +203,7 @@ stack. The end-to-end flow follows three stages:
    `/rebalancing/execute` endpoint and, if required, submits them to the Commit
    Log.
 
-For local validation, run the strategy with `Runner.offline()` while posting
+For local validation, run the strategy with `Runner.submit()` while posting
 `MultiWorldRebalanceRequest` payloads to the World Service to inspect plans, then
 review the Gateway dry-run response to confirm order shapes. Providing activation
 and Gateway URLs enables the exact same flow in integrated environments.
@@ -249,24 +249,17 @@ wait
 
 ### Test Teardown and Shutdown
 
-When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), prefer the session context manager to ensure everything is cleaned up:
+When a test starts background services (e.g., TagQueryManager subscriptions or ActivationManager), prefer explicit cleanup:
 
 ```python
-async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw") as strategy:
-    ...  # assertions
-```
-
-If you cannot use ``async with`` (e.g., in synchronous tests), fall back to the explicit helpers:
-
-```python
-strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw")
+strategy = Runner.submit(MyStrategy, world="w", mode="paper")
 try:
     ...  # assertions
 finally:
     Runner.shutdown(strategy)
 ```
 
-The helpers are idempotent and safe to call even if no background services are active.
+`Runner.shutdown` is idempotent and safe to call even if no background services are active.
 
 ### Test Mode Budgets
 

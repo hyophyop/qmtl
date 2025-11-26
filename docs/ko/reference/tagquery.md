@@ -17,9 +17,9 @@ last_modified: 2025-09-23
 
 ## Runner 통합
 
-- 부팅 시퀀스: `Runner.run(..., world_id=..., gateway_url=...)` 은 `TagQueryManager`를 부착하고 Gateway의 `queue_map`을 노드에 적용한 뒤, 라이브 구독을 시작하기 전에 `resolve_tags()` 를 한 번 호출합니다.
+- 부팅 시퀀스: `Runner.submit(..., world="name", mode=Mode.PAPER)` 은 `TagQueryManager`를 부착하고 Gateway의 `queue_map`을 노드에 적용한 뒤, 라이브 구독을 시작하기 전에 `resolve_tags()` 를 한 번 호출합니다.
 - 라이브 업데이트: 부팅 이후 `TagQueryManager.start()` 는 `/events/subscribe` 에 구독하고, `/queues/by_tag` 를 주기적으로 호출해 편차를 복구합니다.
-- 오프라인 모드: `Runner.offline(...)` 을 사용하거나 Gateway/Kafka를 이용할 수 없을 때 `resolve_tags(offline=True)` 는 로컬 캐시 파일(`.qmtl_tagmap.json` 기본값)에서 큐 매핑을 복원합니다. 스냅샷이 없으면 노드는 초기에는 데이터 없이 실행 전용으로 유지됩니다.
+- 오프라인 모드: `Runner.submit(..., mode=Mode.BACKTEST)` 을 사용하거나 Gateway/Kafka를 이용할 수 없을 때 `resolve_tags(offline=True)` 는 로컬 캐시 파일(`.qmtl_tagmap.json` 기본값)에서 큐 매핑을 복원합니다. 스냅샷이 없으면 노드는 초기에는 데이터 없이 실행 전용으로 유지됩니다.
 
 ## 캐싱과 결정성
 

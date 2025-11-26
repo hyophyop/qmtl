@@ -44,6 +44,17 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 **Ax-2** Neo4j causal cluster exposes single-leader consistency; read replicas may lag.
 **Ax-3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain-Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/foundation/common/compute_context.py` and is wrapped by `StrategyComputeContext` (`qmtl/services/gateway/submission/context_service.py`) which owns commit-log serialization, downgrade tracking, and Redis mapping for ingestion flows.
 
+**User-facing design intent:** Gateway is the place where the QMTL core value
+“focus only on strategy logic; the system handles optimisation and returns”
+is enforced at the network boundary.
+- SDK users submit via `Runner.submit(MyStrategy)` or simple REST calls; Gateway
+derives the full compute context and hides WorldService/DAG Manager complexity
+behind that interface.
+- When adding endpoints or metadata, first check whether the **strategy
+author’s submit flow becomes more complex**; prefer defaults, inference, and
+policy presets over exposing raw backend configuration.
+- Avoid keeping old and new paths alive for long purely for compatibility; at any point in time there should be a single **canonical endpoint surface**, with compatibility layers removed after a defined migration window.
+
 ### Non-Goals
 - Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
 - Gateway does not manage brokerage execution; it only mediates requests and relays control events.

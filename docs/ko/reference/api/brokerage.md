@@ -42,7 +42,7 @@ flowchart LR
 - 결제는 두 가지 모드를 지원합니다. 기본은 기록만 남기는 즉시 현금 이동, 선택적 `SettlementModel(defer_cash=True)` 는 `CashWithSettlementBuyingPowerModel` 과 함께 지연 결제를 처리합니다.
 
 SDK에서의 활성화:
-- SDK `Runner` 는 거래 주문에 대해 활성화 게이트를 통합합니다. 라이브 모드에서 `gateway_url` 을 지정하면 `ActivationUpdated` 이벤트를 구독하고, 해당 롱/숏 사이드가 비활성화된 경우 BUY/SELL 제출을 차단합니다.
+- SDK `Runner` 는 거래 주문에 대해 활성화 게이트를 통합합니다. 라이브 모드에서 Gateway(`QMTL_GATEWAY_URL`)에 연결되면 `ActivationUpdated` 이벤트를 구독하고, 해당 롱/숏 사이드가 비활성화된 경우 BUY/SELL 제출을 차단합니다.
 
 ## 빠른 시작
 

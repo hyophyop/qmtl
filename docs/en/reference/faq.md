@@ -13,10 +13,10 @@ last_modified: 2025-09-05
 
 `TagQueryNode` refreshes its queue list through the `TagQueryManager` that the
 Runner spawns. When a strategy runs in world-driven mode
-(`Runner.run(world_id=..., gateway_url=...)`) the manager performs the initial
+(`Runner.submit(world=...)`) the manager performs the initial
 queue lookup and establishes the WebSocket subscription. If Gateway or
 WorldService are unreachable the strategy remains in the safe baseline
-(compute-only, order gate OFF). `Runner.offline()` runs locally without the
+(compute-only, order gate OFF). `Runner.submit()` runs locally without the
 Gateway; tag-based nodes start with an empty queue list in that mode.
 
 See [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md) for guidance on updating code that previously used `Runner.backtest` or CLI `--mode`.
