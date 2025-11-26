@@ -3,10 +3,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.qmtl.interfaces._cli_tokens import resolve_cli_tokens
 
-
-PROJECT_INIT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.project", "qmtl.interfaces.cli.init")
+# v2 CLI: 'qmtl init' (flat structure)
+PROJECT_INIT_TOKENS = ["init"]
 
 
 def _repo_root() -> Path:
@@ -62,18 +61,15 @@ def test_init_wheel(tmp_path: Path) -> None:
     if existing:
         extra_paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(extra_paths)
+    # v2 CLI: `qmtl init <path>` with positional argument
     subprocess.run(
         [
             str(qmtl),
             *PROJECT_INIT_TOKENS,
-            "--with-sample-data",
-            "--path",
             str(dest),
-            "--preset",
-            "minimal",
         ],
         check=True,
         env=env,
     )
-    assert (dest / "data" / "sample_ohlcv.csv").is_file()
-    assert (dest / "notebooks" / "strategy_analysis_example.ipynb").is_file()
+    # v2 creates a minimal strategy file
+    assert (dest / "strategy.py").is_file()

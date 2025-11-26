@@ -3,7 +3,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.qmtl.interfaces._cli_tokens import resolve_cli_tokens
 
 from qmtl.interfaces.tools.taglint import (
     REQUIRED_KEYS,
@@ -14,7 +13,8 @@ from qmtl.interfaces.tools.taglint import (
 )
 
 
-TAGLINT_TOKENS = resolve_cli_tokens("qmtl.interfaces.cli.tools", "qmtl.interfaces.cli.taglint")
+# v2 CLI: 'taglint' is an admin command (shown in --help-admin)
+TAGLINT_TOKENS = ["taglint"]
 
 
 def run(path: Path | None, *extra: str, fix: bool = False, env: dict[str, str] | None = None):

@@ -5,49 +5,43 @@ import pytest
 from qmtl.utils.i18n import set_language
 
 
+# v2 CLI: flat structure, admin commands are accessed via --help-admin
+# or direct command names for common operations
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        (["service", "--help"], "usage: qmtl service"),
-        (["service", "gateway", "--help"], "usage: qmtl service gateway"),
-        (["service", "dagmanager", "--help"], "usage: qmtl service dagmanager"),
-        (["service", "dagmanager", "server", "--help"], "usage: qmtl service dagmanager server"),
-        (["service", "dagmanager", "metrics", "--help"], "usage: qmtl service dagmanager metrics"),
-        (["tools", "--help"], "usage: qmtl tools"),
-        (["tools", "sdk", "--help"], "usage: qmtl tools sdk"),
-        (["project", "--help"], "usage: qmtl project"),
-        (["project", "init", "--help"], "usage: qmtl project init"),
+        # v2 core commands
+        (["--help"], "QMTL v2.0"),
+        (["init", "--help"], "Initialize a new QMTL project"),
+        (["submit", "--help"], "Submit a strategy"),
+        (["status", "--help"], "Check status"),
+        # v2 admin commands (accessed directly)
+        (["gateway", "--help"], "Run the Gateway HTTP server"),
+        (["dagmanager-server", "--help"], "DAG Manager"),
     ],
 )
 def test_cli_subcommand_help(args, expected):
     result = subprocess.run([sys.executable, "-m", "qmtl", *args], capture_output=True, text=True)
-    assert result.returncode == 0
-    assert expected in result.stdout
+    assert result.returncode == 0, f"Failed with stderr: {result.stderr}"
+    assert expected in result.stdout, f"Expected '{expected}' not found in: {result.stdout}"
 
 
 @pytest.mark.parametrize(
     "cmd",
     [
-        "gw",
-        "gateway",
-        "dagmanager",
-        "dagmanager-server",
-        "dagmanager-metrics",
-        "sdk",
-        "taglint",
-        "report",
-        "init",
+        # These are legacy commands that are no longer available
+        "service",
+        "tools",
+        "project",
     ],
 )
 def test_removed_top_level_aliases_show_top_level_usage(cmd):
     result = subprocess.run(
         [sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True
     )
+    # v2 CLI: legacy commands return error with migration message
     assert result.returncode != 0
-    assert result.stdout
-    assert result.stdout.splitlines()[0].startswith("usage: qmtl")
-    assert "error: unknown command" in result.stderr
-    assert cmd in result.stderr
+    assert "has been removed" in result.stderr or "Unknown command" in result.stderr
 
 
 def test_gateway_cli_help_respects_locale(monkeypatch, capsys):
