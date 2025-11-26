@@ -291,6 +291,11 @@ class WorldServiceClient:
             "GET", f"/worlds/{world_id}", headers=headers
         )
 
+    async def describe_world(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
+        return await self._request_json(
+            "GET", f"/worlds/{world_id}/describe", headers=headers
+        )
+
     async def put_world(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "PUT",

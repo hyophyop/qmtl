@@ -1,84 +1,80 @@
-"""QMTL strategy SDK."""
+"""QMTL Strategy SDK.
+
+QMTL v2.0 provides a simplified API for strategy development.
+
+Primary API (what users need):
+  Runner      Submit and run strategies
+  Strategy    Base class for strategy definition
+  Mode        Execution mode (backtest | paper | live)
+
+Example:
+    from qmtl.runtime.sdk import Runner, Strategy, Mode
+
+    class MyStrategy(Strategy):
+        def setup(self):
+            ...
+
+    result = Runner.submit(MyStrategy)
+    print(result.status)
+
+For advanced usage, import from submodules:
+    from qmtl.runtime.sdk.node import Node, StreamInput, ProcessingNode
+    from qmtl.runtime.sdk.presets import PolicyPreset
+"""
 
 from __future__ import annotations
 
 import importlib
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
+
+# =============================================================================
+# PUBLIC API - What users need to know
+# =============================================================================
 
 __all__ = [
-    "Node",
-    "SourceNode",
-    "ProcessingNode",
-    "StreamInput",
-    "TagQueryNode",
-    "NodeCache",
-    "MatchMode",
-    "NodeCacheArrow",
-    "BackfillState",
-    "CacheView",
-    "CacheWindow",
-    "CacheFrame",
-    "Strategy",
-    "buy_signal",
+    # Core API (3 essentials)
     "Runner",
-    "TagQueryManager",
-    "WebSocketClient",
-    "HistoryProvider",
-    "HistoryBackend",
-    "DataFetcher",
-    "EventRecorder",
-    "StreamLike",
-    "NodeLike",
-    "AutoBackfillRequest",
-    "AugmentedHistoryProvider",
-    "AutoBackfillStrategy",
-    "QuestDBBackend",
-    "QuestDBHistoryProvider",
-    "QuestDBLoader",
-    "QuestDBRecorder",
-    "BackfillEngine",
-    "metrics",
-    "TradeExecutionService",
-    "EventRecorderService",
-    "BrokerageClient",
-    "HttpBrokerageClient",
-    "FakeBrokerageClient",
-    "CcxtBrokerageClient",
-    "FuturesCcxtBrokerageClient",
-    "OCOOrder",
-    "LiveDataFeed",
-    "WebSocketFeed",
-    "FakeLiveDataFeed",
-    "Portfolio",
-    "Position",
-    "order_value",
-    "order_percent",
-    "order_target_percent",
-    "parse_interval",
-    "parse_period",
-    "validate_tag",
-    "validate_name",
-    "CcxtExchange",
-    "normalize_exchange_id",
-    "ensure_ccxt_exchange",
-    "FetcherBackfillStrategy",
-    "LiveReplayBackfillStrategy",
-    "QMTLValidationError",
-    "NodeValidationError",
-    "InvalidParameterError",
-    "InvalidTagError",
-    "InvalidIntervalError",
-    "InvalidPeriodError",
-    "InvalidNameError",
-    "_cli",
-    "SeamlessBuilder",
-    "SeamlessAssembly",
-    "SeamlessPresetRegistry",
-    "hydrate_builder",
-    "build_seamless_assembly",
+    "Strategy",
+    "Mode",
+    # Result types
+    "SubmitResult",
+    "StrategyMetrics",
 ]
 
-_ATTR_MAP: Mapping[str, tuple[str, str | None]] = {
+# =============================================================================
+# LAZY LOADING
+# =============================================================================
+
+_PUBLIC_API: Mapping[str, tuple[str, str]] = {
+    # Core API
+    "Runner": ("qmtl.runtime.sdk.runner", "Runner"),
+    "Strategy": ("qmtl.runtime.sdk.strategy", "Strategy"),
+    "Mode": ("qmtl.runtime.sdk.mode", "Mode"),
+    # Result types
+    "SubmitResult": ("qmtl.runtime.sdk.submit", "SubmitResult"),
+    "StrategyMetrics": ("qmtl.runtime.sdk.submit", "StrategyMetrics"),
+}
+
+# Extended API - available but not advertised in __all__
+# Users can import these directly from submodules
+_EXTENDED_API: Mapping[str, tuple[str, str | None]] = {
+    # Mode utilities
+    "mode_to_execution_domain": ("qmtl.runtime.sdk.mode", "mode_to_execution_domain"),
+    "execution_domain_to_mode": ("qmtl.runtime.sdk.mode", "execution_domain_to_mode"),
+    "effective_mode_to_mode": ("qmtl.runtime.sdk.mode", "effective_mode_to_mode"),
+    "is_orders_enabled": ("qmtl.runtime.sdk.mode", "is_orders_enabled"),
+    "is_real_time_data": ("qmtl.runtime.sdk.mode", "is_real_time_data"),
+    "normalize_mode": ("qmtl.runtime.sdk.mode", "normalize_mode"),
+    # Policy presets
+    "PolicyPreset": ("qmtl.runtime.sdk.presets", "PolicyPreset"),
+    "get_preset": ("qmtl.runtime.sdk.presets", "get_preset"),
+    "list_presets": ("qmtl.runtime.sdk.presets", "list_presets"),
+    # Validation pipeline
+    "ValidationPipeline": ("qmtl.runtime.sdk.validation_pipeline", "ValidationPipeline"),
+    "ValidationResult": ("qmtl.runtime.sdk.validation_pipeline", "ValidationResult"),
+    "ValidationStatus": ("qmtl.runtime.sdk.validation_pipeline", "ValidationStatus"),
+    "validate_strategy": ("qmtl.runtime.sdk.validation_pipeline", "validate_strategy"),
+    "validate_strategy_sync": ("qmtl.runtime.sdk.validation_pipeline", "validate_strategy_sync"),
     # Nodes and cache
     "Node": ("qmtl.runtime.sdk.node", "Node"),
     "SourceNode": ("qmtl.runtime.sdk.node", "SourceNode"),
@@ -94,12 +90,9 @@ _ATTR_MAP: Mapping[str, tuple[str, str | None]] = {
     "CacheFrame": ("qmtl.runtime.sdk.cache_view_tools", "CacheFrame"),
     "StreamLike": ("qmtl.runtime.sdk.protocols", "StreamLike"),
     "NodeLike": ("qmtl.runtime.sdk.protocols", "NodeLike"),
-    # Strategies
-    "Strategy": ("qmtl.runtime.sdk.strategy", "Strategy"),
+    # Other utilities
     "buy_signal": ("qmtl.runtime.sdk.strategy", "buy_signal"),
-    "Runner": ("qmtl.runtime.sdk.runner", "Runner"),
     "TagQueryManager": ("qmtl.runtime.sdk.tagquery_manager", "TagQueryManager"),
-    "_cli": ("qmtl.runtime.sdk.cli", "main"),
     "WebSocketClient": ("qmtl.runtime.sdk.ws_client", "WebSocketClient"),
     # Data I/O
     "AutoBackfillRequest": ("qmtl.runtime.sdk.data_io", "AutoBackfillRequest"),
@@ -166,9 +159,11 @@ _ATTR_MAP: Mapping[str, tuple[str, str | None]] = {
     "build_seamless_assembly": ("qmtl.runtime.sdk.seamless", "build_assembly"),
 }
 
+_ALL_API = {**_PUBLIC_API, **_EXTENDED_API}
+
 
 def __getattr__(name: str) -> Any:
-    target = _ATTR_MAP.get(name)
+    target = _ALL_API.get(name)
     if target is None:
         raise AttributeError(name)
     module_path, attr = target
@@ -179,4 +174,5 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
+    # Only show public API in dir()
     return sorted(set(__all__))

@@ -17,6 +17,30 @@ from ..schemas import (
 from ..services import WorldService
 
 
+def _policy_to_human_readable(policy: Any) -> str:
+    if policy is None:
+        return "no policy"
+    data = policy.get("policy") if isinstance(policy, dict) else policy
+    parts: list[str] = []
+    thresholds = data.get("thresholds") if isinstance(data, dict) else None
+    if isinstance(thresholds, dict):
+        bits = []
+        for metric, cfg in thresholds.items():
+            if not isinstance(cfg, dict):
+                continue
+            min_v = cfg.get("min")
+            max_v = cfg.get("max")
+            if min_v is not None and max_v is not None:
+                bits.append(f"{metric} between {min_v} and {max_v}")
+            elif min_v is not None:
+                bits.append(f"{metric} >= {min_v}")
+            elif max_v is not None:
+                bits.append(f"{metric} <= {max_v}")
+        if bits:
+            parts.append("thresholds: " + "; ".join(bits))
+    return ", ".join(parts) if parts else "no policy"
+
+
 def create_worlds_router(service: WorldService) -> APIRouter:
     router = APIRouter()
 
@@ -38,6 +62,25 @@ def create_worlds_router(service: WorldService) -> APIRouter:
         if not world:
             raise HTTPException(status_code=404, detail='world not found')
         return world
+
+    @router.get('/worlds/{world_id}/describe')
+    async def describe_world(world_id: str) -> Dict:
+        store = service.store
+        world = await store.get_world(world_id)
+        if not world:
+            raise HTTPException(status_code=404, detail='world not found')
+        default_version = await store.default_policy_version(world_id)
+        policy = await store.get_default_policy(world_id)
+        return {
+            **world,
+            "default_policy_version": default_version,
+            "policy": policy,
+            "policy_preset": policy.get("preset") if isinstance(policy, dict) else None,  # type: ignore[union-attr]
+            "policy_preset_mode": policy.get("preset_mode") if isinstance(policy, dict) else None,  # type: ignore[union-attr]
+            "policy_preset_version": policy.get("preset_version") if isinstance(policy, dict) else None,  # type: ignore[union-attr]
+            "policy_overrides": policy.get("overrides") if isinstance(policy, dict) else None,  # type: ignore[union-attr]
+            "policy_human": _policy_to_human_readable(policy),
+        }
 
     @router.put('/worlds/{world_id}')
     async def put_world(world_id: str, payload: World) -> Dict:

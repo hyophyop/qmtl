@@ -230,6 +230,12 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         path_params=("world_id",),
     ),
     WorldRoute(
+        "get",
+        "/worlds/{world_id}/describe",
+        "describe_world",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
         "put",
         "/worlds/{world_id}",
         "put_world",

@@ -139,7 +139,16 @@ class DecisionEvaluator:
             deactivate = set(payload.plan.deactivate)
             return sorted((set(prev) - deactivate) | activate)
 
-        policy = payload.policy or await self.store.get_default_policy(world_id)
+        policy_payload = payload.policy or await self.store.get_default_policy(world_id)
+        policy = policy_payload
+        if not isinstance(policy, Policy):
+            try:
+                if isinstance(policy_payload, dict) and "policy" in policy_payload:
+                    policy = Policy.model_validate(policy_payload["policy"])
+                else:
+                    policy = Policy.model_validate(policy_payload)
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail=f"invalid policy: {exc}") from exc
         if policy is None:
             raise HTTPException(status_code=404, detail="policy not found")
         prev = payload.previous or await self.store.get_decisions(world_id)

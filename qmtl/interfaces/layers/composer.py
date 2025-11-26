@@ -200,11 +200,11 @@ def main() -> None:
     """Run the strategy."""
     strategy = create_strategy()
 
-    # Run in offline mode (no Gateway/WorldService)
-    # For production, use: Runner.run(strategy, world_id=\"...\", gateway_url=\"...\")
-    result = Runner.offline(strategy)
-    print("Strategy execution completed")
-    print(f"Result: {result}")
+    # Submit in backtest mode without auto-validation to keep the scaffold simple.
+    # Configure QMTL_DEFAULT_WORLD/QMTL_GATEWAY_URL env vars for your environment.
+    result = Runner.submit(strategy, auto_validate=False)
+    print("Strategy submission completed")
+    print(f"Status: {result.status}")
 
 
 if __name__ == "__main__":

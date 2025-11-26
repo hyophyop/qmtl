@@ -14,7 +14,7 @@ def create_policies_router(service: WorldService) -> APIRouter:
     @router.post('/worlds/{world_id}/policies', response_model=PolicyVersionResponse)
     async def post_policy(world_id: str, payload: PolicyRequest) -> PolicyVersionResponse:
         store = service.store
-        version = await store.add_policy(world_id, payload.policy)
+        version = await store.add_policy(world_id, payload.to_payload())
         return PolicyVersionResponse(version=version)
 
     @router.get('/worlds/{world_id}/policies')
