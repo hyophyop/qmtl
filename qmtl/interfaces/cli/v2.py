@@ -607,11 +607,25 @@ def _command_tables(admin: bool = False) -> tuple[dict[str, callable], dict[str,
             "dagmanager-server": lambda argv: import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0,
             "taglint": lambda argv: import_module("qmtl.interfaces.cli.taglint").run(argv) or 0,
         }
+    else:
+        commands = {
+            **commands,
+            "gw": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
+            "gateway": lambda argv: import_module("qmtl.interfaces.cli.gateway").run(argv) or 0,
+            "dagmanager-server": lambda argv: import_module("qmtl.interfaces.cli.dagmanager").run(argv) or 0,
+        }
     return commands, legacy
 
 
 # Export command registries for test/inspection without invoking argument parsing
-COMMANDS, LEGACY_COMMANDS = _command_tables(admin=False)
+_ALL_COMMANDS, LEGACY_COMMANDS = _command_tables(admin=False)
+COMMANDS = {
+    "submit": cmd_submit,
+    "status": cmd_status,
+    "world": cmd_world,
+    "init": cmd_init,
+    "version": cmd_version,
+}
 _ADMIN_COMMANDS_FULL, _ = _command_tables(admin=True)
 ADMIN_COMMANDS = {k: v for k, v in _ADMIN_COMMANDS_FULL.items() if k not in COMMANDS}
 

@@ -11,7 +11,7 @@ from qmtl.runtime.transforms.linearity_metrics import (
     equity_linearity_metrics_v2,
 )
 
-from .policy_engine import evaluate_policy
+from .policy_engine import Policy, evaluate_policy
 from .schemas import ApplyRequest, EvaluateRequest, StrategySeries
 from .alpha_metrics import (
     alpha_performance_metrics_from_returns,

@@ -13,8 +13,8 @@ from qmtl.interfaces.tools.taglint import (
 )
 
 
-# v2 CLI: 'taglint' is an admin command (shown in --help-admin)
-TAGLINT_TOKENS = ["taglint"]
+# v2 CLI: 'taglint' is an admin command, invoked via `qmtl --admin taglint`
+TAGLINT_TOKENS = ["--admin", "taglint"]
 
 
 def run(path: Path | None, *extra: str, fix: bool = False, env: dict[str, str] | None = None):

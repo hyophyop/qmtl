@@ -1,22 +1,17 @@
-"""Test configuration.
+"""Test configuration and shared fixtures."""
 
-Filters noisy ResourceWarnings from unclosed sockets/event loops that can be
-emitted by http client stubs under xdist. This keeps CI output clean without
-affecting test behavior.
-"""
-
-import warnings
 import asyncio
 from typing import List
+
 import pytest
+import pytest_asyncio
+import yaml
 
-warnings.filterwarnings("ignore", message="unclosed.*", category=ResourceWarning)
-warnings.filterwarnings("ignore", message=".*unclosed event loop.*", category=ResourceWarning)
-warnings.filterwarnings("ignore", message="unclosed <socket.*", category=ResourceWarning)
+from qmtl.runtime.sdk import configuration as sdk_configuration
+from qmtl.runtime.sdk import runtime
+from qmtl.runtime.sdk.arrow_cache import reload_arrow_cache
 
 
-# Ensure event loops opened during tests are explicitly closed to avoid
-# interpreter-level ResourceWarning spam when workers exit.
 def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
     for loop in loops:
         if loop.is_closed():
@@ -42,7 +37,6 @@ def _track_and_close_event_loops():
         yield
     finally:
         asyncio.new_event_loop = orig_new_loop
-        # Close any default loop created by libraries
         try:
             loop = asyncio.get_event_loop_policy().get_event_loop()
             created.append(loop)
@@ -53,3 +47,38 @@ def _track_and_close_event_loops():
             asyncio.set_event_loop(None)
         except Exception:
             pass
+
+
+@pytest_asyncio.fixture
+async def fake_redis():
+    fakeredis_aioredis = pytest.importorskip(
+        "fakeredis.aioredis",
+        reason="fakeredis is required for Redis-backed runtime tests",
+    )
+    redis = fakeredis_aioredis.FakeRedis(decode_responses=True)
+    try:
+        yield redis
+    finally:
+        if hasattr(redis, "aclose"):
+            await redis.aclose(close_connection_pool=True)
+        else:
+            await redis.close()
+
+
+@pytest.fixture
+def configure_sdk(tmp_path, monkeypatch):
+    def _apply(data: dict, *, filename: str = "qmtl.yml") -> str:
+        cfg_path = tmp_path / filename
+        cfg_path.write_text(yaml.safe_dump(data))
+        monkeypatch.chdir(tmp_path)
+        sdk_configuration.reset_runtime_config_cache()
+        runtime.reload()
+        reload_arrow_cache()
+        return str(cfg_path)
+
+    try:
+        yield _apply
+    finally:
+        sdk_configuration.reset_runtime_config_cache()
+        runtime.reload()
+        reload_arrow_cache()
