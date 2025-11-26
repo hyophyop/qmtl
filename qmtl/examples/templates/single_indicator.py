@@ -1,4 +1,4 @@
-r"""Single indicator strategy template.
+r"""Single indicator strategy template - QMTL v2.0.
 
 Node flow:
     price -> ema
@@ -10,7 +10,8 @@ ASCII DAG::
 
 import argparse
 from qmtl.runtime.indicators import ema
-from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import StreamInput
 
 
 class SingleIndicatorStrategy(Strategy):
@@ -23,17 +24,18 @@ class SingleIndicatorStrategy(Strategy):
         ema_node = ema(price, period=10)
         # Register nodes with the strategy in execution order
         self.add_nodes([price, ema_node])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--world-id")
-    parser.add_argument("--gateway-url")
+    parser.add_argument("--world", "-w", help="Target world")
+    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    if args.world_id and args.gateway_url:
-        Runner.run(
-            SingleIndicatorStrategy,
-            world_id=args.world_id,
-            gateway_url=args.gateway_url,
-        )
-    else:
-        Runner.offline(SingleIndicatorStrategy)
+    # v2 API: Single entry point
+    result = Runner.submit(
+        SingleIndicatorStrategy,
+        world=args.world,
+        mode=Mode(args.mode),
+    )
+    print(f"Strategy submitted: {result.status}")

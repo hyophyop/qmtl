@@ -96,6 +96,146 @@ class GatewayClient:
         except Exception:
             return {}
 
+    async def get_world(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch basic world info from Gateway.
+
+        Returns:
+            World info dict (id, name), or None if not found or error.
+        """
+        url = gateway_url.rstrip("/") + f"/worlds/{world_id}"
+        headers = self._build_headers()
+        result = await self._get(url, headers)
+        if result.error or (result.status_code or 0) >= 400:
+            return None
+        return result.payload if isinstance(result.payload, dict) else None
+
+    async def describe_world(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch full world description including policy from Gateway.
+
+        Uses /worlds/{id}/describe endpoint which returns:
+        - id, name (basic info)
+        - default_policy_version
+        - policy (the full policy dict)
+        - policy_preset, policy_preset_mode, policy_preset_version
+        - policy_overrides
+        - policy_human (human-readable policy string)
+
+        Returns:
+            World description dict with policy, or None if not found or error.
+        """
+        url = gateway_url.rstrip("/") + f"/worlds/{world_id}/describe"
+        headers = self._build_headers()
+        result = await self._get(url, headers)
+        if result.error or (result.status_code or 0) >= 400:
+            return None
+        return result.payload if isinstance(result.payload, dict) else None
+
+    async def ensure_world_with_policy(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str,
+        policy_payload: dict[str, Any],
+    ) -> bool:
+        """Ensure a world exists and apply the given policy.
+
+        Creates the world if it doesn't exist, then posts the policy.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        base_url = gateway_url.rstrip("/")
+        headers = self._build_headers()
+
+        # Normalize payload
+        normalized_payload = dict(policy_payload)
+        if "overrides" in normalized_payload and "preset_overrides" not in normalized_payload:
+            normalized_payload["preset_overrides"] = normalized_payload.pop("overrides")
+
+        try:
+            # Check if world exists
+            get_result = await self._get(f"{base_url}/worlds/{world_id}", headers)
+            if get_result.status_code == 404:
+                # Create world
+                create_payload: dict[str, object] = {"id": world_id, "name": world_id}
+                create_result = await self._post(
+                    f"{base_url}/worlds", create_payload, headers
+                )
+                if create_result.error or (create_result.status_code or 0) >= 400:
+                    return False
+
+            # Post policy
+            policy_result = await self._post(
+                f"{base_url}/worlds/{world_id}/policies",
+                normalized_payload,
+                headers,
+            )
+            return not policy_result.error and (policy_result.status_code or 0) < 400
+        except Exception:
+            return False
+
+    async def evaluate_strategy(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str,
+        strategy_id: str,
+        metrics: dict[str, float],
+        returns: list[float],
+        policy_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Ask WorldService (via Gateway) to evaluate strategy metrics.
+
+        Returns:
+            Evaluation result dict with keys like 'active', 'weights', 'violations', etc.
+        """
+        base_url = gateway_url.rstrip("/")
+        headers = self._build_headers()
+
+        payload: dict[str, Any] = {
+            "metrics": {strategy_id: metrics},
+            "series": {strategy_id: {"returns": returns}},
+        }
+        if policy_payload:
+            payload["policy"] = policy_payload
+
+        result = await self._post(
+            f"{base_url}/worlds/{world_id}/evaluate",
+            payload,
+            headers,
+        )
+
+        if result.error or (result.status_code or 0) >= 400:
+            return {"error": result.error or f"WS evaluate error {result.status_code}"}
+
+        return result.payload if isinstance(result.payload, dict) else {}
+
+    async def _get(
+        self, url: str, headers: dict[str, str]
+    ) -> GatewayCallResult:
+        """Perform a GET request with circuit breaker protection."""
+        client = self._create_client(headers)
+        self._attach_headers(client, headers)
+        async with client:
+            try:
+                resp = await client.get(url)
+            except Exception as exc:  # pragma: no cover - network errors
+                return GatewayCallResult(status_code=None, error=str(exc))
+        return GatewayCallResult(
+            status_code=resp.status_code,
+            payload=self._safe_json(resp),
+        )
+
     def _build_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
         inject(headers)

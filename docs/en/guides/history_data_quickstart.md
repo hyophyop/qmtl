@@ -4,8 +4,8 @@ This guide shows how to attach your own historical data to QMTL strategies
 without reverse‑engineering the history warm‑up machinery. It is aimed at
 strategy repositories that:
 
-- run locally with `Runner.offline(...)` during development, and/or
-- run under WorldService using `Runner.run(...)` for backtests or live trials.
+- run locally with `Runner.submit(...)` during development, and/or
+- run under WorldService using `Runner.submit(...)` for backtests or live trials.
 
 The recommended surface for new integrations is the **Seamless Data Provider**
 layer. The lower‑level `HistoryProvider` interface still exists for backwards
@@ -145,9 +145,9 @@ provider into an existing strategy without modifying its ``setup``.
 - WorldService / Gateway runs:
 
   ```python
-  Runner.run(
+  Runner.submit(
       MyStrategy,
-      world_id="my-world",
+      world="my-world",
       gateway_url="http://gateway",
       history_start=1700000000,  # inclusive, epoch seconds
       history_end=1700003600,    # inclusive upper bound used by warm-up service
@@ -157,7 +157,7 @@ provider into an existing strategy without modifying its ``setup``.
 - Local offline runs:
 
   ```python
-  Runner.offline(
+  Runner.submit(
       MyStrategy,
       history_start=1700000000,
       history_end=1700003600,

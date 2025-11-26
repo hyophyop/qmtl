@@ -65,8 +65,8 @@ cd my_qmtl_project
 ```bash
 python strategy.py
 ```
-스캐폴드 스크립트는 기본적으로 `Runner.offline()`을 사용하므로 외부 서비스가 필요하지 않습니다.
-환경에 연결하려면 `Runner.run(world_id=..., gateway_url=...)`를 호출하도록 스크립트를 수정하세요.
+스캐폴드 스크립트는 기본적으로 `Runner.submit()`을 사용하므로 외부 서비스가 필요하지 않습니다.
+환경에 연결하려면 `Runner.submit(world=...)`로 월드를 지정하세요. Gateway URL은 `QMTL_GATEWAY_URL` 환경 변수로 읽습니다.
 이 모드는 WorldService의 결정과 활성화 이벤트를 따릅니다.
 
 Gateway는 WorldService를 프록시하며, SDK는 `/events/subscribe`가 반환하는 토큰화된 WebSocket을 통해 제어 이벤트를 수신합니다. 활성화 및 큐 업데이트는 Gateway 상태를 직접 읽지 않고 이 불투명(opaque) 제어 스트림으로 전달됩니다.
@@ -86,11 +86,11 @@ transforms
 ...
 ```
 
-Gateway/WorldService에 도달할 수 없는 상태에서 `Runner.run(...)`을 호출하면,
+Gateway/WorldService에 도달할 수 없는 상태에서 `Runner.submit(...)`을 호출하면,
 제어 연결이 복구될 때까지 전략은 안전한 compute‑only 상태(주문 게이트 OFF)를 유지합니다.
 
 > **자주 발생하는 문제**
-> - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.offline()` 사용
+> - Gateway URL 미지정: `--gateway-url` 인자 추가 또는 `Runner.submit()` 사용
 > - 의존성 충돌: `uv pip install -e .[dev]`로 재설치 권장
 
 ## 3. 전략 개발
@@ -150,8 +150,8 @@ Manager 구성이 신호/가격 입력을 바인딩하도록 할 수 있습니�
 
 ## 4. 월드와 함께 실행
 
-의존성 없이 로컬 테스트를 할 때는 `Runner.offline()`을 사용하세요. 통합 실행의 경우
-`Runner.run(strategy_cls, world_id=..., gateway_url=...)`로 전환합니다. 활성화와 큐 업데이트는
+의존성 없이 로컬 테스트를 할 때는 `Runner.submit(mode="backtest")`를 사용하세요. 통합 실행의 경우
+`Runner.submit(strategy_cls, world=...)`로 전환합니다(Gateway URL은 `QMTL_GATEWAY_URL`). 활성화와 큐 업데이트는
 Gateway의 `/events/subscribe` WebSocket 제어 스트림으로 전달되며, 정책과 활성화의 권한은 WS에 있습니다.
 
 실행 도메인은 이제 봉투(envelope)에 명시적으로 표기됩니다:
@@ -187,7 +187,7 @@ Intent-first 전략은 월드/게이트웨이 리밸런싱 스택과 결합할 �
    어댑터가 `orders_from_world_plan`/`/rebalancing/execute`를 통해 델타를 주문으로 변환하고, 필요 시
    `submit=true` 옵션으로 Commit Log에 전송합니다.
 
-로컬 검증 시에는 `Runner.offline()`으로 전략을 실행하면서 월드 서비스에 `MultiWorldRebalanceRequest`를 보내어
+로컬 검증 시에는 `Runner.submit()`으로 전략을 실행하면서 월드 서비스에 `MultiWorldRebalanceRequest`를 보내어
 계획을 확인하고, 게이트웨이의 드라이런 응답으로 주문 형태를 점검하세요. 활성화/게이트웨이 URL을 지정하면
 동일한 플로우가 실제 환경에서도 그대로 작동합니다.
 
@@ -229,17 +229,10 @@ wait
 ### 테스트 종료 및 정리(Teardown)
 
 테스트에서 백그라운드 서비스를 시작하는 경우(예: TagQueryManager 구독 또는 ActivationManager),
-모든 리소스를 정리하기 위해 세션 컨텍스트 매니저 사용을 권장합니다:
+모든 리소스를 정리하기 위해 명시적 정리를 수행하세요:
 
 ```python
-async with Runner.session(MyStrategy, world_id="w", gateway_url="http://gw") as strategy:
-    ...  # assertions
-```
-
-동기 테스트 등으로 ``async with``를 사용할 수 없을 때는 다음 보조 함수를 사용하세요:
-
-```python
-strategy = Runner.run(MyStrategy, world_id="w", gateway_url="http://gw")
+strategy = Runner.submit(MyStrategy, world="w", mode="paper")
 try:
     ...  # assertions
 finally:

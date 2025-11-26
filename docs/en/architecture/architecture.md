@@ -11,6 +11,9 @@ last_modified: 2025-09-22
 
 # QMTL Advanced Architecture and Implementation Blueprint
 
+!!! warning
+    Legacy code samples that use `Runner.run`/`Runner.offline` are obsolete. Use `Runner.submit(..., world=..., mode=...)` instead; the architecture remains the same, but the entrypoint is now submit-only.
+
 ## Related Documents
 - [Architecture Overview](README.md)
 - [Gateway](gateway.md)
@@ -45,11 +48,39 @@ once and their outputs fan out to all strategies that depend on them, which
 dramatically reduces CPU, memory, and wall-clock usage in high-frequency or
 multi-strategy environments.
 
-This blueprint captures the architectural philosophy behind that reuse:
-layered service boundaries, cross-component protocols, state restoration
-mechanisms, and the deterministic policies that keep queue orchestration
-predictable. It is intended as a roadmap for engineers implementing or evolving
-the platform.
+At the architectural level, the core design value of QMTL can be stated in a
+single sentence:
+
+> **“Focus only on strategy logic; the system handles optimisation and returns.”**
+
+All components described in this document (Gateway, DAG Manager, WorldService,
+SDK/Runner, etc.) share the following intent:
+- Strategy authors focus on **strategy DAGs, world selection, and execution mode**
+  while the system layers own queue creation/scaling, ExecutionDomain handling,
+  2-Phase apply, feature artifact management, and risk/timing gating.
+- Internal layers are allowed to be complex, but the **external interface is
+  designed around `Write strategy → Submit → (Auto evaluate/deploy) → Check
+  contribution`** as the primary user flow.
+- When introducing new features, the default bias is “have the system decide
+  automatically and offer overrides only when necessary” rather than pushing
+  more configuration choices onto users.
+
+### Core Principle: Simplicity > Backward Compatibility
+
+!!! danger "Breaking Change Principle"
+    **Do not keep legacy solely to preserve backward compatibility.**
+    
+    Keeping old and new APIs/config side-by-side for compatibility:
+    - Doubles documentation surface ("old way" vs "new way")
+    - Accumulates branches and flags in the codebase
+    - Confuses new users on "which path is canonical"
+    - Ultimately negates the simplification goal itself
+    
+    **Losing simplicity is more harmful than breaking backward compatibility.**
+
+In practice:
+- For major changes (e.g., Runner API, ExecutionDomain semantics, world policy schema), ship **explicit migration guides and helper tools**, but avoid long-lived runtime flags or compatibility modes.
+- Docs, examples, and CLI should always point to a single “current” path; regularly prune dual paths so “old vs new” flows do not coexist indefinitely.
 
 ---
 
@@ -337,7 +368,7 @@ class FlowExample(Strategy):
         price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
         self.add_nodes([price])
 
-Runner.run(FlowExample, world_id="arch_world", gateway_url="http://gw")
+Runner.submit(FlowExample, world="arch_world")
 ```
 
 `TagQueryManager` includes `world_id` in `GET /queues/by_tag` requests,
@@ -392,11 +423,7 @@ class GeneralStrategy(Strategy):
 
 # World-driven execution entry point
 if __name__ == "__main__":
-    Runner.run(
-        GeneralStrategy,
-        world_id="general_demo",
-        gateway_url="http://gateway.local"
-    )
+    Runner.submit(GeneralStrategy, world="general_demo")
 ```
 
 ---
@@ -445,7 +472,7 @@ class CorrelationStrategy(Strategy):
 
 # Live execution example (world-driven)
 if __name__ == "__main__":
-    Runner.run(CorrelationStrategy, world_id="corr_demo", gateway_url="http://gateway.local")
+    Runner.submit(CorrelationStrategy, world="corr_demo")
 ```
 
 ---

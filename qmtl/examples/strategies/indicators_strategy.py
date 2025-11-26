@@ -1,4 +1,7 @@
-from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+"""Indicators strategy example - QMTL v2.0."""
+
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import StreamInput
 from qmtl.runtime.indicators import ema
 
 
@@ -8,5 +11,8 @@ class EmaStrategy(Strategy):
         self.ema_node = ema(self.price, period=10)
         self.add_nodes([self.price, self.ema_node])
 
+
 if __name__ == "__main__":
-    Runner.offline(EmaStrategy)
+    # v2 API: backtest mode for local validation
+    result = Runner.submit(EmaStrategy, mode=Mode.BACKTEST)
+    print(f"Strategy submitted: {result.status}")

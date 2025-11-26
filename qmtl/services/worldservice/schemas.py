@@ -39,7 +39,41 @@ class World(BaseModel):
 
 
 class PolicyRequest(BaseModel):
-    policy: Policy
+    preset: str | None = None
+    preset_mode: str | None = None
+    preset_version: str | None = None
+    preset_overrides: Dict[str, float] | None = None
+    policy: Policy | dict | None = None
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "PolicyRequest":
+        if self.policy is not None and not isinstance(self.policy, Policy):
+            try:
+                self.policy = Policy.model_validate(self.policy)
+            except Exception as exc:
+                raise ValueError(f"invalid policy payload: {exc}") from exc
+
+        if self.preset:
+            try:
+                from .presets import get_preset_policy
+                preset_policy = get_preset_policy(self.preset, self.preset_overrides)
+                self.policy = self.policy or preset_policy
+            except Exception as exc:
+                raise ValueError(f"invalid preset '{self.preset}': {exc}") from exc
+
+        if self.policy is None:
+            raise ValueError("policy is required")
+        return self
+
+    def to_payload(self) -> Dict[str, Any]:
+        """Serialize to storage-friendly payload with metadata."""
+        return {
+            "preset": self.preset,
+            "preset_mode": self.preset_mode,
+            "preset_version": self.preset_version,
+            "overrides": self.preset_overrides,
+            "policy": self.policy.model_dump() if isinstance(self.policy, Policy) else self.policy,
+        }
 
 
 class PolicyVersionResponse(BaseModel):

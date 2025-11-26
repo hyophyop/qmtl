@@ -1,6 +1,10 @@
-"""Example strategy demonstrating execution cost modeling."""
+"""Execution model strategy example - QMTL v2.0.
 
-from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner
+Demonstrates execution cost modeling with the simplified v2 API.
+"""
+
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.transforms import alpha_history_node, TradeSignalGeneratorNode
 from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
 from qmtl.runtime.sdk.execution_modeling import (
@@ -113,5 +117,7 @@ class ExecutionModelStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.offline(ExecutionModelStrategy)
+    # v2 API: backtest mode for cost modeling validation
+    result = Runner.submit(ExecutionModelStrategy, mode=Mode.BACKTEST)
+    print(f"Strategy submitted: {result.status}")
 

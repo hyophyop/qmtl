@@ -29,6 +29,12 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute-only with order gates OFF.
 - Submission `meta.execution_domain` values are treated only as hints; the authoritative domain always derives from the WS `effective_mode`.
 
+QMTL’s core value — **“focus only on strategy logic; the system handles optimisation and returns”** — is realised in WorldService as follows:
+- Strategy authors only submit strategies to worlds; **validation, promotion/demotion, weight adjustments, and risk constraints** are enforced automatically by WS policies.
+- From a world-portfolio perspective, only strategies that are classified as `valid` are admitted so that **world-level risk-adjusted returns do not degrade**, aiming as closely as possible at monotonic improvement.
+- SDK/Runner and Gateway act purely as consumers of WS decision envelopes; user interfaces do not require operators to understand or control ExecutionDomain details or the apply protocol to benefit from world decisions.
+- When evolving policies/schemas, avoid keeping old and new fields or modes indefinitely for compatibility; after a defined migration window, converge on a single “current” policy model (prioritising simplicity over backward compatibility).
+
 Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 
 ---

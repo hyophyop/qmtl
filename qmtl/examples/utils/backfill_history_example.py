@@ -1,8 +1,11 @@
+"""Backfill history example - QMTL v2.0."""
+
 from __future__ import annotations
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.io import QuestDBHistoryProvider, BinanceFetcher
 
 
@@ -30,11 +33,13 @@ class BackfillHistoryStrategy(Strategy):
 
 
 def main() -> None:
-    Runner.run(
+    # v2 API: Submit with paper mode for history backfill
+    result = Runner.submit(
         BackfillHistoryStrategy,
-        world_id="backfill_history",
-        gateway_url="http://localhost:8000",
+        world="backfill_history",
+        mode=Mode.PAPER,
     )
+    print(f"Strategy submitted: {result.status}")
 
 
 if __name__ == "__main__":

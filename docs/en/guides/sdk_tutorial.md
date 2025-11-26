@@ -108,143 +108,63 @@ class MyStrategy(Strategy):
         self.add_nodes([price, out])
 ```
 
-## Running Strategies (World-Driven)
+## Running Strategies (Submit-only)
 
-Execution is governed by world decisions served by WorldService. Runner exposes a
-single entry point:
+Execution is governed by world decisions served by WorldService. QMTL v2 exposes
+a single entry point:
 
-- `Runner.run(MyStrategy, world_id="...", gateway_url="http://gw")`  
-  Respects WorldService decisions and activations. Order gates toggle based on
-  activation state and default to compute-only (orders OFF) when decisions are
-  missing or expired.
-- `Runner.offline(MyStrategy)`  
-  Runs locally without the Gateway. Tag-based nodes start with empty queues.
+- `Runner.submit(MyStrategy, world="...", mode="paper|live|backtest")`  
+  Registers the strategy, runs validation, and activates when valid. Orders are
+  gated automatically based on activation state; compute-only is used when
+  decisions are missing or expired.
 
 ```python
 from qmtl.runtime.sdk import Runner
 
 # World-driven execution
-Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
+Runner.submit(MyStrategy, world="my_world", mode="paper")
 
-# Offline execution
-Runner.offline(MyStrategy)
+# Backtest / local validation
+Runner.submit(MyStrategy, mode="backtest")
 ```
 
-After each `TagQueryNode` is registered, Runner automatically queries the Gateway
-to fetch matching queues and, during `TagQueryManager.start()`, exchanges the
-event descriptor and token required for WebSocket subscriptions. The manager
-stores the result internally; callers do not need to persist it. Policy
-evaluations remain the responsibility of WorldService-SDK simply adapts behavior
-based on the received decisions and activations.
+After each `TagQueryNode` is registered, Runner submits to the Gateway to fetch
+matching queues and, during `TagQueryManager.start()`, exchanges the event
+descriptor and token required for WebSocket subscriptions. Policy evaluations
+remain the responsibility of WorldService—SDK adapts behavior based on the
+received decisions and activations.
 
-### Backtest and Dry Run Requirements
+### World Propagation and Modes
 
-Clock snapshots (`as_of`, `dataset_fingerprint`) are enforced server side by
-WorldService/Gateway. The SDK does not choose the execution domain or clock; it
-always follows world decisions.
-
-- If backtest/dry-run metadata is missing, Gateway/WorldService reject the request
-  or downgrade it to compute-only (orders OFF).
-- When decisions or activations are stale or absent, SDK stays in compute-only mode.
-
-Use `Runner.offline(MyStrategy)` for deterministic local reproduction. Tag-based
-nodes keep empty queues, and you can manually hydrate caches or feature artifacts
-to mirror production data.
-
-### World ID Propagation
-
-`world_id` flows from Runner into `TagQueryManager` and `ActivationManager`, which
-inject the identifier into node registrations and metric labels so that queues and
-observability remain world-scoped.
-
-```mermaid
-sequenceDiagram
-    participant R as Runner
-    participant T as TagQueryManager
-    participant A as ActivationManager
-    participant N as Nodes / Metrics
-    R->>T: world_id
-    R->>A: world_id
-    T->>N: register(world_id)
-    A->>N: activation(world_id)
-```
+- `world` is propagated into `TagQueryManager` and `ActivationManager`, keeping
+  queue resolution and observability world-scoped.
+- `mode` exposes only `backtest | paper | live`; internal execution-domain
+  plumbing is hidden.
 
 ```python
-from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Strategy, StreamInput, Runner, Mode
 
 class WorldStrategy(Strategy):
     def setup(self):
         price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
         self.add_nodes([price])
 
-# world_id is propagated automatically to node registration and metric labels
-Runner.run(WorldStrategy, world_id="demo_world", gateway_url="http://gw")
+Runner.submit(WorldStrategy, world="demo_world", mode=Mode.PAPER)
 ```
-
-### ExecutionDomain Mapping
-
-- WorldService emits `effective_mode` (`validate|compute-only|paper|live`).
-- Gateway and SDK map this value to `execution_domain`.
-- Mapping rules: `validate -> backtest (orders OFF)`, `compute-only -> backtest`,
-  `paper -> dryrun`, `live -> live`. `shadow` is reserved for operators.
-- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})
-  switches domains via `connectors.execution_domain`. Legacy `trade_mode=paper`
-  automatically translates to `dryrun`.
-- `Runner.offline` applies the same gating as the `backtest` domain. If
-  WorldService sends `effective_mode="validate"`, the SDK maps it to `backtest`
-  and blocks orders.
 
 ## CLI Helpers
 
-`qmtl tools sdk run` requires `--world-id`:
+`qmtl submit` is the CLI equivalent of `Runner.submit`:
 
 ```bash
-qmtl tools sdk run strategies.my:MyStrategy --world-id demo_world --gateway-url http://gw
+qmtl submit strategy.py --world demo_world --mode paper
+qmtl submit strategy.py --mode backtest
 ```
 
-Environment variables work as well:
+Environment variables:
 
-```bash
-export WORLD_ID=demo_world
-qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url http://gw
-```
-
-Example of reading values from a config file:
-
-```yaml
-# config.yml
-world_id: demo_world
-gateway_url: http://gw
-```
-
-```bash
-WORLD_ID=$(yq '.world_id' config.yml)
-GATEWAY_URL=$(yq '.gateway_url' config.yml)
-qmtl tools sdk run strategies.my:MyStrategy --world-id $WORLD_ID --gateway-url $GATEWAY_URL
-```
-
-List all options:
-
-```bash
-qmtl tools sdk --help
-```
-
-`qmtl tools sdk run` also accepts clock and dataset metadata:
-
-```bash
-qmtl tools sdk run strategies.my:MyStrategy \
-  --world-id demo_world \
-  --gateway-url http://gw \
-  --mode backtest \
-  --clock virtual \
-  --as-of 2025-09-30T23:59:59Z \
-  --dataset-fingerprint lake:blake3:ohlcv:20250930
-```
-
-`--mode live` only permits `--clock wall`. Invalid combinations fail immediately.
-Omitting `--as-of` or `--dataset-fingerprint` for backtests or dry runs causes
-Runner to block Gateway calls and remain in compute-only mode, preventing mixed
-datasets from reaching live queues.
+- `QMTL_GATEWAY_URL` for the Gateway URL (default `http://localhost:8000`)
+- `QMTL_DEFAULT_WORLD` for the default world (default `__default__`)
 
 ## Cache Access
 

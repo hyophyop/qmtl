@@ -242,11 +242,10 @@ to satisfy its `period × interval` warmup window. For providers that implement
 without that helper fall back to the `coverage()` plus `fill_missing()` loop so
 existing adapters continue to work.
 
-Both :func:`Runner.run` and :func:`Runner.offline` execute the same warmup
-pipeline: ranges are reconciled via the provider, the `BackfillEngine` fetches
-rows into the node caches and the runtime replays those events through the
-strategy graph. This guarantees that local dry runs exercise the identical
-bootstrap logic used in production.
+All `Runner.submit` modes share the same warmup pipeline: ranges are reconciled
+via the provider, the `BackfillEngine` fetches rows into the node caches and the
+runtime replays those events through the strategy graph. This guarantees that
+backtests and live/paper runs exercise the identical bootstrap logic.
 
 Integrated run (world‑driven):
 
@@ -254,10 +253,9 @@ Integrated run (world‑driven):
 from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.run(
+Runner.submit(
     SampleStrategy,
-    world_id="sample_world",
-    gateway_url="http://localhost:8000",
+    world="sample_world",
 )
 ```
 
@@ -267,7 +265,7 @@ Offline priming for local testing:
 from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.offline(SampleStrategy)
+Runner.submit(SampleStrategy)
 ```
 
 During execution the SDK collects cached history and replays it through the

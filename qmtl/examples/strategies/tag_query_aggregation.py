@@ -1,8 +1,12 @@
+"""Tag query aggregation strategy example - QMTL v2.0."""
+
 from __future__ import annotations
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import EventRecorderService, MatchMode, Node, Runner, Strategy, TagQueryNode
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
+from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.io import QuestDBRecorder
 
 
@@ -41,5 +45,6 @@ class TagQueryAggregationStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Running under a world automatically resolves queues and subscribes
-    Runner.run(TagQueryAggregationStrategy, world_id="tag_query_agg", gateway_url="http://gateway.local")
+    # v2 API: Submit with paper mode for tag resolution
+    result = Runner.submit(TagQueryAggregationStrategy, world="tag_query_agg", mode=Mode.PAPER)
+    print(f"Strategy submitted: {result.status}")

@@ -1,4 +1,7 @@
+"""Test configuration and shared fixtures."""
+
 import asyncio
+from typing import List
 
 import pytest
 import pytest_asyncio
@@ -7,7 +10,44 @@ import yaml
 from qmtl.runtime.sdk import configuration as sdk_configuration
 from qmtl.runtime.sdk import runtime
 from qmtl.runtime.sdk.arrow_cache import reload_arrow_cache
-from qmtl.runtime.sdk.runner import Runner
+
+
+def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
+    for loop in loops:
+        if loop.is_closed():
+            continue
+        try:
+            loop.close()
+        except Exception:
+            pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _track_and_close_event_loops():
+    created: List[asyncio.AbstractEventLoop] = []
+    orig_new_loop = asyncio.new_event_loop
+
+    def tracking_new_loop():
+        loop = orig_new_loop()
+        created.append(loop)
+        return loop
+
+    asyncio.new_event_loop = tracking_new_loop
+    try:
+        yield
+    finally:
+        asyncio.new_event_loop = orig_new_loop
+        try:
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            created.append(loop)
+        except Exception:
+            pass
+        _close_loops(created)
+        try:
+            asyncio.set_event_loop(None)
+        except Exception:
+            pass
+
 
 @pytest_asyncio.fixture
 async def fake_redis():
@@ -25,25 +65,8 @@ async def fake_redis():
             await redis.close()
 
 
-@pytest.fixture(autouse=True)
-def _default_runner_context():
-    context = {
-        "execution_mode": "backtest",
-        "clock": "virtual",
-        "as_of": "2025-01-01T00:00:00Z",
-        "dataset_fingerprint": "lake:blake3:test",
-    }
-    Runner.set_default_context(context)
-    try:
-        yield context
-    finally:
-        Runner.set_default_context(None)
-
-
 @pytest.fixture
 def configure_sdk(tmp_path, monkeypatch):
-    """Write a temporary qmtl.yml and reload runtime/config caches."""
-
     def _apply(data: dict, *, filename: str = "qmtl.yml") -> str:
         cfg_path = tmp_path / filename
         cfg_path.write_text(yaml.safe_dump(data))
@@ -59,19 +82,3 @@ def configure_sdk(tmp_path, monkeypatch):
         sdk_configuration.reset_runtime_config_cache()
         runtime.reload()
         reload_arrow_cache()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _close_event_loop():
-    """Ensure the default asyncio loop is closed to avoid ResourceWarning at teardown."""
-
-    yield
-    policy = asyncio.get_event_loop_policy()
-    loop = getattr(getattr(policy, "_local", None), "_loop", None)
-    if loop is None:
-        return
-    if loop.is_running():
-        loop.call_soon(loop.stop)
-        loop.run_until_complete(asyncio.sleep(0))
-    if not loop.is_closed():
-        loop.close()

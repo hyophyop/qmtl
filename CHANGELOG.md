@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.0.0 — QMTL Simplification (2025-11-26)
+
+### ⚡ Breaking Changes
+
+This release implements the QMTL Simplification Proposal, fundamentally restructuring the SDK and CLI for a dramatically simpler user experience.
+
+**API Changes:**
+- **`Runner.run()` → `Runner.submit()`**: The primary strategy submission API is now `Runner.submit(strategy, world=, mode=)`. Legacy `Runner.run(world_id=, gateway_url=)` has been removed; calls now raise with guidance.
+- **`Runner.offline()` → `Runner.submit(mode="backtest")`**: Offline execution is now handled via the unified submit API; the legacy helpers are removed.
+- **`execution_domain` → `mode`**: The complex 4-level execution domain mapping is now exposed as a simple 3-mode interface (`backtest | paper | live`).
+
+**CLI Changes:**
+- **Flat CLI structure**: `qmtl submit`, `qmtl status`, `qmtl world`, `qmtl init` replace the old 4-level hierarchy.
+- **Legacy commands removed**: `qmtl service sdk`, `qmtl tools sdk`, `qmtl project init` are no longer available; use v2 commands exclusively.
+- **Simplified configuration**: Complex gating_policy YAML replaced with preset-based config (`sandbox | conservative | moderate | aggressive`).
+
+### ✨ New Features
+
+**Phase 1: Clean Slate**
+- `Runner.submit()` - unified strategy submission with auto-discovery of default world and gateway
+- `StrategySubmitResult` - comprehensive result object with status, contribution metrics, and feedback
+- `PolicyPreset` - 4 preset policies (sandbox, conservative, moderate, aggressive) with simple overrides
+- CLI v2 with flat command structure
+
+**Phase 2: Automation Pipeline**
+- Automatic validation pipeline - strategies are automatically backtested and evaluated on submission
+- Real-time contribution feedback - immediate metrics on strategy performance and portfolio impact
+- Auto-activation - valid strategies are automatically activated with default weights
+
+**Phase 3: Internal Cleanup**
+- `Mode` enum - unified `backtest | paper | live` modes replacing complex execution domain mapping
+- Mode utilities: `mode_to_execution_domain()`, `execution_domain_to_mode()`, `is_orders_enabled()`, `is_real_time_data()`, `normalize_mode()`
+- Legacy CLI modules removed in favor of v2
+
+### 🗑️ Removed
+
+- `Runner.run(world_id=, gateway_url=)` - removed; use `Runner.submit(world=)`
+- `Runner.offline()` - removed; use `Runner.submit(mode="backtest")`
+- `qmtl service sdk run` / `qmtl tools sdk` / `qmtl project init` - removed; use v2 commands
+- Complex `gating_policy` YAML - use preset-based configuration instead
+
+### 📖 Documentation
+
+- Updated simplification_proposal.md with implementation status
+- All phases (1-3) marked as completed
+- Migration guide available at https://qmtl.readthedocs.io/migrate/v2
+
+### 🧪 Tests
+
+- 687 tests passing, 6 legacy tests skipped
+- 34 new mode utility tests
+- 18 new CLI v2 tests
+- Updated legacy CLI tests with skip markers
+
+---
+
 ## Unreleased
 
 - Added a time-weighted average price (TWAP) indicator to the runtime

@@ -1,4 +1,4 @@
-"""Example strategy demonstrating order publication pipeline.
+"""Order pipeline strategy example - QMTL v2.0.
 
 This example explicitly shows a fan-in (multi-upstream) node: a node that reads
 from two upstreams at once. We combine the alpha history with the raw price
@@ -7,7 +7,9 @@ stream to gate long signals when the short-term price trend is down.
 
 from typing import Any, Mapping
 
-from qmtl.runtime.sdk import Strategy, StreamInput, Node, Runner, TradeExecutionService
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.trade_execution_service import TradeExecutionService
 from qmtl.runtime.transforms import (
     alpha_history_node,
     TradeSignalGeneratorNode,
@@ -80,4 +82,6 @@ if __name__ == "__main__":
     Runner.set_trade_execution_service(service)
     Runner.set_trade_order_http_url("http://endpoint")
     Runner.set_trade_order_kafka_topic("orders")
-    Runner.offline(OrderPipelineStrategy)
+    # v2 API: backtest mode for local validation
+    result = Runner.submit(OrderPipelineStrategy, mode=Mode.BACKTEST)
+    print(f"Strategy submitted: {result.status}")

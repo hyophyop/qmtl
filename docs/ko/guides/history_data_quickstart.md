@@ -4,8 +4,8 @@
 자신의 히스토리 데이터(CSV/Parquet/DB/시뮬레이션)를 전략에 붙이는 방법을
 요약합니다. 특히 다음과 같은 전략 레포를 대상으로 합니다.
 
-- 개발 중에는 `Runner.offline(...)` 으로 로컬에서 실행하고,
-- 월드 서비스 환경에서는 `Runner.run(...)` 으로 백테스트/라이브 실험을 돌리는 경우.
+- 개발 중에는 `Runner.submit(...)` 으로 로컬에서 실행하고,
+- 월드 서비스 환경에서는 `Runner.submit(...)` 으로 백테스트/라이브 실험을 돌리는 경우.
 
 새로운 통합에서 권장되는 표면은 **Seamless Data Provider** 레이어입니다.
 하위 레벨의 `HistoryProvider` 인터페이스는 여전히 존재하지만,
@@ -152,9 +152,9 @@ class MyStrategy(Strategy):
 - WorldService / Gateway 실행:
 
   ```python
-  Runner.run(
+  Runner.submit(
       MyStrategy,
-      world_id="my-world",
+      world="my-world",
       gateway_url="http://gateway",
       history_start=1700000000,  # 포함, epoch seconds
       history_end=1700003600,    # 포함 상한, 히스토리 서비스에서 사용
@@ -164,7 +164,7 @@ class MyStrategy(Strategy):
 - 로컬 오프라인 실행:
 
   ```python
-  Runner.offline(
+  Runner.submit(
       MyStrategy,
       history_start=1700000000,
       history_end=1700003600,

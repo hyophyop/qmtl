@@ -85,13 +85,13 @@ Sample lines:
 Sample lines:
 {% raw %}
 - L28: from qmtl.runtime.sdk import Runner
-- L31: runner.run(strategy, world_id="demo", gateway_url="http://localhost:8000")
-- L41: qmtl tools sdk --mode backtest --world-id demo --gateway-url http://localhost:8000
-- L47: qmtl tools sdk run --world-id demo --gateway-url http://localhost:8000
-- L48: qmtl tools sdk offline  # local execution
+- L31: Runner.submit(strategy, world="demo")
+- L41: qmtl submit strategy.py --mode backtest --world demo
+- L47: qmtl submit strategy.py --mode paper --world demo
+- L48: qmtl submit strategy.py --mode live  # live execution
 - L76: from qmtl.runtime.brokerage.simple import PerShareFeeModel, VolumeShareSlippageModel
 - L82: from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
-- L87: - [ ] `Runner.backtest`, `Runner.dryrun`, `Runner.live`를 `Runner.run` 또는 `Runner.offline`으로 교체
+- L87: - [x] `Runner.backtest` / `Runner.dryrun` / `Runner.live` / `Runner.run` / `Runner.offline` 호출을 `Runner.submit(..., mode=...)`로 교체
 {% endraw %}
 
 ## /Users/munseungjin/workspace/research/qmtl/docs/ko/reference/CHANGELOG.md
@@ -408,4 +408,3 @@ Sample lines:
 - L113: "binance",               # CCXT ID ("binanceusdm" 은 선물용)
 - L120: model_default = make_ccxt_brokerage(
 {% endraw %}
-

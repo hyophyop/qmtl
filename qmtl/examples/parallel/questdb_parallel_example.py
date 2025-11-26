@@ -1,16 +1,15 @@
+"""QuestDB parallel example - QMTL v2.0."""
+
 from __future__ import annotations
 
 import asyncio
 import pandas as pd  # type: ignore[import-untyped]
 
 from qmtl.runtime.io import QuestDBRecorder  # type: ignore[import-untyped]
-from qmtl.runtime.sdk import (
-    EventRecorderService,
-    Node,
-    Runner,
-    StreamInput,
-    metrics,
-)  # type: ignore[import-untyped]
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.event_service import EventRecorderService
+from qmtl.runtime.sdk import metrics
 from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
 
 
@@ -56,9 +55,10 @@ class MA2(BaseMA2):
 
 async def main() -> None:
     metrics.start_metrics_server(port=8000)
-    task1 = asyncio.create_task(Runner.offline_async(MA1))
-    task2 = asyncio.create_task(Runner.offline_async(MA2))
-    await asyncio.gather(task1, task2)
+    # v2 API: Submit strategies with backtest mode
+    result1 = Runner.submit(MA1, mode=Mode.BACKTEST)
+    result2 = Runner.submit(MA2, mode=Mode.BACKTEST)
+    print(f"MA1: {result1.status}, MA2: {result2.status}")
     print(metrics.collect_metrics())
 
 

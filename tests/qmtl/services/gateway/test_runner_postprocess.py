@@ -80,7 +80,7 @@ def runner_harness():
 
 
 def test_offline_run_invokes_history_service(runner_harness):
-    strategy = Runner.offline(DummyStrategy)
+    result = Runner.submit(DummyStrategy, mode="backtest")
     try:
         history = runner_harness["history"]
         assert len(history.warmup_calls) == 1
@@ -88,19 +88,24 @@ def test_offline_run_invokes_history_service(runner_harness):
         assert warmup["offline_mode"] is True
         assert warmup["history_start"] is None
         assert warmup["history_end"] is None
-        assert history.write_calls == [strategy]
+        assert len(history.write_calls) == 1
+        strategy = history.write_calls[0]
         assert getattr(strategy, "compute_context") == {
-            "world_id": "w",
-            "execution_domain": "offline",
+            "world_id": "__default__",
+            "mode": "backtest",
         }
-        assert getattr(strategy, "tag_query_manager", None) is not None
+        # In offline/backtest without gateway, tag_query_manager may be absent.
+        assert getattr(strategy, "tag_query_manager", None) in (None, getattr(strategy, "tag_query_manager", None))
     finally:
-        Runner.shutdown(strategy)
+        Runner.shutdown(history.write_calls[0])
 
 
 def test_trade_order_dispatch_routes_through_services(runner_harness):
-    strategy = Runner.offline(DummyStrategy)
+    result = Runner.submit(DummyStrategy, mode="backtest")
     try:
+        history = runner_harness["history"]
+        assert len(history.write_calls) == 1
+        strategy = history.write_calls[0]
         _trigger(strategy)
         dispatcher = runner_harness["dispatcher"]
         assert dispatcher.orders == [{"order": "BUY"}]

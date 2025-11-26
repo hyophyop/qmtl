@@ -220,9 +220,9 @@ keeping coordinator-driven telemetry untouched.
 히스토리를 갖추도록 보장합니다. `ensure_range()`를 구현한 프로바이더는 갭 검사 전에 자동 백필을 수행하고,
 그렇지 않은 경우 `coverage()` + `fill_missing()` 루프로 폴백합니다.
 
-`Runner.run`/`Runner.offline` 모두 동일한 워머프 파이프라인을 실행합니다: 프로바이더로 범위를 조정하고,
-`BackfillEngine`이 노드 캐시에 행을 적재하며, 런타임은 전략 그래프를 통해 이벤트를 리플레이합니다.
-이로써 로컬 드라이런이 프로덕션과 동일한 부트스트랩 로직을 수행함이 보장됩니다.
+`Runner.submit`의 모든 모드(backtest/paper/live)는 동일한 워머프 파이프라인을 공유합니다: 프로바이더로
+범위를 조정하고 `BackfillEngine`이 노드 캐시에 행을 적재하며, 런타임은 전략 그래프를 통해 이벤트를
+리플레이합니다. 이로써 로컬·백테스트·라이브 실행이 동일한 부트스트랩 로직을 수행함이 보장됩니다.
 
 Integrated run (world‑driven):
 
@@ -230,10 +230,9 @@ Integrated run (world‑driven):
 from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.run(
+Runner.submit(
     SampleStrategy,
-    world_id="sample_world",
-    gateway_url="http://localhost:8000",
+    world="sample_world",
 )
 ```
 
@@ -243,7 +242,7 @@ Offline priming for local testing:
 from qmtl.runtime.sdk import Runner
 from tests.sample_strategy import SampleStrategy
 
-Runner.offline(SampleStrategy)
+Runner.submit(SampleStrategy)
 ```
 
 During execution the SDK collects cached history and replays it through the

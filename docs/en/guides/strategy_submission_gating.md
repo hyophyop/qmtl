@@ -14,7 +14,7 @@ This guide stitches together offline validation, world-driven runs, activation g
 from qmtl.runtime.sdk import Runner
 from strategies.beta_factory.demo import StrategyCls
 
-Runner.offline(
+Runner.submit(
     StrategyCls,
     history_start=1700000000,
     history_end=1700003600,
@@ -31,19 +31,16 @@ Runner.offline(
 ### CLI (preferred)
 
 ```bash
-qmtl tools sdk run \
-  --world-id my-world \
-  --gateway-url http://gateway:8080 \
-  --strategy path.to.StrategyCls
+qmtl submit strategy.py --world my-world --mode paper
 ```
 
 ### Python API
 
 ```python
-Runner.run(
+Runner.submit(
     StrategyCls,
-    world_id="my-world",
-    gateway_url="http://gateway:8080",
+    world="my-world",
+    mode="paper",
 )
 ```
 

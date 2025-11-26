@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality and align with the WorldService‑first `Runner.run` and local `Runner.offline` APIs.
+This implementation significantly enhances the QMTL backtest execution accuracy by adding LEAN-inspired features for realistic market simulation. The enhancements introduce optional advanced functionality and align with the submit-only QMTL v2 API.
 
 ## Key Enhancements Implemented
 
@@ -50,11 +50,12 @@ This implementation significantly enhances the QMTL backtest execution accuracy 
 
 ### Runner API
 ```python
-# WS-first run (follows WorldService decisions; orders gated by activation)
-Runner.run(MyStrategy, world_id="my_world", gateway_url="http://gw")
+# Submit (follows WorldService decisions when Gateway is available)
+from qmtl.runtime.sdk import Mode, Runner
+Runner.submit(MyStrategy, world="my_world", mode=Mode.LIVE)
 
-# Offline/local run (no Gateway/WS)
-Runner.offline(MyStrategy)
+# Local backtest-style run (no Gateway/WS)
+Runner.submit(MyStrategy, mode=Mode.BACKTEST, auto_validate=False)
 
 # Data validation is provided as a separate utility
 from qmtl.runtime.sdk.backtest_validation import validate_backtest_data

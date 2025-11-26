@@ -4,23 +4,20 @@ import importlib
 
 
 def test_sdk_package_reexports_core_symbols():
+    """Test that qmtl.sdk exports v2 core API symbols."""
     import qmtl.sdk as sdk
     import qmtl.runtime.sdk as runtime_sdk
 
-    assert sdk.Node is runtime_sdk.Node
-    assert sdk.CacheView is runtime_sdk.CacheView
+    # v2 core API: 5 symbols
     assert sdk.Runner is runtime_sdk.Runner
+    assert sdk.Strategy is runtime_sdk.Strategy
+    assert sdk.Mode is runtime_sdk.Mode
+    assert sdk.SubmitResult is runtime_sdk.SubmitResult
+    assert sdk.StrategyMetrics is runtime_sdk.StrategyMetrics
 
 
 def test_sdk_submodules_passthrough_runtime_symbols():
-    cases = [
-        ("node", "Node"),
-        ("cache_view", "CacheView"),
-        ("runner", "Runner"),
-    ]
-
-    for module_name, symbol in cases:
-        module = importlib.import_module(f"qmtl.sdk.{module_name}")
-        runtime_module = importlib.import_module(f"qmtl.runtime.sdk.{module_name}")
-
-        assert getattr(module, symbol) is getattr(runtime_module, symbol)
+    """Test that extended APIs are available via submodules."""
+    # v2: Node, CacheView are in qmtl.runtime.sdk.node submodule
+    from qmtl.runtime.sdk.node import Node
+    assert Node is not None

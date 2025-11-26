@@ -1,5 +1,8 @@
+"""Correlation strategy example - QMTL v2.0."""
+
 import pandas as pd  # type: ignore[import-untyped]
-from qmtl.runtime.sdk import MatchMode, Node, Runner, Strategy, TagQueryNode
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
 
 class CorrelationStrategy(Strategy):
     def setup(self):
@@ -29,6 +32,6 @@ class CorrelationStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Running via Runner will automatically fetch matching queues and
-    # subscribe to updates.
-    Runner.run(CorrelationStrategy, world_id="correlation_demo", gateway_url="http://gateway.local")
+    # v2 API: Submit with paper mode for real-time data with simulated orders
+    result = Runner.submit(CorrelationStrategy, world="correlation_demo", mode=Mode.PAPER)
+    print(f"Strategy submitted: {result.status}")

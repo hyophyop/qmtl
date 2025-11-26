@@ -4,8 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import asynccontextmanager
-from typing import Any, Mapping, Optional, TYPE_CHECKING, cast
+from typing import Any, Mapping, TYPE_CHECKING, cast
 
 from opentelemetry import trace
 
@@ -29,6 +28,8 @@ from .services import RunnerServices, get_global_services, set_global_services
 from .strategy import Strategy
 from .strategy_bootstrapper import StrategyBootstrapper
 from .tag_manager_service import TagManagerService
+from .mode import Mode
+from .submit import SubmitResult, submit, submit_async
 
 if TYPE_CHECKING:
     from .activation_manager import ActivationManager
@@ -38,6 +39,10 @@ if TYPE_CHECKING:
     from .seamless_data_provider import SeamlessDataProvider
 else:  # pragma: no cover - runtime placeholders for type-only imports
     HistoryBackend = HistoryProvider = object
+
+
+# Public API - only expose essential Runner class
+__all__ = ["Runner"]
 
 
 _runner_services = get_global_services()
@@ -81,10 +86,99 @@ class Runner:
         cls._services = services
         set_global_services(services)
 
-    # ------------------------------------------------------------------
-    # Backward mode-specific APIs removed; Runner adheres to WS decisions.
-    # Use run(world_id=..., gateway_url=...) or offline().
-    # ------------------------------------------------------------------
+    # ==================================================================
+    # PRIMARY API: Runner.submit() - Single entry point for QMTL v2.0
+    # ==================================================================
+
+    @classmethod
+    def submit(
+        cls,
+        strategy_cls: type[Strategy],
+        *,
+        world: str | None = None,
+        mode: Mode | str = Mode.BACKTEST,
+        preset: str | None = None,
+        preset_mode: str | None = None,
+        preset_version: str | None = None,
+        preset_overrides: dict[str, float] | None = None,
+        returns: list[float] | None = None,
+        auto_validate: bool = True,
+    ) -> SubmitResult:
+        """Submit a strategy for evaluation and potential activation.
+        
+        This is the single entry point for all strategy submissions in QMTL v2.0.
+        The system automatically:
+        1. Registers the strategy DAG
+        2. Runs backtest validation
+        3. Calculates performance metrics
+        4. Activates valid strategies with appropriate weight
+        
+        Parameters
+        ----------
+        strategy_cls : type[Strategy]
+            Strategy class to submit.
+        world : str, optional
+            Target world for the strategy. Uses QMTL_DEFAULT_WORLD env var
+            or "__default__" if not specified.
+        mode : Mode | str
+            Execution mode: "backtest", "paper", or "live".
+            Default is "backtest" for validation.
+        
+        Returns
+        -------
+        SubmitResult
+            Result containing strategy_id, status, and metrics.
+        
+        Examples
+        --------
+        >>> result = Runner.submit(MyStrategy)
+        >>> print(result.status)  # "active" or "rejected"
+        >>> print(result.contribution)  # 0.023 (2.3% contribution)
+        
+        >>> result = Runner.submit(MyStrategy, world="prod", mode="live")
+        """
+        return submit(
+            strategy_cls,
+            world=world,
+            mode=mode,
+            preset=preset,
+            preset_mode=preset_mode,
+            preset_version=preset_version,
+            preset_overrides=preset_overrides,
+            returns=returns,
+            auto_validate=auto_validate,
+        )
+
+    @classmethod
+    async def submit_async(
+        cls,
+        strategy_cls: type[Strategy],
+        *,
+        world: str | None = None,
+        mode: Mode | str = Mode.BACKTEST,
+        preset: str | None = None,
+        preset_mode: str | None = None,
+        preset_version: str | None = None,
+        preset_overrides: dict[str, float] | None = None,
+        returns: list[float] | None = None,
+        auto_validate: bool = True,
+    ) -> SubmitResult:
+        """Async version of submit(). See submit() for details."""
+        return await submit_async(
+            strategy_cls,
+            world=world,
+            mode=mode,
+            preset=preset,
+            preset_mode=preset_mode,
+            preset_version=preset_version,
+            preset_overrides=preset_overrides,
+            returns=returns,
+            auto_validate=auto_validate,
+        )
+
+    # ==================================================================
+    # Internal configuration methods
+    # ==================================================================
 
     @classmethod
     def set_gateway_circuit_breaker(cls, cb: AsyncCircuitBreaker | None) -> None:
@@ -297,152 +391,6 @@ class Runner:
             return None
 
     @staticmethod
-    async def run_async(
-        strategy_cls: type[Strategy],
-        *,
-        world_id: str,
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        history_start: object | None = None,
-        history_end: object | None = None,
-        schema_enforcement: str = "fail",
-    ) -> Strategy:
-        """Run a strategy for ``world_id`` with minimal caller input.
-
-        Preferred usage defers execution decisions entirely to backend services:
-
-            Runner.run_async(StrategyCls, world_id=..., gateway_url=...)
-
-        The SDK does not choose execution domains or clocks. Order gating and
-        promotions are driven by WorldService decisions relayed by Gateway.
-        """
-        services = Runner.services()
-        strategy = Runner._prepare(strategy_cls)
-        compute_context = ComputeContext(world_id=world_id, execution_domain=DEFAULT_EXECUTION_DOMAIN)
-        setattr(strategy, "compute_context", {"world_id": world_id})
-        meta_payload: dict | None = dict(meta) if isinstance(meta, dict) else None
-
-        cleanup_needed = True
-        try:
-            strategy.on_start()
-            await Runner._maybe_refresh_capabilities(gateway_url)
-
-            bootstrap_result = await Runner._bootstrap_strategy(
-                services,
-                strategy,
-                compute_context,
-                world_id,
-                gateway_url,
-                meta_payload,
-                schema_enforcement,
-            )
-            manager = bootstrap_result.manager
-            offline_mode = bootstrap_result.offline_mode
-            if bootstrap_result.completed:
-                cleanup_needed = False
-                return strategy
-
-            await Runner._configure_activation(
-                services,
-                bootstrap_result.strategy_id,
-                gateway_url,
-                world_id,
-                offline_mode,
-            )
-            history_service = services.history_service
-            await history_service.warmup_strategy(
-                strategy,
-                offline_mode=offline_mode,
-                history_start=history_start,
-                history_end=history_end,
-            )
-            if not offline_mode:
-                await manager.start()
-
-            history_service.write_snapshots(strategy)
-            strategy.on_finish()
-            cleanup_needed = False
-            return strategy
-
-        except Exception as e:
-            try:
-                strategy.on_error(e)
-            except Exception:
-                logger.exception("strategy.on_error raised during failure handling")
-            raise
-        finally:
-            if cleanup_needed:
-                try:
-                    await Runner.shutdown_async(strategy)
-                except Exception:
-                    logger.exception("Runner shutdown failed after initialization error")
-
-    @staticmethod
-    def run(
-        strategy_cls: type[Strategy],
-        *,
-        world_id: str,
-        gateway_url: str | None = None,
-        meta: Optional[dict] = None,
-        history_start: object | None = None,
-        history_end: object | None = None,
-        schema_enforcement: str = "fail",
-    ) -> Strategy:
-        """Synchronous wrapper around :meth:`run_async`.
-
-        Prefer the minimal form:
-
-            Runner.run(StrategyCls, world_id=..., gateway_url=...)
-
-        This call keeps parameters minimal and does not expose execution domain
-        or clock controls. For offline/local runs, use :meth:`offline`.
-        """
-        return asyncio.run(
-            Runner.run_async(
-                strategy_cls,
-                world_id=world_id,
-                gateway_url=gateway_url,
-                meta=meta,
-                history_start=history_start,
-                history_end=history_end,
-                schema_enforcement=schema_enforcement,
-            )
-        )
-
-    @staticmethod
-    def offline(
-        strategy_cls: type[Strategy],
-        *,
-        schema_enforcement: str = "fail",
-        history_start: object | None = None,
-        history_end: object | None = None,
-        data: "SeamlessDataProvider | None" = None,
-    ) -> Strategy:
-        """Execute ``strategy_cls`` locally without Gateway interaction.
-
-        Parameters
-        ----------
-        strategy_cls:
-            Strategy class to execute.
-        schema_enforcement:
-            Controls node schema validation behaviour (``\"fail\"`` or
-            ``\"warn\"``).
-        history_start, history_end:
-            Optional epoch-second boundaries for history warm-up. When both
-            are ``None``, the warm-up service falls back to its offline
-            baseline window or provider-driven coverage.
-        """
-        return asyncio.run(
-            Runner.offline_async(
-                strategy_cls,
-                schema_enforcement=schema_enforcement,
-                history_start=history_start,
-                history_end=history_end,
-                data=data,
-            )
-        )
-
-    @staticmethod
     async def _maybe_refresh_capabilities(gateway_url: str | None) -> None:
         if gateway_url:
             await Runner._refresh_gateway_capabilities(gateway_url)
@@ -496,119 +444,6 @@ class Runner:
                     "Activation manager failed to start; proceeding with gates OFF by default"
                 )
         services.trade_dispatcher.set_activation_manager(services.activation_manager)
-
-    @staticmethod
-    async def offline_async(
-        strategy_cls: type[Strategy],
-        *,
-        schema_enforcement: str = "fail",
-        history_start: object | None = None,
-        history_end: object | None = None,
-        data: "SeamlessDataProvider | None" = None,
-    ) -> Strategy:
-        services = Runner.services()
-        strategy = Runner._prepare(strategy_cls)
-        # Lifecycle start
-        try:
-            strategy.on_start()
-        except Exception as e:
-            strategy.on_error(e)
-            raise
-        context = ComputeContext(world_id="w", execution_domain="offline")
-        for n in strategy.nodes:
-            setattr(n, "_schema_enforcement", schema_enforcement)
-            try:
-                n.apply_compute_context(context)
-            except AttributeError:
-                pass
-        tag_service = TagManagerService(None)
-        # Use a stable default world id for offline execution so that
-        # node IDs match typical offline test runs.
-        try:
-            manager = tag_service.init(strategy, world_id="w")
-        except TypeError:
-            manager = tag_service.init(strategy)
-        logger.info(f"[OFFLINE] {strategy_cls.__name__} starting")
-        setattr(strategy, "compute_context", {"world_id": "w", "execution_domain": "offline"})
-        tag_service.apply_queue_map(strategy, {})
-        await manager.resolve_tags(offline=True)
-        if data is not None:
-            Runner._attach_history_provider(strategy, data)
-        # Hydrate + warm-up history (provider-driven when available), then replay
-        history_service = services.history_service
-        await history_service.warmup_strategy(
-            strategy,
-            offline_mode=True,
-            history_start=history_start,
-            history_end=history_end,
-        )
-        # After replay, write a fresh snapshot for faster next start
-        history_service.write_snapshots(strategy)
-        # Lifecycle finish
-        try:
-            strategy.on_finish()
-        except Exception as e:
-            strategy.on_error(e)
-            raise
-        return strategy
-
-    @staticmethod
-    def _attach_history_provider(
-        strategy: Strategy,
-        provider: HistoryProviderProtocol | "SeamlessDataProvider" | None,
-    ) -> None:
-        """Attach a history provider to stream inputs that lack one.
-
-        This helper is used by :meth:`offline_async` to wire a Seamless
-        provider into strategies without requiring them to modify ``setup``.
-        Explicitly configured providers on individual streams are left
-        untouched.
-        """
-        try:
-            from .node import StreamInput
-        except Exception:
-            return
-
-        for node in getattr(strategy, "nodes", []):
-            if not isinstance(node, StreamInput):
-                continue
-            existing = getattr(node, "history_provider", None)
-            if existing is not None:
-                continue
-            provider_for_node = cast(HistoryProvider | HistoryBackend | None, provider)
-            coerced: HistoryProviderProtocol | HistoryProvider | HistoryBackend | None
-            try:
-                coerced = node._coerce_history_provider(provider_for_node)
-            except Exception:
-                coerced = provider_for_node
-            setattr(node, "_history_provider", coerced)
-            if coerced is None:
-                continue
-            bind_fn = getattr(coerced, "bind_stream", None)
-            if callable(bind_fn):
-                try:
-                    bind_fn(node)
-                except Exception:
-                    logger.debug("failed to bind history provider to stream", exc_info=True)
-
-    # ------------------------------------------------------------------
-    # Convenience context manager for tests
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    @asynccontextmanager
-    async def session(strategy_cls: type[Strategy], **kwargs):
-        """Run ``strategy_cls`` and ensure cleanup on exit.
-
-        Yields the initialized strategy and guarantees that
-        :meth:`shutdown_async` is invoked after the ``async with`` block
-        exits, simplifying test teardown.
-        """
-        strategy = await Runner.run_async(strategy_cls, **kwargs)
-        try:
-            yield strategy
-        finally:
-            await Runner.shutdown_async(strategy)
 
     # ------------------------------------------------------------------
     # Cleanup helpers for tests and graceful shutdown
