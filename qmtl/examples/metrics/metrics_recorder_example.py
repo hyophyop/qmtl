@@ -1,8 +1,13 @@
+"""Metrics recorder example - QMTL v2.0."""
+
 from __future__ import annotations
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, metrics, EventRecorderService
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.event_service import EventRecorderService
+from qmtl.runtime.sdk import metrics
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 
 
@@ -32,4 +37,6 @@ class RecorderStrategy(Strategy):
 
 if __name__ == "__main__":
     metrics.start_metrics_server(port=8000)
-    Runner.run(RecorderStrategy, world_id="metrics_recorder", gateway_url="http://localhost:8000")
+    # v2 API: Submit with paper mode
+    result = Runner.submit(RecorderStrategy, world="metrics_recorder", mode=Mode.PAPER)
+    print(f"Strategy submitted: {result.status}")

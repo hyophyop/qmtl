@@ -1,4 +1,8 @@
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
+"""Multi-asset lag strategy example - QMTL v2.0."""
+
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -35,8 +39,10 @@ class MultiAssetLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.run(
+    # v2 API: Submit with paper mode
+    result = Runner.submit(
         MultiAssetLagStrategy,
-        world_id="multi_asset_lag",
-        gateway_url="http://gateway.local",
+        world="multi_asset_lag",
+        mode=Mode.PAPER,
     )
+    print(f"Strategy submitted: {result.status}")

@@ -1,7 +1,14 @@
+"""General strategy example - QMTL v2.0.
+
+Demonstrates the simplified Runner.submit() API for strategy submission.
+"""
+
 import argparse
 import pandas as pd  # type: ignore[import-untyped]
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.event_service import EventRecorderService
 
 class GeneralStrategy(Strategy):
     def __init__(self):
@@ -37,15 +44,14 @@ class GeneralStrategy(Strategy):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--world-id")
-    parser.add_argument("--gateway-url")
+    parser.add_argument("--world", "-w", help="Target world")
+    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    if args.world_id and args.gateway_url:
-        Runner.run(
-            GeneralStrategy,
-            world_id=args.world_id,
-            gateway_url=args.gateway_url,
-        )
-    else:
-        Runner.offline(GeneralStrategy)
+    # v2 API: Single entry point for all execution modes
+    result = Runner.submit(
+        GeneralStrategy,
+        world=args.world,
+        mode=Mode(args.mode),
+    )
+    print(f"Strategy submitted: {result.status}")

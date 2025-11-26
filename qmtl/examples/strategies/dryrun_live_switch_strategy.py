@@ -1,19 +1,13 @@
-"""Sample strategy runnable in dryrun or live domains via YAML configuration.
+"""Mode-based strategy example - QMTL v2.0.
 
-Configuration excerpt::
+Demonstrates the simplified v2 Mode concept:
+- Mode.BACKTEST: Historical data simulation
+- Mode.PAPER: Real-time data, simulated orders  
+- Mode.LIVE: Real-time data, real orders
 
-    connectors:
-      execution_domain: dryrun  # or "live"
-      broker_url: https://broker/api/orders
-      trade_max_retries: 3
-      trade_backoff: 0.1
-      ws_url: wss://gateway/ws
-
-Execution domains mirror WorldService decisions. When the policy engine
-emits ``effective_mode="validate"`` the SDK maps it to the ``backtest``
-domain (orders gated OFF). ``effective_mode="paper"`` now maps to the
-``dryrun`` domain, which keeps broker hooks wired while still suppressing
-real order placement unless explicitly enabled.
+Configuration via environment variables:
+  QMTL_GATEWAY_URL     Gateway URL (auto-discovered)
+  QMTL_DEFAULT_WORLD   Default world (auto-discovered)
 """
 
 from __future__ import annotations
@@ -21,13 +15,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from qmtl.runtime.sdk import (
-    Strategy,
-    StreamInput,
-    Node,
-    Runner,
-    TradeExecutionService,
-)
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.trade_execution_service import TradeExecutionService
 from qmtl.runtime.sdk import configuration as sdk_configuration
 from qmtl.runtime.sdk import runtime
 from qmtl.runtime.sdk.live_data_feed import WebSocketFeed
@@ -37,25 +27,26 @@ from qmtl.runtime.transforms import (
     TradeOrderPublisherNode,
 )
 
-DEFAULT_EXECUTION_DOMAIN = "dryrun"
+DEFAULT_MODE = Mode.PAPER
 
 
 def _connectors_config():
     return sdk_configuration.get_connectors_config()
 
 
-def _resolve_execution_domain() -> str:
-    """Return the configured execution domain with legacy compatibility."""
-
+def _resolve_mode() -> Mode:
+    """Return the configured mode from environment or config."""
     cfg = _connectors_config()
-    raw = (cfg.execution_domain or DEFAULT_EXECUTION_DOMAIN).strip().lower()
-    if raw == "paper":
-        raw = "dryrun"
-
-    if raw not in {"dryrun", "live"}:
-        raise ValueError("Execution domain must be 'dryrun' or 'live'")
-
-    return raw
+    raw = (cfg.execution_domain or "paper").strip().lower()
+    
+    # Map legacy domain names to v2 Mode
+    mode_map = {
+        "backtest": Mode.BACKTEST,
+        "dryrun": Mode.PAPER,
+        "paper": Mode.PAPER,
+        "live": Mode.LIVE,
+    }
+    return mode_map.get(raw, DEFAULT_MODE)
 
 
 class SwitchableStrategy(Strategy):
@@ -109,23 +100,20 @@ def _configure_live() -> None:
 
 def main() -> None:
     runtime.reload()
-    domain = _resolve_execution_domain()
+    mode = _resolve_mode()
 
-    if domain == "live":
+    if mode == Mode.LIVE:
         _configure_live()
         ws_url = (_connectors_config().ws_url or "").strip()
         if ws_url:
-            # Run a short-lived WS demo in parallel with the offline pass
             try:
                 asyncio.run(_maybe_run_ws(ws_url))
             except Exception:
                 pass
 
-    # For simplicity, run an offline pass. In practice, you would call Runner.run
-    # with gateway/world settings and maintain a persistent process. World decisions
-    # that set ``effective_mode="validate"`` map to the ``backtest`` execution domain,
-    # keeping order gates OFF until promotion.
-    Runner.offline(SwitchableStrategy)
+    # v2 API: Single entry point with mode
+    result = Runner.submit(SwitchableStrategy, mode=mode)
+    print(f"Strategy submitted: {result.status}")
 
 
 if __name__ == "__main__":

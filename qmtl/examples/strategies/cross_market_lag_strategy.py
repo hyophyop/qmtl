@@ -1,4 +1,8 @@
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner, EventRecorderService
+"""Cross-market lag strategy example - QMTL v2.0."""
+
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -47,4 +51,6 @@ class CrossMarketLagStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.run(CrossMarketLagStrategy, world_id="cross_market_lag", gateway_url="http://gateway.local")
+    # v2 API: Submit with paper mode for real-time data
+    result = Runner.submit(CrossMarketLagStrategy, world="cross_market_lag", mode=Mode.PAPER)
+    print(f"Strategy submitted: {result.status}")

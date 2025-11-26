@@ -1,7 +1,10 @@
+"""Tag query strategy example - QMTL v2.0."""
+
 from __future__ import annotations
 
 import pandas as pd  # type: ignore[import-untyped]
-from qmtl.runtime.sdk import MatchMode, Node, Runner, Strategy, TagQueryNode
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
 
 
 class TagQueryStrategy(Strategy):
@@ -40,6 +43,6 @@ class TagQueryStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # Running the strategy triggers automatic tag resolution and
-    # WebSocket subscriptions under the selected world.
-    Runner.run(TagQueryStrategy, world_id="tag_query_demo", gateway_url="http://gateway.local")
+    # v2 API: Submit with paper mode for real-time tag resolution
+    result = Runner.submit(TagQueryStrategy, world="tag_query_demo", mode=Mode.PAPER)
+    print(f"Strategy submitted: {result.status}")

@@ -1,7 +1,11 @@
-"""Example strategy that can run under WS or offline."""
+"""Backtest validation example - QMTL v2.0.
+
+Demonstrates the simplified Runner.submit() API.
+"""
 
 import argparse
-from qmtl.runtime.sdk import Strategy, StreamInput, Runner
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import StreamInput
 
 
 class ValidationStrategy(Strategy):
@@ -14,18 +18,17 @@ class ValidationStrategy(Strategy):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--world-id")
-    parser.add_argument("--gateway-url")
+    parser.add_argument("--world", "-w", help="Target world")
+    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    if args.world_id and args.gateway_url:
-        Runner.run(
-            ValidationStrategy,
-            world_id=args.world_id,
-            gateway_url=args.gateway_url,
-        )
-    else:
-        Runner.offline(ValidationStrategy)
+    # v2 API: Single entry point
+    result = Runner.submit(
+        ValidationStrategy,
+        world=args.world,
+        mode=Mode(args.mode),
+    )
+    print(f"Strategy submitted: {result.status}")
 
 
 if __name__ == "__main__":

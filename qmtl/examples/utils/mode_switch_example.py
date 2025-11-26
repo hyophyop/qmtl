@@ -1,13 +1,19 @@
+"""Mode switch example - QMTL v2.0.
+
+Demonstrates how to run the same strategy across different modes.
+"""
+
 from __future__ import annotations
 
 import argparse
 import pandas as pd  # type: ignore[import-untyped]
 
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
+from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk.node import Node, StreamInput
 
 
 class ModeSwitchStrategy(Strategy):
-    """Run the same strategy across multiple execution domains."""
+    """Run the same strategy across multiple execution modes."""
 
     def setup(self) -> None:
         price = StreamInput(interval="60s", period=30)
@@ -22,15 +28,14 @@ class ModeSwitchStrategy(Strategy):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gateway-url")
-    parser.add_argument("--world-id")
+    parser.add_argument("--world", "-w", help="Target world")
+    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    if args.world_id and args.gateway_url:
-        Runner.run(
-            ModeSwitchStrategy,
-            world_id=args.world_id,
-            gateway_url=args.gateway_url,
-        )
-    else:
-        Runner.offline(ModeSwitchStrategy)
+    # v2 API: Single entry point with mode
+    result = Runner.submit(
+        ModeSwitchStrategy,
+        world=args.world,
+        mode=Mode(args.mode),
+    )
+    print(f"Strategy submitted: {result.status}")
