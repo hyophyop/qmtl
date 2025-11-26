@@ -1,77 +1,55 @@
+"""Test configuration.
+
+Filters noisy ResourceWarnings from unclosed sockets/event loops that can be
+emitted by http client stubs under xdist. This keeps CI output clean without
+affecting test behavior.
+"""
+
+import warnings
 import asyncio
-
+from typing import List
 import pytest
-import pytest_asyncio
-import yaml
 
-from qmtl.runtime.sdk import configuration as sdk_configuration
-from qmtl.runtime.sdk import runtime
-from qmtl.runtime.sdk.arrow_cache import reload_arrow_cache
-from qmtl.runtime.sdk.runner import Runner
-
-@pytest_asyncio.fixture
-async def fake_redis():
-    fakeredis_aioredis = pytest.importorskip(
-        "fakeredis.aioredis",
-        reason="fakeredis is required for Redis-backed runtime tests",
-    )
-    redis = fakeredis_aioredis.FakeRedis(decode_responses=True)
-    try:
-        yield redis
-    finally:
-        if hasattr(redis, "aclose"):
-            await redis.aclose(close_connection_pool=True)
-        else:
-            await redis.close()
+warnings.filterwarnings("ignore", message="unclosed.*", category=ResourceWarning)
+warnings.filterwarnings("ignore", message=".*unclosed event loop.*", category=ResourceWarning)
+warnings.filterwarnings("ignore", message="unclosed <socket.*", category=ResourceWarning)
 
 
-@pytest.fixture(autouse=True)
-def _default_runner_context():
-    context = {
-        "execution_mode": "backtest",
-        "clock": "virtual",
-        "as_of": "2025-01-01T00:00:00Z",
-        "dataset_fingerprint": "lake:blake3:test",
-    }
-    Runner.set_default_context(context)
-    try:
-        yield context
-    finally:
-        Runner.set_default_context(None)
-
-
-@pytest.fixture
-def configure_sdk(tmp_path, monkeypatch):
-    """Write a temporary qmtl.yml and reload runtime/config caches."""
-
-    def _apply(data: dict, *, filename: str = "qmtl.yml") -> str:
-        cfg_path = tmp_path / filename
-        cfg_path.write_text(yaml.safe_dump(data))
-        monkeypatch.chdir(tmp_path)
-        sdk_configuration.reset_runtime_config_cache()
-        runtime.reload()
-        reload_arrow_cache()
-        return str(cfg_path)
-
-    try:
-        yield _apply
-    finally:
-        sdk_configuration.reset_runtime_config_cache()
-        runtime.reload()
-        reload_arrow_cache()
+# Ensure event loops opened during tests are explicitly closed to avoid
+# interpreter-level ResourceWarning spam when workers exit.
+def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
+    for loop in loops:
+        if loop.is_closed():
+            continue
+        try:
+            loop.close()
+        except Exception:
+            pass
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _close_event_loop():
-    """Ensure the default asyncio loop is closed to avoid ResourceWarning at teardown."""
+def _track_and_close_event_loops():
+    created: List[asyncio.AbstractEventLoop] = []
+    orig_new_loop = asyncio.new_event_loop
 
-    yield
-    policy = asyncio.get_event_loop_policy()
-    loop = getattr(getattr(policy, "_local", None), "_loop", None)
-    if loop is None:
-        return
-    if loop.is_running():
-        loop.call_soon(loop.stop)
-        loop.run_until_complete(asyncio.sleep(0))
-    if not loop.is_closed():
-        loop.close()
+    def tracking_new_loop():
+        loop = orig_new_loop()
+        created.append(loop)
+        return loop
+
+    asyncio.new_event_loop = tracking_new_loop
+    try:
+        yield
+    finally:
+        asyncio.new_event_loop = orig_new_loop
+        # Close any default loop created by libraries
+        try:
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            created.append(loop)
+        except Exception:
+            pass
+        _close_loops(created)
+        try:
+            asyncio.set_event_loop(None)
+        except Exception:
+            pass

@@ -145,9 +145,10 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
 
     monkeypatch.setattr(Runner.services(), "kafka_factory", DummyFactory())
 
-    async with Runner.session(
-        TQStrategy, world_id="tq_live_updates", gateway_url="http://gw"
-    ) as strat:
+    result = await Runner.submit_async(TQStrategy, world="tq_live_updates", mode="paper")
+    strat = result.strategy
+    assert strat is not None
+    try:
         await wait_for(lambda: bool(strat.tag_query_manager._nodes))
 
         await hub.send_queue_update(
@@ -177,4 +178,6 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
         await wait_for(lambda: node.upstreams == ["q1"])
         assert node.execute
         assert hasattr(strat, "tag_query_manager")
+    finally:
+        await Runner.shutdown_async(strat)
     await transport.aclose()
