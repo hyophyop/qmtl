@@ -120,7 +120,7 @@ def _create_intent_guard_node(
         order = dict(payload)
         sized_order: dict | None = order
         if portfolio is not None and "quantity" not in order:
-            sized_order = apply_sizing(order, portfolio, weight_fn=None)
+            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
         if sized_order is None:
             return None
         if "quantity" not in sized_order:
