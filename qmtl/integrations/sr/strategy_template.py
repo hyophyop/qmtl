@@ -6,20 +6,16 @@ Seamless Data Provider와 동일 데이터를 사용하도록 Strategy를 생성
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, cast
+from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
 
 from .expression_key import compute_expression_key
 
-dataclasses_asdict: Callable[[Any], Any] | None
 try:
-    from dataclasses import asdict as _dataclasses_asdict
-
-    dataclasses_asdict = _dataclasses_asdict
+    from dataclasses import asdict as _dataclass_asdict
 except Exception:  # pragma: no cover - fallback
-    dataclasses_asdict = None
-
-asdict_fn: Callable[[Any], Any] | None = dataclasses_asdict
+    dataclass_asdict: Callable[[Any], dict[str, Any]] | None = None
+else:
+    dataclass_asdict = cast(Callable[[Any], dict[str, Any]], _dataclass_asdict)
 
 _RUNTIME_AVAILABLE = False
 if TYPE_CHECKING:
@@ -28,7 +24,7 @@ if TYPE_CHECKING:
 else:
     try:  # pragma: no cover - optional at runtime
         from qmtl.runtime.sdk import Strategy
-        from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
+        from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
 
         _RUNTIME_AVAILABLE = True
     except Exception:  # pragma: no cover - fallback for tests/docs
@@ -248,10 +244,10 @@ def build_strategy_from_dag_spec(
     data_spec = getattr(dag_spec, "data_spec", None)
     expression_key = getattr(dag_spec, "expression_key", None)
 
-    dag_dict = None
-    if asdict_fn is not None and hasattr(dag_spec, "__dataclass_fields__"):
+    dag_dict: dict[str, Any] | None = None
+    if dataclass_asdict is not None and hasattr(dag_spec, "__dataclass_fields__"):
         try:  # pragma: no cover - defensive
-            dag_dict = asdict_fn(dag_spec)
+            dag_dict = dataclass_asdict(dag_spec)
         except Exception:
             dag_dict = None
 

@@ -1,110 +1,107 @@
 """Tests for qmtl.integrations.sr.dag module."""
 
+import pytest
 import sympy as sp
 
 from qmtl.integrations.sr.dag import (
-    ExpressionDagSpec,
     ExpressionDagBuilder,
-    build_expression_dag,
+    ExpressionDagSpec,
     _DagBuilder,
     _expression_key,
+    build_expression_dag,
 )
 
 
 class TestDagBuilder:
-    """Tests for _DagBuilder internal class."""
+    """Tests for the internal runtime-aware DAG builder."""
 
-    def test_walk_symbol(self):
-        """Test walking a symbol node."""
+    def test_walk_symbol_and_number(self):
         builder = _DagBuilder()
-        x = sp.Symbol("x")
-        nid = builder.walk(x)
 
-        assert nid == "n0"
-        assert len(builder.nodes) == 1
-        assert builder.nodes[0]["label"] == "var:x"
+        x = sp.Symbol("x")
+        const = sp.Float(3.14)
+
+        xid = builder.walk(x)
+        cid = builder.walk(const)
+
+        assert xid == "n0"
+        assert cid == "n1"
+        assert builder.nodes[0]["node_type"] == "input"
+        assert builder.nodes[0]["params"] == {"field": "x"}
+        assert builder.nodes[1]["node_type"] == "const"
+        assert builder.nodes[1]["params"] == {"value": 3.14}
         assert builder.edges == []
 
-    def test_walk_number(self):
-        """Test walking a number node."""
-        builder = _DagBuilder()
-        num = sp.Float(3.14)
-        nid = builder.walk(num)
-
-        assert nid == "n0"
-        assert len(builder.nodes) == 1
-        assert builder.nodes[0]["label"] == "const:3.14"
-
-    def test_walk_integer(self):
-        """Test walking an integer node."""
-        builder = _DagBuilder()
-        num = sp.Integer(42)
-        nid = builder.walk(num)
-
-        assert nid == "n0"
-        assert len(builder.nodes) == 1
-        assert builder.nodes[0]["label"] == "const:42.0"
-
-    def test_walk_add_expression(self):
-        """Test walking an addition expression."""
+    def test_walk_add_expression_creates_edges(self):
         builder = _DagBuilder()
         x, y = sp.symbols("x y")
-        expr = x + y
-        builder.walk(expr)
 
-        # x + y creates nodes for each operand and the Add operation
-        assert len(builder.nodes) == 3
-        # Check that we have the expected node types
-        labels = [n["label"] for n in builder.nodes]
-        assert any("op:Add" in label for label in labels)
-        assert any("var:x" in label for label in labels)
-        assert any("var:y" in label for label in labels)
-        assert len(builder.edges) == 2  # x->Add, y->Add
+        output = builder.walk(x + y)
 
-    def test_walk_complex_expression(self):
-        """Test walking a complex nested expression."""
+        assert output == "n2"
+        assert builder.nodes[-1]["node_type"] == "math/add"
+        assert builder.nodes[-1]["inputs"] == ["n0", "n1"]
+        assert set(builder.edges) == {("n0", "n2"), ("n1", "n2")}
+
+    def test_detects_sub_and_division(self):
         builder = _DagBuilder()
-        x, y, z = sp.symbols("x y z")
-        expr = (x + y) * z
-        builder.walk(expr)
+        x, y = sp.symbols("x y")
 
-        # Creates: var:x, var:y, op:Add, var:z, op:Mul
-        assert len(builder.nodes) == 5
-        # Edges: x->Add, y->Add, Add->Mul, z->Mul
-        assert len(builder.edges) == 4
+        sub_output = builder.walk(x - y)
+        div_output = builder.walk(x / y)
+
+        sub_node = next(node for node in builder.nodes if node["id"] == sub_output)
+        div_node = next(node for node in builder.nodes if node["id"] == div_output)
+
+        assert sub_node["node_type"] == "math/sub"
+        assert div_node["node_type"] == "math/div"
+
+    def test_indicator_mapping(self):
+        builder = _DagBuilder()
+        x = sp.Symbol("price")
+        expr = sp.Function("EMA")(x, 10)
+
+        output = builder.walk(expr)
+        indicator = next(node for node in builder.nodes if node["id"] == output)
+
+        assert indicator["node_type"] == "indicator/ema"
+        assert indicator["params"] == {"period": 10.0}
+        assert indicator["inputs"] == ["n0"]
+
+    def test_indicator_rejects_extra_parameters(self):
+        builder = _DagBuilder()
+        x = sp.Symbol("price")
+        expr = sp.Function("EMA")(x, 10, 20)
+
+        with pytest.raises(ValueError, match="expects 1 parameters, got 2"):
+            builder.walk(expr)
+
+    def test_unsupported_function_raises(self):
+        builder = _DagBuilder()
+        x = sp.Symbol("x")
+        expr = sp.Function("UNKNOWN")(x)
+
+        with pytest.raises(ValueError):
+            builder.walk(expr)
 
 
 class TestExpressionKey:
     """Tests for _expression_key function."""
 
-    def test_same_expression_same_key(self):
-        """Test that same expressions produce same keys."""
+    def test_equivalent_expressions_share_key(self):
         x, y = sp.symbols("x y")
-        expr1 = x + y
-        expr2 = x + y
+        expr1 = x + y + 0
+        expr2 = y + x
 
-        key1 = _expression_key(expr1)
-        key2 = _expression_key(expr2)
+        assert _expression_key(expr1) == _expression_key(expr2)
 
-        assert key1 == key2
-
-    def test_different_expression_different_key(self):
-        """Test that different expressions produce different keys."""
+    def test_key_changes_with_expression(self):
         x, y = sp.symbols("x y")
-        expr1 = x + y
-        expr2 = x * y
-
-        key1 = _expression_key(expr1)
-        key2 = _expression_key(expr2)
-
-        assert key1 != key2
+        assert _expression_key(x + y) != _expression_key(x * y)
 
     def test_key_is_hex_string(self):
-        """Test that key is a valid hex string."""
-        x = sp.Symbol("x")
-        key = _expression_key(x)
-
-        assert len(key) == 64  # SHA256 hex
+        key = _expression_key(sp.Symbol("x"))
+        assert len(key) == 64
         assert all(c in "0123456789abcdef" for c in key)
 
 
@@ -112,7 +109,6 @@ class TestBuildExpressionDag:
     """Tests for build_expression_dag function."""
 
     def test_simple_expression(self):
-        """Test building DAG from simple expression."""
         x = sp.Symbol("x")
         spec = build_expression_dag(
             x,
@@ -122,45 +118,29 @@ class TestBuildExpressionDag:
         )
 
         assert isinstance(spec, ExpressionDagSpec)
-        assert len(spec.nodes) == 1
-        assert spec.nodes[0]["label"] == "var:x"
+        assert spec.nodes[0]["node_type"] == "input"
+        assert spec.output == "n0"
         assert spec.edges == []
         assert spec.equation == "x"
         assert spec.complexity == 1
         assert spec.loss == 0.5
         assert spec.node_count == 1
 
-    def test_binary_expression(self):
-        """Test building DAG from binary expression."""
+    def test_add_expression_builds_runtime_nodes(self):
         x, y = sp.symbols("x y")
-        expr = x + y
         spec = build_expression_dag(
-            expr,
+            x + y,
             equation="x + y",
             complexity=3,
             loss=0.1,
         )
 
-        assert spec.node_count == 3
-        assert len(spec.edges) == 2
-        # Output node should exist
-        assert spec.output in [n["id"] for n in spec.nodes]
-
-    def test_expression_key_is_set(self):
-        """Test that expression_key is properly set."""
-        x = sp.Symbol("x")
-        spec = build_expression_dag(
-            x,
-            equation="x",
-            complexity=1,
-            loss=0.5,
-        )
-
-        assert spec.expression_key is not None
-        assert len(spec.expression_key) == 64
+        node_types = {node["node_type"] for node in spec.nodes}
+        assert {"input", "math/add"}.issubset(node_types)
+        assert spec.node_count == len(spec.nodes)
+        assert spec.output in {node["id"] for node in spec.nodes}
 
     def test_complexity_and_loss_conversion(self):
-        """Test that complexity and loss are properly converted."""
         x = sp.Symbol("x")
         spec = build_expression_dag(
             x,
@@ -179,9 +159,8 @@ class TestExpressionDagSpec:
     """Tests for ExpressionDagSpec dataclass."""
 
     def test_create(self):
-        """Test creating ExpressionDagSpec."""
         spec = ExpressionDagSpec(
-            nodes=[{"id": "n0", "label": "var:x"}],
+            nodes=[{"id": "n0", "label": "input:x", "node_type": "input"}],
             edges=[],
             output="n0",
             expression_key="abc123",
@@ -193,7 +172,7 @@ class TestExpressionDagSpec:
             data_spec={"dataset_id": "foo"},
         )
 
-        assert spec.nodes == [{"id": "n0", "label": "var:x"}]
+        assert spec.nodes[0]["node_type"] == "input"
         assert spec.edges == []
         assert spec.output == "n0"
         assert spec.expression_key == "abc123"
@@ -210,7 +189,12 @@ class TestExpressionDagBuilder:
 
     def test_build_with_data_spec_and_version(self):
         builder = ExpressionDagBuilder(spec_version="v2")
-        spec = builder.build("x + y", complexity=3, loss=0.1, data_spec={"interval": "1m"})
+        spec = builder.build(
+            "x + y",
+            complexity=3,
+            loss=0.1,
+            data_spec={"interval": "1m"},
+        )
 
         assert len(spec.expression_key) == 64
         assert spec.spec_version == "v2"
@@ -224,12 +208,17 @@ class TestExpressionDagBuilder:
 
         assert key_v1 != key_v2
 
+    def test_equation_defaults_to_normalized(self):
+        builder = ExpressionDagBuilder()
+        spec = builder.build("x + 0")
+
+        assert spec.equation == "x"
+
 
 class TestRealWorldExpressions:
     """Tests with real-world-like expressions."""
 
     def test_polynomial(self):
-        """Test polynomial expression."""
         x = sp.Symbol("x")
         expr = 2 * x**2 + 3 * x + 1
         spec = build_expression_dag(
@@ -243,7 +232,6 @@ class TestRealWorldExpressions:
         assert spec.complexity == 7
 
     def test_trigonometric(self):
-        """Test trigonometric expression."""
         x = sp.Symbol("x")
         expr = sp.sin(x) + sp.cos(x)
         spec = build_expression_dag(
@@ -253,12 +241,12 @@ class TestRealWorldExpressions:
             loss=0.05,
         )
 
-        # sin(x) + cos(x) -> var:x, op:sin, op:cos, op:Add
-        # Note: sympy may reuse x node
-        assert spec.node_count >= 3
+        node_types = {node["node_type"] for node in spec.nodes}
+        assert "math/add" in node_types
+        assert "math/sin" in node_types
+        assert "math/cos" in node_types
 
     def test_nested_expression(self):
-        """Test deeply nested expression."""
         x, y = sp.symbols("x y")
         expr = sp.exp(sp.log(x + y) * 2)
         spec = build_expression_dag(
@@ -268,6 +256,4 @@ class TestRealWorldExpressions:
             loss=0.02,
         )
 
-        # Sympy may simplify exp(log(...)*2) to (x+y)^2
-        # Just verify we got a valid DAG with multiple nodes
         assert spec.node_count >= 3
