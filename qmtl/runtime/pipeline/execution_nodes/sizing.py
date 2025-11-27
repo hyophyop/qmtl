@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
@@ -21,7 +21,7 @@ class SizingNode(ProcessingNode):
         *,
         portfolio: Portfolio,
         name: str | None = None,
-        weight_fn: Callable[[dict], float] | None = None,
+        weight_fn: Callable[[Mapping[str, Any]], float] | None = None,
     ) -> None:
         self.order = order
         self.portfolio = portfolio
@@ -34,9 +34,11 @@ class SizingNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         _, order = latest
+        if not isinstance(order, Mapping):
+            return None
         return apply_sizing(order, self.portfolio, weight_fn=self.weight_fn)

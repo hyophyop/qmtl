@@ -32,8 +32,8 @@ class MicroBatchNode(ProcessingNode):
         if not seq:
             return None
         # Identify distinct timestamps (ordered as in seq)
-        timestamps = [ts for ts, _ in seq]
-        distinct = []
+        timestamps: list[int] = [int(ts) for ts, _ in seq]
+        distinct: list[int] = []
         for ts in timestamps:
             if not distinct or distinct[-1] != ts:
                 distinct.append(ts)
