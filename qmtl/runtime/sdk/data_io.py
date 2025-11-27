@@ -16,8 +16,9 @@ from .protocols import StreamLike
 if TYPE_CHECKING:
     from .seamless_data_provider import SeamlessFetchResult
 
-
-HistoryFetchResult: TypeAlias = pd.DataFrame | "SeamlessFetchResult"
+    HistoryFetchResult: TypeAlias = pd.DataFrame | SeamlessFetchResult
+else:
+    HistoryFetchResult: TypeAlias = pd.DataFrame | Any
 
 
 class DataFetcher(Protocol):
