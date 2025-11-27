@@ -87,7 +87,7 @@ _INDICATOR_NODE_MAP: dict[str, NodeMapping] = {
 
 def _sort_key(expr: sp.Expr) -> str:
     try:
-        return sp.srepr(expr)
+        return str(sp.srepr(expr))
     except Exception:  # pragma: no cover - defensive fallback
         return str(expr)
 
