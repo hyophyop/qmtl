@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
 
 from ._shared import latest_entry, safe_call
+from qmtl.runtime.pipeline.order_types import FillPayload
 
 
 class PortfolioNode(ProcessingNode):
@@ -33,7 +34,7 @@ class PortfolioNode(ProcessingNode):
             period=1,
         )
 
-    def _update_watermark(self, ts: int, fill: Mapping[str, Any]) -> None:
+    def _update_watermark(self, ts: int, fill: FillPayload) -> None:
         if not self._watermark_topic:
             return
         try:
@@ -56,7 +57,7 @@ class PortfolioNode(ProcessingNode):
         price = float(fill.get("fill_price", fill.get("price", 0.0)))
         commission = float(fill.get("commission", 0.0))
         self.portfolio.apply_fill(symbol, qty, price, commission)
-        self._update_watermark(ts, fill)
+        self._update_watermark(ts, cast(FillPayload, fill))
         snapshot = {
             "cash": self.portfolio.cash,
             "positions": {

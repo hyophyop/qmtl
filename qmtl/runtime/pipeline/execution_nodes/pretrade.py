@@ -12,6 +12,7 @@ from qmtl.runtime.sdk.watermark import WatermarkGate, is_ready
 from qmtl.runtime.transforms.execution_shared import run_pretrade_checks
 
 from ._shared import latest_entry, normalise_watermark_gate, safe_call
+from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 
 
 class PreTradeGateNode(ProcessingNode):
@@ -46,7 +47,7 @@ class PreTradeGateNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict | None:
+    def _compute(self, view: CacheView) -> SizedOrder | OrderRejection | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None

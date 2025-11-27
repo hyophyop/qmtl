@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Tuple
+from typing import Any, Callable, Mapping, Tuple, cast
 
 from qmtl.runtime.brokerage import Account, BrokerageModel, OrderType, TimeInForce
 from qmtl.foundation.common.pretrade import RejectionReason
@@ -14,6 +14,7 @@ from qmtl.runtime.sdk.portfolio import (
     order_value,
 )
 from qmtl.runtime.sdk.pretrade import check_pretrade
+from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -30,7 +31,7 @@ def run_pretrade_checks(
     account: Account,
     default_order_type: OrderType = OrderType.MARKET,
     default_tif: TimeInForce = TimeInForce.DAY,
-) -> Tuple[bool, dict[str, Any]]:
+) -> Tuple[bool, SizedOrder | OrderRejection]:
     """Return the outcome of the shared pre-trade checks.
 
     The function copies ``order`` to avoid mutating the caller's payload. When
@@ -60,7 +61,7 @@ def run_pretrade_checks(
     )
 
     if result.allowed:
-        return True, dict(order)
+        return True, cast(SizedOrder, dict(order))
 
     reason = result.reason.value if getattr(result, "reason", None) else RejectionReason.UNKNOWN.value
     return False, {"rejected": True, "reason": reason}
@@ -71,10 +72,10 @@ def apply_sizing(
     portfolio: Portfolio,
     *,
     weight_fn: Callable[[Mapping[str, Any]], float] | None = None,
-) -> dict[str, Any] | None:
+) -> SizedOrder | None:
     """Return a sized order dictionary or ``None`` when insufficient data."""
 
-    sized = dict(order)
+    sized: SizedOrder = dict(order)
     if "quantity" in sized:
         return sized
 

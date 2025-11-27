@@ -10,6 +10,7 @@ from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.transforms.execution_shared import apply_sizing
 
 from ._shared import latest_entry
+from qmtl.runtime.pipeline.order_types import SizedOrder
 
 
 class SizingNode(ProcessingNode):
@@ -34,7 +35,7 @@ class SizingNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView) -> SizedOrder | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None

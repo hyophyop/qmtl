@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from qmtl.runtime.sdk.execution_modeling import (
     ExecutionFill,
@@ -15,6 +15,7 @@ from qmtl.runtime.sdk.execution_modeling import (
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 
 from ._shared import latest_entry
+from qmtl.runtime.pipeline.order_types import ExecutionFillPayload, SizedOrder
 
 
 class ExecutionNode(ProcessingNode):
@@ -37,13 +38,13 @@ class ExecutionNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView) -> ExecutionFillPayload | SizedOrder | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         ts, order = latest
         if self.execution_model is None:
-            return dict(order)
+            return cast(SizedOrder, dict(order))
         price = float(order["price"])
         qty = float(order["quantity"])
         side = OrderSide.BUY if qty >= 0 else OrderSide.SELL
@@ -58,4 +59,4 @@ class ExecutionNode(ProcessingNode):
             market_data=market,
             timestamp=ts,
         )
-        return asdict(fill)
+        return cast(ExecutionFillPayload, asdict(fill))
