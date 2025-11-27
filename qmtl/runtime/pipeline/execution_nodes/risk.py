@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager
 
 from ._shared import latest_entry
+from qmtl.runtime.pipeline.order_types import RiskRejection, SizedOrder
 
 
 class RiskControlNode(ProcessingNode):
@@ -33,7 +34,7 @@ class RiskControlNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView) -> SizedOrder | RiskRejection | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
@@ -60,6 +61,6 @@ class RiskControlNode(ProcessingNode):
         if adj_qty and adj_qty != order["quantity"]:
             order["quantity"] = adj_qty
         if ok:
-            return order
+            return cast(SizedOrder, order)
         violation_reason = violation.violation_type.value if violation is not None else "unknown"
-        return {"rejected": True, "violation": violation_reason}
+        return cast(RiskRejection, {"rejected": True, "violation": violation_reason})

@@ -42,6 +42,7 @@ from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
 )
+from qmtl.runtime.pipeline.order_types import normalize_order_intent
 from qmtl.runtime.transforms.execution_shared import apply_sizing
 from qmtl.runtime.transforms.position_intent import PositionTargetNode, Thresholds
 from qmtl.runtime.brokerage import (
@@ -119,7 +120,7 @@ def _create_intent_guard_node(
         order = dict(payload)
         sized_order: dict | None = order
         if portfolio is not None and "quantity" not in order:
-            sized_order = apply_sizing(order, portfolio, weight_fn=weight_fn)
+            sized_order = apply_sizing(order, portfolio, weight_fn=None)
         if sized_order is None:
             return None
         if "quantity" not in sized_order:
@@ -301,6 +302,7 @@ def _ccxt_execution_publish_steps(
 
 def _ccxt_sizing_portfolio_steps() -> dict[str, StepSpec]:
     return {
+        "pretrade": _ccxt_pretrade_step(),
         "sizing": StepSpec.from_factory(
             RealSizingNode,
             inject_portfolio=True,
@@ -311,6 +313,27 @@ def _ccxt_sizing_portfolio_steps() -> dict[str, StepSpec]:
             inject_portfolio=True,
         ),
     }
+
+
+def _ccxt_pretrade_step() -> StepSpec:
+    """Normalize upstream CCXT order intents into a consistent mapping."""
+
+    def _factory(upstream: Node) -> Node:
+        def _compute(view: CacheView) -> dict[str, Any] | None:
+            order = _latest_order(view, upstream, copy=True)
+            if order is None:
+                return None
+            return normalize_order_intent(order)
+
+        return Node(
+            input=upstream,
+            compute_fn=_compute,
+            name=f"{upstream.name}_normalize",
+            interval=upstream.interval,
+            period=1,
+        )
+
+    return StepSpec.from_factory(_factory)
 
 
 class NodeSetRecipe:
