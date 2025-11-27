@@ -180,24 +180,25 @@ def _run_coroutine_blocking(coro: Coroutine[object, object, SubmitResult]) -> Su
     except RuntimeError:
         return asyncio.run(coro)
 
-    result: dict[str, object] = {}
+    result: dict[str, SubmitResult | BaseException] = {}
 
     def _runner() -> None:
         try:
             result["value"] = asyncio.run(coro)
-        except Exception as exc:  # noqa: BLE001 - propagate original error
+        except BaseException as exc:  # noqa: BLE001 - propagate original error
             result["error"] = exc
 
     thread = Thread(target=_runner, daemon=True)
     thread.start()
     thread.join()
 
-    if "error" in result:
-        raise result["error"]  # type: ignore[misc]
+    error = result.get("error")
+    if isinstance(error, BaseException):
+        raise error
     value = result.get("value")
-    if value is None:
+    if not isinstance(value, SubmitResult):
         raise RuntimeError("submit coroutine did not produce a result")
-    return value  # type: ignore[return-value]
+    return value
 
 
 async def submit_async(

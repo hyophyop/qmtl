@@ -261,8 +261,14 @@ class TagQueryManager:
             return True
         return False
 
+    def _require_client(self) -> WebSocketClient:
+        if self.client is None:
+            raise RuntimeError("WebSocket client is not initialized")
+        return self.client
+
     async def _start_client_with_polling(self) -> None:
-        await self.client.start()  # type: ignore[union-attr]
+        client = self._require_client()
+        await client.start()
         if self.gateway_url:
             self._stop_event.clear()
             self._poll_task = asyncio.create_task(self._poll_loop())
