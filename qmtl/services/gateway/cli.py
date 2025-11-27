@@ -16,7 +16,7 @@ from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import find_config_file, load_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
-from .commit_log import create_commit_log_writer
+from .commit_log import CommitLogWriter, create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
 from qmtl.utils.i18n import _, language_source, set_language
 
@@ -47,7 +47,7 @@ def _log_config_source(
 try:  # pragma: no cover - aiokafka optional
     from aiokafka import AIOKafkaConsumer
 except Exception:  # pragma: no cover - import guard
-    AIOKafkaConsumer = Any  # type: ignore[misc]
+    AIOKafkaConsumer = Any
 
 
 async def _main(argv: list[str] | None = None) -> None:
@@ -217,10 +217,11 @@ async def _process_commits(records):
 
 
 async def _connect_database(db) -> None:
-    if not hasattr(db, "connect"):
+    connect = getattr(db, "connect", None)
+    if not callable(connect):
         return
     try:
-        await db.connect()  # type: ignore[attr-defined]
+        await connect()
     except Exception as exc:  # pragma: no cover - exception path tested separately
         message = _("Failed to connect to database")
         logging.exception(message)
@@ -228,9 +229,10 @@ async def _connect_database(db) -> None:
 
 
 async def _close_database(db) -> None:
-    if hasattr(db, "close"):
+    close = getattr(db, "close", None)
+    if callable(close):
         try:
-            await db.close()  # type: ignore[attr-defined]
+            await close()
         except Exception:  # pragma: no cover - exception path tested separately
             logging.exception(_("Failed to close database connection"))
 

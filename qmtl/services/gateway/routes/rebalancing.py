@@ -30,7 +30,12 @@ from ..shared_account_policy import SharedAccountPolicy
 from ..strategy_manager import StrategyManager
 from ..world_client import WorldServiceClient
 from ..compute_context import resolve_execution_domain
-from qmtl.services.worldservice.rebalancing import allocate_strategy_deltas, PositionSlice
+from qmtl.services.worldservice.rebalancing import (
+    PositionSlice,
+    RebalancePlan,
+    SymbolDelta,
+    allocate_strategy_deltas,
+)
 from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest
 
 logger = logging.getLogger(__name__)
@@ -86,30 +91,30 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         per_world_plans = plan_resp.get("per_world", {})
         venue_policies = _resolve_venue_policies(request)
         lot_sizes = payload.lot_size_by_symbol or {}
-        marks_by_world, marks_global = _collect_mark_snapshots(payload.positions or [])
-        current_net_notional = _aggregate_net_notional(payload.positions or [])
+        position_slices = [
+            PositionSlice(**pos.model_dump()) for pos in (payload.positions or [])
+        ]
+        marks_by_world, marks_global = _collect_mark_snapshots(position_slices)
+        current_net_notional = _aggregate_net_notional(position_slices)
         min_trade_notional = payload.min_trade_notional
         for wid, p in per_world_plans.items():
-            plan_obj = type(
-                "_Plan",
-                (),
-                {
-                    "world_id": wid,
-                    "scale_world": p.get("scale_world", 1.0),
-                    "scale_by_strategy": p.get("scale_by_strategy", {}),
-                    "deltas": [
-                        type(
-                            "_Delta",
-                            (),
-                            {
-                                "symbol": d.get("symbol"),
-                                "delta_qty": float(d.get("delta_qty", 0.0)),
-                                "venue": d.get("venue"),
-                            },
-                        )
-                        for d in p.get("deltas", [])
-                    ],
-                },
+            deltas = [
+                SymbolDelta(
+                    symbol=str(d.get("symbol")),
+                    delta_qty=float(d.get("delta_qty", 0.0)),
+                    venue=str(d.get("venue")) if d.get("venue") is not None else None,
+                )
+                for d in p.get("deltas", [])
+                if isinstance(d, Mapping)
+            ]
+            scale_by_strategy = {
+                str(k): float(v) for k, v in (p.get("scale_by_strategy", {}) or {}).items()
+            }
+            plan_obj = RebalancePlan(
+                world_id=str(wid),
+                scale_world=float(p.get("scale_world", 1.0)),
+                scale_by_strategy=scale_by_strategy,
+                deltas=deltas,
             )
             orders = orders_from_world_plan(
                 plan_obj,
@@ -138,15 +143,16 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                         "message": "shared-account execution is disabled",
                     },
                 )
-            global_deltas = plan_resp.get("global_deltas", [])
-            orders_global = orders_from_symbol_deltas([
-                type("_Delta", (), {
-                    "symbol": d.get("symbol"),
-                    "delta_qty": float(d.get("delta_qty", 0.0)),
-                    "venue": d.get("venue"),
-                })
-                for d in global_deltas
-            ], options=OrderOptions(
+            global_deltas = [
+                SymbolDelta(
+                    symbol=str(d.get("symbol")),
+                    delta_qty=float(d.get("delta_qty", 0.0)),
+                    venue=str(d.get("venue")) if d.get("venue") is not None else None,
+                )
+                for d in plan_resp.get("global_deltas", [])
+                if isinstance(d, Mapping)
+            ]
+            orders_global = orders_from_symbol_deltas(global_deltas, options=OrderOptions(
                 lot_size_by_symbol=lot_sizes,
                 min_trade_notional=min_trade_notional,
                 marks_by_symbol=marks_global,
@@ -176,35 +182,28 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         orders_per_strategy: List[Dict[str, Any]] | None = None
         if per_strategy and not shared_account:
             # Build PositionSlice list from request payload for allocation
-            positions = [
-                PositionSlice(
-                    world_id=pos.world_id,
-                    strategy_id=pos.strategy_id,
-                    symbol=pos.symbol,
-                    qty=pos.qty,
-                    mark=pos.mark,
-                    venue=pos.venue,
-                )
-                for pos in payload.positions
-            ]
+            positions = position_slices
 
             strategy_after_total = payload.strategy_alloc_after_total or {}
             orders_per_strategy = []
             for wid, p in per_world_plans.items():
                 # Reconstruct plan object for allocate_strategy_deltas
-                plan_obj = type("_Plan", (), {
-                    "world_id": wid,
-                    "scale_world": p.get("scale_world", 1.0),
-                    "scale_by_strategy": p.get("scale_by_strategy", {}),
-                    "deltas": [
-                        type("_Delta", (), {
-                            "symbol": d.get("symbol"),
-                            "delta_qty": float(d.get("delta_qty", 0.0)),
-                            "venue": d.get("venue"),
-                        })
+                plan_obj = RebalancePlan(
+                    world_id=str(wid),
+                    scale_world=float(p.get("scale_world", 1.0)),
+                    scale_by_strategy={
+                        str(k): float(v) for k, v in (p.get("scale_by_strategy", {}) or {}).items()
+                    },
+                    deltas=[
+                        SymbolDelta(
+                            symbol=str(d.get("symbol")),
+                            delta_qty=float(d.get("delta_qty", 0.0)),
+                            venue=str(d.get("venue")) if d.get("venue") is not None else None,
+                        )
                         for d in p.get("deltas", [])
+                        if isinstance(d, Mapping)
                     ],
-                })
+                )
 
                 fallback = strategy_after_total.get(wid)
                 exec_deltas = allocate_strategy_deltas(wid, plan_obj, positions, fallback_weights=fallback)
@@ -413,7 +412,7 @@ async def _publish_per_strategy(
     per_world_entries: dict[str, List[dict[str, Any]]] = defaultdict(list)
     for item in orders_per_strategy:
         wid = item["world_id"]
-        per_world_entries[wid].append(item)
+        per_world_entries[wid].append(dict(item))
     submitted_any = False
     for wid, entries in per_world_entries.items():
         orders_only = [entry["order"] for entry in entries]
@@ -504,7 +503,7 @@ async def _publish_batch(
 
 
 async def _record_rebalance_audit(
-    database: Database,
+    database: Database | None,
     world_id: str,
     scope: str,
     total: int,

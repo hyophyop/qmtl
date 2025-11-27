@@ -41,7 +41,7 @@ class DecodedDag:
 @dataclass
 class StrategyManager:
     redis: redis.Redis
-    database: PostgresDatabase
+    database: Database
     fsm: StrategyFSM
     degrade: Optional[DegradationManager] = None
     insert_sentinel: bool = True

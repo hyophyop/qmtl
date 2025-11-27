@@ -176,7 +176,7 @@ class ControlBusConsumer:
         data: dict[str, Any]
         if content_type == PROTO_CONTENT_TYPE:
             # Placeholder proto path: decode via helper (still JSON today)
-            event = decode_cb(
+            event: dict[str, Any] = decode_cb(
                 message.value if isinstance(message.value, (bytes, bytearray)) else str(message.value).encode()
             )
         else:
@@ -188,9 +188,8 @@ class ControlBusConsumer:
                 )
             except Exception:  # pragma: no cover - malformed message
                 event = {}
-        if not isinstance(event, dict):
-            data = {}
-        elif content_type == PROTO_CONTENT_TYPE:
+
+        if content_type == PROTO_CONTENT_TYPE:
             # For proto placeholder, keep full event as data for downstream consumers
             data = event
         else:
@@ -328,10 +327,11 @@ class ControlBusConsumer:
 
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
-        if not self.ws_hub:
+        ws_hub = self.ws_hub
+        if ws_hub is None:
             return
 
-        await self._dispatch_generic_message(msg)
+        await self._dispatch_generic_message(msg, ws_hub)
 
     def _marker_for_generic_message(self, msg: ControlBusMessage) -> tuple[Any, ...]:
         if msg.topic == "policy":
@@ -341,25 +341,25 @@ class ControlBusConsumer:
             )
         return (msg.etag, msg.run_id)
 
-    async def _dispatch_generic_message(self, msg: ControlBusMessage) -> None:
+    async def _dispatch_generic_message(self, msg: ControlBusMessage, ws_hub: WebSocketHub) -> None:
         version = msg.data.get("version")
         if version != 1:
             logger.warning("unsupported controlbus message version: %s", version)
             return
 
         if msg.topic == "activation":
-            await self.ws_hub.send_activation_updated(msg.data)
+            await ws_hub.send_activation_updated(msg.data)
             return
         if msg.topic == "policy":
-            await self.ws_hub.send_policy_updated(msg.data)
+            await ws_hub.send_policy_updated(msg.data)
             return
         if msg.topic == "queue":
-            await self._handle_queue_update(msg)
+            await self._handle_queue_update(msg, ws_hub)
             return
 
         logger.warning("Unhandled ControlBus topic %s", msg.topic)
 
-    async def _handle_queue_update(self, msg: ControlBusMessage) -> None:
+    async def _handle_queue_update(self, msg: ControlBusMessage, ws_hub: WebSocketHub) -> None:
         tags = msg.data.get("tags", [])
         interval = msg.data.get("interval", 0)
         queues = msg.data.get("queues", [])
@@ -374,7 +374,7 @@ class ControlBusConsumer:
         except ValueError:
             mode = MatchMode.ANY
 
-        await self.ws_hub.send_queue_update(
+        await ws_hub.send_queue_update(
             tags,
             interval,
             queues,
@@ -384,17 +384,17 @@ class ControlBusConsumer:
             etag=etag,
             ts=ts,
         )
-        await self._maybe_emit_tagquery_upsert(tags, interval, queues, execution_domain)
+        await self._maybe_emit_tagquery_upsert(ws_hub, tags, interval, queues, execution_domain)
 
     async def _maybe_emit_tagquery_upsert(
-        self, tags: list[str], interval: int, queues: list[Any], execution_domain: str | None
+        self, ws_hub: WebSocketHub, tags: list[str], interval: int, queues: list[Any], execution_domain: str | None
     ) -> None:
         key = (tuple(sorted(tags)), int(interval), execution_domain or "")
         if key in self._known_tag_intervals:
             return
 
         self._known_tag_intervals.add(key)
-        await self.ws_hub.send_tagquery_upsert(tags, interval, queues)
+        await ws_hub.send_tagquery_upsert(tags, interval, queues)
 
     def _track_delivery(
         self,
