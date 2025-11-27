@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
@@ -33,7 +33,7 @@ class PortfolioNode(ProcessingNode):
             period=1,
         )
 
-    def _update_watermark(self, ts: int, fill: dict[str, Any]) -> None:
+    def _update_watermark(self, ts: int, fill: Mapping[str, Any]) -> None:
         if not self._watermark_topic:
             return
         try:
@@ -45,7 +45,7 @@ class PortfolioNode(ProcessingNode):
         except Exception:
             pass
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
         latest = latest_entry(view, self.fills)
         if latest is None:
             return None

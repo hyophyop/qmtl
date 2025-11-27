@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 
 from qmtl.runtime.indicators import (
     conditional_entry_filter,
@@ -52,31 +53,33 @@ def simulate_single_snapshot() -> dict[str, object]:
     """Run the pipeline with mocked data and return the emitted metrics."""
 
     artifacts = build_pipeline()
-    order_snapshot = {
+    order_snapshot: Mapping[str, list[tuple[float, float]]] = {
         "bids": [(100.0, 4.0), (99.9, 2.5), (99.8, 2.0)],
         "asks": [(100.1, 3.0), (100.2, 2.5), (100.3, 1.5)],
     }
-    queue_snapshot = {"queue_rank": 2, "queue_size": 10}
+    queue_snapshot: Mapping[str, int] = {"queue_rank": 2, "queue_size": 10}
 
-    order_view = CacheView(
+    order_view: CacheView[Mapping[str, list[tuple[float, float]]]] = CacheView(
         {
             artifacts.order_book.node_id: {
                 artifacts.order_book.interval: [(0, order_snapshot)]
             }
         }
     )
-    micro_metrics = artifacts.microprice_metrics.compute_fn(order_view)
+    micro_metrics: Mapping[str, float | None] | None = artifacts.microprice_metrics.compute_fn(
+        order_view
+    )
 
-    queue_view = CacheView(
+    queue_view: CacheView[Mapping[str, int]] = CacheView(
         {
             artifacts.queue_metadata.node_id: {
                 artifacts.queue_metadata.interval: [(0, queue_snapshot)]
             }
         }
     )
-    priority_value = artifacts.priority.compute_fn(queue_view)
+    priority_value: float | None = artifacts.priority.compute_fn(queue_view)
 
-    gate_view = CacheView(
+    gate_view: CacheView[Mapping[str, float | None] | float | None] = CacheView(
         {
             artifacts.microprice_metrics.node_id: {
                 artifacts.microprice_metrics.interval: [(0, micro_metrics)]
