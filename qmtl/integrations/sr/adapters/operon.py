@@ -18,7 +18,7 @@ from ..types import BaseSRCandidate
 # Type checking imports (won't fail if pyoperon not installed)
 if TYPE_CHECKING:
     try:
-        import pyoperon  # type: ignore
+        import pyoperon
     except ImportError:
         pass
 
@@ -53,11 +53,11 @@ class OperonCandidate(BaseSRCandidate):
 # Check if pyoperon is available
 _PYOPERON_AVAILABLE = False
 try:
-    import pyoperon  # type: ignore
+    import pyoperon
 
     _PYOPERON_AVAILABLE = True
 except ImportError:
-    pyoperon = None  # type: ignore
+    pyoperon = None
 
 
 def is_pyoperon_available() -> bool:

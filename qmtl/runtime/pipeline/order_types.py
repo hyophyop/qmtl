@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Typed order payload contracts shared across execution nodes."""
 
-from typing import Any, Literal, Mapping, MutableMapping, TypedDict, cast
+from typing import Literal, Mapping, MutableMapping, TypedDict, cast
 from typing import NotRequired
 from typing_extensions import Required
 
@@ -121,7 +121,7 @@ OrderPayload = Mapping[str, object]
 MutableOrderPayload = MutableMapping[str, object]
 
 
-def as_order_dict(order: Mapping[str, Any] | MutableMapping[str, Any] | None) -> dict[str, object] | None:
+def as_order_dict(order: OrderPayload | MutableOrderPayload | None) -> dict[str, object] | None:
     """Return a shallow dict copy when *order* is mapping-like."""
 
     if not isinstance(order, Mapping):
@@ -132,7 +132,7 @@ def as_order_dict(order: Mapping[str, Any] | MutableMapping[str, Any] | None) ->
         return None
 
 
-def normalize_order_intent(order: Mapping[str, Any] | MutableMapping[str, Any] | None) -> OrderIntent | SizedOrder | None:
+def normalize_order_intent(order: OrderPayload | MutableOrderPayload | None) -> OrderIntent | SizedOrder | None:
     """Normalize loose order-like payloads into a predictable dict."""
 
     normalized = as_order_dict(order)
@@ -161,7 +161,7 @@ def normalize_order_intent(order: Mapping[str, Any] | MutableMapping[str, Any] |
 
 
 def prepare_gateway_payload(
-    order: Mapping[str, Any] | MutableMapping[str, Any],
+    order: GatewayOrderPayload | OrderPayload | MutableOrderPayload,
     *,
     world_id: str | None = None,
     strategy_id: str | None = None,
@@ -170,7 +170,7 @@ def prepare_gateway_payload(
 ) -> GatewayOrderPayload:
     """Return a Gateway/commit-log friendly order payload."""
 
-    payload = dict(order)
+    payload: dict[str, object] = dict(order)
     if include_metadata:
         if world_id and "world_id" not in payload:
             payload["world_id"] = world_id
@@ -182,7 +182,7 @@ def prepare_gateway_payload(
         payload["type"] = payload.get("order_type")
     if "time_in_force" not in payload and "tif" in payload:
         payload["time_in_force"] = payload.get("tif")
-    return payload  # type: ignore[return-value]
+    return cast(GatewayOrderPayload, payload)
 
 
 __all__ = [
