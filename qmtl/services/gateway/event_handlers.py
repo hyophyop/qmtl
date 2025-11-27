@@ -177,12 +177,12 @@ def create_event_router(
                             hash_data = await world_client.get_state_hash(
                                 world_id, "policy"
                             )
-                            payload = {"world_id": world_id}
+                            policy_payload = {"world_id": world_id}
                             if isinstance(hash_data, dict):
-                                payload.update(hash_data)
-                            payload["version"] = 1
+                                policy_payload.update(hash_data)
+                            policy_payload["version"] = 1
                             event = format_event(
-                                "qmtl.services.gateway", "policy_state_hash", payload
+                                "qmtl.services.gateway", "policy_state_hash", policy_payload
                             )
                             await websocket.send_text(json.dumps(event))
                         except Exception:
@@ -192,20 +192,20 @@ def create_event_router(
                 while True:
                     raw = await websocket.receive_text()
                     # Treat any incoming message as a heartbeat; try to parse ack structure
-                    payload: dict[str, Any] | None = None
+                    incoming_payload: dict[str, Any] | None = None
                     try:
-                        payload = json.loads(raw)
+                        incoming_payload = json.loads(raw)
                     except Exception:
-                        payload = None
-                    if isinstance(payload, dict):
-                        msg_type = payload.get("type") or payload.get("event")
+                        incoming_payload = None
+                    if isinstance(incoming_payload, dict):
+                        msg_type = incoming_payload.get("type") or incoming_payload.get("event")
                         if msg_type == "ack":
                             gw_metrics.ws_acks_total.inc()
                             logger.info(
                                 "ws_ack",
                                 extra={
                                     "event": "ws_ack",
-                                    "last_id": payload.get("last_id"),
+                                    "last_id": incoming_payload.get("last_id"),
                                 },
                             )
                             # Echo back an acknowledgement
@@ -215,7 +215,7 @@ def create_event_router(
                                         {
                                             "type": "ack",
                                             "ts": datetime.now(timezone.utc).isoformat(),
-                                            "last_id": payload.get("last_id"),
+                                            "last_id": incoming_payload.get("last_id"),
                                         }
                                     )
                                 )
@@ -223,7 +223,9 @@ def create_event_router(
                                 pass
                         elif msg_type == "refresh":
                             gw_metrics.ws_refreshes_total.inc()
-                            token = payload.get("token")
+                            token = incoming_payload.get("token")
+                            if not isinstance(token, str):
+                                continue
                             try:
                                 new_claims = validate_event_token(token, event_config)
                                 raw_topics = new_claims.get("topics") or []

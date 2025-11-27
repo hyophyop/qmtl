@@ -173,6 +173,18 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
+  "qmtl.services.gateway.*",
+]
+ignore_errors = false
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.services.gateway.tests.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
   "qmtl.runtime.sdk.*",
 ]
 ignore_errors = false

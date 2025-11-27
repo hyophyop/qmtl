@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import time
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.models import (
     QueuesByTagResponse,
+    QueueDescriptor,
     SeamlessHistoryReport,
     StatusResponse,
     StrategyAck,
@@ -26,7 +29,7 @@ from .dependencies import GatewayDependencyProvider
 def _ack_from_result(result: StrategySubmissionResult) -> StrategyAck:
     return StrategyAck(
         strategy_id=result.strategy_id,
-        queue_map=result.queue_map,
+        queue_map=cast(dict[str, object], result.queue_map),
         sentinel_id=result.sentinel_id,
         node_ids_crc32=result.node_ids_crc32,
         downgraded=result.downgraded,
@@ -112,10 +115,15 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
 
         tag_list = split_tags(tags)
         mode = normalize_match_mode(match_mode).value
-        queues = await dagmanager.get_queues_by_tag(
+        raw_queues = await dagmanager.get_queues_by_tag(
             tag_list, interval, mode, world_id or None, execution_domain
         )
-        return {"queues": queues}
+        queues = [
+            QueueDescriptor.model_validate(queue)
+            for queue in raw_queues
+            if isinstance(queue, dict)
+        ]
+        return QueuesByTagResponse(queues=queues)
 
     @router.post(
         "/strategies/{strategy_id}/history",

@@ -107,6 +107,8 @@ class QueueMapResolver:
             return
         for item in result:
             queue_name = item.get("queue") if isinstance(item, dict) else str(item)
+            if not isinstance(queue_name, str):
+                continue
             if queue_name not in seen[node_id]:
                 lst.append(item)
                 seen[node_id].add(queue_name)

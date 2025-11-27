@@ -212,15 +212,18 @@ def _resolve_world_client(
 ) -> WorldServiceClient | None:
     if world_client is None and enable_proxy and url is not None:
         budget = Budget(timeout=timeout, retries=retries)
+
+        def _on_breaker_open() -> None:
+            gw_metrics.worlds_breaker_state.set(1)
+            gw_metrics.worlds_breaker_open_total.inc()
+
+        def _on_breaker_close() -> None:
+            gw_metrics.worlds_breaker_state.set(0)
+            gw_metrics.worlds_breaker_failures.set(0)
+
         breaker = AsyncCircuitBreaker(
-            on_open=lambda: (
-                gw_metrics.worlds_breaker_state.set(1),
-                gw_metrics.worlds_breaker_open_total.inc(),
-            ),
-            on_close=lambda: (
-                gw_metrics.worlds_breaker_state.set(0),
-                gw_metrics.worlds_breaker_failures.set(0),
-            ),
+            on_open=_on_breaker_open,
+            on_close=_on_breaker_close,
             on_failure=lambda c: gw_metrics.worlds_breaker_failures.set(c),
         )
         gw_metrics.worlds_breaker_state.set(0)
@@ -270,7 +273,10 @@ async def _start_background(
 
     if enable_background and commit_log_consumer:
         await commit_log_consumer.start()
-        handler = commit_log_handler or (lambda records: None)
+        async def _noop(records: list[tuple[str, int, str, Any]]) -> None:
+            return None
+
+        handler = commit_log_handler or _noop
 
         async def _consume_loop() -> None:
             while True:
@@ -322,30 +328,37 @@ async def _safe_stop_commit_writer(writer: CommitLogWriter) -> None:
 async def _close_dagmanager_and_db(dagmanager: DagManagerClient, database_obj: Database) -> None:
     if hasattr(dagmanager, "close"):
         await dagmanager.close()
-    if hasattr(database_obj, "close"):
+    close = getattr(database_obj, "close", None)
+    if callable(close):
         try:
-            await database_obj.close()  # type: ignore[attr-defined]
+            await close()
         except Exception:
             logger.exception("Failed to close database connection")
 
 
 async def _close_redis(redis_conn: redis.Redis) -> None:
     try:
-        if hasattr(redis_conn, "aclose"):
-            await redis_conn.aclose()  # type: ignore[attr-defined]
-        elif hasattr(redis_conn, "close"):
-            await redis_conn.close()  # type: ignore[attr-defined]
+        aclose = getattr(redis_conn, "aclose", None)
+        close = getattr(redis_conn, "close", None)
+        if callable(aclose):
+            await aclose()
+        elif callable(close):
+            await close()
         pool = getattr(redis_conn, "connection_pool", None)
-        if pool is not None and hasattr(pool, "disconnect"):
-            await pool.disconnect()  # type: ignore[attr-defined]
+        disconnect = getattr(pool, "disconnect", None) if pool is not None else None
+        if callable(disconnect):
+            await disconnect()
     except Exception:
         logger.exception("Failed to close Redis connection")
 
 
 async def _close_world_client(world_client: WorldServiceClient | None) -> None:
-    if world_client is None or not hasattr(world_client._client, "aclose"):
+    if world_client is None:
         return
-    try:
-        await world_client._client.aclose()  # type: ignore[attr-defined]
-    except Exception:
-        logger.exception("Failed to close world client")
+    client = getattr(world_client, "_client", None)
+    close = getattr(client, "aclose", None)
+    if callable(close):
+        try:
+            await close()
+        except Exception:
+            logger.exception("Failed to close world client")
