@@ -497,7 +497,7 @@ class HistoryWarmupService:
     def _execute_node(node: Any, event_values: dict[str, dict[int, list[tuple[int, Any]]]]) -> Any:
         from .cache_view import CacheView
 
-        view = CacheView(event_values)
+        view: CacheView[Any] = CacheView(event_values)
         result = node.compute_fn(view)
         runner = _get_runner()
         if runner is not None:

@@ -21,8 +21,11 @@ class CacheWindow(Generic[PayloadT]):
     interval: int | str
     _rows: CacheLeaf[PayloadT]
 
-    def latest(self) -> CacheEntry[PayloadT] | None:
-        return self._rows[-1] if self._rows else None
+    def latest(self) -> PayloadT | None:
+        if not self._rows:
+            return None
+        _, payload = self._rows[-1]
+        return payload
 
     def as_frame(self, *, ts_col: str = "ts"):
         """Return a pandas DataFrame with a timestamp column."""

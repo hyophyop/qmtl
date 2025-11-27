@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Iterable
-from typing import Any, Generic, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Generic, Mapping, Protocol, Sequence, TypeVar
 
 import pandas as pd
 
-from .cache_view import CacheEntry, CacheView, PayloadT
+PayloadT = TypeVar("PayloadT")
+CacheEntry = tuple[int, PayloadT]
+
+
+class CacheViewLike(Protocol):
+    def __getitem__(self, key: Any) -> Any:
+        ...
+
 from .protocols import NodeLike
 
 
@@ -49,7 +56,7 @@ class CacheFrame(Generic[PayloadT]):
 
 
 def window(
-    view: CacheView[PayloadT] | Any, node: "NodeLike" | str, interval: int, length: int
+    view: CacheViewLike, node: "NodeLike" | str, interval: int, length: int
 ) -> list[CacheEntry[PayloadT]]:
     """Return the trailing ``length`` entries for ``(node, interval)``."""
 
@@ -57,14 +64,14 @@ def window(
         raise ValueError("length must be non-negative")
 
     series_view = view[node][interval]
-    data = _as_sequence(series_view)
+    data: Sequence[CacheEntry[PayloadT]] = _as_sequence(series_view)
     if length == 0:
         return []
     return list(data[-length:])
 
 
 def as_frame(
-    view: CacheView[PayloadT] | Any,
+    view: CacheViewLike,
     node: "NodeLike" | str,
     interval: int,
     *,
@@ -73,7 +80,7 @@ def as_frame(
 ) -> CacheFrame[PayloadT]:
     """Convert a cache leaf into a :class:`CacheFrame`."""
 
-    series = _slice_series(view, node, interval, window)
+    series: Sequence[CacheEntry[PayloadT]] = _slice_series(view, node, interval, window)
     timestamps: list[int] = []
     values: list[Any] = []
     for item in series:
@@ -90,7 +97,7 @@ def as_frame(
 
 
 def align_frames(
-    view: CacheView[PayloadT] | Any,
+    view: CacheViewLike,
     specs: Sequence[tuple["NodeLike" | str, int]],
     *,
     window: int | None = None,
@@ -113,10 +120,10 @@ def align_frames(
 
 
 def _slice_series(
-    view: CacheView[PayloadT] | Any, node: "NodeLike" | str, interval: int, window: int | None
+    view: CacheViewLike, node: "NodeLike" | str, interval: int, window: int | None
 ) -> Sequence[CacheEntry[PayloadT]]:
     series_view = view[node][interval]
-    data = _as_sequence(series_view)
+    data: Sequence[CacheEntry[PayloadT]] = _as_sequence(series_view)
     if window is None:
         return data[:]
     if window < 0:
