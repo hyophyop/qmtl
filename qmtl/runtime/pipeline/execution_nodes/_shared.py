@@ -10,10 +10,10 @@ from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.watermark import WatermarkGate
 
 
-CacheEntry = tuple[int, Any]
+CacheEntry = tuple[int, Mapping[str, Any]]
 
 
-def latest_entry(view: CacheView, node: Node) -> CacheEntry | None:
+def latest_entry(view: CacheView[Mapping[str, Any]], node: Node) -> CacheEntry | None:
     """Return the most recent cache entry for ``node`` if available."""
 
     data = view[node][node.interval]

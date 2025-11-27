@@ -38,13 +38,11 @@ class OrderPublishNode(ProcessingNode):
     def _publish_gateway(self, order: MutableMapping[str, object]) -> None:
         safe_call(self.submit_order, order)
 
-    def _compute(self, view: CacheView) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         ts, order = latest
-        if not isinstance(order, Mapping):
-            return None
         order_payload: MutableMapping[str, object] = (
             order if isinstance(order, MutableMapping) else cast(MutableMapping[str, object], dict(order))
         )

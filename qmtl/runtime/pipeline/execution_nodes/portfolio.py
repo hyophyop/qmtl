@@ -45,7 +45,7 @@ class PortfolioNode(ProcessingNode):
         except Exception:
             pass
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView[dict[str, Any]]) -> dict | None:
         latest = latest_entry(view, self.fills)
         if latest is None:
             return None

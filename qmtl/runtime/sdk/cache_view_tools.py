@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Iterable
-from typing import Any, Mapping, Sequence
+from typing import Any, Generic, Mapping, Sequence
 
 import pandas as pd
 
+from .cache_view import CacheEntry, CacheView, PayloadT
 from .protocols import NodeLike
 
 
 @dataclass(frozen=True)
-class CacheFrame:
+class CacheFrame(Generic[PayloadT]):
     """Pandas-backed view over a cache leaf."""
 
     frame: pd.DataFrame
@@ -28,13 +29,13 @@ class CacheFrame:
         changed = target.pct_change(periods=window)
         return changed.dropna() if dropna else changed
 
-    def validate_columns(self, required: Sequence[str]) -> "CacheFrame":
+    def validate_columns(self, required: Sequence[str]) -> "CacheFrame[PayloadT]":
         missing = [column for column in required if column not in self.frame.columns]
         if missing:
             raise KeyError(f"Missing columns: {', '.join(missing)}")
         return self
 
-    def align_with(self, *others: "CacheFrame") -> list["CacheFrame"]:
+    def align_with(self, *others: "CacheFrame[PayloadT]") -> list["CacheFrame[PayloadT]"]:
         frames = [self.frame, *(other.frame for other in others)]
         if not frames:
             return []
@@ -47,7 +48,9 @@ class CacheFrame:
         return [CacheFrame(frame.loc[common_index]) for frame in frames]
 
 
-def window(view, node: "NodeLike" | str, interval: int, length: int) -> list[tuple[Any, Any]]:
+def window(
+    view: CacheView[PayloadT] | Any, node: "NodeLike" | str, interval: int, length: int
+) -> list[CacheEntry[PayloadT]]:
     """Return the trailing ``length`` entries for ``(node, interval)``."""
 
     if length < 0:
@@ -61,13 +64,13 @@ def window(view, node: "NodeLike" | str, interval: int, length: int) -> list[tup
 
 
 def as_frame(
-    view,
+    view: CacheView[PayloadT] | Any,
     node: "NodeLike" | str,
     interval: int,
     *,
     window: int | None = None,
     columns: Sequence[str] | None = None,
-) -> CacheFrame:
+) -> CacheFrame[PayloadT]:
     """Convert a cache leaf into a :class:`CacheFrame`."""
 
     series = _slice_series(view, node, interval, window)
@@ -87,12 +90,12 @@ def as_frame(
 
 
 def align_frames(
-    view,
+    view: CacheView[PayloadT] | Any,
     specs: Sequence[tuple["NodeLike" | str, int]],
     *,
     window: int | None = None,
     columns: Mapping["NodeLike" | str, Sequence[str]] | Sequence[str] | None = None,
-) -> list[CacheFrame]:
+) -> list[CacheFrame[PayloadT]]:
     """Materialize and align multiple cache leaves on their shared timestamps."""
 
     frames: list[CacheFrame] = []
@@ -110,8 +113,8 @@ def align_frames(
 
 
 def _slice_series(
-    view, node: "NodeLike" | str, interval: int, window: int | None
-) -> Sequence[Any]:
+    view: CacheView[PayloadT] | Any, node: "NodeLike" | str, interval: int, window: int | None
+) -> Sequence[CacheEntry[PayloadT]]:
     series_view = view[node][interval]
     data = _as_sequence(series_view)
     if window is None:
@@ -123,7 +126,7 @@ def _slice_series(
     return data[-window:]
 
 
-def _as_sequence(series_view: Any) -> Sequence[Any]:
+def _as_sequence(series_view: Any) -> Sequence[CacheEntry[PayloadT]]:
     data = series_view
     series_cls = series_view.__class__
     # CacheView exposes its backing data via _data; avoid importing to keep module decoupled

@@ -27,13 +27,11 @@ class TimingGateNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         ts, order = latest
-        if not isinstance(order, Mapping):
-            return None
         order_payload = dict(order)
         dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
         ok, reason, _ = self.controller.validate_timing(dt)

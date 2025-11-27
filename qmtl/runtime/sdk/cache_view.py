@@ -1,23 +1,28 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, cast
+from typing import Any, Generic, TypeVar, cast
 from dataclasses import dataclass
 
 from . import metrics as sdk_metrics
 from .protocols import NodeLike
 
 
+PayloadT = TypeVar("PayloadT")
+CacheEntry = tuple[int, PayloadT]
+CacheLeaf = Sequence[CacheEntry[PayloadT]]
+
+
 @dataclass(slots=True)
-class CacheWindow:
+class CacheWindow(Generic[PayloadT]):
     """Windowed slice of cache entries for a single ``(node_id, interval)``."""
 
     node_id: str
     interval: int | str
-    _rows: Sequence[tuple[int, Any]]
+    _rows: CacheLeaf[PayloadT]
 
-    def latest(self) -> Any:
-        return self._rows[-1][1] if self._rows else None
+    def latest(self) -> CacheEntry[PayloadT] | None:
+        return self._rows[-1] if self._rows else None
 
     def as_frame(self, *, ts_col: str = "ts"):
         """Return a pandas DataFrame with a timestamp column."""
@@ -62,13 +67,16 @@ class CacheWindow:
         series = frame.set_index(ts_col)[column]
         return series.dropna() if dropna else series
 
-    def rows(self) -> list[tuple[int, Any]]:
+    def rows(self) -> list[CacheEntry[PayloadT]]:
         """Return the underlying rows (ts, payload) as a new list."""
 
         return list(self._rows)
 
 
-class CacheView:
+CacheViewData = Mapping[Any, Any] | CacheLeaf[PayloadT]
+
+
+class CacheView(Generic[PayloadT]):
     """Simple hierarchical read-only view over a cache snapshot.
 
     When ``track_access`` is ``True`` every accessed ``(upstream_id, interval)``
@@ -77,7 +85,7 @@ class CacheView:
 
     def __init__(
         self,
-        data: Any,
+        data: CacheViewData[PayloadT],
         *,
         track_access: bool = False,
         artifact_plane: Any | None = None,
@@ -141,7 +149,7 @@ class CacheView:
             return self.__getitem__(name)
         raise AttributeError(name)
 
-    def latest(self) -> Any:
+    def latest(self) -> CacheEntry[PayloadT] | None:
         data = object.__getattribute__(self, "_data")
         if isinstance(data, Sequence):
             return data[-1] if data else None
@@ -217,7 +225,7 @@ class CacheView:
         length: int | None = None,
         *,
         count: int | None = None,
-    ):
+    ) -> CacheWindow[PayloadT] | list[CacheEntry[PayloadT]]:
         """Return a cache slice for ``(node, interval)``.
 
         - Legacy mode: ``length`` (positional) → delegate to ``cache_view_tools.window`` and

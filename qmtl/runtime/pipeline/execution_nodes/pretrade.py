@@ -46,7 +46,7 @@ class PreTradeGateNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None

@@ -33,13 +33,11 @@ class RiskControlNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict[str, Any] | None:
+    def _compute(self, view: CacheView[Mapping[str, Any]]) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         _, order = latest
-        if not isinstance(order, Mapping):
-            return None
         current_positions = {
             sym: PositionInfo(
                 symbol=sym,
