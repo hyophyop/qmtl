@@ -263,11 +263,13 @@ def build_strategy_from_dag_spec(
         interval = data_spec_mapping.get("interval") or data_spec_mapping.get("timeframe")
         period = data_spec_mapping.get("period") or data_spec_mapping.get("min_history")
 
-    class DagStrategy(Strategy):  # type: ignore[misc]
-        _expression = expression
+    expr_str = expression or ""
+
+    class DagStrategy(Strategy):
+        _expression = expr_str
         _data_spec = data_spec_mapping or None
         _sr_engine = sr_engine
-        _expression_key = expression_key or compute_expression_key(expression)
+        _expression_key = expression_key or compute_expression_key(expr_str)
         _expression_dag_spec = dag_dict
         _sr_metadata = {
             "dag_node_count": getattr(dag_spec, "node_count", None),
@@ -316,6 +318,7 @@ def build_strategy_from_dag_spec(
                 if ds and snap:
                     fingerprint = f"{ds}:{snap}"
 
+            node: Any
             for nid in topo_order:
                 spec = id_to_spec[nid]
                 node_type = spec.get("node_type", "")
@@ -323,6 +326,12 @@ def build_strategy_from_dag_spec(
                 params = spec.get("params") or {}
                 inputs = spec.get("inputs") or []
                 upstream = [node_objs[i] for i in inputs if i in node_objs]
+                if not upstream:
+                    upstream = [
+                        node_objs[src]
+                        for src, dst in dag_edges
+                        if dst == nid and src in node_objs
+                    ]
 
                 if node_type == "input":
                     node = StreamInput(
@@ -332,6 +341,8 @@ def build_strategy_from_dag_spec(
                     )
                 else:
                     tag = node_type.replace("/", "_") if node_type else "sr_node"
+                    if not upstream:
+                        raise ValueError(f"processing node {nid} has no upstream inputs")
                     node = ProcessingNode(
                         upstream,
                         compute_fn=_compute_stub,
@@ -351,7 +362,7 @@ def build_strategy_from_dag_spec(
             self.add_nodes(list(node_objs.values()))
 
         def serialize(self) -> dict[str, Any]:
-            dag = super().serialize()
+            dag = cast(dict[str, Any], super().serialize())
             meta = dag.setdefault("meta", {})
             sr_meta = meta.setdefault("sr", {})
             sr_meta.update(
@@ -369,7 +380,7 @@ def build_strategy_from_dag_spec(
     if expression_key:
         cname = f"sr_dag_{expression_key[:8]}"
     else:
-        cname = f"sr_dag_{abs(hash(expression)) % 10000:04d}"
+        cname = f"sr_dag_{abs(hash(expr_str)) % 10000:04d}"
     DagStrategy.__name__ = cname
     DagStrategy.__qualname__ = cname
     return DagStrategy
