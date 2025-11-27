@@ -175,7 +175,7 @@ class _DagBuilder:
                 raise ValueError(f"Unexpected parameters for {func_name}: {args}")
             return {}
 
-        if len(args) < len(mapping.param_names):
+        if len(args) != len(mapping.param_names):
             raise ValueError(
                 f"{func_name} expects {len(mapping.param_names)} parameters, got {len(args)}"
             )

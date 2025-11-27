@@ -68,6 +68,14 @@ class TestDagBuilder:
         assert indicator["params"] == {"period": 10.0}
         assert indicator["inputs"] == ["n0"]
 
+    def test_indicator_rejects_extra_parameters(self):
+        builder = _DagBuilder()
+        x = sp.Symbol("price")
+        expr = sp.Function("EMA")(x, 10, 20)
+
+        with pytest.raises(ValueError, match="expects 1 parameters, got 2"):
+            builder.walk(expr)
+
     def test_unsupported_function_raises(self):
         builder = _DagBuilder()
         x = sp.Symbol("x")
