@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Mapping, MutableMapping
+from typing import Any, Callable, Mapping, MutableMapping, Sequence, cast
 
 from qmtl.services.dagmanager.kafka_admin import compute_key
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
@@ -17,9 +17,13 @@ def latest_entry(view: CacheView, node: Node) -> CacheEntry | None:
     """Return the most recent cache entry for ``node`` if available."""
 
     data = view[node][node.interval]
+    if isinstance(data, CacheView):
+        data = object.__getattribute__(data, "_data")
+    if not isinstance(data, Sequence):
+        return None
     if not data:
         return None
-    return data[-1]
+    return cast(CacheEntry, data[-1])
 
 
 def normalise_watermark_gate(

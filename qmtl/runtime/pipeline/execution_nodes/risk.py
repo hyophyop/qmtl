@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager
@@ -31,11 +33,13 @@ class RiskControlNode(ProcessingNode):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         _, order = latest
+        if not isinstance(order, Mapping):
+            return None
         current_positions = {
             sym: PositionInfo(
                 symbol=sym,
@@ -59,4 +63,5 @@ class RiskControlNode(ProcessingNode):
             order["quantity"] = adj_qty
         if ok:
             return order
-        return {"rejected": True, "violation": violation.violation_type.value}
+        violation_reason = violation.violation_type.value if violation is not None else "unknown"
+        return {"rejected": True, "violation": violation_reason}

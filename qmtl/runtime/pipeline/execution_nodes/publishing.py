@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, MutableMapping
+from typing import Any, Callable, Mapping, MutableMapping, cast
 
 from qmtl.services.gateway.commit_log import CommitLogWriter
 from qmtl.runtime.sdk import metrics as sdk_metrics
@@ -21,7 +21,7 @@ class OrderPublishNode(ProcessingNode):
         order: Node,
         *,
         commit_log_writer: CommitLogWriter | None = None,
-        submit_order: Callable[[dict], None] | None = None,
+        submit_order: Callable[[MutableMapping[str, object]], None] | None = None,
         name: str | None = None,
     ) -> None:
         self.order = order
@@ -36,16 +36,35 @@ class OrderPublishNode(ProcessingNode):
         )
 
     def _publish_gateway(self, order: MutableMapping[str, object]) -> None:
-        safe_call(self.submit_order, order)  # type: ignore[arg-type]
+        safe_call(self.submit_order, order)
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView) -> dict[str, Any] | None:
         latest = latest_entry(view, self.order)
         if latest is None:
             return None
         ts, order = latest
-        if activation_blocks_order(order):
-            return order
-        publish_commit_log(self.commit_log_writer, self, self.order, ts, self.order.interval, order)
-        self._publish_gateway(order)
+        if not isinstance(order, Mapping):
+            return None
+        order_payload: MutableMapping[str, object] = (
+            order if isinstance(order, MutableMapping) else cast(MutableMapping[str, object], dict(order))
+        )
+        if activation_blocks_order(order_payload):
+            return dict(order_payload)
+        interval = self.order.interval
+        if interval is None:
+            return None
+        try:
+            interval_value = int(interval)
+        except (TypeError, ValueError):
+            return None
+        publish_commit_log(
+            self.commit_log_writer,
+            self,
+            self.order,
+            ts,
+            interval_value,
+            order_payload,
+        )
+        self._publish_gateway(order_payload)
         safe_call(getattr(sdk_metrics, "record_order_published", None))
-        return order
+        return dict(order_payload)

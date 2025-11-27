@@ -161,7 +161,6 @@ module = [
   "qmtl.runtime.indicators.*",
   "qmtl.runtime.io.*",
   "qmtl.runtime.nodesets.*",
-  "qmtl.runtime.pipeline.*",
   "qmtl.runtime.reference_models.*",
   "qmtl.runtime.transforms.*",
   "qmtl.services.*",
@@ -174,6 +173,12 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
   "qmtl.runtime.sdk.*",
+]
+ignore_errors = false
+
+[[tool.mypy.overrides]]
+module = [
+  "qmtl.runtime.pipeline.*",
 ]
 ignore_errors = false
 
