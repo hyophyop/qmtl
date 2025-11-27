@@ -6,6 +6,7 @@ Seamless Data Provider와 동일 데이터를 사용하도록 Strategy를 생성
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
 
 from .expression_key import compute_expression_key
@@ -235,10 +236,12 @@ def build_expression_strategy(
 def build_strategy_from_dag_spec(
     dag_spec: Any,
     *,
-    history_provider: Any | None = None,
+    history_provider: Any | None,
     sr_engine: str | None = "pysr",
 ) -> type[Strategy]:
     """Create a Strategy from an ExpressionDagSpec-like object."""
+    if history_provider is None:
+        raise ValueError("history_provider (Seamless) is required for DAG-based strategies")
 
     expression = getattr(dag_spec, "equation", None) or getattr(dag_spec, "expression", "")
     data_spec = getattr(dag_spec, "data_spec", None)
@@ -250,19 +253,224 @@ def build_strategy_from_dag_spec(
             dag_dict = dataclass_asdict(dag_spec)
         except Exception:
             dag_dict = None
+    dag_nodes = getattr(dag_spec, "nodes", None)
+    dag_edges = getattr(dag_spec, "edges", None)
 
-    return build_expression_strategy(
-        expression or "",
-        strategy_name=f"sr_dag_{(expression_key or '')[:8]}",
-        data_spec=data_spec if isinstance(data_spec, Mapping) else None,
-        history_provider=history_provider,
-        sr_engine=sr_engine,
-        expression_key=expression_key,
-        expression_dag_spec=dag_dict,
-        metadata={
+    data_spec_mapping = data_spec if isinstance(data_spec, Mapping) else {}
+    interval = None
+    period = None
+    if isinstance(data_spec_mapping, Mapping):
+        interval = data_spec_mapping.get("interval") or data_spec_mapping.get("timeframe")
+        period = data_spec_mapping.get("period") or data_spec_mapping.get("min_history")
+
+    expr_str = expression or ""
+
+    class DagStrategy(Strategy):
+        _expression = expr_str
+        _data_spec = data_spec_mapping or None
+        _sr_engine = sr_engine
+        _expression_key = expression_key or compute_expression_key(expr_str)
+        _expression_dag_spec = dag_dict
+        _sr_metadata = {
             "dag_node_count": getattr(dag_spec, "node_count", None),
             "dag_complexity": getattr(dag_spec, "complexity", None),
             "dag_loss": getattr(dag_spec, "loss", None),
             "spec_version": getattr(dag_spec, "spec_version", None),
-        },
-    )
+        }
+
+        def setup(self) -> None:  # pragma: no cover - runtime wiring
+            if not _RUNTIME_AVAILABLE:
+                # Fallback: keep metadata only
+                return
+
+            if not isinstance(dag_nodes, list) or not isinstance(dag_edges, list):
+                raise ValueError("dag_spec must contain 'nodes' and 'edges'")
+
+            id_to_spec = {n["id"]: n for n in dag_nodes if isinstance(n, Mapping)}
+            indegree = {nid: 0 for nid in id_to_spec}
+            for src, dst in dag_edges:
+                if dst in indegree:
+                    indegree[dst] += 1
+
+            queue: deque[str] = deque([nid for nid, deg in indegree.items() if deg == 0])
+            topo_order: list[str] = []
+            while queue:
+                nid = queue.popleft()
+                topo_order.append(nid)
+                for src, dst in dag_edges:
+                    if src == nid:
+                        indegree[dst] -= 1
+                        if indegree[dst] == 0:
+                            queue.append(dst)
+
+            if len(topo_order) != len(id_to_spec):
+                raise ValueError("dag_spec contains cycles or disconnected nodes")
+
+            node_objs: dict[str, Any] = {}
+
+            def _make_compute(node_type: str, params: Mapping[str, Any] | None, upstream_objs: list[Any]):
+                def _extract_from_stream(view: Any, stream: StreamInput) -> tuple[Any, Any] | tuple[None, None]:
+                    try:
+                        window = view[stream.node_id][stream.interval]
+                        latest = window.latest()
+                        rows = getattr(window, "_data", None)
+                    except Exception:
+                        return None, None
+                    ts = None
+                    payload = latest
+                    try:
+                        from collections.abc import Sequence as _Seq
+
+                        if isinstance(rows, _Seq) and rows:
+                            ts, payload = rows[-1]
+                    except Exception:
+                        pass
+                    return ts, payload
+
+                def _extract_value(view: Any, upstream: Any) -> tuple[Any, Any] | tuple[None, None]:
+                    if isinstance(upstream, StreamInput):
+                        return _extract_from_stream(view, upstream)
+                    try:
+                        result = view[upstream.node_id]
+                    except Exception:
+                        return None, None
+                    if isinstance(result, Mapping):
+                        ts = result.get("ts")
+                        if "signal" in result:
+                            return ts, result.get("signal")
+                        if "value" in result:
+                            return ts, result.get("value")
+                    return None, None
+
+                def _compute(view: Any) -> Any:
+                    import math
+
+                    values: list[Any] = []
+                    ts = None
+                    for upstream in upstream_objs:
+                        uts, val = _extract_value(view, upstream)
+                        if ts is None:
+                            ts = uts
+                        values.append(val)
+                    if not values or any(v is None for v in values):
+                        return None
+
+                    try:
+                        if node_type == "math/add":
+                            out = sum(values)
+                        elif node_type == "math/mul":
+                            out = math.prod(values)
+                        elif node_type == "math/pow" and len(values) >= 2:
+                            out = math.pow(values[0], values[1])
+                        elif node_type == "math/abs":
+                            out = abs(values[0])
+                        elif node_type == "math/sin":
+                            out = math.sin(values[0])
+                        elif node_type == "math/cos":
+                            out = math.cos(values[0])
+                        elif node_type == "math/exp":
+                            out = math.exp(values[0])
+                        elif node_type == "math/log":
+                            out = math.log(values[0])
+                        elif node_type == "logic/and":
+                            out = all(values)
+                        elif node_type == "logic/or":
+                            out = any(values)
+                        elif node_type == "logic/not":
+                            out = not values[0]
+                        elif node_type == "cmp/gte" and len(values) >= 2:
+                            out = values[0] >= values[1]
+                        elif node_type == "cmp/gt" and len(values) >= 2:
+                            out = values[0] > values[1]
+                        elif node_type == "cmp/lte" and len(values) >= 2:
+                            out = values[0] <= values[1]
+                        elif node_type == "cmp/lt" and len(values) >= 2:
+                            out = values[0] < values[1]
+                        elif node_type == "cmp/eq" and len(values) >= 2:
+                            out = values[0] == values[1]
+                        elif node_type == "cmp/ne" and len(values) >= 2:
+                            out = values[0] != values[1]
+                        else:
+                            # Default passthrough for unrecognized nodes
+                            out = values[0]
+                    except Exception:
+                        return None
+
+                    return {"ts": ts, "value": out, "signal": out}
+
+                return _compute
+
+            fingerprint = None
+            if self._data_spec:
+                ds = self._data_spec.get("dataset_id")
+                snap = self._data_spec.get("snapshot_version") or self._data_spec.get("as_of")
+                if ds and snap:
+                    fingerprint = f"{ds}:{snap}"
+
+            node: Any
+            for nid in topo_order:
+                spec = id_to_spec[nid]
+                node_type = spec.get("node_type", "")
+                label = spec.get("label") or node_type or nid
+                params = spec.get("params") or {}
+                inputs = spec.get("inputs") or []
+                upstream = [node_objs[i] for i in inputs if i in node_objs]
+                if not upstream:
+                    upstream = [
+                        node_objs[src]
+                        for src, dst in dag_edges
+                        if dst == nid and src in node_objs
+                    ]
+
+                if node_type == "input":
+                    node = StreamInput(
+                        interval=interval or params.get("interval") or "60s",
+                        period=period or params.get("period") or 200,
+                        history_provider=history_provider,
+                    )
+                else:
+                    tag = node_type.replace("/", "_") if node_type else "sr_node"
+                    if not upstream:
+                        raise ValueError(f"processing node {nid} has no upstream inputs")
+                    compute_fn = _make_compute(node_type, params, upstream)
+                    node = ProcessingNode(
+                        upstream,
+                        compute_fn=compute_fn,
+                        name=label,
+                        interval=interval or params.get("interval"),
+                        period=period or params.get("period"),
+                        tags=["sr", tag],
+                        config={"sr_node_type": node_type, "sr_params": params},
+                    )
+                if fingerprint:
+                    try:
+                        node.dataset_fingerprint = fingerprint
+                    except Exception:
+                        pass
+                node_objs[nid] = node
+
+            self.add_nodes(list(node_objs.values()))
+
+        def serialize(self) -> dict[str, Any]:
+            dag = cast(dict[str, Any], super().serialize())
+            meta = dag.setdefault("meta", {})
+            sr_meta = meta.setdefault("sr", {})
+            sr_meta.update(
+                {
+                    "expression": self._expression,
+                    "expression_key": self._expression_key,
+                    "data_spec": self._data_spec,
+                    "expression_dag_spec": self._expression_dag_spec,
+                    "sr_engine": self._sr_engine,
+                }
+            )
+            sr_meta.update({k: v for k, v in self._sr_metadata.items() if v is not None})
+            return dag
+
+    if expression_key:
+        cname = f"sr_dag_{expression_key[:8]}"
+    else:
+        cname = f"sr_dag_{abs(hash(expr_str)) % 10000:04d}"
+    DagStrategy.__name__ = cname
+    DagStrategy.__qualname__ = cname
+    return DagStrategy
