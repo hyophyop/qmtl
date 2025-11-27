@@ -308,8 +308,97 @@ def build_strategy_from_dag_spec(
 
             node_objs: dict[str, Any] = {}
 
-            def _compute_stub(_: Any) -> Any:
-                return None
+            def _make_compute(node_type: str, params: Mapping[str, Any] | None, upstream_objs: list[Any]):
+                def _extract_from_stream(view: Any, stream: StreamInput) -> tuple[Any, Any] | tuple[None, None]:
+                    try:
+                        window = view[stream.node_id][stream.interval]
+                        latest = window.latest()
+                        rows = getattr(window, "_data", None)
+                    except Exception:
+                        return None, None
+                    ts = None
+                    payload = latest
+                    try:
+                        from collections.abc import Sequence as _Seq
+
+                        if isinstance(rows, _Seq) and rows:
+                            ts, payload = rows[-1]
+                    except Exception:
+                        pass
+                    return ts, payload
+
+                def _extract_value(view: Any, upstream: Any) -> tuple[Any, Any] | tuple[None, None]:
+                    if isinstance(upstream, StreamInput):
+                        return _extract_from_stream(view, upstream)
+                    try:
+                        result = view[upstream.node_id]
+                    except Exception:
+                        return None, None
+                    if isinstance(result, Mapping):
+                        ts = result.get("ts")
+                        if "signal" in result:
+                            return ts, result.get("signal")
+                        if "value" in result:
+                            return ts, result.get("value")
+                    return None, None
+
+                def _compute(view: Any) -> Any:
+                    import math
+
+                    values: list[Any] = []
+                    ts = None
+                    for upstream in upstream_objs:
+                        uts, val = _extract_value(view, upstream)
+                        if ts is None:
+                            ts = uts
+                        values.append(val)
+                    if not values or any(v is None for v in values):
+                        return None
+
+                    try:
+                        if node_type == "math/add":
+                            out = sum(values)
+                        elif node_type == "math/mul":
+                            out = math.prod(values)
+                        elif node_type == "math/pow" and len(values) >= 2:
+                            out = math.pow(values[0], values[1])
+                        elif node_type == "math/abs":
+                            out = abs(values[0])
+                        elif node_type == "math/sin":
+                            out = math.sin(values[0])
+                        elif node_type == "math/cos":
+                            out = math.cos(values[0])
+                        elif node_type == "math/exp":
+                            out = math.exp(values[0])
+                        elif node_type == "math/log":
+                            out = math.log(values[0])
+                        elif node_type == "logic/and":
+                            out = all(values)
+                        elif node_type == "logic/or":
+                            out = any(values)
+                        elif node_type == "logic/not":
+                            out = not values[0]
+                        elif node_type == "cmp/gte" and len(values) >= 2:
+                            out = values[0] >= values[1]
+                        elif node_type == "cmp/gt" and len(values) >= 2:
+                            out = values[0] > values[1]
+                        elif node_type == "cmp/lte" and len(values) >= 2:
+                            out = values[0] <= values[1]
+                        elif node_type == "cmp/lt" and len(values) >= 2:
+                            out = values[0] < values[1]
+                        elif node_type == "cmp/eq" and len(values) >= 2:
+                            out = values[0] == values[1]
+                        elif node_type == "cmp/ne" and len(values) >= 2:
+                            out = values[0] != values[1]
+                        else:
+                            # Default passthrough for unrecognized nodes
+                            out = values[0]
+                    except Exception:
+                        return None
+
+                    return {"ts": ts, "value": out, "signal": out}
+
+                return _compute
 
             fingerprint = None
             if self._data_spec:
@@ -343,9 +432,10 @@ def build_strategy_from_dag_spec(
                     tag = node_type.replace("/", "_") if node_type else "sr_node"
                     if not upstream:
                         raise ValueError(f"processing node {nid} has no upstream inputs")
+                    compute_fn = _make_compute(node_type, params, upstream)
                     node = ProcessingNode(
                         upstream,
-                        compute_fn=_compute_stub,
+                        compute_fn=compute_fn,
                         name=label,
                         interval=interval or params.get("interval"),
                         period=period or params.get("period"),
