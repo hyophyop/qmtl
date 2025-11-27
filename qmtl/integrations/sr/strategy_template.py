@@ -6,6 +6,7 @@ Seamless Data Provider와 동일 데이터를 사용하도록 Strategy를 생성
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
 
 from .expression_key import compute_expression_key
@@ -235,10 +236,12 @@ def build_expression_strategy(
 def build_strategy_from_dag_spec(
     dag_spec: Any,
     *,
-    history_provider: Any | None = None,
+    history_provider: Any | None,
     sr_engine: str | None = "pysr",
 ) -> type[Strategy]:
     """Create a Strategy from an ExpressionDagSpec-like object."""
+    if history_provider is None:
+        raise ValueError("history_provider (Seamless) is required for DAG-based strategies")
 
     expression = getattr(dag_spec, "equation", None) or getattr(dag_spec, "expression", "")
     data_spec = getattr(dag_spec, "data_spec", None)
@@ -250,19 +253,123 @@ def build_strategy_from_dag_spec(
             dag_dict = dataclass_asdict(dag_spec)
         except Exception:
             dag_dict = None
+    dag_nodes = getattr(dag_spec, "nodes", None)
+    dag_edges = getattr(dag_spec, "edges", None)
 
-    return build_expression_strategy(
-        expression or "",
-        strategy_name=f"sr_dag_{(expression_key or '')[:8]}",
-        data_spec=data_spec if isinstance(data_spec, Mapping) else None,
-        history_provider=history_provider,
-        sr_engine=sr_engine,
-        expression_key=expression_key,
-        expression_dag_spec=dag_dict,
-        metadata={
+    data_spec_mapping = data_spec if isinstance(data_spec, Mapping) else {}
+    interval = None
+    period = None
+    if isinstance(data_spec_mapping, Mapping):
+        interval = data_spec_mapping.get("interval") or data_spec_mapping.get("timeframe")
+        period = data_spec_mapping.get("period") or data_spec_mapping.get("min_history")
+
+    class DagStrategy(Strategy):  # type: ignore[misc]
+        _expression = expression
+        _data_spec = data_spec_mapping or None
+        _sr_engine = sr_engine
+        _expression_key = expression_key or compute_expression_key(expression)
+        _expression_dag_spec = dag_dict
+        _sr_metadata = {
             "dag_node_count": getattr(dag_spec, "node_count", None),
             "dag_complexity": getattr(dag_spec, "complexity", None),
             "dag_loss": getattr(dag_spec, "loss", None),
             "spec_version": getattr(dag_spec, "spec_version", None),
-        },
-    )
+        }
+
+        def setup(self) -> None:  # pragma: no cover - runtime wiring
+            if not _RUNTIME_AVAILABLE:
+                # Fallback: keep metadata only
+                return
+
+            if not isinstance(dag_nodes, list) or not isinstance(dag_edges, list):
+                raise ValueError("dag_spec must contain 'nodes' and 'edges'")
+
+            id_to_spec = {n["id"]: n for n in dag_nodes if isinstance(n, Mapping)}
+            indegree = {nid: 0 for nid in id_to_spec}
+            for src, dst in dag_edges:
+                if dst in indegree:
+                    indegree[dst] += 1
+
+            queue: deque[str] = deque([nid for nid, deg in indegree.items() if deg == 0])
+            topo_order: list[str] = []
+            while queue:
+                nid = queue.popleft()
+                topo_order.append(nid)
+                for src, dst in dag_edges:
+                    if src == nid:
+                        indegree[dst] -= 1
+                        if indegree[dst] == 0:
+                            queue.append(dst)
+
+            if len(topo_order) != len(id_to_spec):
+                raise ValueError("dag_spec contains cycles or disconnected nodes")
+
+            node_objs: dict[str, Any] = {}
+
+            def _compute_stub(_: Any) -> Any:
+                return None
+
+            fingerprint = None
+            if self._data_spec:
+                ds = self._data_spec.get("dataset_id")
+                snap = self._data_spec.get("snapshot_version") or self._data_spec.get("as_of")
+                if ds and snap:
+                    fingerprint = f"{ds}:{snap}"
+
+            for nid in topo_order:
+                spec = id_to_spec[nid]
+                node_type = spec.get("node_type", "")
+                label = spec.get("label") or node_type or nid
+                params = spec.get("params") or {}
+                inputs = spec.get("inputs") or []
+                upstream = [node_objs[i] for i in inputs if i in node_objs]
+
+                if node_type == "input":
+                    node = StreamInput(
+                        interval=interval or params.get("interval") or "60s",
+                        period=period or params.get("period") or 200,
+                        history_provider=history_provider,
+                    )
+                else:
+                    tag = node_type.replace("/", "_") if node_type else "sr_node"
+                    node = ProcessingNode(
+                        upstream,
+                        compute_fn=_compute_stub,
+                        name=label,
+                        interval=interval or params.get("interval"),
+                        period=period or params.get("period"),
+                        tags=["sr", tag],
+                        config={"sr_node_type": node_type, "sr_params": params},
+                    )
+                if fingerprint:
+                    try:
+                        node.dataset_fingerprint = fingerprint
+                    except Exception:
+                        pass
+                node_objs[nid] = node
+
+            self.add_nodes(list(node_objs.values()))
+
+        def serialize(self) -> dict[str, Any]:
+            dag = super().serialize()
+            meta = dag.setdefault("meta", {})
+            sr_meta = meta.setdefault("sr", {})
+            sr_meta.update(
+                {
+                    "expression": self._expression,
+                    "expression_key": self._expression_key,
+                    "data_spec": self._data_spec,
+                    "expression_dag_spec": self._expression_dag_spec,
+                    "sr_engine": self._sr_engine,
+                }
+            )
+            sr_meta.update({k: v for k, v in self._sr_metadata.items() if v is not None})
+            return dag
+
+    if expression_key:
+        cname = f"sr_dag_{expression_key[:8]}"
+    else:
+        cname = f"sr_dag_{abs(hash(expression)) % 10000:04d}"
+    DagStrategy.__name__ = cname
+    DagStrategy.__qualname__ = cname
+    return DagStrategy
