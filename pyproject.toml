@@ -27,6 +27,7 @@ dependencies = [
     "cachetools",
     "blake3",
     "pytest-asyncio>=0.23",
+    "pysr>=1.5.9",
 ]
 
 [project.optional-dependencies]
