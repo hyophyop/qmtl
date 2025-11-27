@@ -12,7 +12,10 @@ def _load_optional_module(name: str) -> Any | None:
     spec = importlib.util.find_spec(name)
     if spec is None:
         return None
-    return importlib.import_module(name)
+    try:
+        return importlib.import_module(name)
+    except Exception:  # pragma: no cover - guard optional deps
+        return None
 
 
 pa: Any | None = _load_optional_module("pyarrow")
