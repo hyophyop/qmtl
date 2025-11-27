@@ -6,57 +6,67 @@ Seamless Data Provider와 동일 데이터를 사용하도록 Strategy를 생성
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, cast
 
 from .expression_key import compute_expression_key
 
+dataclasses_asdict: Callable[[Any], Any] | None
 try:
-    from dataclasses import asdict
+    from dataclasses import asdict as _dataclasses_asdict
+
+    dataclasses_asdict = _dataclasses_asdict
 except Exception:  # pragma: no cover - fallback
-    asdict = None  # type: ignore
+    dataclasses_asdict = None
+
+asdict_fn: Callable[[Any], Any] | None = dataclasses_asdict
 
 _RUNTIME_AVAILABLE = False
-try:  # pragma: no cover - optional at runtime
-    from qmtl.runtime.sdk import Strategy  # type: ignore
-    from qmtl.runtime.sdk.node import StreamInput, ProcessingNode  # type: ignore
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk import Strategy
+    from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
+else:
+    try:  # pragma: no cover - optional at runtime
+        from qmtl.runtime.sdk import Strategy
+        from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
 
-    _RUNTIME_AVAILABLE = True
-except Exception:  # pragma: no cover - fallback for tests/docs
-    class Strategy:  # type: ignore
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            self.nodes: list[Any] = []
+        _RUNTIME_AVAILABLE = True
+    except Exception:  # pragma: no cover - fallback for tests/docs
+        class Strategy:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.nodes: list[Any] = []
 
-        def add_nodes(self, nodes: Any) -> None:
-            if not isinstance(nodes, Sequence):
-                nodes = [nodes]
-            self.nodes.extend(list(nodes))
+            def add_nodes(self, nodes: Any) -> None:
+                if not isinstance(nodes, Sequence):
+                    nodes = [nodes]
+                self.nodes.extend(list(nodes))
 
-        def serialize(self) -> dict[str, Any]:
-            return {"schema_version": "v1", "nodes": [], "meta": {}}
+            def serialize(self) -> dict[str, Any]:
+                return {"schema_version": "v1", "nodes": [], "meta": {}}
 
-        def on_start(self) -> None: ...
+            def on_start(self) -> None: ...
 
-        def on_finish(self) -> None: ...
+            def on_finish(self) -> None: ...
 
-        def setup(self) -> None: ...
+            def setup(self) -> None: ...
 
-    class StreamInput:  # type: ignore
-        def __init__(self, *, interval: Any = None, period: Any = None, history_provider: Any = None) -> None:
-            self.interval = interval
-            self.period = period
-            self.history_provider = history_provider
-            self.node_id = "stream_input"
-            self.dataset_fingerprint = None
+        class StreamInput:
+            def __init__(self, *, interval: Any = None, period: Any = None, history_provider: Any = None) -> None:
+                self.interval = interval
+                self.period = period
+                self.history_provider = history_provider
+                self.node_id = "stream_input"
+                self.dataset_fingerprint = None
 
-    class ProcessingNode:  # type: ignore
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            self.input = args[0] if args else None
-            self.compute_fn = kwargs.get("compute_fn")
-            self.interval = kwargs.get("interval")
-            self.period = kwargs.get("period")
-            self.tags = kwargs.get("tags", [])
-            self.node_id = "processing_node"
-            self.dataset_fingerprint = None
+        class ProcessingNode:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.input = args[0] if args else None
+                self.compute_fn = kwargs.get("compute_fn")
+                self.interval = kwargs.get("interval")
+                self.period = kwargs.get("period")
+                self.tags = kwargs.get("tags", [])
+                self.node_id = "processing_node"
+                self.dataset_fingerprint = None
 
 
 def _compile_expression(expression: str, modules: str | tuple[str, ...] = "numpy"):
@@ -111,7 +121,7 @@ def build_expression_strategy(
         interval = data_spec.get("interval") or data_spec.get("timeframe")
         period = data_spec.get("period") or data_spec.get("min_history")
 
-    class ExpressionStrategy(Strategy):  # type: ignore[misc]
+    class ExpressionStrategy(Strategy):
         _expression = expression
         _data_spec = dict(data_spec) if isinstance(data_spec, Mapping) else None
         _sr_engine = sr_engine
@@ -205,7 +215,7 @@ def build_expression_strategy(
             return self._evaluate_payload(payload)
 
         def serialize(self) -> dict[str, Any]:
-            dag = super().serialize()
+            dag = cast(dict[str, Any], super().serialize())
             meta = dag.setdefault("meta", {})
             sr_meta = meta.setdefault("sr", {})
             sr_meta.update(
@@ -239,9 +249,9 @@ def build_strategy_from_dag_spec(
     expression_key = getattr(dag_spec, "expression_key", None)
 
     dag_dict = None
-    if asdict and hasattr(dag_spec, "__dataclass_fields__"):
+    if asdict_fn is not None and hasattr(dag_spec, "__dataclass_fields__"):
         try:  # pragma: no cover - defensive
-            dag_dict = asdict(dag_spec)  # type: ignore[arg-type]
+            dag_dict = asdict_fn(dag_spec)
         except Exception:
             dag_dict = None
 
