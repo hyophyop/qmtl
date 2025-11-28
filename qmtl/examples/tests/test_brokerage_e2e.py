@@ -1,15 +1,23 @@
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import pytest
 
-from qmtl.runtime.brokerage import Account, Order, OrderType, TimeInForce
 from qmtl.examples.brokerage_demo.advanced_demo import build_model
+from qmtl.runtime.brokerage import (
+    Account,
+    ExchangeHoursProvider,
+    Order,
+    OrderType,
+    TimeInForce,
+)
 
 
 def test_brokerage_e2e_scenarios():
     model, settlement = build_model()
     acct = Account(cash=100_000.0)
-    hours = model.hours  # type: ignore[attr-defined]
+    hours = cast(ExchangeHoursProvider | None, getattr(model, "hours", None))
+    assert hours is not None
 
     day = datetime(2024, 1, 2, tzinfo=timezone.utc)
     open_ts = datetime.combine(day.date(), hours.market_hours.regular_start, tzinfo=timezone.utc)

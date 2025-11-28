@@ -16,21 +16,20 @@ from qmtl.runtime.brokerage import (
 
 def test_demo_executes_market_order():
     # Construct a simple brokerage model akin to the demo
+    class _BP:
+        def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
+            balance = account.cashbook.get(account.base_currency).balance
+            return balance >= order.price * abs(order.quantity)
+
+    buying_power = _BP()
     model = BrokerageModel(
-        buying_power_model=lambda: None,  # type: ignore[assignment]
+        buying_power_model=buying_power,
         fee_model=PercentFeeModel(rate=0.001, minimum=1.0),
         slippage_model=ConstantSlippageModel(0.0),
         fill_model=MarketFillModel(),
         symbols=SymbolPropertiesProvider(),
         hours=ExchangeHoursProvider(),
     )
-
-    class _BP:
-        def has_sufficient_buying_power(self, account: Account, order: Order) -> bool:
-            balance = account.cashbook.get(account.base_currency).balance
-            return balance >= order.price * abs(order.quantity)
-
-    model.buying_power_model = _BP()  # type: ignore[attr-defined]
 
     acct = Account(cash=1_000.0)
     order = Order(symbol="AAPL", quantity=5, price=100.0, type=OrderType.MARKET, tif=TimeInForce.DAY)

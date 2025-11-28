@@ -1,6 +1,6 @@
 """Correlation strategy example - QMTL v2.0."""
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 from qmtl.runtime.sdk import Runner, Strategy, Mode
 from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
 

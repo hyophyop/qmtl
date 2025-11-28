@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from qmtl.runtime.sdk import Node, StreamInput  # type: ignore[import-untyped]
+from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
 from qmtl.runtime.sdk.util import parse_interval
 

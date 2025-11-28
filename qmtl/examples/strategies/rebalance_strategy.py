@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol, cast
 
 _PORTFOLIO_FALLBACK = (
     Path(__file__).resolve().parents[2] / "runtime" / "sdk" / "portfolio.py"
@@ -16,12 +16,24 @@ _PORTFOLIO_FALLBACK = (
 
 if TYPE_CHECKING:  # pragma: no cover - typing aid only
     from qmtl.runtime.plugin_loader import PortfolioModule
+    from qmtl.runtime.sdk.portfolio import Portfolio, Position
 else:
     # Minimal protocol to avoid importing qmtl in lean environments where optional
     # dependencies are unavailable.
+    class Position(Protocol):
+        symbol: str
+        quantity: float
+        market_value: float
+
+    class Portfolio(Protocol):
+        cash: float
+        positions: dict[str, Position]
+
+        def get_position(self, symbol: str) -> Position | None: ...
+
     class PortfolioModule(Protocol):
-        Portfolio: type
-        Position: type
+        Portfolio: type[Portfolio]
+        Position: type[Position]
         order_value: Callable[[str, float, float], float]
 
 
@@ -33,7 +45,7 @@ def _load_module_from_path(module_name: str, module_file: Path) -> PortfolioModu
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    return module  # type: ignore[return-value]
+    return cast(PortfolioModule, module)
 
 
 def _load_portfolio_helpers(module_file: Path) -> PortfolioModule:
@@ -51,7 +63,7 @@ pf: PortfolioModule = _load_portfolio_helpers(_PORTFOLIO_FALLBACK)
 
 
 def compute_rebalance_quantity(
-    portfolio: pf.Portfolio, symbol: str, target_weight: float, price: float
+    portfolio: Portfolio, symbol: str, target_weight: float, price: float
 ) -> float:
     """Return quantity required to reach ``target_weight`` for ``symbol``.
 
