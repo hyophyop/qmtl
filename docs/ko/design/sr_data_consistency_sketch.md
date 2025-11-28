@@ -2,7 +2,7 @@
 title: "SR-QMTL 데이터 일관성 설계 스케치"
 tags: [design, draft, sr, data-consistency]
 author: "QMTL Team"
-last_modified: 2025-11-27
+last_modified: 2025-12-02
 status: sketch
 related: sr_integration_proposal.md
 ---
@@ -47,7 +47,26 @@ SR 엔진(Operon)에서 수식을 평가할 때 사용한 데이터와 QMTL에�
 
 ---
 
-## 2. 방안 비교
+## 2. data_spec(스냅샷 핸들) 정의
+
+SR 제출물에 포함되는 `data_spec`은 SR 계산에서 사용한 **스냅샷 핸들**을 QMTL이 그대로 재현하도록 돕는 최소 필드 집합입니다.
+
+| 필드 | 설명 | 필수 여부 |
+|------|------|-----------|
+| `dataset_id` | Seamless Provider가 식별하는 데이터셋 ID | ✅ |
+| `snapshot_version` \| `as_of` | 불변 스냅샷 버전 또는 시점. 교정 시 새 버전을 발급하고 기존 버전은 보존. | ✅ |
+| `partition` | 데이터 파티션/유니버스 식별자(예: `crypto_major_v1`) | ✅ |
+| `timeframe` | SR 계산에 사용한 캔들/리샘플 주기 (예: `1h`) | ✅ |
+| `schema` | 열/피처 스키마 힌트(선택) | ⚠️ 선택 |
+| `context_version` | data_spec 해석 규칙 버전 | ⚠️ 선택 |
+
+!!! note "스냅샷 불변성"
+    - `(dataset_id, snapshot_version|as_of, partition)` 조합은 **불변 스냅샷**을 가리킨다.
+    - 덮어쓰기가 아닌 새 버전 발급으로 교정하며, 제출/실행 시점이 달라도 동일 스냅샷을 참조하도록 강제한다.
+
+---
+
+## 3. 방안 비교
 
 ### 방안 1: QMTL을 Single Source of Truth로
 
@@ -161,7 +180,7 @@ SR 엔진(Operon)에서 수식을 평가할 때 사용한 데이터와 QMTL에�
 
 ---
 
-## 3. 비교 요약
+## 4. 비교 요약
 
 | 항목 | 방안 1 (QMTL SSOT) | 방안 2 (스펙 검증) | 방안 3 (Feature Store) |
 |------|-------------------|-------------------|----------------------|
@@ -173,9 +192,9 @@ SR 엔진(Operon)에서 수식을 평가할 때 사용한 데이터와 QMTL에�
 
 ---
 
-## 4. 권장안: 방안 3 + 방안 2 혼합
+## 5. 권장안: 방안 3 + 방안 2 혼합
 
-### 4.1 기본 구조
+### 5.1 기본 구조
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -199,7 +218,7 @@ SR 엔진(Operon)에서 수식을 평가할 때 사용한 데이터와 QMTL에�
 └─────────────────────┘                      └──────────────────────┘
 ```
 
-### 4.2 DataContext 계약
+### 5.2 DataContext 계약
 
 ```python
 @dataclass
@@ -223,7 +242,7 @@ class DataContext:
     context_version: str = "v1"   # DataContext 스키마/해석 규칙 버전
 ```
 
-### 4.3 워크플로우
+### 5.3 워크플로우
 
 ```
 1. [QMTL] Universe 정의 및 Feature 사전 계산
@@ -254,9 +273,16 @@ class DataContext:
    - 데이터 일관성 보장됨
 ```
 
+### 5.4 제출 핸드셰이크 (validation_sample + epsilon)
+
+1. SR 엔진이 제출 시 `meta.sr`에 `expression_key`, `data_spec`, `validation_sample`(입력, 기대 출력, `epsilon`)을 포함한다.
+2. Gateway/Runner는 `data_spec`으로 Seamless 데이터를 로드하고 제출된 수식/Expression DAG를 같은 스냅샷에서 평가한다.
+3. 결과가 `epsilon` 허용 오차 내에서 `validation_sample`과 일치하면 통과한다. 불일치 시 diff(기대 값, 실제 값, 사용한 snapshot_version|as_of, epsilon)를 포함하여 reject한다.
+4. 스냅샷이 누락되었거나 불변성 위반(동일 snapshot_version이 덮어쓰기 된 정황)이 감지되면 즉시 실패시켜 재현 불가능한 전략이 World에 진입하지 않도록 한다.
+
 ---
 
-## 5. 미결정 사항
+## 6. 미결정 사항
 
 - [ ] Feature Store 구현체 선정 (Redis, PostgreSQL, Parquet, ...)
 - [ ] snapshot_id 관리 정책 (시간 기반 vs 해시 기반)
@@ -265,9 +291,9 @@ class DataContext:
 
 ---
 
-## 6. 용어 정리 및 operon 설계와의 관계
+## 7. 용어 정리 및 operon 설계와의 관계
 
-### 6.1 DataContext와 data_spec/data_context 매핑
+### 7.1 DataContext와 data_spec/data_context 매핑
 
 - 이 문서에서 정의한 `DataContext`는 SR-QMTL 간 **데이터 컨텍스트의 정규화된 개념 모델**입니다.
   - 핵심 필드: `universe_id`, `snapshot_id`, `feature_set`
@@ -284,7 +310,7 @@ class DataContext:
     - `context_version`은 DataContext 스키마/해석 규칙의 버전을 나타내며,  
       향후 Feature Store 구조나 필드 구성이 변경되더라도 버전별로 의미를 구분할 수 있도록 합니다.
 
-### 6.2 Feature Store의 위치
+### 7.2 Feature Store의 위치
 
 - 본 문서의 권장안(방안 3 + 방안 2 혼합)은 `DataContext`를 **공유 Feature Store 위에 올리는 구조**를 상정합니다.
   - Universe Registry + Materialized Features를 기반으로 universe/snapshot/feature_set를 관리.
@@ -294,7 +320,7 @@ class DataContext:
   - 중기 이후: 이 핸들 계약을 깨지 않는 선에서 `DataContext`를 확장하고,  
     백엔드로 공유 Feature Store를 도입하는 것을 **향후 고려 사항**으로 둠.
 
-### 6.3 설계 레이어링
+### 7.3 설계 레이어링
 
 - **표현식/결과 레벨 일관성**  
   - `sr_integration_proposal.md`의 `expression_dag_spec` + `validation_sample` 핸드셰이크가 담당.  
@@ -310,17 +336,18 @@ class DataContext:
 
 ---
 
-## 6. 다음 단계
+## 8. 다음 단계
 
 1. 이 스케치 기반으로 논의
-2. 결정된 내용을 `sr_integration_proposal.md` 섹션 12에 통합
-3. DataContext 프로토콜 상세 설계
+2. 결정된 내용을 `sr_integration_proposal.md`의 핵심 결정/Phase 1 섹션에 통합
+3. DataContext 프로토콜 상세 설계 (snapshot_id 발급/immutability, epsilon 기본값 정의 포함)
 4. Feature Store 인터페이스 정의
 
 ---
 
-## 변경 이력
+## 9. 변경 이력
 
 | 날짜 | 변경 내용 |
 |------|----------|
+| 2025-12-02 | data_spec 정의/핸드셰이크/불변성 명시, 섹션 재정렬 |
 | 2025-11-27 | 초안 작성 (논의용 스케치) |

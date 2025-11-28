@@ -2,7 +2,7 @@
 title: "QMTL SR(Strategy Recommendation) 통합 제안서"
 tags: [design, integration, sr, strategy-generation, pysr]
 author: "QMTL Team"
-last_modified: 2025-09-15
+last_modified: 2025-12-02
 status: plan-revised
 ---
 
@@ -11,7 +11,7 @@ status: plan-revised
 !!! success "문서 상태: 설계 갱신 (Seamless 단일 경로 우선)"
     - PySR 등 SR 엔진은 **QMTL Seamless Data Provider**를 그대로 사용해 학습/평가합니다.
     - 동일 Seamless Provider로 **warmup→live**까지 이어지게 하여 데이터 불일치 리스크를 차단합니다.
-    - 수식→DAG 전략 변환기를 전략 템플릿(또는 팩토리)로 제공해 SR 통합을 **QMTL 코어와 느슨하게** 결합합니다.
+    - `ExpressionDagBuilder → 전략 템플릿 → Runner.submit`로 이어지는 **단일 제출 경로**를 기준으로 SR 통합을 **QMTL 코어와 느슨하게** 결합합니다.
     - DAG Manager 직접 병합/캐싱 경로는 **추후 결정 사항**으로 남기고, 필요 시 `sr_data_consistency_sketch.md`에서 선택합니다.
 
 ## 1. 목표
@@ -24,14 +24,14 @@ status: plan-revised
 ## 2. 핵심 결정
 
 - **Seamless 단일 데이터 경로**: PySR는 QMTL가 제공하는 Seamless Data Provider를 사용해 학습/평가한다. 런타임도 동일 provider를 사용해 warmup/live 전환 시 데이터 불일치를 없앤다.
-- **수식→전략 템플릿**: 수식(또는 DAG 스펙)을 입력받아 바로 실행 가능한 Strategy를 생성하는 템플릿/팩토리를 SR 모듈에 둔다. (예: `SRStrategyFactory` 혹은 전용 Strategy 클래스)
+- **수식→전략 템플릿**: ExpressionDagBuilder(예: `build_expression_dag`)로 Sympy 수식을 DAG 스펙으로 정규화하고, 이를 입력으로 전략 템플릿(예: `build_strategy_from_dag_spec`)을 생성한다. 생성된 Strategy는 Runner/World 제출 표준 경로를 그대로 탄다.
 - **필수 메타데이터**:
   - `expression_key` (정규화/해시) — dedup 및 교체 정책용
-  - `data_spec` — `dataset_id`, `snapshot_version/as_of`, `partition` 등 스냅샷 핸들
+  - `data_spec` — `dataset_id`, `snapshot_version|as_of`, `partition`, `timeframe` 등 스냅샷 핸들. 스냅샷은 불변이며 교정 시 새 버전을 발급한다.
   - `expression_dag_spec` — 필요 시 Sympy→DAG 변환본 (선택)
   - `sr_engine`, `candidate_id`, `fitness`, `complexity`, `generation`
-- **정합성 핸드셰이크(제출 시)**: 제출 페이로드에 validation 샘플을 포함하여 SR 계산 결과와 QMTL 실행 결과를 비교, 불일치 시 거부.
-- **World 정책 연계**: World/Gateway가 `expression_key` 기반으로 중복을 거부/교체할 수 있는 정책 플래그를 둔다. 기본은 replace 또는 reject 중 선택.
+- **정합성 핸드셰이크(제출 시)**: 제출 페이로드에 validation 샘플을 포함하여 SR 계산 결과와 QMTL 실행 결과를 비교, 불일치 시 거부한다. 기본 허용 오차는 `epsilon`(예: 상대/절대 오차)로 명시한다.
+- **World 정책 연계**: World/Gateway가 `expression_key` 기반으로 중복을 거부/교체할 수 있는 정책 플래그를 둔다. 기본은 replace 또는 reject 중 명시적으로 선택하며, 선택 근거를 로그/메트릭으로 남긴다.
 - **DAG Manager 직접 병합/캐싱**: Phase 2 선택 사항으로 보류. 필요 시 표현식 서브그래프 재사용·배치 병합을 켠다.
 
 ## 3. 범위 / 비범위
@@ -50,13 +50,15 @@ status: plan-revised
 
 ### Phase 1 (최소 실행 경로, 권장)
 - PySR가 **Seamless Data Provider**로 학습/평가하고 동일 provider를 런타임에 사용.
-- 수식→전략 템플릿 제공: 수식/`expression_dag_spec`/`data_spec`을 받아 Strategy 생성 후 Runner.submit.
-- 최소 실행 경로 예시:
-  - PySR HOF → `load_pysr_hof_as_dags` → `build_strategy_from_dag_spec(...)`로 전략 생성 → `Runner.submit`.
-  - Seamless Data Provider를 history_provider로 주입해 학습/평가/실행 데이터 일치 확보.
-- 제출 페이로드: `expression_key`, `data_spec`, `sr_engine`, `fitness/complexity/generation`, (옵션) `expression_dag_spec`, `validation_sample`.
-- WorldPolicy에 `expression_key` 기반 dedup 옵션(replace/reject)을 배선.
-- 정합성 핸드셰이크: 제출 시 샘플 비교 후 불일치면 reject.
+- ExpressionDagBuilder로 수식/`expression_dag_spec`/`data_spec`을 정규화한 뒤 Strategy 템플릿(`build_strategy_from_dag_spec`)으로 감싸 Runner.submit에 제출.
+- 최소 실행 경로 예시(현재 구현 기준):
+  1. PySR HOF → `load_pysr_hof_as_dags(max_nodes, data_spec, spec_version)`.
+  2. 각 DAG 스펙을 `build_strategy_from_dag_spec(..., history_provider=SeamlessProvider, sr_engine="pysr")`로 Strategy 생성.
+  3. Strategy.metadata에 `expression_key`, `data_spec`, `dedup_policy.expression_key.on_duplicate`, `validation_sample`을 포함해 `Runner.submit`.
+  4. World 게이팅 시 expression_key dedup 정책(replace/reject)과 validation 샘플 오차(`epsilon`)를 확인.
+- 제출 페이로드(최소): `expression_key`, `spec_version`, `data_spec`, `sr_engine`, `fitness/complexity/generation`, (옵션) `expression_dag_spec`, `validation_sample`.
+- WorldPolicy에 `expression_key` 기반 dedup 옵션(replace/reject)을 명시하고, World 로그에 적용 결과를 기록.
+- 정합성 핸드셰이크: 제출 시 validation 샘플을 실행해 `epsilon` 허용 오차 내 일치하지 않으면 reject + diff를 반환.
 
 !!! note "제출 메타 포맷 (필수)"
     - `meta.sr`에 포함되는 공통 필드
@@ -103,26 +105,28 @@ status: plan-revised
 
 ### 5.2 수식→전략 템플릿
 - 입력: 수식 문자열 또는 Sympy 기반 `expression_dag_spec`, `data_spec`, `sr_engine`, 메타 정보.
-- 변환: `SRStrategyFactory`(또는 전용 Strategy 템플릿)가 StreamInput을 생성하고 수식을 평가하는 노드를 붙인다.
+- 변환: ExpressionDagBuilder(예: `build_expression_dag`)로 DAG 스펙을 생성/정규화하고, `build_strategy_from_dag_spec`가 Seamless StreamInput/노드를 구성한다.
 - 실행: Runner.submit(또는 submit_async)로 World에 제출. World/Gateway는 일반 전략과 동일 파이프라인을 적용.
 
 ### 5.3 제출 페이로드 & 정합성 핸드셰이크
 - 필드:
   - `expression_key` (정규화 해시, spec_version 포함)
   - `expression_dag_spec` (선택, Sympy→DAG 스펙)
-  - `data_spec` (필수)
+  - `data_spec` (필수, 스냅샷 핸들)
   - `sr_engine`, `candidate_id`, `fitness`, `complexity`, `generation`
-  - `validation_sample`: 입력 포인트와 기대 출력 값
+  - `validation_sample`: 입력 포인트와 기대 출력 값 + `epsilon`(절대/상대 오차)
 - 절차:
   1. Gateway/Runner가 `data_spec`으로 Seamless 데이터를 로드.
   2. 수식(DAG)을 동일 데이터에 실행, `validation_sample`과 비교.
-  3. 허용 오차 내 일치 시 통과, 불일치면 reject + diff 반환.
+  3. 허용 오차(`epsilon`) 내 일치 시 통과, 불일치면 reject + diff 반환(값, 허용 오차, 스냅샷 ID 포함).
 
 ### 5.4 중복/교체 정책
 - SR 엔진 측: `expression_key`로 중복 후보 제거/교체.
 - World/Gateway: 정책 옵션
   - `expression_key`별 max 1개 활성화
-  - `on_duplicate: replace | reject` (default: replace 또는 reject 중 환경에 맞게 선택)
+  - `on_duplicate: replace | reject` (default는 환경별로 명시)
+  - replace: 동일 expression_key 전략 교체(상태/평가 기록은 정책에 따라 복원/초기화)
+  - reject: 기존 전략 유지, 신규 제출은 실패 사유를 명확히 반환
 - WorldPolicy 예시(컨셉):
 ```yaml
 selection:
@@ -138,13 +142,13 @@ selection:
 
 ## 6. 구현 체크리스트 (Phase 1)
 
-- [ ] PySR 학습/평가가 Seamless Data Provider를 사용하도록 배선.
-- [ ] 수식→전략 템플릿(또는 팩토리)에서 동일 Seamless provider를 사용해 warmup/live까지 실행.
-- [ ] 제출 페이로드에 `expression_key`, `data_spec`, `sr_engine`, `fitness/complexity/generation` 포함.
-- [ ] `validation_sample` 기반 정합성 핸드셰이크 구현 및 실패 시 reject.
-- [ ] WorldPolicy에 `expression_key` dedup 옵션 추가 및 기본값 결정(replace/reject).
-- [ ] 메트릭/로그: 제출/활성/중복/정합성 실패율 노출.
-- [ ] E2E: PySR HOF → 변환기 → Runner.submit → World 게이팅에서 active/rejected 확인.
+- [ ] PySR 학습/평가가 Seamless Data Provider를 사용하도록 배선하고, 동일 provider가 Strategy 실행에도 주입됨을 확인.
+- [ ] ExpressionDagBuilder → `build_strategy_from_dag_spec` 경로가 Runner.submit 표준 인터페이스와 호환되는지 검증.
+- [ ] 제출 페이로드에 `expression_key/spec_version`, `data_spec`, `sr_engine`, `fitness/complexity/generation`, dedup 정책(`on_duplicate`)을 포함.
+- [ ] `validation_sample + epsilon` 기반 정합성 핸드셰이크 구현 및 실패 시 명확한 reject 사유/값 diff 반환.
+- [ ] WorldPolicy에 `expression_key` dedup 옵션 추가 및 기본값 결정(replace/reject), 적용 결과를 로그/메트릭으로 노출.
+- [ ] 메트릭/로그: 제출/활성/중복/정합성 실패율, dedup 정책별 성공/거부 비율 노출.
+- [ ] E2E: PySR HOF → 변환기 → Runner.submit → World 게이팅 → 실행까지 active/rejected가 정책/검증 결과와 일치함을 확인.
 
 ## 7. 테스트 가이드
 
