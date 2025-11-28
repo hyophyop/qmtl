@@ -34,8 +34,9 @@ class RoughBergomiInput(SyntheticInput):
         self.wfbm = 0.0
         self.t = 0.0
 
-    def step(self) -> tuple[int, dict[str, float]]:
-        dt = float(self.interval)
+    def step(self) -> tuple[int, dict[str, float | list[float]]]:
+        interval = self._interval_value()
+        dt = float(interval)
         z1 = self.rng.standard_normal()
         z2 = self.rng.standard_normal()
         dw1 = np.sqrt(dt) * z1
@@ -47,5 +48,5 @@ class RoughBergomiInput(SyntheticInput):
         corr_term = self.rho * z1 + np.sqrt(1 - self.rho ** 2) * self.rng.standard_normal()
         self.price *= np.exp((self.mu - 0.5 * v) * dt + np.sqrt(v * dt) * corr_term)
         self.t = t_new
-        self.timestamp += self.interval
+        self.timestamp += interval
         return self.timestamp, {"price": float(self.price)}

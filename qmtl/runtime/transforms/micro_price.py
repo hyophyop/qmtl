@@ -91,6 +91,8 @@ def micro_price_node(
         raise ValueError("Provide only one of weight_node or imbalance_node")
 
     interval = interval or bid_price.interval
+    if interval is None:
+        raise ValueError("micro_price_node requires an interval")
 
     def compute(view: CacheView):
         bid = _latest_price(view, bid_price, interval)

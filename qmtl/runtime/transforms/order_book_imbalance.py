@@ -34,10 +34,13 @@ def order_book_imbalance_node(
     """
 
     interval = interval or bid_volume.interval
+    if interval is None:
+        raise ValueError("order_book_imbalance_node requires an interval")
+    resolved_interval: int | str = interval
 
     def compute(view: CacheView):
-        b = _latest(view, bid_volume, interval)
-        a = _latest(view, ask_volume, interval)
+        b = _latest(view, bid_volume, resolved_interval)
+        a = _latest(view, ask_volume, resolved_interval)
         if b is None or a is None:
             return None
         total = b + a
@@ -49,7 +52,7 @@ def order_book_imbalance_node(
         input=[bid_volume, ask_volume],
         compute_fn=compute,
         name=name or "order_book_imbalance",
-        interval=interval,
+        interval=resolved_interval,
     )
 
 
@@ -180,6 +183,9 @@ def logistic_order_book_imbalance_node(
     """Return a node computing a logistic weight from order-book imbalance."""
 
     interval = interval or bid_volume.interval
+    if interval is None:
+        raise ValueError("logistic_order_book_imbalance_node requires an interval")
+    resolved_interval: int | str = interval
 
     def mapper(imbalance: float) -> float:
         return imbalance_to_weight(
@@ -197,11 +203,11 @@ def logistic_order_book_imbalance_node(
         compute_fn=_imbalance_node_compute(
             bid_volume,
             ask_volume,
-            interval=interval,
+            interval=resolved_interval,
             mapper=mapper,
         ),
         name=name or "logistic_order_book_weight",
-        interval=interval,
+        interval=resolved_interval,
     )
 
 

@@ -15,11 +15,17 @@ class SyntheticInput(StreamInput):
         self.rng = np.random.default_rng(seed)
         self.timestamp = 0
 
-    def step(self) -> tuple[int, dict[str, float]]:
+    def _interval_value(self) -> int:
+        interval = self.interval
+        if not isinstance(interval, int):
+            raise TypeError("SyntheticInput requires an integer interval")
+        return interval
+
+    def step(self) -> tuple[int, dict[str, float | list[float]]]:
         raise NotImplementedError
 
-    def generate(self, steps: int) -> list[tuple[int, dict[str, float]]]:
-        data = []
+    def generate(self, steps: int) -> list[tuple[int, dict[str, float | list[float]]]]:
+        data: list[tuple[int, dict[str, float | list[float]]]] = []
         for _ in range(steps):
             data.append(self.step())
         return data
