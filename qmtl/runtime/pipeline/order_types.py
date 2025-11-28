@@ -152,6 +152,9 @@ def normalize_order_intent(order: OrderPayload | MutableOrderPayload | None) -> 
         normalized["type"] = normalized.get("order_type")
     if "time_in_force" not in normalized and "tif" in normalized:
         normalized["time_in_force"] = normalized.get("tif")
+    if "quantity" not in normalized and "size" in normalized:
+        # Accept legacy size alias for absolute quantity.
+        normalized["quantity"] = normalized["size"]
     if "price" in normalized and "limit_price" not in normalized:
         typ = normalized.get("type")
         if typ in {OrderType.LIMIT, OrderType.STOP_LIMIT, "limit", "stop_limit"}:
