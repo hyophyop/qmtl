@@ -20,6 +20,7 @@ def compute_expression_key(
     expression: str | dict[str, Any],
     *,
     normalize: bool = True,
+    spec_version: str = "v1",
 ) -> str:
     """Compute a stable key for an expression.
 
@@ -41,28 +42,40 @@ def compute_expression_key(
     '...'  # 64-char hex string
     >>> compute_expression_key("y + x")  # Same key due to commutativity
     '...'
+    >>> compute_expression_key("x + y", spec_version="v2")  # Different hash when spec changes
+    '...'
     """
+    if not spec_version:
+        raise ValueError("spec_version is required to compute expression_key")
+
     if isinstance(expression, str):
+        expression = expression.strip()
+        if not expression:
+            raise ValueError("expression is required to compute expression_key")
+
         # Try to parse and normalize
         if normalize:
             try:
                 ast = _parse_expression(expression)
                 normalized = normalize_ast(ast)
                 canonical = _ast_to_canonical_string(normalized)
-            except Exception:
-                # Fallback to raw string if parsing fails
-                canonical = expression.strip()
+            except Exception as exc:
+                raise ValueError("failed to normalize expression for expression_key") from exc
         else:
-            canonical = expression.strip()
+            canonical = expression
     else:
         # Already an AST dict
-        if normalize:
-            normalized = normalize_ast(expression)
-            canonical = _ast_to_canonical_string(normalized)
-        else:
-            canonical = _ast_to_canonical_string(expression)
+        try:
+            if normalize:
+                normalized = normalize_ast(expression)
+                canonical = _ast_to_canonical_string(normalized)
+            else:
+                canonical = _ast_to_canonical_string(expression)
+        except Exception as exc:  # pragma: no cover - defensive
+            raise ValueError("failed to normalize AST for expression_key") from exc
 
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    payload = f"{spec_version}:{canonical}"
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def normalize_ast(ast: dict[str, Any]) -> dict[str, Any]:

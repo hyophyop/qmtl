@@ -1,5 +1,7 @@
 """Tests for qmtl.integrations.sr.expression_key module."""
 
+import pytest
+
 from qmtl.integrations.sr.expression_key import (
     compute_expression_key,
     normalize_ast,
@@ -143,18 +145,21 @@ class TestNormalizeAst:
 class TestExpressionKeyEdgeCases:
     """Edge case tests for expression key generation."""
 
-    def test_empty_string_returns_key(self):
-        """Test with empty string - falls back to raw string."""
-        # Empty string falls back to empty string, which gets hashed
-        key = compute_expression_key("")
-        assert isinstance(key, str)
-        assert len(key) == 64
+    def test_empty_string_rejected(self):
+        """Missing expressions should fail fast."""
+        with pytest.raises(ValueError):
+            compute_expression_key("")
 
-    def test_whitespace_only_returns_key(self):
-        """Test with whitespace only - falls back to stripped string."""
-        key = compute_expression_key("   ")
-        assert isinstance(key, str)
-        assert len(key) == 64
+    def test_whitespace_only_rejected(self):
+        """Whitespace-only expressions should fail fast."""
+        with pytest.raises(ValueError):
+            compute_expression_key("   ")
+
+    def test_spec_version_changes_key(self):
+        """Spec version should be part of the hash payload."""
+        key_v1 = compute_expression_key("x + y", spec_version="v1")
+        key_v2 = compute_expression_key("x + y", spec_version="v2")
+        assert key_v1 != key_v2
 
     def test_numeric_constants(self):
         """Test expressions with numeric constants."""

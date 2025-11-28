@@ -79,6 +79,66 @@ def _compile_expression(expression: str, modules: str | tuple[str, ...] = "numpy
         return None, [], None
 
 
+def _clean_dict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    return {k: v for k, v in (payload or {}).items() if v is not None}
+
+
+def _build_sr_meta(
+    *,
+    expression: str,
+    expression_key: str | None,
+    data_spec: Mapping[str, Any] | None,
+    expression_dag_spec: Mapping[str, Any] | None,
+    sr_engine: str | None,
+    spec_version: str,
+    metadata: Mapping[str, Any] | None,
+    on_duplicate: str | None,
+) -> dict[str, Any]:
+    resolved_spec_version = spec_version or "v1"
+    clean_metadata = _clean_dict(metadata)
+
+    try:
+        key = compute_expression_key(expression, spec_version=resolved_spec_version)
+    except Exception as exc:
+        raise ValueError("expression_key is required and failed to compute") from exc
+
+    if expression_key:
+        key = expression_key
+    if not key:
+        raise ValueError("expression_key is required for SR submission")
+
+    dedup_policy = {
+        "expression_key": {
+            "value": key,
+            "spec_version": resolved_spec_version,
+        }
+    }
+    dedup_on_duplicate = on_duplicate or clean_metadata.get("on_duplicate")
+    if dedup_on_duplicate:
+        dedup_policy["expression_key"]["on_duplicate"] = dedup_on_duplicate
+
+    clean_metadata.pop("on_duplicate", None)
+    clean_metadata.pop("spec_version", None)
+    clean_metadata.pop("expression_key", None)
+
+    sr_meta = {
+        "expression": expression,
+        "expression_key": key,
+        "spec_version": resolved_spec_version,
+        "expression_key_meta": {
+            "value": key,
+            "spec_version": resolved_spec_version,
+        },
+        "data_spec": dict(data_spec) if isinstance(data_spec, Mapping) else None,
+        "expression_dag_spec": dict(expression_dag_spec) if isinstance(expression_dag_spec, Mapping) else None,
+        "sr_engine": sr_engine,
+        "dedup_policy": dedup_policy,
+        **clean_metadata,
+    }
+
+    return _clean_dict(sr_meta)
+
+
 @dataclass(frozen=True)
 class ValidationPoint:
     input: Mapping[str, Any]
@@ -290,6 +350,8 @@ def build_expression_strategy(
     expression_key: str | None = None,
     expression_dag_spec: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    spec_version: str = "v1",
+    on_duplicate: str | None = "replace",
 ) -> type[Strategy]:
     """Create a Strategy subclass that evaluates a given expression.
 
@@ -311,9 +373,23 @@ def build_expression_strategy(
             Canonical DAG spec (if available).
         metadata : Mapping, optional
             Additional SR metadata (candidate_id, fitness, complexity, generation, etc.).
+        spec_version : str, optional
+            Expression spec version tagged alongside the expression_key (default: "v1").
+        on_duplicate : str, optional
+            Deduplication policy for World/Gateway ("replace" or "reject").
     """
     parsed, symbols, fn = _compile_expression(expression)
-    expr_key = expression_key or compute_expression_key(expression)
+    sr_meta = _build_sr_meta(
+        expression=expression,
+        expression_key=expression_key,
+        data_spec=data_spec,
+        expression_dag_spec=expression_dag_spec,
+        sr_engine=sr_engine,
+        spec_version=spec_version,
+        metadata=metadata,
+        on_duplicate=on_duplicate,
+    )
+    expr_key = sr_meta["expression_key"]
     interval = None
     period = None
     if isinstance(data_spec, Mapping):
@@ -326,10 +402,8 @@ def build_expression_strategy(
         _sr_engine = sr_engine
         _compiled = (parsed, symbols, fn)
         _expression_key = expr_key
-        _expression_dag_spec = (
-            dict(expression_dag_spec) if isinstance(expression_dag_spec, Mapping) else None
-        )
-        _sr_metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+        _expression_dag_spec = sr_meta.get("expression_dag_spec")
+        _sr_metadata = sr_meta
 
         def setup(self) -> None:  # pragma: no cover - simple wiring
             if not _RUNTIME_AVAILABLE:
@@ -417,16 +491,7 @@ def build_expression_strategy(
             dag = cast(dict[str, Any], super().serialize())
             meta = dag.setdefault("meta", {})
             sr_meta = meta.setdefault("sr", {})
-            sr_meta.update(
-                {
-                    "expression": self._expression,
-                    "expression_key": self._expression_key,
-                    "data_spec": self._data_spec,
-                    "expression_dag_spec": self._expression_dag_spec,
-                    "sr_engine": self._sr_engine,
-                    **self._sr_metadata,
-                }
-            )
+            sr_meta.update(self._sr_metadata)
             return dag
 
     cname = strategy_name or f"sr_expr_{abs(hash(expression)) % 10000:04d}"
@@ -440,6 +505,8 @@ def build_strategy_from_dag_spec(
     *,
     history_provider: Any | None,
     sr_engine: str | None = "pysr",
+    spec_version: str | None = None,
+    on_duplicate: str | None = "replace",
 ) -> type[Strategy]:
     """Create a Strategy from an ExpressionDagSpec-like object."""
     if history_provider is None:
@@ -467,19 +534,31 @@ def build_strategy_from_dag_spec(
 
     expr_str = expression or ""
 
-    class DagStrategy(Strategy):
-        _expression = expr_str
-        _data_spec = data_spec_mapping or None
-        _sr_engine = sr_engine
-        _expression_key = expression_key or compute_expression_key(expr_str)
-        _expression_dag_spec = dag_dict
-        _compiled = _compile_expression(expr_str)
-        _sr_metadata = {
+    resolved_spec_version = spec_version or getattr(dag_spec, "spec_version", None) or "v1"
+    sr_meta = _build_sr_meta(
+        expression=expr_str,
+        expression_key=expression_key,
+        data_spec=data_spec_mapping,
+        expression_dag_spec=dag_dict,
+        sr_engine=sr_engine,
+        spec_version=resolved_spec_version,
+        metadata={
             "dag_node_count": getattr(dag_spec, "node_count", None),
             "dag_complexity": getattr(dag_spec, "complexity", None),
             "dag_loss": getattr(dag_spec, "loss", None),
             "spec_version": getattr(dag_spec, "spec_version", None),
-        }
+        },
+        on_duplicate=on_duplicate,
+    )
+
+    class DagStrategy(Strategy):
+        _expression = expr_str
+        _data_spec = data_spec_mapping or None
+        _sr_engine = sr_engine
+        _expression_key = sr_meta["expression_key"]
+        _expression_dag_spec = sr_meta.get("expression_dag_spec")
+        _compiled = _compile_expression(expr_str)
+        _sr_metadata = sr_meta
 
         def _evaluate_payload(self, payload: Any) -> float | None:
             parsed_local, sym_local, fn_local = self._compiled
@@ -683,22 +762,10 @@ def build_strategy_from_dag_spec(
             dag = cast(dict[str, Any], super().serialize())
             meta = dag.setdefault("meta", {})
             sr_meta = meta.setdefault("sr", {})
-            sr_meta.update(
-                {
-                    "expression": self._expression,
-                    "expression_key": self._expression_key,
-                    "data_spec": self._data_spec,
-                    "expression_dag_spec": self._expression_dag_spec,
-                    "sr_engine": self._sr_engine,
-                }
-            )
-            sr_meta.update({k: v for k, v in self._sr_metadata.items() if v is not None})
+            sr_meta.update(self._sr_metadata)
             return dag
 
-    if expression_key:
-        cname = f"sr_dag_{expression_key[:8]}"
-    else:
-        cname = f"sr_dag_{abs(hash(expr_str)) % 10000:04d}"
+    cname = f"sr_dag_{sr_meta['expression_key'][:8]}"
     DagStrategy.__name__ = cname
     DagStrategy.__qualname__ = cname
     return DagStrategy

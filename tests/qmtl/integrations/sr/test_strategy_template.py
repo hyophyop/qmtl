@@ -26,9 +26,24 @@ class TestStrategyTemplate:
         strategy_cls = build_expression_strategy("x", data_spec=data_spec, sr_engine="pysr")
         strat = strategy_cls()
         dag = strat.serialize()
-        assert dag["meta"]["sr"]["data_spec"]["dataset_id"] == "ohlcv_spot_1m"
-        assert dag["meta"]["sr"]["sr_engine"] == "pysr"
-        assert "expression_key" in dag["meta"]["sr"]
+        sr_meta = dag["meta"]["sr"]
+        assert sr_meta["data_spec"]["dataset_id"] == "ohlcv_spot_1m"
+        assert sr_meta["sr_engine"] == "pysr"
+        assert sr_meta["spec_version"] == "v1"
+        assert sr_meta["expression_key_meta"]["value"] == sr_meta["expression_key"]
+        assert sr_meta["dedup_policy"]["expression_key"]["on_duplicate"] == "replace"
+
+    def test_dedup_policy_override(self):
+        strategy_cls = build_expression_strategy(
+            "x + y",
+            sr_engine="pysr",
+            on_duplicate="reject",
+            spec_version="v2",
+        )
+        sr_meta = strategy_cls().serialize()["meta"]["sr"]
+
+        assert sr_meta["dedup_policy"]["expression_key"]["on_duplicate"] == "reject"
+        assert sr_meta["dedup_policy"]["expression_key"]["spec_version"] == "v2"
 
     def test_build_from_dag_spec_requires_history_provider(self):
         dag_spec = ExpressionDagSpec(
@@ -90,6 +105,7 @@ class TestStrategyTemplate:
         dag = strat.serialize()
         assert dag["meta"]["sr"]["expression_key"] == "abc123"
         assert dag["meta"]["sr"]["data_spec"]["dataset_id"] == "ohlcv"
+        assert dag["meta"]["sr"]["dedup_policy"]["expression_key"]["on_duplicate"] == "replace"
 
     def test_submit_with_validation_passes_and_calls_submit(self):
         strategy_cls = build_expression_strategy("x + y")
