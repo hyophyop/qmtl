@@ -4,6 +4,7 @@ from pathlib import Path
 
 from qmtl.integrations.sr.pysr_adapter import (
     load_pysr_hof_as_dags,
+    load_pysr_hof_as_strategies,
     _load_rows,
     _latest_hof,
     REQUIRED_COLS,
@@ -163,6 +164,23 @@ class TestLoadPysrHofAsDags:
 
         assert len(specs) == 1
 
+    def test_injects_data_spec_and_spec_version(self, tmp_path: Path):
+        data_spec = {"dataset_id": "ohlcv", "snapshot_version": "2025-01-01", "interval": "1m"}
+        hof_path = tmp_path / "hall_of_fame.csv"
+        hof_path.write_text(
+            "Complexity,Loss,Equation\n"
+            "1,0.5,x0\n"
+        )
+
+        specs = load_pysr_hof_as_dags(
+            hof_path=hof_path,
+            data_spec=data_spec,
+            spec_version="v2",
+        )
+
+        assert specs[0].data_spec == data_spec
+        assert specs[0].spec_version == "v2"
+
 
 class TestRequiredCols:
     """Tests for REQUIRED_COLS constant."""
@@ -172,3 +190,35 @@ class TestRequiredCols:
         assert "Equation" in REQUIRED_COLS
         assert "Complexity" in REQUIRED_COLS
         assert "Loss" in REQUIRED_COLS
+
+
+class TestLoadPysrHofAsStrategies:
+    """Tests for load_pysr_hof_as_strategies helper."""
+
+    def test_builds_strategy_with_meta(self, tmp_path: Path):
+        hof_path = tmp_path / "hall_of_fame.csv"
+        hof_path.write_text(
+            "Complexity,Loss,Equation\n"
+            "1,0.5,x0 + x1\n"
+        )
+        data_spec = {
+            "dataset_id": "ohlcv",
+            "snapshot_version": "2025-01-01",
+            "interval": "1m",
+            "period": 200,
+        }
+
+        strategies = load_pysr_hof_as_strategies(
+            history_provider=object(),
+            hof_path=hof_path,
+            data_spec=data_spec,
+            spec_version="v2",
+        )
+
+        assert strategies
+        strategy_cls = strategies[0]
+        dag = strategy_cls().serialize()
+        sr_meta = dag.get("meta", {}).get("sr", {})
+        assert sr_meta.get("expression_key")
+        assert sr_meta.get("data_spec") == data_spec
+        assert sr_meta.get("spec_version") == "v2"

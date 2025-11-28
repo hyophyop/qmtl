@@ -33,6 +33,18 @@ def main() -> None:
         help="Drop expressions whose DAG node_count exceeds this threshold.",
     )
     parser.add_argument(
+        "--data-spec",
+        type=str,
+        default=None,
+        help="JSON string or file path describing the Seamless data spec to embed.",
+    )
+    parser.add_argument(
+        "--spec-version",
+        type=str,
+        default="v1",
+        help="Expression spec_version used for hashing and compatibility labels.",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -40,11 +52,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    data_spec = None
+    if args.data_spec:
+        candidate_path = Path(args.data_spec)
+        if candidate_path.exists():
+            data_spec = json.loads(candidate_path.read_text())
+        else:
+            data_spec = json.loads(args.data_spec)
+
     hof_path = args.hof
     specs = load_pysr_hof_as_dags(
         hof_path=hof_path,
         outputs_base=Path("outputs"),
         max_nodes=args.max_nodes,
+        data_spec=data_spec,
+        spec_version=args.spec_version,
     )
     out_path = args.out
     if out_path is None:

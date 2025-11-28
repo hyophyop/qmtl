@@ -18,6 +18,7 @@ DAG:
 
 Adapters:
     - load_pysr_hof_as_dags: Load PySR hall_of_fame.csv as DAG specs
+    - load_pysr_hof_as_strategies: Load PySR hall_of_fame.csv as Strategy classes
     - adapters: Subpackage with generic and Operon adapters
 
 Strategy Templates:
@@ -60,7 +61,7 @@ from .dag import (  # noqa: F401
 )
 
 # Adapters
-from .pysr_adapter import load_pysr_hof_as_dags  # noqa: F401
+from .pysr_adapter import load_pysr_hof_as_dags, load_pysr_hof_as_strategies  # noqa: F401
 from . import adapters  # noqa: F401
 
 # Strategy Templates
@@ -92,6 +93,7 @@ __all__ = [
     "ExpressionDagBuilder",
     # Adapters
     "load_pysr_hof_as_dags",
+    "load_pysr_hof_as_strategies",
     "adapters",
     # Strategy Templates
     "build_expression_strategy",

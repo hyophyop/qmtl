@@ -381,3 +381,45 @@ loader = QuestDBHistoryProvider(
     fetcher=fetcher,
 )
 ```
+
+## PySR HOF → Runner quickstart
+
+Use the PySR adapter to propagate ``data_spec`` and ``spec_version`` all the way to
+Strategy submission:
+
+```bash
+python scripts/pysr_hof_to_dag.py \
+  --hof outputs/run_001/hall_of_fame.csv \
+  --data-spec '{"dataset_id": "ohlcv", "snapshot_version": "2025-01-01", "interval": "1m", "period": 200}' \
+  --spec-version v1
+```
+
+Then create Strategy classes wired to the Seamless history provider and submit them via the SDK runner:
+
+```python
+from pathlib import Path
+
+from qmtl.integrations.sr import load_pysr_hof_as_strategies
+from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
+from qmtl.runtime.sdk.runner import Runner
+
+provider = EnhancedQuestDBProvider(
+    dsn="postgresql://user:pass@localhost:8812/qdb",
+    table="ohlcv",
+)
+
+strategies = load_pysr_hof_as_strategies(
+    history_provider=provider,
+    hof_path=Path("outputs/run_001/hall_of_fame.csv"),
+    data_spec={
+        "dataset_id": "ohlcv",
+        "snapshot_version": "2025-01-01",
+        "interval": "1m",
+        "period": 200,
+    },
+    spec_version="v1",
+)
+
+for strategy_cls in strategies:
+    Runner.submit(strategy_cls, world="demo", mode="backtest")
+```
