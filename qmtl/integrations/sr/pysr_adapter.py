@@ -9,6 +9,7 @@ from typing import List
 import sympy as sp
 
 from .dag import ExpressionDagSpec, build_expression_dag
+from .strategy_template import build_strategy_from_dag_spec
 
 REQUIRED_COLS = {"Equation", "Complexity", "Loss"}
 
@@ -79,3 +80,38 @@ def load_pysr_hof_as_dags(
         specs.append(spec)
 
     return specs
+
+
+def load_pysr_hof_as_strategies(
+    *,
+    history_provider: object,
+    hof_path: Path | None = None,
+    outputs_base: Path | None = None,
+    max_nodes: int = 20,
+    data_spec: dict | None = None,
+    spec_version: str = "v1",
+    sr_engine: str | None = "pysr",
+) -> List[type]:
+    """Load PySR HOF as Strategy classes wired with Seamless provider.
+
+    This convenience helper chains ``load_pysr_hof_as_dags`` with
+    ``build_strategy_from_dag_spec`` so the caller can directly submit
+    the resulting strategies to ``Runner.submit``.
+    """
+
+    dag_specs = load_pysr_hof_as_dags(
+        hof_path=hof_path,
+        outputs_base=outputs_base,
+        max_nodes=max_nodes,
+        data_spec=data_spec,
+        spec_version=spec_version,
+    )
+
+    return [
+        build_strategy_from_dag_spec(
+            spec,
+            history_provider=history_provider,
+            sr_engine=sr_engine,
+        )
+        for spec in dag_specs
+    ]
