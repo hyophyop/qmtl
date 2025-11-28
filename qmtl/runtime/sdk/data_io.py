@@ -6,12 +6,21 @@ This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
 
 from .protocols import StreamLike
+
+class _SeamlessFetchResultLike(Protocol):
+    """Lightweight view of seamless fetch responses without importing the provider."""
+
+    frame: pd.DataFrame
+    metadata: Any
+
+
+HistoryFetchResult: TypeAlias = pd.DataFrame | _SeamlessFetchResultLike
 
 
 class DataFetcher(Protocol):
@@ -72,7 +81,7 @@ class HistoryProvider(ABC):
     @abstractmethod
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> HistoryFetchResult:
         """Return data in ``[start, end)`` for ``node_id`` and ``interval``."""
         ...
 
@@ -121,6 +130,7 @@ __all__ = [
     "DataFetcher",
     "HistoryBackend",
     "AutoBackfillRequest",
+    "HistoryFetchResult",
     "HistoryProvider",
     "EventRecorder",
 ]

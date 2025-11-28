@@ -1023,7 +1023,7 @@ class SeamlessDataProvider(HistoryProvider):
                 current_attempt = attempt + 1
                 try:
                     kwargs = _prepare_backfill_kwargs(current_attempt, batch_id)
-                    coro = self.backfiller.backfill(  # type: ignore[union-attr]
+                    coro = backfiller.backfill(
                         chunk_start,
                         chunk_end,
                         **kwargs,
@@ -1389,7 +1389,7 @@ class SeamlessDataProvider(HistoryProvider):
             interval=interval,
         )
 
-    async def fetch(  # type: ignore[override]
+    async def fetch(
         self,
         start: int,
         end: int,

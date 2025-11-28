@@ -1,22 +1,25 @@
 """Optional dependency guards for Arrow cache backend."""
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import os
 from typing import Any
 
 from .. import configuration
 
-pa: Any | None = None
-try:  # pragma: no cover - optional dependency
-    import pyarrow as pa  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    pa = None
+def _load_optional_module(name: str) -> Any | None:
+    spec = importlib.util.find_spec(name)
+    if spec is None:
+        return None
+    try:
+        return importlib.import_module(name)
+    except Exception:
+        return None
 
-ray: Any | None = None
-try:  # pragma: no cover - optional dependency
-    import ray  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    ray = None
+
+pa: Any | None = _load_optional_module("pyarrow")
+ray: Any | None = _load_optional_module("ray")
 
 def _resolve_enabled() -> bool:
     if pa is None:
