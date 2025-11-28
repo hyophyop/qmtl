@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, cast
 
 import pytest
 from fastapi import HTTPException
@@ -378,7 +378,7 @@ async def test_shared_validation_path(
     with pytest.raises(HTTPException) as exc:
         await helper.process(bundle.payload, config)
 
-    detail = exc.value.detail
+    detail = cast(dict[str, Any], exc.value.detail)
     assert detail["code"] == "E_NODE_ID_MISMATCH"
 
 

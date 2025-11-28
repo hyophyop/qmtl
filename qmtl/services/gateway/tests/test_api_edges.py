@@ -1,13 +1,15 @@
 import secrets
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+import redis.asyncio as redis
 
 from qmtl.services.gateway import api
 from qmtl.services.gateway.degradation import DegradationLevel
 from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
+from qmtl.services.gateway.world_client import WorldServiceClient
 
 
 class _FakeRedis:
@@ -74,7 +76,7 @@ def patched_app(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     redis_client = _FakeRedis()
     database = api.MemoryDatabase()
     app = api.create_app(
-        redis_client=redis_client,
+        redis_client=cast(redis.Redis, redis_client),
         database=database,
         enable_background=False,
     )
@@ -100,7 +102,12 @@ def test_world_client_capabilities_are_configured() -> None:
     caps = GatewayHealthCapabilities(rebalance_schema_version=2, alpha_metrics_capable=True)
 
     result = api._resolve_world_client(
-        client, enable_proxy=False, url=None, timeout=0.1, retries=1, capabilities=caps
+        cast(WorldServiceClient, client),
+        enable_proxy=False,
+        url=None,
+        timeout=0.1,
+        retries=1,
+        capabilities=caps,
     )
 
     assert result is client
@@ -127,11 +134,12 @@ def test_event_config_generates_secret_and_warns(monkeypatch: pytest.MonkeyPatch
 
 
 def test_degrade_middleware_handles_minimal_and_static(patched_app: TestClient) -> None:
-    patched_app.app.state.degradation.level = DegradationLevel.STATIC
+    app = cast(FastAPI, patched_app.app)
+    app.state.degradation.level = DegradationLevel.STATIC
     response = patched_app.post("/strategies")
     assert response.status_code == 204
     assert response.headers.get("Retry-After") == "30"
 
-    patched_app.app.state.degradation.level = DegradationLevel.MINIMAL
+    app.state.degradation.level = DegradationLevel.MINIMAL
     response = patched_app.post("/strategies")
     assert response.status_code == 503

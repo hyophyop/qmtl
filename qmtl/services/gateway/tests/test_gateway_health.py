@@ -4,20 +4,18 @@ import asyncio
 
 import pytest
 
-from qmtl.services.gateway import gateway_health as gh_module
 from qmtl.services.gateway.gateway_health import (
     GatewayHealthCapabilities,
     get_health,
+    reset_status_cache,
 )
 
 
 @pytest.fixture(autouse=True)
 def clear_gateway_health_cache():
-    gh_module._STATUS_CACHE_MAP.clear()  # type: ignore[attr-defined]
-    gh_module._STATUS_CACHE_TS = 0.0  # type: ignore[attr-defined]
+    reset_status_cache()
     yield
-    gh_module._STATUS_CACHE_MAP.clear()  # type: ignore[attr-defined]
-    gh_module._STATUS_CACHE_TS = 0.0  # type: ignore[attr-defined]
+    reset_status_cache()
 
 
 class StubBreaker:
