@@ -6,19 +6,21 @@ This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import Any, Protocol, TYPE_CHECKING, TypeAlias, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
 
 from .protocols import StreamLike
 
-if TYPE_CHECKING:
-    from .seamless_data_provider import SeamlessFetchResult
+class _SeamlessFetchResultLike(Protocol):
+    """Lightweight view of seamless fetch responses without importing the provider."""
 
-    HistoryFetchResult: TypeAlias = pd.DataFrame | SeamlessFetchResult
-else:
-    HistoryFetchResult: TypeAlias = pd.DataFrame | Any
+    frame: pd.DataFrame
+    metadata: Any
+
+
+HistoryFetchResult: TypeAlias = pd.DataFrame | _SeamlessFetchResultLike
 
 
 class DataFetcher(Protocol):
