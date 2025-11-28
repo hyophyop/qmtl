@@ -33,8 +33,9 @@ class HestonInput(SyntheticInput):
         self.rho = rho
         self.mu = mu
 
-    def step(self) -> tuple[int, dict[str, float]]:
-        dt = float(self.interval)
+    def step(self) -> tuple[int, dict[str, float | list[float]]]:
+        interval = self._interval_value()
+        dt = float(interval)
         z1 = self.rng.standard_normal()
         z2 = self.rng.standard_normal()
         dw1 = np.sqrt(dt) * z1
@@ -43,5 +44,5 @@ class HestonInput(SyntheticInput):
             self.v + self.kappa * (self.theta - self.v) * dt + self.sigma * np.sqrt(abs(self.v)) * dw2
         )
         self.price *= np.exp((self.mu - 0.5 * self.v) * dt + np.sqrt(abs(self.v)) * dw1)
-        self.timestamp += self.interval
+        self.timestamp += interval
         return self.timestamp, {"price": float(self.price)}

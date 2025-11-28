@@ -30,10 +30,11 @@ class GarchInput(SyntheticInput):
         self.beta = beta
         self.var = omega / (1 - alpha - beta)
 
-    def step(self) -> tuple[int, dict[str, float]]:
+    def step(self) -> tuple[int, dict[str, float | list[float]]]:
+        interval = self._interval_value()
         eps = self.rng.standard_normal()
         self.var = self.omega + self.alpha * (eps ** 2) * self.var + self.beta * self.var
         ret = self.mu + np.sqrt(abs(self.var)) * eps
         self.price *= np.exp(ret)
-        self.timestamp += self.interval
+        self.timestamp += interval
         return self.timestamp, {"price": float(self.price)}

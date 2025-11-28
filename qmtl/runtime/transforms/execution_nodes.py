@@ -20,6 +20,7 @@ from qmtl.runtime.sdk.pretrade import Activation
 from qmtl.runtime.brokerage import BrokerageModel, Account
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.transforms.execution_shared import run_pretrade_checks, apply_sizing
+from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 
 
 class PreTradeGateNode(Node):
@@ -51,7 +52,7 @@ class PreTradeGateNode(Node):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView) -> SizedOrder | OrderRejection | None:
         data = view[self.order][self.order.interval]
         if not data:
             return None
@@ -93,7 +94,7 @@ class SizingNode(Node):
             period=1,
         )
 
-    def _compute(self, view: CacheView) -> dict | None:
+    def _compute(self, view: CacheView) -> SizedOrder | None:
         intent_data = view[self.intent][self.intent.interval]
         portfolio_data = view[self.portfolio][self.portfolio.interval]
         if not intent_data or not portfolio_data:

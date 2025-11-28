@@ -23,7 +23,7 @@ def check_pretrade(
     brokerage: BrokerageModel,
     account: Account,
     symbol: str,
-    quantity: int,
+    quantity: float,
     price: float,
     order_type: OrderType = OrderType.MARKET,
     tif: TimeInForce = TimeInForce.DAY,

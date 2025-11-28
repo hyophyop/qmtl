@@ -22,7 +22,8 @@ class RawMarketInput(SyntheticInput):
         self.price = start_price
 
     def step(self) -> Tuple[int, Dict[str, float | List[float]]]:
-        self.timestamp += self.interval
+        interval = self._interval_value()
+        self.timestamp += interval
         # Random walk price dynamics
         ret = self.rng.normal(0, 0.1)
         self.price += ret
