@@ -61,7 +61,7 @@ class Order:
     """
 
     symbol: str
-    quantity: int
+    quantity: float
     price: float
     type: OrderType = OrderType.MARKET
     tif: TimeInForce = TimeInForce.DAY

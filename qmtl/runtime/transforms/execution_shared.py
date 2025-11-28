@@ -47,16 +47,13 @@ def run_pretrade_checks(
     limit_price = _coerce_float(order.get("limit_price"))
     stop_price = _coerce_float(order.get("stop_price"))
 
-    quantity_for_check = int(quantity) if quantity is not None else 0
-    price_for_check = price if price is not None else 0.0
-
     result = check_pretrade(
         activation_map=activation_map,
         brokerage=brokerage,
         account=account,
         symbol=str(symbol),
-        quantity=quantity_for_check,
-        price=price_for_check,
+        quantity=quantity if quantity is not None else 0.0,
+        price=price if price is not None else 0.0,
         order_type=order_type,
         tif=tif,
         limit_price=limit_price,
