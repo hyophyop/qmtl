@@ -59,7 +59,8 @@ class SwitchableStrategy(Strategy):
             data = view[price][price.interval]
             if len(data) < 2:
                 return 0.0
-            prev, last = data[-2][1]["close"], data[-1][1]["close"]
+            prev = float(data[-2][1]["close"])
+            last = float(data[-1][1]["close"])
             return (last - prev) / prev
 
         alpha = Node(input=price, compute_fn=compute_alpha, name="alpha")

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import pandas as pd  # type: ignore[import-untyped]
+from typing import cast
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
-from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
-from qmtl.runtime.sdk.event_service import EventRecorderService
+import pandas as pd
+
 from qmtl.runtime.io import QuestDBRecorder
+from qmtl.runtime.sdk import Mode, Runner, Strategy
+from qmtl.runtime.sdk.event_service import EventRecorderService
+from qmtl.runtime.sdk.node import MatchMode, Node, TagQueryNode
 
 
 class TagQueryAggregationStrategy(Strategy):
@@ -24,7 +26,9 @@ class TagQueryAggregationStrategy(Strategy):
 
         def calc_corr(view) -> pd.DataFrame:
             aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-            frames = [frame.frame for frame in aligned if not frame.frame.empty]
+            frames = [
+                cast(pd.DataFrame, frame.frame) for frame in aligned if not frame.frame.empty
+            ]
             if not frames:
                 return pd.DataFrame()
             df = pd.concat(frames, axis=1)

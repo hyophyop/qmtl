@@ -5,10 +5,16 @@ This module provides Binance brokerage integration.
 
 from __future__ import annotations
 
+from types import ModuleType
+from typing import Any, cast
+
+_ccxt: ModuleType | None
 try:
-    import ccxt
+    import ccxt as _ccxt
 except ImportError:
-    ccxt = None
+    _ccxt = None
+
+ccxt: ModuleType | None = _ccxt
 
 
 class BinanceBroker:
@@ -25,7 +31,8 @@ class BinanceBroker:
         if ccxt is None:
             raise ImportError("CCXT is required for Binance integration. Install with: pip install ccxt")
         
-        self.exchange = ccxt.binance({
+        exchange_factory = cast(Any, ccxt).binance
+        self.exchange: Any = exchange_factory({
             'apiKey': api_key,
             'secret': api_secret,
             'options': {'defaultType': 'future' if testnet else 'spot'},

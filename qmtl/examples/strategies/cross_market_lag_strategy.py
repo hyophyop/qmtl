@@ -4,7 +4,7 @@ from qmtl.runtime.sdk import Runner, Strategy, Mode
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 class CrossMarketLagStrategy(Strategy):
     def setup(self):

@@ -16,7 +16,7 @@ from pathlib import Path
 import argparse
 from qmtl.runtime.sdk import Runner, Strategy, Mode
 from qmtl.runtime.sdk.node import Node, StreamInput
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 
 class BranchingStrategy(Strategy):

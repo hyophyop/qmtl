@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
-from qmtl.runtime.io import QuestDBRecorder  # type: ignore[import-untyped]
+from qmtl.runtime.io import QuestDBRecorder
 from qmtl.runtime.sdk import Runner, Strategy, Mode
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.event_service import EventRecorderService

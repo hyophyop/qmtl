@@ -14,7 +14,7 @@ import json
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 import httpx
 
@@ -54,7 +54,7 @@ def _post_apply(url: str, world_id: str, payload: Mapping[str, Any]) -> Mapping[
     with httpx.Client(timeout=2.0) as client:
         response = client.post(endpoint, json=payload)
         response.raise_for_status()
-        return response.json()
+        return cast(Mapping[str, Any], response.json())
 
 
 def main(argv: list[str] | None = None) -> int:

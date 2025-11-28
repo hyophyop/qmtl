@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import pandas as pd  # type: ignore[import-untyped]
-from qmtl.runtime.sdk import Runner, Strategy, Mode
-from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
+from typing import cast
+
+import pandas as pd
+from qmtl.runtime.sdk import Mode, Runner, Strategy
+from qmtl.runtime.sdk.node import MatchMode, Node, TagQueryNode
 
 
 class TagQueryStrategy(Strategy):
@@ -22,7 +24,9 @@ class TagQueryStrategy(Strategy):
 
         def calc_corr(view) -> pd.DataFrame:
             aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-            frames = [frame.frame for frame in aligned if not frame.frame.empty]
+            frames = [
+                cast(pd.DataFrame, frame.frame) for frame in aligned if not frame.frame.empty
+            ]
             if not frames:
                 return pd.DataFrame()
             df = pd.concat(frames, axis=1)
@@ -35,7 +39,8 @@ class TagQueryStrategy(Strategy):
             if not latest:
                 return pd.DataFrame()
             _, corr_df = latest[-1]
-            return pd.DataFrame({"avg_corr": [corr_df.mean().mean()]})
+            corr_frame = cast(pd.DataFrame, corr_df)
+            return pd.DataFrame({"avg_corr": [corr_frame.mean().mean()]})
 
         avg_node = Node(input=corr_node, compute_fn=avg_corr, name="avg_corr")
 

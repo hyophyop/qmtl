@@ -164,7 +164,6 @@ module = [
   "qmtl.runtime.reference_models.*",
   "qmtl.services.*",
   "qmtl.foundation.*",
-  "qmtl.examples.*",
   "tests.*",
 ]
 ignore_errors = true
