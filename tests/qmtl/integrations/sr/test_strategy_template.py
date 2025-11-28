@@ -2,9 +2,13 @@
 
 import pytest
 
-from qmtl.integrations.sr.strategy_template import (
+from qmtl.integrations.sr import (
+    ValidationSample,
+    ValidationSampleMismatch,
     build_expression_strategy,
     build_strategy_from_dag_spec,
+    submit_with_validation,
+    validate_strategy_against_sample,
 )
 from qmtl.integrations.sr.dag import ExpressionDagSpec
 
@@ -86,3 +90,52 @@ class TestStrategyTemplate:
         dag = strat.serialize()
         assert dag["meta"]["sr"]["expression_key"] == "abc123"
         assert dag["meta"]["sr"]["data_spec"]["dataset_id"] == "ohlcv"
+
+    def test_submit_with_validation_passes_and_calls_submit(self):
+        strategy_cls = build_expression_strategy("x + y")
+        sample = {"points": [{"input": {"x": 1, "y": 2}, "expected": 3}]}
+
+        calls: list[dict] = []
+
+        def _submit_stub(target_cls: type, **kwargs: object) -> dict[str, object]:
+            calls.append({"cls": target_cls, "kwargs": kwargs})
+            return {"status": "submitted"}
+
+        result = submit_with_validation(
+            strategy_cls,
+            validation_sample=sample,
+            submit_fn=_submit_stub,
+            world="demo",
+        )
+
+        assert result == {"status": "submitted"}
+        assert calls and calls[0]["cls"] is strategy_cls
+        assert calls[0]["kwargs"].get("world") == "demo"
+
+    def test_submit_with_validation_rejects_mismatch(self):
+        strategy_cls = build_expression_strategy("x + y")
+        sample = {"points": [{"input": {"x": 1, "y": 2}, "expected": 4}]}
+
+        def _submit_stub(*_: object, **__: object) -> None:  # pragma: no cover - should not be called
+            raise AssertionError("submit stub should not be invoked when validation fails")
+
+        with pytest.raises(ValidationSampleMismatch) as excinfo:
+            submit_with_validation(strategy_cls, validation_sample=sample, submit_fn=_submit_stub)
+
+        message = str(excinfo.value)
+        assert "expected=4" in message
+        assert "actual" in message
+
+    def test_validate_strategy_against_sample_respects_epsilon(self):
+        strategy_cls = build_expression_strategy("x")
+        sample = ValidationSample.parse(
+            {
+                "points": [{"input": {"x": 1.0}, "expected": 1.02}],
+                "epsilon": {"abs": 0.05},
+            }
+        )
+
+        result = validate_strategy_against_sample(strategy_cls, sample)
+
+        assert result.passed is True
+        assert result.mismatches == []

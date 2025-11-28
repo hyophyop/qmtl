@@ -7,6 +7,7 @@ Seamless Data Provider와 동일 데이터를 사용하도록 Strategy를 생성
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
 
 from .expression_key import compute_expression_key
@@ -76,6 +77,207 @@ def _compile_expression(expression: str, modules: str | tuple[str, ...] = "numpy
         return parsed, symbols, fn
     except Exception:
         return None, [], None
+
+
+@dataclass(frozen=True)
+class ValidationPoint:
+    input: Mapping[str, Any]
+    expected: float | int | None
+
+
+@dataclass
+class ValidationSample:
+    points: list[ValidationPoint]
+    epsilon_abs: float = 0.0
+    epsilon_rel: float = 0.0
+
+    @classmethod
+    def parse(cls, payload: Any) -> "ValidationSample":
+        if payload is None:
+            raise ValueError("validation_sample payload is required")
+
+        epsilon_section = payload.get("epsilon", {}) if isinstance(payload, Mapping) else {}
+        epsilon_abs_raw = payload.get("epsilon_abs") if isinstance(payload, Mapping) else None
+        epsilon_rel_raw = payload.get("epsilon_rel") if isinstance(payload, Mapping) else None
+        epsilon_abs = (
+            _to_float(epsilon_abs_raw, 0.0) if epsilon_abs_raw is not None else _to_float(epsilon_section.get("abs"), 0.0)
+        )
+        epsilon_rel = (
+            _to_float(epsilon_rel_raw, 0.0) if epsilon_rel_raw is not None else _to_float(epsilon_section.get("rel"), 0.0)
+        )
+
+        if isinstance(payload, Mapping):
+            points_payload = payload.get("points") or payload.get("samples")
+        else:
+            points_payload = payload
+
+        points = _parse_points(points_payload)
+        return cls(points=points, epsilon_abs=epsilon_abs, epsilon_rel=epsilon_rel)
+
+
+@dataclass(frozen=True)
+class ValidationMismatch:
+    index: int
+    expected: float | int | None
+    actual: float | None
+    abs_error: float | None
+    rel_error: float | None
+    input: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    passed: bool
+    mismatches: list[ValidationMismatch]
+
+
+class ValidationSampleMismatch(ValueError):
+    def __init__(self, result: ValidationResult) -> None:
+        self.result = result
+        details = "; ".join(
+            [
+                f"#{m.index}: expected={m.expected}, actual={m.actual}, abs_err={m.abs_error}, rel_err={m.rel_error}"
+                for m in result.mismatches
+            ]
+        )
+        super().__init__(f"validation_sample mismatch ({details})")
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_points(points_payload: Any) -> list[ValidationPoint]:
+    if points_payload is None:
+        raise ValueError("validation_sample requires 'points' or a list payload")
+
+    if not isinstance(points_payload, Sequence) or isinstance(points_payload, (str, bytes, bytearray)):
+        raise ValueError("validation_sample points must be a sequence of samples")
+
+    parsed: list[ValidationPoint] = []
+    for raw in points_payload:
+        if isinstance(raw, Mapping):
+            input_payload = raw.get("input") or raw.get("inputs")
+            expected = raw.get("expected")
+            if expected is None and "output" in raw:
+                expected = raw.get("output")
+            if expected is None and "value" in raw:
+                expected = raw.get("value")
+            if input_payload is None:
+                known_keys = {"expected", "output", "value", "input", "inputs"}
+                leftovers = {k: v for k, v in raw.items() if k not in known_keys}
+                if leftovers:
+                    input_payload = leftovers
+            if not isinstance(input_payload, Mapping):
+                raise ValueError("Each validation sample must include an 'input' mapping")
+        elif isinstance(raw, (tuple, list)) and len(raw) == 2:
+            input_payload, expected = raw
+            if not isinstance(input_payload, Mapping):
+                raise ValueError("Tuple validation samples must be (mapping, expected)")
+        else:
+            raise ValueError("validation_sample points must be mappings or (mapping, expected) tuples")
+
+        parsed.append(
+            ValidationPoint(
+                input=cast(Mapping[str, Any], input_payload),
+                expected=cast(float | int | None, expected),
+            )
+        )
+
+    if not parsed:
+        raise ValueError("validation_sample requires at least one point")
+    return parsed
+
+
+def _within_tolerance(expected: float, actual: float, *, epsilon_abs: float, epsilon_rel: float) -> tuple[bool, float, float]:
+    abs_error = abs(actual - expected)
+    rel_error = abs_error / max(abs(expected), 1e-12)
+    return abs_error <= epsilon_abs or rel_error <= epsilon_rel, abs_error, rel_error
+
+
+def validate_strategy_against_sample(
+    strategy_cls: type["Strategy"],
+    validation_sample: ValidationSample | Mapping[str, Any] | Sequence[Any],
+    *,
+    epsilon_abs: float | None = None,
+    epsilon_rel: float | None = None,
+) -> ValidationResult:
+    sample = validation_sample if isinstance(validation_sample, ValidationSample) else ValidationSample.parse(validation_sample)
+    if epsilon_abs is not None:
+        sample = replace(sample, epsilon_abs=epsilon_abs)
+    if epsilon_rel is not None:
+        sample = replace(sample, epsilon_rel=epsilon_rel)
+
+    strategy = strategy_cls()
+    evaluator = getattr(strategy, "evaluate", None)
+    if not callable(evaluator):
+        raise ValueError("strategy_cls must expose an evaluate(payload) helper for validation")
+
+    mismatches: list[ValidationMismatch] = []
+    for idx, point in enumerate(sample.points):
+        actual = evaluator(point.input)
+        if actual is None or point.expected is None:
+            mismatches.append(
+                ValidationMismatch(
+                    index=idx,
+                    expected=point.expected,
+                    actual=cast(float | None, actual),
+                    abs_error=None,
+                    rel_error=None,
+                    input=point.input,
+                )
+            )
+            continue
+
+        within, abs_error, rel_error = _within_tolerance(
+            float(point.expected), float(actual),
+            epsilon_abs=sample.epsilon_abs,
+            epsilon_rel=sample.epsilon_rel,
+        )
+        if not within:
+            mismatches.append(
+                ValidationMismatch(
+                    index=idx,
+                    expected=point.expected,
+                    actual=float(actual),
+                    abs_error=abs_error,
+                    rel_error=rel_error,
+                    input=point.input,
+                )
+            )
+
+    return ValidationResult(passed=not mismatches, mismatches=mismatches)
+
+
+def submit_with_validation(
+    strategy_cls: type["Strategy"],
+    *,
+    validation_sample: ValidationSample | Mapping[str, Any] | Sequence[Any] | None = None,
+    epsilon_abs: float | None = None,
+    epsilon_rel: float | None = None,
+    submit_fn: Callable[..., Any] | None = None,
+    **submit_kwargs: Any,
+) -> Any:
+    if validation_sample is not None:
+        result = validate_strategy_against_sample(
+            strategy_cls,
+            validation_sample,
+            epsilon_abs=epsilon_abs,
+            epsilon_rel=epsilon_rel,
+        )
+        if not result.passed:
+            raise ValidationSampleMismatch(result)
+
+    submit_callable = submit_fn
+    if submit_callable is None:
+        from qmtl.runtime.sdk import Runner
+
+        submit_callable = Runner.submit
+
+    return submit_callable(strategy_cls, **submit_kwargs)
 
 
 def build_expression_strategy(
@@ -271,12 +473,38 @@ def build_strategy_from_dag_spec(
         _sr_engine = sr_engine
         _expression_key = expression_key or compute_expression_key(expr_str)
         _expression_dag_spec = dag_dict
+        _compiled = _compile_expression(expr_str)
         _sr_metadata = {
             "dag_node_count": getattr(dag_spec, "node_count", None),
             "dag_complexity": getattr(dag_spec, "complexity", None),
             "dag_loss": getattr(dag_spec, "loss", None),
             "spec_version": getattr(dag_spec, "spec_version", None),
         }
+
+        def _evaluate_payload(self, payload: Any) -> float | None:
+            parsed_local, sym_local, fn_local = self._compiled
+            if fn_local is None:
+                return None
+            if not sym_local:
+                try:
+                    return float(fn_local())
+                except Exception:
+                    return None
+            vals: list[Any] = []
+            for name in sym_local:
+                if isinstance(payload, Mapping):
+                    vals.append(payload.get(name))
+                else:
+                    vals.append(payload)
+            if any(v is None for v in vals):
+                return None
+            try:
+                return float(fn_local(*vals))
+            except Exception:
+                return None
+
+        def evaluate(self, payload: Any) -> float | None:
+            return self._evaluate_payload(payload)
 
         def setup(self) -> None:  # pragma: no cover - runtime wiring
             if not _RUNTIME_AVAILABLE:
