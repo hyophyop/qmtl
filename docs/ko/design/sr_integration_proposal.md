@@ -51,8 +51,8 @@ status: plan-revised
 ### Phase 1 (최소 실행 경로, 권장)
 - PySR가 **Seamless Data Provider**로 학습/평가하고 동일 provider를 런타임에 사용.
 - ExpressionDagBuilder로 수식/`expression_dag_spec`/`data_spec`을 정규화한 뒤 Strategy 템플릿(`build_strategy_from_dag_spec`)으로 감싸 Runner.submit에 제출.
-- 최소 실행 경로 예시(현재 구현 기준):
-  1. PySR HOF → `load_pysr_hof_as_dags(max_nodes, data_spec, spec_version)`.
+  - 최소 실행 경로 예시(현재 구현 기준):
+    1. PySR HOF → `load_pysr_hof_as_dags(max_nodes=..., data_spec=..., spec_version=...)`.
   2. 각 DAG 스펙을 `build_strategy_from_dag_spec(..., history_provider=SeamlessProvider, sr_engine="pysr")`로 Strategy 생성.
   3. Strategy.metadata에 `expression_key`, `data_spec`, `dedup_policy.expression_key.on_duplicate`, `validation_sample`을 포함해 `Runner.submit`.
   4. World 게이팅 시 expression_key dedup 정책(replace/reject)과 validation 샘플 오차(`epsilon`)를 확인.
