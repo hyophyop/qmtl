@@ -67,6 +67,11 @@ from . import adapters  # noqa: F401
 from .strategy_template import (  # noqa: F401
     build_expression_strategy,
     build_strategy_from_dag_spec,
+    submit_with_validation,
+    validate_strategy_against_sample,
+    ValidationSample,
+    ValidationSampleMismatch,
+    ValidationResult,
 )
 
 # Expression Keys
@@ -91,6 +96,11 @@ __all__ = [
     # Strategy Templates
     "build_expression_strategy",
     "build_strategy_from_dag_spec",
+    "submit_with_validation",
+    "validate_strategy_against_sample",
+    "ValidationSample",
+    "ValidationSampleMismatch",
+    "ValidationResult",
     # Expression Keys
     "compute_expression_key",
     "normalize_ast",
