@@ -58,6 +58,33 @@ status: plan-revised
 - WorldPolicy에 `expression_key` 기반 dedup 옵션(replace/reject)을 배선.
 - 정합성 핸드셰이크: 제출 시 샘플 비교 후 불일치면 reject.
 
+!!! note "제출 메타 포맷 (필수)"
+    - `meta.sr`에 포함되는 공통 필드
+        - `expression`, `expression_key`, `spec_version`, `data_spec`, `sr_engine`
+        - `expression_key_meta.value/spec_version`: 해시 버전 구분용
+        - `dedup_policy.expression_key.on_duplicate`: `replace`(기본) 또는 `reject`
+    - 예시(JSON):
+        ```json
+        {
+          "meta": {
+            "sr": {
+              "expression": "x + y",
+              "expression_key": "...",
+              "spec_version": "v1",
+              "data_spec": {"dataset_id": "ohlcv", "snapshot_version": "2025-01-01"},
+              "dedup_policy": {
+                "expression_key": {
+                  "value": "...",
+                  "spec_version": "v1",
+                  "on_duplicate": "replace"
+                }
+              }
+            }
+          }
+        }
+        ```
+    - `expression_key`가 없거나 계산에 실패하면 제출 단계에서 명확한 오류를 반환하고 중복 제어를 건너뛰지 않는다.
+
 ### Phase 2 (선택)
 - Gateway 배치 제출 API, 검증/정합성의 배치 최적화.
 - DAG Manager 직접 병합/캐싱/서브그래프 재사용 스위치 온.
