@@ -1,5 +1,6 @@
 import sys
 from types import SimpleNamespace
+from typing import Awaitable, Callable
 
 import pytest
 
@@ -33,7 +34,7 @@ async def test_server_manager_starts_and_tracks_clients(monkeypatch: pytest.Monk
     registry = ConnectionRegistry()
     joins: list[object] = []
     leaves: list[object] = []
-    captured: dict[str, object] = {}
+    captured: dict[str, Callable[[object], Awaitable[None]]] = {}
 
     async def on_join(sock: object) -> None:
         joins.append(sock)
@@ -41,7 +42,9 @@ async def test_server_manager_starts_and_tracks_clients(monkeypatch: pytest.Monk
     async def on_leave(sock: object) -> None:
         leaves.append(sock)
 
-    async def fake_serve(handler, host, port):
+    async def fake_serve(
+        handler: Callable[[object], Awaitable[None]], host: str, port: int
+    ) -> _FakeServer:
         captured["acceptor"] = handler
         return _FakeServer(8765)
 
@@ -63,7 +66,7 @@ async def test_server_manager_starts_and_tracks_clients(monkeypatch: pytest.Monk
             raise RuntimeError("disconnect")
 
     client = _Client()
-    await acceptor(client)  # type: ignore[arg-type]
+    await acceptor(client)
 
     assert joins == [client]
     assert leaves == [client]

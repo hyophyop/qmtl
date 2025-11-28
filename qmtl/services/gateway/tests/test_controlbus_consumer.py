@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
+from qmtl.services.gateway.ws.hub import WebSocketHub
 
 
 class _FakeHub:
@@ -54,7 +55,9 @@ class _FakeHub:
 @pytest.mark.asyncio
 async def test_process_generic_message_routes_and_deduplicates(monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _FakeHub()
-    consumer = ControlBusConsumer([], ["activation"], "group-a", ws_hub=hub)
+    consumer = ControlBusConsumer(
+        [], ["activation"], "group-a", ws_hub=cast(WebSocketHub, hub)
+    )
 
     recorded: dict[str, list[Any]] = {"control": [], "dropped": []}
 
@@ -89,7 +92,9 @@ async def test_process_generic_message_routes_and_deduplicates(monkeypatch: pyte
 @pytest.mark.asyncio
 async def test_queue_update_emits_tagquery_once(monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _FakeHub()
-    consumer = ControlBusConsumer([], ["queue"], "group-a", ws_hub=hub)
+    consumer = ControlBusConsumer(
+        [], ["queue"], "group-a", ws_hub=cast(WebSocketHub, hub)
+    )
 
     control_calls: list[tuple[str, Any]] = []
     monkeypatch.setattr(

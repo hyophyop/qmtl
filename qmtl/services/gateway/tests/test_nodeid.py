@@ -22,7 +22,10 @@ class FakeDB(Database):
 
     async def get_status(self, strategy_id: str) -> str | None:  # pragma: no cover - not used
         rec = self.records.get(strategy_id)
-        return rec.get("status") if rec else None
+        if rec is None:
+            return None
+        status = rec.get("status")
+        return status if isinstance(status, str) else None
 
     async def append_event(self, strategy_id: str, event: str) -> None:  # pragma: no cover - not used
         self.events.append((strategy_id, event))

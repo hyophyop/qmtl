@@ -1,9 +1,12 @@
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from qmtl.services.gateway import api
+from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
+from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer
+from qmtl.services.gateway.ws.hub import WebSocketHub
 
 
 class _DummyComponent:
@@ -24,7 +27,7 @@ class _DummyCommitConsumer(_DummyComponent):
         super().__init__()
         self.consume_calls: list[tuple[Any, int]] = []
 
-    async def start(self) -> None:  # type: ignore[override]
+    async def start(self) -> None:
         await super().start()
 
     async def consume(self, handler, timeout_ms: int) -> None:  # pragma: no cover - exercised via task
@@ -77,17 +80,17 @@ async def test_start_and_stop_background_lifecycle() -> None:
 
     commit_task = await api._start_background(
         enable_background=True,
-        controlbus_consumer=controlbus,
-        commit_log_consumer=commit_consumer,
+        controlbus_consumer=cast(ControlBusConsumer, controlbus),
+        commit_log_consumer=cast(CommitLogConsumer, commit_consumer),
         commit_log_handler=None,
-        ws_hub=ws_hub,
+        ws_hub=cast(WebSocketHub, ws_hub),
     )
 
+    assert commit_task is not None
     assert controlbus.started is True
     assert controlbus.ws_hub is ws_hub
-    assert commit_consumer.started is True
+    assert commit_consumer.started is True  # type: ignore[unreachable]
     assert ws_hub.started is True
-    assert commit_task is not None
 
     await asyncio.sleep(0.02)
 
@@ -128,10 +131,10 @@ async def test_background_disabled_skips_start() -> None:
 
     commit_task = await api._start_background(
         enable_background=False,
-        controlbus_consumer=controlbus,
-        commit_log_consumer=commit_consumer,
+        controlbus_consumer=cast(ControlBusConsumer, controlbus),
+        commit_log_consumer=cast(CommitLogConsumer, commit_consumer),
         commit_log_handler=None,
-        ws_hub=ws_hub,
+        ws_hub=cast(WebSocketHub, ws_hub),
     )
 
     assert commit_task is None

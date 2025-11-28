@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any, Optional, TYPE_CHECKING
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Optional, TYPE_CHECKING
 
 import redis.asyncio as redis
 
@@ -72,9 +74,16 @@ class GatewayHealthCollector:
         return result
 
     async def _probe_redis(self) -> str:
-        if self.redis_client is None:
+        client = self.redis_client
+        if client is None:
             return "unknown"
-        return await self._probe(lambda: self.redis_client.ping())
+        async def _call() -> Any:
+            result = client.ping()
+            if inspect.isawaitable(result):
+                return await result
+            return result
+
+        return await self._probe(_call)
 
     async def _probe_postgres(self) -> str:
         db = self.database
@@ -97,7 +106,7 @@ class GatewayHealthCollector:
 
         return await self._probe(_call)
 
-    async def _probe(self, func) -> str:
+    async def _probe(self, func: Callable[[], Awaitable[Any]]) -> str:
         try:
             result = await asyncio.wait_for(func(), timeout=self.timeout)
         except asyncio.TimeoutError:
@@ -123,6 +132,14 @@ _STATUS_CACHE_MAP: dict[tuple[int, int, int, int, tuple[int, bool, str | None], 
 _STATUS_CACHE_TS: float = 0.0
 _STATUS_CACHE_TTL = 2.0  # seconds
 _STATUS_LOCK = asyncio.Lock()
+
+
+def reset_status_cache() -> None:
+    """Clear gateway health cache. Intended for tests."""
+
+    _STATUS_CACHE_MAP.clear()
+    global _STATUS_CACHE_TS
+    _STATUS_CACHE_TS = 0.0
 
 
 async def get_health(
@@ -178,4 +195,4 @@ async def get_health(
         return result
 
 
-__all__ = ["GatewayHealthCapabilities", "get_health"]
+__all__ = ["GatewayHealthCapabilities", "get_health", "reset_status_cache"]
