@@ -62,7 +62,8 @@ def allocate_strategy_deltas(
     for d in plan.deltas:
         key = (d.venue, d.symbol)
         strat_notional = bucket.get(key, {})
-        if strat_notional:
+        total_notional = sum(strat_notional.values()) if strat_notional else 0.0
+        if strat_notional and total_notional > 0:
             out.extend(
                 _allocate_existing_delta(world_id, d.symbol, d.delta_qty, d.venue, strat_notional)
             )

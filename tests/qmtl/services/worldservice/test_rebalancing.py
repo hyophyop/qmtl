@@ -12,6 +12,7 @@ from qmtl.services.worldservice.rebalancing import (
     GlobalDeltaAggregator,
     RebalancePlan,
     SymbolDelta,
+    allocate_strategy_deltas,
 )
 
 
@@ -41,6 +42,33 @@ def test_single_world_proportional_downscale_rounding():
     assert d.symbol == "BTCUSDT"
     assert d.venue == "binance"
     assert round(d.delta_qty, 3) == -0.333
+
+
+def test_allocate_strategy_deltas_falls_back_when_notional_zero_with_positions():
+    plan = RebalancePlan(
+        world_id="w",
+        scale_world=1.0,
+        scale_by_strategy={},
+        deltas=[SymbolDelta(symbol="BTCUSDT", venue="binance", delta_qty=1.0)],
+    )
+    positions = [
+        PositionSlice(
+            world_id="w",
+            strategy_id="s1",
+            symbol="BTCUSDT",
+            qty=0.0,  # Non-empty position entry but zero notional
+            mark=100.0,
+            venue="binance",
+        )
+    ]
+
+    fallback = {"s1": 0.6, "s2": 0.4}
+    exec_deltas = allocate_strategy_deltas("w", plan, positions, fallback_weights=fallback)
+
+    assert len(exec_deltas) == 2
+    per_strategy = {d.strategy_id: d.delta_qty for d in exec_deltas}
+    assert per_strategy["s1"] == pytest.approx(0.6)
+    assert per_strategy["s2"] == pytest.approx(0.4)
 
 
 def test_lot_rounding_toward_zero_on_upscale():
