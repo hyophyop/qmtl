@@ -138,18 +138,32 @@ class BackfillEngine:
     async def _process_metadata(self, node: Any, metadata) -> None:
         if metadata is None:
             return
+        self._set_last_fetch_metadata(node, metadata)
+        self._apply_coverage_bounds(node, metadata)
+        self._update_compute_context_from_metadata(node, metadata)
+        self._apply_conformance_flags(node, metadata)
+        self._apply_conformance_warnings(node, metadata)
+
+        await self._publish_metadata(node, metadata)
+
+    @staticmethod
+    def _set_last_fetch_metadata(node: Any, metadata) -> None:
         try:
             node.last_fetch_metadata = metadata
         except Exception:
             pass
 
+    @staticmethod
+    def _apply_coverage_bounds(node: Any, metadata) -> None:
         try:
-            coverage = metadata.coverage_bounds
+            coverage = getattr(metadata, "coverage_bounds", None)
             if coverage is not None:
                 setattr(node, "last_coverage_bounds", coverage)
         except Exception:
             pass
 
+    @staticmethod
+    def _update_compute_context_from_metadata(node: Any, metadata) -> None:
         artifact = getattr(metadata, "artifact", None)
         try:
             if artifact is not None:
@@ -157,25 +171,30 @@ class BackfillEngine:
                     as_of=getattr(artifact, "as_of", None),
                     dataset_fingerprint=getattr(artifact, "dataset_fingerprint", None),
                 )
-            elif getattr(metadata, "as_of", None) is not None:
-                node.update_compute_context(as_of=metadata.as_of)
+                return
+
+            as_of = getattr(metadata, "as_of", None)
+            if as_of is not None:
+                node.update_compute_context(as_of=as_of)
         except Exception:
             logger.debug("failed to update node compute context from metadata", exc_info=True)
 
+    @staticmethod
+    def _apply_conformance_flags(node: Any, metadata) -> None:
         try:
-            setattr(node, "seamless_conformance_flags", dict(metadata.conformance_flags))
-        except Exception:
-            pass
-        try:
-            setattr(
-                node,
-                "seamless_conformance_warnings",
-                list(metadata.conformance_warnings or ()),
-            )
+            flags = getattr(metadata, "conformance_flags", None)
+            if flags is not None:
+                setattr(node, "seamless_conformance_flags", dict(flags))
         except Exception:
             pass
 
-        await self._publish_metadata(node, metadata)
+    @staticmethod
+    def _apply_conformance_warnings(node: Any, metadata) -> None:
+        try:
+            warnings = getattr(metadata, "conformance_warnings", None) or ()
+            setattr(node, "seamless_conformance_warnings", list(warnings))
+        except Exception:
+            pass
 
     async def _publish_metadata(self, node: Any, metadata) -> None:
         gateway_url = getattr(node, "gateway_url", None)
