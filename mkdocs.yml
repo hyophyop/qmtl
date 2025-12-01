@@ -8,7 +8,6 @@ nav:
       - User Workflow: getting-started/workflow.md
   - Maintenance:
       - Schedule: MAINTENANCE_SCHEDULE.md
-      - Workflow Orchestration Radon Plan: maintenance/radon_workflow_orchestration.md
       - Radon Metrics Snapshot (2025-11-14): maintenance/metrics/2025-11-14.md
       - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
   - Architecture:
