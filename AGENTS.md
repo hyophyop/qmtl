@@ -49,12 +49,24 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ## Testing
 
-- Always run tests in parallel with `pytest-xdist` for faster feedback:
-  `uv run -m pytest -W error -n auto`
-- If `pytest-xdist` is not installed, add it temporarily with
-  `uv pip install pytest-xdist` (or add it to your local extras).
-- For suites with shared resources, prefer `--dist loadscope` or cap workers
-  (e.g., `-n 2`). Mark must‑be‑serial tests and run them separately.
+- CI parity (required before opening a PR): run every check that CI executes (from
+  `.github/workflows/ci.yml` and `docs-link-check.yml`). Use the same flags/paths, adding `-n auto`
+  locally for speed only if the checks remain equivalent. Order to mirror CI:
+  - `uv run --with mypy -m mypy`
+  - `uv run mkdocs build --strict`
+  - `uv run python scripts/check_design_drift.py`
+  - `uv run python scripts/lint_dsn_keys.py`
+  - `uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json`
+  - `uv run --with grimp python scripts/check_sdk_layers.py`
+  - `uv run python scripts/check_docs_links.py`
+  - `uv run -m pytest --collect-only -q`
+  - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1 -k 'not slow'`
+  - `PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests`
+  - `USE_INPROC_WS_STACK=1 WS_MODE=service uv run -m pytest -q tests/e2e/world_smoke -q`
+- Always run tests in parallel with `pytest-xdist` for faster feedback; if not installed, add it
+  temporarily with `uv pip install pytest-xdist`. For suites with shared resources, prefer
+  `--dist loadscope` or cap workers (e.g., `-n 2`). Mark must‑be‑serial tests and run them
+  separately.
 
 ### Test Design Strategy
 
