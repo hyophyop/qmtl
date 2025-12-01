@@ -101,8 +101,14 @@ async def _main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
+    server_config = uvicorn.Config(app, host=config.host, port=config.port)
+    server = uvicorn.Server(server_config)
+
     try:
-        uvicorn.run(app, host=config.host, port=config.port)
+        await server.serve()
+    except asyncio.CancelledError:
+        server.should_exit = True
+        raise
     finally:
         await _close_database(db)
 
