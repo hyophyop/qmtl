@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 import sys
 
@@ -115,6 +116,152 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     assert captured["redis"]
     assert captured["insert_sentinel"] is True
     assert namespace_calls == [False]
+
+
+def test_gateway_cli_prefers_uvicorn_server(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  database_backend: memory",
+                "  database_dsn: 'sqlite:///:memory:'",
+                "dagmanager:",
+                "  enable_topic_namespace: false",
+            ]
+        )
+    )
+
+    from types import SimpleNamespace
+    from qmtl.services.gateway import cli
+
+    captured = {}
+
+    class DummyDB:
+        async def connect(self):
+            captured["connect"] = True
+
+        async def close(self):
+            captured["close"] = True
+
+    def fake_create_app(**kwargs):
+        captured["app_kwargs"] = kwargs
+        return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
+
+    class DummyConfig:
+        def __init__(self, app, host, port):
+            captured["host"] = host
+            captured["port"] = port
+            captured["app"] = app
+
+    class DummyServer:
+        def __init__(self, config):
+            captured["server_config"] = config
+            self.should_exit = False
+
+        async def serve(self):
+            captured["served"] = True
+
+    def fake_run(*_args, **_kwargs):
+        raise AssertionError("uvicorn.run should not be used when Server is available")
+
+    def fake_set_namespace(enabled: bool) -> None:
+        captured.setdefault("namespace", []).append(enabled)
+
+    fake_uvicorn = SimpleNamespace(Config=DummyConfig, Server=DummyServer, run=fake_run)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setattr(cli, "set_topic_namespace_enabled", fake_set_namespace)
+    monkeypatch.chdir(tmp_path)
+
+    cli.main(["--config", str(config_path)])
+
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 12345
+    assert captured["served"] is True
+    assert captured["close"] is True
+    assert captured["namespace"] == [False]
+
+
+def test_gateway_cli_sets_exit_flag_when_cancelled(monkeypatch, tmp_path):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "gateway:",
+                "  host: 127.0.0.1",
+                "  port: 12345",
+                "  database_backend: memory",
+                "  database_dsn: 'sqlite:///:memory:'",
+                "dagmanager:",
+                "  enable_topic_namespace: false",
+            ]
+        )
+    )
+
+    from contextlib import suppress
+    from types import SimpleNamespace
+    from qmtl.services.gateway import cli
+
+    captured = {}
+
+    class DummyDB:
+        async def connect(self):
+            captured["connect"] = True
+
+        async def close(self):
+            captured["close"] = True
+
+    def fake_create_app(**kwargs):
+        captured["app_kwargs"] = kwargs
+        return SimpleNamespace(state=SimpleNamespace(database=DummyDB()))
+
+    class DummyConfig:
+        def __init__(self, app, host, port):
+            captured["host"] = host
+            captured["port"] = port
+            captured["app"] = app
+
+    class DummyServer:
+        def __init__(self, config):
+            captured["server"] = self
+            self.should_exit = False
+            self.cancelled = False
+
+        async def serve(self):
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    def fake_set_namespace(enabled: bool) -> None:
+        captured.setdefault("namespace", []).append(enabled)
+
+    fake_uvicorn = SimpleNamespace(Config=DummyConfig, Server=DummyServer)
+
+    async def drive():
+        task = asyncio.create_task(cli._main(["--config", str(config_path)]))
+        await asyncio.sleep(0)
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.setattr(cli, "create_app", fake_create_app)
+    monkeypatch.setattr(cli, "set_topic_namespace_enabled", fake_set_namespace)
+    monkeypatch.chdir(tmp_path)
+
+    asyncio.run(drive())
+
+    server = captured["server"]
+    assert server.should_exit is True
+    assert server.cancelled is True
+    assert captured["close"] is True
+    assert captured["namespace"] == [False]
 
 
 def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
@@ -308,4 +455,3 @@ def test_gateway_cli_db_close_failure(monkeypatch, tmp_path):
     cli.main([])
 
     assert logged["msg"] == "Failed to close database connection"
-
