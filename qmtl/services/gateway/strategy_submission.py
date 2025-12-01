@@ -51,7 +51,7 @@ class StrategySubmissionResult:
 @dataclass
 class DiffOutcome:
     sentinel_id: str | None
-    queue_map: dict[str, list[dict[str, Any]]] | None
+    queue_map: dict[str, list[dict[str, Any] | Any]] | None
     error: bool
 
 
@@ -252,26 +252,27 @@ class StrategySubmissionHelper:
     ) -> QueueResolution:
         diff_sentinel = diff_outcome.sentinel_id or ""
         prefer_diff = config.prefer_diff_queue_map
-        if prefer_diff and not diff_outcome.error and diff_outcome.queue_map is not None:
+        if self._use_diff_queue_map(prefer_diff, diff_outcome):
+            queue_map = cast(
+                dict[str, list[dict[str, Any] | Any]],
+                diff_outcome.queue_map,
+            )
             return QueueResolution(
                 sentinel_id=diff_sentinel,
-                queue_map=diff_outcome.queue_map,
+                queue_map=queue_map,
                 source="diff",
             )
 
         queue_map = await self._pipeline.build_queue_map(
             dag, worlds, default_world, exec_domain
         )
-        sentinel_id = diff_sentinel
-        crc_fallback = False
-
-        if prefer_diff and diff_outcome.error and not sentinel_id:
-            crc_fallback = config.use_crc_sentinel_fallback
-        elif not prefer_diff and config.use_crc_sentinel_fallback and not sentinel_id:
-            crc_fallback = True
-
-        if crc_fallback:
-            sentinel_id = self._crc_sentinel(dag)
+        sentinel_id, crc_fallback = self._resolve_sentinel_id(
+            dag=dag,
+            diff_sentinel=diff_sentinel,
+            prefer_diff=prefer_diff,
+            diff_outcome=diff_outcome,
+            config=config,
+        )
 
         return QueueResolution(
             sentinel_id=sentinel_id,
@@ -280,6 +281,49 @@ class StrategySubmissionHelper:
             diff_error=diff_outcome.error,
             crc_fallback=crc_fallback,
         )
+
+    def _use_diff_queue_map(
+        self, prefer_diff: bool, diff_outcome: DiffOutcome
+    ) -> bool:
+        return (
+            prefer_diff
+            and not diff_outcome.error
+            and diff_outcome.queue_map is not None
+        )
+
+    def _resolve_sentinel_id(
+        self,
+        dag: dict[str, Any],
+        diff_sentinel: str,
+        prefer_diff: bool,
+        diff_outcome: DiffOutcome,
+        config: StrategySubmissionConfig,
+    ) -> tuple[str, bool]:
+        sentinel_id = diff_sentinel
+        crc_fallback = self._should_crc_fallback(
+            prefer_diff=prefer_diff,
+            diff_outcome=diff_outcome,
+            sentinel_id=sentinel_id,
+            config=config,
+        )
+        if crc_fallback:
+            sentinel_id = self._crc_sentinel(dag)
+        return sentinel_id, crc_fallback
+
+    def _should_crc_fallback(
+        self,
+        prefer_diff: bool,
+        diff_outcome: DiffOutcome,
+        sentinel_id: str,
+        config: StrategySubmissionConfig,
+    ) -> bool:
+        if sentinel_id:
+            return False
+        if not config.use_crc_sentinel_fallback:
+            return False
+        if prefer_diff:
+            return diff_outcome.error
+        return True
 
     def _sentinel_default(
         self, config: StrategySubmissionConfig, strategy_id: str
