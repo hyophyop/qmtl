@@ -55,7 +55,7 @@
   - `BackfillEngine._publish_metadata` (C / 17) → **A / 5** (#1567) — 메타데이터 구성과 Gateway 호출을 `_build_metadata_payload` / `_publish_metadata` 로 분리.
   - `ActivationManager.start` (C / 14) → **A / 5** (#1567) — 시작 시퀀스를 `_start_existing_client` / `_start_via_gateway` / `_schedule_polling` 등으로 분리.
 
-여전히 C 급 복잡도를 갖는 함수가 일부 존재하지만, 이 문서의 범위는 위 오케스트레이션 경로에 한정된다. 데이터 정규화·백필 경로는 `maintenance/radon_normalization_backfill.md`에서 추적하고, WorldService 스키마/alpha 경로는 #1514 작업 완료로 `architecture/worldservice.md`와 `world/rebalancing.md`에 흡수되어 별도 radon 계획을 종료한다.
+여전히 C 급 복잡도를 갖는 함수가 일부 존재하지만, 이 문서의 범위는 위 오케스트레이션 경로에 한정된다. 2025-12-02 라돈 재측정에서 정규화·백필 경로가 A/B 등급으로 정리되어 별도 라돈 계획 문서는 종료했으며, 회귀가 보이면 정규화·백필 라돈 커맨드를 직접 재실행해 추적한다. WorldService 스키마/alpha 경로는 #1514 작업 완료로 `architecture/worldservice.md`와 `world/rebalancing.md`에 흡수되어 별도 radon 계획을 종료했다.
 
 ## 공통 불량 패턴 요약
 
