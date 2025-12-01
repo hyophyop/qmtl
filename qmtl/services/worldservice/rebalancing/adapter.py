@@ -56,58 +56,89 @@ def allocate_strategy_deltas(
       layer; this function only apportions quantities to strategies.
     """
 
-    # Index positions by (venue, symbol) -> strategy -> abs(notional)
-    bucket: Dict[tuple[str | None, str], Dict[str, float]] = {}
-    for p in positions:
-        if p.world_id != world_id:
-            continue
-        key = (p.venue, p.symbol)
-        b = bucket.setdefault(key, {})
-        b[p.strategy_id] = b.get(p.strategy_id, 0.0) + abs(p.qty * p.mark)
+    bucket = _build_notional_index(world_id, positions)
 
     out: List[ExecutionDelta] = []
     for d in plan.deltas:
         key = (d.venue, d.symbol)
         strat_notional = bucket.get(key, {})
-        total = sum(strat_notional.values())
-
-        if total > 0:
-            # Distribute by existing absolute notional
-            for sid, n in strat_notional.items():
-                share = 0.0 if total == 0 else (n / total)
-                qty = d.delta_qty * share
-                if qty != 0.0:
-                    out.append(
-                        ExecutionDelta(
-                            world_id=world_id,
-                            strategy_id=sid,
-                            symbol=d.symbol,
-                            delta_qty=qty,
-                            venue=d.venue,
-                        )
-                    )
-        else:
-            # No existing exposure. For reductions, nothing to do. For increases,
-            # require fallback weights to avoid arbitrary assignment.
-            if d.delta_qty <= 0:
-                continue
-            if fallback_weights:
-                total_w = sum(max(0.0, w) for w in fallback_weights.values())
-                if total_w <= 0:
-                    continue
-                for sid, w in fallback_weights.items():
-                    share = max(0.0, w) / total_w
-                    qty = d.delta_qty * share
-                    if qty != 0.0:
-                        out.append(
-                            ExecutionDelta(
-                                world_id=world_id,
-                                strategy_id=sid,
-                                symbol=d.symbol,
-                                delta_qty=qty,
-                                venue=d.venue,
-                            )
-                        )
+        total_notional = sum(strat_notional.values()) if strat_notional else 0.0
+        if strat_notional and total_notional > 0:
+            out.extend(
+                _allocate_existing_delta(world_id, d.symbol, d.delta_qty, d.venue, strat_notional)
+            )
+            continue
+        out.extend(
+            _allocate_fallback_delta(world_id, d.symbol, d.delta_qty, d.venue, fallback_weights)
+        )
 
     return out
 
+
+def _build_notional_index(
+    world_id: str, positions: Iterable[PositionSlice]
+) -> Dict[tuple[str | None, str], Dict[str, float]]:
+    bucket: Dict[tuple[str | None, str], Dict[str, float]] = {}
+    for pos in positions:
+        if pos.world_id != world_id:
+            continue
+        key = (pos.venue, pos.symbol)
+        slot = bucket.setdefault(key, {})
+        slot[pos.strategy_id] = slot.get(pos.strategy_id, 0.0) + abs(pos.qty * pos.mark)
+    return bucket
+
+
+def _allocate_existing_delta(
+    world_id: str,
+    symbol: str,
+    delta_qty: float,
+    venue: str | None,
+    strat_notional: Mapping[str, float],
+) -> List[ExecutionDelta]:
+    total = sum(strat_notional.values())
+    if total <= 0:
+        return []
+    allocations: List[ExecutionDelta] = []
+    for sid, notional in strat_notional.items():
+        share = notional / total if total else 0.0
+        qty = delta_qty * share
+        if qty != 0.0:
+            allocations.append(
+                ExecutionDelta(
+                    world_id=world_id,
+                    strategy_id=sid,
+                    symbol=symbol,
+                    delta_qty=qty,
+                    venue=venue,
+                )
+            )
+    return allocations
+
+
+def _allocate_fallback_delta(
+    world_id: str,
+    symbol: str,
+    delta_qty: float,
+    venue: str | None,
+    fallback_weights: Mapping[str, float] | None,
+) -> List[ExecutionDelta]:
+    if delta_qty <= 0 or not fallback_weights:
+        return []
+    total_w = sum(max(0.0, w) for w in fallback_weights.values())
+    if total_w <= 0:
+        return []
+    allocations: List[ExecutionDelta] = []
+    for sid, weight in fallback_weights.items():
+        share = max(0.0, weight) / total_w
+        qty = delta_qty * share
+        if qty != 0.0:
+            allocations.append(
+                ExecutionDelta(
+                    world_id=world_id,
+                    strategy_id=sid,
+                    symbol=symbol,
+                    delta_qty=qty,
+                    venue=venue,
+                )
+            )
+    return allocations

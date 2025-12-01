@@ -18,27 +18,30 @@ from ..services import WorldService
 
 
 def _policy_to_human_readable(policy: Any) -> str:
-    if policy is None:
-        return "no policy"
     data = policy.get("policy") if isinstance(policy, dict) else policy
-    parts: list[str] = []
     thresholds = data.get("thresholds") if isinstance(data, dict) else None
-    if isinstance(thresholds, dict):
-        bits = []
-        for metric, cfg in thresholds.items():
-            if not isinstance(cfg, dict):
-                continue
-            min_v = cfg.get("min")
-            max_v = cfg.get("max")
-            if min_v is not None and max_v is not None:
-                bits.append(f"{metric} between {min_v} and {max_v}")
-            elif min_v is not None:
-                bits.append(f"{metric} >= {min_v}")
-            elif max_v is not None:
-                bits.append(f"{metric} <= {max_v}")
-        if bits:
-            parts.append("thresholds: " + "; ".join(bits))
-    return ", ".join(parts) if parts else "no policy"
+    formatted: list[str] = []
+    for metric, cfg in (thresholds or {}).items():
+        rendered = _format_threshold(metric, cfg)
+        if rendered:
+            formatted.append(rendered)
+    if not formatted:
+        return "no policy"
+    return "thresholds: " + "; ".join(formatted)
+
+
+def _format_threshold(metric: str, cfg: Any) -> str | None:
+    if not isinstance(cfg, dict):
+        return None
+    min_v = cfg.get("min")
+    max_v = cfg.get("max")
+    if min_v is not None and max_v is not None:
+        return f"{metric} between {min_v} and {max_v}"
+    if min_v is not None:
+        return f"{metric} >= {min_v}"
+    if max_v is not None:
+        return f"{metric} <= {max_v}"
+    return None
 
 
 def create_worlds_router(service: WorldService) -> APIRouter:

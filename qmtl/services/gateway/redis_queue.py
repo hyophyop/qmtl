@@ -26,9 +26,9 @@ class RedisTaskQueue:
         self, op: Callable[..., Awaitable[Any] | Any], *args: Any, **kwargs: Any
     ) -> Any | None:
         try:
-            result = op(*args, **kwargs)
+            result: Any = op(*args, **kwargs)
             if inspect.isawaitable(result):
-                return await result
+                result = await result
             return result
         except Exception as e:  # pragma: no cover - logging
             operation_name = getattr(op, "__name__", op.__class__.__name__)

@@ -129,42 +129,43 @@ class ValidationCacheRepository(AuditableRepository):
             bucket = {}
             world_bucket[node_id] = bucket
             return bucket
+        if self._is_normalized_bucket(bucket):
+            return bucket
+        if isinstance(bucket, dict):
+            normalized = self._normalize_bucket(world_id, node_id, bucket)
+            world_bucket[node_id] = normalized
+            return normalized
+        raise TypeError(f"unexpected validation cache container for {world_id}/{node_id}: {bucket!r}")
+
+    def _is_normalized_bucket(self, bucket: Any) -> bool:
         if not isinstance(bucket, dict):
-            raise TypeError(f"unexpected validation cache container for {world_id}/{node_id}: {bucket!r}")
+            return False
+        if not bucket:
+            return True
+        return all(isinstance(v, ValidationCacheEntry) for v in bucket.values())
+
+    def _normalize_bucket(
+        self, world_id: str, node_id: str, bucket: Dict[str, Any]
+    ) -> Dict[str, ValidationCacheEntry]:
         changed = False
         normalized: Dict[str, ValidationCacheEntry] = {}
         updated_domains: set[str] = set()
         dropped_domains: set[str] = set()
         for domain_key, payload in list(bucket.items()):
-            try:
-                normalized_domain = _normalize_execution_domain(domain_key)
-            except ValueError:
-                normalized_domain = DEFAULT_EXECUTION_DOMAIN
-                changed = True
-                updated_domains.add(normalized_domain)
-            converted = self._coerce_entry(
-                payload,
-                world_id=world_id,
-                node_id=node_id,
-                execution_domain=normalized_domain,
+            normalized_domain, converted, entry_changed, updated, dropped = self._normalize_entry(
+                domain_key, payload, world_id, node_id
             )
-            if converted is None:
-                changed = True
+            changed = changed or entry_changed
+            updated_domains.update(updated)
+            if dropped:
                 dropped_domains.add(str(domain_key))
                 continue
-            if converted.execution_domain != normalized_domain:
-                normalized_domain = converted.execution_domain
-                changed = True
-                updated_domains.add(normalized_domain)
-            if not isinstance(payload, ValidationCacheEntry) or converted is not payload:
-                changed = True
-                updated_domains.add(normalized_domain)
             if normalized_domain in normalized:
                 changed = True
                 dropped_domains.add(str(domain_key))
+                continue
             normalized[normalized_domain] = converted
         if changed:
-            world_bucket[node_id] = normalized
             audit_payload: Dict[str, Any] = {
                 "event": "validation_cache_bucket_normalized",
                 "node_id": node_id,
@@ -177,6 +178,38 @@ class ValidationCacheRepository(AuditableRepository):
             self._emit_audit(world_id, audit_payload)
             return normalized
         return bucket
+
+    def _normalize_entry(
+        self,
+        domain_key: str,
+        payload: Any,
+        world_id: str,
+        node_id: str,
+    ) -> tuple[str, ValidationCacheEntry | None, bool, set[str], bool]:
+        entry_changed = False
+        updated_domains: set[str] = set()
+        try:
+            normalized_domain = _normalize_execution_domain(domain_key)
+        except ValueError:
+            normalized_domain = DEFAULT_EXECUTION_DOMAIN
+            entry_changed = True
+            updated_domains.add(normalized_domain)
+        converted = self._coerce_entry(
+            payload,
+            world_id=world_id,
+            node_id=node_id,
+            execution_domain=normalized_domain,
+        )
+        if converted is None:
+            return normalized_domain, None, True, updated_domains, True
+        if converted.execution_domain != normalized_domain:
+            normalized_domain = converted.execution_domain
+            entry_changed = True
+            updated_domains.add(normalized_domain)
+        if not isinstance(payload, ValidationCacheEntry) or converted is not payload:
+            entry_changed = True
+            updated_domains.add(normalized_domain)
+        return normalized_domain, converted, entry_changed, updated_domains, False
 
     def get(
         self,
