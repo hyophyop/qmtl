@@ -88,22 +88,41 @@ class ConformancePipeline:
     # schema handling helpers
     # ------------------------------------------------------------------
     def _extract_schema_mapping(self, schema: dict | None) -> dict[str, str]:
-        if schema is None:
+        if not isinstance(schema, dict):
             return {}
-        if isinstance(schema, dict):
-            if "fields" in schema and isinstance(schema["fields"], Iterable):
-                mapping: dict[str, str] = {}
-                for field in schema["fields"]:
-                    if not isinstance(field, dict):
-                        continue
-                    name = field.get("name")
-                    dtype = field.get("dtype") or field.get("type")
-                    if isinstance(name, str) and isinstance(dtype, str):
-                        mapping[name] = dtype
+        if "fields" in schema:
+            mapping = self._normalize_field_schema(schema.get("fields"))
+            if mapping:
                 return mapping
-            if all(isinstance(k, str) and isinstance(v, str) for k, v in schema.items()):
-                return {k: v for k, v in schema.items() if k != "schema_compat_id"}
-        return {}
+        return self._normalize_flat_schema(schema)
+
+    def _normalize_field_schema(self, fields: Iterable[Any] | None) -> dict[str, str]:
+        if not isinstance(fields, Iterable) or isinstance(fields, (str, bytes)):
+            return {}
+        mapping: dict[str, str] = {}
+        for entry in fields:
+            name, dtype = self._extract_field_entry(entry)
+            if name is not None and dtype is not None:
+                mapping[name] = dtype
+        return mapping
+
+    def _extract_field_entry(self, entry: Any) -> tuple[str | None, str | None]:
+        if not isinstance(entry, dict):
+            return None, None
+        name = entry.get("name")
+        dtype = entry.get("dtype") or entry.get("type")
+        if isinstance(name, str) and isinstance(dtype, str):
+            return name, dtype
+        return None, None
+
+    def _normalize_flat_schema(self, schema: dict[Any, Any]) -> dict[str, str]:
+        return {
+            key: value
+            for key, value in schema.items()
+            if key != "schema_compat_id"
+            and isinstance(key, str)
+            and isinstance(value, str)
+        }
 
     def _enforce_schema(
         self,
@@ -342,32 +361,47 @@ class ConformancePipeline:
         return cast_rows
 
     def _infer_epoch_divisor(self, series: pd.Series) -> int:
-        if series.empty:
-            return 1
-        values = np.abs(series.to_numpy(copy=False))
-        if not len(values):
-            return 1
-        non_zero = values[values > 0]
-        if not len(non_zero):
+        values = self._non_zero_epoch_values(series)
+        if not values.size:
             return 1
 
-        max_value = int(non_zero.max())
+        max_value = int(values.max())
         # Treat small magnitudes as already being in the desired resolution (seconds).
         # This prevents arbitrary integers such as [1_000, 4_000, ...] from being
         # interpreted as millisecond epochs and down-casted unexpectedly.
         if max_value < 10**10:
             return 1
 
-        unique_sorted = np.unique(non_zero)
-        if unique_sorted.size >= 2:
-            diffs = np.diff(unique_sorted)
-            positive_diffs = diffs[diffs > 0]
-            if positive_diffs.size:
-                min_diff = int(positive_diffs.min())
-                for divisor in (10**9, 10**6, 10**3):
-                    if min_diff % divisor == 0:
-                        return divisor
+        diff_divisor = self._candidate_divisor_from_diffs(values)
+        if diff_divisor:
+            return diff_divisor
 
+        return self._divisor_from_magnitude(max_value)
+
+    def _non_zero_epoch_values(self, series: pd.Series) -> np.ndarray:
+        if series.empty:
+            return np.array([], dtype="int64")
+        values = np.abs(series.to_numpy(copy=False))
+        if not values.size:
+            return values
+        return values[values > 0]
+
+    def _candidate_divisor_from_diffs(self, values: np.ndarray) -> int | None:
+        unique_sorted = np.unique(values)
+        if unique_sorted.size < 2:
+            return None
+        diffs = np.diff(unique_sorted)
+        positive_diffs = diffs[diffs > 0]
+        if not positive_diffs.size:
+            return None
+        min_diff = int(positive_diffs.min())
+        for divisor in (10**9, 10**6, 10**3):
+            if min_diff % divisor == 0:
+                return divisor
+        return None
+
+    @staticmethod
+    def _divisor_from_magnitude(max_value: int) -> int:
         if max_value >= 10**16:
             return 10**9
         if max_value >= 10**13:
