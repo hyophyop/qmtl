@@ -51,7 +51,7 @@ class StrategySubmissionResult:
 @dataclass
 class DiffOutcome:
     sentinel_id: str | None
-    queue_map: dict[str, list[dict[str, Any]]] | None
+    queue_map: dict[str, list[dict[str, Any] | Any]] | None
     error: bool
 
 
@@ -253,9 +253,13 @@ class StrategySubmissionHelper:
         diff_sentinel = diff_outcome.sentinel_id or ""
         prefer_diff = config.prefer_diff_queue_map
         if self._use_diff_queue_map(prefer_diff, diff_outcome):
+            queue_map = cast(
+                dict[str, list[dict[str, Any] | Any]],
+                diff_outcome.queue_map,
+            )
             return QueueResolution(
                 sentinel_id=diff_sentinel,
-                queue_map=diff_outcome.queue_map,
+                queue_map=queue_map,
                 source="diff",
             )
 
