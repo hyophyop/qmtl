@@ -55,7 +55,7 @@ After merging the work from #1563–#1567, the CC grades for the paths above imp
   - `BackfillEngine._publish_metadata` (C / 17) → **A / 5** (#1567) — split metadata construction and Gateway submission into dedicated helpers.
   - `ActivationManager.start` (C / 14) → **A / 5** (#1567) — decomposed startup into `_start_existing_client`, `_start_via_gateway`, `_schedule_polling` and related helpers.
 
-Some C-grade functions remain in other modules, but this document is scoped to the orchestration paths above. Data normalization/backfill work continues under `maintenance/radon_normalization_backfill.md`, and the WorldService schema/alpha track finished under #1514 and rolled into `architecture/worldservice.md` and `world/rebalancing.md`, retiring the separate radon plan.
+Some C-grade functions remain in other modules, but this document is scoped to the orchestration paths above. The data normalization/backfill track reached A/B grades in the 2025-12-02 radon scan, so that dedicated radon plan has been retired; rerun the normalization/backfill radon checks directly if regressions appear. The WorldService schema/alpha track finished under #1514 and rolled into `architecture/worldservice.md` and `world/rebalancing.md`, retiring the separate radon plan.
 
 ## Common anti-patterns
 

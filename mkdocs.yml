@@ -8,7 +8,6 @@ nav:
       - User Workflow: getting-started/workflow.md
   - Maintenance:
       - Schedule: MAINTENANCE_SCHEDULE.md
-      - Data Normalization & Backfill Radon Plan: maintenance/radon_normalization_backfill.md
       - Workflow Orchestration Radon Plan: maintenance/radon_workflow_orchestration.md
       - Radon Metrics Snapshot (2025-11-14): maintenance/metrics/2025-11-14.md
       - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
@@ -167,7 +166,6 @@ plugins:
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
-            "Data Normalization & Backfill Radon Plan": "데이터 정규화·백필 Radon 계획"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
             "Workflow Orchestration Radon Plan": "워크플로 오케스트레이션 Radon 계획"
             "Radon Metrics Snapshot (2025-11-14)": "라돈 지표 스냅샷 (2025-11-14)"
