@@ -101,14 +101,23 @@ async def _main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
-    server_config = uvicorn.Config(app, host=config.host, port=config.port)
-    server = uvicorn.Server(server_config)
+    server_config = getattr(uvicorn, "Config", None)
+    server_cls = getattr(uvicorn, "Server", None)
 
     try:
-        await server.serve()
-    except asyncio.CancelledError:
-        server.should_exit = True
-        raise
+        if server_config is not None and server_cls is not None:
+            server = server_cls(server_config(app, host=config.host, port=config.port))
+            try:
+                await server.serve()
+            except asyncio.CancelledError:
+                server.should_exit = True
+                raise
+        elif hasattr(uvicorn, "run"):
+            await asyncio.to_thread(uvicorn.run, app, host=config.host, port=config.port)
+        else:  # pragma: no cover - defensive path for unexpected shims
+            message = _("uvicorn module is missing a server interface")
+            logging.error(message)
+            raise SystemExit(message)
     finally:
         await _close_database(db)
 
