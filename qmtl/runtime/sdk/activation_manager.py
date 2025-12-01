@@ -45,6 +45,13 @@ class ActivationState:
 class ActivationManager:
     """Subscribe to activation updates and expose allow/deny checks."""
 
+    _SIDE_ALIASES = {
+        "buy": "long",
+        "long": "long",
+        "sell": "short",
+        "short": "short",
+    }
+
     def __init__(self, gateway_url: str | None = None, *, ws_client: WebSocketClient | None = None,
                  world_id: str | None = None, strategy_id: str | None = None) -> None:
         self.gateway_url = gateway_url
@@ -59,21 +66,14 @@ class ActivationManager:
         self._stop_event: asyncio.Event | None = None
 
     def allow_side(self, side: str) -> bool:
-        if self.state.stale:
+        target = self._resolve_side_state(side)
+        if target is None:
             return False
-        if self.state.freeze or self.state.drain:
+        if self._is_globally_inactive():
             return False
-        s = side.lower()
-        st: SideState | None = None
-        if s in {"buy", "long"}:
-            st = self.state.long
-        elif s in {"sell", "short"}:
-            st = self.state.short
-        if st is None:
+        if self._is_side_inactive(target):
             return False
-        if st.freeze or st.drain:
-            return False
-        return bool(st.active)
+        return bool(target.active)
 
     def is_stale(self) -> bool:
         return self.state.stale
@@ -83,33 +83,45 @@ class ActivationManager:
 
         Safe default is 0.0 when stale or side is unknown/disabled.
         """
-        if self.state.stale:
+        target = self._resolve_side_state(side)
+        if target is None:
             return 0.0
-        if self.state.freeze or self.state.drain:
+        if self._is_globally_inactive():
             return 0.0
-        s = side.lower()
-        st: SideState | None = None
-        if s in {"buy", "long"}:
-            st = self.state.long
-        elif s in {"sell", "short"}:
-            st = self.state.short
-        if st is None:
+        if self._is_side_inactive(target):
             return 0.0
-        if st.freeze or st.drain:
+        if not target.active:
             return 0.0
-        if not st.active:
-            return 0.0
-        w = float(st.weight)
-        # Clamp to [0,1]
-        if w < 0.0:
-            return 0.0
-        if w > 1.0:
-            return 1.0
-        return w
+        return self._clamp_weight(target.weight)
 
     def _recompute_global_modes(self) -> None:
         self.state.freeze = bool(self.state.long.freeze or self.state.short.freeze)
         self.state.drain = bool(self.state.long.drain or self.state.short.drain)
+
+    def _is_globally_inactive(self) -> bool:
+        return any((self.state.stale, self.state.freeze, self.state.drain))
+
+    @staticmethod
+    def _is_side_inactive(side_state: SideState) -> bool:
+        return side_state.freeze or side_state.drain
+
+    @classmethod
+    def _normalize_side(cls, side: str | None) -> str | None:
+        if side is None:
+            return None
+        return cls._SIDE_ALIASES.get(side.lower())
+
+    def _resolve_side_state(self, side: str) -> SideState | None:
+        normalized = self._normalize_side(side)
+        if normalized == "long":
+            return self.state.long
+        if normalized == "short":
+            return self.state.short
+        return None
+
+    @staticmethod
+    def _clamp_weight(weight: float) -> float:
+        return max(0.0, min(1.0, float(weight)))
 
     async def _on_message(self, data: Mapping[str, object]) -> None:
         update = self._parse_activation_event(data)
