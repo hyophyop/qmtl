@@ -8,6 +8,14 @@ status: plan-revised
 
 # QMTL SR(Strategy Recommendation) 통합 제안서
 
+## 0. As‑Is / To‑Be 요약
+
+- As‑Is
+  - 이 문서는 SR 엔진(PySR/Operon 등)을 QMTL Core Loop(Seamless, Runner.submit, World)와 느슨하게 통합하는 설계를 제안하지만, SR→Runner.submit→WorldService 경로는 일부만 구현되어 있고 auto_returns/World‑level 평가/배분과의 연결은 아직 설계 수준에 머물러 있습니다.
+- To‑Be
+  - SR 템플릿이 생성하는 전략은 Seamless 데이터, expression_key, validation 샘플, auto_returns 설정 등을 포함해 Runner.submit/WorldService 표준 플로우에 자연스럽게 편입됩니다.
+  - 이 문서는 그 연결 지점을 계속 업데이트하되, 상단 As‑Is/To‑Be를 통해 “어디까지 구현되어 있고 무엇이 설계만인지”를 명시적으로 유지합니다.
+
 !!! success "문서 상태: 설계 갱신 (Seamless 단일 경로 우선)"
     - PySR 등 SR 엔진은 **QMTL Seamless Data Provider**를 그대로 사용해 학습/평가합니다.
     - 동일 Seamless Provider로 **warmup→live**까지 이어지게 하여 데이터 불일치 리스크를 차단합니다.

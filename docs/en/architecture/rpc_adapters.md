@@ -13,6 +13,11 @@ last_modified: 2025-11-16
 
 # RPC Adapter Command/Facade Design
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Define common design patterns for RPC/service adapters used by Gateway, DAG Manager, WorldService and the Runtime SDK to reduce complexity and duplication.
+- Core Loop position: Wraps the internal/external RPC paths used across Core Loop stages (submit, evaluate, activate, rebalance) in explicit Command/Facade layers so architectural boundaries remain clear in code.
+
 ## 1. Scope and Background
 
 This document defines common design patterns for RPC/service adapters used by Gateway, DAG Manager, WorldService and the Runtime SDK.

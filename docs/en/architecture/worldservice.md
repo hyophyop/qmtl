@@ -37,6 +37,36 @@ QMTL’s core value — **“focus only on strategy logic; the system handles op
 
 Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 
+### 0-A. As-Is / To-Be Summary
+
+#### Evaluation & Activation Flow
+
+- As‑Is
+  - WS `/worlds/{id}/evaluate` accepts `EvaluateRequest(metrics, series, policy)` and uses the policy engine (`Policy`) to compute **active strategy sets**.
+  - SDK/Runner runs `ValidationPipeline` locally first, then optionally calls WS evaluation as a **secondary signal**. Both layers carry notions of weight/contribution, so it is not always obvious which value is the final authority.
+  - Activation state lives in Redis/DB and is broadcast via ControlBus, but the connection to Runner.submit / CLI is only partially standardised (how activation/weights are surfaced to users).
+- To‑Be
+  - WS evaluation results (active/weight/contribution/violations) are treated as the **single world-level source of truth**, with SDK/Runner exposing them directly; `ValidationPipeline` becomes a hint/local pre-check only.
+  - `DecisionEnvelope`/`ActivationEnvelope` schemas and Runner/CLI `SubmitResult` are aligned so that “submit strategy → inspect world decision” reads as a single flow.
+
+#### ExecutionDomain / effective_mode
+
+- As‑Is
+  - WS computes `effective_mode` (`validate | compute-only | paper | live`), Gateway/SDK map it to `execution_domain(backtest/dryrun/live/shadow)`.
+  - Some paths also consider `meta.execution_domain` hints from submissions; precedence between hints and WS decisions is described across several docs and implementations.
+- To‑Be
+  - Authority over ExecutionDomain is explicitly anchored in WS `effective_mode`; Gateway/SDK always derive domains from it, treating submission hints as advisory at most.
+  - `world/world.md`, `architecture.md`, `gateway.md`, and this document share a single normative mapping table and precedence rules.
+
+#### World-Level Allocation / Rebalancing
+
+- As‑Is
+  - `/allocations` and `/rebalancing/*` can compute and record world and cross-world allocation plans, but they are used as **operator-driven loops** separate from the strategy submission flow.
+  - v2 rebalancing schemas embed alpha metrics (`alpha_metrics`), yet few docs present “strategy evaluation → world allocation” as one cohesive narrative.
+- To‑Be
+  - The strategy submission/evaluation loop and the world allocation loop are documented as a **standard two-step flow**, with WS clearly owning both evaluation/activation and allocation decisions.
+  - `/allocations` aligns naturally with Runner.submit/CLI outputs so that world/strategy allocation summaries can be queried and displayed from the same world-centric perspective.
+
 ---
 
 ## 1. Data Model (normative)

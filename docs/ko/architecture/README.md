@@ -26,7 +26,6 @@ EventStreamDescriptor와 같은 표준 명칭을 확인할 수 있습니다.
 - [WorldService](worldservice.md): 월드 정책, 결정, 활성화.
 - [ControlBus](controlbus.md): SDK에서는 보이지 않는 내부 제어 버스.
 - [Lean Brokerage Model](lean_brokerage_model.md): 브로커리지 통합 세부 사항.
-- [컨트롤 플레인 Radon 계획](radon_control_plane.md): 게이트웨이와 DAG Manager 복잡도 개선 로드맵.
 
 ## 아키텍처 계층 한눈에 보기
 

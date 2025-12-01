@@ -12,6 +12,17 @@ spec_version: v1.2
 
 *Research‑Driven Draft v1.2 — 2025‑06‑10*
 
+## S0‑A. As‑Is / To‑Be (Core Loop 관점 요약)
+
+- As‑Is
+  - Gateway는 `/strategies` 제출을 받아 DAG Manager Diff/큐 매핑과 WorldService 프록시를 조합해 **compute_context `{world_id, execution_domain, as_of, partition}`**를 구성합니다.
+  - ExecutionDomain/ComputeKey/EvalKey 매핑 규범은 아키텍처 문서와 코드에 흩어져 있고, 일부 경로에서는 제출 메타의 `execution_domain` 힌트와 WS 결정이 섞여 있습니다.
+  - WS `/evaluate` 결과와 ActivationUpdated/QueueUpdated 이벤트를 ControlBus/WebSocket으로 중계하지만, Runner.submit/CLI가 어떤 필드를 어떻게 소비하는지는 부분적으로만 표준화되어 있습니다.
+- To‑Be
+  - Gateway는 Core Loop에서 “**입력 전략 → DAG/WorldService에 대한 단일 진입점 + 결정/큐 이벤트 브리지**” 역할만 수행하며, 정책·할당·상태의 SSOT는 모두 WS/DM에 남도록 문서와 구현이 정렬됩니다.
+  - ExecutionDomain/ComputeKey/EvalKey에 관한 규범은 `architecture.md`·`worldservice.md`·본 문서에서 동일하게 서술되고, 제출 메타의 도메인 힌트는 항상 WS 결정보다 낮은 우선순위를 갖습니다.
+  - WS의 Decision/Activation/Allocation 결과와 Gateway의 상태 캐시/스트림 중계가 Runner/CLI `SubmitResult` 및 운영자용 CLI(예: world status, allocations)와 자연스럽게 이어지도록, **표면(필드·에러·TTL 의미)**을 정리합니다.
+
 ## 관련 문서
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)

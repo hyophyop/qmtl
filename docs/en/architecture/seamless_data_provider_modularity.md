@@ -1,5 +1,10 @@
 # Seamless Data Provider modularization memo
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Describe how SLA handling, domain policies, backfill orchestration, and range math are split into helper modules so the Seamless data provider stays maintainable.
+- Core Loop position: Supports the Core Loop’s “data supply automation” stage by ensuring the data plane can evolve on top of clear module boundaries; the primary audience is runtime/data-plane maintainers.
+
 ## Overview
 The Seamless data provider had accumulated SLA handling, domain policies, backfill orchestration, and range math in a single class. The refactor slices those responsibilities into helper modules so we can hit our Radon CC/MI targets and let multiple engineers work in parallel.
 

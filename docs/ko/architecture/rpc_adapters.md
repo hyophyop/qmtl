@@ -13,6 +13,11 @@ last_modified: 2025-11-16
 
 # RPC 어댑터 Command/Facade 설계안
 
+## 0. 목적과 Core Loop 상 위치
+
+- 목적: Gateway/DAG Manager/WorldService 및 Runtime SDK 계층에서 사용하는 RPC/서비스 어댑터의 복잡도를 줄이기 위한 공통 설계 패턴을 정의합니다.
+- Core Loop 상 위치: Core Loop 각 단계(전략 제출, 평가, 활성화, 리밸런싱)에서 호출되는 내부/외부 RPC 경로를 **명시적인 Command/Facade 계층**으로 감싸, 아키텍처 경계가 코드 수준에서도 유지되도록 하는 유지보수/설계 계획입니다.
+
 ## 1. 범위 및 배경
 
 이 문서는 Gateway/DAG Manager/WorldService 및 Runtime SDK 계층에서 사용하는 RPC/서비스 어댑터의 복잡도를 줄이기 위한 공통 설계 패턴을 정의한다.

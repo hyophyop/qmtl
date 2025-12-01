@@ -21,6 +21,14 @@ status: implemented
 - `Runner.submit`/`ValidationPipeline`이 WS 정책/프리셋을 조회해 검증하며, 단조성(모노토닉) 수익률 보호 가드를 추가했습니다.
 - CLI v2 `status`/`world`가 Gateway와 연동되어 월드 생성 시 프리셋 정책을 저장하고 조회합니다.
 
+### 0. As‑Is / To‑Be (단순화 관점 요약)
+
+- As‑Is
+  - 이 문서는 v2.0 단순화(Runner.submit 단일 진입점, Mode 통합, CLI v2)를 중심으로 구현 완료 상태를 설명하지만, auto_returns, WorldService 평가/활성/배분 일원화, world/preset 기반 데이터 on‑ramp 같은 후속 단순화는 Core Loop 관점에서 여전히 과제로 남아 있습니다.
+- To‑Be
+  - 본 문서의 “단순화 목표” 절은 `rewrite_architecture_docs.md`에 정리된 네 축(Core Loop)을 기준으로 갱신되어, 앞으로의 단순화(P1/P2: auto_returns+SR 통합, WS 평가/할당 일원화)를 명시적으로 추적합니다.
+  - v2.0 이후 단순화 작업은 Maintenance/Radon 문서와 함께 이곳에서 요약·링크되어, 독자가 “현재 세대의 canonical path”를 항상 한 문서에서 찾을 수 있게 합니다.
+
 ## 1. 초기 설계 목적 재확인
 
 QMTL의 핵심 목적:

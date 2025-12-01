@@ -11,6 +11,11 @@ last_modified: 2025-09-08
 
 # Exchange Node Sets — Execution Layer Composition
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Specify how post-signal trade execution is composed as a reusable, exchange‑specific "Node Set" that can be attached behind a strategy’s signal node.
+- Core Loop position: Provides the standard execution layer for the Core Loop’s **“strategy execution and order routing”** stage, connecting signal nodes to execution/portfolio/risk nodes in a stable, reusable way.
+
 This document specifies how post-signal trade execution is composed as a reusable, exchange‑specific "Node Set" that can be attached behind a strategy’s signal node while preserving QMTL’s DAG semantics and the WS/DM responsibility boundaries.
 
 Intent

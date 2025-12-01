@@ -14,6 +14,7 @@
   - #1567 Runtime SDK Gateway/태그/백필/액티베이션 오케스트레이션 정리
 
 이 문서는 위 이슈들을 통해 진행한 워크플로 오케스트레이션 경로의 복잡도 정비 결과를 요약하고, 이후 작업에서 재사용할 설계 패턴을 정리한다.
+범위 노트(2025-11-24): Gateway + DAG Manager + Runtime SDK 오케스트레이션에 대한 최신 라돈 현황은 이 문서로 통합되었으며, 기존 Control-Plane/Runtime SDK 라돈 계획 문서는 상태를 반영한 후 제거했다.
 
 ## 기본 radon 스냅샷 (계획 수립 시점)
 
@@ -54,7 +55,7 @@
   - `BackfillEngine._publish_metadata` (C / 17) → **A / 5** (#1567) — 메타데이터 구성과 Gateway 호출을 `_build_metadata_payload` / `_publish_metadata` 로 분리.
   - `ActivationManager.start` (C / 14) → **A / 5** (#1567) — 시작 시퀀스를 `_start_existing_client` / `_start_via_gateway` / `_schedule_polling` 등으로 분리.
 
-여전히 C 급 복잡도를 갖는 함수가 일부 존재하지만, 이 문서의 범위는 위 오케스트레이션 경로에 한정하며, 다른 모듈에 대한 정비 계획은 별도의 Radon 문서(`radon_runtime_sdk.md`, `radon_control_plane.md` 등)에서 관리한다.
+여전히 C 급 복잡도를 갖는 함수가 일부 존재하지만, 이 문서의 범위는 위 오케스트레이션 경로에 한정된다. 데이터 정규화·백필 경로는 `maintenance/radon_normalization_backfill.md`에서 추적하고, WorldService 스키마/alpha 경로는 #1514 작업 완료로 `architecture/worldservice.md`와 `world/rebalancing.md`에 흡수되어 별도 radon 계획을 종료한다.
 
 ## 공통 불량 패턴 요약
 
@@ -101,4 +102,3 @@
 - DAG diff 실행 경로(`DagManagerClient.diff` → `DiffExecutor.run` → `StrategyWorker._diff_strategy`)는 이미 위 패턴을 적용한 상태이며, radon 기준으로 A/B 등급을 유지한다.
 - RPC 어댑터 Command/Facade 설계안(#1554, #1581, #1584)은 이 경로를 대표 사례로 간주하며, 자세한 레이어링 설명은 `architecture/rpc_adapters.md` 문서를 따른다.
 - #1584 에서는 추가 코드 변경 없이, 본 문서와 RPC 어댑터 설계 문서 간의 정렬 상태를 검증하고 메타 이슈(#1554)에서 diff 경로를 완료된 상태로 표시한다.
-

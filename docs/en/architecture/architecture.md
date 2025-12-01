@@ -57,13 +57,88 @@ All components described in this document (Gateway, DAG Manager, WorldService,
 SDK/Runner, etc.) share the following intent:
 - Strategy authors focus on **strategy DAGs, world selection, and execution mode**
   while the system layers own queue creation/scaling, ExecutionDomain handling,
-  2-Phase apply, feature artifact management, and risk/timing gating.
+  2‑Phase apply, feature artifact management, and risk/timing gating.
 - Internal layers are allowed to be complex, but the **external interface is
   designed around `Write strategy → Submit → (Auto evaluate/deploy) → Check
   contribution`** as the primary user flow.
 - When introducing new features, the default bias is “have the system decide
   automatically and offer overrides only when necessary” rather than pushing
   more configuration choices onto users.
+
+### 0.1 Core Loop: Strategy Lifecycle (As‑Is / To‑Be)
+
+From the user’s perspective, QMTL’s **Core Loop** is:
+
+> Implement strategy → Submit → (system backtests/evaluates/deploys inside a world) → Observe world performance → Refine strategy
+
+- **To‑Be (target experience)**  
+  - Strategy code only expresses “signal logic + required data”.  
+  - Data supply/backfill/market replay are handled by the Seamless/DataPlane.  
+  - A single `Runner.submit(..., world=..., mode=...)` call:
+    - Warms up history and runs a replay‑style backtest,
+    - Computes performance metrics and evaluates policies (WorldService),
+    - Drives activation decisions and world‑level capital allocation.  
+  - Users focus on the “submit → observe → improve” loop for their worlds.
+
+- **As‑Is (v2.0 implementation snapshot)**  
+  - `Runner.submit` already orchestrates history warm‑up, backtest execution, and metric computation via `ValidationPipeline`.  
+  - WorldService exposes `/worlds/{id}/evaluate`, `/apply`, `/activation`, and `/allocations` APIs
+    for policy evaluation, activation management, and rebalancing plans.  
+  - However, missing `auto_returns`, and the separation between evaluation/activation/allocation layers,
+    mean that "submit once and immediately become tradable with capital allocation" is not fully automatic yet.  
+  - The gap and follow‑up plans are captured in each section as As‑Is/To‑Be.
+
+#### 0.1.1 Backtest & Market Replay
+
+- As‑Is
+  - `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
+  - Seamless/QuestDB/CCXT and other sources are already integrated into the v2 data plane, but
+    **which StreamInputs/datasets a strategy uses** is still chosen explicitly by the author.
+  - World configuration (`world/world.md`) and dataset wiring (`dataset_id`, `snapshot_version`, etc.)
+    are set up manually following the design docs.
+- To‑Be
+  - For the default on‑ramp, **world + preset + a simple data spec** are enough for
+    Runner/CLI to auto‑wire a suitable Seamless provider and StreamInputs.
+  - The minimum configuration to get “market‑like replay backtests” shrinks to
+    `world`, `mode`, and (optionally) a data preset.
+
+#### 0.1.2 Data Supply Automation
+
+- As‑Is
+  - `SeamlessDataProvider v2` abstracts cache→storage→backfill→live and enforces
+    SLAs/conformance/schema checks.
+  - At the Runner/SDK level, there is no contract that “Seamless attaches automatically when a world is given”:
+    SR templates and regular strategies still pass `history_provider` explicitly.
+- To‑Be
+  - When a world is specified, Runner/CLI defaults to a Seamless provider consistent
+    with that world’s config/preset and auto‑injects it into StreamInputs.
+  - Users think in terms of **data presets/fingerprints**, not low‑level data plumbing.
+
+#### 0.1.3 Auto Evaluation → Tradable Transition
+
+- As‑Is
+  - `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks.
+  - WorldService `/evaluate` determines active sets, but SDK/Runner must still supply `backtest_returns`
+    explicitly, and `auto_returns` exists only as a design.
+  - Activation (order gating) is wired through WorldService/ActivationManager, yet
+    “submit once → automatically active with weights” depends on how worlds/policies/ops flows are configured.
+- To‑Be
+  - `auto_returns` is implemented as a Runner.submit pre‑processing step so
+    SR/expression strategies that don’t emit returns still get a basic evaluation.
+  - WorldService evaluation outputs (active/weight/contribution) map consistently into Runner/CLI
+    results, and the “validation → activation → capital allocation” flow is standardised and documented.
+
+#### 0.1.4 World‑Level Capital Allocation
+
+- As‑Is
+  - WorldService can compute world and cross‑world allocation plans through `/allocations`
+    and its internal rebalancing engine.
+  - Runner.submit/CLI and the capital allocation path are **loosely coupled**; practical
+    capital movements rely on separate operational/scheduling loops.
+- To‑Be
+  - The strategy submission/evaluation loop and the world allocation loop are described as
+    a **two‑step standard flow** in docs/CLI:
+    WorldService proposes world/strategy allocations, and operators accept/adjust and execute them.
 
 ### Core Principle: Simplicity > Backward Compatibility
 

@@ -13,6 +13,11 @@ last_modified: 2025-10-18
 
 # Layered Template System Architecture
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Describe how project initialization and templates are organised into a layered, composable architecture for data supply, signal generation, execution, and brokerage.
+- Core Loop position: Covers the full Core Loop (data → signal → execution → allocation) from a **project/template perspective**, guiding strategy/world authors on which layers to pick when starting.
+
 ## Related Documents
 - [Architecture Overview](README.md)
 - [Strategy Development Workflow](../guides/strategy_workflow.md)

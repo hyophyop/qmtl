@@ -10,6 +10,11 @@ last_modified: 2025-09-08
 
 # Execution State Machine and TIF Policies
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Sketch the execution state machine for backtests and paper trading, focusing on persistent open orders, partial fills, and Time-In-Force (GTC/IOC/FOK) semantics.
+- Core Loop position: Acts as a reference for the Core Loop’s “strategy execution → order/fill state tracking” stage, describing how simulated/replayed executions transition between states.
+
 This document sketches the execution state machine for backtests and paper trading, focusing on persistent open orders, partial fills, and Time-In-Force (GTC/IOC/FOK) semantics.
 
 ## State Machine
@@ -47,4 +52,3 @@ stateDiagram-v2
 - FOK: Fill entire order immediately or cancel the order; if not fully filled in one attempt the order transitions to **EXPIRED** with zero fills.
 
 See also: [Brokerage API](../reference/api/brokerage.md) and [Lean Brokerage Model](lean_brokerage_model.md).
-
