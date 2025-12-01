@@ -63,28 +63,14 @@ class WorldNodeRepository(AuditableRepository):
         updated_domains: set[str] = set()
         dropped_domains: set[str] = set()
         for domain_key, payload in list(bucket.items()):
-            if isinstance(payload, WorldNodeRef):
-                ref = payload
-                domain = ref.execution_domain
-            elif isinstance(payload, Mapping):
-                ref = self._make_ref(
-                    world_id,
-                    node_id,
-                    payload.get("execution_domain", domain_key),
-                    payload.get("status"),
-                    payload.get("last_eval_key"),
-                    payload.get("annotations"),
-                )
-                domain = ref.execution_domain
-            else:
-                raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {payload!r}")
+            ref, domain = self._coerce_ref(world_id, node_id, domain_key, payload)
             if domain_key != domain or container.get(domain) is not ref:
                 changed = True
                 updated_domains.add(domain)
             if domain in container:
                 changed = True
                 dropped_domains.add(str(domain_key))
-            container[domain] = ref if isinstance(payload, WorldNodeRef) else ref
+            container[domain] = ref
         if changed:
             world_bucket[node_id] = container
             audit_payload: Dict[str, Any] = {
@@ -99,6 +85,23 @@ class WorldNodeRepository(AuditableRepository):
             self._emit_audit(world_id, audit_payload)
             return container
         return bucket
+
+    def _coerce_ref(
+        self, world_id: str, node_id: str, domain_key: str, payload: Any
+    ) -> tuple[WorldNodeRef, str]:
+        if isinstance(payload, WorldNodeRef):
+            return payload, payload.execution_domain
+        if isinstance(payload, Mapping):
+            ref = self._make_ref(
+                world_id,
+                node_id,
+                payload.get("execution_domain", domain_key),
+                payload.get("status"),
+                payload.get("last_eval_key"),
+                payload.get("annotations"),
+            )
+            return ref, ref.execution_domain
+        raise TypeError(f"unexpected world node payload for {world_id}/{node_id}: {payload!r}")
 
     def upsert(
         self,

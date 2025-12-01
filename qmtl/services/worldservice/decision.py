@@ -134,28 +134,49 @@ class DecisionEvaluator:
         self, world_id: str, payload: ApplyRequest | EvaluateRequest
     ) -> List[str]:
         if isinstance(payload, ApplyRequest) and payload.plan:
-            prev = payload.previous or await self.store.get_decisions(world_id)
-            activate = set(payload.plan.activate)
-            deactivate = set(payload.plan.deactivate)
-            return sorted((set(prev) - deactivate) | activate)
+            return await self._apply_plan(world_id, payload)
 
+        policy = await self._resolve_policy(world_id, payload)
+        prev = await self._resolve_previous(world_id, payload)
+        metrics = self._augment_metrics(payload)
+        return evaluate_policy(metrics, policy, prev, payload.correlations)
+
+    async def _apply_plan(self, world_id: str, payload: ApplyRequest) -> List[str]:
+        prev = payload.previous or await self.store.get_decisions(world_id)
+        activate = set(payload.plan.activate)
+        deactivate = set(payload.plan.deactivate)
+        return sorted((set(prev) - deactivate) | activate)
+
+    async def _resolve_policy(
+        self, world_id: str, payload: ApplyRequest | EvaluateRequest
+    ) -> Policy:
         policy_payload = payload.policy or await self.store.get_default_policy(world_id)
         policy = policy_payload
-        if not isinstance(policy, Policy):
-            try:
-                if isinstance(policy_payload, dict) and "policy" in policy_payload:
-                    policy = Policy.model_validate(policy_payload["policy"])
-                else:
-                    policy = Policy.model_validate(policy_payload)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=f"invalid policy: {exc}") from exc
-        if policy is None:
-            raise HTTPException(status_code=404, detail="policy not found")
-        prev = payload.previous or await self.store.get_decisions(world_id)
-        metrics = augment_metrics_with_linearity(
+        if isinstance(policy, Policy):
+            return policy
+        try:
+            if isinstance(policy_payload, dict) and "policy" in policy_payload:
+                return Policy.model_validate(policy_payload["policy"])
+            return Policy.model_validate(policy_payload)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"invalid policy: {exc}") from exc
+
+    async def _resolve_previous(
+        self, world_id: str, payload: ApplyRequest | EvaluateRequest
+    ) -> List[str]:
+        prev = payload.previous
+        if prev is not None:
+            return prev
+        return await self.store.get_decisions(world_id)
+
+    def _augment_metrics(
+        self, payload: ApplyRequest | EvaluateRequest
+    ) -> Dict[str, Dict[str, float]]:
+        if getattr(payload, "metrics", None) is None:
+            return {}
+        return augment_metrics_with_linearity(
             payload.metrics or {}, getattr(payload, "series", None)
         )
-        return evaluate_policy(metrics, policy, prev, payload.correlations)
 
 
 __all__ = ["DecisionEvaluator", "augment_metrics_with_linearity"]
