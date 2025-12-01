@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, TYPE_CHECKING, Any
+from typing import Iterable, TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from pandas._typing import DtypeArg
@@ -378,10 +379,11 @@ class ConformancePipeline:
 
         return self._divisor_from_magnitude(max_value)
 
-    def _non_zero_epoch_values(self, series: pd.Series) -> np.ndarray:
+    def _non_zero_epoch_values(self, series: pd.Series) -> NDArray[np.int64]:
         if series.empty:
-            return np.array([], dtype="int64")
-        values = np.abs(series.to_numpy(copy=False))
+            return np.array([], dtype=np.int64)
+        raw_values = series.to_numpy(dtype=np.int64, copy=False)
+        values = cast(NDArray[np.int64], np.abs(raw_values, dtype=np.int64))
         if not values.size:
             return values
         return values[values > 0]
