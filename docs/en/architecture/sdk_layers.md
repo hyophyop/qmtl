@@ -1,5 +1,10 @@
 # SDK Layering Guidelines
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Summarise the intended dependency flow inside the SDK so we avoid new import cycles and keep interfaces thin.
+- Core Loop position: Supports all Core Loop stages (submit, warm‑up, evaluation, activation) by ensuring they run on a **well‑defined SDK layering scheme**; the primary audience is SDK maintainers.
+
 This note summarizes the intended dependency flow inside the SDK so we avoid new import cycles and keep interfaces thin.
 
 - Preferred direction: `foundation → protocols → core → nodes → io → strategies`.

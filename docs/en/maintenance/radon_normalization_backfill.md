@@ -18,6 +18,7 @@
   - #1576 (runtime/sdk refactor)
 
 > Canonical content is maintained in `docs/ko/...`; this English page is a translation kept in sync with the Korean original.
+Consolidation note (2025-11-24): this document replaces the former Seamless Data Provider Radon Plan and now serves as the single radon tracker for Seamless data normalization/backfill/publication work.
 
 ## Current radon snapshot (key C-grade functions)
 
@@ -85,7 +86,7 @@ To reduce complexity in data normalization/backfill paths, we will adopt the fol
   - Move exception-handling, retry/backoff, downgrade decisions, and logging/metrics into dedicated helpers or pipeline steps.
   - Keep the “happy path” in each orchestrator short and linear to minimize cyclomatic complexity.
 
-These design rules align with existing docs (`radon_runtime_sdk.md`, `radon_seamless_data.md`, `seamless_data_provider_modularity.md`) while focusing specifically on **cross-cutting patterns for normalization/backfill**.
+These design rules align with existing architecture notes (for example `architecture/seamless_data_provider_modularity.md`) while focusing specifically on **cross-cutting patterns for normalization/backfill**.
 
 ## Sub-issues and execution structure
 
@@ -114,4 +115,3 @@ Each sub-issue aims to bring its target C-grade functions down to **B or better*
   - `uv run mkdocs build`
 
 Once PRs satisfying this checklist are merged for the relevant sub-issues, we consider the objective of #1550 (“reduce complexity of data normalization/backfill paths”) achieved.
-

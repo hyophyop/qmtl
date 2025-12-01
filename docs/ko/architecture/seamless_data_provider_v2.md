@@ -7,6 +7,20 @@ last_modified: 2025-08-21
 
 # 심리스 데이터 프로바이더 v2 아키텍처
 
+## 0. 목적과 Core Loop 상 위치
+
+- 목적: Seamless Data Provider(SDP) v2가 **데이터 정규화·적합성 검증·백필·SLA·관측 가능성**을 어떻게 조합해, 전략/월드에 일관된 히스토리/라이브 데이터를 제공하는지 아키텍처 수준에서 정의합니다.
+- Core Loop 상 위치: Core Loop의 **“데이터 공급 자동화” + “시장 replay 백테스트”** 단계를 뒷받침하는 데이터 플레인 설계입니다. Runner.submit과 WorldService가 기대하는 데이터 품질/커버리지를 보장하는 책임을 집니다.
+
+### 0‑A. As‑Is / To‑Be 요약
+
+- As‑Is
+  - SDP v2는 이미 런타임에 적용되어, cache→storage→backfill→live 경로와 ConformancePipeline/SLA/metrics를 통해 데이터 품질을 관리합니다.
+  - 그러나 전략/템플릿 수준에서는 여전히 `history_provider`를 직접 구성해야 하고, world 설정만으로 Seamless가 자동으로 붙는 on‑ramp는 정의되어 있지 않습니다.
+- To‑Be
+  - world/preset 기반 on‑ramp에서 Runner/CLI가 **Seamless preset + data spec**만으로 적절한 SDP 인스턴스를 자동 구성하고, StreamInput에 주입합니다.
+  - 이 문서는 데이터 플레인 관점에서 As‑Is를 규범화하고, `rewrite_architecture_docs.md`와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장됩니다.
+
 > **상태:** 심리스 데이터 프로바이더 v2 아키텍처는 런타임에 정식 적용되었습니다. 분산 백필 코디네이터가 인프로세스 스텁을 대체했고, `SLAPolicy` 예산이 강제되며, 아래에서 언급하는 관측 지표가 기본으로 방출됩니다. 남은 로드맵은 핵심 서비스 공백이 아니라 스키마 거버넌스와 대시보드 다듬기에 집중합니다.
 
 심리스 데이터 프로바이더(SDP)는 초기 설계 문서에서 설명한 프로토타입을 넘어, 요청이 들어오는 순간부터 데이터 품질·백필 SLA·스키마 안전성을 보장하는 프로덕션 시스템으로 진화했습니다. 아래 절에서는 현재도 진행 중인 기능을 명시해 독자가 런타임이 제공하는 보증을 과대평가하지 않도록 합니다.

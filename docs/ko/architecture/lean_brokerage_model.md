@@ -9,6 +9,11 @@ last_modified: 2025-08-21
 
 # Lean 브로커리지 모델 — 통합 가이드
 
+## 0. 목적과 Core Loop 상 위치
+
+- 목적: Lean의 브로커리지 모델이 제공하는 현실 모델링 구성 요소(수수료, 레버리지, 규제, 주문 가능 여부 등)를 정리하고, QMTL에서 이를 어떻게 차용/적용할 수 있는지 설계 관점에서 설명합니다.
+- Core Loop 상 위치: Core Loop의 “전략 실행 및 리스크/규제 제약 반영” 단계에서, 어떤 브로커리지/현실 모델이 주문 경로에 개입하는지 이해하기 위한 참고 문서입니다.
+
 ## 관련 문서
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)

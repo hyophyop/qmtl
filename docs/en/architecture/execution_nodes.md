@@ -1,5 +1,10 @@
 # Execution Layer Nodes
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Catalogue wrapper nodes for pre-trade checks, order sizing, execution, fill ingestion, portfolio updates, risk controls and timing gates in the execution layer.
+- Core Loop position: Serves as a reference for the Core Loop’s “strategy execution and order routing” stage, showing how post-signal orders flow through the execution chain. In practice, strategies usually consume these via [exchange_node_sets.md](exchange_node_sets.md).
+
 Wrapper nodes for pre-trade checks, order sizing, execution, fill ingestion,
 portfolio updates, risk controls and timing gates. These classes bridge
 strategy signals with exchange node sets described in

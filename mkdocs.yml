@@ -1,7 +1,17 @@
 site_name: QMTL Documentation
 nav:
   - Home: index.md
-  - Maintenance Schedule: MAINTENANCE_SCHEDULE.md
+  - Getting Started:
+      - Overview: getting-started/index.md
+      - Core Concepts: getting-started/concepts.md
+      - Quickstart: getting-started/quickstart.md
+      - User Workflow: getting-started/workflow.md
+  - Maintenance:
+      - Schedule: MAINTENANCE_SCHEDULE.md
+      - Data Normalization & Backfill Radon Plan: maintenance/radon_normalization_backfill.md
+      - Workflow Orchestration Radon Plan: maintenance/radon_workflow_orchestration.md
+      - Radon Metrics Snapshot (2025-11-14): maintenance/metrics/2025-11-14.md
+      - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
   - Architecture:
       - Overview: architecture/README.md
       - SDK Layering: architecture/sdk_layers.md
@@ -19,17 +29,7 @@ nav:
       - Exchange Node Sets: architecture/exchange_node_sets.md
       - Execution Nodes: architecture/execution_nodes.md
       - Execution State: architecture/execution_state.md
-      - Data Normalization & Backfill Radon Plan: architecture/radon_normalization_backfill.md
-      - WorldService/Alpha Radon Plan: architecture/radon_worldservice.md
-      - WorldService Allocation Radon Plan: architecture/radon_worldservice_allocation.md
-      - Control-Plane Radon Plan: architecture/radon_control_plane.md
-      - Seamless Data Provider Radon Plan: architecture/radon_seamless_data.md
-      - History Warmup Radon Plan: architecture/radon_history_warmup.md
-      - Runtime SDK Radon Plan: architecture/radon_runtime_sdk.md
-      - Workflow Orchestration Radon Plan: architecture/radon_workflow_orchestration.md
       - RPC Adapters Command/Facade Plan: architecture/rpc_adapters.md
-      - Radon Metrics Snapshot (2025-11-14): architecture/metrics/2025-11-14.md
-      - Linearity & Alpha Metrics Complexity Plan: architecture/metrics/linearity_and_alpha_metrics_complexity.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -93,6 +93,8 @@ nav:
   - Design:
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
+      - SR × Runner.submit Auto Returns: design/sr_auto_returns_integration_sketch.md
+      - SDK Auto Returns Proposals Comparison: design/auto_returns_proposals_comparison.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -130,6 +132,7 @@ nav:
       - Overview: archive/README.md
       - Realm Terminology Evaluation: archive/realm_rename_eval.md
       - Backward Compatibility Cleanup Notes: archive/backward_compat_cleanup.md
+      - Architecture Rewrite Guide (Archived): archive/rewrite_architecture_docs.md
   - Tags: tags.md
   - Templates:
       - Index: templates/index.md
@@ -149,6 +152,10 @@ plugins:
           build: true
           nav_translations:
             Home: 홈
+            "Getting Started": "시작하기"
+            "Core Concepts": "핵심 개념"
+            "Quickstart": "빠른 시작"
+            "User Workflow": "사용자 워크플로"
             Maintenance Schedule: 유지보수 일정
             Architecture: 아키텍처
             Guides: 가이드
@@ -162,11 +169,7 @@ plugins:
             "Execution State": "실행 상태"
             "Data Normalization & Backfill Radon Plan": "데이터 정규화·백필 Radon 계획"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
-            "WorldService Allocation Radon Plan": "WorldService 할당 Radon 계획"
-            "Control-Plane Radon Plan": "컨트롤 플레인 Radon 계획"
-            "Seamless Data Provider Radon Plan": "Seamless Data Provider Radon 계획"
-            "History Warmup Radon Plan": "History Warmup Radon 계획"
-            "Runtime SDK Radon Plan": "런타임 SDK Radon 계획"
+            "Workflow Orchestration Radon Plan": "워크플로 오케스트레이션 Radon 계획"
             "Radon Metrics Snapshot (2025-11-14)": "라돈 지표 스냅샷 (2025-11-14)"
             "Linearity & Alpha Metrics Complexity Plan": "선형성·알파 메트릭 복잡도 계획"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"

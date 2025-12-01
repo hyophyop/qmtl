@@ -45,6 +45,84 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 - 내부 레이어는 복잡해질 수 있지만, **외부 인터페이스는 `전략 작성 → 제출 → (자동 평가/배포) → 수익 기여 확인` 흐름을 중심으로 설계**한다.
 - 새로운 기능을 추가할 때도 “사용자가 더 많은 옵션을 알게 만드는 대신, 시스템이 자동 결정하고 필요 시에만 override 하게 한다”는 방향을 기본으로 삼는다.
 
+### 0.1 Core Loop: 전략 생애주기 (As‑Is / To‑Be)
+
+사용자 관점에서 QMTL이 지향하는 **Core Loop**는 다음과 같다.
+
+> 전략 작성 → 제출 → (시스템이 월드 안에서 백테스트/평가/배포) → 월드 성과 확인 → 전략 개선
+
+- **To‑Be (목표 경험)**  
+  - 전략 코드는 “신호 생성 + 필요한 데이터”만 표현한다.  
+  - 데이터 공급/백필/시장 replay는 Seamless/DataPlane이 책임진다.  
+  - `Runner.submit(..., world=..., mode=...)` 한 번으로:
+    - 히스토리 warm‑up + replay 기반 백테스트,
+    - 성과 지표 계산 및 정책 평가(WorldService),
+    - 활성/비활성 결정과 자본 배분(월드 단위)이 자동으로 이어진다.
+  - 사용자는 월드 성과/기여도를 보고 전략을 개선하는 루프에 집중한다.
+
+- **As‑Is (v2.0 기준 구현 요약)**  
+  - `Runner.submit`은 히스토리 warm‑up, 백테스트 실행, `ValidationPipeline` 기반 성과 계산까지 자동으로 수행한다.  
+  - WorldService는 `/worlds/{id}/evaluate`·`/apply`·`/activation`·`/allocations` API로  
+    정책 평가, 활성 집합 관리, 리밸런싱 계획을 제공한다.  
+  - 그러나 `auto_returns` 미구현, 평가/활성화/자본 배분의 계층 분리 등으로 인해,
+    "제출만 하면 곧바로 tradable/자본 배분까지" 완전히 자동화된 상태는 아니다.
+  - 이 격차와 후속 계획은 각 섹션의 As‑Is/To‑Be 형태로 정리되어 있다.
+
+#### 0.1.1 백테스트 & 시장 replay
+
+- As‑Is
+  - `HistoryWarmupService`와 `Pipeline`이 `StreamInput` 기반 히스토리 로딩·replay를 담당한다.
+  - Seamless/QuestDB/CCXT 등 데이터 소스는 이미 v2 데이터 플레인으로 통합되었지만,
+    **전략이 어떤 StreamInput/데이터셋을 사용할지**는 여전히 사용자가 직접 지정해야 한다.
+  - World 설정(`world/world.md`)과 데이터셋(`dataset_id`, `snapshot_version` 등)의 연결은
+    설계 문서를 따라 수동으로 구성해야 한다.
+- To‑Be
+  - 기본 on‑ramp에서는 **world + preset + 간단한 data spec**만으로
+    Runner/CLI가 적절한 Seamless provider와 StreamInput을 자동으로 연결한다.
+  - “시장 replay처럼 보이는 백테스트”에 필요한 최소 설정이
+    `world`·`mode`·(선택적) 데이터 preset 정도로 축소된다.
+
+#### 0.1.2 데이터 공급 자동화
+
+- As‑Is
+  - `SeamlessDataProvider v2`는 캐시→스토리지→백필→라이브 경로를 추상화하고,
+    SLA/적합성/스키마 검증까지 수행한다.
+  - 그러나 Runner/SDK 수준에서는 “world만 주면 Seamless가 자동 붙는다”는 계약이 없고,
+    SR 템플릿이나 일반 Strategy에서 `history_provider`를 직접 구성해야 한다.
+- To‑Be
+  - Runner/CLI에서 world를 지정하면, 해당 world 설정/프리셋에 맞는 Seamless provider가
+    기본으로 선택되고, StreamInput에도 자동 주입된다.
+  - 사용자는 데이터 인프라 세부 구현 대신 **data preset / fingerprint**만 의식하면 된다.
+
+#### 0.1.3 성과 자동 평가 → tradable 전환
+
+- As‑Is
+  - `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행한다.
+  - WorldService `/evaluate`는 active set을 결정하지만,
+    SDK/Runner는 여전히 `backtest_returns`를 직접 전달해야 하고,
+    `auto_returns`는 설계만 존재하고 구현되지 않았다.
+  - Activation(게이트 ON/OFF)은 WorldService/ActivationManager로 연결되어 있지만,
+    “submit 한 번으로 바로 활성화+가중치 결정”은 월드/정책/운영 플로우에 따라 다르게 wiring된다.
+- To‑Be
+  - `auto_returns`가 Runner.submit 전처리 단계에 구현되어,
+    “returns를 명시하지 않은 SR/표현식 전략”도 기본 백테스트 평가가 가능하다.
+  - WorldService 평가 결과(active/weight/contribution)가
+    Runner/CLI 결과와 일관되게 매핑되고,  
+    “validation → activation → capital allocation” 흐름이 한 눈에 보이도록 표준화된다.
+
+#### 0.1.4 월드 단위 자본 자동 배분
+
+- As‑Is
+  - WorldService는 `/allocations`와 내부 rebalancing 엔진으로
+    world/world‑간 자본 배분 계획을 계산할 수 있다.
+  - 하지만 Runner.submit/CLI와 자본 배분 경로는 **느슨하게 결합**되어 있어,
+    실제 자본 이동에는 별도의 운영/스케줄링 루프가 필요하다.
+- To‑Be
+  - 전략 제출/평가 루프와 월드 자본 배분 루프를 문서/CLI 측면에서
+    “표준 두 단계 루프”로 정의하고,  
+    WorldService가 추천하는 world/strategy allocations를
+    운영자가 수용/수정해 실행하는 플로우가 명시된다.
+
 ### 기본 원칙: 단순성 > 하위 호환성
 
 !!! danger "Breaking Change 원칙"

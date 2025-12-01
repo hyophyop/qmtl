@@ -9,6 +9,22 @@ last_modified: 2025-08-21
 
 본 문서는 docs/world/world_todo.md와 docs/world/world_refined.md의 아이디어를 통합하여, “월드(World)”라는 알파 정제 단위를 QMTL에 무리 없이 도입하기 위한 단일 사양과 작업 명세를 제시한다. 목표는 기존 QMTL 구성요소(DAG Manager, Gateway, SDK Runner, Metrics)를 최대한 재사용하면서 정책 기반의 자동 평가·승격·강등을 제공하는 것이다. 불필요한 프레임워크 확장을 피하고, 단계적 도입이 가능하도록 설계를 최소화했다.
 
+## 0. Core Loop 관점 As‑Is / To‑Be
+
+- As‑Is
+  - World 개념, Policy DSL, 2‑Phase Apply, Activation Table 등 “월드 중심 설계”는 잘 정리되어 있다.
+  - 그러나 Runner.submit / ValidationPipeline / WorldService `/evaluate` / `/allocations` 사이의 흐름이 이 문서 안에서는 간접적으로만 드러나, 사용자가 “전략 제출 → 월드 평가/승격 → 자본 배분”을 한 루프로 읽기 어렵다.
+  - 데이터 핸들러(Seamless)는 기본값으로 명시돼 있으나, world 설정만으로 Seamless provider가 자동으로 선택·주입되는 on‑ramp 계약은 정의되어 있지 않다.
+- To‑Be
+  - 이 문서는 “World = 전략 생애주기 관리 단위”를 Core Loop와 직접 연결하는 상위 사양으로,  
+    아래 네 단계를 명확히 서술해야 한다.
+    1. 전략 제출 → World에 바인딩 (`/worlds/{id}/decisions` / WSB)
+    2. 월드 평가 (`/evaluate`) → DecisionEnvelope (active/violations)
+    3. 활성화/게이팅 (`/activation` + ControlBus) → 주문 경로 제어
+    4. 자본 배분 (`/allocations` + `/rebalancing/*`) → world/strategy allocations  
+  - Runner.submit / CLI와의 연결 지점(입력: returns/metrics, 출력: status/weight/contribution)을 예시 수준으로 포함해,  
+    이 문서 하나만 읽어도 “월드 관점 Core Loop”가 이해되도록 정비한다.
+
 - **용어 안내:** QMTL 전 구간에서 공식 용어는 "World"다. 과거 "Realm"으로의 변경 제안은 채택되지 않았으며, 관련 내용은 참고용 보관 문서에만 남아 있다.
 
 - 기준 문서: ./docs/architecture/architecture.md, ./docs/architecture/gateway.md, ./docs/architecture/dag-manager.md

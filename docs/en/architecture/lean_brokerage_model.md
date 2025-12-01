@@ -9,6 +9,11 @@ last_modified: 2025-08-21
 
 # Lean Brokerage Model - Integration Guide
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Summarise Lean’s brokerage model building blocks (fees, leverage, regulations, order eligibility, etc.) and explain how to map them into QMTL.
+- Core Loop position: Serves as a reference for the Core Loop’s “strategy execution with real-world constraints” stage, showing which brokerage/reality models shape order flows.
+
 ## Related Documents
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)

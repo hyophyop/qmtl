@@ -9,6 +9,10 @@ last_modified: 2025-11-22
 
 # Architecture Glossary
 
+## 0. Purpose and Core Loop Position
+
+- Purpose: Collect and define core architectural terms used across QMTL (DecisionEnvelope, ExecutionDomain, GSG/WVG, etc.) in one place.
+- Core Loop position: Serves as a reference dictionary that ties together the concepts appearing at each Core Loop stage, so other design docs can assume a shared vocabulary.
 - DecisionEnvelope: World decision result containing `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`.
 - effective_mode: Policy output string in DecisionEnvelope. Values: `validate | compute-only | paper | live`. Consumers MUST map to an ExecutionDomain for compute/routing; see mapping below.
 - execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs. Caller-supplied `meta.execution_domain` is only a hint; the authoritative value derives from WS `effective_mode`. Runner/SDK retain `shadow` (no backtest downgrade) while hard-blocking order publish.

@@ -17,6 +17,8 @@
   - #1575 (runtime/io 리팩터링)
   - #1576 (runtime/sdk 리팩터링)
 
+통합 노트(2025-11-24): 기존 Seamless Data Provider Radon 계획을 본 문서로 통합했으며, Seamless 정규화·백필·퍼블리시 라돈 추적은 이제 이 페이지 하나에서 관리한다.
+
 ## 현재 radon 스냅샷 (핵심 C급 함수)
 
 2025-11-16 기준, `uv run --with radon -m radon cc -s qmtl/runtime/io qmtl/runtime/sdk/seamless_data_provider.py` 출력에서 **데이터 정규화·백필·퍼블리시와 직결된 C급 함수**만 추린 요약입니다.
@@ -82,7 +84,7 @@
 - **에러·로그 경로 분리**
   - 예외 처리·재시도(backoff)·다운그레이드 결정·로그/메트릭을 별도 헬퍼나 파이프라인 스텝으로 옮겨, 핵심 happy-path 로직의 분기 수를 줄입니다.
 
-이 설계 원칙은 기존 문서들 (`radon_runtime_sdk.md`, `radon_seamless_data.md`, `seamless_data_provider_modularity.md`) 과 동일한 방향을 유지하면서, **정규화·백필 경로 전반을 가로지르는 cross-cutting 패턴**에 초점을 맞춥니다.
+이 설계 원칙은 `architecture/seamless_data_provider_modularity.md` 등 기존 설계 노트와 정렬하면서, **정규화·백필 경로 전반을 가로지르는 cross-cutting 패턴**에 초점을 맞춥니다.
 
 ## 서브 이슈 및 진행 구조
 
@@ -111,4 +113,3 @@
   - `uv run mkdocs build`
 
 위 체크리스트를 만족하는 PR들이 병합되면, #1550 에서 정의한 “데이터 정규화·백필 경로 복잡도 개선” 목표를 달성한 것으로 간주합니다.
-

@@ -1,5 +1,10 @@
 # SDK 레이어 가이드
 
+## 0. 목적과 Core Loop 상 위치
+
+- 목적: SDK 내부 의존성 흐름을 정리해 불필요한 import 순환을 막고 인터페이스를 얇게 유지하기 위한 기준을 설명합니다.
+- Core Loop 상 위치: Core Loop 각 단계(전략 제출, 히스토리 warm‑up, 평가, 활성화)가 **예측 가능한 SDK 레이어 구조** 위에서 동작하도록 보조하는 유지보수/설계 가이드입니다(주 독자는 SDK 유지보수자).
+
 이 문서는 SDK 내부 의존성 흐름을 정리해 불필요한 import 순환을 막고 인터페이스를 얇게 유지하기 위한 기준을 설명합니다.
 
 - 선호하는 방향: `foundation → protocols → core → nodes → io → strategies`

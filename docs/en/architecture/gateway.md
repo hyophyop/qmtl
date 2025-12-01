@@ -12,6 +12,17 @@ spec_version: v1.2
 
 *Research-Driven Draft v1.2 - 2025-06-10*
 
+## S0-A. As-Is / To-Be (Core Loop View)
+
+- As‑Is
+  - Gateway accepts `/strategies` submissions, orchestrates DAG Manager diff/queue mapping and WorldService proxies, and constructs a **compute context `{world_id, execution_domain, as_of, partition}`** for downstream services.
+  - Normative rules for ExecutionDomain/ComputeKey/EvalKey are spread across architecture docs and code; some paths blend submission `meta.execution_domain` hints with WS decisions.
+  - WS `/evaluate` results and ActivationUpdated/QueueUpdated events are relayed via ControlBus/WebSocket, but the way Runner.submit/CLI consume and present these fields is only partially standardised.
+- To‑Be
+  - In the Core Loop, Gateway is strictly the **ingress + bridge** between SDKs and WS/DM: it never becomes an SSOT for policies, allocations, or graph state; those remain with WS/DM and are documented as such.
+  - ExecutionDomain/ComputeKey/EvalKey rules are described consistently in `architecture.md`, `worldservice.md`, and this spec, with submission domain hints always subordinate to WS decisions.
+  - WS Decision/Activation/Allocation outputs and Gateway’s caching/stream relays map cleanly onto Runner/CLI `SubmitResult` and operator CLIs (world status, allocations), with field/TTL/error semantics aligned.
+
 ## Related Documents
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)

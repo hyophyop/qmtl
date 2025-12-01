@@ -13,6 +13,11 @@ last_modified: 2025-10-18
 
 # 레이어드 템플릿 시스템 아키텍처
 
+## 0. 목적과 Core Loop 상 위치
+
+- 목적: 프로젝트 초기화/템플릿 시스템을 레이어 기반 아키텍처로 설계해, 데이터 공급·신호 생성·실행·브로커리지를 **조합 가능한 레이어**로 나누는 방법을 정의합니다.
+- Core Loop 상 위치: Core Loop 전체(데이터 → 신호 → 실행 → 자본 배분)를 **템플릿/프로젝트 레벨에서 어떻게 묶어 제공할지**에 초점을 둔 문서로, 전략/월드 개발자가 어떤 레이어를 선택해 시작하면 되는지 안내합니다.
+
 ## 관련 문서
 - [Architecture Overview](README.md)
 - [Strategy Development Workflow](../guides/strategy_workflow.md)

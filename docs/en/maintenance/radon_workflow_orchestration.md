@@ -14,6 +14,7 @@
   - #1567 Runtime SDK Gateway/tag/backfill/activation orchestration cleanup
 
 This document summarizes the outcome of the workflow orchestration complexity work tracked in the issues above and captures reusable design patterns for future changes.
+Scope note (2025-11-24): this page is now the canonical radon record for Gateway + DAG Manager + Runtime SDK orchestration. The earlier Control-Plane and Runtime SDK radon plan documents have been retired and their status rolled into this page.
 
 ## Baseline radon snapshot (at plan time)
 
@@ -54,7 +55,7 @@ After merging the work from #1563–#1567, the CC grades for the paths above imp
   - `BackfillEngine._publish_metadata` (C / 17) → **A / 5** (#1567) — split metadata construction and Gateway submission into dedicated helpers.
   - `ActivationManager.start` (C / 14) → **A / 5** (#1567) — decomposed startup into `_start_existing_client`, `_start_via_gateway`, `_schedule_polling` and related helpers.
 
-Some C-grade functions remain in other modules, but this document is scoped to the orchestration paths above. Other radon plans (for example `radon_runtime_sdk.md`, `radon_control_plane.md`) track cleanup for the remaining hotspots.
+Some C-grade functions remain in other modules, but this document is scoped to the orchestration paths above. Data normalization/backfill work continues under `maintenance/radon_normalization_backfill.md`, and the WorldService schema/alpha track finished under #1514 and rolled into `architecture/worldservice.md` and `world/rebalancing.md`, retiring the separate radon plan.
 
 ## Common anti-patterns
 
@@ -101,4 +102,3 @@ With this work and the checklist above, the workflow orchestration complexity re
 - The DAG diff execution path (`DagManagerClient.diff` → `DiffExecutor.run` → `StrategyWorker._diff_strategy`) already follows the patterns described above and now has A/B radon grades.
 - The RPC adapter Command/Facade design (#1554, #1581, #1584) treats this path as a representative example; see `architecture/rpc_adapters.md` for the layered breakdown.
 - Issue #1584 focuses on aligning the RPC adapter plan with this existing design and marking the diff path as complete under the #1554 meta issue, without additional structural changes.
-
