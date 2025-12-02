@@ -135,8 +135,21 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
         print(_("[qmtl] Configuration file not found. Specify --config."), file=sys.stderr)
         raise SystemExit(2)
 
+    unified = _load_or_exit(cfg_path)
+    targets = _resolve_targets(args.target)
+    _ensure_sections_present(cfg_path, targets, unified.present_sections)
+
+    results = await _validate_targets(unified, targets, args.offline)
+    _print_results(results, as_json=args.json)
+
+    if _has_errors(results):
+        raise SystemExit(1)
+    return results
+
+
+def _load_or_exit(cfg_path: str):
     try:
-        unified = load_config(cfg_path)
+        return load_config(cfg_path)
     except FileNotFoundError:
         print(_("[qmtl] Configuration file '{path}' does not exist.").format(path=cfg_path), file=sys.stderr)
         raise SystemExit(2)
@@ -144,43 +157,52 @@ async def _execute_validate(args: argparse.Namespace) -> Mapping[str, Mapping[st
         print(_("[qmtl] Failed to load configuration: {exc}").format(exc=exc), file=sys.stderr)
         raise SystemExit(2) from exc
 
-    results: Dict[str, Dict[str, ValidationIssue]] = {}
-    # Always include schema validation for structure/type checks
-    results["schema"] = validate_config_structure(unified)
 
+def _resolve_targets(target: str) -> List[str]:
     targets: List[str] = []
-    if args.target in {"gateway", "all"}:
+    if target in {"gateway", "all"}:
         targets.append("gateway")
-    if args.target in {"dagmanager", "all"}:
+    if target in {"dagmanager", "all"}:
         targets.append("dagmanager")
+    return targets
 
-    missing = [section for section in targets if section not in unified.present_sections]
-    if missing:
-        for section in missing:
-            print(
-                _("[qmtl] Configuration file '{path}' does not define the '{section}' section.").format(path=cfg_path, section=section),
-                file=sys.stderr,
-            )
-        raise SystemExit(2)
 
-    if "gateway" in targets:
-        results["gateway"] = await validate_gateway_config(unified.gateway, offline=args.offline)
-    if "dagmanager" in targets:
-        results["dagmanager"] = await validate_dagmanager_config(
-            unified.dagmanager, offline=args.offline
+def _ensure_sections_present(cfg_path: str, targets: List[str], present_sections: List[str]) -> None:
+    missing = [section for section in targets if section not in present_sections]
+    if not missing:
+        return
+    for section in missing:
+        print(
+            _("[qmtl] Configuration file '{path}' does not define the '{section}' section.").format(
+                path=cfg_path, section=section
+            ),
+            file=sys.stderr,
         )
+    raise SystemExit(2)
 
+
+async def _validate_targets(unified, targets: List[str], offline: bool) -> Dict[str, Dict[str, ValidationIssue]]:
+    results: Dict[str, Dict[str, ValidationIssue]] = {}
+    results["schema"] = validate_config_structure(unified)
+    if "gateway" in targets:
+        results["gateway"] = await validate_gateway_config(unified.gateway, offline=offline)
+    if "dagmanager" in targets:
+        results["dagmanager"] = await validate_dagmanager_config(unified.dagmanager, offline=offline)
+    return results
+
+
+def _print_results(results: Mapping[str, Mapping[str, ValidationIssue]], *, as_json: bool) -> None:
     table = _render_table(results)
     if table:
         print(table)
-    if args.json:
+    if as_json:
         if table:
             print()
         print(json.dumps(_issues_to_json(results), indent=2, sort_keys=True))
 
-    if any(issue.severity == "error" for checks in results.values() for issue in checks.values()):
-        raise SystemExit(1)
-    return results
+
+def _has_errors(results: Mapping[str, Mapping[str, ValidationIssue]]) -> bool:
+    return any(issue.severity == "error" for checks in results.values() for issue in checks.values())
 
 
 def _execute_generate(args: argparse.Namespace) -> Path:

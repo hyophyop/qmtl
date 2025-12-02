@@ -298,32 +298,56 @@ class NodeCacheArrow:
         items: Iterable[tuple[int, Any]],
     ) -> None:
         sl = self._ensure(u, interval)
-        existing: dict[int, Any] = {ts: v for ts, v in sl.get_list()}
-        backfill_items: list[tuple[int, Any]] = []
-        for ts, payload in items:
-            bucket = ts - (ts % interval)
-            backfill_items.append((bucket, payload))
+        existing = dict(sl.get_list())
+        backfill_items = self._normalize_backfill_items(items, interval)
 
         if backfill_items:
-            ts_sorted = sorted({ts for ts, _ in backfill_items})
-            ranges: list[tuple[int, int]] = []
-            start_range = ts_sorted[0]
-            prev = start_range
-            for ts in ts_sorted[1:]:
-                if ts == prev + interval:
-                    prev = ts
-                else:
-                    ranges.append((start_range, prev))
-                    start_range = ts
-                    prev = ts
-            ranges.append((start_range, prev))
-            self.backfill_state.mark_ranges(u, interval, ranges)
+            self._mark_backfill_ranges(u, interval, backfill_items)
 
+        merged = self._merge_backfill(existing, backfill_items)
+        self._store_backfill(sl, merged)
+        self._update_backfill_tracking(u, interval, merged)
+
+    def _normalize_backfill_items(
+        self, items: Iterable[tuple[int, Any]], interval: int
+    ) -> list[tuple[int, Any]]:
+        normalized: list[tuple[int, Any]] = []
+        for ts, payload in items:
+            bucket = ts - (ts % interval)
+            normalized.append((bucket, payload))
+        return normalized
+
+    def _mark_backfill_ranges(
+        self, u: str, interval: int, backfill_items: list[tuple[int, Any]]
+    ) -> None:
+        ts_sorted = sorted({ts for ts, _ in backfill_items})
+        if not ts_sorted:
+            return
+
+        ranges: list[tuple[int, int]] = []
+        start_range = ts_sorted[0]
+        prev = start_range
+        for ts in ts_sorted[1:]:
+            if ts == prev + interval:
+                prev = ts
+                continue
+            ranges.append((start_range, prev))
+            start_range = ts
+            prev = ts
+        ranges.append((start_range, prev))
+        self.backfill_state.mark_ranges(u, interval, ranges)
+
+    def _merge_backfill(
+        self,
+        existing: dict[int, Any],
+        backfill_items: list[tuple[int, Any]],
+    ) -> list[tuple[int, Any]]:
         merged_map: dict[int, Any] = dict(existing)
         for ts, payload in backfill_items:
             merged_map.setdefault(ts, payload)
-        merged = sorted(merged_map.items())[-self.period :]
+        return sorted(merged_map.items())[-self.period :]
 
+    def _store_backfill(self, sl: _Slice, merged: list[tuple[int, Any]]) -> None:
         if ARROW_AVAILABLE:
             import pickle
 
@@ -331,10 +355,15 @@ class NodeCacheArrow:
             val_list = [pickle.dumps(v) for _, v in merged]
             sl.ts = self._pa.array(ts_list, self._pa.int64())
             sl.vals = self._pa.array(val_list, self._pa.binary())
-        else:  # pragma: no cover - safety guard
-            for ts, v in merged:
-                sl.append(int(ts), v)
+            return
 
+        # pragma: no cover - safety guard
+        for ts, v in merged:
+            sl.append(int(ts), v)
+
+    def _update_backfill_tracking(
+        self, u: str, interval: int, merged: list[tuple[int, Any]]
+    ) -> None:
         self._filled[(u, interval)] = min(len(merged), self.period)
         last_ts = merged[-1][0] if merged else None
         prev_last = self._last_ts.get((u, interval))

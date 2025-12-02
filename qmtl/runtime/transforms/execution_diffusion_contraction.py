@@ -19,28 +19,40 @@ def concentration_scores(
     if len(exec_prices_ticks) == 0:
         return 0.0, 0.0, 0.0
 
+    hist = _build_hist(exec_prices_ticks, exec_sizes, bins, eps)
+    p = _normalize_hist(hist, eps)
+    entropy = -sum(pi * math.log(pi + eps) for pi in p if pi > 0)
+    hhi = sum(pi * pi for pi in p)
+    fano = _fano_from_ticks(exec_prices_ticks, eps)
+    return entropy, hhi, fano
+
+
+def _build_hist(exec_prices_ticks: Sequence[float], exec_sizes: Sequence[float], bins: int, eps: float) -> list[float]:
     min_p = min(exec_prices_ticks)
     max_p = max(exec_prices_ticks)
     hist = [0.0] * bins
     if max_p - min_p < eps:
         hist[0] = sum(exec_sizes)
-    else:
-        bin_width = (max_p - min_p) / bins
-        for price, size in zip(exec_prices_ticks, exec_sizes):
-            idx = min(int((price - min_p) / bin_width), bins - 1)
-            hist[idx] += size
+        return hist
+    bin_width = (max_p - min_p) / bins
+    for price, size in zip(exec_prices_ticks, exec_sizes):
+        idx = min(int((price - min_p) / bin_width), bins - 1)
+        hist[idx] += size
+    return hist
+
+
+def _normalize_hist(hist: Sequence[float], eps: float) -> list[float]:
     total = sum(hist) + eps
-    p = [h / total for h in hist]
-    entropy = -sum(pi * math.log(pi + eps) for pi in p if pi > 0)
-    hhi = sum(pi * pi for pi in p)
+    return [h / total for h in hist]
+
+
+def _fano_from_ticks(exec_prices_ticks: Sequence[float], eps: float) -> float:
     deltas = [abs(exec_prices_ticks[i] - exec_prices_ticks[i - 1]) for i in range(1, len(exec_prices_ticks))]
-    if deltas:
-        mean_d = sum(deltas) / len(deltas)
-        var_d = sum((d - mean_d) ** 2 for d in deltas) / len(deltas)
-        fano = var_d / (mean_d + eps)
-    else:
-        fano = 0.0
-    return entropy, hhi, fano
+    if not deltas:
+        return 0.0
+    mean_d = sum(deltas) / len(deltas)
+    var_d = sum((d - mean_d) ** 2 for d in deltas) / len(deltas)
+    return var_d / (mean_d + eps)
 
 
 def path_resistance(depth: Sequence[float] | None, eps: float = 1e-12) -> float:

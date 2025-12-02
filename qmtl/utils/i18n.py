@@ -36,52 +36,8 @@ def _try_load_po(domain: str, localedir: str, lang: str | None) -> Optional[_PoT
     po_path = Path(localedir) / lang / "LC_MESSAGES" / f"{domain}.po"
     if not po_path.exists():
         return None
-
-    catalog: dict[str, str] = {}
-    current_id: Optional[str] = None
-    current_str: Optional[str] = None
-    collecting: Optional[str] = None  # "id" or "str"
-
-    def _finish_pair():
-        nonlocal current_id, current_str
-        if current_id is not None and current_str is not None:
-            catalog[current_id] = current_str
-        current_id = None
-        current_str = None
-
-    def _unquote(s: str) -> str:
-        try:
-            value = ast.literal_eval(s)
-            return str(value)
-        except (SyntaxError, ValueError):
-            if s.startswith('"') and s.endswith('"'):
-                s = s[1:-1]
-            return s
-
-    for raw in po_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith('#'):
-            continue
-        if line.startswith('msgid '):
-            _finish_pair()
-            collecting = "id"
-            current_id = _unquote(line[6:].strip())
-            current_str = None
-            continue
-        if line.startswith('msgstr '):
-            collecting = "str"
-            current_str = _unquote(line[7:].strip())
-            continue
-        if line.startswith('"'):
-            frag = _unquote(line)
-            if collecting == "id" and current_id is not None:
-                current_id += frag
-            elif collecting == "str" and current_str is not None:
-                current_str += frag
-            continue
-        # ignore other directives (plural, context) for simplicity
-
-    _finish_pair()
+    parser = _PoParser()
+    catalog = parser.parse(po_path)
     return _PoTranslations(catalog)
 
 
@@ -160,3 +116,55 @@ def _normalize_lang(value: str) -> str:
     token = token.split(".", 1)[0]
     token = token.replace("-", "_")
     return token.split("_", 1)[0].lower() or "en"
+
+
+class _PoParser:
+    def __init__(self) -> None:
+        self._catalog: dict[str, str] = {}
+        self._current_id: Optional[str] = None
+        self._current_str: Optional[str] = None
+        self._collecting: Optional[str] = None  # "id" or "str"
+
+    def parse(self, path: Path) -> dict[str, str]:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            self._consume_line(raw.strip())
+        self._finish_pair()
+        return self._catalog
+
+    def _consume_line(self, line: str) -> None:
+        if not line or line.startswith("#"):
+            return
+        if line.startswith("msgid "):
+            self._finish_pair()
+            self._collecting = "id"
+            self._current_id = self._unquote(line[6:].strip())
+            self._current_str = None
+            return
+        if line.startswith("msgstr "):
+            self._collecting = "str"
+            self._current_str = self._unquote(line[7:].strip())
+            return
+        if line.startswith('"'):
+            self._append_fragment(self._unquote(line))
+
+    def _append_fragment(self, fragment: str) -> None:
+        if self._collecting == "id" and self._current_id is not None:
+            self._current_id += fragment
+        elif self._collecting == "str" and self._current_str is not None:
+            self._current_str += fragment
+
+    def _finish_pair(self) -> None:
+        if self._current_id is not None and self._current_str is not None:
+            self._catalog[self._current_id] = self._current_str
+        self._current_id = None
+        self._current_str = None
+
+    @staticmethod
+    def _unquote(text: str) -> str:
+        try:
+            value = ast.literal_eval(text)
+            return str(value)
+        except (SyntaxError, ValueError):
+            if text.startswith('"') and text.endswith('"'):
+                return text[1:-1]
+            return text

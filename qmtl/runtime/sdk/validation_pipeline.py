@@ -309,45 +309,71 @@ def _monotonicity_violation(monotonicity: float | None) -> ThresholdViolation | 
 
 def _generate_improvement_hints(violations: List[ThresholdViolation]) -> List[str]:
     """Generate actionable improvement hints based on violations."""
+    if not violations:
+        return []
+    handlers = {
+        "sharpe": _hint_sharpe,
+        "max_drawdown": _hint_max_drawdown,
+        "win_rate": _hint_win_rate,
+        "win_ratio": _hint_win_rate,
+        "profit_factor": _hint_profit_factor,
+        "equity_monotonicity": _hint_equity_monotonicity,
+    }
     hints: List[str] = []
-
     for v in violations:
-        if v.metric == "sharpe":
-            if v.threshold_type == "min":
-                hints.append(
-                    f"Improve Sharpe ratio: current {v.value:.2f}, need ≥{v.threshold_value}. "
-                    "Consider reducing volatility or increasing returns."
-                )
-        elif v.metric == "max_drawdown":
-            if v.threshold_type == "max":
-                hints.append(
-                    f"Reduce max drawdown: current {v.value:.1%}, need ≤{v.threshold_value:.1%}. "
-                    "Consider adding stop-loss or reducing position sizes."
-                )
-        elif v.metric in ("win_rate", "win_ratio"):
-            if v.threshold_type == "min":
-                hints.append(
-                    f"Improve win rate: current {v.value:.1%}, need ≥{v.threshold_value:.1%}. "
-                    "Consider refining entry signals or filtering low-probability trades."
-                )
-        elif v.metric == "profit_factor":
-            if v.threshold_type == "min":
-                hints.append(
-                    f"Improve profit factor: current {v.value:.2f}, need ≥{v.threshold_value}. "
-                    "Consider improving risk/reward ratio or cutting losses faster."
-                )
-        elif v.metric == "equity_monotonicity":
-            hints.append(
-                "Stabilize the equity curve: current monotonicity is negative. "
-                "Consider reducing choppiness or enforcing risk controls to avoid repeated drawdowns."
-            )
+        handler = handlers.get(v.metric)
+        if handler:
+            text = handler(v)
+            if text:
+                hints.append(text)
+    if hints:
+        return hints
+    return [
+        "Review the threshold violations above and adjust your strategy parameters accordingly."
+    ]
 
-    if not hints and violations:
-        hints.append(
-            "Review the threshold violations above and adjust your strategy parameters accordingly."
+
+def _hint_sharpe(v: ThresholdViolation) -> str | None:
+    if v.threshold_type == "min":
+        return (
+            f"Improve Sharpe ratio: current {v.value:.2f}, need ≥{v.threshold_value}. "
+            "Consider reducing volatility or increasing returns."
         )
+    return None
 
-    return hints
+
+def _hint_max_drawdown(v: ThresholdViolation) -> str | None:
+    if v.threshold_type == "max":
+        return (
+            f"Reduce max drawdown: current {v.value:.1%}, need ≤{v.threshold_value:.1%}. "
+            "Consider adding stop-loss or reducing position sizes."
+        )
+    return None
+
+
+def _hint_win_rate(v: ThresholdViolation) -> str | None:
+    if v.threshold_type == "min":
+        return (
+            f"Improve win rate: current {v.value:.1%}, need ≥{v.threshold_value:.1%}. "
+            "Consider refining entry signals or filtering low-probability trades."
+        )
+    return None
+
+
+def _hint_profit_factor(v: ThresholdViolation) -> str | None:
+    if v.threshold_type == "min":
+        return (
+            f"Improve profit factor: current {v.value:.2f}, need ≥{v.threshold_value}. "
+            "Consider improving risk/reward ratio or cutting losses faster."
+        )
+    return None
+
+
+def _hint_equity_monotonicity(_: ThresholdViolation) -> str:
+    return (
+        "Stabilize the equity curve: current monotonicity is negative. "
+        "Consider reducing choppiness or enforcing risk controls to avoid repeated drawdowns."
+    )
 
 
 def _calculate_weight_and_rank(
@@ -427,46 +453,46 @@ def _calculate_correlation(
     if not existing_returns or not new_returns:
         return 0.0, []
 
+    clean_new = _clean_series(new_returns)
+    if len(clean_new) < 2:
+        return 0.0, []
+
     correlations: List[float] = []
     high_correlation_strategies: List[str] = []
 
-    new_arr = [r for r in new_returns if not math.isnan(r)]
-    if len(new_arr) < 2:
-        return 0.0, []
-
     for sid, returns in existing_returns.items():
-        existing_arr = [r for r in returns if not math.isnan(r)]
-        if len(existing_arr) < 2:
+        corr = _pairwise_correlation(clean_new, returns)
+        if corr is None:
             continue
-
-        # Align lengths
-        min_len = min(len(new_arr), len(existing_arr))
-        if min_len < 2:
-            continue
-
-        new_aligned = new_arr[:min_len]
-        existing_aligned = existing_arr[:min_len]
-
-        # Calculate Pearson correlation
-        mean_new = sum(new_aligned) / min_len
-        mean_existing = sum(existing_aligned) / min_len
-
-        numerator = sum(
-            (new_aligned[i] - mean_new) * (existing_aligned[i] - mean_existing)
-            for i in range(min_len)
-        )
-        std_new = math.sqrt(sum((x - mean_new) ** 2 for x in new_aligned))
-        std_existing = math.sqrt(sum((x - mean_existing) ** 2 for x in existing_aligned))
-
-        if std_new > 0 and std_existing > 0:
-            corr = numerator / (std_new * std_existing)
-            correlations.append(abs(corr))
-            # Track high correlations (> 0.7 is typically concerning)
-            if abs(corr) > 0.7:
-                high_correlation_strategies.append(sid)
+        correlations.append(abs(corr))
+        if abs(corr) > 0.7:
+            high_correlation_strategies.append(sid)
 
     avg_corr = sum(correlations) / len(correlations) if correlations else 0.0
     return avg_corr, high_correlation_strategies
+
+
+def _clean_series(values: Sequence[float]) -> List[float]:
+    return [float(r) for r in values if not math.isnan(r)]
+
+
+def _pairwise_correlation(new_arr: Sequence[float], existing: Sequence[float]) -> float | None:
+    clean_existing = _clean_series(existing)
+    min_len = min(len(new_arr), len(clean_existing))
+    if min_len < 2:
+        return None
+
+    a = list(new_arr[:min_len])
+    b = list(clean_existing[:min_len])
+    mean_a = sum(a) / min_len
+    mean_b = sum(b) / min_len
+
+    numerator = sum((ai - mean_a) * (bi - mean_b) for ai, bi in zip(a, b))
+    std_a = math.sqrt(sum((x - mean_a) ** 2 for x in a))
+    std_b = math.sqrt(sum((x - mean_b) ** 2 for x in b))
+    if std_a == 0 or std_b == 0:
+        return None
+    return numerator / (std_a * std_b)
 
 
 def _linearity_metrics_from_returns(returns: Sequence[float]) -> Dict[str, float]:
@@ -576,70 +602,35 @@ class ValidationPipeline:
         strategy_id = getattr(strategy, "name", None) or type(strategy).__name__
 
         try:
-            # Step 1: Get returns (from strategy or provided)
-            if returns is None:
-                returns = self._extract_returns_from_strategy(strategy)
+            returns = self._resolve_returns(strategy, returns)
+            metrics = self._calculate_metrics(returns, risk_free_rate, transaction_cost)
 
-            # Step 2: Calculate performance metrics
-            metrics = _calculate_metrics_from_returns(
-                returns,
-                risk_free_rate=risk_free_rate,
-                transaction_cost=transaction_cost,
-            )
-
-            # Step 3: Check thresholds (for hints) and evaluate via policy engine
             policy = self._get_effective_policy()
-            violations = _check_thresholds(metrics, policy)
-            monotonic_violation = _monotonicity_violation(metrics.monotonicity)
-            if monotonic_violation:
-                violations.insert(0, monotonic_violation)
-
             policy_obj = policy if isinstance(policy, Policy) else _policy_from_preset(policy)
-            metrics_dict = {strategy_id: metrics.to_policy_metrics()}
-            active = evaluate_policy(metrics_dict, policy_obj)
-            is_active = strategy_id in active
 
-            # Step 4: Calculate correlation with existing strategies
-            correlation_avg = 0.0
-            correlation_violations: List[str] = []
-            if self.existing_returns and returns:
-                correlation_avg, correlation_violations = _calculate_correlation(
-                    returns, self.existing_returns
-                )
-                # Check if correlation violates policy
-                if policy_obj.correlation and correlation_avg > policy_obj.correlation.max:
-                    violations.append(
-                        ThresholdViolation(
-                            metric="correlation_avg",
-                            value=correlation_avg,
-                            threshold_type="max",
-                            threshold_value=policy_obj.correlation.max,
-                            message=f"Average correlation ({correlation_avg:.2f}) exceeds maximum ({policy_obj.correlation.max})",
-                        )
-                    )
+            violations = self._collect_metric_violations(metrics, policy_obj)
+            correlation_avg, correlation_flags, correlation_thresholds = self._collect_correlation(
+                returns, policy_obj
+            )
+            if correlation_thresholds:
+                violations.extend(correlation_thresholds)
 
+            is_active = self._is_policy_active(strategy_id, metrics, policy_obj)
             if violations or not is_active:
-                return ValidationResult(
-                    status=ValidationStatus.FAILED,
-                    metrics=metrics,
-                    strategy_id=strategy_id,
-                    world_id=self.world_id,
-                    violations=violations,
-                    improvement_hints=_generate_improvement_hints(violations),
-                    activated=False,
-                    correlation_avg=correlation_avg,
-                    correlation_violations=correlation_violations,
+                return self._build_failure_result(
+                    strategy_id,
+                    metrics,
+                    violations,
+                    correlation_avg,
+                    correlation_flags,
                 )
 
-            # Step 5: Calculate weight and rank for passed strategies (approx)
             weight, rank = _calculate_weight_and_rank(
                 strategy_id,
                 metrics,
                 self.existing_strategies,
                 policy,
             )
-
-            # Step 6: Estimate contribution
             contribution = _estimate_contribution(weight, metrics, self.world_sharpe)
 
             return ValidationResult(
@@ -652,7 +643,7 @@ class ValidationPipeline:
                 rank=rank,
                 contribution=contribution,
                 correlation_avg=correlation_avg,
-                correlation_violations=correlation_violations,
+                correlation_violations=correlation_flags,
             )
 
         except Exception as e:
@@ -665,6 +656,91 @@ class ValidationPipeline:
                 error_message=str(e),
                 improvement_hints=[f"Validation error: {e}"],
             )
+
+    def _resolve_returns(
+        self, strategy: "Strategy", provided_returns: Sequence[float] | None
+    ) -> Sequence[float]:
+        if provided_returns is not None:
+            return provided_returns
+        return self._extract_returns_from_strategy(strategy)
+
+    def _calculate_metrics(
+        self,
+        returns: Sequence[float],
+        risk_free_rate: float,
+        transaction_cost: float,
+    ) -> PerformanceMetrics:
+        return _calculate_metrics_from_returns(
+            returns,
+            risk_free_rate=risk_free_rate,
+            transaction_cost=transaction_cost,
+        )
+
+    def _collect_metric_violations(
+        self, metrics: PerformanceMetrics, policy: Policy
+    ) -> List[ThresholdViolation]:
+        violations = _check_thresholds(metrics, policy)
+        monotonic_violation = _monotonicity_violation(metrics.monotonicity)
+        if monotonic_violation:
+            violations.insert(0, monotonic_violation)
+        return violations
+
+    def _collect_correlation(
+        self,
+        returns: Sequence[float],
+        policy: Policy,
+    ) -> tuple[float, list[str], list[ThresholdViolation]]:
+        if not (self.existing_returns and returns):
+            return 0.0, [], []
+
+        correlation_avg, correlation_violations = _calculate_correlation(
+            returns, self.existing_returns
+        )
+        threshold_violations: list[ThresholdViolation] = []
+        if policy.correlation and correlation_avg > policy.correlation.max:
+            threshold_violations.append(
+                ThresholdViolation(
+                    metric="correlation_avg",
+                    value=correlation_avg,
+                    threshold_type="max",
+                    threshold_value=policy.correlation.max,
+                    message=(
+                        f"Average correlation ({correlation_avg:.2f}) exceeds maximum "
+                        f"({policy.correlation.max})"
+                    ),
+                )
+            )
+        return correlation_avg, correlation_violations, threshold_violations
+
+    def _is_policy_active(
+        self,
+        strategy_id: str,
+        metrics: PerformanceMetrics,
+        policy: Policy,
+    ) -> bool:
+        metrics_dict = {strategy_id: metrics.to_policy_metrics()}
+        active = evaluate_policy(metrics_dict, policy)
+        return strategy_id in active
+
+    def _build_failure_result(
+        self,
+        strategy_id: str,
+        metrics: PerformanceMetrics,
+        violations: list[ThresholdViolation],
+        correlation_avg: float,
+        correlation_violations: list[str],
+    ) -> ValidationResult:
+        return ValidationResult(
+            status=ValidationStatus.FAILED,
+            metrics=metrics,
+            strategy_id=strategy_id,
+            world_id=self.world_id,
+            violations=violations,
+            improvement_hints=_generate_improvement_hints(violations),
+            activated=False,
+            correlation_avg=correlation_avg,
+            correlation_violations=correlation_violations,
+        )
 
     def _extract_returns_from_strategy(
         self,

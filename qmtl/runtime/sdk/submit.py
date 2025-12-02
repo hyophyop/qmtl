@@ -112,58 +112,75 @@ def _get_default_preset() -> str:
 
 def _policy_to_human_readable(policy: Any) -> str:
     """Convert a policy-like dict to a concise human readable string."""
-    if policy is None:
-        return "no policy"
-    if isinstance(policy, dict):
-        data = policy.get("policy") if "policy" in policy else policy
-        preset = policy.get("preset")
-    else:
-        try:
-            data = policy.model_dump()
-            preset = None
-        except Exception:
-            data = {}
-            preset = None
-
-    thresholds = data.get("thresholds") if isinstance(data, dict) else None
+    data, preset = _extract_policy_data(policy)
     parts: list[str] = []
     if preset:
         parts.append(f"preset={preset}")
+    parts.extend(_render_thresholds(data))
+    parts.extend(_render_top_k(data))
+    parts.extend(_render_correlation_limit(data))
+    parts.extend(_render_hysteresis(data))
+    return ", ".join(parts) if parts else "no policy"
 
-    if isinstance(thresholds, dict):
-        thresh_bits: list[str] = []
-        for metric, cfg in thresholds.items():
-            if not isinstance(cfg, dict):
-                continue
-            min_v = cfg.get("min")
-            max_v = cfg.get("max")
-            if min_v is not None and max_v is not None:
-                thresh_bits.append(f"{metric} between {min_v} and {max_v}")
-            elif min_v is not None:
-                thresh_bits.append(f"{metric} >= {min_v}")
-            elif max_v is not None:
-                thresh_bits.append(f"{metric} <= {max_v}")
-        if thresh_bits:
-            parts.append("thresholds: " + "; ".join(thresh_bits))
 
+def _extract_policy_data(policy: Any) -> tuple[dict[str, Any], str | None]:
+    """Return (policy_dict, preset)."""
+    if policy is None:
+        return {}, None
+    if isinstance(policy, dict):
+        data = policy.get("policy") if "policy" in policy else policy
+        return data if isinstance(data, dict) else {}, policy.get("preset")
+    try:
+        return policy.model_dump(), None
+    except Exception:
+        return {}, None
+
+
+def _render_thresholds(data: dict[str, Any]) -> list[str]:
+    thresholds = data.get("thresholds") if isinstance(data, dict) else None
+    if not isinstance(thresholds, dict):
+        return []
+    bits: list[str] = []
+    for metric, cfg in thresholds.items():
+        if not isinstance(cfg, dict):
+            continue
+        min_v = cfg.get("min")
+        max_v = cfg.get("max")
+        if min_v is not None and max_v is not None:
+            bits.append(f"{metric} between {min_v} and {max_v}")
+        elif min_v is not None:
+            bits.append(f"{metric} >= {min_v}")
+        elif max_v is not None:
+            bits.append(f"{metric} <= {max_v}")
+    return ["thresholds: " + "; ".join(bits)] if bits else []
+
+
+def _render_top_k(data: dict[str, Any]) -> list[str]:
     top_k = data.get("top_k") if isinstance(data, dict) else None
-    if isinstance(top_k, dict):
-        metric = top_k.get("metric")
-        k = top_k.get("k")
-        if metric and k:
-            parts.append(f"top_k: keep top {k} by {metric}")
+    if not isinstance(top_k, dict):
+        return []
+    metric = top_k.get("metric")
+    k = top_k.get("k")
+    if metric and k:
+        return [f"top_k: keep top {k} by {metric}"]
+    return []
 
+
+def _render_correlation_limit(data: dict[str, Any]) -> list[str]:
     corr = data.get("correlation") if isinstance(data, dict) else None
     if isinstance(corr, dict) and corr.get("max") is not None:
-        parts.append(f"correlation max: {corr.get('max')}")
+        return [f"correlation max: {corr.get('max')}"]
+    return []
 
+
+def _render_hysteresis(data: dict[str, Any]) -> list[str]:
     hyst = data.get("hysteresis") if isinstance(data, dict) else None
-    if isinstance(hyst, dict) and hyst.get("metric") and hyst.get("enter") is not None and hyst.get("exit") is not None:
-        parts.append(
-            f"hysteresis on {hyst['metric']}: enter {hyst['enter']}, exit {hyst['exit']}"
-        )
-
-    return ", ".join(parts) if parts else "no policy"
+    metric = hyst.get("metric") if isinstance(hyst, dict) else None
+    enter = hyst.get("enter") if isinstance(hyst, dict) else None
+    exit_v = hyst.get("exit") if isinstance(hyst, dict) else None
+    if metric and enter is not None and exit_v is not None:
+        return [f"hysteresis on {metric}: enter {enter}, exit {exit_v}"]
+    return []
 
 
 def _run_coroutine_blocking(coro: Coroutine[object, object, SubmitResult]) -> SubmitResult:
@@ -264,34 +281,16 @@ async def submit_async(
     >>> for hint in result.improvement_hints:
     ...     print(hint)
     """
-    from qmtl.foundation.common.compute_key import ComputeContext
-    from .validation_pipeline import ValidationPipeline, ValidationStatus
-    
-    # Normalize mode
-    if isinstance(mode, str):
-        mode = Mode(mode.lower())
-    
-    # Resolve world, gateway, and preset
+    mode = _normalize_mode_value(mode)
     resolved_world = world or _get_default_world()
     resolved_preset = preset or _get_default_preset()
     gateway_url = _get_gateway_url()
-    world_notice: list[str] = []
-    
-    # Map mode to internal execution domain
     execution_domain = mode_to_execution_domain(mode)
-    
     services = get_global_services()
-    
-    # Handle both class and instance
-    if isinstance(strategy_cls, type):
-        strategy = _prepare_strategy(strategy_cls)
-        strategy_class_name = strategy_cls.__name__
-    else:
-        # Already an instance
-        strategy = strategy_cls
-        strategy_class_name = type(strategy).__name__
-    
-    # Create compute context
+    strategy, strategy_class_name = _strategy_from_input(strategy_cls)
+    world_ctx: WorldContext | None = None
+
+    from qmtl.foundation.common.compute_key import ComputeContext
     compute_context = ComputeContext(
         world_id=resolved_world,
         execution_domain=execution_domain,
@@ -300,484 +299,861 @@ async def submit_async(
         "world_id": resolved_world,
         "mode": mode.value,
     })
-    
-    strategy_id: str | None = None
-    backtest_returns: list[float] = []
-    
+
     try:
         strategy.on_start()
-        
-        # Use GatewayClient from services for proper circuit breaker/tracing
-        gw_client = services.gateway_client
-        gateway_available = await _check_gateway_available(gateway_url, client=gw_client)
-        world_description: dict[str, Any] | None = None
-        policy_payload_for_world: dict[str, Any] | None = None
-        user_policy_requested = any([preset, preset_overrides, preset_mode, preset_version])
-
-        if gateway_available:
-            world_description = await _fetch_world_description(gateway_url, resolved_world, client=gw_client)
-
-        if user_policy_requested and resolved_preset:
-            try:
-                from .presets import get_preset
-                preset_obj = get_preset(resolved_preset)
-                policy_payload_for_world = {
-                    "preset": preset_obj.name,
-                    "policy": preset_obj.to_policy_dict(),
-                    "preset_mode": preset_mode,
-                    "preset_version": preset_version,
-                    "preset_overrides": preset_overrides or {},
-                }
-                policy_text = _policy_to_human_readable(policy_payload_for_world)
-                world_notice.append(
-                    f"Using world '{resolved_world}' with preset '{preset_obj.name}' policy: {policy_text}"
-                )
-            except Exception as exc:
-                logger.debug("Failed to build policy from preset %s: %s", resolved_preset, exc)
-                policy_payload_for_world = None
-
-        if policy_payload_for_world is None and world_description:
-            policy_payload_for_world = world_description.get("policy") if isinstance(world_description, dict) else None
-            if isinstance(world_description, dict):
-                resolved_preset = world_description.get("policy_preset") or resolved_preset
-                human = world_description.get("policy_human") or _policy_to_human_readable(policy_payload_for_world)
-                world_notice.append(f"World '{resolved_world}' policy: {human}")
-
-        if policy_payload_for_world is None and resolved_world == DEFAULT_WORLD:
-            # Use default preset (sandbox) for zero-config default world submissions
-            try:
-                from .presets import get_preset
-                default_preset_obj = get_preset(resolved_preset or DEFAULT_PRESET)
-                policy_payload_for_world = {
-                    "preset": default_preset_obj.name,
-                    "policy": default_preset_obj.to_policy_dict(),
-                }
-                policy_text = _policy_to_human_readable(policy_payload_for_world)
-                world_notice.append(
-                    f"Using default world '__default__' with '{default_preset_obj.name}' preset: {policy_text}. "
-                    "Set QMTL_DEFAULT_WORLD to target a custom world or use --preset to override."
-                )
-                logger.info(
-                    "Using default world '__default__' with '%s' preset: %s",
-                    default_preset_obj.name,
-                    policy_text,
-                )
-            except Exception as exc:
-                logger.debug("Failed to load default preset: %s", exc)
-
-        if policy_payload_for_world is None and resolved_preset:
-            try:
-                from .presets import get_preset
-                preset_obj = get_preset(resolved_preset)
-                policy_payload_for_world = {
-                    "preset": preset_obj.name,
-                    "policy": preset_obj.to_policy_dict(),
-                    "preset_mode": preset_mode,
-                    "preset_version": preset_version,
-                    "preset_overrides": preset_overrides or {},
-                }
-            except Exception:
-                policy_payload_for_world = None
-
-        validation_policy = _policy_from_payload(policy_payload_for_world)
-
-        if gateway_available:
-            if policy_payload_for_world is not None:
-                await _ensure_world_policy(
-                    gateway_url=gateway_url,
-                    world_id=resolved_world,
-                    payload=policy_payload_for_world,
-                    client=gw_client,
-                )
-            # Submit to gateway for full validation pipeline
-            from .strategy_bootstrapper import StrategyBootstrapper
-            
-            bootstrapper = StrategyBootstrapper(services.gateway_client)
-            bootstrap_result = await bootstrapper.bootstrap(
-                strategy,
-                context=compute_context,
-                world_id=resolved_world,
-                gateway_url=gateway_url,
-                meta={"mode": mode.value},
-                offline=False,
-                kafka_available=services.kafka_factory.available,
-                trade_mode="simulate" if mode != Mode.LIVE else "live",
-                schema_enforcement="fail",
-                feature_plane=services.feature_plane,
-                gateway_context=None,
-                skip_gateway_submission=False,
-            )
-            strategy_id = bootstrap_result.strategy_id
-            
-            # Configure activation for non-backtest modes
-            if mode != Mode.BACKTEST and not bootstrap_result.offline_mode:
-                await _configure_activation(
-                    services=services,
-                    strategy_id=strategy_id,
-                    gateway_url=gateway_url,
-                    world_id=resolved_world,
-                    offline_mode=bootstrap_result.offline_mode,
-                )
-        else:
-            # Offline mode - local validation only
-            logger.info(f"Gateway not available at {gateway_url}, running local validation")
-            strategy_id = f"local_{strategy_class_name}_{id(strategy)}"
-        
-        # Run history warmup and validation
-        history_service = services.history_service
-        await history_service.warmup_strategy(
-            strategy,
-            offline_mode=not gateway_available,
-            history_start=None,
-            history_end=None,
+        gateway_available = await _check_gateway_available(gateway_url, client=services.gateway_client)
+        world_ctx = await _build_world_context(
+            gateway_available=gateway_available,
+            gateway_url=gateway_url,
+            resolved_world=resolved_world,
+            resolved_preset=resolved_preset,
+            preset_mode=preset_mode,
+            preset_version=preset_version,
+            preset_overrides=preset_overrides,
+            services=services,
         )
-        
-        history_service.write_snapshots(strategy)
-        strategy.on_finish()
-        
-        # Extract returns from strategy if not provided
-        if returns is not None:
-            backtest_returns = list(returns)
-        else:
-            backtest_returns = _extract_returns_from_strategy(strategy)
-        
-        # Phase 2: Run automatic validation pipeline
-        if auto_validate:
-            if not backtest_returns:
-                logger.warning(
-                    "Strategy %s produced no returns; auto-validation cannot proceed",
-                    strategy_class_name,
-                )
-                return SubmitResult(
-                    strategy_id=strategy_id or f"no_returns_{id(strategy)}",
-                    status="rejected",
-                    world=resolved_world,
-                    mode=mode,
-                    rejection_reason=(
-                        "No returns produced for validation; provide pre-computed "
-                        "returns or ensure the strategy populates returns/equity/pnl."
-                    ),
-                    improvement_hints=[
-                        "Ensure your strategy populates returns/equity/pnl during warmup",
-                        "Pass pre-computed returns via Runner.submit(..., returns=...)",
-                        "Verify history data is available for the selected world/mode",
-                    ],
-                    metrics=StrategyMetrics(),
-                    strategy=strategy,
-                )
-
-            validation_pipeline = ValidationPipeline(
-                preset=resolved_preset,
-                policy=validation_policy,
-                world_id=resolved_world,
-            )
-            validation_result = await validation_pipeline.validate(
-                strategy,
-                returns=backtest_returns,
-            )
-
-            # Optionally ask WorldService (via Gateway) to evaluate/apply policy
-            ws_eval = None
-            if gateway_available:
-                # Convert PerformanceMetrics to StrategyMetrics for WS evaluation
-                eval_metrics = StrategyMetrics(
-                    sharpe=validation_result.metrics.sharpe,
-                    max_drawdown=validation_result.metrics.max_drawdown,
-                    win_rate=validation_result.metrics.win_ratio,
-                    profit_factor=validation_result.metrics.profit_factor,
-                )
-                ws_eval = await _evaluate_with_worldservice(
-                    gateway_url=gateway_url,
-                    world_id=resolved_world,
-                    strategy_id=strategy_id or strategy_class_name,
-                    metrics=eval_metrics,
-                    returns=backtest_returns,
-                    preset=resolved_preset,
-                    client=gw_client,
-                )
-                if ws_eval.error:
-                    logger.debug("WorldService evaluation fallback error: %s", ws_eval.error)
-
-            # Convert validation result to SubmitResult
-            if validation_result.status == ValidationStatus.PASSED:
-                # If WS explicitly rejects or reports violations, treat as rejected
-                if ws_eval and (ws_eval.active is False or (ws_eval.violations and len(ws_eval.violations) > 0)):
-                    rejection_reason = "WorldService evaluation rejected strategy"
-                    ws_reject_violations: list[dict[str, object]] = []
-                    if ws_eval.violations:
-                        for ws_violation in ws_eval.violations:
-                            ws_reject_violations.append(
-                                {
-                                    "metric": ws_violation.get("metric"),
-                                    "value": ws_violation.get("value"),
-                                    "threshold_type": ws_violation.get("threshold_type") or ws_violation.get("type"),
-                                    "threshold_value": ws_violation.get("threshold_value") or ws_violation.get("threshold"),
-                                    "message": ws_violation.get("message"),
-                                }
-                            )
-                    return SubmitResult(
-                        strategy_id=strategy_id or f"rejected_{id(strategy)}",
-                        status="rejected",
-                        world=resolved_world,
-                        mode=mode,
-                        rejection_reason=rejection_reason,
-                        improvement_hints=world_notice + validation_result.improvement_hints,
-                        threshold_violations=[
-                            {
-                                "metric": v.metric,
-                                "value": v.value,
-                                "threshold_type": v.threshold_type,
-                                "threshold_value": v.threshold_value,
-                                "message": v.message,
-                            }
-                            for v in validation_result.violations
-                        ] + ws_reject_violations,
-                        metrics=StrategyMetrics(
-                            sharpe=validation_result.metrics.sharpe,
-                            max_drawdown=validation_result.metrics.max_drawdown,
-                            win_rate=validation_result.metrics.win_ratio,
-                            profit_factor=validation_result.metrics.profit_factor,
-                        ),
-                        strategy=strategy,
-                    )
-
-                status = (
-                    "active"
-                    if (
-                        validation_result.activated
-                        or (ws_eval and ws_eval.active is True)
-                    )
-                    else "validated"
-                )
-                weight: float | None = validation_result.weight
-                rank: int | None = validation_result.rank
-                contribution: float | None = validation_result.contribution
-                # Convert PerformanceMetrics to StrategyMetrics for consistent return type
-                metrics_out = StrategyMetrics(
-                    sharpe=validation_result.metrics.sharpe,
-                    max_drawdown=validation_result.metrics.max_drawdown,
-                    win_rate=validation_result.metrics.win_ratio,
-                    profit_factor=validation_result.metrics.profit_factor,
-                    car_mdd=validation_result.metrics.car_mdd,
-                    rar_mdd=validation_result.metrics.rar_mdd,
-                    total_return=validation_result.metrics.total_return,
-                    num_trades=validation_result.metrics.num_trades,
-                    correlation_avg=validation_result.correlation_avg,
-                )
-                if ws_eval:
-                    weight = ws_eval.weight if ws_eval.weight is not None else weight
-                    rank = ws_eval.rank if ws_eval.rank is not None else rank
-                    contribution = (
-                        ws_eval.contribution
-                        if ws_eval.contribution is not None
-                        else contribution
-                    )
-                    corr_avg = ws_eval.correlation_avg
-                    if corr_avg is not None:
-                        metrics_out = StrategyMetrics(
-                            sharpe=validation_result.metrics.sharpe,
-                            max_drawdown=validation_result.metrics.max_drawdown,
-                            correlation_avg=corr_avg,
-                            win_rate=validation_result.metrics.win_ratio,
-                            profit_factor=validation_result.metrics.profit_factor,
-                            car_mdd=validation_result.metrics.car_mdd,
-                            rar_mdd=validation_result.metrics.rar_mdd,
-                            total_return=validation_result.metrics.total_return,
-                            num_trades=validation_result.metrics.num_trades,
-                        )
-                return SubmitResult(
-                    strategy_id=strategy_id or f"unknown_{id(strategy)}",
-                    status=status,
-                    world=resolved_world,
-                    mode=mode,
-                    contribution=contribution,
-                    weight=weight,
-                    rank=rank,
-                    metrics=metrics_out,
-                    strategy=strategy,
-                    improvement_hints=world_notice + validation_result.improvement_hints,
-                )
-            elif validation_result.status == ValidationStatus.FAILED:
-                # When Gateway is available, defer to WorldService evaluation.
-                # Local validation may lack world state (existing strategies, correlation data),
-                # so WS evaluation is the source of truth for world-aware decisions.
-                if gateway_available and ws_eval and ws_eval.active is True:
-                    # WS accepts the strategy despite local rejection - trust WS
-                    logger.info(
-                        "Local validation failed but WorldService accepted strategy %s; "
-                        "deferring to WS decision (local lacks world state)",
-                        strategy_id or strategy_class_name,
-                    )
-                    # Log local violations as warnings for visibility
-                    for v in validation_result.violations:
-                        logger.warning(
-                            "Local validation warning (overridden by WS): %s=%s (threshold %s %s)",
-                            v.metric, v.value, v.threshold_type, v.threshold_value,
-                        )
-                    weight = ws_eval.weight
-                    rank = ws_eval.rank
-                    contribution = ws_eval.contribution
-                    corr_avg = ws_eval.correlation_avg
-                    metrics_out = StrategyMetrics(
-                        sharpe=validation_result.metrics.sharpe,
-                        max_drawdown=validation_result.metrics.max_drawdown,
-                        win_rate=validation_result.metrics.win_ratio,
-                        profit_factor=validation_result.metrics.profit_factor,
-                        correlation_avg=corr_avg,
-                        car_mdd=validation_result.metrics.car_mdd,
-                        rar_mdd=validation_result.metrics.rar_mdd,
-                        total_return=validation_result.metrics.total_return,
-                        num_trades=validation_result.metrics.num_trades,
-                    )
-                    return SubmitResult(
-                        strategy_id=strategy_id or f"ws_accepted_{id(strategy)}",
-                        status="active",
-                        world=resolved_world,
-                        mode=mode,
-                        contribution=contribution,
-                        weight=weight,
-                        rank=rank,
-                        metrics=metrics_out,
-                        strategy=strategy,
-                        improvement_hints=world_notice + [
-                            "Note: Local validation failed but WorldService accepted with world-aware metrics"
-                        ] + validation_result.improvement_hints,
-                    )
-
-                # Gateway available but WS eval failed/unavailable - defer decision, don't reject locally
-                if gateway_available and (ws_eval is None or ws_eval.error):
-                    ws_error_msg = ws_eval.error if ws_eval else "WS evaluation unavailable"
-                    logger.warning(
-                        "Local validation failed for %s but WS evaluation also failed (%s); "
-                        "deferring to Gateway with 'pending' status (local validation lacks world state)",
-                        strategy_id or strategy_class_name,
-                        ws_error_msg,
-                    )
-                    # Log local violations as warnings
-                    for v in validation_result.violations:
-                        logger.warning(
-                            "Local validation warning (WS unavailable): %s=%s (threshold %s %s)",
-                            v.metric, v.value, v.threshold_type, v.threshold_value,
-                        )
-                    return SubmitResult(
-                        strategy_id=strategy_id or f"pending_{id(strategy)}",
-                        status="pending",
-                        world=resolved_world,
-                        mode=mode,
-                        metrics=StrategyMetrics(
-                            sharpe=validation_result.metrics.sharpe,
-                            max_drawdown=validation_result.metrics.max_drawdown,
-                            win_rate=validation_result.metrics.win_ratio,
-                            profit_factor=validation_result.metrics.profit_factor,
-                        ),
-                        strategy=strategy,
-                        improvement_hints=world_notice + [
-                            f"Local validation failed but WS evaluation unavailable ({ws_error_msg}); "
-                            "strategy submitted as pending for server-side evaluation"
-                        ] + validation_result.improvement_hints,
-                        threshold_violations=[
-                            {
-                                "metric": v.metric,
-                                "value": v.value,
-                                "threshold_type": v.threshold_type,
-                                "threshold_value": v.threshold_value,
-                                "message": v.message,
-                            }
-                            for v in validation_result.violations
-                        ],
-                    )
-
-                # Gateway not available OR WS explicitly rejected - apply local rejection
-                rejection_reason = "Strategy did not meet policy thresholds"
-                if ws_eval and ws_eval.active is False:
-                    rejection_reason = "WorldService evaluation rejected strategy"
-                if ws_eval and ws_eval.error:
-                    rejection_reason += f" (WS error: {ws_eval.error})"
-                ws_extra_violations: list[dict[str, object]] = []
-                if ws_eval and ws_eval.violations:
-                    validation_result.improvement_hints.extend(
-                        [
-                            str(ws_violation.get("message", ""))
-                            for ws_violation in ws_eval.violations
-                            if ws_violation.get("message")
-                        ]
-                    )
-                    for ws_violation in ws_eval.violations:
-                        ws_extra_violations.append(
-                            {
-                                "metric": ws_violation.get("metric"),
-                                "value": ws_violation.get("value"),
-                                "threshold_type": ws_violation.get("threshold_type") or ws_violation.get("type"),
-                                "threshold_value": ws_violation.get("threshold_value") or ws_violation.get("threshold"),
-                                "message": ws_violation.get("message"),
-                            }
-                        )
-                return SubmitResult(
-                    strategy_id=strategy_id or f"rejected_{id(strategy)}",
-                    status="rejected",
-                    world=resolved_world,
-                    mode=mode,
-                    rejection_reason=rejection_reason,
-                    improvement_hints=world_notice + validation_result.improvement_hints,
-                    threshold_violations=[
-                        {
-                            "metric": v.metric,
-                            "value": v.value,
-                            "threshold_type": v.threshold_type,
-                            "threshold_value": v.threshold_value,
-                            "message": v.message,
-                        }
-                        for v in validation_result.violations
-                    ] + ws_extra_violations,
-                    metrics=StrategyMetrics(
-                        sharpe=validation_result.metrics.sharpe,
-                        max_drawdown=validation_result.metrics.max_drawdown,
-                        win_rate=validation_result.metrics.win_ratio,
-                        profit_factor=validation_result.metrics.profit_factor,
-                    ),
-                    strategy=strategy,
-                )
-            else:
-                # ERROR status
-                return SubmitResult(
-                    strategy_id=strategy_id or f"error_{id(strategy)}",
-                    status="rejected",
-                    world=resolved_world,
-                    mode=mode,
-                    rejection_reason=validation_result.error_message or "Validation error",
-                    improvement_hints=world_notice + validation_result.improvement_hints,
-                    strategy=strategy,
-                )
-        
-        # No auto-validation or no returns: return basic result
-        return SubmitResult(
-            strategy_id=strategy_id or f"unknown_{id(strategy)}",
-            status="pending" if not gateway_available else "active",
-            world=resolved_world,
-            mode=mode,
-            contribution=None,
-            weight=None,
-            rank=None,
-            metrics=StrategyMetrics(),
+        bootstrap_out = await _bootstrap_strategy(
+            services=services,
             strategy=strategy,
-            improvement_hints=world_notice,
+            strategy_class_name=strategy_class_name,
+            compute_context=compute_context,
+            resolved_world=resolved_world,
+            gateway_url=gateway_url,
+            mode=mode,
+            gateway_available=gateway_available,
+            policy_payload=world_ctx.policy_payload,
         )
-        
-    except Exception as e:
+        backtest_returns = await _warmup_and_collect_returns(
+            services=services,
+            strategy=strategy,
+            gateway_available=gateway_available,
+            returns=returns,
+        )
+        if not auto_validate:
+            return _basic_result(
+                strategy=strategy,
+                strategy_id=bootstrap_out.strategy_id,
+                resolved_world=resolved_world,
+                mode=mode,
+                gateway_available=gateway_available,
+                world_notice=world_ctx.world_notice,
+            )
+        if not backtest_returns:
+            return _reject_due_to_no_returns(
+                strategy=strategy,
+                strategy_class_name=strategy_class_name,
+                strategy_id=bootstrap_out.strategy_id,
+                resolved_world=resolved_world,
+                mode=mode,
+                world_notice=world_ctx.world_notice,
+            )
+
+        validation_result, ws_eval = await _run_validation_and_ws_eval(
+            strategy=strategy,
+            strategy_id=bootstrap_out.strategy_id or strategy_class_name,
+            resolved_world=resolved_world,
+            resolved_preset=world_ctx.resolved_preset,
+            validation_policy=world_ctx.validation_policy,
+            backtest_returns=backtest_returns,
+            services=services,
+            gateway_url=gateway_url,
+            gateway_available=gateway_available,
+        )
+        return _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name=strategy_class_name,
+            strategy_id=bootstrap_out.strategy_id,
+            resolved_world=resolved_world,
+            mode=mode,
+            world_notice=world_ctx.world_notice,
+            validation_result=validation_result,
+            ws_eval=ws_eval,
+            gateway_available=gateway_available,
+        )
+    except Exception as e:  # pragma: no cover - safety net
         try:
             strategy.on_error(e)
         except Exception:
             logger.exception("strategy.on_error raised during failure handling")
 
+        fallback_notice = world_ctx.world_notice if world_ctx else []
+        fallback_id = _strategy_id_or_fallback(None, strategy, prefix="failed")
         return SubmitResult(
-            strategy_id=strategy_id or f"failed_{id(strategy)}",
+            strategy_id=fallback_id,
             status="rejected",
             world=resolved_world,
             mode=mode,
             rejection_reason=str(e),
-            improvement_hints=world_notice + _get_improvement_hints(e),
-            strategy=strategy if 'strategy' in locals() else None,
+            improvement_hints=fallback_notice + _get_improvement_hints(e),
+            strategy=strategy if "strategy" in locals() else None,
         )
+
+
+def _normalize_mode_value(mode: Mode | str) -> Mode:
+    return Mode(mode.lower()) if isinstance(mode, str) else mode
+
+
+def _strategy_from_input(strategy_cls: type["Strategy"] | "Strategy") -> tuple["Strategy", str]:
+    if isinstance(strategy_cls, type):
+        strategy = _prepare_strategy(strategy_cls)
+        return strategy, strategy_cls.__name__
+    return strategy_cls, type(strategy_cls).__name__
+
+
+@dataclass
+class WorldContext:
+    policy_payload: dict[str, Any] | None
+    resolved_preset: str | None
+    world_notice: list[str]
+    world_description: dict[str, Any] | None
+    validation_policy: Any | None
+
+
+@dataclass
+class BootstrapOutcome:
+    strategy_id: str | None
+    offline_mode: bool
+
+
+async def _build_world_context(
+    *,
+    gateway_available: bool,
+    gateway_url: str,
+    resolved_world: str,
+    resolved_preset: str | None,
+    preset_mode: str | None,
+    preset_version: str | None,
+    preset_overrides: dict[str, float] | None,
+    services: "RunnerServices",
+) -> WorldContext:
+    overrides = preset_overrides or {}
+    world_description = await _maybe_fetch_world_description(
+        gateway_available=gateway_available,
+        gateway_url=gateway_url,
+        resolved_world=resolved_world,
+        services=services,
+    )
+    policy_payload, world_notice = _policy_from_user_inputs(
+        resolved_world=resolved_world,
+        resolved_preset=resolved_preset,
+        preset_mode=preset_mode,
+        preset_version=preset_version,
+        overrides=overrides,
+    )
+    resolved_preset_out = resolved_preset
+
+    if policy_payload is None and world_description:
+        policy_payload, resolved_preset_out, notice = _policy_from_world_description(
+            resolved_world=resolved_world,
+            world_description=world_description,
+            resolved_preset=resolved_preset_out,
+        )
+        world_notice.extend(notice)
+
+    if policy_payload is None and resolved_world == DEFAULT_WORLD:
+        policy_payload, notice = _default_world_policy(
+            resolved_preset_out=resolved_preset_out,
+            preset_mode=preset_mode,
+            preset_version=preset_version,
+            overrides=overrides,
+        )
+        world_notice.extend(notice)
+
+    if policy_payload is None and resolved_preset_out:
+        policy_payload = _policy_payload_from_preset(
+            preset_name=resolved_preset_out,
+            preset_mode=preset_mode,
+            preset_version=preset_version,
+            preset_overrides=overrides,
+        )
+
+    validation_policy = _policy_from_payload(policy_payload)
+    return WorldContext(
+        policy_payload=policy_payload,
+        resolved_preset=resolved_preset_out,
+        world_notice=world_notice,
+        world_description=world_description,
+        validation_policy=validation_policy,
+    )
+
+
+async def _maybe_fetch_world_description(
+    *,
+    gateway_available: bool,
+    gateway_url: str,
+    resolved_world: str,
+    services: "RunnerServices",
+) -> dict[str, Any] | None:
+    if not gateway_available:
+        return None
+    return await _fetch_world_description(gateway_url, resolved_world, client=services.gateway_client)
+
+
+def _policy_from_user_inputs(
+    *,
+    resolved_world: str,
+    resolved_preset: str | None,
+    preset_mode: str | None,
+    preset_version: str | None,
+    overrides: dict[str, float],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if not any([resolved_preset, overrides, preset_mode, preset_version]) or not resolved_preset:
+        return None, []
+    policy_payload = _policy_payload_from_preset(
+        preset_name=resolved_preset,
+        preset_mode=preset_mode,
+        preset_version=preset_version,
+        preset_overrides=overrides,
+    )
+    if not policy_payload:
+        return None, []
+    policy_text = _policy_to_human_readable(policy_payload)
+    notice = [f"Using world '{resolved_world}' with preset '{policy_payload['preset']}' policy: {policy_text}"]
+    return policy_payload, notice
+
+
+def _policy_from_world_description(
+    *,
+    resolved_world: str,
+    world_description: dict[str, Any] | None,
+    resolved_preset: str | None,
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    if not isinstance(world_description, dict):
+        return None, resolved_preset, []
+    policy_payload = world_description.get("policy")
+    resolved_preset_out = world_description.get("policy_preset") or resolved_preset
+    human = world_description.get("policy_human") or _policy_to_human_readable(policy_payload)
+    return policy_payload, resolved_preset_out, [f"World '{resolved_world}' policy: {human}"]
+
+
+def _default_world_policy(
+    *,
+    resolved_preset_out: str | None,
+    preset_mode: str | None,
+    preset_version: str | None,
+    overrides: dict[str, float],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    payload = _policy_payload_from_preset(
+        preset_name=resolved_preset_out or DEFAULT_PRESET,
+        preset_mode=preset_mode,
+        preset_version=preset_version,
+        preset_overrides=overrides,
+    )
+    if not payload:
+        return None, []
+    policy_text = _policy_to_human_readable(payload)
+    notice = [
+        "Using default world '__default__' with '" + payload["preset"] + f"' preset: {policy_text}. "
+        "Set QMTL_DEFAULT_WORLD to target a custom world or use --preset to override."
+    ]
+    logger.info(
+        "Using default world '__default__' with '%s' preset: %s",
+        payload["preset"],
+        policy_text,
+    )
+    return payload, notice
+
+
+def _policy_payload_from_preset(
+    *,
+    preset_name: str | None,
+    preset_mode: str | None,
+    preset_version: str | None,
+    preset_overrides: dict[str, float],
+) -> dict[str, Any] | None:
+    if not preset_name:
+        return None
+    try:
+        from .presets import get_preset
+
+        preset_obj = get_preset(preset_name)
+        payload: dict[str, Any] = {
+            "preset": preset_obj.name,
+            "policy": preset_obj.to_policy_dict(),
+        }
+        if preset_mode:
+            payload["preset_mode"] = preset_mode
+        if preset_version:
+            payload["preset_version"] = preset_version
+        if preset_overrides:
+            payload["preset_overrides"] = preset_overrides
+        return payload
+    except Exception as exc:  # pragma: no cover - defensive, logged for observability
+        logger.debug("Failed to load preset %s: %s", preset_name, exc)
+        return None
+
+
+async def _bootstrap_strategy(
+    *,
+    services: "RunnerServices",
+    strategy: "Strategy",
+    strategy_class_name: str,
+    compute_context: Any,
+    resolved_world: str,
+    gateway_url: str,
+    mode: Mode,
+    gateway_available: bool,
+    policy_payload: dict[str, Any] | None,
+) -> BootstrapOutcome:
+    if not gateway_available:
+        logger.info("Gateway not available at %s, running local validation", gateway_url)
+        return BootstrapOutcome(strategy_id=f"local_{strategy_class_name}_{id(strategy)}", offline_mode=True)
+
+    if policy_payload is not None:
+        await _ensure_world_policy(
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            payload=policy_payload,
+            client=services.gateway_client,
+        )
+
+    from .strategy_bootstrapper import StrategyBootstrapper
+
+    bootstrapper = StrategyBootstrapper(services.gateway_client)
+    bootstrap_result = await bootstrapper.bootstrap(
+        strategy,
+        context=compute_context,
+        world_id=resolved_world,
+        gateway_url=gateway_url,
+        meta={"mode": mode.value},
+        offline=False,
+        kafka_available=services.kafka_factory.available,
+        trade_mode="simulate" if mode != Mode.LIVE else "live",
+        schema_enforcement="fail",
+        feature_plane=services.feature_plane,
+        gateway_context=None,
+        skip_gateway_submission=False,
+    )
+
+    if mode != Mode.BACKTEST and not bootstrap_result.offline_mode:
+        await _configure_activation(
+            services=services,
+            strategy_id=bootstrap_result.strategy_id,
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            offline_mode=bootstrap_result.offline_mode,
+        )
+
+    return BootstrapOutcome(strategy_id=bootstrap_result.strategy_id, offline_mode=bootstrap_result.offline_mode)
+
+
+async def _warmup_and_collect_returns(
+    *,
+    services: "RunnerServices",
+    strategy: "Strategy",
+    gateway_available: bool,
+    returns: Sequence[float] | None,
+) -> list[float]:
+    history_service = services.history_service
+    await history_service.warmup_strategy(
+        strategy,
+        offline_mode=not gateway_available,
+        history_start=None,
+        history_end=None,
+    )
+    history_service.write_snapshots(strategy)
+    strategy.on_finish()
+
+    if returns is not None:
+        return list(returns)
+    return _extract_returns_from_strategy(strategy)
+
+
+def _basic_result(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    gateway_available: bool,
+    world_notice: list[str],
+) -> SubmitResult:
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy),
+        status="pending" if not gateway_available else "active",
+        world=resolved_world,
+        mode=mode,
+        contribution=None,
+        weight=None,
+        rank=None,
+        metrics=StrategyMetrics(),
+        strategy=strategy,
+        improvement_hints=world_notice,
+    )
+
+
+def _reject_due_to_no_returns(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+) -> SubmitResult:
+    logger.warning("Strategy %s produced no returns; auto-validation cannot proceed", strategy_class_name)
+    return SubmitResult(
+        strategy_id=strategy_id or f"no_returns_{id(strategy)}",
+        status="rejected",
+        world=resolved_world,
+        mode=mode,
+        rejection_reason=(
+            "No returns produced for validation; provide pre-computed "
+            "returns or ensure the strategy populates returns/equity/pnl."
+        ),
+        improvement_hints=world_notice + [
+            "Ensure your strategy populates returns/equity/pnl during warmup",
+            "Pass pre-computed returns via Runner.submit(..., returns=...)",
+            "Verify history data is available for the selected world/mode",
+        ],
+        metrics=StrategyMetrics(),
+        strategy=strategy,
+    )
+
+
+async def _run_validation_and_ws_eval(
+    *,
+    strategy: "Strategy",
+    strategy_id: str,
+    resolved_world: str,
+    resolved_preset: str | None,
+    validation_policy: Any | None,
+    backtest_returns: Sequence[float],
+    services: "RunnerServices",
+    gateway_url: str,
+    gateway_available: bool,
+) -> tuple[Any, WsEvalResult | None]:
+    from .validation_pipeline import ValidationPipeline
+
+    validation_pipeline = ValidationPipeline(
+        preset=resolved_preset,
+        policy=validation_policy,
+        world_id=resolved_world,
+    )
+    validation_result = await validation_pipeline.validate(strategy, returns=backtest_returns)
+
+    if not gateway_available:
+        return validation_result, None
+
+    eval_metrics = StrategyMetrics(
+        sharpe=validation_result.metrics.sharpe,
+        max_drawdown=validation_result.metrics.max_drawdown,
+        win_rate=validation_result.metrics.win_ratio,
+        profit_factor=validation_result.metrics.profit_factor,
+    )
+    ws_eval = await _evaluate_with_worldservice(
+        gateway_url=gateway_url,
+        world_id=resolved_world,
+        strategy_id=strategy_id,
+        metrics=eval_metrics,
+        returns=backtest_returns,
+        preset=resolved_preset,
+        client=services.gateway_client,
+    )
+    if ws_eval.error:
+        logger.debug("WorldService evaluation fallback error: %s", ws_eval.error)
+    return validation_result, ws_eval
+
+
+def _build_submit_result_from_validation(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+    gateway_available: bool,
+) -> SubmitResult:
+    from .validation_pipeline import ValidationStatus
+
+    if validation_result.status == ValidationStatus.PASSED:
+        return _build_passed_result(
+            strategy=strategy,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            mode=mode,
+            world_notice=world_notice,
+            validation_result=validation_result,
+            ws_eval=ws_eval,
+        )
+    if validation_result.status == ValidationStatus.FAILED:
+        return _build_failed_result(
+            strategy=strategy,
+            strategy_class_name=strategy_class_name,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            mode=mode,
+            world_notice=world_notice,
+            validation_result=validation_result,
+            ws_eval=ws_eval,
+            gateway_available=gateway_available,
+        )
+    return _build_error_result(
+        strategy=strategy,
+        strategy_id=strategy_id,
+        resolved_world=resolved_world,
+        mode=mode,
+        world_notice=world_notice,
+        validation_result=validation_result,
+    )
+
+
+def _build_passed_result(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> SubmitResult:
+    rejection = _ws_rejection_result(
+        strategy=strategy,
+        strategy_id=strategy_id,
+        resolved_world=resolved_world,
+        mode=mode,
+        world_notice=world_notice,
+        validation_result=validation_result,
+        ws_eval=ws_eval,
+    )
+    if rejection:
+        return rejection
+
+    status = _resolved_status(validation_result, ws_eval)
+    weight = validation_result.weight
+    rank = validation_result.rank
+    contribution = validation_result.contribution
+    weight, rank, contribution = _merge_ws_eval_fields(ws_eval, weight, rank, contribution)
+    metrics_out = _base_metrics_from_validation(validation_result)
+    if ws_eval and ws_eval.correlation_avg is not None:
+        metrics_out = _clone_metrics_with_corr(metrics_out, ws_eval.correlation_avg)
+
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy),
+        status=status,
+        world=resolved_world,
+        mode=mode,
+        contribution=contribution,
+        weight=weight,
+        rank=rank,
+        metrics=metrics_out,
+        strategy=strategy,
+        improvement_hints=world_notice + validation_result.improvement_hints,
+    )
+
+
+def _ws_rejection_result(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> SubmitResult | None:
+    if ws_eval is None:
+        return None
+    has_rejection = ws_eval.active is False or (ws_eval.violations and len(ws_eval.violations) > 0)
+    if not has_rejection:
+        return None
+    ws_reject_violations = _merge_threshold_violations(validation_result, ws_eval.violations or [])
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
+        status="rejected",
+        world=resolved_world,
+        mode=mode,
+        rejection_reason="WorldService evaluation rejected strategy",
+        improvement_hints=world_notice + validation_result.improvement_hints,
+        threshold_violations=ws_reject_violations,
+        metrics=_base_metrics_from_validation(validation_result),
+        strategy=strategy,
+    )
+
+
+def _resolved_status(validation_result: Any, ws_eval: WsEvalResult | None) -> str:
+    if validation_result.activated or (ws_eval and ws_eval.active is True):
+        return "active"
+    return "validated"
+
+
+def _merge_ws_eval_fields(
+    ws_eval: WsEvalResult | None,
+    weight: float | None,
+    rank: int | None,
+    contribution: float | None,
+) -> tuple[float | None, int | None, float | None]:
+    if ws_eval:
+        weight = ws_eval.weight if ws_eval.weight is not None else weight
+        rank = ws_eval.rank if ws_eval.rank is not None else rank
+        contribution = ws_eval.contribution if ws_eval.contribution is not None else contribution
+    return weight, rank, contribution
+
+
+def _build_failed_result(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+    gateway_available: bool,
+) -> SubmitResult:
+    if gateway_available and ws_eval and ws_eval.active is True:
+        return _ws_accepts_after_fail(
+            strategy=strategy,
+            strategy_class_name=strategy_class_name,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            mode=mode,
+            world_notice=world_notice,
+            validation_result=validation_result,
+            ws_eval=ws_eval,
+        )
+
+    if gateway_available and (ws_eval is None or ws_eval.error):
+        return _pending_after_failed_validation(
+            strategy=strategy,
+            strategy_class_name=strategy_class_name,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            mode=mode,
+            world_notice=world_notice,
+            validation_result=validation_result,
+            ws_eval=ws_eval,
+        )
+
+    return _reject_after_failed_validation(
+        strategy=strategy,
+        strategy_id=strategy_id,
+        resolved_world=resolved_world,
+        mode=mode,
+        world_notice=world_notice,
+        validation_result=validation_result,
+        ws_eval=ws_eval,
+    )
+
+
+def _ws_accepts_after_fail(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult,
+) -> SubmitResult:
+    logger.info(
+        "Local validation failed but WorldService accepted strategy %s; deferring to WS decision",
+        strategy_id or strategy_class_name,
+    )
+    for v in validation_result.violations:
+        logger.warning(
+            "Local validation warning (overridden by WS): %s=%s (threshold %s %s)",
+            v.metric, v.value, v.threshold_type, v.threshold_value,
+        )
+    metrics_out = _clone_metrics_with_corr(_base_metrics_from_validation(validation_result), ws_eval.correlation_avg)
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="ws_accepted"),
+        status="active",
+        world=resolved_world,
+        mode=mode,
+        contribution=ws_eval.contribution,
+        weight=ws_eval.weight,
+        rank=ws_eval.rank,
+        metrics=metrics_out,
+        strategy=strategy,
+        improvement_hints=world_notice + [
+            "Note: Local validation failed but WorldService accepted with world-aware metrics"
+        ] + validation_result.improvement_hints,
+    )
+
+
+def _pending_after_failed_validation(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> SubmitResult:
+    ws_error_msg = ws_eval.error if ws_eval else "WS evaluation unavailable"
+    logger.warning(
+        "Local validation failed for %s but WS evaluation also failed (%s); deferring with pending status",
+        strategy_id or strategy_class_name,
+        ws_error_msg,
+    )
+    for v in validation_result.violations:
+        logger.warning(
+            "Local validation warning (WS unavailable): %s=%s (threshold %s %s)",
+            v.metric, v.value, v.threshold_type, v.threshold_value,
+        )
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="pending"),
+        status="pending",
+        world=resolved_world,
+        mode=mode,
+        metrics=StrategyMetrics(
+            sharpe=validation_result.metrics.sharpe,
+            max_drawdown=validation_result.metrics.max_drawdown,
+            win_rate=validation_result.metrics.win_ratio,
+            profit_factor=validation_result.metrics.profit_factor,
+        ),
+        strategy=strategy,
+        improvement_hints=world_notice + [
+            f"Local validation failed but WS evaluation unavailable ({ws_error_msg}); strategy submitted as pending "
+            "for server-side evaluation"
+        ] + validation_result.improvement_hints,
+        threshold_violations=[
+            {
+                "metric": v.metric,
+                "value": v.value,
+                "threshold_type": v.threshold_type,
+                "threshold_value": v.threshold_value,
+                "message": v.message,
+            }
+            for v in validation_result.violations
+        ],
+    )
+
+
+def _reject_after_failed_validation(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> SubmitResult:
+    rejection_reason, ws_extra_violations = _rejection_details(ws_eval, validation_result)
+
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
+        status="rejected",
+        world=resolved_world,
+        mode=mode,
+        rejection_reason=rejection_reason,
+        improvement_hints=world_notice + validation_result.improvement_hints,
+        threshold_violations=_merge_threshold_violations(validation_result, ws_extra_violations),
+        metrics=StrategyMetrics(
+            sharpe=validation_result.metrics.sharpe,
+            max_drawdown=validation_result.metrics.max_drawdown,
+            win_rate=validation_result.metrics.win_ratio,
+            profit_factor=validation_result.metrics.profit_factor,
+        ),
+        strategy=strategy,
+    )
+
+
+def _rejection_details(ws_eval: WsEvalResult | None, validation_result: Any) -> tuple[str, list[dict[str, object]]]:
+    rejection_reason = "Strategy did not meet policy thresholds"
+    if ws_eval is None:
+        return rejection_reason, []
+
+    if ws_eval.active is False:
+        rejection_reason = "WorldService evaluation rejected strategy"
+    if ws_eval.error:
+        rejection_reason += f" (WS error: {ws_eval.error})"
+
+    ws_extra_violations: list[dict[str, object]] = []
+    if ws_eval.violations:
+        validation_result.improvement_hints.extend(
+            [str(ws_violation.get("message", "")) for ws_violation in ws_eval.violations if ws_violation.get("message")]
+        )
+        for ws_violation in ws_eval.violations:
+            ws_extra_violations.append(
+                {
+                    "metric": ws_violation.get("metric"),
+                    "value": ws_violation.get("value"),
+                    "threshold_type": ws_violation.get("threshold_type") or ws_violation.get("type"),
+                    "threshold_value": ws_violation.get("threshold_value") or ws_violation.get("threshold"),
+                    "message": ws_violation.get("message"),
+                }
+            )
+    return rejection_reason, ws_extra_violations
+
+
+def _build_error_result(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    mode: Mode,
+    world_notice: list[str],
+    validation_result: Any,
+) -> SubmitResult:
+    return SubmitResult(
+        strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="error"),
+        status="rejected",
+        world=resolved_world,
+        mode=mode,
+        rejection_reason=validation_result.error_message or "Validation error",
+        improvement_hints=world_notice + validation_result.improvement_hints,
+        strategy=strategy,
+    )
+
+
+def _strategy_id_or_fallback(strategy_id: str | None, strategy: "Strategy", *, prefix: str = "unknown") -> str:
+    return strategy_id or f"{prefix}_{id(strategy)}"
+
+
+def _base_metrics_from_validation(validation_result: Any) -> StrategyMetrics:
+    return StrategyMetrics(
+        sharpe=validation_result.metrics.sharpe,
+        max_drawdown=validation_result.metrics.max_drawdown,
+        win_rate=validation_result.metrics.win_ratio,
+        profit_factor=validation_result.metrics.profit_factor,
+        car_mdd=validation_result.metrics.car_mdd,
+        rar_mdd=validation_result.metrics.rar_mdd,
+        total_return=validation_result.metrics.total_return,
+        num_trades=validation_result.metrics.num_trades,
+        correlation_avg=validation_result.correlation_avg,
+    )
+
+
+def _merge_threshold_violations(validation_result: Any, extra: list[dict[str, object]]) -> list[dict[str, object]]:
+    base = [
+        {
+            "metric": v.metric,
+            "value": v.value,
+            "threshold_type": v.threshold_type,
+            "threshold_value": v.threshold_value,
+            "message": v.message,
+        }
+        for v in getattr(validation_result, "violations", [])
+    ]
+    return base + extra
+
+
+def _clone_metrics_with_corr(metrics: StrategyMetrics, correlation_avg: float | None) -> StrategyMetrics:
+    if correlation_avg is None:
+        return metrics
+    return StrategyMetrics(
+        sharpe=metrics.sharpe,
+        max_drawdown=metrics.max_drawdown,
+        correlation_avg=correlation_avg,
+        win_rate=metrics.win_rate,
+        profit_factor=metrics.profit_factor,
+        car_mdd=metrics.car_mdd,
+        rar_mdd=metrics.rar_mdd,
+        total_return=metrics.total_return,
+        num_trades=metrics.num_trades,
+    )
 
 
 def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:
@@ -1095,25 +1471,24 @@ def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalRes
     violations = data.get("violations") or data.get("threshold_violations")
     correlation_avg = data.get("correlation_avg") or data.get("correlation")
 
-    is_active = None
-    if isinstance(active_list, list):
-        is_active = strategy_id in active_list
-
-    weight = None
-    contribution = None
-    rank = None
-    if isinstance(weights, dict):
-        weight = weights.get(strategy_id)
-    if isinstance(contributions, dict):
-        contribution = contributions.get(strategy_id)
-    if isinstance(ranks, dict):
-        rank = ranks.get(strategy_id)
+    is_active = strategy_id in active_list if isinstance(active_list, list) else None
+    weight = _value_from_mapping(weights, strategy_id)
+    contribution = _value_from_mapping(contributions, strategy_id)
+    rank = _value_from_mapping(ranks, strategy_id)
+    violations_list = violations if isinstance(violations, list) else None
+    corr = float(correlation_avg) if isinstance(correlation_avg, (int, float)) else None
 
     return WsEvalResult(
         active=is_active,
         weight=weight,
         contribution=contribution,
         rank=rank,
-        violations=violations if isinstance(violations, list) else None,
-        correlation_avg=float(correlation_avg) if isinstance(correlation_avg, (int, float)) else None,
+        violations=violations_list,
+        correlation_avg=corr,
     )
+
+
+def _value_from_mapping(mapping: object, key: str) -> Any:
+    if isinstance(mapping, dict):
+        return mapping.get(key)
+    return None

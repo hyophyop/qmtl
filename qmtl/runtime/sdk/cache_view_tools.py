@@ -154,27 +154,53 @@ def _build_frame(
     timestamps: Sequence[int], values: Sequence[Any], columns: Sequence[str] | None
 ) -> pd.DataFrame:
     if not values:
-        if columns is None:
-            return pd.DataFrame(index=pd.Index([], name="t"))
-        return pd.DataFrame(columns=list(columns), index=pd.Index([], name="t"))
+        return _empty_frame(columns)
 
     first_value = values[0]
     if isinstance(first_value, Mapping):
-        inferred_columns = columns or _collect_mapping_columns(values)
-        _validate_mapping_columns(values, inferred_columns)
-        rows = [{column: value.get(column) for column in inferred_columns} for value in values]
-        return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+        return _frame_from_mapping(timestamps, values, columns)
 
     if isinstance(first_value, Sequence) and not isinstance(first_value, (str, bytes, bytearray)):
-        inferred_columns = columns or [f"value_{i}" for i in range(len(first_value))]
-        if columns is not None and len(first_value) != len(columns):
-            raise ValueError("sequence values must match the number of columns")
-        rows = [
-            {column: value[i] for i, column in enumerate(inferred_columns)}
-            for value in values
-        ]
-        return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+        return _frame_from_sequence(timestamps, values, columns)
 
+    return _frame_from_scalar(timestamps, values, columns)
+
+
+def _empty_frame(columns: Sequence[str] | None) -> pd.DataFrame:
+    if columns is None:
+        return pd.DataFrame(index=pd.Index([], name="t"))
+    return pd.DataFrame(columns=list(columns), index=pd.Index([], name="t"))
+
+
+def _frame_from_mapping(
+    timestamps: Sequence[int],
+    values: Sequence[Mapping[str, Any]],
+    columns: Sequence[str] | None,
+) -> pd.DataFrame:
+    inferred_columns = columns or _collect_mapping_columns(values)
+    _validate_mapping_columns(values, inferred_columns)
+    rows = [{column: value.get(column) for column in inferred_columns} for value in values]
+    return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+
+
+def _frame_from_sequence(
+    timestamps: Sequence[int],
+    values: Sequence[Sequence[Any]],
+    columns: Sequence[str] | None,
+) -> pd.DataFrame:
+    inferred_columns = columns or [f"value_{i}" for i in range(len(values[0]))]
+    if columns is not None and len(values[0]) != len(columns):
+        raise ValueError("sequence values must match the number of columns")
+    rows = [
+        {column: value[i] for i, column in enumerate(inferred_columns)}
+        for value in values
+    ]
+    return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+
+
+def _frame_from_scalar(
+    timestamps: Sequence[int], values: Sequence[Any], columns: Sequence[str] | None
+) -> pd.DataFrame:
     inferred_columns = columns or ["value"]
     if columns is not None and len(inferred_columns) != 1:
         raise ValueError("scalar values can only map to a single column")

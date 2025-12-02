@@ -86,23 +86,11 @@ def _build_log_extra(
     completion_ratio: Any = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    parts = key.split(":", 5)
-    node_id = parts[0] if parts and parts[0] else "unknown"
-    interval = parts[1] if len(parts) > 1 and parts[1] else None
-    batch_start = parts[2] if len(parts) > 2 else None
-    batch_end = parts[3] if len(parts) > 3 else None
-    world = parts[4] if len(parts) > 4 and parts[4] else None
-    requested_as_of = parts[5] if len(parts) > 5 and parts[5] else None
-
+    parsed = _parse_lease_key(key)
     extra: dict[str, Any] = {
         "coordinator_id": coordinator_id,
         "lease_key": key,
-        "node_id": node_id,
-        "interval": _maybe_int(interval) if interval and interval.isdigit() else interval,
-        "batch_start": _maybe_int(batch_start),
-        "batch_end": _maybe_int(batch_end),
-        "world": world,
-        "requested_as_of": requested_as_of,
+        **parsed,
     }
 
     if worker_id:
@@ -120,6 +108,32 @@ def _build_log_extra(
         extra["reason"] = reason
 
     return extra
+
+
+def _parse_lease_key(key: str) -> dict[str, Any]:
+    parts = key.split(":", 5)
+    node_id = _pick_part(parts, 0, default="unknown")
+    interval = _pick_part(parts, 1)
+    batch_start = _pick_part(parts, 2)
+    batch_end = _pick_part(parts, 3)
+    world = _pick_part(parts, 4)
+    requested_as_of = _pick_part(parts, 5)
+
+    return {
+        "node_id": node_id,
+        "interval": _maybe_int(interval) if interval and interval.isdigit() else interval,
+        "batch_start": _maybe_int(batch_start),
+        "batch_end": _maybe_int(batch_end),
+        "world": world,
+        "requested_as_of": requested_as_of,
+    }
+
+
+def _pick_part(parts: list[str], index: int, default: str | None = None) -> str | None:
+    if index >= len(parts):
+        return default
+    value = parts[index] or default
+    return value
 
 
 @dataclass

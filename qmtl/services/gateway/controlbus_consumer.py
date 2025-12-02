@@ -5,6 +5,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import typing
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -170,42 +171,53 @@ class ControlBusConsumer:
                     self._consumer = None
 
     def _parse_kafka_message(self, message: Any) -> ControlBusMessage:
-        key = message.key.decode() if message.key else ""
-        headers = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in (message.headers or [])}
-        content_type = headers.get("content_type")
-        data: dict[str, Any]
-        if content_type == PROTO_CONTENT_TYPE:
-            # Placeholder proto path: decode via helper (still JSON today)
-            event: dict[str, Any] = decode_cb(
-                message.value if isinstance(message.value, (bytes, bytearray)) else str(message.value).encode()
-            )
-        else:
-            try:
-                event = (
-                    json.loads(message.value.decode())
-                    if isinstance(message.value, (bytes, bytearray))
-                    else json.loads(message.value)
-                )
-            except Exception:  # pragma: no cover - malformed message
-                event = {}
-
-        if content_type == PROTO_CONTENT_TYPE:
-            # For proto placeholder, keep full event as data for downstream consumers
-            data = event
-        else:
-            # For JSON, prefer nested payload when present; otherwise pass through
-            data = event.get("data", event)
+        headers = self._decode_headers(message.headers)
+        event = self._decode_event(message.value, headers.get("content_type"))
+        data = self._extract_data(event, headers.get("content_type"))
         etag = (data.get("etag") or headers.get("etag") or "")
         run_id = (data.get("run_id") or headers.get("run_id") or "")
         timestamp_ms = getattr(message, "timestamp", None)
         return ControlBusMessage(
             topic=message.topic,
-            key=key,
+            key=self._decode_key(message.key),
             etag=etag,
             run_id=run_id,
             data=data,
             timestamp_ms=timestamp_ms,
         )
+
+    @staticmethod
+    def _decode_key(raw_key: Any) -> str:
+        if not raw_key:
+            return ""
+        return raw_key.decode() if isinstance(raw_key, (bytes, bytearray)) else str(raw_key)
+
+    @staticmethod
+    def _decode_headers(raw_headers: Any) -> dict[str, Any]:
+        return {
+            key: (value.decode() if isinstance(value, (bytes, bytearray)) else value)
+            for key, value in (raw_headers or [])
+        }
+
+    @staticmethod
+    def _decode_event(raw_value: Any, content_type: str | None) -> dict[str, Any]:
+        if content_type == PROTO_CONTENT_TYPE:
+            payload = raw_value if isinstance(raw_value, (bytes, bytearray)) else str(raw_value).encode()
+            return decode_cb(payload)
+
+        try:
+            if isinstance(raw_value, (bytes, bytearray)):
+                return typing.cast(dict[str, Any], json.loads(raw_value.decode()))
+            return typing.cast(dict[str, Any], json.loads(raw_value))
+        except Exception:  # pragma: no cover - malformed message
+            return {}
+
+    @staticmethod
+    def _extract_data(event: dict[str, Any], content_type: str | None) -> dict[str, Any]:
+        if content_type == PROTO_CONTENT_TYPE:
+            return event
+        nested = event.get("data", event)
+        return nested if isinstance(nested, dict) else event
 
     def _marker_for_plan(self, payload: RebalancingPlannedData) -> tuple[Any, ...]:
         serialized = json.dumps(

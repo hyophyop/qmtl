@@ -99,31 +99,47 @@ class GarbageCollector:
         """Run one GC batch and return processed QueueInfo items."""
         now = now or datetime.now(UTC)
         all_queues = list(self.store.list_orphan_queues())
-        orphan_queue_total.set(len(all_queues))
-        orphan_queue_total._val = len(all_queues)  # type: ignore[attr-defined]
-        queues = []
-        for q in all_queues:
-            rule = self.policy.get(q.tag)
-            if not rule:
-                continue
-            if now - q.created_at >= rule.ttl + rule.grace:
-                queues.append((q, rule))
-        # adjust batch size based on broker load
-        batch = self.batch_size
-        if self.metrics.messages_in_per_sec() >= 80:
-            batch = max(1, batch // 2)
-        queues = queues[:batch]
-        processed: list[QueueInfo] = []
-        for q, rule in queues:
-            if rule.action == "drop":
-                self.store.drop_queue(q.name)
-            elif rule.action == "archive":
-                if self.archive is not None and q.tag == "sentinel":
-                    self.archive.archive(q.name)
-                self.store.drop_queue(q.name)
-            processed.append(q)
+        self._record_orphan_count(all_queues)
+
+        candidates = self._select_candidates(all_queues, now)
+        batch = self._adjust_batch_size()
+        processed = self._process_batch(candidates[:batch])
+
         gc_last_run_timestamp.set(now.timestamp())
         gc_last_run_timestamp._val = gc_last_run_timestamp._value.get()  # type: ignore[attr-defined]
+        return processed
+
+    def _record_orphan_count(self, queues: list[QueueInfo]) -> None:
+        orphan_queue_total.set(len(queues))
+        orphan_queue_total._val = len(queues)  # type: ignore[attr-defined]
+
+    def _select_candidates(
+        self, queues: list[QueueInfo], now: datetime
+    ) -> list[tuple[QueueInfo, GcRule]]:
+        candidates: list[tuple[QueueInfo, GcRule]] = []
+        for queue in queues:
+            rule = self.policy.get(queue.tag)
+            if not rule:
+                continue
+            if now - queue.created_at >= rule.ttl + rule.grace:
+                candidates.append((queue, rule))
+        return candidates
+
+    def _adjust_batch_size(self) -> int:
+        if self.metrics.messages_in_per_sec() >= 80:
+            return max(1, self.batch_size // 2)
+        return self.batch_size
+
+    def _process_batch(self, queues: list[tuple[QueueInfo, GcRule]]) -> list[QueueInfo]:
+        processed: list[QueueInfo] = []
+        for queue, rule in queues:
+            if rule.action == "drop":
+                self.store.drop_queue(queue.name)
+            elif rule.action == "archive":
+                if self.archive is not None and queue.tag == "sentinel":
+                    self.archive.archive(queue.name)
+                self.store.drop_queue(queue.name)
+            processed.append(queue)
         return processed
 
 

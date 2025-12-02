@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -43,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -61,6 +65,27 @@ jobs:
 
       - name: Install dependencies (dev)
         run: uv pip install -e .[dev]
+
+      - name: Radon diff (CC/MI)
+        run: |
+          git fetch origin main
+          changed=$(git diff --name-only origin/main... | rg '\.py$') || true
+          if [ -z "$changed" ]; then
+            echo "No Python changes; skipping radon diff scan"
+            exit 0
+          fi
+          cc_output=$(echo "$changed" | xargs -r uv run --with radon -m radon cc -s -n C)
+          mi_output=$(echo "$changed" | xargs -r uv run --with radon -m radon mi -s -n C)
+          echo "$cc_output"
+          echo "$mi_output"
+          if [ -n "$cc_output" ]; then
+            echo "Radon CC found C-or-worse blocks in changed files"
+            exit 1
+          fi
+          if [ -n "$mi_output" ]; then
+            echo "Radon MI warnings (C-or-worse) in changed files:"
+            echo "$mi_output"
+          fi
 
       - name: Type check (mypy)
         run: uv run --with mypy -m mypy

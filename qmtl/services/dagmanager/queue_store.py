@@ -67,32 +67,14 @@ class KafkaQueueStore(QueueStore):
         return QueueMetadata(name=name, tag=tag, created_at=created_at, interval=interval)
 
     def _extract_tag(self, name: str, config: Mapping[str, object]) -> str:
-        for key in ("qmtl.tag", "qmtl_tag", "queue.tag", "queue_tag"):
-            raw = config.get(key)
-            if isinstance(raw, str) and raw:
-                return raw
-
-        retention = config.get("retention.ms")
-        try:
-            retention_ms = int(retention) if retention is not None else None
-        except (TypeError, ValueError):
-            retention_ms = None
-
-        if isinstance(retention_ms, int):
-            seven_days = 7 * 24 * 60 * 60 * 1000
-            thirty_days = 30 * 24 * 60 * 60 * 1000
-            one_eighty_days = 180 * 24 * 60 * 60 * 1000
-            if retention_ms >= one_eighty_days:
-                return "sentinel"
-            if retention_ms <= seven_days:
-                return "raw"
-            if retention_ms <= thirty_days:
-                return "indicator"
-
-        lowered = name.lower()
-        if "sentinel" in lowered:
+        tag = self._tag_from_config(config)
+        if tag:
+            return tag
+        tag = self._tag_from_retention(config)
+        if tag:
+            return tag
+        if "sentinel" in name.lower():
             return "sentinel"
-
         return self._default_tag
 
     def _extract_created_at(
@@ -120,34 +102,72 @@ class KafkaQueueStore(QueueStore):
                 continue
         return None
 
+    def _tag_from_config(self, config: Mapping[str, object]) -> str | None:
+        for key in ("qmtl.tag", "qmtl_tag", "queue.tag", "queue_tag"):
+            raw = config.get(key)
+            if isinstance(raw, str) and raw:
+                return raw
+        return None
+
+    def _tag_from_retention(self, config: Mapping[str, object]) -> str | None:
+        retention = config.get("retention.ms")
+        try:
+            retention_ms = int(retention) if retention is not None else None
+        except (TypeError, ValueError):
+            return None
+
+        if not isinstance(retention_ms, int):
+            return None
+        seven_days = 7 * 24 * 60 * 60 * 1000
+        thirty_days = 30 * 24 * 60 * 60 * 1000
+        one_eighty_days = 180 * 24 * 60 * 60 * 1000
+        if retention_ms >= one_eighty_days:
+            return "sentinel"
+        if retention_ms <= seven_days:
+            return "raw"
+        if retention_ms <= thirty_days:
+            return "indicator"
+        return None
+
     @staticmethod
     def _coerce_timestamp(value: object) -> datetime | None:
         try:
             if isinstance(value, str):
-                value = value.strip()
-                if not value:
-                    return None
-                if value.isdigit():
-                    value = int(value)
-                else:
-                    if value.endswith("Z"):
-                        value = value[:-1] + "+00:00"
-                    ts = datetime.fromisoformat(value)
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                    return ts
+                return KafkaQueueStore._from_string(value)
             if isinstance(value, (int, float)):
-                if value > 10**12:
-                    value = float(value) / 1000.0
-                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+                return KafkaQueueStore._from_number(value)
             if isinstance(value, datetime):
-                if value.tzinfo is None:
-                    value = value.replace(tzinfo=timezone.utc)
-                return value.astimezone(timezone.utc)
+                return KafkaQueueStore._from_datetime(value)
         except Exception:  # pragma: no cover - defensive guard
             return None
         return None
 
+    @staticmethod
+    def _from_string(raw: str) -> datetime | None:
+        text = raw.strip()
+        if not text:
+            return None
+        if text.isdigit():
+            return KafkaQueueStore._from_number(int(text))
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        ts = datetime.fromisoformat(text)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+
+    @staticmethod
+    def _from_number(value: int | float) -> datetime | None:
+        adjusted = float(value)
+        if adjusted > 10**12:
+            adjusted = adjusted / 1000.0
+        return datetime.fromtimestamp(adjusted, tz=timezone.utc)
+
+    @staticmethod
+    def _from_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
 
 __all__ = ["KafkaQueueStore", "QueueMetadata"]
-

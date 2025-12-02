@@ -5,12 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import time
 from collections.abc import Awaitable, Callable, Iterable, MutableMapping
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, NamedTuple
 
 import pandas as pd
 
 from .data_io import AutoBackfillRequest, DataFetcher, HistoryBackend
-from .history_coverage import WarmupWindow, compute_missing_ranges
+from .history_coverage import CoverageRange, WarmupWindow, compute_missing_ranges
 from . import metrics
 
 if TYPE_CHECKING:  # pragma: no cover - optional dependency
@@ -130,6 +130,21 @@ class AutoBackfillStrategy(ABC):
         filtered = frame[~frame["ts"].isin(existing_ts)]
         return filtered, len(filtered) != before
 
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_frame(
+        frame: pd.DataFrame | None, start: int, end: int
+    ) -> pd.DataFrame:
+        if frame is None or frame.empty:
+            return pd.DataFrame()
+        if "ts" not in frame.columns:
+            raise KeyError("DataFetcher returned frame without 'ts' column")
+        df = frame.copy()
+        df["ts"] = df["ts"].astype(int)
+        df = df.sort_values("ts")
+        df = df[(df["ts"] >= start) & (df["ts"] <= end)]
+        return df
+
 
 class FetcherBackfillStrategy(AutoBackfillStrategy):
     """Backfill missing ranges using a :class:`DataFetcher`."""
@@ -215,21 +230,6 @@ class FetcherBackfillStrategy(AutoBackfillStrategy):
         self._observe_duration(started_at)
         return list(updated)
 
-    # ------------------------------------------------------------------
-    def _normalize_frame(
-        self, frame: pd.DataFrame | None, start: int, end: int
-    ) -> pd.DataFrame:
-        if frame is None or frame.empty:
-            return pd.DataFrame()
-        if "ts" not in frame.columns:
-            raise KeyError("DataFetcher returned frame without 'ts' column")
-        df = frame.copy()
-        df["ts"] = df["ts"].astype(int)
-        df = df.sort_values("ts")
-        df = df[(df["ts"] >= start) & (df["ts"] <= end)]
-        return df
-
-    # ------------------------------------------------------------------
 class LiveReplayBackfillStrategy(AutoBackfillStrategy):
     """Recreate missing history from live event buffers or recorders."""
 
@@ -275,46 +275,17 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
             self._observe_duration(started_at)
             return coverage
 
+        gap_results = await self._fill_missing_gaps(missing, request, backend)
         updated = coverage
         rows_written = 0
         refresh_post_write = False
 
-        for gap in missing:
-            events = await self._collect_events(
-                gap.start, gap.end, request.node_id, request.interval
-            )
-            frame = self._normalizer(events)
-            if frame is None or frame.empty:
+        for result in gap_results:
+            if not result.ranges:
                 continue
-            if "ts" not in frame.columns:
-                raise KeyError("replay source returned rows without 'ts' column")
-            frame = frame.copy()
-            frame["ts"] = frame["ts"].astype(int)
-            frame = frame.sort_values("ts")
-            frame = frame[(frame["ts"] >= gap.start) & (frame["ts"] <= gap.end)]
-            if frame.empty:
-                continue
-
-            existing = await backend.read_range(
-                gap.start,
-                gap.end + request.interval,
-                node_id=request.node_id,
-                interval=request.interval,
-            )
-            frame, refreshed = self._drop_existing(frame, existing)
-            refresh_post_write = refresh_post_write or refreshed
-            if frame.empty:
-                continue
-
-            await backend.write_rows(
-                frame, node_id=request.node_id, interval=request.interval
-            )
-            rows_written += len(frame)
-            updated = self._merge_ranges(
-                updated,
-                self._ranges_from_dataframe(frame, request.interval),
-                request.interval,
-            )
+            refresh_post_write = refresh_post_write or result.refresh
+            rows_written += result.rows_written
+            updated = self._merge_ranges(updated, result.ranges, request.interval)
 
         if refresh_post_write:
             refreshed_ranges = await backend.coverage(
@@ -332,21 +303,77 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
         self._observe_duration(started_at)
         return list(updated)
 
+    async def _fill_missing_gaps(
+        self,
+        missing: Iterable[CoverageRange],
+        request: AutoBackfillRequest,
+        backend: HistoryBackend,
+    ) -> list["_GapResult"]:
+        results: list["_GapResult"] = []
+        for gap in missing:
+            result = await self._process_gap(gap, request, backend)
+            results.append(result)
+        return results
+
+    async def _process_gap(
+        self,
+        gap: CoverageRange,
+        request: AutoBackfillRequest,
+        backend: HistoryBackend,
+    ) -> "_GapResult":
+        events = await self._collect_events(
+            gap.start, gap.end, request.node_id, request.interval
+        )
+        frame = self._normalize_frame(self._normalizer(events), gap.start, gap.end)
+        if frame is None or frame.empty:
+            return _GapResult(ranges=[], rows_written=0, refresh=False)
+
+        existing = await backend.read_range(
+            gap.start,
+            gap.end + request.interval,
+            node_id=request.node_id,
+            interval=request.interval,
+        )
+        frame, refreshed = self._drop_existing(frame, existing)
+        if frame.empty:
+            return _GapResult(ranges=[], rows_written=0, refresh=refreshed)
+
+        await backend.write_rows(
+            frame, node_id=request.node_id, interval=request.interval
+        )
+        ranges = self._ranges_from_dataframe(frame, request.interval)
+        return _GapResult(ranges=ranges, rows_written=len(frame), refresh=refreshed)
+
     # ------------------------------------------------------------------
     async def _collect_events(
         self, start: int, end: int, node_id: str, interval: int
     ) -> list[ReplayEvent]:
         if self._replay_source is not None:
-            result = await self._replay_source(start, end, node_id, interval)
-            return list(result)
+            return await self._collect_from_replay_source(start, end, node_id, interval)
+
         recorder = getattr(self._event_service, "recorder", None)
         if recorder is None:
             return []
-        # Prefer explicit replay helpers
+
+        events = await self._collect_from_recorder(recorder, start, end, node_id, interval)
+        if events:
+            return events
+        return self._collect_from_buffer(recorder, start, end)
+
+    async def _collect_from_replay_source(
+        self, start: int, end: int, node_id: str, interval: int
+    ) -> list[ReplayEvent]:
+        result = await self._replay_source(start, end, node_id, interval)  # type: ignore[misc]
+        return list(result)
+
+    async def _collect_from_recorder(
+        self, recorder: Any, start: int, end: int, node_id: str, interval: int
+    ) -> list[ReplayEvent]:
         replay_fn = getattr(recorder, "replay", None)
         if callable(replay_fn):
             result = await replay_fn(start, end, node_id=node_id, interval=interval)
             return list(result)
+
         read_fn = getattr(recorder, "read_range", None)
         if callable(read_fn):
             result = await read_fn(start, end, node_id=node_id, interval=interval)
@@ -356,6 +383,9 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
                     for _, row in result.iterrows()
                 ]
             return list(result)
+        return []
+
+    def _collect_from_buffer(self, recorder: Any, start: int, end: int) -> list[ReplayEvent]:
         buffer_attr = getattr(recorder, "buffer", None)
         if buffer_attr is None:
             return []
@@ -394,3 +424,9 @@ __all__ = [
     "ReplayEvent",
     "ReplaySource",
 ]
+
+
+class _GapResult(NamedTuple):
+    ranges: list[tuple[int, int]]
+    rows_written: int
+    refresh: bool

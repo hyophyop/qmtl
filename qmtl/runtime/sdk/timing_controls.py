@@ -36,26 +36,33 @@ class MarketHours:
 
     def get_session(self, timestamp: datetime) -> MarketSession:
         """Determine market session for a given timestamp."""
-        # Convert timestamp to market timezone
-        if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
-
-        # Convert to market time (simplified - assumes US/Eastern)
-        market_time = timestamp.time()
-
-        regular_end = self.regular_end
-        if self.early_closes and timestamp.date() in self.early_closes:
-            regular_end = self.early_closes[timestamp.date()]
-
-        # Check if it's a weekend (simplified)
-        if timestamp.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        normalized = self._normalize_timestamp(timestamp)
+        if self._is_weekend(normalized):
             return MarketSession.CLOSED
 
+        market_time = normalized.time()
+        regular_end = self._resolve_regular_end(normalized)
+        return self._session_for_time(market_time, regular_end)
+
+    def _normalize_timestamp(self, timestamp: datetime) -> datetime:
+        if timestamp.tzinfo is None:
+            return timestamp.replace(tzinfo=timezone.utc)
+        return timestamp
+
+    def _is_weekend(self, timestamp: datetime) -> bool:
+        return timestamp.weekday() >= 5
+
+    def _resolve_regular_end(self, timestamp: datetime) -> time:
+        if self.early_closes and timestamp.date() in self.early_closes:
+            return self.early_closes[timestamp.date()]
+        return self.regular_end
+
+    def _session_for_time(self, market_time: time, regular_end: time) -> MarketSession:
         if market_time < self.pre_market_start:
             return MarketSession.CLOSED
-        elif market_time < self.regular_start:
+        if market_time < self.regular_start:
             return MarketSession.PRE_MARKET
-        elif market_time <= regular_end:
+        if market_time <= regular_end:
             if (
                 self.lunch_start
                 and self.lunch_end
@@ -63,10 +70,9 @@ class MarketHours:
             ):
                 return MarketSession.LUNCH
             return MarketSession.REGULAR
-        elif market_time <= self.post_market_end:
+        if market_time <= self.post_market_end:
             return MarketSession.POST_MARKET
-        else:
-            return MarketSession.CLOSED
+        return MarketSession.CLOSED
 
 
 class TimingController:

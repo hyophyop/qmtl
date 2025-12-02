@@ -219,37 +219,49 @@ def _parse_points(points_payload: Any) -> list[ValidationPoint]:
 
     parsed: list[ValidationPoint] = []
     for raw in points_payload:
-        if isinstance(raw, Mapping):
-            input_payload = raw.get("input") or raw.get("inputs")
-            expected = raw.get("expected")
-            if expected is None and "output" in raw:
-                expected = raw.get("output")
-            if expected is None and "value" in raw:
-                expected = raw.get("value")
-            if input_payload is None:
-                known_keys = {"expected", "output", "value", "input", "inputs"}
-                leftovers = {k: v for k, v in raw.items() if k not in known_keys}
-                if leftovers:
-                    input_payload = leftovers
-            if not isinstance(input_payload, Mapping):
-                raise ValueError("Each validation sample must include an 'input' mapping")
-        elif isinstance(raw, (tuple, list)) and len(raw) == 2:
-            input_payload, expected = raw
-            if not isinstance(input_payload, Mapping):
-                raise ValueError("Tuple validation samples must be (mapping, expected)")
-        else:
-            raise ValueError("validation_sample points must be mappings or (mapping, expected) tuples")
-
-        parsed.append(
-            ValidationPoint(
-                input=cast(Mapping[str, Any], input_payload),
-                expected=cast(float | int | None, expected),
-            )
-        )
+        parsed.append(_parse_point(raw))
 
     if not parsed:
         raise ValueError("validation_sample requires at least one point")
     return parsed
+
+
+def _parse_point(raw: Any) -> ValidationPoint:
+    if isinstance(raw, Mapping):
+        input_payload, expected = _parse_point_mapping(raw)
+    elif isinstance(raw, (tuple, list)) and len(raw) == 2:
+        input_payload, expected = _parse_point_tuple(raw)
+    else:
+        raise ValueError("validation_sample points must be mappings or (mapping, expected) tuples")
+
+    return ValidationPoint(
+        input=cast(Mapping[str, Any], input_payload),
+        expected=cast(float | int | None, expected),
+    )
+
+
+def _parse_point_mapping(raw: Mapping[str, Any]) -> tuple[Mapping[str, Any], Any]:
+    input_payload = raw.get("input") or raw.get("inputs")
+    expected = raw.get("expected")
+    if expected is None:
+        expected = raw.get("output", raw.get("value"))
+
+    if input_payload is None:
+        known_keys = {"expected", "output", "value", "input", "inputs"}
+        leftovers = {k: v for k, v in raw.items() if k not in known_keys}
+        if leftovers:
+            input_payload = leftovers
+
+    if not isinstance(input_payload, Mapping):
+        raise ValueError("Each validation sample must include an 'input' mapping")
+    return input_payload, expected
+
+
+def _parse_point_tuple(raw: Sequence[Any]) -> tuple[Mapping[str, Any], Any]:
+    input_payload, expected = raw
+    if not isinstance(input_payload, Mapping):
+        raise ValueError("Tuple validation samples must be (mapping, expected)")
+    return input_payload, expected
 
 
 def _within_tolerance(expected: float, actual: float, *, epsilon_abs: float, epsilon_rel: float) -> tuple[bool, float, float]:
@@ -500,6 +512,39 @@ def build_expression_strategy(
     return ExpressionStrategy
 
 
+def _extract_dag_fields(
+    dag_spec: Any,
+) -> tuple[str, Any, Mapping[str, Any], Any, Any, dict[str, Any] | None, Any, Any]:
+    expression = getattr(dag_spec, "equation", None) or getattr(dag_spec, "expression", "")
+    expression_key = getattr(dag_spec, "expression_key", None)
+    data_spec_mapping = _coerce_mapping(getattr(dag_spec, "data_spec", None))
+    interval, period = _extract_interval_period(data_spec_mapping)
+    dag_dict = _maybe_dataclass_asdict(dag_spec)
+    dag_nodes = getattr(dag_spec, "nodes", None)
+    dag_edges = getattr(dag_spec, "edges", None)
+    expr_str = expression or ""
+    return expr_str, expression_key, data_spec_mapping, interval, period, dag_dict, dag_nodes, dag_edges
+
+
+def _coerce_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _extract_interval_period(data_spec_mapping: Mapping[str, Any]) -> tuple[Any, Any]:
+    interval = data_spec_mapping.get("interval") or data_spec_mapping.get("timeframe")
+    period = data_spec_mapping.get("period") or data_spec_mapping.get("min_history")
+    return interval, period
+
+
+def _maybe_dataclass_asdict(dag_spec: Any) -> dict[str, Any] | None:
+    if dataclass_asdict is None or not hasattr(dag_spec, "__dataclass_fields__"):
+        return None
+    try:  # pragma: no cover - defensive
+        return dataclass_asdict(dag_spec)
+    except Exception:
+        return None
+
+
 def build_strategy_from_dag_spec(
     dag_spec: Any,
     *,
@@ -512,27 +557,16 @@ def build_strategy_from_dag_spec(
     if history_provider is None:
         raise ValueError("history_provider (Seamless) is required for DAG-based strategies")
 
-    expression = getattr(dag_spec, "equation", None) or getattr(dag_spec, "expression", "")
-    data_spec = getattr(dag_spec, "data_spec", None)
-    expression_key = getattr(dag_spec, "expression_key", None)
-
-    dag_dict: dict[str, Any] | None = None
-    if dataclass_asdict is not None and hasattr(dag_spec, "__dataclass_fields__"):
-        try:  # pragma: no cover - defensive
-            dag_dict = dataclass_asdict(dag_spec)
-        except Exception:
-            dag_dict = None
-    dag_nodes = getattr(dag_spec, "nodes", None)
-    dag_edges = getattr(dag_spec, "edges", None)
-
-    data_spec_mapping = data_spec if isinstance(data_spec, Mapping) else {}
-    interval = None
-    period = None
-    if isinstance(data_spec_mapping, Mapping):
-        interval = data_spec_mapping.get("interval") or data_spec_mapping.get("timeframe")
-        period = data_spec_mapping.get("period") or data_spec_mapping.get("min_history")
-
-    expr_str = expression or ""
+    (
+        expr_str,
+        expression_key,
+        data_spec_mapping,
+        interval,
+        period,
+        dag_dict,
+        dag_nodes,
+        dag_edges,
+    ) = _extract_dag_fields(dag_spec)
 
     resolved_spec_version = spec_version or getattr(dag_spec, "spec_version", None) or "v1"
     sr_meta = _build_sr_meta(

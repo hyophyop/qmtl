@@ -184,31 +184,53 @@ def _get_or_create_metric(
     reg = registry or global_registry
     labels = tuple(labelnames or ())
     cache_key = (reg, name)
+
     cached = _METRIC_CACHE.get(cache_key)
-    if cached is not None:
-        if isinstance(cached, metric_cls) and _labels_match(cached, labels):
-            return cached  # type: ignore[return-value]
-        try:
-            reg.unregister(cached)
-        except Exception:  # pragma: no cover - defensive
-            pass
-        _METRIC_CACHE.pop(cache_key, None)
+    metric = _reuse_cached_metric(cached, metric_cls, labels)
+    if metric is not None:
+        return metric
 
     existing = _lookup_metric(reg, name)
-    if existing is not None:
-        if not isinstance(existing, metric_cls):  # pragma: no cover - defensive
-            raise TypeError(
-                f"Metric '{name}' already registered with incompatible type {type(existing)!r}"
-            )
-        if not _labels_match(existing, labels):
-            reg.unregister(existing)
-            existing = None
-    if existing is None:
+    metric = _reuse_existing_metric(existing, metric_cls, labels, name, reg)
+    if metric is None:
         metric = metric_cls(name, documentation, labels, registry=reg)
-    else:
-        metric = existing
+
     _METRIC_CACHE[cache_key] = metric
     return metric  # type: ignore[return-value]
+
+
+def _reuse_cached_metric(
+    cached: Any, metric_cls: type[MetricT], labels: tuple[str, ...]
+) -> MetricT | None:
+    if cached is None:
+        return None
+    if isinstance(cached, metric_cls) and _labels_match(cached, labels):
+        return cached  # type: ignore[return-value]
+    try:
+        # Cached metric is stale or incompatible; unregister defensively
+        cached._registry.unregister(cached)  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - defensive
+        pass
+    return None
+
+
+def _reuse_existing_metric(
+    existing: Any,
+    metric_cls: type[MetricT],
+    labels: tuple[str, ...],
+    name: str,
+    registry: CollectorRegistry,
+) -> MetricT | None:
+    if existing is None:
+        return None
+    if not isinstance(existing, metric_cls):  # pragma: no cover - defensive
+        raise TypeError(
+            f"Metric '{name}' already registered with incompatible type {type(existing)!r}"
+        )
+    if not _labels_match(existing, labels):
+        registry.unregister(existing)
+        return None
+    return existing  # type: ignore[return-value]
 
 
 def _ensure_test_store(
@@ -399,5 +421,4 @@ def get_metric_value(
                 continue
             return float(sample.value)
     return 0.0
-
 
