@@ -222,21 +222,15 @@ def _resolve_time_in_force(
     venue: str | None,
     options: OrderOptions,
 ) -> str:
-    policies = options.venue_policies or {}
-    policy = policies.get(venue or "")
-    if policy is None and venue:
-        policy = policies.get(venue.lower())
-    if policy is None:
-        policy = policies.get("*")
+    policy = _lookup_venue_policy(options, venue)
     if policy is None:
         return tif
-    if reduce_only and not policy.supports_reduce_only:
-        return tif
-    if reduce_only and policy.reduce_only_requires_ioc:
-        return "IOC"
-    if policy.default_time_in_force:
-        return policy.default_time_in_force
-    return tif
+    if reduce_only:
+        if not policy.supports_reduce_only:
+            return tif
+        if policy.reduce_only_requires_ioc:
+            return "IOC"
+    return policy.default_time_in_force or tif
 
 
 def _apply_reduce_only_flag(
@@ -247,13 +241,16 @@ def _apply_reduce_only_flag(
 ) -> bool:
     if not reduce_only:
         return False
-    policies = options.venue_policies or {}
-    policy = policies.get(venue or "") or policies.get((venue or "").lower())
-    if policy is None:
-        policy = policies.get("*")
+    policy = _lookup_venue_policy(options, venue)
     if policy is None:
         return reduce_only
-    return policy.supports_reduce_only
+    return bool(policy.supports_reduce_only)
+
+
+def _lookup_venue_policy(options: OrderOptions, venue: str | None):
+    policies = options.venue_policies or {}
+    key = venue or ""
+    return policies.get(key) or policies.get(key.lower()) or policies.get("*")
 
 
 def _build_order(

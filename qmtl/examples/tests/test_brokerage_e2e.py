@@ -13,36 +13,41 @@ from qmtl.runtime.brokerage import (
 )
 
 
-def test_brokerage_e2e_scenarios():
+def _setup_demo():
     model, settlement = build_model()
     acct = Account(cash=100_000.0)
     hours = cast(ExchangeHoursProvider | None, getattr(model, "hours", None))
     assert hours is not None
-
     day = datetime(2024, 1, 2, tzinfo=timezone.utc)
     open_ts = datetime.combine(day.date(), hours.market_hours.regular_start, tzinfo=timezone.utc)
     close_time = hours.early_closes.get(day.date(), hours.market_hours.regular_end)
     close_ts = datetime.combine(day.date(), close_time, tzinfo=timezone.utc)
+    return model, settlement, acct, hours, open_ts, close_ts
 
-    # MOO fills at open with slippage and fee
+
+def test_moo_and_ioc_fills():
+    model, _settlement, acct, hours, open_ts, _close_ts = _setup_demo()
+
     order_moo = Order("AAPL", 10, 100.0, OrderType.MOO)
     fill_moo = model.execute_order(acct, order_moo, 100.0, ts=open_ts)
     assert fill_moo.quantity == 10
     assert fill_moo.price > 100.0
     assert fill_moo.fee >= 1.0
 
-    # IOC partially fills up to liquidity cap
     in_session = open_ts + timedelta(minutes=1)
     order_ioc = Order("AAPL", 100, 100.0, OrderType.MARKET, tif=TimeInForce.IOC)
     fill_ioc = model.execute_order(acct, order_ioc, 100.0, ts=in_session)
     assert fill_ioc.quantity == 50
 
-    # FOK fails when full quantity unavailable
+
+def test_fok_and_moc_behaviour():
+    model, _settlement, acct, hours, open_ts, close_ts = _setup_demo()
+
+    in_session = open_ts + timedelta(minutes=1)
     order_fok = Order("AAPL", 60, 100.0, OrderType.MARKET, tif=TimeInForce.FOK)
     fill_fok = model.execute_order(acct, order_fok, 100.0, ts=in_session)
     assert fill_fok.quantity == 0
 
-    # MOC fills only at close
     before_close = close_ts - timedelta(minutes=1)
     early = model.execute_order(acct, Order("AAPL", 10, 100.0, OrderType.MOC), 100.0, ts=before_close)
     assert early.quantity == 0
@@ -50,12 +55,15 @@ def test_brokerage_e2e_scenarios():
     fill_moc = model.execute_order(acct, order_moc, 100.0, ts=close_ts)
     assert fill_moc.quantity == 10
 
-    # Market closed on holiday
+
+def test_market_closed_and_settlement():
+    model, settlement, acct, hours, open_ts, close_ts = _setup_demo()
+
+    order_moo = Order("AAPL", 10, 100.0, OrderType.MOO)
     holiday_ts = datetime(2024, 7, 4, 15, 0, tzinfo=timezone.utc)
     with pytest.raises(ValueError, match="Market is closed"):
         model.can_submit_order(acct, order_moo, ts=holiday_ts)
 
-    # Deferred settlement keeps cash unchanged until applied
     balance = acct.cashbook.get(acct.base_currency).balance
     assert balance == pytest.approx(100_000.0)
     settlement.apply_due(acct, now=close_ts + timedelta(days=1))

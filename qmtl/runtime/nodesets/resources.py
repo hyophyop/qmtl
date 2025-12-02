@@ -35,18 +35,24 @@ def _infer_side(order: Mapping[str, object]) -> str:
         if s in {"buy", "sell", "long", "short"}:
             return "buy" if s in {"buy", "long"} else "sell"
     qty = order.get("quantity")
-    if qty is not None:
-        try:
-            return "buy" if float(qty) >= 0 else "sell"
-        except (TypeError, ValueError):
-            pass
+    if _is_numeric(qty):
+        return "buy" if float(qty) >= 0 else "sell"
+    return _infer_side_from_value(order)
+
+
+def _is_numeric(value: object) -> bool:
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _infer_side_from_value(order: Mapping[str, object]) -> str:
     for key in ("value", "percent", "target_percent"):
         val = order.get(key)
-        if val is not None:
-            try:
-                return "buy" if float(val) >= 0 else "sell"
-            except (TypeError, ValueError):
-                continue
+        if _is_numeric(val):
+            return "buy" if float(val) >= 0 else "sell"
     return "buy"
 
 
@@ -107,4 +113,3 @@ __all__ = [
     "make_activation_weight_fn",
     "clear_shared_portfolios",
 ]
-

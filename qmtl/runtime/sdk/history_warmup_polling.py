@@ -55,50 +55,67 @@ class HistoryWarmupPoller:
         is_ready: Callable[[], bool],
     ) -> WarmupResult:
         deadline = self._time_source() + request.timeout
+        coverage_list, missing = await self._refresh_missing(request)
+        missing = await self._maybe_ensure_range(request, missing, is_ready)
+        timed_out = False
+
+        while missing and not is_ready():
+            coverage_list, missing, timed_out = await self._fill_missing_once(
+                request, missing, is_ready, deadline
+            )
+            if timed_out or (request.stop_on_ready and is_ready()):
+                break
+
+        return WarmupResult(coverage=coverage_list, missing=missing, timed_out=timed_out)
+
+    async def _refresh_missing(
+        self, request: WarmupRequest
+    ) -> tuple[list[tuple[int, int]], list[CoverageRange]]:
         coverage_list = list(
             await self._provider.coverage(node_id=request.node_id, interval=request.interval)
         )
         missing = compute_missing_ranges(coverage_list, request.window)
-        timed_out = False
+        return coverage_list, missing
 
+    async def _maybe_ensure_range(
+        self,
+        request: WarmupRequest,
+        missing: list[CoverageRange],
+        is_ready: Callable[[], bool],
+    ) -> list[CoverageRange]:
         ensure_range = getattr(self._provider, "ensure_range", None)
-        if callable(ensure_range) and missing and not is_ready():
-            await ensure_range(
-                request.window.start,
-                request.window.end,
+        if not (callable(ensure_range) and missing and not is_ready()):
+            return missing
+
+        await ensure_range(
+            request.window.start,
+            request.window.end,
+            node_id=request.node_id,
+            interval=request.interval,
+        )
+        _, new_missing = await self._refresh_missing(request)
+        return new_missing
+
+    async def _fill_missing_once(
+        self,
+        request: WarmupRequest,
+        missing: list[CoverageRange],
+        is_ready: Callable[[], bool],
+        deadline: float,
+    ) -> tuple[list[tuple[int, int]], list[CoverageRange], bool]:
+        for gap in missing:
+            await self._provider.fill_missing(
+                gap.start,
+                gap.end,
                 node_id=request.node_id,
                 interval=request.interval,
             )
-            coverage_list = list(
-                await self._provider.coverage(
-                    node_id=request.node_id, interval=request.interval
-                )
-            )
-            missing = compute_missing_ranges(coverage_list, request.window)
-
-        while not is_ready() and missing:
-            for gap in missing:
-                await self._provider.fill_missing(
-                    gap.start,
-                    gap.end,
-                    node_id=request.node_id,
-                    interval=request.interval,
-                )
-                if request.stop_on_ready and is_ready():
-                    break
-            if request.stop_on_ready:
+            if request.stop_on_ready and is_ready():
                 break
-            if self._time_source() > deadline:
-                timed_out = True
-                break
-            coverage_list = list(
-                await self._provider.coverage(
-                    node_id=request.node_id, interval=request.interval
-                )
-            )
-            missing = compute_missing_ranges(coverage_list, request.window)
 
-        return WarmupResult(coverage=coverage_list, missing=missing, timed_out=timed_out)
+        timed_out = self._time_source() > deadline
+        coverage_list, new_missing = await self._refresh_missing(request)
+        return coverage_list, new_missing, timed_out
 
 
 __all__ = ["HistoryWarmupPoller", "WarmupRequest", "WarmupResult", "HistoryProviderProtocol"]

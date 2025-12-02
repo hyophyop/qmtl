@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from opentelemetry import trace
 
@@ -174,43 +174,15 @@ class NodeFeedMixin(CacheActivationMixin):
         validate_feed_params(upstream_id, interval, timestamp, on_missing)
 
         mode = getattr(self, "_schema_enforcement", "fail").lower()
-        if (
-            self.expected_schema
-            and self._should_validate_schema(payload)
-            and mode != "off"
-        ):
-            from ..schema_validation import validate_schema
+        self._maybe_validate_schema(mode, payload)
 
-            try:
-                validate_schema(payload, self.expected_schema)
-            except NodeValidationError as exc:
-                msg = f"{self.name or self.node_id}: {exc}"
-                if mode == "warn":
-                    logger.warning(msg)
-                elif mode == "fail":
-                    raise NodeValidationError(msg) from exc
-
-        with tracer.start_as_current_span(
-            "node.feed", attributes={"node.id": self.node_id}
-        ):
-            self._activate_cache_key()
-            self.cache.append(upstream_id, interval, timestamp, payload)
-            self._record_resident_bytes()
-
-        if self.event_service is not None:
-            self.event_service.record(self.node_id, interval, timestamp, payload)
-
+        self._record_feed(upstream_id, interval, timestamp, payload)
         self._maybe_record_warmup_ready()
 
         if self._is_missing(upstream_id, interval, on_missing):
             return False
 
-        try:
-            self._last_watermark = self.cache.watermark(
-                allowed_lateness=self.allowed_lateness
-            )
-        except Exception:
-            self._last_watermark = None
+        self._last_watermark = self._compute_watermark()
 
         if self.pre_warmup or self.compute_fn is None:
             return False
@@ -222,6 +194,42 @@ class NodeFeedMixin(CacheActivationMixin):
         watermark = int(self._last_watermark)
         policy = LateEventPolicy(self.on_late, self._late_events)
         return policy.should_process(upstream_id, bucket_ts, watermark, payload)
+
+    def _maybe_validate_schema(self, mode: str, payload: Any) -> None:
+        if (
+            not self.expected_schema
+            or not self._should_validate_schema(payload)
+            or mode == "off"
+        ):
+            return
+
+        from ..schema_validation import validate_schema
+
+        try:
+            validate_schema(payload, self.expected_schema)
+        except NodeValidationError as exc:
+            msg = f"{self.name or self.node_id}: {exc}"
+            if mode == "warn":
+                logger.warning(msg)
+                return
+            raise NodeValidationError(msg) from exc
+
+    def _record_feed(self, upstream_id: str, interval: int, timestamp: int, payload: Any) -> None:
+        with tracer.start_as_current_span(
+            "node.feed", attributes={"node.id": self.node_id}
+        ):
+            self._activate_cache_key()
+            self.cache.append(upstream_id, interval, timestamp, payload)
+            self._record_resident_bytes()
+
+        if self.event_service is not None:
+            self.event_service.record(self.node_id, interval, timestamp, payload)
+
+    def _compute_watermark(self) -> int | None:
+        try:
+            return cast(int | None, self.cache.watermark(allowed_lateness=self.allowed_lateness))
+        except Exception:
+            return None
 
     def _should_validate_schema(self, payload: Any) -> bool:
         try:  # Optional pandas dependency

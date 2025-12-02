@@ -139,28 +139,52 @@ def normalize_order_intent(order: OrderPayload | MutableOrderPayload | None) -> 
     if normalized is None:
         return None
 
-    symbol = normalized.get("symbol")
-    if not isinstance(symbol, str) or not symbol:
+    if not _has_symbol(normalized):
         return None
 
-    # Normalize side/action and order type aliases.
-    if "side" not in normalized:
-        action = normalized.get("action")
-        if isinstance(action, str):
-            normalized["side"] = action
-    if "type" not in normalized and "order_type" in normalized:
-        normalized["type"] = normalized.get("order_type")
-    if "time_in_force" not in normalized and "tif" in normalized:
-        normalized["time_in_force"] = normalized.get("tif")
-    if "quantity" not in normalized and "size" in normalized:
-        # Accept legacy size alias for absolute quantity.
-        normalized["quantity"] = normalized["size"]
-    if "price" in normalized and "limit_price" not in normalized:
-        typ = normalized.get("type")
-        if typ in {OrderType.LIMIT, OrderType.STOP_LIMIT, "limit", "stop_limit"}:
-            normalized["limit_price"] = normalized.get("price")
+    _apply_side_aliases(normalized)
+    _apply_type_aliases(normalized)
+    _apply_time_in_force_alias(normalized)
+    _apply_quantity_alias(normalized)
+    _infer_limit_price(normalized)
 
     return cast(OrderIntent | SizedOrder, normalized)
+
+
+def _has_symbol(order: dict[str, object]) -> bool:
+    symbol = order.get("symbol")
+    return isinstance(symbol, str) and bool(symbol)
+
+
+def _apply_side_aliases(order: dict[str, object]) -> None:
+    if "side" in order:
+        return
+    action = order.get("action")
+    if isinstance(action, str):
+        order["side"] = action
+
+
+def _apply_type_aliases(order: dict[str, object]) -> None:
+    if "type" not in order and "order_type" in order:
+        order["type"] = order.get("order_type")
+
+
+def _apply_time_in_force_alias(order: dict[str, object]) -> None:
+    if "time_in_force" not in order and "tif" in order:
+        order["time_in_force"] = order.get("tif")
+
+
+def _apply_quantity_alias(order: dict[str, object]) -> None:
+    if "quantity" not in order and "size" in order:
+        order["quantity"] = order["size"]
+
+
+def _infer_limit_price(order: dict[str, object]) -> None:
+    if "price" not in order or "limit_price" in order:
+        return
+    typ = order.get("type")
+    if typ in {OrderType.LIMIT, OrderType.STOP_LIMIT, "limit", "stop_limit"}:
+        order["limit_price"] = order.get("price")
 
 
 def prepare_gateway_payload(
@@ -175,17 +199,25 @@ def prepare_gateway_payload(
 
     payload: dict[str, object] = dict(order)
     if include_metadata:
-        if world_id and "world_id" not in payload:
-            payload["world_id"] = world_id
-        if strategy_id and "strategy_id" not in payload:
-            payload["strategy_id"] = strategy_id
-        if correlation_id and "correlation_id" not in payload:
-            payload["correlation_id"] = correlation_id
-    if "type" not in payload and "order_type" in payload:
-        payload["type"] = payload.get("order_type")
-    if "time_in_force" not in payload and "tif" in payload:
-        payload["time_in_force"] = payload.get("tif")
+        _attach_metadata(payload, world_id=world_id, strategy_id=strategy_id, correlation_id=correlation_id)
+    _apply_type_aliases(payload)
+    _apply_time_in_force_alias(payload)
     return cast(GatewayOrderPayload, payload)
+
+
+def _attach_metadata(
+    payload: dict[str, object],
+    *,
+    world_id: str | None,
+    strategy_id: str | None,
+    correlation_id: str | None,
+) -> None:
+    if world_id and "world_id" not in payload:
+        payload["world_id"] = world_id
+    if strategy_id and "strategy_id" not in payload:
+        payload["strategy_id"] = strategy_id
+    if correlation_id and "correlation_id" not in payload:
+        payload["correlation_id"] = correlation_id
 
 
 __all__ = [

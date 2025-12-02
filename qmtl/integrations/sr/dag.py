@@ -110,24 +110,43 @@ def _normalize_expr(expr: sp.Expr) -> sp.Expr:
     args = [_normalize_expr(arg) for arg in expr.args]
     func_name = expr.func.__name__
 
-    if func_name in _COMMUTATIVE_FUNCS:
-        args = sorted(args, key=_sort_key)
+    args = _maybe_sort_commutative(func_name, args)
+    reduced = _maybe_drop_neutral(func_name, args)
+    if reduced is not None:
+        return reduced
 
-    if func_name in _NEUTRAL_ELEMENTS:
-        neutral = _NEUTRAL_ELEMENTS[func_name]
-        args = [arg for arg in args if arg != neutral]
-        if not args:
-            return sp.Float(neutral)
-        if len(args) == 1:
-            return args[0]
-
-    if func_name == "Pow" and len(args) == 2 and args[1] == 1:
-        return args[0]
+    pow_simplified = _maybe_simplify_pow(func_name, args)
+    if pow_simplified is not None:
+        return pow_simplified
 
     try:
         return expr.func(*args, evaluate=False)
     except Exception:  # pragma: no cover - defensive fallback
         return expr
+
+
+def _maybe_sort_commutative(func_name: str, args: list[sp.Expr]) -> list[sp.Expr]:
+    if func_name in _COMMUTATIVE_FUNCS:
+        return sorted(args, key=_sort_key)
+    return args
+
+
+def _maybe_drop_neutral(func_name: str, args: list[sp.Expr]) -> sp.Expr | None:
+    if func_name not in _NEUTRAL_ELEMENTS:
+        return None
+    neutral = _NEUTRAL_ELEMENTS[func_name]
+    filtered = [arg for arg in args if arg != neutral]
+    if not filtered:
+        return sp.Float(neutral)
+    if len(filtered) == 1:
+        return filtered[0]
+    return None
+
+
+def _maybe_simplify_pow(func_name: str, args: list[sp.Expr]) -> sp.Expr | None:
+    if func_name == "Pow" and len(args) == 2 and args[1] == 1:
+        return args[0]
+    return None
 
 
 def _expression_key(expr: sp.Expr, *, spec_version: str = "v1") -> str:
@@ -200,15 +219,17 @@ class _DagBuilder:
         if node.func.__name__ != "Mul" or len(node.args) != 2:
             return False, node, node
         left, right = node.args
-        if right.func.__name__ == "Pow" and len(right.args) == 2:
-            base, exp = right.args
-            if isinstance(exp, sp.Number) and float(exp) == -1.0:
-                return True, left, base
-        if left.func.__name__ == "Pow" and len(left.args) == 2:
-            base, exp = left.args
-            if isinstance(exp, sp.Number) and float(exp) == -1.0:
-                return True, right, base
+        if self._is_inverse_pow(right):
+            return True, left, right.args[0]
+        if self._is_inverse_pow(left):
+            return True, right, left.args[0]
         return False, node, node
+
+    def _is_inverse_pow(self, expr: sp.Expr) -> bool:
+        if expr.func.__name__ != "Pow" or len(expr.args) != 2:
+            return False
+        base, exp = expr.args
+        return isinstance(exp, sp.Number) and float(exp) == -1.0
 
     def _maybe_subtraction(self, node: sp.Expr) -> tuple[bool, sp.Expr, sp.Expr]:
         if node.func.__name__ != "Add" or len(node.args) != 2:
@@ -232,6 +253,24 @@ class _DagBuilder:
 
         func_name = node.func.__name__
 
+        special = self._walk_special(node)
+        if special is not None:
+            return special
+
+        mapping = self._lookup_mapping(func_name)
+        if not mapping:
+            raise ValueError(f"Unsupported expression node: {func_name}")
+
+        arity = mapping.input_arity or len(node.args)
+        if len(node.args) < arity:
+            raise ValueError(f"{func_name} requires {arity} inputs, got {len(node.args)}")
+
+        inputs = [self.walk(arg) for arg in node.args[:arity]]
+        params = self._extract_params(mapping, node.args[arity:], func_name)
+        label = mapping.label or mapping.node_type
+        return self._add(mapping.node_type, label=label, inputs=inputs, params=params)
+
+    def _walk_special(self, node: sp.Expr) -> str | None:
         is_sub, minuend, subtrahend = self._maybe_subtraction(node)
         if is_sub:
             left_id = self.walk(minuend)
@@ -248,19 +287,7 @@ class _DagBuilder:
         if is_neg:
             target_id = self.walk(target)
             return self._add("math/neg", label="neg", inputs=[target_id])
-
-        mapping = self._lookup_mapping(func_name)
-        if not mapping:
-            raise ValueError(f"Unsupported expression node: {func_name}")
-
-        arity = mapping.input_arity or len(node.args)
-        if len(node.args) < arity:
-            raise ValueError(f"{func_name} requires {arity} inputs, got {len(node.args)}")
-
-        inputs = [self.walk(arg) for arg in node.args[:arity]]
-        params = self._extract_params(mapping, node.args[arity:], func_name)
-        label = mapping.label or mapping.node_type
-        return self._add(mapping.node_type, label=label, inputs=inputs, params=params)
+        return None
 
 
 def build_expression_dag(

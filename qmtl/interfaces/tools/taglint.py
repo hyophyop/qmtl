@@ -69,48 +69,17 @@ def validate_tags(tags: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     errors: List[str] = []
     fixed_tags: Dict[str, Any] = {}
     for key, val in tags.items():
-        key_l = str(key).lower()
-        if isinstance(val, list):
-            errors.append(_("{key}: lists are not allowed").format(key=key))
+        normalized_key, normalized_val, key_errors = _normalize_tag_entry(key, val)
+        errors.extend(key_errors)
+        if normalized_key is None:
             continue
-        if isinstance(val, str):
-            val_l = val.lower()
-        else:
-            val_l = val
-        if key_l == "interval":
-            norm, ok = normalize_interval(val_l)
-            if not ok:
-                errors.append(_("interval value '{value}' is invalid").format(value=val))
-            elif norm != val_l:
-                errors.append(
-                    _("interval '{value}' not normalized (expected {expected})").format(
-                        value=val, expected=norm
-                    )
-                )
-                val_l = norm
-        if key_l == "scope" and isinstance(val_l, str) and val_l not in VALID_SCOPES:
-            errors.append(_("scope '{value}' is invalid").format(value=val_l))
-        fixed_tags[key_l] = val_l
-        if key != key_l or (isinstance(val, str) and val != val_l):
-            errors.append(
-                _("{key}: keys and string values must be lowercase").format(key=key)
-            )
-    for req in REQUIRED_KEYS:
-        if req not in fixed_tags:
-            errors.append(_("missing required key: {key}").format(key=req))
+        fixed_tags[normalized_key] = normalized_val
+    errors.extend(_missing_key_errors(fixed_tags))
     return fixed_tags, errors
 
 
 def write_tags(path: str, tree: ast.Module, node: ast.Assign | None, tags: Dict[str, Any]):
-    # Build ordered dict
-    ordered = OrderedDict()
-    for key in REQUIRED_KEYS + RECOMMENDED_KEYS:
-        if key in tags:
-            ordered[key] = tags[key]
-    # Include any additional keys
-    for key, val in tags.items():
-        if key not in ordered:
-            ordered[key] = val
+    ordered = _order_tags(tags)
     dict_str = json.dumps(ordered, indent=4)
     lines = dict_str.splitlines()
     tag_lines = ["TAGS = " + lines[0]] + ["    " + l for l in lines[1:]]
@@ -137,6 +106,59 @@ def apply_fixes(path: str, tags: Dict[str, Any], tree: ast.Module, node: ast.Ass
     for key in keys:
         fixed.setdefault(key, "TODO")
     write_tags(path, tree, node, fixed)
+
+
+def _normalize_tag_entry(key: Any, value: Any) -> tuple[str | None, Any, list[str]]:
+    errors: list[str] = []
+    normalized_key = str(key).lower()
+    if isinstance(value, list):
+        errors.append(_("{key}: lists are not allowed").format(key=key))
+        return None, None, errors
+
+    normalized_val = value.lower() if isinstance(value, str) else value
+    if normalized_key == "interval":
+        normalized_val, interval_errors = _normalize_interval_value(value, normalized_val)
+        errors.extend(interval_errors)
+    if normalized_key == "scope" and isinstance(normalized_val, str) and normalized_val not in VALID_SCOPES:
+        errors.append(_("scope '{value}' is invalid").format(value=normalized_val))
+    if key != normalized_key or (isinstance(value, str) and value != normalized_val):
+        errors.append(_("{key}: keys and string values must be lowercase").format(key=key))
+    return normalized_key, normalized_val, errors
+
+
+def _normalize_interval_value(raw_value: Any, normalized_val: Any) -> tuple[Any, list[str]]:
+    errors: list[str] = []
+    norm, ok = normalize_interval(normalized_val)
+    if not ok:
+        errors.append(_("interval value '{value}' is invalid").format(value=raw_value))
+        return normalized_val, errors
+    if norm != normalized_val:
+        errors.append(
+            _("interval '{value}' not normalized (expected {expected})").format(
+                value=raw_value, expected=norm
+            )
+        )
+        normalized_val = norm
+    return normalized_val, errors
+
+
+def _missing_key_errors(fixed_tags: Dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for req in REQUIRED_KEYS:
+        if req not in fixed_tags:
+            errors.append(_("missing required key: {key}").format(key=req))
+    return errors
+
+
+def _order_tags(tags: Dict[str, Any]) -> OrderedDict:
+    ordered = OrderedDict()
+    for key in REQUIRED_KEYS + RECOMMENDED_KEYS:
+        if key in tags:
+            ordered[key] = tags[key]
+    for key, val in tags.items():
+        if key not in ordered:
+            ordered[key] = val
+    return ordered
 
 
 def lint_file(path: str, fix: bool = False) -> Tuple[bool, str]:

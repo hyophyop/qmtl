@@ -102,46 +102,48 @@ class CacheView(Generic[PayloadT]):
         self._artifact_plane = artifact_plane
 
     def __getitem__(self, key: Any) -> Any:
-        # Use direct attribute access to avoid any accidental recursion
         data = object.__getattribute__(self, "_data")
         if isinstance(data, Mapping):
-            if _looks_like_node(key):
-                key = key.node_id
-
-            new_path = self._path + (key,)
-            if self._track_access and len(new_path) == 2:
-                u, i = new_path
-                if isinstance(u, str) and isinstance(i, int):
-                    self._access_log.append((u, i))
-                    sdk_metrics.observe_cache_read(u, i)
-            value = data[key]
-            # Guard against nested CacheView: unwrap to underlying data
-            if isinstance(value, CacheView):
-                value = object.__getattribute__(value, "_data")
-            # If the leaf is a Sequence (typical cache leaf: list[(ts, v)]),
-            # wrap it so callers can use `.latest()` while still supporting
-            # index access (e.g., `[-1]`).
-            if isinstance(value, Sequence):
-                return CacheView(
-                    value,
-                    track_access=self._track_access,
-                    artifact_plane=self._artifact_plane,
-                    access_log=self._access_log,
-                    path=new_path,
-                )
-            # Wrap mappings to allow further navigation; return scalars directly.
-            if isinstance(value, Mapping):
-                return CacheView(
-                    value,
-                    track_access=self._track_access,
-                    artifact_plane=self._artifact_plane,
-                    access_log=self._access_log,
-                    path=new_path,
-                )
-            return value
+            return self._get_from_mapping(data, key)
         if isinstance(data, Sequence):
             return data[key]
         raise TypeError("unsupported operation")
+
+    def _get_from_mapping(self, data: Mapping[Any, Any], key: Any) -> Any:
+        if _looks_like_node(key):
+            key = key.node_id
+
+        new_path = self._path + (key,)
+        self._maybe_record_access(new_path)
+        value = data[key]
+        if isinstance(value, CacheView):
+            value = object.__getattribute__(value, "_data")
+
+        if isinstance(value, Sequence):
+            return CacheView(
+                value,
+                track_access=self._track_access,
+                artifact_plane=self._artifact_plane,
+                access_log=self._access_log,
+                path=new_path,
+            )
+        if isinstance(value, Mapping):
+            return CacheView(
+                value,
+                track_access=self._track_access,
+                artifact_plane=self._artifact_plane,
+                access_log=self._access_log,
+                path=new_path,
+            )
+        return value
+
+    def _maybe_record_access(self, path: tuple[Any, ...]) -> None:
+        if not (self._track_access and len(path) == 2):
+            return
+        u, i = path
+        if isinstance(u, str) and isinstance(i, int):
+            self._access_log.append((u, i))
+            sdk_metrics.observe_cache_read(u, i)
 
     def __getattr__(self, name: str) -> Any:
         # Avoid treating private/dunder attributes as mapping access

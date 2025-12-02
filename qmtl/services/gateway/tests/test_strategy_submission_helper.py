@@ -42,21 +42,17 @@ def assert_submission_result(
 ):
     """Common assertions for :class:`StrategySubmissionResult` instances."""
 
-    assert result.strategy_id == expected_strategy_id
-    assert result.sentinel_id == expected_sentinel
-    if expected_queue_map is not None:
-        assert result.queue_map == expected_queue_map
-    if queue_map_assert is not None:
-        queue_map_assert(result.queue_map)
-    assert result.downgraded is downgraded
-    assert result.safe_mode is safe_mode
-    assert result.downgrade_reason == downgrade_reason
-    if queue_map_source is not None:
-        assert result.queue_map_source == queue_map_source
-    if diff_error is not None:
-        assert result.diff_error is diff_error
-    if crc_fallback is not None:
-        assert result.crc_fallback is crc_fallback
+    _assert_required_fields(result, expected_strategy_id, expected_sentinel)
+    _assert_queue_map(result, expected_queue_map, queue_map_assert)
+    _assert_flags(
+        result,
+        downgraded=downgraded,
+        safe_mode=safe_mode,
+        downgrade_reason=downgrade_reason,
+        queue_map_source=queue_map_source,
+        diff_error=diff_error,
+        crc_fallback=crc_fallback,
+    )
 
 
 def _assert_query_queue_map(queue_map: dict, bundle) -> None:
@@ -68,6 +64,41 @@ def _assert_query_queue_map(queue_map: dict, bundle) -> None:
 
 def _assert_diff_queue_map(queue_map: dict, bundle) -> None:
     assert queue_map == {"node123": [{"queue": "topic-A", "global": False}]}
+
+
+def _assert_required_fields(result, expected_strategy_id: str, expected_sentinel: str) -> None:
+    assert result.strategy_id == expected_strategy_id
+    assert result.sentinel_id == expected_sentinel
+
+
+def _assert_queue_map(
+    result, expected_queue_map: dict | None, queue_map_assert: Callable[[dict], None] | None
+) -> None:
+    if expected_queue_map is not None:
+        assert result.queue_map == expected_queue_map
+    if queue_map_assert is not None:
+        queue_map_assert(result.queue_map)
+
+
+def _assert_flags(
+    result,
+    *,
+    downgraded: bool,
+    safe_mode: bool,
+    downgrade_reason: Any,
+    queue_map_source: str | None,
+    diff_error: bool | None,
+    crc_fallback: bool | None,
+) -> None:
+    assert result.downgraded is downgraded
+    assert result.safe_mode is safe_mode
+    assert result.downgrade_reason == downgrade_reason
+    if queue_map_source is not None:
+        assert result.queue_map_source == queue_map_source
+    if diff_error is not None:
+        assert result.diff_error is diff_error
+    if crc_fallback is not None:
+        assert result.crc_fallback is crc_fallback
 
 
 @pytest.mark.parametrize(

@@ -73,27 +73,21 @@ class _DummyWorldClient:
 
 
 @pytest.mark.asyncio
-async def test_start_and_stop_background_lifecycle() -> None:
-    ws_hub = _DummyHub()
-    controlbus = _DummyComponent()
-    commit_consumer = _DummyCommitConsumer()
+async def test_start_background_initializes_components() -> None:
+    ws_hub, controlbus, commit_consumer, commit_task = await _start_components()
+    try:
+        assert commit_task is not None
+        assert controlbus.started is True
+        assert controlbus.ws_hub is ws_hub
+        assert commit_consumer.started is True  # type: ignore[unreachable]
+        assert ws_hub.started is True
+    finally:
+        await _stop_components(commit_task, ws_hub, controlbus, commit_consumer)
 
-    commit_task = await api._start_background(
-        enable_background=True,
-        controlbus_consumer=cast(ControlBusConsumer, controlbus),
-        commit_log_consumer=cast(CommitLogConsumer, commit_consumer),
-        commit_log_handler=None,
-        ws_hub=cast(WebSocketHub, ws_hub),
-    )
 
-    assert commit_task is not None
-    assert controlbus.started is True
-    assert controlbus.ws_hub is ws_hub
-    assert commit_consumer.started is True  # type: ignore[unreachable]
-    assert ws_hub.started is True
-
-    await asyncio.sleep(0.02)
-
+@pytest.mark.asyncio
+async def test_stop_background_cleans_up() -> None:
+    ws_hub, controlbus, commit_consumer, commit_task = await _start_components()
     dagmanager = _DummyCloseable()
     database = _DummyCloseable()
     redis_conn = _DummyRedis()
@@ -118,6 +112,35 @@ async def test_start_and_stop_background_lifecycle() -> None:
     assert ws_hub.stopped is True
     assert dagmanager.closed is True
     assert database.closed is True
+
+
+async def _start_components():
+    ws_hub = _DummyHub()
+    controlbus = _DummyComponent()
+    commit_consumer = _DummyCommitConsumer()
+    commit_task = await api._start_background(
+        enable_background=True,
+        controlbus_consumer=cast(ControlBusConsumer, controlbus),
+        commit_log_consumer=cast(CommitLogConsumer, commit_consumer),
+        commit_log_handler=None,
+        ws_hub=cast(WebSocketHub, ws_hub),
+    )
+    await asyncio.sleep(0.02)
+    return ws_hub, controlbus, commit_consumer, commit_task
+
+
+async def _stop_components(commit_task, ws_hub, controlbus, commit_consumer):
+    await api._stop_background(
+        commit_task=commit_task,
+        ws_hub=ws_hub,
+        controlbus_consumer=controlbus,
+        commit_log_consumer=commit_consumer,
+        commit_log_writer=None,
+        dagmanager=_DummyCloseable(),
+        database_obj=_DummyCloseable(),
+        redis_conn=_DummyRedis(),
+        world_client=_DummyWorldClient(),
+    )
     assert redis_conn.closed is True
     assert redis_conn.pool_closed is True
     assert world_client.closed is True

@@ -100,42 +100,7 @@ class FeatureArtifactPlane:
             DeprecationWarning,
             stacklevel=2,
         )
-        overrides: dict[str, Any] = {}
-
-        raw_enabled = os.getenv("QMTL_FEATURE_ARTIFACTS")
-        if raw_enabled is not None:
-            enabled = _coerce_env_bool(raw_enabled)
-            if enabled is None:
-                logger.warning(
-                    "invalid boolean for QMTL_FEATURE_ARTIFACTS: %s", raw_enabled
-                )
-            else:
-                overrides["feature_artifacts_enabled"] = enabled
-
-        raw_dir = os.getenv("QMTL_FEATURE_ARTIFACT_DIR")
-        if raw_dir is not None:
-            overrides["feature_artifact_dir"] = raw_dir
-
-        raw_versions = os.getenv("QMTL_FEATURE_ARTIFACT_VERSIONS")
-        if raw_versions is not None:
-            text = raw_versions.strip()
-            if not text:
-                overrides["feature_artifact_versions"] = None
-            else:
-                try:
-                    overrides["feature_artifact_versions"] = int(text)
-                except ValueError:
-                    logger.warning(
-                        "invalid integer for QMTL_FEATURE_ARTIFACT_VERSIONS: %s",
-                        raw_versions,
-                    )
-
-        raw_domains = os.getenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS")
-        if raw_domains is not None:
-            tokens = [token.strip() for token in re.split(r"[,\s]+", raw_domains)]
-            overrides["feature_artifact_write_domains"] = [
-                token for token in tokens if token
-            ]
+        overrides = cls._collect_env_overrides()
 
         if not overrides:
             return cls.from_config()
@@ -144,6 +109,24 @@ class FeatureArtifactPlane:
         base_cfg = unified.cache if unified is not None else _CacheConfig()
         cfg = replace(base_cfg, **overrides)
         return _from_cache_config(cfg)
+
+    @staticmethod
+    def _collect_env_overrides() -> dict[str, Any]:
+        overrides: dict[str, Any] = {}
+
+        _maybe_set_bool_env(
+            "QMTL_FEATURE_ARTIFACTS", "feature_artifacts_enabled", overrides
+        )
+        _maybe_set_str_env("QMTL_FEATURE_ARTIFACT_DIR", "feature_artifact_dir", overrides)
+        _maybe_set_int_env(
+            "QMTL_FEATURE_ARTIFACT_VERSIONS", "feature_artifact_versions", overrides
+        )
+        _maybe_set_list_env(
+            "QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS",
+            "feature_artifact_write_domains",
+            overrides,
+        )
+        return overrides
 
     # ------------------------------------------------------------------
     def configure(
@@ -268,3 +251,42 @@ class FeatureArtifactPlane:
             self.backend.write(key, payload)
         except Exception:
             logger.exception("failed to write feature artifact for factor %s", factor_id)
+
+
+def _maybe_set_bool_env(env_var: str, target_key: str, overrides: dict[str, Any]) -> None:
+    raw = os.getenv(env_var)
+    if raw is None:
+        return
+    value = _coerce_env_bool(raw)
+    if value is None:
+        logger.warning("invalid boolean for %s: %s", env_var, raw)
+        return
+    overrides[target_key] = value
+
+
+def _maybe_set_str_env(env_var: str, target_key: str, overrides: dict[str, Any]) -> None:
+    raw = os.getenv(env_var)
+    if raw is not None:
+        overrides[target_key] = raw
+
+
+def _maybe_set_int_env(env_var: str, target_key: str, overrides: dict[str, Any]) -> None:
+    raw = os.getenv(env_var)
+    if raw is None:
+        return
+    text = raw.strip()
+    if not text:
+        overrides[target_key] = None
+        return
+    try:
+        overrides[target_key] = int(text)
+    except ValueError:
+        logger.warning("invalid integer for %s: %s", env_var, raw)
+
+
+def _maybe_set_list_env(env_var: str, target_key: str, overrides: dict[str, Any]) -> None:
+    raw = os.getenv(env_var)
+    if raw is None:
+        return
+    tokens = [token.strip() for token in re.split(r"[,\s]+", raw)]
+    overrides[target_key] = [token for token in tokens if token]

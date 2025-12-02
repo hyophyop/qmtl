@@ -98,50 +98,73 @@ def normalize_ast(ast: dict[str, Any]) -> dict[str, Any]:
         Normalized AST
     """
     node_type = ast.get("type", "")
-
-    # Leaf nodes: constants and variables
-    if node_type == "Const":
+    if node_type in {"Const", "Var"}:
         return ast.copy()
 
-    if node_type == "Var":
-        return ast.copy()
+    children = [_normalize_child(c) for c in ast.get("children", [])]
+    children = _normalize_commutative(node_type, children)
 
-    # Recursively normalize children
-    children = [normalize_ast(c) for c in ast.get("children", [])]
+    folded = _fold_constants(node_type, children)
+    if folded is not None:
+        return folded
 
-    # Commutative operations: sort children for canonical order
+    identity_result = _remove_identities(node_type, children)
+    if identity_result is not None:
+        return identity_result
+
+    return {"type": node_type, "children": children}
+
+
+def _normalize_child(node: dict[str, Any]) -> dict[str, Any]:
+    return normalize_ast(node)
+
+
+def _normalize_commutative(node_type: str, children: list[dict[str, Any]]) -> list[dict[str, Any]]:
     commutative_ops = {"Add", "Mul", "And", "Or", "Max", "Min"}
     if node_type in commutative_ops and len(children) > 1:
-        children = sorted(children, key=_ast_sort_key)
+        return sorted(children, key=_ast_sort_key)
+    return children
 
-    # Constant folding for binary arithmetic
+
+def _fold_constants(node_type: str, children: list[dict[str, Any]]) -> dict[str, Any] | None:
     if node_type == "Add" and all(_is_const(c) for c in children):
         total = sum(_get_const_value(c) for c in children)
         return {"type": "Const", "value": total}
-
     if node_type == "Mul" and all(_is_const(c) for c in children):
         product = 1.0
         for c in children:
             product *= _get_const_value(c)
         return {"type": "Const", "value": product}
+    return None
 
-    # Identity removal: Mul(x, 1) -> x
-    if node_type == "Mul":
-        children = [c for c in children if not (_is_const(c) and _get_const_value(c) == 1)]
-        if len(children) == 0:
-            return {"type": "Const", "value": 1.0}
-        if len(children) == 1:
-            return children[0]
 
-    # Identity removal: Add(x, 0) -> x
-    if node_type == "Add":
-        children = [c for c in children if not (_is_const(c) and _get_const_value(c) == 0)]
-        if len(children) == 0:
-            return {"type": "Const", "value": 0.0}
-        if len(children) == 1:
-            return children[0]
+def _remove_identities(node_type: str, children: list[dict[str, Any]]) -> dict[str, Any] | None:
+    handlers = {
+        "Mul": _remove_mul_identities,
+        "Add": _remove_add_identities,
+    }
+    handler = handlers.get(node_type)
+    if handler:
+        return handler(children)
+    return None
 
-    return {"type": node_type, "children": children}
+
+def _remove_mul_identities(children: list[dict[str, Any]]) -> dict[str, Any] | None:
+    filtered = [c for c in children if not (_is_const(c) and _get_const_value(c) == 1)]
+    if len(filtered) == 0:
+        return {"type": "Const", "value": 1.0}
+    if len(filtered) == 1:
+        return filtered[0]
+    return {"type": "Mul", "children": filtered}
+
+
+def _remove_add_identities(children: list[dict[str, Any]]) -> dict[str, Any] | None:
+    filtered = [c for c in children if not (_is_const(c) and _get_const_value(c) == 0)]
+    if len(filtered) == 0:
+        return {"type": "Const", "value": 0.0}
+    if len(filtered) == 1:
+        return filtered[0]
+    return {"type": "Add", "children": filtered}
 
 
 def _ast_to_canonical_string(ast: dict[str, Any]) -> str:

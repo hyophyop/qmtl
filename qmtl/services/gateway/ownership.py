@@ -35,44 +35,14 @@ class OwnershipManager:
     async def acquire(self, key: int, owner: Optional[str] = None) -> bool:
         """Attempt to acquire ownership for ``key``."""
 
-        if self._kafka is not None:
-            try:
-                if await self._kafka.acquire(key):
-                    if key in self._pending:
-                        gw_metrics.owner_reassign_total.inc()
-                        self._pending.discard(key)
-                    elif owner is not None:
-                        last = self._last_owner.get(key)
-                        if last is not None and last != owner:
-                            gw_metrics.owner_reassign_total.inc()
-                            metric = cast(Any, gw_metrics.owner_reassign_total)
-                            metric._val = metric._value.get()
-                    if owner is not None:
-                        self._last_owner[key] = owner
-                    return True
-                else:
-                    self._pending.add(key)
-            except Exception:  # pragma: no cover - defensive logging
-                logger.exception("Kafka ownership acquisition failed")
+        if await self._try_kafka_acquire(key, owner):
+            return True
 
-        assert self._db._pool is not None, "database not connected"
-        async with self._db._pool.acquire() as conn:
-            acquired = await pg_try_advisory_lock(conn, key)
-            if acquired:
-                if key in self._pending:
-                    gw_metrics.owner_reassign_total.inc()
-                    self._pending.discard(key)
-                elif owner is not None:
-                    last = self._last_owner.get(key)
-                    if last is not None and last != owner:
-                        gw_metrics.owner_reassign_total.inc()
-                        metric = cast(Any, gw_metrics.owner_reassign_total)
-                        metric._val = metric._value.get()
-                if owner is not None:
-                    self._last_owner[key] = owner
-                return True
-            self._pending.add(key)
-            return False
+        acquired = await self._try_db_acquire(key, owner)
+        if acquired:
+            return True
+        self._pending.add(key)
+        return False
 
     async def release(self, key: int) -> None:
         """Release ownership for ``key``."""
@@ -87,6 +57,48 @@ class OwnershipManager:
         assert self._db._pool is not None, "database not connected"
         async with self._db._pool.acquire() as conn:
             await pg_advisory_unlock(conn, key)
+
+    async def _try_kafka_acquire(self, key: int, owner: Optional[str]) -> bool:
+        if self._kafka is None:
+            return False
+        try:
+            if not await self._kafka.acquire(key):
+                self._pending.add(key)
+                return False
+            self._record_reassignment(key, owner)
+            self._remember_owner(key, owner)
+            return True
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Kafka ownership acquisition failed")
+            return False
+
+    async def _try_db_acquire(self, key: int, owner: Optional[str]) -> bool:
+        assert self._db._pool is not None, "database not connected"
+        async with self._db._pool.acquire() as conn:
+            acquired = await pg_try_advisory_lock(conn, key)
+            if not acquired:
+                return False
+            self._record_reassignment(key, owner)
+            self._remember_owner(key, owner)
+            return True
+
+    def _record_reassignment(self, key: int, owner: Optional[str]) -> None:
+        if key in self._pending:
+            gw_metrics.owner_reassign_total.inc()
+            self._pending.discard(key)
+            return
+        if owner is None:
+            return
+        last = self._last_owner.get(key)
+        if last is None or last == owner:
+            return
+        gw_metrics.owner_reassign_total.inc()
+        metric = cast(Any, gw_metrics.owner_reassign_total)
+        metric._val = metric._value.get()
+
+    def _remember_owner(self, key: int, owner: Optional[str]) -> None:
+        if owner is not None:
+            self._last_owner[key] = owner
 
 
 __all__ = ["OwnershipManager", "KafkaOwnership"]

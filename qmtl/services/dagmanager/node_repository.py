@@ -201,23 +201,35 @@ class MemoryNodeRepository(NodeRepository):
         compute_key: str | None = None,
     ) -> list[str]:
         result: list[str] = []
-        for nid, data in _GRAPH.nodes(data=True):
-            ts = data.get("buffering_since")
-            if compute_key:
-                ctx = data.get("buffering_since_ctx")
-                if isinstance(ctx, dict):
-                    ctx_ts = ctx.get(compute_key)
-                    if ctx_ts is not None and ctx_ts < older_than_ms:
-                        result.append(nid)
-                        continue
-            else:
-                if isinstance(data.get("buffering_since_ctx"), dict):
-                    if any(v is not None and v < older_than_ms for v in data["buffering_since_ctx"].values()):
-                        result.append(nid)
-                        continue
-            if ts is not None and ts < older_than_ms:
-                result.append(nid)
+        for node_id, data in _GRAPH.nodes(data=True):
+            if self._is_buffering(data, older_than_ms, compute_key):
+                result.append(node_id)
         return result
+
+    def _is_buffering(
+        self, data: dict[str, Any], older_than_ms: int, compute_key: str | None
+    ) -> bool:
+        ts = data.get("buffering_since")
+        if compute_key:
+            return self._has_buffering_ctx_ts(data, compute_key, older_than_ms)
+        if self._any_buffering_ctx(data, older_than_ms):
+            return True
+        return bool(ts is not None and ts < older_than_ms)
+
+    def _has_buffering_ctx_ts(
+        self, data: dict[str, Any], compute_key: str, older_than_ms: int
+    ) -> bool:
+        ctx = data.get("buffering_since_ctx")
+        if not isinstance(ctx, dict):
+            return False
+        ctx_ts = ctx.get(compute_key)
+        return bool(ctx_ts is not None and ctx_ts < older_than_ms)
+
+    def _any_buffering_ctx(self, data: dict[str, Any], older_than_ms: int) -> bool:
+        ctx = data.get("buffering_since_ctx")
+        if not isinstance(ctx, dict):
+            return False
+        return any(ts is not None and ts < older_than_ms for ts in ctx.values())
 
 
 __all__ = ["MemoryNodeRepository"]

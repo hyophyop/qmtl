@@ -543,21 +543,10 @@ async def _resolve_world_modes(
     for wid in world_ids:
         if not wid:
             continue
-        try:
-            data = await world_client.get_world(wid)
-        except Exception:
+        world_data = await _fetch_world_data(world_client, wid)
+        if world_data is None:
             continue
-        mode = None
-        execution_domain = None
-        if isinstance(data, Mapping):
-            world_payload = data.get("world") if isinstance(data.get("world"), Mapping) else None
-            if world_payload:
-                mode = world_payload.get("mode")
-                execution_domain = world_payload.get("execution_domain")
-            if mode is None:
-                mode = data.get("mode") or data.get("effective_mode")
-            if execution_domain is None:
-                execution_domain = data.get("execution_domain")
+        mode, execution_domain = _extract_mode_and_domain(world_data)
         normalized_domain = _normalize_execution_domain(execution_domain)
         normalized_mode = mode if isinstance(mode, str) else None
         if normalized_mode is not None or normalized_domain is not None:
@@ -581,6 +570,28 @@ def _normalize_execution_domain(execution_domain: Any) -> str | None:
         return resolve_execution_domain(candidate)
     except Exception:
         return candidate.lower()
+
+
+async def _fetch_world_data(world_client: WorldServiceClient, wid: str) -> Mapping[str, Any] | None:
+    try:
+        data = await world_client.get_world(wid)
+        return data if isinstance(data, Mapping) else None
+    except Exception:
+        return None
+
+
+def _extract_mode_and_domain(data: Mapping[str, Any]) -> tuple[Any, Any]:
+    mode = None
+    execution_domain = None
+    world_payload = data.get("world") if isinstance(data.get("world"), Mapping) else None
+    if world_payload:
+        mode = world_payload.get("mode")
+        execution_domain = world_payload.get("execution_domain")
+    if mode is None:
+        mode = data.get("mode") or data.get("effective_mode")
+    if execution_domain is None:
+        execution_domain = data.get("execution_domain")
+    return mode, execution_domain
 
 
 def _summarize_orders(orders: Sequence[Mapping[str, Any]]) -> tuple[int, int, float]:
