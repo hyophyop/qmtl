@@ -64,8 +64,19 @@ def test_market_closed_and_settlement():
     with pytest.raises(ValueError, match="Market is closed"):
         model.can_submit_order(acct, order_moo, ts=holiday_ts)
 
-    balance = acct.cashbook.get(acct.base_currency).balance
-    assert balance == pytest.approx(100_000.0)
-    settlement.apply_due(acct, now=close_ts + timedelta(days=1))
-    updated_balance = acct.cashbook.get(acct.base_currency).balance
-    assert updated_balance < 100_000.0
+    starting_entry = acct.cashbook.get(acct.base_currency)
+    starting_balance = starting_entry.balance
+    assert starting_balance == pytest.approx(100_000.0)
+
+    fill = model.execute_order(acct, order_moo, 100.0, ts=open_ts)
+    assert fill.quantity > 0
+
+    post_trade_entry = acct.cashbook.get(acct.base_currency)
+    assert post_trade_entry.balance == pytest.approx(starting_balance)
+    assert post_trade_entry.pending < 0
+
+    applied = settlement.apply_due(acct, now=close_ts + timedelta(days=1))
+    settled_entry = acct.cashbook.get(acct.base_currency)
+    assert applied == 1
+    assert settled_entry.balance < starting_balance
+    assert abs(settled_entry.pending) < 1e-9
