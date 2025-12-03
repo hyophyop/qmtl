@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
@@ -14,6 +16,7 @@ from qmtl.services.gateway.world_client import WorldServiceClient
 from .dependencies import GatewayDependencyProvider
 
 WorldCall = Callable[[WorldServiceClient, dict[str, str]], Awaitable[Any]]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -84,12 +87,56 @@ async def _proxy_world_call(
     response_builder: Callable[[Any, dict[str, str]], Response] | None = None,
 ) -> Response:
     headers, cid = _build_world_headers(request)
-    data = await func(client, headers)
+    try:
+        data = await func(client, headers)
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        detail = _extract_worldservice_detail(exc.response)
+        log_level = logging.INFO if status_code == status.HTTP_404_NOT_FOUND else logging.WARNING
+        logger.log(
+            log_level,
+            "WorldService proxy %s %s returned %s (cid=%s): %s",
+            request.method,
+            request.url.path,
+            status_code,
+            cid,
+            detail,
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+            headers={"X-Correlation-ID": cid},
+        ) from None
+    except httpx.RequestError as exc:
+        logger.warning(
+            "WorldService proxy request failed for %s %s (cid=%s): %s",
+            request.method,
+            request.url.path,
+            cid,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="WorldService unavailable",
+            headers={"X-Correlation-ID": cid},
+        ) from None
+
     base_headers = {"X-Correlation-ID": cid}
     builder = response_builder or (
         lambda payload, hdrs: JSONResponse(payload, headers=dict(hdrs))
     )
     return builder(data, dict(base_headers))
+
+
+def _extract_worldservice_detail(response: httpx.Response) -> Any:
+    try:
+        payload = response.json()
+        if isinstance(payload, dict) and "detail" in payload:
+            return payload["detail"]
+        return payload
+    except Exception:
+        text = response.text
+        return text or "WorldService request failed"
 
 
 async def _execute_world_call(

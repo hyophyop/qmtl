@@ -144,15 +144,21 @@ async def test_decide_stale_on_backend_error(
 async def test_decide_backend_error_no_cache(
     gateway_app_factory, reset_gateway_metrics
 ) -> None:
+    captured: dict[str, str | None] = {}
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/decide"):
+            captured["cid"] = request.headers.get("X-Correlation-ID")
             return httpx.Response(500)
         raise AssertionError("unexpected path")
 
     async with gateway_app_factory(handler) as ctx:
-        with pytest.raises(httpx.HTTPStatusError):
-            await ctx.client.get("/worlds/abc/decide")
+        resp = await ctx.client.get("/worlds/abc/decide")
 
+    assert resp.status_code == 500
+    assert resp.json() == {"detail": "WorldService request failed"}
+    assert resp.headers["X-Correlation-ID"]
+    assert resp.headers["X-Correlation-ID"] == captured.get("cid")
     assert metrics.worlds_stale_responses_total._value.get() == 0
 
 
