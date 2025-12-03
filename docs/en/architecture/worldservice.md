@@ -35,7 +35,9 @@ QMTL’s core value — **“focus only on strategy logic; the system handles op
 - SDK/Runner and Gateway act purely as consumers of WS decision envelopes; user interfaces do not require operators to understand or control ExecutionDomain details or the apply protocol to benefit from world decisions.
 - When evolving policies/schemas, avoid keeping old and new fields or modes indefinitely for compatibility; after a defined migration window, converge on a single “current” policy model (prioritising simplicity over backward compatibility).
 
-Non-goals: Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
+Non-goals:
+- Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
+- Supporting a full strategy lifecycle and final evaluation/gating in a **“pure local, SDK-only” mode** (without WorldService/Gateway) as an official operating mode. SDK-level ValidationPipeline/PnL helpers exist for tests and experiments, but WorldService remains the SSOT for policies, evaluation, and gating.
 
 ### 0-A. As-Is / To-Be Summary
 

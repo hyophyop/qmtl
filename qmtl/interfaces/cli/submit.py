@@ -7,6 +7,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import List
 
+from qmtl.runtime.sdk.submit import _get_default_world
 from qmtl.utils.i18n import _ as _t
 
 from .common import parse_preset_overrides

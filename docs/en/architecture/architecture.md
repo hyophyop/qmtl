@@ -65,6 +65,13 @@ SDK/Runner, etc.) share the following intent:
   automatically and offer overrides only when necessary” rather than pushing
   more configuration choices onto users.
 
+!!! note "Supported execution modes"
+    The Core Loop and execution model described in this document **always assume a stack that includes WorldService and Gateway**.  
+    **Running the full strategy lifecycle (`submit → evaluate → gate → deploy`) in a “pure local, SDK-only” mode without WS/Gateway is *not* an officially supported mode.**
+    
+    ValidationPipeline, PnL helpers, and similar utilities may be used directly from the SDK for tests and experiments,  
+    but WorldService remains the single source of truth for policy, evaluation, and gating, and the Core Loop narrative is defined in terms of that WS/Gateway-backed path.
+
 ### 0.1 Core Loop: Strategy Lifecycle (As‑Is / To‑Be)
 
 From the user’s perspective, QMTL’s **Core Loop** is:

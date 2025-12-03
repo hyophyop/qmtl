@@ -1,6 +1,7 @@
 site_name: QMTL Documentation
 nav:
   - Home: index.md
+  - Roadmap: roadmap.md
   - Getting Started:
       - Overview: getting-started/index.md
       - Core Concepts: getting-started/concepts.md
@@ -14,6 +15,7 @@ nav:
       - Overview: architecture/README.md
       - SDK Layering: architecture/sdk_layers.md
       - Architecture & World ID Flow: architecture/architecture.md
+      - Core Loop Roadmap: architecture/core_loop_roadmap.md
       - Layered Template System: architecture/layered_template_system.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
       - Seamless Data Provider Modularization: architecture/seamless_data_provider_modularity.md
@@ -89,6 +91,7 @@ nav:
       - Release: operations/release.md
       - CI: operations/ci.md
   - Design:
+      - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
       - SR × Runner.submit Auto Returns: design/sr_auto_returns_integration_sketch.md
@@ -150,12 +153,14 @@ plugins:
           build: true
           nav_translations:
             Home: 홈
+            Roadmap: 로드맵
             "Getting Started": "시작하기"
             "Core Concepts": "핵심 개념"
             "Quickstart": "빠른 시작"
             "User Workflow": "사용자 워크플로"
             Maintenance Schedule: 유지보수 일정
             Architecture: 아키텍처
+            Core Loop Roadmap: Core Loop 로드맵
             Guides: 가이드
             Docs Internationalization: 문서 국제화
             "Layered Template System": "레이어드 템플릿 시스템"
@@ -169,6 +174,7 @@ plugins:
             "Workflow Orchestration Radon Plan": "워크플로 오케스트레이션 Radon 계획"
             "Radon Metrics Snapshot (2025-11-14)": "라돈 지표 스냅샷 (2025-11-14)"
             "Linearity & Alpha Metrics Complexity Plan": "선형성·알파 메트릭 복잡도 계획"
+            "WorldService Evaluation Runs & Metrics API": "WorldService 평가 런 & 메트릭 API"
             "Layered Templates Quick Start": "레이어 기반 템플릿 퀵스타트"
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"
