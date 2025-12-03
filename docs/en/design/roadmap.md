@@ -292,9 +292,9 @@ The following principles are always observed while executing this roadmap:
 
 ## Related Documents
 
-- [Architecture Overview](architecture/architecture.md)
-- [Gateway Specification](architecture/gateway.md)
-- [DAG Manager Specification](architecture/dag-manager.md)
-- [WorldService Specification](architecture/worldservice.md)
-- [Seamless Data Provider v2](architecture/seamless_data_provider_v2.md)
-- [World Specification](world/world.md)
+- [Architecture Overview](../architecture/architecture.md)
+- [Gateway Specification](../architecture/gateway.md)
+- [DAG Manager Specification](../architecture/dag-manager.md)
+- [WorldService Specification](../architecture/worldservice.md)
+- [Seamless Data Provider v2](../architecture/seamless_data_provider_v2.md)
+- [World Specification](../world/world.md)

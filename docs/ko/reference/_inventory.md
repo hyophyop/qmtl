@@ -46,12 +46,6 @@ last_modified: 2025-08-26
 - `docs/architecture/seamless_data_provider_v2.md`
 - `docs/architecture/worldservice.md`
 
-## 보관(Archive)
-*소유자: Records Steward*
-
-- `docs/archive/README.md`
-- `docs/archive/realm_rename_eval.md`
-
 ## 설계(Design)
 *소유자: Design Council*
 
@@ -102,7 +96,6 @@ last_modified: 2025-08-26
 - `docs/operations/config-cli.md`
 - `docs/operations/dag_snapshot.md`
 - `docs/operations/dagmanager_diff_context_rollout.md`
-- `docs/operations/dashboards/index.md`
 - `docs/operations/docker.md`
 - `docs/operations/e2e_testing.md`
 - `docs/operations/exchange_calendars.md`
@@ -130,7 +123,6 @@ last_modified: 2025-08-26
 - `docs/reference/api/brokerage.md`
 - `docs/reference/api/connectors.md`
 - `docs/reference/api/fills_webhook.md`
-- `docs/reference/api/index.md`
 - `docs/reference/api/order_events.md`
 - `docs/reference/api/portfolio.md`
 - `docs/reference/api_world.md`
@@ -148,7 +140,6 @@ last_modified: 2025-08-26
 - `docs/reference/report_cli.md`
 - `docs/reference/schema_registry.md`
 - `docs/reference/schemas.md`
-- `docs/reference/schemas/index.md`
 - `docs/reference/tagquery.md`
 - `docs/reference/templates.md`
 
@@ -163,11 +154,8 @@ last_modified: 2025-08-26
 ## 월드(World)
 *소유자: World Council*
 
-- `docs/world/index.md`
 - `docs/world/policy_engine.md`
 - `docs/world/world.md`
-- `docs/world/world_refined.md`
-- `docs/world/world_todo.md`
 
 ## 예제(Examples)
 *소유자: Examples Guild*

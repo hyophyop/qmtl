@@ -1,6 +1,6 @@
-# [Home](../index.md) / [world](index.md) / [world_todo](world_todo.md)
+# [Archive](../README.md) / [world (archived)](world_refined.md) / world_todo
 
-# QMTL Strategy State Management — Draft
+# QMTL Strategy State Management — Draft (archived)
 
 Overview
 

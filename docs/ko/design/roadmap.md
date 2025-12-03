@@ -292,9 +292,9 @@ gantt
 
 ## 관련 문서
 
-- [아키텍처 개요](architecture/architecture.md)
-- [Gateway 명세](architecture/gateway.md)
-- [DAG Manager 명세](architecture/dag-manager.md)
-- [WorldService 명세](architecture/worldservice.md)
-- [Seamless Data Provider v2](architecture/seamless_data_provider_v2.md)
-- [World 사양](world/world.md)
+- [아키텍처 개요](../architecture/architecture.md)
+- [Gateway 명세](../architecture/gateway.md)
+- [DAG Manager 명세](../architecture/dag-manager.md)
+- [WorldService 명세](../architecture/worldservice.md)
+- [Seamless Data Provider v2](../architecture/seamless_data_provider_v2.md)
+- [World 사양](../world/world.md)

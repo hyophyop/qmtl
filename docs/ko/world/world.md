@@ -7,7 +7,7 @@ last_modified: 2025-08-21
 
 # QMTL 월드(World) — 전략 생애주기 관리 사양 v1
 
-본 문서는 docs/world/world_todo.md와 docs/world/world_refined.md의 아이디어를 통합하여, “월드(World)”라는 알파 정제 단위를 QMTL에 무리 없이 도입하기 위한 단일 사양과 작업 명세를 제시한다. 목표는 기존 QMTL 구성요소(DAG Manager, Gateway, SDK Runner, Metrics)를 최대한 재사용하면서 정책 기반의 자동 평가·승격·강등을 제공하는 것이다. 불필요한 프레임워크 확장을 피하고, 단계적 도입이 가능하도록 설계를 최소화했다.
+본 문서는 과거 초안(world_todo/world_refined)의 아이디어를 통합하여, “월드(World)”라는 알파 정제 단위를 QMTL에 무리 없이 도입하기 위한 단일 사양과 작업 명세를 제시한다. 목표는 기존 QMTL 구성요소(DAG Manager, Gateway, SDK Runner, Metrics)를 최대한 재사용하면서 정책 기반의 자동 평가·승격·강등을 제공하는 것이다. 불필요한 프레임워크 확장을 피하고, 단계적 도입이 가능하도록 설계를 최소화했다.
 
 ## 0. Core Loop 관점 As‑Is / To‑Be
 

@@ -2,7 +2,7 @@
 title: "Core Loop 중심 아키텍처 로드맵"
 tags: [architecture, roadmap, core-loop]
 author: "QMTL Team"
-last_modified: 2025-12-02
+last_modified: 2025-12-04
 ---
 
 # Core Loop 중심 아키텍처 로드맵
@@ -40,6 +40,40 @@ last_modified: 2025-12-02
 
 이 제약을 깨는 변경은 허용되지 않으며, 예외가 필요할 경우 아키텍처 문서에 명시적인 waiver·후속 계획을 기록해야 한다.
 
+### 1.3 프로그램 구조(P‑0/P‑A/B/C)와 트랙 매핑
+
+이 로드맵은 `docs/ko/design/architecture_roadmap_redesign.md`에서 합의한 **수직 프로그램 구조(P‑0/P‑A/B/C)**를 따른다.  
+각 작업은 최소 하나 이상의 프로그램과 T1–T6 트랙/마일스톤에 매핑되어야 한다.
+
+- **P‑0 — 플랫폼/공통 인프라/관측 메타‑트랙**  
+  Core Loop에 직접 노출되지는 않지만, 모든 프로그램이 공통으로 사용하는 인프라·빌드·관측·운영 개선을 담는다.  
+  예: 테스트 인프라, 공통 observability 스택, 비용/성능 개선 등(주로 T5/T6와 연결).
+- **P‑A — Core Loop Paved Road v1**  
+  신규 전략 작성자가 “Runner.submit + world/preset”만으로 Core Loop를 경험하도록 만드는 **최우선 프로그램**이다.  
+  - P‑A P0 핵심 범위:  
+    - T1 P0‑M1 (SubmitResult ↔ WS Envelopes 정렬)  
+    - T2 P0‑M2 (ExecutionDomain 결정 권한의 WS 단일화, default‑safe 강화)  
+    - T6 P0‑M1 (Core Loop 계약 테스트 스켈레톤)  
+  - P‑A P1 이후:  
+    - T1 P1‑M3 (전략 템플릿/가이드 Core Loop화)  
+    - T3 P0‑M1 (world 기반 데이터 preset on‑ramp)  
+    - T4 P0‑M1, P0‑M2 (ComputeContext/ExecutionDomain·NodeID/TagQuery 규약 정렬)
+- **P‑B — Promotion & Live Safety**  
+  전략 승급·라이브 안전성·2‑Phase Apply를 다루는 프로그램으로, P‑A P0 완료 이후 본격화된다.  
+  - 주요 매핑:  
+    - T2 P0‑M1, P1‑M3 (평가·활성 단일화, 2‑Phase Apply 운용)  
+    - T4 P1‑M3 (큐 네임스페이스/ACL 일원화)  
+    - T3 P2‑M3 (멀티 업스트림/Tag 기반 자동 큐 매핑)  
+    - T5 P0‑M1 (Determinism 체크리스트)
+- **P‑C — Data Autopilot & Observability**  
+  데이터 플레인 자동화, 스키마 거버넌스, Core Loop 골든 시그널/대시보드를 담당한다.  
+  - 주요 매핑:  
+    - T3 P0‑M1, P1‑M2 (preset on‑ramp, 스키마 레지스트리 거버넌스)  
+    - T5 P1‑M2 (Core Loop 골든 시그널 대시보드)  
+    - T6 P2‑M3 (As‑Is/To‑Be 문서 및 로드맵 정합성 유지)
+
+P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적인 이유가 있는지”부터 검토해야 하며, 필요 시 별도 ADR에서 예외와 후속 계획을 함께 기록한다.
+
 ## 2. 로드맵 개요: 트랙과 마일스톤
 
 로드맵은 다음 여섯 개 트랙으로 구성한다. 각 트랙은 Core Loop 상의 위치와 함께, **P0–P2 우선순위 마일스톤**으로 나눈다.
@@ -51,9 +85,14 @@ last_modified: 2025-12-02
 - T5. 운영·관측·안전성 트랙
 - T6. 품질·테스트·문서화 트랙
 
-각 트랙은 “방향성(Design North Star)” → “핵심 마일스톤(P0–P2)” → “구체적인 작업 예시” 순으로 기술한다.
+각 트랙은 "방향성(Design North Star)" → "핵심 마일스톤(P0–P2)" → "구체적인 작업 예시" 순으로 기술한다.
+
+!!! note "프로그램과의 관계"
+    각 트랙의 마일스톤은 상위 프로그램(P-A/B/C)에 매핑된다. PR/이슈 생성 시 "어느 프로그램의 어느 마일스톤을 전진시키는가?"를 명시해야 한다.
 
 ## 3. T1 — 전략 경험/SDK 트랙
+
+**연결 프로그램**: P-A (Core Loop Paved Road)
 
 ### 3.1 방향성
 
@@ -85,6 +124,8 @@ last_modified: 2025-12-02
   - bare Runner 예제보다 월드 기반 예제를 우선 소개하고, `world/world.md`·`world/policy_engine.md`와 교차 링크한다.
 
 ## 4. T2 — 월드/정책(WorldService) 트랙
+
+**연결 프로그램**: P-A (평가/활성 단일화), P-B (Promotion & Live Safety)
 
 ### 4.1 방향성
 
@@ -118,6 +159,8 @@ last_modified: 2025-12-02
 
 ## 5. T3 — 데이터 플레인/Seamless 트랙
 
+**연결 프로그램**: P-A (데이터 preset), P-C (Data Autopilot)
+
 ### 5.1 방향성
 
 - Core Loop 상 **“데이터 공급 자동화 + 시장 replay 백테스트”** 단계를 Seamless/DataPlane이 책임지도록 구조를 고정한다.
@@ -142,6 +185,8 @@ last_modified: 2025-12-02
   - world 설정 예시에서 데이터 preset 항목을 추가하고, Runner/CLI가 실제로 어떻게 Seamless 인스턴스를 구성하는지 예제를 포함한다.
 
 ## 6. T4 — Gateway/DAG Manager 트랙
+
+**연결 프로그램**: P-A (ComputeContext 정렬), P-B (큐 네임스페이스/ACL)
 
 ### 6.1 방향성
 
@@ -170,6 +215,8 @@ last_modified: 2025-12-02
 
 ## 7. T5 — 운영·관측·안전성 트랙
 
+**연결 프로그램**: P-B (Determinism), P-C (골든 시그널 대시보드)
+
 ### 7.1 방향성
 
 - Core Loop 상 각 단계(제출, 백테스트, 평가, 활성/배포, 자본 배분)에 대해 **관측 가능성과 결정성**을 보장한다.
@@ -194,6 +241,8 @@ last_modified: 2025-12-02
 
 ## 8. T6 — 품질·테스트·문서화 트랙
 
+**연결 프로그램**: P-A (Core Loop 계약 테스트), P-C (문서 정리)
+
 ### 8.1 방향성
 
 - Core Loop를 지키는 **계약 테스트(Contract Test)**를 우선시하고, 내부 구현 변경에 덜 민감한 테스트 구조를 유지한다.
@@ -217,14 +266,42 @@ last_modified: 2025-12-02
 - `docs/ko/architecture/architecture.md` 및 관련 아키텍처 문서  
   - As‑Is/To‑Be 섹션이 실제 구현 상태와 어긋나지 않도록 주기적으로 점검하고, 변경 시 본 로드맵 문서와 함께 업데이트한다.
 
+---
+
 ## 9. 로드맵 운용 원칙
 
-- **트랙/마일스톤 기반 이슈 관리**  
-  - 새 기능/리팩터·버그 수정 이슈는 반드시 T1–T6 트랙과 P0–P2 마일스톤 중 하나 이상에 매핑한다.
+### 9.1 이슈/PR 관리
+
+- **프로그램 + 트랙/마일스톤 매핑 필수**  
+  - 새 기능/리팩터·버그 수정 이슈는 반드시 **P-0/A/B/C 프로그램** 중 하나와, **T1–T6 트랙의 P0–P2 마일스톤** 중 하나 이상에 매핑한다.
+  - PR 템플릿에 `Program:`, `Track/Milestone:` 필드를 포함한다.
 - **As‑Is/To‑Be 동기화**  
   - 구현이 To‑Be에 가까워질수록, 각 컴포넌트 문서의 As‑Is 부분을 갱신하거나 제거하고, 본 로드맵의 관련 마일스톤 상태를 업데이트한다.
 - **복잡도/기술 부채 가시화**  
-  - 불가피한 예외/waiver는 해당 코드 근처와 PR 본문에서 “왜 Core Loop 방향성과 다르게 선택했는지”를 설명하고, 본 로드맵에서 후속 계획을 참조한다.
+  - 불가피한 예외/waiver는 해당 코드 근처와 PR 본문에서 "왜 Core Loop 방향성과 다르게 선택했는지"를 설명하고, 본 로드맵에서 후속 계획을 참조한다.
 
-이 로드맵은 Core Loop 관점에서 QMTL의 중장기 방향성을 고정하는 기준 문서로 사용한다. 새로운 기능을 설계할 때는, 먼저 이 문서에서 어떤 트랙/마일스톤에 해당하는지부터 정의한 뒤 설계를 시작해야 한다.
+### 9.2 CI Gate
 
+- `tests/e2e/core_loop` 계약 테스트 스위트는 **P-A 완료의 핵심 DOD**이다.
+- 이 테스트가 실패하면 관련 모듈 변경은 merge 불가.
+- 테스트 스켈레톤은 구현 완료 전에도 "이 테스트가 결국 통과해야 한다"는 목표로 먼저 작성한다.
+
+### 9.3 ADR (Architecture Decision Record)
+
+- 중요한 아키텍처 결정에 한해 ADR을 작성한다.
+- ADR에는 "연결된 프로그램(P-0/A/B/C)과 트랙/마일스톤"을 반드시 명시한다.
+- 경량화 원칙: 모든 변경에 ADR을 요구하지 않고, **Core Loop 방향성에 영향을 주는 결정**에만 적용한다.
+
+---
+
+## 10. 관련 문서
+
+- [architecture_roadmap_redesign.md](architecture_roadmap_redesign.md) — 이 로드맵의 설계 논의 및 합의 과정 아카이브
+- [architecture.md](../architecture/architecture.md) — 전체 아키텍처 개요
+- [worldservice.md](../architecture/worldservice.md) — WorldService 상세
+- [gateway.md](../architecture/gateway.md) — Gateway 상세
+- [seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md) — Seamless 데이터 플레인
+
+---
+
+이 로드맵은 Core Loop 관점에서 QMTL의 중장기 방향성을 고정하는 기준 문서로 사용한다. 새로운 기능을 설계할 때는, 먼저 이 문서에서 **어떤 프로그램과 어떤 트랙/마일스톤에 해당하는지**부터 정의한 뒤 설계를 시작해야 한다.

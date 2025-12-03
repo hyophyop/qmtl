@@ -28,7 +28,7 @@ related_issue: "hyophyop/qmtl#1750"
 
 - [아키텍처 개요](../architecture/architecture.md), [WorldService](../architecture/worldservice.md)
 - [auto_returns 통합 설계](auto_returns_unified_design.md)
-- [로드맵](../roadmap.md)
+- [로드맵](roadmap.md)
 
 여기서 제안하는 API/스키마는 **초안(draft)** 이며, 실제 적용 전에 worldservice/gateway/SDK 팀과 함께 구체화·축소·분할해야 한다.
 

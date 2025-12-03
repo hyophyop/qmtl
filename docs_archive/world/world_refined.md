@@ -1,4 +1,6 @@
-# World Design Review and Refinements (Research Summary)
+# World Design Review and Refinements (Research Summary, archived)
+
+> Archived research draft. Current world spec: `docs/world/world.md`.
 
 This note critically reviews the initial research draft for Worlds and
 consolidates actionable refinements across semantics, policy DSL, transition
@@ -77,4 +79,3 @@ selection:
 - Neutral: complexity increases with shared nodes—mitigate via staged adoption.
 - Negative: without drain/hysteresis/risk cuts, toggling and unintended orders
   may occur—default policies should remain conservative.
-

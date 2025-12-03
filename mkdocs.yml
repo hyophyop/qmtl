@@ -1,21 +1,18 @@
 site_name: QMTL Documentation
 nav:
   - Home: index.md
-  - Roadmap: roadmap.md
+  - Roadmap: design/core_loop_roadmap.md
   - Getting Started:
       - Overview: getting-started/index.md
       - Core Concepts: getting-started/concepts.md
       - Quickstart: getting-started/quickstart.md
       - User Workflow: getting-started/workflow.md
   - Maintenance:
-      - Schedule: MAINTENANCE_SCHEDULE.md
-      - Radon Metrics Snapshot (2025-11-14): maintenance/metrics/2025-11-14.md
       - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
   - Architecture:
       - Overview: architecture/README.md
       - SDK Layering: architecture/sdk_layers.md
       - Architecture & World ID Flow: architecture/architecture.md
-      - Core Loop Roadmap: architecture/core_loop_roadmap.md
       - Layered Template System: architecture/layered_template_system.md
       - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
       - Seamless Data Provider Modularization: architecture/seamless_data_provider_modularity.md
@@ -129,11 +126,6 @@ nav:
       - Policy Engine: world/policy_engine.md
       - Centralized Rebalancing: world/rebalancing.md
       - Modes: world/rebalancing_modes.md
-  - Archive:
-      - Overview: archive/README.md
-      - Realm Terminology Evaluation: archive/realm_rename_eval.md
-      - Backward Compatibility Cleanup Notes: archive/backward_compat_cleanup.md
-      - Architecture Rewrite Guide (Archived): archive/rewrite_architecture_docs.md
   - Tags: tags.md
   - Templates:
       - Index: templates/index.md
@@ -194,7 +186,6 @@ plugins:
             Design: 설계
             Reference: 레퍼런스
             World: 월드
-            Archive: 보관
             "Backward Compatibility Cleanup Notes": "하위호환 제거 메모"
             Tags: 태그
             Templates: 템플릿

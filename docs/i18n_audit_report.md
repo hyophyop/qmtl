@@ -8,12 +8,12 @@ Heuristics flag Korean pages with too little Hangul text, and English pages with
 - ko_low_hangul: 12.4% hangul, 62.7% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/guides/migration_bc_removal.md`
 - ko_low_hangul: 12.5% hangul, 67.9% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/reference/CHANGELOG.md`
 - ko_low_hangul: 12.8% hangul, 42.7% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/operations/exchange_calendars.md`
-- ko_low_hangul: 12.9% hangul, 73.6% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/archive/ccxt-seamless-legacy-audit.md`
+- ko_low_hangul: 12.9% hangul, 73.6% latin — `/Users/munseungjin/workspace/research/qmtl/docs_archive/ko/archive/ccxt-seamless-legacy-audit.md`
 - ko_low_hangul: 12.9% hangul, 59.8% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/templates/index.md`
 - ko_low_hangul: 14.3% hangul, 76.2% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/reference/schemas/index.md`
 - ko_low_hangul: 16.7% hangul, 59.9% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/io/ccxt-questdb.md`
 - ko_low_hangul: 17.1% hangul, 66.3% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/architecture/gateway.md`
-- ko_low_hangul: 17.1% hangul, 46.4% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/archive/README.md`
+- ko_low_hangul: 17.1% hangul, 46.4% latin — `/Users/munseungjin/workspace/research/qmtl/docs_archive/ko/archive/README.md`
 - ko_low_hangul: 17.3% hangul, 59.2% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/architecture/execution_state.md`
 - ko_low_hangul: 17.6% hangul, 63.7% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/architecture/execution_nodes.md`
 - ko_low_hangul: 17.6% hangul, 60.7% latin — `/Users/munseungjin/workspace/research/qmtl/docs/ko/architecture/layered_template_system.md`
@@ -46,7 +46,7 @@ Sample lines:
 - L45: - `docs/architecture/lean_brokerage_model.md`
 - L46: - `docs/architecture/seamless_data_provider_v2.md`
 - L47: - `docs/architecture/worldservice.md`
-- L53: - `docs/archive/ccxt-seamless-legacy-audit.md`
+- L53: - `docs_archive/ccxt-seamless-legacy-audit.md`
 - L58: - `docs/design/seamless_data_provider.md`
 - L59: - `docs/design/yaml_config_overhaul.md`
 - L65: - `docs/guides/build_nodeset_sdk.md`
@@ -118,7 +118,7 @@ Sample lines:
 - L32: early_closes={date(2024, 12, 24): time(13, 0)},
 {% endraw %}
 
-## /Users/munseungjin/workspace/research/qmtl/docs/ko/archive/ccxt-seamless-legacy-audit.md
+## /Users/munseungjin/workspace/research/qmtl/docs_archive/ko/archive/ccxt-seamless-legacy-audit.md
 - Kind: ko_low_hangul — Hangul: 12.9%, Latin: 73.6%
 
 Sample lines:
@@ -211,7 +211,7 @@ Sample lines:
 - L134: omitted, Gateway defaults to ``any`` for backward compatibility.
 {% endraw %}
 
-## /Users/munseungjin/workspace/research/qmtl/docs/ko/archive/README.md
+## /Users/munseungjin/workspace/research/qmtl/docs_archive/ko/archive/README.md
 - Kind: ko_low_hangul — Hangul: 17.1%, Latin: 46.4%
 
 
