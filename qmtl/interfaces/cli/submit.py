@@ -6,8 +6,6 @@ import sys
 from importlib import import_module
 from pathlib import Path
 from typing import List
-
-from qmtl.runtime.sdk.submit import _get_default_world
 from qmtl.utils.i18n import _ as _t
 
 from .common import parse_preset_overrides
@@ -62,7 +60,7 @@ def _prepend_strategy_root(strategy_root: Path | None) -> None:
 def cmd_submit(argv: List[str]) -> int:
     """Submit a strategy for evaluation."""
     strategy_root, config_default_world = _discover_project_settings()
-    default_world = config_default_world or _get_default_world()
+    default_world = config_default_world or os.environ.get("QMTL_DEFAULT_WORLD") or "__default__"
 
     parser = argparse.ArgumentParser(
         prog="qmtl submit",

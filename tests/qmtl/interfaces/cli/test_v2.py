@@ -242,6 +242,44 @@ class DemoStrategy(Strategy):
         assert getattr(captured["strategy"], "__name__") == "DemoStrategy"
         reset_runtime_config_cache()
 
+    def test_submit_falls_back_to_env_default_world(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "workspace_env"
+        workspace.mkdir()
+
+        strategies = workspace / "strategies"
+        strategies.mkdir()
+        (strategies / "__init__.py").write_text("")
+        (strategies / "demo.py").write_text(
+            """
+from qmtl.runtime.sdk import Strategy
+
+
+class DemoStrategy(Strategy):
+    def setup(self):
+        pass
+"""
+        )
+
+        monkeypatch.chdir(workspace)
+        monkeypatch.setenv("QMTL_DEFAULT_WORLD", "env_world")
+        reset_runtime_config_cache()
+
+        captured: dict[str, object] = {}
+
+        def fake_submit(strategy_cls, args, overrides):
+            captured["world"] = args.world
+            return 0
+
+        monkeypatch.setattr(
+            "qmtl.interfaces.cli.submit._submit_and_print_result", fake_submit
+        )
+
+        result = cmd_submit(["strategies.demo:DemoStrategy"])
+
+        assert result == 0
+        assert captured["world"] == "env_world"
+        reset_runtime_config_cache()
+
 
 class TestCLILegacyCommands:
     """Tests for legacy command handling."""
