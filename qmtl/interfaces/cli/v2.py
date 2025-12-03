@@ -27,7 +27,11 @@ from qmtl.utils.i18n import _ as _t  # Alias to avoid shadowing in loops
 from .http_client import gateway_url
 from .status import cmd_status
 from .submit import cmd_submit
-from .templates import DEFAULT_ENV_EXAMPLE, DEFAULT_STRATEGY_TEMPLATE
+from .templates import (
+    DEFAULT_ENV_EXAMPLE,
+    DEFAULT_QMTL_CONFIG,
+    DEFAULT_STRATEGY_TEMPLATE,
+)
 from .world import cmd_world
 
 
@@ -66,18 +70,26 @@ def cmd_init(argv: List[str]) -> int:
     if project_path.exists() and any(project_path.iterdir()):
         print(_t("Error: Directory '{}' already exists and is not empty").format(args.path), file=sys.stderr)
         return 1
-    
+
     project_path.mkdir(parents=True, exist_ok=True)
-    (project_path / "strategy.py").write_text(DEFAULT_STRATEGY_TEMPLATE)
+    strategies_dir = project_path / "strategies"
+    strategies_dir.mkdir(parents=True, exist_ok=True)
+    (strategies_dir / "__init__.py").write_text("")
+    (strategies_dir / "my_strategy.py").write_text(DEFAULT_STRATEGY_TEMPLATE)
+    (project_path / "qmtl.yml").write_text(DEFAULT_QMTL_CONFIG)
     (project_path / ".env.example").write_text(DEFAULT_ENV_EXAMPLE)
-    
+
     print(_t("✅ Project initialized at '{}'").format(args.path))
     print()
     print(_t("Next steps:"))
     print(f"  1. cd {args.path}")
-    print("  2. Edit strategy.py with your strategy logic")
-    print("  3. qmtl submit strategy.py")
-    
+    print("  2. Edit strategies/my_strategy.py with your strategy logic")
+    print(
+        "  3. qmtl submit strategies.my_strategy:MyStrategy"
+        " --world demo_world"
+    )
+    print("     (project.strategy_root + default_world are tracked in qmtl.yml)")
+
     return 0
 
 

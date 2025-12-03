@@ -2,7 +2,7 @@
 title: "SDK Usage Guide"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-09-24
+last_modified: 2025-12-05
 ---
 
 {{ nav_links() }}
@@ -165,6 +165,26 @@ Environment variables:
 
 - `QMTL_GATEWAY_URL` for the Gateway URL (default `http://localhost:8000`)
 - `QMTL_DEFAULT_WORLD` for the default world (default `__default__`)
+
+## Local factory layout (WS/Gateway Core Loop)
+
+For WS/Gateway-backed Core Loop, use the following opinionated **strategy factory** layout:
+
+```
+workspace/
+├── qmtl/                 # qmtl repo (editable install)
+├── strategies/           # project.strategy_root (local strategy package)
+│   └── my_strategy.py    # strategies.my_strategy:MyStrategy
+└── qmtl.yml              # project.default_world plus Gateway/WorldService config
+```
+
+`qmtl init <path>` scaffolds this layout automatically. The generated `qmtl.yml` records `project.strategy_root: strategies` and `project.default_world: demo_world`, so `qmtl submit` can resolve modules without `PYTHONPATH=./strategies` tweaks.
+
+1. Create a workspace: `uv run qmtl init factory`
+2. Implement a strategy: `factory/strategies/my_strategy.py`
+3. Submit: `uv run qmtl submit strategies.my_strategy:MyStrategy` (override with `--world` when needed)
+
+`qmtl submit` prefers `qmtl.yml` for strategy resolution and the default world. Even if `QMTL_STRATEGY_ROOT` or an existing `PYTHONPATH` is present, `project.strategy_root` is applied first to keep behaviour consistent across POSIX and Windows.
 
 ## Cache Access
 

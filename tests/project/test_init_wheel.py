@@ -71,5 +71,13 @@ def test_init_wheel(tmp_path: Path) -> None:
         check=True,
         env=env,
     )
-    # v2 creates a minimal strategy file
-    assert (dest / "strategy.py").is_file()
+    # v2 creates a minimal strategy package and config
+    strategies_dir = dest / "strategies"
+    assert (strategies_dir / "__init__.py").is_file()
+    assert (strategies_dir / "my_strategy.py").is_file()
+    assert (dest / "qmtl.yml").is_file()
+    assert (dest / ".env.example").is_file()
+
+    config_text = (dest / "qmtl.yml").read_text()
+    assert "project:" in config_text
+    assert "strategy_root: strategies" in config_text

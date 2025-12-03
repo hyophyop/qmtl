@@ -35,7 +35,9 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 - SDK/Runner 및 Gateway는 WS가 제공하는 결정(envelope)의 소비자일 뿐이며, 사용자가 ExecutionDomain이나 Apply 프로토콜을 직접 제어하지 않아도 되도록 인터페이스를 구성합니다.
 - 정책/스키마를 개편할 때는 하위 호환성을 위해 구/신 필드·모드를 장기간 병존시키지 않고, 명시적인 마이그레이션 기간 후에는 단일한 “신 정책 모델”만 유지하는 것을 원칙으로 합니다(단순성 > 하위 호환성).
 
-비목표: 전략 인제스트, DAG diff, 큐/태그 디스커버리(각각 Gateway/DAG Manager 소유). 주문 I/O는 여기에서 다루지 않습니다.
+비목표:
+- 전략 인제스트, DAG diff, 큐/태그 디스커버리(각각 Gateway/DAG Manager 소유). 주문 I/O는 여기에서 다루지 않습니다.
+- WorldService/Gateway 없이 Runner/SDK만으로 전체 전략 생애 주기와 최종 평가/게이팅을 처리하는 “순수 로컬 모드”를 정식 운영 모드로 지원하지 않습니다. SDK 레벨의 ValidationPipeline·PnL 헬퍼는 테스트/실험 용도이며, 정책·평가·게이팅의 SSOT는 항상 WorldService입니다.
 
 ### 0‑A. As‑Is / To‑Be 요약
 

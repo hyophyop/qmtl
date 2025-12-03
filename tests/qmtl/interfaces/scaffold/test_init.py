@@ -60,8 +60,12 @@ def test_init_cli_v2(tmp_path: Path):
     # v2 CLI: positional path argument, returns 0 on success (no SystemExit)
     result = cli_main(["init", str(dest)])
     assert result == 0
-    # v2 creates minimal structure
-    assert (dest / "strategy.py").is_file()
+    # v2 creates minimal structure with strategies package + config
+    strategies_dir = dest / "strategies"
+    assert (strategies_dir / "__init__.py").is_file()
+    assert (strategies_dir / "my_strategy.py").is_file()
+    assert (dest / "qmtl.yml").is_file()
+    assert (dest / ".env.example").is_file()
 
 
 def test_layer_composer_compose(tmp_path: Path):
