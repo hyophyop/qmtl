@@ -83,6 +83,22 @@ async def test_world_delete_returns_no_content(gateway_app_factory) -> None:
 
 
 @pytest.mark.asyncio
+async def test_world_describe_missing_world_returns_404(
+    gateway_app_factory,
+) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/worlds/__default__/describe":
+            return httpx.Response(404, json={"detail": "world not found"})
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.get("/worlds/__default__/describe")
+
+    assert resp.status_code == 404
+    assert resp.json() == {"detail": "world not found"}
+
+
+@pytest.mark.asyncio
 async def test_world_activation_injects_query_defaults(
     gateway_app_factory,
 ) -> None:

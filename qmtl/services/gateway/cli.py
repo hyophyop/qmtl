@@ -199,10 +199,10 @@ async def _build_commitlog_clients(
     config: GatewayConfig,
 ) -> tuple[CommitLogWriter | None, CommitLogConsumer | None]:
     if not config.commitlog_bootstrap or not config.commitlog_topic:
-        logging.warning(
+        logging.info(
             _(
-                "Commit-log writer is disabled; production deployments must set "
-                "commitlog_bootstrap and commitlog_topic to record gateway.ingest events."
+                "Commit-log writer disabled (expected for local dev). "
+                "Set commitlog_bootstrap and commitlog_topic to record gateway.ingest events in production."
             )
         )
         return None, None
