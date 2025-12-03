@@ -2,7 +2,7 @@
 title: "SDK 사용 가이드"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-09-24
+last_modified: 2025-12-05
 ---
 
 {{ nav_links() }}
@@ -127,6 +127,26 @@ qmtl submit strategy.py --mode backtest
 환경 변수:
 - `QMTL_GATEWAY_URL`: Gateway URL (`http://localhost:8000` 기본)
 - `QMTL_DEFAULT_WORLD`: 기본 월드 이름 (`__default__` 기본)
+
+## 로컬 팩토리 레이아웃 (WS/Gateway Core Loop)
+
+WS/Gateway 기반 Core Loop를 기본 경로로 사용하는 **전략 팩토리** 작업 공간의 권장 구조는 다음과 같습니다.
+
+```
+workspace/
+├── qmtl/                 # qmtl 저장소 (editable install)
+├── strategies/           # project.strategy_root (지역 전략 패키지)
+│   └── my_strategy.py    # strategies.my_strategy:MyStrategy
+└── qmtl.yml              # project.default_world, Gateway/WorldService 설정
+```
+
+`qmtl init <path>`가 위 구조를 자동 생성합니다. 기본 `qmtl.yml`에는 `project.strategy_root: strategies`와 `project.default_world: demo_world`가 기록되어 있어 `PYTHONPATH=./strategies` 같은 수동 설정 없이 전략을 불러올 수 있습니다.
+
+1. 새 작업 공간 생성: `uv run qmtl init factory`
+2. 전략 작성: `factory/strategies/my_strategy.py`
+3. 제출: `uv run qmtl submit strategies.my_strategy:MyStrategy` (필요 시 `--world`로 override)
+
+`qmtl submit`은 `qmtl.yml`을 우선 사용해 전략 경로와 기본 월드를 해석합니다. `QMTL_STRATEGY_ROOT`(선택)나 기존 `PYTHONPATH`가 있더라도 `project.strategy_root`가 최우선으로 적용되어 POSIX/Windows 모두에서 동일하게 동작합니다.
 
 ## 캐시 조회
 

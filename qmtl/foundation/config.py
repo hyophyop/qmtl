@@ -230,6 +230,18 @@ class TestConfig:
     )
 
 
+@dataclass
+class ProjectConfig:
+    """Project-level hints for CLI defaults and strategy discovery."""
+
+    strategy_root: str | None = field(
+        default=None, metadata={"env": "QMTL_STRATEGY_ROOT"}
+    )
+    default_world: str | None = field(
+        default=None, metadata={"env": "QMTL_DEFAULT_WORLD"}
+    )
+
+
 CONFIG_SECTION_NAMES: tuple[str, ...] = (
     "worldservice",
     "gateway",
@@ -240,6 +252,7 @@ CONFIG_SECTION_NAMES: tuple[str, ...] = (
     "cache",
     "runtime",
     "test",
+    "project",
 )
 
 
@@ -344,6 +357,7 @@ class UnifiedConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     test: TestConfig = field(default_factory=TestConfig)
+    project: ProjectConfig = field(default_factory=ProjectConfig)
     present_sections: FrozenSet[str] = field(default_factory=frozenset)
 
 
@@ -484,6 +498,7 @@ def load_config(path: str) -> UnifiedConfig:
     cache_data = sections["cache"]
     runtime_data = sections["runtime"]
     test_data = sections["test"]
+    project_data = sections["project"]
 
     gateway_cfg = GatewayConfig.from_mapping(gateway_data)
     dagmanager_cfg = DagManagerConfig(**dagmanager_data)
@@ -497,6 +512,7 @@ def load_config(path: str) -> UnifiedConfig:
     cache_cfg = CacheConfig(**cache_data)
     runtime_cfg = RuntimeConfig(**runtime_data)
     test_cfg = TestConfig(**test_data)
+    project_cfg = ProjectConfig(**project_data)
 
     _mirror_worldservice_to_gateway(world_data, worldservice_cfg, gateway_cfg)
 
@@ -510,5 +526,6 @@ def load_config(path: str) -> UnifiedConfig:
         cache=cache_cfg,
         runtime=runtime_cfg,
         test=test_cfg,
+        project=project_cfg,
         present_sections=present_sections,
     )

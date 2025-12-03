@@ -42,4 +42,21 @@ DEFAULT_ENV_EXAMPLE = '''# QMTL Configuration
 
 # Default world (default: __default__)
 # QMTL_DEFAULT_WORLD=__default__
+
+# Strategy root (optional when project.strategy_root is set in qmtl.yml)
+# QMTL_STRATEGY_ROOT=./strategies
 '''
+
+DEFAULT_QMTL_CONFIG = """# QMTL project defaults for strategy submission
+
+project:
+  strategy_root: strategies
+  default_world: demo_world
+
+worldservice:
+  url: http://localhost:8080
+
+gateway:
+  host: 0.0.0.0
+  port: 8000
+"""

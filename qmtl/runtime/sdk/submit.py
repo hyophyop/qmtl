@@ -102,6 +102,11 @@ def _get_gateway_url() -> str:
 
 def _get_default_world() -> str:
     """Get default world from environment or use default."""
+    from qmtl.runtime.sdk.configuration import get_runtime_config
+
+    config = get_runtime_config()
+    if config and config.project.default_world:
+        return config.project.default_world
     return os.environ.get(ENV_DEFAULT_WORLD, DEFAULT_WORLD)
 
 

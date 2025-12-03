@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from qmtl.interfaces.cli.submit import cmd_submit
 from qmtl.interfaces.cli.v2 import COMMANDS, LEGACY_COMMANDS, ADMIN_COMMANDS, main
+from qmtl.runtime.sdk.configuration import reset_runtime_config_cache
 
 
 class TestCLIHelp:
@@ -164,11 +166,13 @@ class TestCLIInit:
         project_dir = tmp_path / "test_project"
         result = main(["init", str(project_dir)])
         assert result == 0
-        
+
         # Check files were created
-        assert (project_dir / "strategy.py").exists()
+        assert (project_dir / "qmtl.yml").exists()
+        assert (project_dir / "strategies" / "__init__.py").exists()
+        assert (project_dir / "strategies" / "my_strategy.py").exists()
         assert (project_dir / ".env.example").exists()
-        
+
         captured = capsys.readouterr()
         assert "Project initialized" in captured.out
         assert "Next steps:" in captured.out
@@ -182,6 +186,61 @@ class TestCLIInit:
         assert result == 1
         captured = capsys.readouterr()
         assert "not empty" in captured.err
+
+
+class TestSubmitStrategyRoot:
+    """Strategy resolution driven by qmtl.yml project section."""
+
+    def test_submit_uses_project_strategy_root_and_default_world(
+        self, tmp_path, monkeypatch
+    ):
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        config = workspace / "qmtl.yml"
+        config.write_text(
+            """
+project:
+  strategy_root: strategies
+  default_world: demo_world
+"""
+        )
+
+        strategies = workspace / "strategies"
+        strategies.mkdir()
+        (strategies / "__init__.py").write_text("")
+        (strategies / "demo.py").write_text(
+            """
+from qmtl.runtime.sdk import Strategy
+
+
+class DemoStrategy(Strategy):
+    def setup(self):
+        pass
+"""
+        )
+
+        monkeypatch.chdir(workspace)
+        monkeypatch.setenv("QMTL_DEFAULT_WORLD", "override_world")
+        reset_runtime_config_cache()
+
+        captured: dict[str, object] = {}
+
+        def fake_submit(strategy_cls, args, overrides):
+            captured["strategy"] = strategy_cls
+            captured["world"] = args.world
+            return 0
+
+        monkeypatch.setattr(
+            "qmtl.interfaces.cli.submit._submit_and_print_result", fake_submit
+        )
+
+        result = cmd_submit(["strategies.demo:DemoStrategy"])
+
+        assert result == 0
+        assert captured["world"] == "demo_world"
+        assert getattr(captured["strategy"], "__name__") == "DemoStrategy"
+        reset_runtime_config_cache()
 
 
 class TestCLILegacyCommands:

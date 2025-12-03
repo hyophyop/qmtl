@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from importlib import import_module
 from pathlib import Path
@@ -11,8 +12,57 @@ from qmtl.utils.i18n import _ as _t
 from .common import parse_preset_overrides
 
 
+def _discover_project_settings() -> tuple[Path | None, str | None]:
+    """Return (strategy_root, default_world) from config/env if present."""
+
+    from qmtl.runtime.sdk.configuration import (
+        get_runtime_config,
+        get_runtime_config_path,
+    )
+
+    env_strategy_root = os.environ.get("QMTL_STRATEGY_ROOT")
+    strategy_root: Path | None = (
+        Path(env_strategy_root).expanduser().resolve()
+        if env_strategy_root is not None
+        else None
+    )
+
+    config = get_runtime_config()
+    if config is None:
+        return strategy_root, None
+
+    cfg_path = get_runtime_config_path()
+    base_dir = Path(cfg_path).parent if cfg_path else Path.cwd()
+    if config.project.strategy_root:
+        strategy_root = (base_dir / config.project.strategy_root).expanduser().resolve()
+    return strategy_root, config.project.default_world
+
+
+def _prepend_strategy_root(strategy_root: Path | None) -> None:
+    """Ensure strategy_root is at the front of sys.path when provided."""
+
+    if strategy_root is None:
+        return
+
+    root_str = str(strategy_root)
+    candidates: list[str] = []
+
+    parent = strategy_root.parent
+    parent_str = str(parent)
+    if parent != strategy_root and parent_str not in sys.path:
+        candidates.append(parent_str)
+    if root_str not in sys.path:
+        candidates.append(root_str)
+
+    if candidates:
+        sys.path[:0] = candidates
+
+
 def cmd_submit(argv: List[str]) -> int:
     """Submit a strategy for evaluation."""
+    strategy_root, config_default_world = _discover_project_settings()
+    default_world = config_default_world or _get_default_world()
+
     parser = argparse.ArgumentParser(
         prog="qmtl submit",
         description=_t("Submit a strategy for evaluation and activation"),
@@ -23,8 +73,10 @@ def cmd_submit(argv: List[str]) -> int:
     )
     parser.add_argument(
         "--world", "-w",
-        default=None,
-        help=_t("Target world (default: QMTL_DEFAULT_WORLD or __default__)"),
+        default=default_world,
+        help=_t(
+            "Target world (defaults to project.default_world in qmtl.yml or QMTL_DEFAULT_WORLD)"
+        ),
     )
     parser.add_argument(
         "--mode", "-m",
@@ -57,6 +109,7 @@ def cmd_submit(argv: List[str]) -> int:
     )
     
     args = parser.parse_args(argv)
+    _prepend_strategy_root(strategy_root)
     overrides = parse_preset_overrides(args.preset_override or [])
     strategy_cls = _load_strategy(args.strategy)
     if strategy_cls is None:
