@@ -16,6 +16,7 @@ from qmtl.services.gateway.world_client import WorldServiceClient
 from .dependencies import GatewayDependencyProvider
 
 WorldCall = Callable[[WorldServiceClient, dict[str, str]], Awaitable[Any]]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,12 +93,13 @@ async def _proxy_world_call(
         status_code = exc.response.status_code
         detail = _extract_worldservice_detail(exc.response)
         log_level = logging.INFO if status_code == status.HTTP_404_NOT_FOUND else logging.WARNING
-        logging.log(
+        logger.log(
             log_level,
-            "WorldService proxy %s %s returned %s: %s",
+            "WorldService proxy %s %s returned %s (cid=%s): %s",
             request.method,
             request.url.path,
             status_code,
+            cid,
             detail,
         )
         raise HTTPException(
@@ -106,10 +108,11 @@ async def _proxy_world_call(
             headers={"X-Correlation-ID": cid},
         ) from None
     except httpx.RequestError as exc:
-        logging.warning(
-            "WorldService proxy request failed for %s %s: %s",
+        logger.warning(
+            "WorldService proxy request failed for %s %s (cid=%s): %s",
             request.method,
             request.url.path,
+            cid,
             exc,
         )
         raise HTTPException(

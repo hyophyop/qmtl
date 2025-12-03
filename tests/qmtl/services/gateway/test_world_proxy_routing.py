@@ -86,8 +86,11 @@ async def test_world_delete_returns_no_content(gateway_app_factory) -> None:
 async def test_world_describe_missing_world_returns_404(
     gateway_app_factory,
 ) -> None:
+    captured: dict[str, str | None] = {}
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/worlds/__default__/describe":
+            captured["cid"] = request.headers.get("X-Correlation-ID")
             return httpx.Response(404, json={"detail": "world not found"})
         raise AssertionError("unexpected path")
 
@@ -96,6 +99,8 @@ async def test_world_describe_missing_world_returns_404(
 
     assert resp.status_code == 404
     assert resp.json() == {"detail": "world not found"}
+    assert resp.headers["X-Correlation-ID"]
+    assert resp.headers["X-Correlation-ID"] == captured.get("cid")
 
 
 @pytest.mark.asyncio
@@ -157,7 +162,10 @@ async def test_live_guard_disabled(gateway_app_factory) -> None:
 async def test_status_reports_worldservice_breaker(
     gateway_app_factory, reset_gateway_metrics
 ) -> None:
+    captured: dict[str, str | None] = {}
+
     async def handler(request: httpx.Request) -> httpx.Response:
+        captured["cid"] = request.headers.get("X-Correlation-ID")
         raise httpx.ConnectError("boom")
 
     breaker = AsyncCircuitBreaker(max_failures=1)
@@ -173,10 +181,13 @@ async def test_status_reports_worldservice_breaker(
             "breaker": breaker,
         },
     ) as ctx:
-        with pytest.raises(httpx.ConnectError):
-            await ctx.client.get("/worlds/abc/decide")
+        resp = await ctx.client.get("/worlds/abc/decide")
         status = await ctx.client.get("/status")
 
+    assert resp.status_code == 503
+    assert resp.json() == {"detail": "WorldService unavailable"}
+    assert resp.headers["X-Correlation-ID"]
+    assert resp.headers["X-Correlation-ID"] == captured.get("cid")
     assert status.json()["worldservice"] == "open"
 
 
