@@ -19,11 +19,13 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict
 
+import time
 import uvicorn
-from fastapi import FastAPI, Response, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 import yaml
-import time
+
+from qmtl.services.worldservice.shared_schemas import EvaluateRequest
 
 
 app = FastAPI()
@@ -106,11 +108,6 @@ async def activation(wid: str) -> Response:
 @app.get("/worlds/{wid}/{topic}/state_hash")
 async def state_hash(wid: str, topic: str) -> dict:
     return {"state_hash": f"{topic}-hash"}
-
-
-class EvaluateRequest(BaseModel):
-    as_of: str | None = None
-
 
 @app.post("/worlds/{wid}/evaluate")
 async def evaluate(wid: str, req: EvaluateRequest) -> dict:
