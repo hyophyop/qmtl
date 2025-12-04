@@ -42,7 +42,8 @@ def test_determine_execution_mode_derived_from_context() -> None:
         gateway_url=None,
     )
 
-    assert mode == "dryrun"
+    # execution_domain hints are ignored; fallback to default-safe backtest
+    assert mode == "backtest"
 
 
 def test_determine_execution_mode_accepts_paper_alias() -> None:
@@ -73,7 +74,7 @@ def test_determine_execution_mode_defaults_to_live_when_gateway() -> None:
     assert mode == "live"
 
 
-def test_determine_execution_mode_retains_shadow_domain() -> None:
+def test_determine_execution_mode_ignores_execution_domain_hint() -> None:
     mode = determine_execution_mode(
         explicit_mode=None,
         execution_domain="shadow",
@@ -83,7 +84,8 @@ def test_determine_execution_mode_retains_shadow_domain() -> None:
         gateway_url=None,
     )
 
-    assert mode == "shadow"
+    # legacy hints no longer steer execution mode
+    assert mode == "backtest"
 
 
 def test_resolve_execution_context_downgrades_missing_as_of() -> None:
@@ -137,20 +139,6 @@ def test_determine_execution_mode_rejects_deprecated_or_unknown_modes(bad_mode: 
         determine_execution_mode(
             explicit_mode=bad_mode,
             execution_domain=None,
-            merged_context=merged,
-            trade_mode="backtest",
-            offline_requested=False,
-            gateway_url=None,
-        )
-
-
-def test_determine_execution_mode_rejects_invalid_domain_hint() -> None:
-    merged: dict[str, str] = {}
-
-    with pytest.raises(ValueError):
-        determine_execution_mode(
-            explicit_mode=None,
-            execution_domain="papertrade",
             merged_context=merged,
             trade_mode="backtest",
             offline_requested=False,

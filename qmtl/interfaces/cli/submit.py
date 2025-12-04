@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from importlib import import_module
@@ -111,8 +112,18 @@ def cmd_submit(argv: List[str]) -> int:
         default=[],
         help=_t("Override preset thresholds (key=value, e.g., max_drawdown.max=0.15)"),
     )
+    parser.add_argument(
+        "--output",
+        choices=["text", "json"],
+        default="text",
+        help=_t("Output format (text|json). Default: text"),
+    )
     
     args = parser.parse_args(argv)
+    args.world = (args.world or "").strip()
+    if not args.world:
+        print(_t("Error: world must be provided (use --world or set QMTL_DEFAULT_WORLD)"), file=sys.stderr)
+        return 1
     _prepend_strategy_root(strategy_root)
     overrides = parse_preset_overrides(args.preset_override or [])
     strategy_cls = _load_strategy(args.strategy)
@@ -144,8 +155,15 @@ def _submit_and_print_result(strategy_cls, args: argparse.Namespace, overrides: 
         reason = getattr(result, "downgrade_reason", None) or "unspecified"
         print(_t("⚠️  Safe mode: execution was downgraded ({})").format(reason), file=sys.stderr)
 
-    _print_submission_result(result)
+    _emit_submission_result(result, getattr(args, "output", "text"))
     return 0 if result.status != "rejected" else 1
+
+
+def _emit_submission_result(result, output_format: str = "text") -> None:
+    if output_format == "json":
+        _print_submission_result_json(result)
+        return
+    _print_submission_result(result)
 
 
 def _print_submission_result(result) -> None:
@@ -162,6 +180,15 @@ def _print_submission_result(result) -> None:
     _print_ws_section(result)
     if getattr(result, "precheck", None):
         _print_precheck_section(result.precheck)
+
+
+def _print_submission_result_json(result) -> None:
+    """Emit SubmitResult as JSON with WS/precheck separation preserved."""
+    try:
+        payload = result.to_dict()
+    except Exception:
+        payload = result
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def _print_ws_section(result) -> None:

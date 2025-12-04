@@ -154,6 +154,17 @@ workspace/
   - `🌐 WorldService decision (SSOT)` — `status/weight/rank/contribution`과 WS 기준 threshold 위반 목록.
   - `🧪 Local pre-check (ValidationPipeline)` — 로컬 지표/위반/힌트(WS와 달라도 SSOT가 아니므로 참고용).
 - `downgraded/safe_mode/downgrade_reason`은 여전히 최상위에 표시되어 default-safe 강등 여부를 확인할 수 있습니다.
+- `--output json` 플래그를 사용하면 WS/Precheck가 분리된 JSON을 그대로 받아볼 수 있습니다.
+
+### 실행 모드·도메인 규칙 (default-safe)
+- 사용자에게 노출되는 모드는 `backtest | paper | live` 뿐이며, 내부 execution_domain 힌트는 무시됩니다.
+- WS 결정(`effective_mode`)이 우선이며, 모호/누락 시 항상 compute-only(backtest)로 강등됩니다.
+- `backtest/paper` 모드에서 `as_of`나 `dataset_fingerprint`가 없으면 안전모드(`safe_mode=True`, `downgrade_reason=missing_as_of`)로 표시됩니다.
+
+### 데이터 preset 자동 연결 (world 기반 온램프)
+- `world.data.presets[]`가 정의된 월드는 Runner/CLI가 자동으로 Seamless provider를 구성합니다.
+- `--data-preset <id>`로 월드에 선언된 preset을 선택할 수 있으며, 생략 시 첫 번째 preset을 사용합니다.
+- StreamInput에 `history_provider`를 직접 설정하지 않아도 world preset이 자동 주입됩니다(계약 테스트 `tests/e2e/core_loop`에서 검증).
 
 ## 캐시 조회
 

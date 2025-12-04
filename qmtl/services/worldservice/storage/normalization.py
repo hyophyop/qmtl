@@ -15,35 +15,29 @@ from .constants import (
 def _normalize_execution_domain(execution_domain: str | None) -> str:
     """Normalise *execution_domain* to a canonical, validated value.
 
-    - Missing/empty/default values are downgraded to the default compute-only domain.
-    - Common aliases (compute-only/compute_only, paper/sim, prod/live) are mapped
-      via ``resolve_execution_domain``.
-    - Unknown tokens surface a clear error so callers can fix inputs instead of
-      silently running in an unintended domain.
+    - Accepts canonical tokens (backtest | dryrun | live | shadow) and maps
+      known aliases via ``resolve_execution_domain``.
+    - Missing/empty/default values downgrade to the default compute-only domain.
+    - Unknown tokens raise to avoid silently running in an unintended domain.
     """
 
-    if execution_domain is None:
-        return DEFAULT_EXECUTION_DOMAIN
-
-    raw = str(execution_domain).strip()
-    if not raw:
+    raw = "" if execution_domain is None else str(execution_domain).strip()
+    if not raw or raw.lower() == "default":
         return DEFAULT_EXECUTION_DOMAIN
 
     resolved = resolve_execution_domain(raw)
-    if resolved is None or resolved.strip().lower() in {"", "default"}:
-        return DEFAULT_EXECUTION_DOMAIN
+    if resolved is None:
+        allowed = ", ".join(sorted(EXECUTION_DOMAINS))
+        raise ValueError(f"unknown execution_domain '{execution_domain}'; expected one of {allowed}")
 
     candidate = resolved.strip().lower()
-    if candidate == DEFAULT_EXECUTION_DOMAIN:
+    if not candidate or candidate == "default":
         return DEFAULT_EXECUTION_DOMAIN
     if candidate in EXECUTION_DOMAINS:
         return candidate
 
     allowed = ", ".join(sorted(EXECUTION_DOMAINS))
-    raise ValueError(
-        f"unknown execution_domain '{execution_domain}'; expected one of {allowed} "
-        "(aliases like 'compute-only' -> backtest, 'paper/sim' -> dryrun)"
-    )
+    raise ValueError(f"unknown execution_domain '{execution_domain}'; expected one of {allowed}")
 
 
 def _normalize_world_node_status(status: str | None) -> str:

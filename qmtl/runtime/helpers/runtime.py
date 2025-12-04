@@ -139,20 +139,14 @@ def determine_execution_mode(
     offline_requested: bool,
     gateway_url: str | None,
 ) -> str:
-    """Determine the execution mode from user inputs and existing context."""
+    """Determine the execution mode from user inputs and existing context.
+
+    execution_domain hints are intentionally ignored; callers must pass
+    explicit_mode (or set execution_mode in context) to steer behaviour.
+    """
 
     if explicit_mode is not None:
         return _normalize_mode(explicit_mode)
-
-    derived = _mode_from_domain(execution_domain)
-    if derived is not None:
-        return derived
-
-    domain_hint = merged_context.get("execution_domain")
-    if domain_hint:
-        derived = _mode_from_domain(domain_hint)
-        if derived is not None:
-            return derived
 
     existing = merged_context.get("execution_mode")
     if existing:

@@ -24,13 +24,15 @@ from qmtl.services.worldservice.storage.normalization import (
         ("  LIVE  ", "live"),
         ("DryRun", "dryrun"),
         (" shadow ", "shadow"),
+        ("backtest", "backtest"),
+        ("  BACKTEST  ", "backtest"),
     ],
 )
 def test_normalize_execution_domain_defaults_and_lowercases(raw: object, expected: str) -> None:
     assert _normalize_execution_domain(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["weird", 123])
+@pytest.mark.parametrize("raw", ["unknown", "legacy", "weird", 123])
 def test_normalize_execution_domain_rejects_unknown_values(raw: object) -> None:
     with pytest.raises(ValueError, match="unknown execution_domain"):
         _normalize_execution_domain(raw)  # type: ignore[arg-type]

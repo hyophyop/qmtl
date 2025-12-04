@@ -50,6 +50,10 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 - To‑Be
   - WS 평가 결과(active/weight/contribution/violations)가 **월드 차원의 단일 출처**로 간주되고, SDK/Runner는 이를 그대로 사용자에게 노출하되 `ValidationPipeline`은 힌트·로컬 사전 검사 역할로 한정됩니다.
   - `DecisionEnvelope`/`ActivationEnvelope` 스키마와 Runner/CLI `SubmitResult` 구조가 일치하도록 정리해, “전략 제출 → 월드 평가 결과 확인”이 한눈에 이어지도록 합니다.
+- 계약 (정렬 상태)
+  - `/worlds/{id}/evaluate` → `DecisionEnvelope`/`ActivationEnvelope` 값이 `SubmitResult.ws.decision/activation`에 그대로 매핑됩니다. CLI `--output json`은 WS/Precheck가 분리된 동일 JSON을 출력합니다.
+  - 로컬 `ValidationPipeline` 출력은 `SubmitResult.precheck`에만 담기며, `status/weight/rank/contribution`의 SSOT는 WS입니다.
+  - `ActivationEnvelope`(`GET/PUT /worlds/{id}/activation`) 필드와 `SubmitResult.ws.activation` 필드가 동일 스키마를 사용해 활성/weight/etag/run_id/state_hash를 노출합니다.
 
 #### ExecutionDomain / effective_mode
 

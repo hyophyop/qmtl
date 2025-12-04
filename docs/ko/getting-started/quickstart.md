@@ -78,34 +78,33 @@ python my_strategy.py
 성공하면 다음과 같은 결과를 받습니다:
 
 ```python
-SubmitResult(
-    strategy_id="momentum_btc_1m_abc123",
-    status="valid",              # valid | invalid | pending
-    world="quickstart_demo",
-    mode="backtest",
-    downgraded=False,            # 안전기본으로 강등되었는지 여부
-    downgrade_reason=None,       # 예: backtest 필수 입력 누락 시 "missing_as_of"
-    safe_mode=False,             # True면 주문 게이트 OFF 상태
-    
-    # 성과 지표
-    metrics={
-        "sharpe": 1.45,
-        "max_drawdown": -0.08,
-        "win_rate": 0.55,
-        "profit_factor": 1.32,
-    },
-    
-    # 월드 내 위치 (backtest에서는 시뮬레이션 값)
-    contribution=0.0,            # 아직 활성화 전
-    weight=0.0,
-    rank=None,
-    
-    # 개선 힌트
-    improvement_hints=[
-        "Sharpe 1.5 이상이면 paper 모드 승격 가능",
-        "최소 30일 백테스트 권장 (현재: 7일)"
-    ]
-)
+{
+  "strategy_id": "momentum_btc_1m_abc123",
+  "status": "valid",              # valid | invalid | pending | rejected
+  "world": "quickstart_demo",
+  "mode": "backtest",
+  "downgraded": false,            # 안전기본 강등 여부 (필요 시 compute-only로 전환)
+  "downgrade_reason": null,       # 예: backtest 필수 입력 누락 시 "missing_as_of"
+  "safe_mode": false,             # True면 주문 게이트 OFF 상태
+  "ws": {                         # WorldService가 SSOT로 제공하는 결정/활성 요약
+    "decision": { "world_id": "quickstart_demo", "effective_mode": "validate", "etag": "..." },
+    "activation": { "strategy_id": "momentum_btc_1m_abc123", "weight": 0.10, "active": true },
+    "metrics": { "sharpe": 1.45, "max_drawdown": -0.08, "win_rate": 0.55, "profit_factor": 1.32 },
+    "threshold_violations": [],
+    "rejection_reason": null
+  },
+  "precheck": {                   # 로컬 ValidationPipeline 참고용 출력
+    "status": "passed",
+    "violations": [],
+    "metrics": { "sharpe": 1.4, "max_drawdown": -0.09 }
+  }
+}
+```
+
+CLI에서도 동일하게 `--output json` 플래그로 WS/Precheck가 분리된 결과를 받을 수 있습니다:
+
+```bash
+qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --mode backtest --output json
 ```
 
 ---
