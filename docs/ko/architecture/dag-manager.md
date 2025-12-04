@@ -2,7 +2,7 @@
 title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-04
 spec_version: v1.1
 ---
 
@@ -122,6 +122,19 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
 - BLAKE3를 사용합니다. 충돌 대비가 필요할 때는 도메인 분리를 적용한 **BLAKE3 XOF**(더 긴 출력)를 사용하세요. 모든 ID는 `blake3:` 접두사를 가져야 합니다.
 - 고유성은 `compute_pk` 제약으로 보장합니다. `schema_compat_id`는 노드 메시지 포맷의 Schema Registry 주요 호환 식별자(major‑compat)를 참조합니다.
 - **Schema compatibility:** Minor/Patch 수준의 스키마 변경은 `schema_compat_id`를 유지하여 `node_id`를 보존한다. 실제 바이트 수준 스키마 변경은 선택 속성 `schema_hash`로 추적해 버퍼링/재계산 정책에 활용한다.
+
+### 1.3-A NodeID/TagQuery 결정성 불변식 및 관측 훅
+- **동일 사양 → 동일 NodeID**: `(node_type, interval, period, params_canon, dependencies_sorted, schema_compat_id, code_hash)`가 동일하면 업로드 순서나 월드/도메인에 관계없이 하나의 NodeID만 생성된다.
+- **세계/도메인 배제**: `world_id`, `execution_domain`, `as_of`, `partition`은 NodeID 입력에 포함되지 않는다. 실행/캐시 격리는 `ComputeKey`(§1.4)·`EvalKey`가 담당하며, NodeID 재사용과 도메인 격리를 혼동하지 않는다.
+- **TagQuery 정규화**: NodeID 입력은 정규화된 `query_tags`(정렬·중복 제거), `match_mode`, `interval`만 포함한다. 런타임에 발견된 업스트림 큐 집합은 ControlBus → TagQueryManager 경로로만 전달되며, NodeID에는 절대 포함하지 않는다.
+- **스키마/코드 경계**: `schema_compat_id`와 `code_hash`가 바뀔 때만 새 NodeID가 나온다. Minor/patch 스키마 변경은 동일 NodeID를 유지하되 버퍼링·검증 경로에서 처리한다.
+- **입력 정규화**: 모든 의존성은 NodeID 기준 사전식 정렬, 파라미터는 숫자 정밀도 고정·불변 JSON 직렬화(키 정렬)로 정규화한다. 비결정적 필드와 표시 전용 메타데이터는 해시 전에 제거한다.
+
+**관측·검증 패턴 (향후 #1784/#1786 메트릭·알람 연계)**
+- NodeID CRC: Gateway/SDK가 재계산한 NodeID를 `crc32` 필드로 교차 검증한다. 불일치 시 400 및 메트릭 `nodeid_crc_mismatch_total`을 적재하고, 샘플 로그에 `submitted_node_id`, `recomputed_node_id`, `strategy_id`를 포함한다.
+- 재계산 드리프트: DAG Manager는 저장된 `node_id`와 재계산 값이 다를 경우 `nodeid_drift_total`을 증가시키고 ControlBus 경고 이벤트를 발행한다. 정상 케이스도 주기적으로 샘플링해 `nodeid_recalc_latency_ms` 히스토그램으로 노출한다.
+- TagQuery 안정성: TagQuery 실행 시 정규화된 질의 스펙 해시(`tagquery_spec_hash`)와 해결된 업스트림 집합 크기(`resolved_queue_count`)를 로그/메트릭으로 남긴다. 동일 스펙에서 NodeID 재계산 불일치가 감지되면 `tagquery_nodeid_mismatch_total`을 올리고 SDK 측 캐시를 강제 무효화한다.
+- 도메인 격리: `cross_context_cache_hit_total`(이미 §1.4에서 정의)을 DAG Manager/SDK 공통 메트릭으로 필수화한다. 값이 0 초과일 때는 캐시 재사용을 차단하고 알람으로 승격한다.
 
 ### 1.4 도메인 범위 ComputeKey (신규)
 
