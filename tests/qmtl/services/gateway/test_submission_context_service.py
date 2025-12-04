@@ -2,6 +2,7 @@ import pytest
 from typing import cast
 
 from qmtl.foundation.common.compute_context import DowngradeReason
+from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.foundation.common.compute_key import compute_compute_key
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.submission.context_service import (
@@ -89,11 +90,14 @@ async def test_build_marks_safe_mode_on_stale_decision() -> None:
     service = ComputeContextService(world_client=cast(WorldServiceClient, client))
     payload = _make_payload()
 
+    counter = gw_metrics.worlds_compute_context_downgrade_total.labels(reason="stale_decision")
+    counter._value.set(0)
     strategy_ctx = await service.build(payload)
 
     assert strategy_ctx.execution_domain == "backtest"
     assert strategy_ctx.safe_mode is True
     assert strategy_ctx.downgrade_reason == DowngradeReason.STALE_DECISION
+    assert counter._value.get() == 1
 
 
 @pytest.mark.asyncio
@@ -102,6 +106,8 @@ async def test_build_safe_mode_when_worldservice_unavailable() -> None:
     service = ComputeContextService(world_client=cast(WorldServiceClient, client))
     payload = _make_payload()
 
+    counter = gw_metrics.worlds_compute_context_downgrade_total.labels(reason="decision_unavailable")
+    counter._value.set(0)
     strategy_ctx = await service.build(payload)
 
     assert client.calls == ["world-1"]
@@ -109,6 +115,9 @@ async def test_build_safe_mode_when_worldservice_unavailable() -> None:
     assert strategy_ctx.safe_mode is True
     assert strategy_ctx.downgraded is True
     assert strategy_ctx.downgrade_reason == DowngradeReason.DECISION_UNAVAILABLE
+    assert counter._value.get() == 1
+    # log path should be side-effect free even when safe_mode already set
+    # (smoke: ensure no exceptions are raised)
 
 
 @pytest.mark.asyncio

@@ -22,4 +22,9 @@ Configuration knobs:
 - `CORE_LOOP_WORLD_ID` / `CORE_LOOP_WORLD_IDS`: optional world ids when using an external service.
 - `CORE_LOOP_ARTIFACT_DIR`: override the artifacts directory (`.artifacts/core_loop` by default).
 
+Contract tests:
+- Marked with `@pytest.mark.contract` and currently `xfail` while the spec is in draft.
+- Include ExecutionDomain default-safe downgrade expectations: running the demo strategy without
+  `as_of` in backtest mode should yield a safe-mode warning and `SubmitResult.downgrade_reason`.
+
 References: docs/ko/design/core_loop_roadmap.md, docs/en/design/core_loop_roadmap_issue_drafts.md.

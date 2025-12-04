@@ -10,7 +10,32 @@ from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 from qmtl.runtime.alpha_metrics import alpha_metric_key, default_alpha_performance_metrics
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
 
-_VALID_MODES = {"backtest", "dryrun", "live", "shadow"}
+_CANONICAL_MODES = {"backtest", "dryrun", "live", "shadow"}
+_MODE_ALIASES = {
+    "backtest": "backtest",
+    "backtesting": "backtest",
+    "dryrun": "dryrun",
+    "dry-run": "dryrun",
+    "dry_run": "dryrun",
+    "paper": "dryrun",
+    "live": "live",
+    "prod": "live",
+    "production": "live",
+    "shadow": "shadow",
+}
+_DEPRECATED_MODES = {
+    "compute-only",
+    "computeonly",
+    "compute_only",
+    "compute",
+    "offline",
+    "sandbox",
+    "sim",
+    "simulation",
+    "validate",
+    "validation",
+    "default",
+}
 _CLOCKS = {"virtual", "wall"}
 
 
@@ -20,6 +45,9 @@ class ExecutionContextResolution:
 
     context: dict[str, str]
     force_offline: bool
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,26 +79,44 @@ class ActivationUpdate:
 # ---------------------------------------------------------------------------
 
 
-def _mode_from_domain(domain: str | None) -> str | None:
-    if not domain:
+def _normalize_mode_token(value: str, *, field: str) -> str:
+    """Normalize execution mode/domain tokens with strict validation.
+
+    Accepted: backtest, dryrun/paper, live, shadow (plus minimal aliases).
+    Deprecated/legacy tokens raise with guidance instead of silently downgrading.
+    """
+
+    token = value.strip().lower()
+    if not token:
+        raise ValueError(f"{field} must be provided")
+
+    if token in _DEPRECATED_MODES:
+        raise ValueError(
+            f"{field} '{value}' is deprecated; use one of backtest, paper, live, or shadow"
+        )
+
+    normalized = _MODE_ALIASES.get(token, token)
+    if normalized in _CANONICAL_MODES:
+        return normalized
+
+    raise ValueError(
+        f"{field} '{value}' is not supported; choose from backtest, paper, live, or shadow"
+    )
+
+
+def _mode_from_domain(domain: str | None, *, field: str = "execution_domain") -> str | None:
+    if domain is None:
         return None
-    key = str(domain).strip().lower()
-    if key == DEFAULT_EXECUTION_DOMAIN:
+    token = str(domain).strip()
+    if not token or token.lower() == DEFAULT_EXECUTION_DOMAIN:
         return None
-    if key in _VALID_MODES:
-        return key
-    return None
+    return _normalize_mode_token(token, field=field)
 
 
 def _normalize_mode(value: str | None) -> str:
     if value is None:
         raise ValueError("execution_mode must be provided")
-    mode = str(value).strip().lower()
-    if mode not in _VALID_MODES:
-        raise ValueError(
-            "execution_mode must be one of 'backtest', 'dryrun', 'live', or 'shadow'"
-        )
-    return mode
+    return _normalize_mode_token(value, field="execution_mode")
 
 
 def _validate_clock(value: object, *, expected: str, mode: str | None = None) -> str:

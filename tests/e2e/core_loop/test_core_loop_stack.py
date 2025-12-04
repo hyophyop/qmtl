@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +45,56 @@ def _http_json(url: str, *, method: str = "GET", data: dict | None = None, timeo
 
 def _world_id_candidates(world_id: str) -> set[str]:
     return {world_id, world_id.replace("_", "-"), world_id.replace("-", "_")}
+
+
+def _submit(strategy: str, *, world: str, mode: str | None = None) -> dict:
+    cmd = ["qmtl", "submit", strategy, "--world", world]
+    if mode:
+        cmd.extend(["--mode", mode])
+    env = dict(os.environ)
+    env.setdefault("QMTL_STRATEGY_ROOT", str(Path(__file__).parent / "worlds"))
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if proc.returncode not in (0, 1):  # allow rejected submissions as contract cases
+        raise AssertionError(
+            f"qmtl submit failed (rc={proc.returncode}):\nstdout={proc.stdout}\nstderr={proc.stderr}"
+        )
+    # crude parse: rely on CLI printing SubmitResult(...) repr
+    return {"stdout": proc.stdout, "stderr": proc.stderr, "code": proc.returncode}
+
+
+def test_submit_default_safe_downgrades_when_missing_as_of(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
+    # Ensure deterministic env for the CLI run
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    result = _submit(
+        "core_loop_demo_strategy:CoreLoopDemoStrategy",
+        world=core_loop_world_id,
+        mode="backtest",
+    )
+
+    # When running without as_of/dataset in backtest, CLI prints a safe mode warning
+    assert "Safe mode: execution was downgraded" in result["stderr"]
+    assert result["code"] in (0, 1)
+
+
+def test_submit_reports_downgrade_reason(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    result = _submit(
+        "core_loop_demo_strategy:CoreLoopDemoStrategy",
+        world=core_loop_world_id,
+        mode="backtest",
+    )
+
+    # SubmitResult repr should include downgrade flags for contract visibility
+    stdout = result["stdout"]
+    assert "downgraded" in stdout
+    assert "downgrade_reason" in stdout or "missing_as_of" in stdout
 
 
 def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandle, core_loop_world_id: str):

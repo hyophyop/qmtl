@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import logging
 from typing import TYPE_CHECKING, Any, List
 
 from qmtl.foundation.common.compute_context import (
@@ -16,6 +17,9 @@ from qmtl.services.gateway import metrics as gw_metrics
 if TYPE_CHECKING:  # pragma: no cover - typing aid
     from qmtl.services.gateway.models import StrategySubmit
     from qmtl.services.gateway.world_client import WorldServiceClient
+
+
+logger = logging.getLogger(__name__)
 
 
 class _WorldDecisionUnavailable(RuntimeError):
@@ -119,6 +123,16 @@ class ComputeContextService:
             gw_metrics.record_worlds_stale_response()
             if not context.safe_mode:
                 return self._downgrade_unavailable(context)
+            logger.warning(
+                "gateway.ws_decision_missing_safe_mode",
+                extra={
+                    "world_id": worlds[0],
+                    "execution_domain": context.execution_domain,
+                    "downgrade_reason": getattr(context.downgrade_reason, "value", context.downgrade_reason)
+                    if context.downgrade_reason
+                    else None,
+                },
+            )
 
         return context
 
@@ -153,6 +167,9 @@ class ComputeContextService:
 
     def _downgrade_stale(self, context: ComputeContext) -> ComputeContext:
         downgraded = context.with_overrides(execution_domain="backtest", as_of=None)
+        gw_metrics.worlds_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.STALE_DECISION.value
+        ).inc()
         return replace(
             downgraded,
             downgraded=True,
@@ -174,6 +191,9 @@ class ComputeContextService:
             else context.with_overrides(execution_domain=target_domain)
         )
         reason = context.downgrade_reason or DowngradeReason.DECISION_UNAVAILABLE
+        gw_metrics.worlds_compute_context_downgrade_total.labels(
+            reason=getattr(reason, "value", reason)
+        ).inc()
         return replace(
             downgraded,
             downgraded=True,

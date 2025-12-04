@@ -121,6 +121,38 @@ async def test_strategy_bootstrapper_applies_queue_map(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_strategy_bootstrapper_ignores_execution_domain_meta(monkeypatch):
+    strategy = SimpleStrategy()
+    strategy.setup()
+    ack = StrategyAck(
+        strategy_id="strategy-999",
+        queue_map={strategy.nodes[0].node_id: "queue"},
+    )
+    client = FakeGatewayClient(ack)
+    monkeypatch.setattr(bootstrapper_module, "TagManagerService", lambda url: FakeTagService(url))
+
+    context = ComputeContext(world_id="w1", execution_domain="live")
+    _ = await StrategyBootstrapper(client).bootstrap(
+        strategy,
+        context=context,
+        world_id="w1",
+        gateway_url="http://gateway",
+        meta={"execution_domain": "paper", "dataset_fingerprint": "fp-x"},
+        offline=False,
+        kafka_available=True,
+        trade_mode="live",
+        schema_enforcement="strict",
+        feature_plane=DummyPlane(),
+    )
+
+    assert client.calls
+    sent_meta = client.calls[-1].get("meta")
+    assert isinstance(sent_meta, dict)
+    assert "execution_domain" not in sent_meta
+    assert sent_meta.get("dataset_fingerprint") == "fp-x"
+
+
+@pytest.mark.asyncio
 async def test_strategy_bootstrapper_handles_no_executable_nodes(monkeypatch):
     strategy = NoExecuteStrategy()
     strategy.setup()

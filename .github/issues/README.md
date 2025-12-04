@@ -10,6 +10,7 @@ This directory contains prepared GitHub issue templates for improving QMTL's tes
   - 목적/범위/배제, 단일 출처 스펙 링크(ko/en), 오픈 질문/결정자, 착수·종료 게이트, 마이그레이션/롤백, 후속 작업 체크리스트가 포함됩니다.  
   - 스펙 본문은 반드시 문서(예: `docs/ko/design/core_loop_roadmap.md`)에만 두고, 이슈에는 링크와 상태(`draft — subject to change`)만 적으세요.  
   - 계약 테스트 스켈레톤은 `@pytest.mark.contract + xfail`로 추가 후, 스펙 확정 시 `xfail`을 제거해 강제 실패로 전환합니다.
+  - CI에 Core Loop 계약 스위트(`tests/e2e/core_loop`)가 추가되었습니다. inproc 스택 기준으로 병렬 실행되며, ExecutionDomain default-safe 다운그레이드와 SubmitResult 필드가 커버됩니다.
 
 ### High Priority
 

@@ -65,6 +65,9 @@ class SubmitResult:
     status: str  # "pending" | "validating" | "active" | "rejected"
     world: str
     mode: Mode
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
     
     # Contribution to world (populated after validation)
     contribution: float | None = None  # Contribution to world returns
@@ -315,6 +318,12 @@ async def submit_async(
         world_id=resolved_world,
         execution_domain=execution_domain,
     )
+    def _attach_context_flags(result: SubmitResult) -> SubmitResult:
+        result.downgraded = bool(getattr(compute_context, "downgraded", False))
+        reason = getattr(compute_context, "downgrade_reason", None)
+        result.downgrade_reason = getattr(reason, "value", reason)
+        result.safe_mode = bool(getattr(compute_context, "safe_mode", False))
+        return result
     setattr(strategy, "compute_context", {
         "world_id": resolved_world,
         "mode": mode.value,
@@ -351,22 +360,26 @@ async def submit_async(
             returns=returns,
         )
         if not auto_validate:
-            return _basic_result(
+            return _attach_context_flags(
+                _basic_result(
                 strategy=strategy,
                 strategy_id=bootstrap_out.strategy_id,
                 resolved_world=resolved_world,
                 mode=mode,
                 gateway_available=gateway_available,
                 world_notice=world_ctx.world_notice,
+                )
             )
         if not backtest_returns:
-            return _reject_due_to_no_returns(
+            return _attach_context_flags(
+                _reject_due_to_no_returns(
                 strategy=strategy,
                 strategy_class_name=strategy_class_name,
                 strategy_id=bootstrap_out.strategy_id,
                 resolved_world=resolved_world,
                 mode=mode,
                 world_notice=world_ctx.world_notice,
+                )
             )
 
         validation_result, ws_eval = await _run_validation_and_ws_eval(
@@ -380,7 +393,8 @@ async def submit_async(
             gateway_url=gateway_url,
             gateway_available=gateway_available,
         )
-        return _build_submit_result_from_validation(
+        return _attach_context_flags(
+            _build_submit_result_from_validation(
             strategy=strategy,
             strategy_class_name=strategy_class_name,
             strategy_id=bootstrap_out.strategy_id,
@@ -390,6 +404,7 @@ async def submit_async(
             validation_result=validation_result,
             ws_eval=ws_eval,
             gateway_available=gateway_available,
+            )
         )
     except Exception as e:  # pragma: no cover - safety net
         try:
@@ -399,7 +414,8 @@ async def submit_async(
 
         fallback_notice = world_ctx.world_notice if world_ctx else []
         fallback_id = _strategy_id_or_fallback(None, strategy, prefix="failed")
-        return SubmitResult(
+        return _attach_context_flags(
+            SubmitResult(
             strategy_id=fallback_id,
             status="rejected",
             world=resolved_world,
@@ -407,6 +423,7 @@ async def submit_async(
             rejection_reason=str(e),
             improvement_hints=fallback_notice + _get_improvement_hints(e),
             strategy=strategy if "strategy" in locals() else None,
+            )
         )
 
 

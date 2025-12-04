@@ -230,6 +230,20 @@ class Runner:
                 "Missing dataset metadata for %s run; forcing compute-only mode",
                 resolution.context.get("execution_mode"),
             )
+        if resolution.downgraded or resolution.safe_mode:
+            reason = resolution.downgrade_reason or "unknown"
+            logger.warning(
+                "Execution context downgraded to safe compute-only path",
+                extra={
+                    "reason": reason,
+                    "execution_mode": resolution.context.get("execution_mode"),
+                    "execution_domain": resolution.context.get("execution_domain"),
+                },
+            )
+            try:
+                sdk_metrics.execution_domain_downgrade_total.labels(reason=reason).inc()
+            except Exception:  # pragma: no cover - metrics best-effort
+                logger.debug("Failed to record downgrade metric", exc_info=True)
         return resolution.context, resolution.force_offline
 
     # ------------------------------------------------------------------
