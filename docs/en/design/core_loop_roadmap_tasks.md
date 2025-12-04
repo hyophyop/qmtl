@@ -34,8 +34,8 @@ Representative issue numbers are in parentheses. Phase 2 is the current focus.
 - [x] Expand Core Loop contract suite with NodeID/TagQuery and Determinism cases (#1789) — Contract test ensures Gateway determinism counters increment on NodeID mismatches.
 
 ## Phase 5 – CI gate landing (T6 P0)
-- Integrate the Core Loop contract suite as a CI merge blocker (#1790).
-- Document how breaking each test maps back to roadmap/architecture intent.
+- [x] Integrate the Core Loop contract suite as a CI merge blocker (#1790) — added the `Core Loop contract suite` step to the `.github/workflows/ci.yml` `test` job running with `CORE_LOOP_STACK_MODE=inproc` so the in-proc WS stack is exercised and failures block PRs.
+- [x] Document how broken tests map to roadmap/architecture intent (#1790) — anchored references in `docs/en/design/core_loop_roadmap.md` (direction), `docs/en/architecture/architecture.md` (boundary/SSOT), and `docs/en/operations/determinism.md` (runbook) so failures trace back to the Core Loop stance and response steps.
 
 ### Parallelization notes
 - Phase 1 (ExecutionDomain line) and Phase 2 (SubmitResult/WS SSOT) can proceed partly in parallel,

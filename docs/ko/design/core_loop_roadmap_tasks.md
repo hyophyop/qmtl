@@ -34,8 +34,8 @@
 - [x] Core Loop 계약 스위트에 NodeID/TagQuery·Determinism 관련 케이스 확장 (#1789) — Gateway determinism 메트릭이 NodeID 불일치 시 증가하는지 검증하는 계약 테스트 추가.
 
 ## Phase 5 – CI 게이트 정착 (T6 P0 마무리)
-- Core Loop 계약 스위트를 CI merge-blocker로 통합 (#1790).
-- 로드맵/아키텍처 문서와 “이 테스트가 깨지면 어떤 방향성이 깨진 것인지”를 연결해서 문서화.
+- [x] Core Loop 계약 스위트를 CI merge-blocker로 통합 (#1790) — `.github/workflows/ci.yml` `test` 잡에 `Core Loop contract suite` 스텝 추가, `CORE_LOOP_STACK_MODE=inproc`로 in-proc WS 스택을 구동해 실패 시 PR을 차단.
+- [x] 로드맵/아키텍처 문서와 “이 테스트가 깨지면 어떤 방향성이 깨진 것인지”를 연결해 명시 (#1790) — 계약 스위트를 `docs/ko/design/core_loop_roadmap.md`(방향성), `docs/ko/architecture/architecture.md`(경계/SSOT), `docs/ko/operations/determinism.md`(런북)에서 참조하도록 정리해, 깨짐이 Core Loop 방향성과 어떤 연관이 있는지 바로 추적 가능.
 
 ### 병렬성 관점
 - Phase 1(ExecutionDomain 라인)과 Phase 2(SubmitResult/WS SSOT)는 부분적으로 병렬 가능하지만,
