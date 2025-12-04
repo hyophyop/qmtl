@@ -151,4 +151,4 @@ Refs: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../archite
 - State merge-blocking rule; document how to run the suite.  
 - Outputs: CI wiring, docs.
 
-Refs: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), [tests](../../tests)
+Refs: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), `tests/e2e/core_loop`

@@ -212,4 +212,4 @@ ExecutionDomain/ComputeContext, NodeID/TagQuery/Determinism처럼 여러 트랙�
  - Dependencies: T6 P0-M1 1)·2)에서 스위트 구조와 핵심 케이스가 정착된 이후, CI 파이프라인에 merge-blocking 규칙 추가.  
  - Out of scope: 전체 테스트 파이프라인 재설계(기존 CI 구성은 유지하되 Core Loop 계약 스위트만 게이트로 추가).
 
-참조: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), [tests](../../tests)
+참조: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), `tests/e2e/core_loop`

@@ -1,0 +1,22 @@
+world:
+  id: "core-loop-demo"
+  name: "Core Loop Demo World"
+  timezone: "UTC"
+
+  metrics:
+    eval_schedule: "cron(0 0 * * *)"
+    windows: { short: "7D", mid: "30D" }
+
+  selection:
+    thresholds:
+      sharpe: { on: 0.6, off: 0.4 }
+    topk:
+      total: 1
+
+  execution:
+    mode_default: "backtest"
+    position_exit_on_deactivate: "market"
+
+  resources:
+    topic_prefix: "w/core-loop-demo"
+    quotas: { cpu_cores: 1, mem_gb: 1 }
