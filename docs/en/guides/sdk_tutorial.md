@@ -186,6 +186,13 @@ workspace/
 
 `qmtl submit` prefers `qmtl.yml` for strategy resolution and the default world. Even if `QMTL_STRATEGY_ROOT` or an existing `PYTHONPATH` is present, `project.strategy_root` is applied first to keep behaviour consistent across POSIX and Windows.
 
+### Reading submission results (WS SSOT + pre-check)
+- `SubmitResult` exposes **WorldService output as the single source of truth** for `status/weight/rank/contribution`; local `ValidationPipeline` output is separated into `precheck`.
+- The CLI prints two sections:
+  - `🌐 WorldService decision (SSOT)` — includes WS `status/weight/rank/contribution` and WS threshold violations.
+  - `🧪 Local pre-check (ValidationPipeline)` — local metrics/violations/hints for reference only (not authoritative).
+- `downgraded/safe_mode/downgrade_reason` remain at the top so you can see default-safe downgrades.
+
 ## Cache Access
 
 `compute_fn` receives the read-only `CacheView` returned by `NodeCache.view()`.

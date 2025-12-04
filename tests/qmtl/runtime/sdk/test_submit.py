@@ -7,7 +7,14 @@ import pytest
 from qmtl.runtime.sdk import Mode, Runner, Strategy, StrategyMetrics, SubmitResult
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
-from qmtl.runtime.sdk.submit import submit, submit_async
+from qmtl.runtime.sdk.submit import (
+    PrecheckResult,
+    WsEvalResult,
+    _build_submit_result_from_validation,
+    submit,
+    submit_async,
+)
+from qmtl.runtime.sdk.validation_pipeline import ValidationStatus
 
 # Suppress noisy resource warnings from http client sockets/event loops in local tests
 pytestmark = [
@@ -153,6 +160,210 @@ class TestSubmitResult:
         assert result.downgraded is True
         assert result.downgrade_reason == "missing_as_of"
         assert result.safe_mode is True
+
+    def test_ws_eval_overrides_validation_fields_and_preserves_precheck(self):
+        class DummyMetrics:
+            sharpe = 1.0
+            max_drawdown = 0.1
+            win_ratio = 0.6
+            profit_factor = 1.2
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.05
+            num_trades = 10
+            correlation_avg = 0.3
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.11
+                self.rank = 7
+                self.contribution = 0.02
+                self.activated = True
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = []
+                self.correlation_avg = 0.3
+
+        ws_eval = WsEvalResult(
+            active=True,
+            weight=0.25,
+            rank=2,
+            contribution=0.08,
+            violations=[],
+            correlation_avg=0.42,
+        )
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-1",
+            resolved_world="world-1",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=ws_eval,
+            gateway_available=True,
+        )
+
+        assert result.status == "active"
+        assert result.weight == ws_eval.weight
+        assert result.rank == ws_eval.rank
+        assert result.contribution == ws_eval.contribution
+        assert result.metrics.correlation_avg == ws_eval.correlation_avg
+        assert result.threshold_violations == ws_eval.violations
+        assert result.precheck is not None
+        assert result.precheck.status == ValidationStatus.PASSED.value
+        assert result.precheck.weight == validation.weight
+        assert result.precheck.rank == validation.rank
+        assert result.precheck.contribution == validation.contribution
+        assert result.precheck.correlation_avg == validation.correlation_avg
+
+    def test_ws_rejection_uses_ws_violations_and_keeps_precheck(self):
+        class DummyMetrics:
+            sharpe = 0.5
+            max_drawdown = 0.2
+            win_ratio = 0.4
+            profit_factor = 0.9
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = -0.02
+            num_trades = 8
+            correlation_avg = 0.1
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.05
+                self.rank = 9
+                self.contribution = 0.0
+                self.activated = False
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = ["local hint"]
+                self.correlation_avg = 0.1
+
+        ws_eval = WsEvalResult(
+            active=False,
+            violations=[{"metric": "sharpe", "threshold_type": "min", "threshold_value": 1.0, "message": "too low"}],
+        )
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-2",
+            resolved_world="world-2",
+            mode=Mode.BACKTEST,
+            world_notice=["notice"],
+            validation_result=validation,
+            ws_eval=ws_eval,
+            gateway_available=True,
+        )
+
+        assert result.status == "rejected"
+        assert result.threshold_violations == ws_eval.violations
+        assert result.improvement_hints  # keeps local hints
+        assert result.precheck is not None
+        assert result.precheck.status == ValidationStatus.PASSED.value
+        assert result.precheck.violations == []
+
+    def test_ws_error_keeps_pending_with_precheck(self):
+        class DummyMetrics:
+            sharpe = 0.7
+            max_drawdown = 0.3
+            win_ratio = 0.45
+            profit_factor = 1.0
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.01
+            num_trades = 5
+            correlation_avg = 0.2
+
+        class DummyViolation:
+            def __init__(self):
+                self.metric = "sharpe"
+                self.value = 0.7
+                self.threshold_type = "min"
+                self.threshold_value = 1.0
+                self.message = "too low"
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.FAILED
+                self.weight = 0.0
+                self.rank = 0
+                self.contribution = 0.0
+                self.activated = False
+                self.metrics = DummyMetrics()
+                self.violations = [DummyViolation()]
+                self.improvement_hints = ["local failure"]
+                self.correlation_avg = 0.2
+
+        ws_eval = WsEvalResult(
+            active=None,
+            error="gateway unreachable",
+            violations=None,
+        )
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-3",
+            resolved_world="world-3",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=ws_eval,
+            gateway_available=True,
+        )
+
+        assert result.status == "pending"
+        assert result.threshold_violations == [
+            {
+                "metric": "sharpe",
+                "value": 0.7,
+                "threshold_type": "min",
+                "threshold_value": 1.0,
+                "message": "too low",
+            }
+        ]
+        assert result.precheck is not None
+        assert result.precheck.status == ValidationStatus.FAILED.value
+
+    def test_submit_result_to_dict_includes_ws_and_precheck(self):
+        precheck = PrecheckResult(
+            status="passed",
+            weight=0.02,
+            rank=5,
+            contribution=0.01,
+            metrics=StrategyMetrics(sharpe=1.1, max_drawdown=0.2),
+            violations=[{"metric": "sharpe", "threshold_type": "min", "threshold_value": 1.0}],
+            improvement_hints=["hint"],
+        )
+        result = SubmitResult(
+            strategy_id="s3",
+            status="active",
+            world="w",
+            mode=Mode.PAPER,
+            contribution=0.05,
+            weight=0.1,
+            rank=2,
+            metrics=StrategyMetrics(sharpe=1.5, max_drawdown=0.1),
+            precheck=precheck,
+        )
+
+        payload = result.to_dict()
+        assert payload["status"] == "active"
+        assert payload["mode"] == "paper"
+        assert payload["weight"] == 0.1
+        assert payload["precheck"]["status"] == "passed"
+        assert payload["precheck"]["weight"] == 0.02
 
 
 class TestSubmitFunction:

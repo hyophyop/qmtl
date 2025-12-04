@@ -37,7 +37,7 @@ from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, Decisi
 logger = logging.getLogger(__name__)
 
 # Re-export Mode for backward compatibility
-__all__ = ["Mode", "SubmitResult", "StrategyMetrics", "submit", "submit_async"]
+__all__ = ["Mode", "SubmitResult", "PrecheckResult", "StrategyMetrics", "submit", "submit_async"]
 
 
 @dataclass
@@ -52,6 +52,46 @@ class StrategyMetrics:
     rar_mdd: float | None = None
     total_return: float | None = None
     num_trades: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sharpe": self.sharpe,
+            "max_drawdown": self.max_drawdown,
+            "correlation_avg": self.correlation_avg,
+            "win_rate": self.win_rate,
+            "profit_factor": self.profit_factor,
+            "car_mdd": self.car_mdd,
+            "rar_mdd": self.rar_mdd,
+            "total_return": self.total_return,
+            "num_trades": self.num_trades,
+        }
+
+
+@dataclass
+class PrecheckResult:
+    """Local ValidationPipeline pre-check output (non-SSOT)."""
+    status: str
+    activated: bool = False
+    weight: float | None = None
+    rank: int | None = None
+    contribution: float | None = None
+    metrics: StrategyMetrics = field(default_factory=StrategyMetrics)
+    violations: list[dict[str, object]] = field(default_factory=list)
+    improvement_hints: list[str] = field(default_factory=list)
+    correlation_avg: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "activated": self.activated,
+            "weight": self.weight,
+            "rank": self.rank,
+            "contribution": self.contribution,
+            "metrics": self.metrics.to_dict(),
+            "violations": self.violations,
+            "improvement_hints": self.improvement_hints,
+            "correlation_avg": self.correlation_avg,
+        }
 
 
 @dataclass
@@ -90,6 +130,39 @@ class SubmitResult:
     
     # Internal reference to the instantiated strategy (for debugging/tests)
     strategy: "Strategy | None" = None
+    # Local validation/pre-check outputs (not SSOT; WS is authoritative)
+    precheck: PrecheckResult | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        def _dump_model(model: Any) -> Any:
+            if model is None:
+                return None
+            if hasattr(model, "model_dump"):
+                return model.model_dump()
+            if hasattr(model, "dict"):
+                return model.dict()
+            return model
+
+        mode_value = self.mode.value if hasattr(self.mode, "value") else str(self.mode)
+        return {
+            "strategy_id": self.strategy_id,
+            "status": self.status,
+            "world": self.world,
+            "mode": mode_value,
+            "downgraded": self.downgraded,
+            "downgrade_reason": self.downgrade_reason,
+            "safe_mode": self.safe_mode,
+            "contribution": self.contribution,
+            "weight": self.weight,
+            "rank": self.rank,
+            "metrics": self.metrics.to_dict(),
+            "decision": _dump_model(self.decision),
+            "activation": _dump_model(self.activation),
+            "rejection_reason": self.rejection_reason,
+            "improvement_hints": list(self.improvement_hints),
+            "threshold_violations": list(self.threshold_violations),
+            "precheck": self.precheck.to_dict() if self.precheck else None,
+        }
 
     def __post_init__(self) -> None:
         if self.decision:
@@ -849,6 +922,7 @@ def _build_passed_result(
     validation_result: Any,
     ws_eval: WsEvalResult | None,
 ) -> SubmitResult:
+    precheck = _precheck_from_validation(validation_result)
     rejection = _ws_rejection_result(
         strategy=strategy,
         strategy_id=strategy_id,
@@ -859,12 +933,13 @@ def _build_passed_result(
         ws_eval=ws_eval,
     )
     if rejection:
+        rejection.precheck = precheck
         return rejection
 
     status = _resolved_status(validation_result, ws_eval)
-    weight = validation_result.weight
-    rank = validation_result.rank
-    contribution = validation_result.contribution
+    weight = None if ws_eval else validation_result.weight
+    rank = None if ws_eval else validation_result.rank
+    contribution = None if ws_eval else validation_result.contribution
     weight, rank, contribution = _merge_ws_eval_fields(ws_eval, weight, rank, contribution)
     metrics_out = _base_metrics_from_validation(validation_result)
     if ws_eval and ws_eval.correlation_avg is not None:
@@ -881,6 +956,7 @@ def _build_passed_result(
         metrics=metrics_out,
         strategy=strategy,
         improvement_hints=world_notice + validation_result.improvement_hints,
+        precheck=precheck,
     )
 
 
@@ -899,7 +975,7 @@ def _ws_rejection_result(
     has_rejection = ws_eval.active is False or (ws_eval.violations and len(ws_eval.violations) > 0)
     if not has_rejection:
         return None
-    ws_reject_violations = _merge_threshold_violations(validation_result, ws_eval.violations or [])
+    ws_reject_violations = _final_threshold_violations(validation_result, ws_eval)
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
         status="rejected",
@@ -910,13 +986,26 @@ def _ws_rejection_result(
         threshold_violations=ws_reject_violations,
         metrics=_base_metrics_from_validation(validation_result),
         strategy=strategy,
+        precheck=_precheck_from_validation(validation_result),
     )
 
 
 def _resolved_status(validation_result: Any, ws_eval: WsEvalResult | None) -> str:
-    if validation_result.activated or (ws_eval and ws_eval.active is True):
+    if ws_eval:
+        if ws_eval.active is True:
+            return "active"
+        if ws_eval.active is False:
+            return "rejected"
+        if ws_eval.error:
+            return "pending"
+    if getattr(validation_result, "activated", False):
         return "active"
-    return "validated"
+    from .validation_pipeline import ValidationStatus
+    if getattr(validation_result, "status", None) == ValidationStatus.PASSED:
+        return "validated"
+    if getattr(validation_result, "status", None) == ValidationStatus.FAILED:
+        return "rejected"
+    return "pending"
 
 
 def _merge_ws_eval_fields(
@@ -926,9 +1015,9 @@ def _merge_ws_eval_fields(
     contribution: float | None,
 ) -> tuple[float | None, int | None, float | None]:
     if ws_eval:
-        weight = ws_eval.weight if ws_eval.weight is not None else weight
-        rank = ws_eval.rank if ws_eval.rank is not None else rank
-        contribution = ws_eval.contribution if ws_eval.contribution is not None else contribution
+        weight = ws_eval.weight
+        rank = ws_eval.rank
+        contribution = ws_eval.contribution
     return weight, rank, contribution
 
 
@@ -1013,6 +1102,7 @@ def _ws_accepts_after_fail(
         improvement_hints=world_notice + [
             "Note: Local validation failed but WorldService accepted with world-aware metrics"
         ] + validation_result.improvement_hints,
+        precheck=_precheck_from_validation(validation_result),
     )
 
 
@@ -1045,25 +1135,17 @@ def _pending_after_failed_validation(
         mode=mode,
         metrics=StrategyMetrics(
             sharpe=validation_result.metrics.sharpe,
-            max_drawdown=validation_result.metrics.max_drawdown,
-            win_rate=validation_result.metrics.win_ratio,
-            profit_factor=validation_result.metrics.profit_factor,
-        ),
+        max_drawdown=validation_result.metrics.max_drawdown,
+        win_rate=validation_result.metrics.win_ratio,
+        profit_factor=validation_result.metrics.profit_factor,
+        ) if ws_eval else _base_metrics_from_validation(validation_result),
         strategy=strategy,
         improvement_hints=world_notice + [
             f"Local validation failed but WS evaluation unavailable ({ws_error_msg}); strategy submitted as pending "
             "for server-side evaluation"
         ] + validation_result.improvement_hints,
-        threshold_violations=[
-            {
-                "metric": v.metric,
-                "value": v.value,
-                "threshold_type": v.threshold_type,
-                "threshold_value": v.threshold_value,
-                "message": v.message,
-            }
-            for v in validation_result.violations
-        ],
+        threshold_violations=_final_threshold_violations(validation_result, ws_eval),
+        precheck=_precheck_from_validation(validation_result),
     )
 
 
@@ -1078,6 +1160,7 @@ def _reject_after_failed_validation(
     ws_eval: WsEvalResult | None,
 ) -> SubmitResult:
     rejection_reason, ws_extra_violations = _rejection_details(ws_eval, validation_result)
+    final_thresholds = ws_extra_violations if ws_extra_violations else _final_threshold_violations(validation_result, ws_eval)
 
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
@@ -1086,7 +1169,7 @@ def _reject_after_failed_validation(
         mode=mode,
         rejection_reason=rejection_reason,
         improvement_hints=world_notice + validation_result.improvement_hints,
-        threshold_violations=_merge_threshold_violations(validation_result, ws_extra_violations),
+        threshold_violations=final_thresholds,
         metrics=StrategyMetrics(
             sharpe=validation_result.metrics.sharpe,
             max_drawdown=validation_result.metrics.max_drawdown,
@@ -1094,6 +1177,7 @@ def _reject_after_failed_validation(
             profit_factor=validation_result.metrics.profit_factor,
         ),
         strategy=strategy,
+        precheck=_precheck_from_validation(validation_result),
     )
 
 
@@ -1142,6 +1226,7 @@ def _build_error_result(
         rejection_reason=validation_result.error_message or "Validation error",
         improvement_hints=world_notice + validation_result.improvement_hints,
         strategy=strategy,
+        precheck=_precheck_from_validation(validation_result),
     )
 
 
@@ -1163,8 +1248,8 @@ def _base_metrics_from_validation(validation_result: Any) -> StrategyMetrics:
     )
 
 
-def _merge_threshold_violations(validation_result: Any, extra: list[dict[str, object]]) -> list[dict[str, object]]:
-    base = [
+def _validation_violations(validation_result: Any) -> list[dict[str, object]]:
+    return [
         {
             "metric": v.metric,
             "value": v.value,
@@ -1174,7 +1259,33 @@ def _merge_threshold_violations(validation_result: Any, extra: list[dict[str, ob
         }
         for v in getattr(validation_result, "violations", [])
     ]
-    return base + extra
+
+
+def _final_threshold_violations(validation_result: Any, ws_eval: WsEvalResult | None) -> list[dict[str, object]]:
+    if ws_eval and ws_eval.violations:
+        return ws_eval.violations
+    return _validation_violations(validation_result)
+
+
+def _precheck_from_validation(validation_result: Any) -> PrecheckResult:
+    """Summarize local ValidationPipeline output for reference."""
+    try:
+        from .validation_pipeline import ValidationStatus
+        status_value = validation_result.status.value if hasattr(validation_result, "status") else ValidationStatus.PENDING
+    except Exception:
+        status_value = str(getattr(validation_result, "status", "pending"))
+
+    return PrecheckResult(
+        status=str(status_value),
+        activated=bool(getattr(validation_result, "activated", False)),
+        weight=getattr(validation_result, "weight", None),
+        rank=getattr(validation_result, "rank", None),
+        contribution=getattr(validation_result, "contribution", None),
+        metrics=_base_metrics_from_validation(validation_result),
+        violations=_validation_violations(validation_result),
+        improvement_hints=list(getattr(validation_result, "improvement_hints", [])),
+        correlation_avg=getattr(validation_result, "correlation_avg", None),
+    )
 
 
 def _clone_metrics_with_corr(metrics: StrategyMetrics, correlation_avg: float | None) -> StrategyMetrics:
