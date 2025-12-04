@@ -25,8 +25,8 @@
 - [x] SDK/전략 가이드 업데이트 (#1766) + ops/dev 가이드에서 “WS가 최종 진실”을 명시 (#1772) — ko/en 가이드에 WS SSOT vs pre-check 구분 및 런북 반영.
 
 ## Phase 3 – world 기반 데이터 preset 온램프 (T3 P0)
-- 이미 정의한 preset 스펙(#1776)을 기준으로 Runner/CLI Seamless 오토 구성 구현 (#1777).
-- preset 기반 실행 예제/가이드 작성, CI/계약 테스트에서 실제로 도는 예제 붙이기 (#1778, #1789 연동).
+- [x] 이미 정의한 preset 스펙(#1776)을 기준으로 Runner/CLI Seamless 오토 구성 구현 (#1777) — `world.data.presets[]` → packaged `data_presets` 맵으로 매핑, `--data-preset` 옵션 추가, demo Seamless provider 기본 시드까지 자동 적용.
+- [x] preset 기반 실행 예제/가이드 작성, CI/계약 테스트에서 실제로 도는 예제 붙이기 (#1778, #1789 연동) — core-loop demo world가 표준 data preset을 포함하고 계약 테스트에서 auto-wiring을 검증.
 
 ## Phase 4 – NodeID/TagQuery + Determinism 마무리 (T4/T5 P0)
 - NodeID/TagQuery 결정성 규칙 구현/검증: 엔진별 적용 (#1783) → 관측/테스트(#1784).

@@ -25,8 +25,8 @@ Representative issue numbers are in parentheses. Phase 2 is the current focus.
 - [x] Refresh SDK/strategy guides and ops/dev guides to state “WS is the final truth” (#1766, #1772) — ko/en guidance updated with WS SSOT vs pre-check separation and runbook note.
 
 ## Phase 3 – World-based data preset on-ramp (T3 P0)
-- Implement Runner/CLI seamless auto-configuration based on the preset spec (#1777).
-- Add preset-driven examples/guides and wire live examples into CI/contract tests (#1778, #1789).
+- [x] Implement Runner/CLI seamless auto-configuration based on the preset spec (#1777) — map `world.data.presets[]` to packaged `data_presets` with Seamless auto-wiring, add `--data-preset`, and seed demo providers by default.
+- [x] Add preset-driven examples/guides and wire live examples into CI/contract tests (#1778, #1789) — core-loop demo world carries the standard data preset and the contract test asserts auto-wiring.
 
 ## Phase 4 – NodeID/TagQuery + Determinism wrap-up (T4/T5 P0)
 - Implement/verify NodeID/TagQuery determinism per engine (#1783) → observe/test (#1784).

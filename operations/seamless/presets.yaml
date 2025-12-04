@@ -52,3 +52,26 @@ conformance_presets:
     partial_ok: true
     interval_ms: null
     schema: {}
+data_presets:
+  ohlcv.binance.spot.1m:
+    kind: "ohlcv"
+    interval_ms: 60000
+    stabilization_bars: 2
+    sla_preset: "baseline"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "demo.inmemory.ohlcv"
+      options:
+        bars: 360
+        seed: 11
+  ohlcv.polygon.us_equity.1d:
+    kind: "ohlcv"
+    interval_ms: 86400000
+    stabilization_bars: 0
+    sla_preset: "tolerant-partial"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "demo.inmemory.ohlcv"
+      options:
+        bars: 180
+        seed: 17

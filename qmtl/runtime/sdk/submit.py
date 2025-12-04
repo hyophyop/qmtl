@@ -32,6 +32,12 @@ if TYPE_CHECKING:
 
 from .mode import Mode, mode_to_execution_domain
 from .services import get_global_services
+from .world_data import (
+    WorldDataSelection,
+    apply_data_binding,
+    build_provider_binding,
+    resolve_world_data_selection,
+)
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 logger = logging.getLogger(__name__)
@@ -186,9 +192,14 @@ ENV_DEFAULT_WORLD = "QMTL_DEFAULT_WORLD"
 ENV_DEFAULT_PRESET = "QMTL_DEFAULT_PRESET"
 
 
-def _get_gateway_url() -> str:
+def _get_gateway_url(world: str | None = None) -> str:
     """Get gateway URL from environment or use default."""
-    return os.environ.get(ENV_GATEWAY_URL, DEFAULT_GATEWAY_URL)
+    explicit = os.environ.get(ENV_GATEWAY_URL)
+    if explicit:
+        return explicit
+    if world and world != DEFAULT_WORLD:
+        return os.environ.get("GATEWAY_URL") or DEFAULT_GATEWAY_URL
+    return DEFAULT_GATEWAY_URL
 
 
 def _get_default_world() -> str:
@@ -323,6 +334,7 @@ async def submit_async(
     preset_mode: str | None = None,
     preset_version: str | None = None,
     preset_overrides: dict[str, float] | None = None,
+    data_preset: str | None = None,
     returns: Sequence[float] | None = None,
     auto_validate: bool = True,
 ) -> SubmitResult:
@@ -355,6 +367,9 @@ async def submit_async(
         Optional preset version identifier stored with the policy.
     preset_overrides : dict[str, float], optional
         Override preset thresholds (keys like "max_drawdown.max": 0.15).
+    data_preset : str, optional
+        World data preset id (from world.data.presets[].id) to use for Seamless auto-wiring.
+        Defaults to the first entry declared on the world.
     returns : Sequence[float], optional
         Pre-computed backtest returns for validation. If not provided,
         the system will attempt to extract returns from strategy execution.
@@ -380,7 +395,7 @@ async def submit_async(
     mode = _normalize_mode_value(mode)
     resolved_world = world or _get_default_world()
     resolved_preset = preset or _get_default_preset()
-    gateway_url = _get_gateway_url()
+    gateway_url = _get_gateway_url(resolved_world)
     execution_domain = mode_to_execution_domain(mode)
     services = get_global_services()
     strategy, strategy_class_name = _strategy_from_input(strategy_cls)
@@ -415,6 +430,16 @@ async def submit_async(
             preset_overrides=preset_overrides,
             services=services,
         )
+        data_notices, _ = await _maybe_configure_world_data(
+            strategy=strategy,
+            world_ctx=world_ctx,
+            world_id=resolved_world,
+            data_preset=data_preset,
+            gateway_available=gateway_available,
+            gateway_url=gateway_url,
+            services=services,
+        )
+        world_ctx.world_notice.extend(data_notices)
         bootstrap_out = await _bootstrap_strategy(
             services=services,
             strategy=strategy,
@@ -518,12 +543,71 @@ class WorldContext:
     world_notice: list[str]
     world_description: dict[str, Any] | None
     validation_policy: Any | None
+    data_preset: str | None = None
+    world_data_preset_id: str | None = None
 
 
 @dataclass
 class BootstrapOutcome:
     strategy_id: str | None
     offline_mode: bool
+
+
+def _strategy_needs_data_provider(strategy: "Strategy") -> bool:
+    try:
+        from qmtl.runtime.sdk import StreamInput
+    except Exception:
+        return False
+    return any(
+        isinstance(node, StreamInput) and getattr(node, "history_provider", None) is None
+        for node in getattr(strategy, "nodes", [])
+    )
+
+
+async def _maybe_configure_world_data(
+    *,
+    strategy: "Strategy",
+    world_ctx: WorldContext,
+    world_id: str,
+    data_preset: str | None,
+    gateway_available: bool,
+    gateway_url: str,
+    services: "RunnerServices",
+) -> tuple[list[str], WorldDataSelection | None]:
+    if not _strategy_needs_data_provider(strategy):
+        return [], None
+
+    world_description = world_ctx.world_description
+    if world_description is None and gateway_available:
+        world_description = await _fetch_world_description(
+            gateway_url, world_id, client=services.gateway_client
+        )
+        world_ctx.world_description = world_description
+
+    selection = resolve_world_data_selection(
+        world_description=world_description,
+        world_id=world_id,
+        data_preset_id=data_preset,
+        seamless_config=None,
+    )
+    if selection is None:
+        raise ValueError(
+            f"world '{world_id}' must define data.presets for StreamInput auto-wiring"
+        )
+
+    binding = build_provider_binding(selection)
+    attached = apply_data_binding(binding, strategy=strategy, world_id=world_id)
+    world_ctx.data_preset = selection.spec.key
+    world_ctx.world_data_preset_id = selection.world_preset_id
+
+    notice_source = selection.source or "packaged presets"
+    return [
+        (
+            f"World '{world_id}' data preset '{selection.world_preset_id}' → "
+            f"'{selection.data_preset_key}' applied to {attached} stream(s) "
+            f"(source: {notice_source})"
+        )
+    ], selection
 
 
 async def _build_world_context(
@@ -1371,6 +1455,7 @@ def submit(
     preset_mode: str | None = None,
     preset_version: str | None = None,
     preset_overrides: dict[str, float] | None = None,
+    data_preset: str | None = None,
     returns: Sequence[float] | None = None,
     auto_validate: bool = True,
 ) -> SubmitResult:
@@ -1394,6 +1479,9 @@ def submit(
         Optional preset version identifier to store with world policy.
     preset_overrides : dict[str, float], optional
         Override preset thresholds (e.g., {'max_drawdown.max': 0.15}).
+    data_preset : str, optional
+        World data preset id (from world.data.presets[].id) to use for Seamless auto-wiring.
+        Defaults to the first entry declared on the world.
     returns : Sequence[float], optional
         Pre-computed backtest returns.
     auto_validate : bool
@@ -1414,6 +1502,7 @@ def submit(
         preset_mode=preset_mode,
         preset_version=preset_version,
         preset_overrides=preset_overrides,
+        data_preset=data_preset,
         returns=returns,
         auto_validate=auto_validate,
     ))
@@ -1446,13 +1535,23 @@ async def _fetch_world_description(
     """
     try:
         if client is not None:
-            # Use describe_world to get full policy info
-            return await client.describe_world(gateway_url=gateway_url, world_id=world_id)
+            data = await client.describe_world(gateway_url=gateway_url, world_id=world_id)
+            if data:
+                return data
+            fallback = await client.get_world(gateway_url=gateway_url, world_id=world_id)
+            if fallback:
+                return fallback
         # Fallback to direct httpx if no client provided
+        base_url = gateway_url.rstrip("/")
         async with httpx.AsyncClient(timeout=5.0) as http_client:
-            resp = await http_client.get(f"{gateway_url.rstrip('/')}/worlds/{world_id}/describe")
+            resp = await http_client.get(f"{base_url}/worlds/{world_id}/describe")
             if resp.status_code == 404:
-                return None
+                resp_world = await http_client.get(f"{base_url}/worlds/{world_id}")
+                if resp_world.status_code == 404:
+                    return None
+                resp_world.raise_for_status()
+                raw_world = resp_world.json()
+                return raw_world if isinstance(raw_world, dict) else None
             resp.raise_for_status()
             data = resp.json()
             return data if isinstance(data, dict) else None

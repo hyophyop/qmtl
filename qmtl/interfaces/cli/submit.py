@@ -101,6 +101,11 @@ def cmd_submit(argv: List[str]) -> int:
         help=_t("Optional preset version identifier (metadata)"),
     )
     parser.add_argument(
+        "--data-preset",
+        default=None,
+        help=_t("World data preset id (world.data.presets[].id). Defaults to the world's first preset."),
+    )
+    parser.add_argument(
         "--preset-override",
         action="append",
         default=[],
@@ -129,6 +134,7 @@ def _submit_and_print_result(strategy_cls, args: argparse.Namespace, overrides: 
             preset_mode=args.preset_mode,
             preset_version=args.preset_version,
             preset_overrides=overrides or None,
+            data_preset=args.data_preset,
         )
     except Exception as e:
         print(_t("Error: {}").format(str(e)), file=sys.stderr)

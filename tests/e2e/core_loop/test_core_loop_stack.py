@@ -69,6 +69,14 @@ def _submit(strategy: str, *, world: str, mode: str | None = None) -> dict:
     return {"stdout": proc.stdout, "stderr": proc.stderr, "code": proc.returncode}
 
 
+def _stream_inputs(strategy):
+    try:
+        from qmtl.runtime.sdk import StreamInput
+    except Exception:
+        return []
+    return [n for n in getattr(strategy, "nodes", []) if isinstance(n, StreamInput)]
+
+
 def test_submit_default_safe_downgrades_when_missing_as_of(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
     # Ensure deterministic env for the CLI run
     monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
@@ -128,3 +136,33 @@ def test_inproc_stack_sets_service_env(core_loop_stack: CoreLoopStackHandle):
     assert os.environ.get("WS_MODE") == "service"
     assert os.environ.get("GATEWAY_URL") == core_loop_stack.gateway_url
     assert os.environ.get("WORLDS_BASE_URL") == core_loop_stack.worlds_url
+
+
+@pytest.mark.asyncio
+async def test_world_data_preset_autowires_seamless_provider(core_loop_world_id: str):
+    from qmtl.runtime.sdk import Mode, Runner
+    from tests.e2e.core_loop.worlds.core_loop_demo_strategy import CoreLoopDemoStrategy
+
+    result = Runner.submit(
+        CoreLoopDemoStrategy,
+        world=core_loop_world_id,
+        mode=Mode.BACKTEST,
+        auto_validate=False,
+    )
+    strategy = result.strategy
+    assert strategy is not None
+    streams = _stream_inputs(strategy)
+    assert streams, "strategy should expose at least one StreamInput"
+
+    stream = streams[0]
+    provider = stream.history_provider
+    assert provider is not None
+
+    interval_val = int(stream.interval) if isinstance(stream.interval, (int, float)) else int(str(stream.interval).rstrip("s"))
+    coverage = await provider.coverage(node_id=stream.node_id, interval=interval_val)
+    assert coverage, "auto-wired provider should seed demo coverage"
+    assert stream.dataset_fingerprint
+
+    cfg = getattr(provider, "_seamless_config", None)
+    if cfg is not None:
+        assert getattr(cfg, "sla_preset", None) == "baseline"
