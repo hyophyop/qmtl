@@ -184,7 +184,8 @@ class InProcessCoreLoopStack:
 
 
 def _service_stack_from_env() -> CoreLoopStackHandle | None:
-    if os.environ.get("CORE_LOOP_STACK_MODE") == "inproc":
+    stack_mode = os.environ.get("CORE_LOOP_STACK_MODE")
+    if stack_mode == "inproc":
         return None
 
     gateway = os.environ.get("GATEWAY_URL")
@@ -194,8 +195,9 @@ def _service_stack_from_env() -> CoreLoopStackHandle | None:
 
     health_url = f"{gateway.rstrip('/')}/health"
     if not _probe_health(health_url):
-        if os.environ.get("CORE_LOOP_STACK_MODE") == "service":
-            warnings.warn(f"gateway health check failed at {health_url}; falling back to in-process stack")
+        if stack_mode == "service":
+            raise RuntimeError(f"gateway health check failed at {health_url} with CORE_LOOP_STACK_MODE=service")
+        warnings.warn(f"gateway health check failed at {health_url}; falling back to in-process stack")
         return None
 
     world_ids_env: list[str] = []
