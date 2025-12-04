@@ -105,4 +105,4 @@ last_modified: 2025-12-04
 - 산출물: `tests/e2e/core_loop` 스켈레톤, SubmitResult/ExecutionDomain/TagQuery 안정성 케이스, CI 통합.
 - 범위/작업: 필수 happy-path/강등 케이스 구현, fixture 단순화, 문서에 테스트 사용법 추가.
 - DOD/테스트: CI에서 스위트 기본 통과, 실패 시 merge 불가 규칙 문서화, 관련 아키텍처 문서 교차 링크.
-- 의존성/참조: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), [tests](../../tests)
+- 의존성/참조: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), `tests/e2e/core_loop`

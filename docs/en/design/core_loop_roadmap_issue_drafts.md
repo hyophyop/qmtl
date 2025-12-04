@@ -105,4 +105,4 @@ This file captures draft epics for the P0 milestones in `core_loop_roadmap.md`. 
 - Outputs: `tests/e2e/core_loop` skeleton, cases for SubmitResult/ExecutionDomain/TagQuery stability, CI integration.
 - Scope/Tasks: Implement happy-path and downgrade cases, simplify fixtures, add usage notes to docs.
 - DOD/Tests: Suite passes in CI; merge-blocking rule documented; cross-links to architecture docs added.
-- Dependencies/Refs: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), [tests](../../tests)
+- Dependencies/Refs: [core_loop_roadmap.md](core_loop_roadmap.md), [architecture.md](../architecture/architecture.md), `tests/e2e/core_loop`
