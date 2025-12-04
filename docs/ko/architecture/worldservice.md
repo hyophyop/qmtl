@@ -284,6 +284,10 @@ gating_policy:
 - `snapshot`/`share_policy` 조합은 Feature Artifact Plane(§1.4) 규칙과 일치해야 합니다. Strategy Plane은 Copy‑on‑Write, Feature Plane은 읽기 전용 복제로만 공유합니다.
 - `risk_limits`, `divergence_guards`, `execution_model`은 프로모션 전 검증에서 평가되며, 실패 시 Apply가 거부되고 freeze 상태가 유지됩니다.
 
+!!! note "내부 정규 스키마와 프리셋의 관계"
+    본 섹션의 `gating_policy` 구조는 WorldService 정책 엔진의 **내부 정규 스키마(SSOT)**를 정의합니다. Core Loop 단순화 및 정책 프리셋 도입은 사용자가 직접 작성해야 하는 월드/정책 설정 표면을 줄이기 위한 것이며, 이 스키마가 표현할 수 있는 게이팅·리스크·관측 정책의 **표현력을 축소하는 것을 목표로 하지 않습니다.**  
+    프리셋/오버라이드·외부 정책 도구는 모두 이 정규 스키마로 컴파일되는 상위 인터페이스로 취급하며, 필요 시 고급/운영 플로우용 별도 진입점으로 이를 재노출할 수 있어야 합니다.
+
 ---
 
 ## 5. 할당 & 리밸런싱 API (규범)

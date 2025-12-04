@@ -187,6 +187,10 @@ world:
 - `clone`: 프리셋 정책을 복제해 내 월드에 적용
 - `extend`: 프리셋을 상속하되 일부 임계값만 오버라이드 (예: `--preset-override max_drawdown.max=0.15`)
 
+**비목표(Non‑Goal):**
+- Core Loop 단순화와 정책 프리셋 도입의 목표는 **사용자가 직접 작성해야 하는 월드/정책 설정 표면을 줄이는 것**이지, WorldService 정책 엔진이 표현할 수 있는 게이팅·리스크·관측 정책의 **표현력을 줄이는 것이 아니다.**
+- 기존 `gating_policy` 정규 스키마는 WorldService 내부 SSOT로 유지되며, 프리셋/오버라이드·운영용 도구는 이 스키마로 컴파일되는 상위 레벨 인터페이스로 취급한다. 필요 시 고급/운영 플로우용 별도 진입점으로 세밀한 게이팅을 재노출할 수 있어야 한다.
+
 ### 3.4 [P1] CLI 플랫화
 
 **Before:**
@@ -309,8 +313,8 @@ mode: backtest | paper | live
    - `qmtl submit`, `qmtl status`, `qmtl world`, `qmtl init` 4개만 유지
 
 3. **정책 프리셋 시스템**
-   - 기존 gating_policy YAML 스키마 제거
-   - 4개 프리셋 + 간단한 오버라이드만 지원
+   - 기존 월드 설정에서 사용자 정의 `gating_policy` YAML을 직접 기술하는 패턴 제거
+   - 4개 프리셋 + 간단한 오버라이드만 지원하되, 내부에서는 WorldService의 `gating_policy` 정규 스키마로 컴파일해 동일한 표현력을 유지
 
 ### Phase 2: 자동화 파이프라인 (2-4주)
 
