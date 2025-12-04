@@ -148,6 +148,13 @@ workspace/
 
 `qmtl submit`은 `qmtl.yml`을 우선 사용해 전략 경로와 기본 월드를 해석합니다. `QMTL_STRATEGY_ROOT`(선택)나 기존 `PYTHONPATH`가 있더라도 `project.strategy_root`가 최우선으로 적용되어 POSIX/Windows 모두에서 동일하게 동작합니다.
 
+### 제출 결과 해석 (WS SSOT + pre-check)
+- CLI/SDK가 반환하는 `SubmitResult`는 **WorldService 결과를 단일 진실(SSOT)**로 노출하고, 로컬 `ValidationPipeline` 출력은 `precheck` 필드로 분리됩니다.
+- CLI는 두 섹션으로 나뉩니다:
+  - `🌐 WorldService decision (SSOT)` — `status/weight/rank/contribution`과 WS 기준 threshold 위반 목록.
+  - `🧪 Local pre-check (ValidationPipeline)` — 로컬 지표/위반/힌트(WS와 달라도 SSOT가 아니므로 참고용).
+- `downgraded/safe_mode/downgrade_reason`은 여전히 최상위에 표시되어 default-safe 강등 여부를 확인할 수 있습니다.
+
 ## 캐시 조회
 
 `compute_fn`에는 `NodeCache.view()`가 반환하는 **읽기 전용 CacheView** 객체가

@@ -18,6 +18,11 @@ last_modified: 2025-08-29
 - WorldService와 Gateway 노드의 NTP 상태 확인
 - `world_id`, 현재 `resource_version`/`etag` 파악
 
+## WS SSOT & 클라이언트 노출
+- WorldService 평가/활성 결과가 `status/weight/contribution`의 단일 진실(SSOT)입니다. CLI/SDK `submit`은 WS 출력 그대로를 노출합니다.
+- 로컬 ValidationPipeline 결과는 “pre-check”(비권위) 섹션으로 분리됩니다. 불일치 시 WS 메트릭/로그를 우선 확인하고 pre-check는 참고용으로 사용합니다.
+- `downgraded/safe_mode/downgrade_reason`은 기본 안전 강등 여부를 표시하기 위해 최상단에 유지됩니다.
+
 ## 절차
 
 1) Freeze/Drain

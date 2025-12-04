@@ -5,6 +5,7 @@ nav:
       - Core Loop Roadmap: design/core_loop_roadmap.md
       - Core Loop P0 Issue Drafts: design/core_loop_roadmap_issue_drafts.md
       - Core Loop P0 Issue Breakdown: design/core_loop_roadmap_issue_breakdown.md
+      - Core Loop Roadmap Tasks: design/core_loop_roadmap_tasks.md
   - Getting Started:
       - Overview: getting-started/index.md
       - Core Concepts: getting-started/concepts.md
@@ -158,6 +159,7 @@ plugins:
             Core Loop Roadmap: Core Loop 로드맵
             Core Loop P0 Issue Drafts: Core Loop P0 이슈 초안
             Core Loop P0 Issue Breakdown: Core Loop P0 이슈 분할안
+            Core Loop Roadmap Tasks: Core Loop 로드맵 태스크
             Guides: 가이드
             Docs Internationalization: 문서 국제화
             "Layered Template System": "레이어드 템플릿 시스템"

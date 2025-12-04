@@ -153,16 +153,28 @@ def _print_submission_result(result) -> None:
         reason = getattr(result, "downgrade_reason", None) or "unspecified"
         print(f"Safe mode:   downgraded ({reason})")
 
+    _print_ws_section(result)
+    if getattr(result, "precheck", None):
+        _print_precheck_section(result.precheck)
+
+
+def _print_ws_section(result) -> None:
+    print(_t("\n🌐 WorldService decision (SSOT)"))
+    print(f"Status: {result.status}")
+    if result.status == "rejected" and result.rejection_reason:
+        print(f"Reason: {result.rejection_reason}")
+    if result.threshold_violations:
+        _print_thresholds(result.threshold_violations, label=_t("Threshold violations (WS)"))
     if result.status == "active":
         _print_active_result(result)
     elif result.status == "rejected":
         _print_rejected_result(result)
     else:
-        print(f"\n⏳ Status: {result.status}")
+        print(f"{_t('Waiting for WS decision or pending activation.')} {_t('Local pre-check shown below if available.')}")
 
 
 def _print_active_result(result) -> None:
-    print(_t("\n✅ Strategy activated successfully!"))
+    print(_t("✅ Strategy activated successfully!"))
     if result.contribution is not None:
         print(f"Contribution: {result.contribution:.2%}")
     if result.weight is not None:
@@ -172,13 +184,50 @@ def _print_active_result(result) -> None:
 
 
 def _print_rejected_result(result) -> None:
-    print(_t("\n❌ Strategy rejected"))
-    if result.rejection_reason:
-        print(f"Reason: {result.rejection_reason}")
+    print(_t("❌ Strategy rejected"))
     if result.improvement_hints:
         print(_t("\n💡 Improvement hints:"))
         for hint in result.improvement_hints:
             print(f"  - {hint}")
+    if result.threshold_violations:
+        _print_thresholds(result.threshold_violations, label=_t("Threshold violations (WS)"))
+
+
+def _print_precheck_section(precheck) -> None:
+    print(_t("\n🧪 Local pre-check (ValidationPipeline)"))
+    print(f"Status: {precheck.status}")
+    if precheck.contribution is not None:
+        print(f"Contribution: {precheck.contribution:.2%}")
+    if precheck.weight is not None:
+        print(f"Weight:       {precheck.weight:.2%}")
+    if precheck.rank is not None:
+        print(f"Rank:         #{precheck.rank}")
+    if precheck.correlation_avg is not None:
+        print(f"Correlation:  {precheck.correlation_avg:.2f}")
+    if precheck.violations:
+        _print_thresholds(precheck.violations, label=_t("Threshold violations (pre-check)"))
+    if precheck.improvement_hints:
+        print(_t("\nHints (pre-check):"))
+        for hint in precheck.improvement_hints:
+            print(f"  - {hint}")
+
+
+def _print_thresholds(violations: list[dict], *, label: str) -> None:
+    if not violations:
+        return
+    print(label + ":")
+    for v in violations:
+        metric = v.get("metric", "metric")
+        vtype = v.get("threshold_type") or v.get("type") or "threshold"
+        tval = v.get("threshold_value") or v.get("threshold")
+        value = v.get("value")
+        message = v.get("message")
+        line = f"  - {metric} {vtype} {tval}"
+        if value is not None:
+            line += f" (value={value})"
+        if message:
+            line += f" — {message}"
+        print(line)
 
 
 def _load_strategy(strategy_ref: str):

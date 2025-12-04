@@ -18,6 +18,11 @@ last_modified: 2025-08-29
 - Confirm NTP health on WorldService and Gateway nodes
 - Identify `world_id` and current `resource_version`/`etag`
 
+## WS SSOT & client surfaces
+- WorldService activation/evaluation is the single source of truth (SSOT) for `status/weight/contribution`. CLI/SDK submit surfaces WS output directly.
+- Local ValidationPipeline output is shown separately as “pre-check” (non-authoritative) for debugging; investigate WS metrics/logs first when there is a mismatch.
+- Downgrade signals (`downgraded/safe_mode/downgrade_reason`) remain at the top-level to expose default-safe paths from CLI/SDK.
+
 ## Procedures
 
 1) Freeze/Drain
@@ -42,4 +47,3 @@ last_modified: 2025-08-29
 - Use world-scoped metrics such as `pretrade_attempts_total{world_id="demo"}` to verify activation state per world.
 
 {{ nav_links() }}
-
