@@ -13,6 +13,23 @@ world:
     topk:
       total: 1
 
+  data:
+    presets:
+      - id: "ohlcv-demo"
+        preset: "ohlcv.binance.spot.1m"
+        universe:
+          symbols: ["BTCUSDT"]
+          asset_class: "crypto"
+          venue: "binance"
+        window:
+          warmup_bars: 60
+          min_history: "7d"
+        seamless:
+          sla_preset: "baseline"
+          conformance_preset: "strict-blocking"
+        live:
+          max_lag: "45s"
+
   execution:
     mode_default: "backtest"
     position_exit_on_deactivate: "market"

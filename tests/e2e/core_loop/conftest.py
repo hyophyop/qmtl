@@ -10,6 +10,10 @@ import yaml
 from .stack import CoreLoopStackHandle, bootstrap_core_loop_stack
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "contract: Core Loop contract test")
+
+
 @pytest.fixture(scope="session")
 def core_loop_artifact_dir():
     path = Path(os.environ.get("CORE_LOOP_ARTIFACT_DIR", ".artifacts/core_loop"))

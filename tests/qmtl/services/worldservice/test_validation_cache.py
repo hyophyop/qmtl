@@ -40,6 +40,62 @@ async def test_validation_cache_scoped_by_execution_domain_storage():
 
 
 @pytest.mark.asyncio
+async def test_validation_cache_accepts_execution_domain_aliases_via_api():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "world-alias"})
+
+            payload = {
+                "node_id": "blake3:alias-node",
+                "execution_domain": "paper",
+                "contract_id": "contract-alias",
+                "dataset_fingerprint": "lake:blake3:alias",
+                "code_version": "rev0",
+                "resource_policy": "standard",
+                "result": "valid",
+                "metrics": {"score": 0.42},
+            }
+
+            resp = await client.post("/worlds/world-alias/validations/cache", json=payload)
+            assert resp.status_code == 200
+            assert resp.json()["cached"] is True
+
+            lookup = await client.post(
+                "/worlds/world-alias/validations/cache/lookup",
+                json={key: payload[key] for key in payload if key not in {"result", "metrics"}},
+            )
+            assert lookup.status_code == 200
+            body = lookup.json()
+            assert body["cached"] is True
+            assert body["result"] == "valid"
+            assert body["metrics"] == {"score": 0.42}
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_rejects_unknown_execution_domain_via_api():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "world-invalid"})
+
+            payload = {
+                "node_id": "blake3:alias-node",
+                "execution_domain": "invalid-mode",
+                "contract_id": "contract-invalid",
+                "dataset_fingerprint": "lake:blake3:alias",
+                "code_version": "rev0",
+                "resource_policy": "standard",
+                "result": "valid",
+                "metrics": {"score": 0.42},
+            }
+
+            resp = await client.post("/worlds/world-invalid/validations/cache", json=payload)
+            assert resp.status_code == 422
+            assert "unknown execution_domain" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "context_update",
     [

@@ -16,6 +16,11 @@ from qmtl.services.worldservice.storage.normalization import (
         (None, DEFAULT_EXECUTION_DOMAIN),
         ("", DEFAULT_EXECUTION_DOMAIN),
         ("   ", DEFAULT_EXECUTION_DOMAIN),
+        ("default", DEFAULT_EXECUTION_DOMAIN),
+        ("compute-only", "backtest"),
+        ("compute_only", "backtest"),
+        ("paper", "dryrun"),
+        ("sim", "dryrun"),
         ("  LIVE  ", "live"),
         ("DryRun", "dryrun"),
         (" shadow ", "shadow"),
@@ -25,7 +30,7 @@ def test_normalize_execution_domain_defaults_and_lowercases(raw: object, expecte
     assert _normalize_execution_domain(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["paper", 123])
+@pytest.mark.parametrize("raw", ["weird", 123])
 def test_normalize_execution_domain_rejects_unknown_values(raw: object) -> None:
     with pytest.raises(ValueError, match="unknown execution_domain"):
         _normalize_execution_domain(raw)  # type: ignore[arg-type]

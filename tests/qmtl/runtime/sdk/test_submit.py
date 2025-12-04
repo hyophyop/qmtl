@@ -70,6 +70,9 @@ class TestSubmitResult:
         assert result.contribution is None
         assert result.weight is None
         assert result.rank is None
+        assert result.downgraded is False
+        assert result.downgrade_reason is None
+        assert result.safe_mode is False
 
     def test_full_result(self):
         result = SubmitResult(
@@ -100,6 +103,8 @@ class TestSubmitResult:
         assert result.status == "rejected"
         assert result.rejection_reason == "Policy threshold not met"
         assert len(result.improvement_hints) == 1
+        assert result.downgraded is False
+        assert result.safe_mode is False
 
     def test_submit_result_embeds_envelopes(self):
         decision = DecisionEnvelope(
@@ -132,6 +137,22 @@ class TestSubmitResult:
         assert result.world == decision.world_id == activation.world_id
         assert result.strategy_id == activation.strategy_id
         assert result.weight == activation.weight
+        assert result.downgraded is False
+
+    def test_submit_result_downgrade_flags(self):
+        result = SubmitResult(
+            strategy_id="s2",
+            status="pending",
+            world="w",
+            mode=Mode.BACKTEST,
+            downgraded=True,
+            downgrade_reason="missing_as_of",
+            safe_mode=True,
+        )
+
+        assert result.downgraded is True
+        assert result.downgrade_reason == "missing_as_of"
+        assert result.safe_mode is True
 
 
 class TestSubmitFunction:

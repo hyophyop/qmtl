@@ -133,3 +133,9 @@ jobs:
           WS_MODE: service
         run: |
           uv run -m pytest -q tests/e2e/world_smoke -q
+
+      - name: Core Loop contract suite
+        env:
+          CORE_LOOP_STACK_MODE: inproc
+        run: |
+          uv run -m pytest -q tests/e2e/core_loop -q

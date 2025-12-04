@@ -155,9 +155,12 @@ class StrategyBootstrapper:
         execution_domain_override: str | None = None
         raw_domain = meta_payload.get("execution_domain")
         if isinstance(raw_domain, str) and raw_domain.strip():
-            canonical = resolve_execution_domain(raw_domain)
-            execution_domain_override = canonical or raw_domain.strip().lower()
-            meta_payload["execution_domain"] = execution_domain_override
+            logger.warning(
+                "runner.execution_domain_hint_ignored",
+                extra={"execution_domain": raw_domain},
+            )
+            meta_payload.pop("execution_domain", None)
+            execution_domain_override = None
         raw_fp = meta_payload.get("dataset_fingerprint") or meta_payload.get(
             "datasetFingerprint"
         )
@@ -190,9 +193,6 @@ class StrategyBootstrapper:
                 "world": world_id,
                 "domain": effective_domain,
             }
-            if meta_payload is None:
-                meta_payload = {}
-            meta_payload.setdefault("execution_domain", effective_domain)
         return dag_meta, meta_payload
 
     async def _maybe_submit_strategy(

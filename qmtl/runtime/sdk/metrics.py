@@ -116,6 +116,17 @@ seamless_cache_miss_total = _counter(
     test_value_factory=dict,
 )
 
+# ---------------------------------------------------------------------------
+# Execution context safety
+# ---------------------------------------------------------------------------
+execution_domain_downgrade_total = _counter(
+    "execution_domain_downgrade_total",
+    "Total number of SDK execution context downgrades to compute-only safe mode",
+    ["reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 seamless_cache_resident_bytes = _gauge(
     "seamless_cache_resident_bytes",
     "Resident bytes held by Seamless in-memory cache",

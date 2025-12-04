@@ -83,6 +83,9 @@ SubmitResult(
     status="valid",              # valid | invalid | pending
     world="quickstart_demo",
     mode="backtest",
+    downgraded=False,            # 안전기본으로 강등되었는지 여부
+    downgrade_reason=None,       # 예: backtest 필수 입력 누락 시 "missing_as_of"
+    safe_mode=False,             # True면 주문 게이트 OFF 상태
     
     # 성과 지표
     metrics={

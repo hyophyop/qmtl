@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 
 from ..schemas import (
     ValidationCacheLookupRequest,
@@ -23,6 +23,9 @@ def create_validations_router(service: WorldService) -> APIRouter:
             return entry
         return ValidationCacheEntry(**entry)
 
+    def _translate_domain_error(exc: ValueError) -> None:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @router.post(
         '/worlds/{world_id}/validations/cache/lookup',
         response_model=ValidationCacheResponse,
@@ -31,7 +34,10 @@ def create_validations_router(service: WorldService) -> APIRouter:
         world_id: str, payload: ValidationCacheLookupRequest
     ) -> ValidationCacheResponse:
         store = service.store
-        entry = _coerce_entry(await store.get_validation_cache(world_id, **payload.model_dump()))
+        try:
+            entry = _coerce_entry(await store.get_validation_cache(world_id, **payload.model_dump()))
+        except ValueError as exc:  # e.g., invalid execution_domain
+            _translate_domain_error(exc)
         if entry is None:
             return ValidationCacheResponse(cached=False)
         return ValidationCacheResponse(
@@ -47,7 +53,10 @@ def create_validations_router(service: WorldService) -> APIRouter:
         world_id: str, payload: ValidationCacheStoreRequest
     ) -> ValidationCacheResponse:
         store = service.store
-        entry = _coerce_entry(await store.set_validation_cache(world_id, **payload.model_dump()))
+        try:
+            entry = _coerce_entry(await store.set_validation_cache(world_id, **payload.model_dump()))
+        except ValueError as exc:
+            _translate_domain_error(exc)
         if entry is None:
             return ValidationCacheResponse(cached=False)
         return ValidationCacheResponse(
@@ -63,9 +72,12 @@ def create_validations_router(service: WorldService) -> APIRouter:
         world_id: str, node_id: str, execution_domain: str | None = None
     ) -> Response:
         store = service.store
-        await store.invalidate_validation_cache(
-            world_id, node_id=node_id, execution_domain=execution_domain
-        )
+        try:
+            await store.invalidate_validation_cache(
+                world_id, node_id=node_id, execution_domain=execution_domain
+            )
+        except ValueError as exc:
+            _translate_domain_error(exc)
         return Response(status_code=204)
 
     return router

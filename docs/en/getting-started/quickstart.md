@@ -83,6 +83,9 @@ SubmitResult(
     status="valid",              # valid | invalid | pending
     world="quickstart_demo",
     mode="backtest",
+    downgraded=False,            # True if forced into safe compute-only
+    downgrade_reason=None,       # e.g., "missing_as_of" when backtest inputs are incomplete
+    safe_mode=False,             # True when orders are gated off for safety
     
     # Performance metrics
     metrics={

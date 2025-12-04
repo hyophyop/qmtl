@@ -16,6 +16,7 @@ from qmtl.runtime.helpers import (
     determine_execution_mode,
     normalize_clock_value,
 )
+from qmtl.foundation.common.compute_context import evaluate_safe_mode
 
 
 def normalize_default_context(
@@ -104,7 +105,24 @@ def resolve_execution_context(
         offline_requested=offline_requested,
     )
 
-    return ExecutionContextResolution(context=merged, force_offline=force_offline)
+    final_domain, downgraded, reason, safe_mode = evaluate_safe_mode(
+        merged.get("execution_domain"), merged.get("as_of")
+    )
+    merged["execution_domain"] = final_domain or merged.get("execution_domain") or ""
+    if downgraded:
+        merged["downgraded"] = "true"
+    if reason is not None:
+        merged["downgrade_reason"] = getattr(reason, "value", str(reason))
+    if safe_mode:
+        merged["safe_mode"] = "true"
+
+    return ExecutionContextResolution(
+        context=merged,
+        force_offline=force_offline,
+        downgraded=downgraded,
+        downgrade_reason=getattr(reason, "value", None) if reason is not None else None,
+        safe_mode=safe_mode,
+    )
 
 
 __all__ = [

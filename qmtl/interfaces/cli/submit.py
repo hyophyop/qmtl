@@ -134,6 +134,10 @@ def _submit_and_print_result(strategy_cls, args: argparse.Namespace, overrides: 
         print(_t("Error: {}").format(str(e)), file=sys.stderr)
         return 1
 
+    if getattr(result, "downgraded", False) or getattr(result, "safe_mode", False):
+        reason = getattr(result, "downgrade_reason", None) or "unspecified"
+        print(_t("⚠️  Safe mode: execution was downgraded ({})").format(reason), file=sys.stderr)
+
     _print_submission_result(result)
     return 0 if result.status != "rejected" else 1
 
@@ -145,6 +149,9 @@ def _print_submission_result(result) -> None:
     print(f"Status:      {result.status}")
     print(f"World:       {result.world}")
     print(f"Mode:        {result.mode.value}")
+    if getattr(result, "downgraded", False) or getattr(result, "safe_mode", False):
+        reason = getattr(result, "downgrade_reason", None) or "unspecified"
+        print(f"Safe mode:   downgraded ({reason})")
 
     if result.status == "active":
         _print_active_result(result)

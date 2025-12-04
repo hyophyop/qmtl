@@ -11,6 +11,8 @@ from qmtl.runtime.helpers import (
     normalize_clock_value,
     parse_activation_update,
 )
+from qmtl.runtime.sdk.execution_context import resolve_execution_context
+from qmtl.foundation.common.compute_context import DowngradeReason
 
 
 def test_determine_execution_mode_prefers_explicit() -> None:
@@ -33,6 +35,21 @@ def test_determine_execution_mode_derived_from_context() -> None:
 
     mode = determine_execution_mode(
         explicit_mode=None,
+        execution_domain=None,
+        merged_context=merged,
+        trade_mode="backtest",
+        offline_requested=False,
+        gateway_url=None,
+    )
+
+    assert mode == "dryrun"
+
+
+def test_determine_execution_mode_accepts_paper_alias() -> None:
+    merged: dict[str, str] = {}
+
+    mode = determine_execution_mode(
+        explicit_mode="paper",
         execution_domain=None,
         merged_context=merged,
         trade_mode="backtest",
@@ -67,6 +84,78 @@ def test_determine_execution_mode_retains_shadow_domain() -> None:
     )
 
     assert mode == "shadow"
+
+
+def test_resolve_execution_context_downgrades_missing_as_of() -> None:
+    resolution = resolve_execution_context(
+        None,
+        context=None,
+        execution_mode="backtest",
+        execution_domain=None,
+        clock=None,
+        as_of=None,
+        dataset_fingerprint=None,
+        offline_requested=False,
+        gateway_url="https://gateway",
+        trade_mode="backtest",
+    )
+
+    assert resolution.force_offline is True
+    assert resolution.downgraded is True
+    assert resolution.safe_mode is True
+    assert resolution.downgrade_reason == DowngradeReason.MISSING_AS_OF.value
+    assert resolution.context["execution_domain"] == "backtest"
+    assert resolution.context.get("downgrade_reason") == DowngradeReason.MISSING_AS_OF.value
+    assert resolution.context.get("safe_mode") == "true"
+
+
+def test_resolve_execution_context_live_not_downgraded_without_as_of() -> None:
+    resolution = resolve_execution_context(
+        None,
+        context=None,
+        execution_mode="live",
+        execution_domain=None,
+        clock=None,
+        as_of=None,
+        dataset_fingerprint=None,
+        offline_requested=False,
+        gateway_url="https://gateway",
+        trade_mode="live",
+    )
+
+    assert resolution.force_offline is False
+    assert resolution.downgraded is False
+    assert resolution.safe_mode is False
+    assert resolution.downgrade_reason is None
+
+
+@pytest.mark.parametrize("bad_mode", ["offline", "sandbox", "compute-only", "unknown"])
+def test_determine_execution_mode_rejects_deprecated_or_unknown_modes(bad_mode: str) -> None:
+    merged: dict[str, str] = {}
+
+    with pytest.raises(ValueError):
+        determine_execution_mode(
+            explicit_mode=bad_mode,
+            execution_domain=None,
+            merged_context=merged,
+            trade_mode="backtest",
+            offline_requested=False,
+            gateway_url=None,
+        )
+
+
+def test_determine_execution_mode_rejects_invalid_domain_hint() -> None:
+    merged: dict[str, str] = {}
+
+    with pytest.raises(ValueError):
+        determine_execution_mode(
+            explicit_mode=None,
+            execution_domain="papertrade",
+            merged_context=merged,
+            trade_mode="backtest",
+            offline_requested=False,
+            gateway_url=None,
+        )
 
 
 def test_normalize_clock_value_applies_expected_clock() -> None:
