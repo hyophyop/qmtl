@@ -6,7 +6,13 @@ from typing import Any, Dict, List, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .policy_engine import Policy
-from .shared_schemas import ActivationEnvelope, DecisionEnvelope, SeamlessArtifactPayload
+from .shared_schemas import (
+    ActivationEnvelope,
+    DecisionEnvelope,
+    EvaluateRequest,
+    SeamlessArtifactPayload,
+    StrategySeries,
+)
 
 
 class ExecutionDomainEnum(StrEnum):
@@ -25,12 +31,6 @@ class WorldNodeStatusEnum(StrEnum):
     PAUSED = "paused"
     STOPPED = "stopped"
     ARCHIVED = "archived"
-
-
-class StrategySeries(BaseModel):
-    equity: List[float] | None = None
-    pnl: List[float] | None = None
-    returns: List[float] | None = None
 
 
 class World(BaseModel):
@@ -99,14 +99,6 @@ class ActivationRequest(BaseModel):
 class ApplyPlan(BaseModel):
     activate: List[str] = Field(default_factory=list)
     deactivate: List[str] = Field(default_factory=list)
-
-
-class EvaluateRequest(BaseModel):
-    metrics: Dict[str, Dict[str, float]] = Field(default_factory=dict)
-    previous: List[str] | None = None
-    correlations: Dict[tuple[str, str], float] | None = None
-    policy: Policy | None = None
-    series: Dict[str, StrategySeries] | None = None
 
 
 class ApplyRequest(EvaluateRequest):

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from .policy_engine import Policy
+
+
+class StrategySeries(BaseModel):
+    equity: List[float] | None = None
+    pnl: List[float] | None = None
+    returns: List[float] | None = None
 
 
 class SeamlessArtifactPayload(BaseModel):
@@ -29,6 +37,14 @@ class DecisionEnvelope(BaseModel):
     artifact: SeamlessArtifactPayload | None = None
 
 
+class EvaluateRequest(BaseModel):
+    metrics: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    previous: List[str] | None = None
+    correlations: Dict[tuple[str, str], float] | None = None
+    policy: Policy | Dict[str, Any] | None = None
+    series: Dict[str, StrategySeries] | None = None
+
+
 class ActivationEnvelope(BaseModel):
     world_id: str
     strategy_id: str
@@ -47,5 +63,7 @@ class ActivationEnvelope(BaseModel):
 __all__ = [
     "ActivationEnvelope",
     "DecisionEnvelope",
+    "EvaluateRequest",
     "SeamlessArtifactPayload",
+    "StrategySeries",
 ]
