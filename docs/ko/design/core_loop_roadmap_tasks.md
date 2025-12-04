@@ -3,7 +3,7 @@
 괄호 안은 대표 이슈 번호입니다. Phase 2부터 착수합니다.
 
 ## Phase 0 – 기반 깔기 (spec/스켈레톤)
-- Core Loop 계약 테스트 스켈레톤 먼저 생성: tests/e2e/core_loop 골격 (#1788).
+- [x] Core Loop 계약 테스트 스켈레톤 생성: tests/e2e/core_loop 골격(#1788), in-proc 스택/픽스처 배포.
 - spec 성 이슈들부터 처리:
   - SubmitResult/WS 스키마 정렬 방향 잡기 (#1764, #1771).
   - world data preset 스펙 정의 (#1776).
@@ -16,6 +16,7 @@
 - Runner 제출 힌트 제거 (WS effective_mode 우선) (#1774).
 - ComputeContext 쪽 정렬: compute_context 규칙 적용 (#1779) → WS 우선 규약 강제 (#1780).
 - ExecutionDomain default-safe 계약/E2E 테스트 추가 (#1775) + Core Loop 계약 스위트에 핵심 케이스로 편입 (#1789).
+- [x] 모드/도메인 표면 정리 (#1769): CLI `--mode`/SDK 문서에서 legacy 토큰 제거, default-safe 규칙·WS 우선 규약을 ko/en 가이드에 반영.
 - 현재 상태: Phase 1까지 완료.
 
 ## Phase 2 – SubmitResult/WS SSOT 정리 (T1/T2 P0)
@@ -32,10 +33,13 @@
 - [x] NodeID/TagQuery 결정성 규칙 구현/검증: 엔진별 적용 (#1783) → 관측/테스트(#1784) — TagQueryNode NodeID가 query spec(정렬·중복 제거된 query_tags + match_mode + interval)에 따라 해시되도록 SDK/Gateway 정규화, queue_map match_mode 전달 및 결정성 테스트 추가.
 - [x] Determinism 체크리스트 코드化 (#1785) → 관측 메트릭/대시보드 (#1786) → 런북 보강 (#1787) — NodeID CRC/필드/불일치·TagQuery 전용 메트릭 추가, `operations/determinism.md` 런북/architecture 링크로 대응 경로 명시.
 - [x] Core Loop 계약 스위트에 NodeID/TagQuery·Determinism 관련 케이스 확장 (#1789) — Gateway determinism 메트릭이 NodeID 불일치 시 증가하는지 검증하는 계약 테스트 추가.
+- [x] ComputeContext 계약 테스트 추가 (#1781) — WS 결정 우선/부재/만료(stale) 시 default-safe 강등 플래그와 as_of 보존 여부를 계약 테스트로 고정.
 
 ## Phase 5 – CI 게이트 정착 (T6 P0 마무리)
 - [x] Core Loop 계약 스위트를 CI merge-blocker로 통합 (#1790) — `.github/workflows/ci.yml` `test` 잡에 `Core Loop contract suite` 스텝 추가, `CORE_LOOP_STACK_MODE=inproc`로 in-proc WS 스택을 구동해 실패 시 PR을 차단.
 - [x] 로드맵/아키텍처 문서와 “이 테스트가 깨지면 어떤 방향성이 깨진 것인지”를 연결해 명시 (#1790) — 계약 스위트를 `docs/ko/design/core_loop_roadmap.md`(방향성), `docs/ko/architecture/architecture.md`(경계/SSOT), `docs/ko/operations/determinism.md`(런북)에서 참조하도록 정리해, 깨짐이 Core Loop 방향성과 어떤 연관이 있는지 바로 추적 가능.
+
+잔여 오픈 이슈 (#1762, #1763, #1769, #1781, #1788)까지 반영했으므로 Phase 0–5 클러스터는 완료 상태다.
 
 ### 병렬성 관점
 - Phase 1(ExecutionDomain 라인)과 Phase 2(SubmitResult/WS SSOT)는 부분적으로 병렬 가능하지만,

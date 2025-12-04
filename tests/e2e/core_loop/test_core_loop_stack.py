@@ -55,6 +55,22 @@ def _submit(strategy: str, *, world: str, mode: str | None = None) -> dict:
     cmd = ["qmtl", "submit", strategy, "--world", world]
     if mode:
         cmd.extend(["--mode", mode])
+    return _submit_raw(cmd)
+
+
+def _submit_json(strategy: str, *, world: str, mode: str | None = None) -> tuple[dict, dict]:
+    cmd = ["qmtl", "submit", strategy, "--world", world, "--output", "json"]
+    if mode:
+        cmd.extend(["--mode", mode])
+    result = _submit_raw(cmd)
+    try:
+        payload = json.loads(result["stdout"])
+    except Exception as exc:  # noqa: PERF203
+        raise AssertionError(f"submit did not emit JSON: rc={result['code']}, stdout={result['stdout']}, stderr={result['stderr']}") from exc
+    return payload, result
+
+
+def _submit_raw(cmd: list[str]) -> dict:
     env = dict(os.environ)
     env.setdefault("QMTL_STRATEGY_ROOT", str(Path(__file__).parent / "worlds"))
     proc = subprocess.run(
@@ -107,6 +123,29 @@ def test_submit_reports_downgrade_reason(core_loop_world_id: str, monkeypatch: p
     stdout = result["stdout"]
     assert "downgraded" in stdout
     assert "downgrade_reason" in stdout or "missing_as_of" in stdout
+
+
+def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    payload, result = _submit_json(
+        "core_loop_demo_strategy:CoreLoopDemoStrategy",
+        world=core_loop_world_id,
+        mode="backtest",
+    )
+
+    # Contract: JSON output keeps WS envelope separate and mirrors downgrade flags.
+    assert payload.get("world") == core_loop_world_id
+    assert "ws" in payload and isinstance(payload["ws"], dict)
+    ws = payload["ws"]
+
+    assert ws.get("world") == core_loop_world_id
+    assert ws.get("status") == payload.get("status")
+    assert ws.get("downgrade_reason") == payload.get("downgrade_reason")
+    assert ws.get("safe_mode") == payload.get("safe_mode")
+    assert "precheck" in payload  # even if null, the field should exist
+    assert "decision" in payload and "activation" in payload
+    assert "decision" in ws and "activation" in ws
+    assert result["code"] in (0, 1)
 
 
 def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandle, core_loop_world_id: str):

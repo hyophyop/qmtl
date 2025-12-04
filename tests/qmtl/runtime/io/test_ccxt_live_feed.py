@@ -63,8 +63,11 @@ class _TradesExchange:
 async def test_reconnect_backoff_schedule(monkeypatch):
     sleep_calls: list[float] = []
 
+    original_sleep = live_module.asyncio.sleep
+
     async def _fake_sleep(delay: float):
         sleep_calls.append(delay)
+        await original_sleep(0)
 
     monkeypatch.setattr(live_module.asyncio, "sleep", _fake_sleep)
 

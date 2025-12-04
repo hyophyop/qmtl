@@ -82,7 +82,10 @@ def cmd_submit(argv: List[str]) -> int:
         "--mode", "-m",
         choices=["backtest", "paper", "live"],
         default="backtest",
-        help=_t("Execution mode (default: backtest)"),
+        help=_t(
+            "Execution mode (backtest|paper|live). WS effective_mode is authoritative; "
+            "missing/legacy tokens are normalized to compute-only (backtest)."
+        ),
     )
     parser.add_argument(
         "--preset", "-p",
