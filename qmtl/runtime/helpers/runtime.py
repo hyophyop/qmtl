@@ -141,8 +141,9 @@ def determine_execution_mode(
 ) -> str:
     """Determine the execution mode from user inputs and existing context.
 
-    execution_domain hints are intentionally ignored; callers must pass
-    explicit_mode (or set execution_mode in context) to steer behaviour.
+    execution_domain hints act as a default when no explicit_mode is provided.
+    Ambiguous submissions downgrade to backtest for safety instead of opting
+    into live execution implicitly.
     """
 
     if explicit_mode is not None:
@@ -152,9 +153,15 @@ def determine_execution_mode(
     if existing:
         return _normalize_mode(existing)
 
+    hinted_mode = _mode_from_domain(execution_domain)
+    if hinted_mode:
+        return hinted_mode
+
+    context_hint = _mode_from_domain(merged_context.get("execution_domain"))
+    if context_hint:
+        return context_hint
+
     if trade_mode == "live" and not offline_requested:
-        return "live"
-    if gateway_url and not offline_requested:
         return "live"
     return "backtest"
 

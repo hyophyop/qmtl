@@ -30,8 +30,8 @@ def test_determine_execution_mode_prefers_explicit() -> None:
     assert mode == "live"
 
 
-def test_determine_execution_mode_derived_from_context() -> None:
-    merged = {"execution_domain": "dryrun"}
+def test_determine_execution_mode_prefers_context_execution_mode() -> None:
+    merged = {"execution_mode": "shadow"}
 
     mode = determine_execution_mode(
         explicit_mode=None,
@@ -42,8 +42,7 @@ def test_determine_execution_mode_derived_from_context() -> None:
         gateway_url=None,
     )
 
-    # execution_domain hints are ignored; fallback to default-safe backtest
-    assert mode == "backtest"
+    assert mode == "shadow"
 
 
 def test_determine_execution_mode_accepts_paper_alias() -> None:
@@ -61,7 +60,7 @@ def test_determine_execution_mode_accepts_paper_alias() -> None:
     assert mode == "dryrun"
 
 
-def test_determine_execution_mode_defaults_to_live_when_gateway() -> None:
+def test_determine_execution_mode_defaults_to_backtest_when_ambiguous() -> None:
     mode = determine_execution_mode(
         explicit_mode=None,
         execution_domain=None,
@@ -71,21 +70,20 @@ def test_determine_execution_mode_defaults_to_live_when_gateway() -> None:
         gateway_url="https://gateway",
     )
 
-    assert mode == "live"
+    assert mode == "backtest"
 
 
-def test_determine_execution_mode_ignores_execution_domain_hint() -> None:
+def test_determine_execution_mode_uses_execution_domain_hint() -> None:
     mode = determine_execution_mode(
         explicit_mode=None,
-        execution_domain="shadow",
+        execution_domain="paper",
         merged_context={},
         trade_mode="backtest",
         offline_requested=False,
-        gateway_url=None,
+        gateway_url="https://gateway",
     )
 
-    # legacy hints no longer steer execution mode
-    assert mode == "backtest"
+    assert mode == "dryrun"
 
 
 def test_resolve_execution_context_downgrades_missing_as_of() -> None:
@@ -109,6 +107,27 @@ def test_resolve_execution_context_downgrades_missing_as_of() -> None:
     assert resolution.context["execution_domain"] == "backtest"
     assert resolution.context.get("downgrade_reason") == DowngradeReason.MISSING_AS_OF.value
     assert resolution.context.get("safe_mode") == "true"
+
+
+def test_resolve_execution_context_accepts_execution_domain_hint() -> None:
+    resolution = resolve_execution_context(
+        None,
+        context=None,
+        execution_mode=None,
+        execution_domain="paper",
+        clock=None,
+        as_of="2024-01-01",
+        dataset_fingerprint="fingerprint",
+        offline_requested=False,
+        gateway_url="https://gateway",
+        trade_mode="backtest",
+    )
+
+    assert resolution.force_offline is False
+    assert resolution.context["execution_mode"] == "dryrun"
+    assert resolution.context["execution_domain"] == "dryrun"
+    assert resolution.downgraded is False
+    assert resolution.safe_mode is False
 
 
 def test_resolve_execution_context_live_not_downgraded_without_as_of() -> None:

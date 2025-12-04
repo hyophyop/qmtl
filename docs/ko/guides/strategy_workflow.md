@@ -156,7 +156,9 @@ Gateway의 `/events/subscribe` WebSocket 제어 스트림으로 전달되며, �
 
 실행 모드/도메인 규칙(WS 우선·default-safe):
 
-- 사용자 입력은 `mode=backtest|paper|live`만 인정하며, `execution_domain` 힌트는 무시됩니다.
+- 사용자 입력은 `mode=backtest|paper|live`를 우선으로 받습니다. `mode`가 없으면 전달된
+  `execution_domain` 힌트를 표준 모드로 매핑하고, 둘 다 없으면 게이트웨이 여부와 관계없이
+  라이브로 올라가지 않도록 compute-only(`backtest`)로 강등합니다.
 - WS `effective_mode`만이 권한을 가지며, 모호/누락 시 compute-only(backtest)로 강등됩니다.
 - `backtest`/`paper`에서 `as_of`나 `dataset_fingerprint`가 없으면 안전모드(`downgrade_reason=missing_as_of`, 주문 게이트 OFF)로 표시됩니다.
 - `ActivationEnvelope`/`DecisionEnvelope`에 담긴 `compute_context`는 WS/Runner/CLI에서 동일 스키마로 직렬화되며, CLI `--output json`으로 그대로 확인할 수 있습니다.

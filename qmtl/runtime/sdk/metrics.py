@@ -127,6 +127,15 @@ execution_domain_downgrade_total = _counter(
     test_value_factory=dict,
 )
 
+# TagQuery determinism
+tagquery_update_total = _counter(
+    "tagquery_update_total",
+    "Total TagQuery queue update messages processed by TagQueryManager",
+    ["outcome", "reason"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 seamless_cache_resident_bytes = _gauge(
     "seamless_cache_resident_bytes",
     "Resident bytes held by Seamless in-memory cache",

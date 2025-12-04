@@ -6,20 +6,20 @@ import os
 from pathlib import Path
 import zlib
 import httpx
-from typing import Dict, List, Tuple, Optional, TYPE_CHECKING, Any
+from typing import Dict, List, Tuple, Optional, TYPE_CHECKING, Any, Mapping, Iterable
 import tempfile
 
-from qmtl.foundation.common.tagquery import MatchMode
-from qmtl.foundation.common.tagquery import normalize_match_mode, normalize_queues
-from qmtl.runtime.sdk._message_registry import AsyncMessageRegistry
-from qmtl.runtime.sdk._normalizers import (
-    extract_message_payload,
-    normalize_interval,
-    normalize_tags,
+from qmtl.foundation.common.tagquery import (
+    MatchMode,
+    canonical_tag_query_params,
+    normalize_match_mode,
+    normalize_queues,
 )
+from qmtl.runtime.sdk._message_registry import AsyncMessageRegistry
+from qmtl.runtime.sdk._normalizers import extract_message_payload
 
 from .ws_client import WebSocketClient
-from . import runtime, configuration
+from . import runtime, configuration, metrics as sdk_metrics
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .node import TagQueryNode
@@ -116,14 +116,48 @@ class TagQueryManager:
         self._message_registry.register("tagquery.upsert", self._handle_tagquery_upsert)
         self._message_registry.register("queue_update", self._handle_queue_update)
 
-    def _normalize_tags_interval(
-        self, payload: dict[str, Any]
-    ) -> tuple[tuple[str, ...], int] | None:
-        tags = normalize_tags(payload.get("tags") or [])
-        interval = normalize_interval(payload.get("interval"))
-        if interval is None:
-            return None
-        return tuple(sorted(tags)), interval
+    def _classify_tagquery_error(self, exc: Exception) -> str:
+        text = str(exc).lower()
+        if "interval" in text:
+            return "missing_interval"
+        if "tag" in text:
+            return "missing_tags"
+        return "invalid_spec"
+
+    def _canonical_key(
+        self,
+        tags: Iterable[str] | str | None,
+        interval: Any,
+        match_mode: MatchMode | str | None,
+    ) -> Tuple[Tuple[str, ...], int, MatchMode]:
+        spec = canonical_tag_query_params(
+            tags,
+            interval=interval,
+            match_mode=match_mode,
+            require_tags=True,
+            require_interval=True,
+        )
+        normalized_mode = normalize_match_mode(spec.get("match_mode"))
+        interval_val = int(spec.get("interval") or 0)
+        query_tags = tuple(spec.get("query_tags") or ())
+        return query_tags, interval_val, normalized_mode
+
+    def _canonical_key_from_payload(
+        self, payload: Mapping[str, Any]
+    ) -> tuple[Tuple[Tuple[str, ...], int, MatchMode] | None, str]:
+        tags = payload.get("tags") or payload.get("query_tags")
+        try:
+            return (
+                self._canonical_key(tags, payload.get("interval"), payload.get("match_mode")),
+                "",
+            )
+        except ValueError as exc:
+            return None, self._classify_tagquery_error(exc)
+
+    def _record_update(self, outcome: str, reason: str) -> None:
+        sdk_metrics.tagquery_update_total.labels(
+            outcome=outcome, reason=reason or "unknown"
+        ).inc()
 
     def _is_duplicate(self, key: Tuple[Tuple[str, ...], int, MatchMode], qset: frozenset[str]) -> bool:
         last = self._last_queue_sets.get(key)
@@ -137,15 +171,15 @@ class TagQueryManager:
     def register(self, node: TagQueryNode) -> None:
         if node.interval is None:
             raise ValueError("TagQueryNode interval is required")
-        interval = int(node.interval)
-        key = (tuple(sorted(node.query_tags)), interval, node.match_mode)
+        tags, interval, mode = self._canonical_key(node.query_tags, node.interval, node.match_mode)
+        key = (tags, interval, mode)
         self._nodes.setdefault(key, []).append(node)
 
     def unregister(self, node: TagQueryNode) -> None:
         if node.interval is None:
             raise ValueError("TagQueryNode interval is required")
-        interval = int(node.interval)
-        key = (tuple(sorted(node.query_tags)), interval, node.match_mode)
+        tags, interval, mode = self._canonical_key(node.query_tags, node.interval, node.match_mode)
+        key = (tags, interval, mode)
         lst = self._nodes.get(key)
         if lst and node in lst:
             lst.remove(node)
@@ -196,32 +230,46 @@ class TagQueryManager:
         await self._message_registry.dispatch(event, payload)
 
     async def _handle_tagquery_upsert(self, payload: dict[str, Any]) -> None:
-        normalized = self._normalize_tags_interval(payload)
+        normalized, reason = self._canonical_key_from_payload(payload)
         if normalized is None:
+            self._record_update("dropped", reason or "invalid_spec")
             return
-        tags, interval = normalized
+        tags, interval, _mode = normalized
         queues = normalize_queues(payload.get("queues", []))
         qset = frozenset(queues)
+        applied = False
         for mode in (MatchMode.ANY, MatchMode.ALL):
             key = (tags, interval, mode)
             if self._is_duplicate(key, qset):
+                self._record_update("deduped", "unchanged")
                 continue
             self._last_queue_sets[key] = qset
-            self._apply_update(key, queues)
+            if self._nodes.get(key):
+                self._apply_update(key, queues)
+                applied = True
+            else:
+                self._record_update("unmatched", "no_registered_node")
+        if applied:
+            self._record_update("applied", "ok")
 
     async def _handle_queue_update(self, payload: dict[str, Any]) -> None:
-        normalized = self._normalize_tags_interval(payload)
+        normalized, reason = self._canonical_key_from_payload(payload)
         if normalized is None:
+            self._record_update("dropped", reason or "invalid_spec")
             return
-        tags, interval = normalized
+        tags, interval, match_mode = normalized
         queues = normalize_queues(payload.get("queues", []))
-        match_mode = normalize_match_mode(payload.get("match_mode"))
         key = (tags, interval, match_mode)
         qset = frozenset(queues)
         if self._is_duplicate(key, qset):
+            self._record_update("deduped", "unchanged")
             return
         self._last_queue_sets[key] = qset
+        if not self._nodes.get(key):
+            self._record_update("unmatched", "no_registered_node")
+            return
         self._apply_update(key, queues)
+        self._record_update("applied", "ok")
 
     # ------------------------------------------------------------------
     async def start(self) -> None:
