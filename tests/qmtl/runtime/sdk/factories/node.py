@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from qmtl.foundation.common import compute_node_id, crc32_of_list
 from qmtl.foundation.common.nodespec import serialize_nodespec
+from qmtl.foundation.common.tagquery import canonical_tag_query_params
 
 
 def _normalize_dependencies(deps: Sequence[Any] | None) -> list[str]:
@@ -126,8 +127,15 @@ def tag_query_node_payload(
     """Build a canonical TagQuery node payload."""
 
     tag_list = list(tags)
-    resolved_params = params if params is not None else {"tags": tag_list, "match_mode": match_mode}
-    extras = {"tags": tag_list}
+    resolved_params = (
+        params
+        if params is not None
+        else canonical_tag_query_params(tag_list, interval=interval, match_mode=match_mode)
+    )
+    extras = {
+        "tags": list(resolved_params.get("query_tags") or tag_list),
+        "match_mode": resolved_params.get("match_mode", match_mode),
+    }
     return canonical_node_payload(
         node_type="TagQueryNode",
         interval=interval,

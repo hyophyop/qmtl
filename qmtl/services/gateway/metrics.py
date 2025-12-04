@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import MutableMapping, Sequence
-from typing import Any, Deque, Mapping, cast
+from typing import Any, Deque, Mapping, Sequence as Seq, cast
 import time
 
 from prometheus_client import (
@@ -18,6 +18,7 @@ from qmtl.foundation.common.metrics_factory import (
     get_or_create_gauge,
     reset_metrics as reset_registered_metrics,
 )
+from qmtl.foundation.common import NodeValidationReport
 
 _e2e_samples: Deque[float] = deque(maxlen=100)
 _worlds_samples: Deque[float] = deque(maxlen=100)
@@ -198,6 +199,30 @@ worlds_breaker_open_total = _gauge(
     test_value_attr="_val",
     test_value_factory=lambda: 0,
     reset=lambda g: g.set(0),
+)
+
+# Determinism metrics
+nodeid_checksum_mismatch_total = _counter(
+    "nodeid_checksum_mismatch_total",
+    "Total DAG submissions whose node_ids_crc32 did not match canonical computation",
+    ["source"],
+)
+
+nodeid_missing_fields_total = _counter(
+    "nodeid_missing_fields_total",
+    "Total DAG submissions with missing canonical NodeID inputs",
+    ["field", "node_type"],
+)
+
+nodeid_mismatch_total = _counter(
+    "nodeid_mismatch_total",
+    "Total DAG submissions where supplied node_id differs from canonical compute_node_id",
+    ["node_type"],
+)
+
+tagquery_nodeid_mismatch_total = _counter(
+    "tagquery_nodeid_mismatch_total",
+    "Total TagQuery nodes rejected due to node_id mismatch",
 )
 
 # ---------------------------------------------------------------------------
@@ -511,6 +536,35 @@ def _update_worlds_cache_ratio() -> None:
     ratio = worlds_cache_hits_total._value.get() / total if total else 0
     worlds_cache_hit_ratio.set(ratio)
     cast(Any, worlds_cache_hit_ratio)._val = cast(Any, worlds_cache_hit_ratio)._value.get()
+
+
+def _node_type_for_index(nodes: Seq[Mapping[str, Any]], index: int) -> str:
+    try:
+        node = nodes[index]
+        node_type = node.get("node_type")
+        if isinstance(node_type, str) and node_type:
+            return node_type
+    except Exception:
+        pass
+    return "unknown"
+
+
+def record_node_identity_report(report: NodeValidationReport, nodes: Seq[Mapping[str, Any]]) -> None:
+    """Record determinism metrics for a NodeID validation outcome."""
+
+    if not report.checksum_valid:
+        nodeid_checksum_mismatch_total.labels(source="dag").inc()
+
+    for missing in report.missing_fields:
+        node_type = _node_type_for_index(nodes, missing.index)
+        for field in missing.missing:
+            nodeid_missing_fields_total.labels(field=field, node_type=node_type).inc()
+
+    for mismatch in report.mismatches:
+        node_type = _node_type_for_index(nodes, mismatch.index)
+        nodeid_mismatch_total.labels(node_type=node_type).inc()
+        if node_type == "TagQueryNode":
+            tagquery_nodeid_mismatch_total.inc()
 
 
 def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:

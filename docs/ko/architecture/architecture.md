@@ -745,4 +745,9 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
 
 
+### 관측 · 런북 연결
+- Gateway 메트릭: `nodeid_checksum_mismatch_total{source="dag"}`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`, `tagquery_nodeid_mismatch_total`.
+- Runbook: `docs/ko/operations/determinism.md`를 따라 NodeID 재계산/CRC·TagQuery 불일치 시 대응한다. 메트릭이 상승하면 DAG 재생성(해시 재계산) 후 Core Loop 계약 테스트(`tests/e2e/core_loop`)로 복구를 확인한다.
+
+
 {{ nav_links() }}

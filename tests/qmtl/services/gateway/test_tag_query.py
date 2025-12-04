@@ -190,6 +190,31 @@ def test_submit_tag_query_node(client):
     assert dag.called_with == (["t1"], 60, "any", None, "backtest")
 
 
+def test_submit_tag_query_uses_match_mode_from_params_when_field_missing(client):
+    c, dag = client
+    node = tag_query_node_payload(
+        tags=["t1"],
+        interval=60,
+        period=2,
+        match_mode="all",
+        code_hash="ch",
+        config_hash="cfg",
+        schema_hash="sh",
+        schema_compat_id="sh-major",
+        inputs=[],
+    )
+    node.pop("match_mode", None)
+    dag_json = {"schema_version": "v1", "nodes": [node]}
+    payload = {
+        "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
+        "meta": None,
+        "node_ids_crc32": node_ids_crc32([node]),
+    }
+    resp = c.post("/strategies", json=payload)
+    assert resp.status_code == 202
+    assert dag.called_with == (["t1"], 60, "all", None, "backtest")
+
+
 def test_submit_tag_query_node_shadow_domain(client):
     c, dag = client
     node = tag_query_node_payload(

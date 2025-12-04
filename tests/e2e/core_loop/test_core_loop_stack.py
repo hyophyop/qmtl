@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -10,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from qmtl.foundation.common import crc32_of_list
 from .stack import CoreLoopStackHandle
 
 
@@ -127,6 +129,50 @@ def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandl
 def test_core_loop_gateway_health(core_loop_stack: CoreLoopStackHandle):
     resp, _ = _http_json(f"{core_loop_stack.gateway_url.rstrip('/')}/health")
     assert resp.status == 200
+
+
+def test_gateway_metrics_capture_nodeid_mismatch(core_loop_stack: CoreLoopStackHandle):
+    if not core_loop_stack.metrics_url:
+        pytest.skip("metrics endpoint not exposed")
+
+    node = {
+        "node_type": "TagQueryNode",
+        "code_hash": "code",
+        "config_hash": "cfg",
+        "schema_hash": "schema",
+        "schema_compat_id": "schema-major",
+        "params": {"tags": ["demo"], "match_mode": "any"},
+        "tags": ["demo"],
+        "interval": 60,
+        "dependencies": [],
+        "node_id": "blake3:incorrect",
+    }
+    dag = {"schema_version": "v1", "nodes": [node]}
+    payload = {
+        "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
+        "meta": None,
+        "node_ids_crc32": crc32_of_list([node["node_id"]]),
+    }
+
+    req = urllib.request.Request(
+        f"{core_loop_stack.gateway_url.rstrip('/')}/strategies",
+        data=json.dumps(payload).encode(),
+        method="POST",
+    )
+    req.add_header("Content-Type", "application/json")
+    try:
+        urllib.request.urlopen(req, timeout=5)
+        assert False, "submission should fail with node_id mismatch"
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+        body = exc.read().decode("utf-8", errors="ignore")
+        assert "E_NODE_ID_MISMATCH" in body
+
+    metrics_resp = urllib.request.urlopen(core_loop_stack.metrics_url, timeout=5)
+    metrics_text = metrics_resp.read().decode()
+    assert "nodeid_mismatch_total" in metrics_text
+    assert 'node_type="TagQueryNode"' in metrics_text
+    assert "tagquery_nodeid_mismatch_total" in metrics_text
 
 
 def test_inproc_stack_sets_service_env(core_loop_stack: CoreLoopStackHandle):

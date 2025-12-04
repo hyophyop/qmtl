@@ -148,3 +148,43 @@ def test_compute_node_id_ignores_nondeterministic_config() -> None:
     mutated["config"] = mutated_config
 
     assert compute_node_id(mutated) == base_id
+
+
+def test_tagquery_node_id_normalizes_query_spec() -> None:
+    base_payload = {
+        "node_type": "TagQueryNode",
+        "interval": 60,
+        "period": 0,
+        "params": {"tags": ["b", "a"], "match_mode": "any"},
+        "dependencies": [],
+        "schema_compat_id": "tag-compat",
+        "code_hash": "tag-code",
+    }
+    reordered = copy.deepcopy(base_payload)
+    reordered["params"] = {"match_mode": "any", "tags": ["a", "b"]}
+
+    assert compute_node_id(base_payload) == compute_node_id(reordered)
+
+    stricter = copy.deepcopy(base_payload)
+    stricter["params"] = {"tags": ["a", "b"], "match_mode": "all"}
+
+    assert compute_node_id(base_payload) != compute_node_id(stricter)
+
+
+def test_tagquery_node_id_falls_back_to_node_fields() -> None:
+    base = {
+        "node_type": "TagQueryNode",
+        "interval": 60,
+        "period": 0,
+        "tags": ["x", "y"],
+        "match_mode": "all",
+        "dependencies": [],
+        "schema_compat_id": "tag-compat",
+        "code_hash": "tag-code",
+    }
+    with_params = {
+        **base,
+        "params": {"tags": ["y", "x"], "match_mode": "all"},
+    }
+
+    assert compute_node_id(base) == compute_node_id(with_params)
