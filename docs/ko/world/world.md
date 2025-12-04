@@ -2,7 +2,7 @@
 title: "QMTL 월드 — 전략 생애주기 관리 사양"
 tags: [world, strategy]
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-04
 ---
 
 # QMTL 월드(World) — 전략 생애주기 관리 사양 v1
@@ -159,6 +159,64 @@ def apply_hysteresis(prev, checks, h):
 - 즉시 라이브 세계관
   - “컷오프 제한이 없는” 샘플 월드를 제공(게이트 완화, 히스테리시스/표본 최소값 낮춤).
   - 그래도 `--allow-live` 플래그와 월드‑스코프 RBAC가 필요하다.
+
+### 6.2 데이터 preset on‑ramp(Seamless 자동 연결)
+
+T3 P0‑M1 목표: world + data preset만으로 Runner/CLI가 적절한 Seamless 인스턴스를 자동 구성하고 `StreamInput.history_provider`에 주입한다. 직접 `history_provider`를 만들지 않는 것을 기본값으로 하며, preset을 모르면 실패시킨다.
+
+- 규약
+  1) 월드는 데이터 플레인 계약의 SSOT로 `data.presets[]` 블록을 반드시 포함한다. 없는 경우 Runner/CLI는 legacy 경로로 폴백하지 않고 “data preset missing”으로 거절한다.
+  2) `data.presets[].preset`은 Seamless data preset ID이며, 실 구현(저장소/백필/라이브/스키마/SLA)은 [`docs/ko/architecture/seamless_data_provider_v2.md`](../architecture/seamless_data_provider_v2.md)의 preset 맵에 정의한다.
+  3) Runner/CLI 기본값은 첫 번째 preset을 사용하며, `--data-preset <id>`로 override 가능하다. override는 world에 존재하는 ID로만 제한한다.
+  4) preset이 가리키는 Seamless 구성 요소가 없으면 즉시 오류를 내고 실행을 멈춘다(서킷). 임의의 커스텀 provider는 “실험/레거시” 경로로 분리한다.
+
+`WorldDataPreset` 스키마(요약)
+
+```yaml
+world:
+  id: "crypto-mom-1h"
+  ...
+  data:
+    presets:
+      - id: "ohlcv-1m"             # Runner/CLI/노드에서 참조할 로컬 ID(필수)
+        preset: "ohlcv.binance.spot.1m"   # Seamless data preset ID(필수)
+        universe:
+          symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+          asset_class: "crypto"    # 선택: conformance 스키마/캘린더 추론에 사용
+          venue: "binance"         # 선택: preset alias가 없을 때 소스 선택
+        window:
+          warmup_bars: 1440        # Seamless backfill 시작 시 필요한 최소 바 수
+          min_history: "90d"       # World data_currency와 일치해야 함
+          backfill_start: "2024-01-01T00:00:00Z"  # (옵션) 강제 백필 시작 시점
+        seamless:
+          sla_preset: "baseline"           # 기본값: baseline
+          conformance_preset: "strict-blocking"  # 기본값: strict-blocking
+          backfill_mode: "background"      # background|foreground
+          stabilization_bars: 2            # live → storage 경계에서 버릴 바 수
+          publish_fingerprint: true        # data fingerprint 발행 여부
+        live:
+          max_lag: "45s"                   # live 경로 허용 지연; 초과 시 compute-only
+          allow_partial: false             # true이면 conformance 경고만 기록하고 통과
+```
+
+- 필드 해석
+  - `id`: 월드 내부에서 참조되는 데이터셋 키. Runner 기본값은 첫 항목의 `id`.
+  - `preset`: Seamless data preset 키. `family.source.market.interval` 형태를 권장하며, 상세는 아래 “preset → Seamless 매핑” 표에 고정한다.
+  - `universe`: 기본 심볼/태그 쿼리. 명시하지 않으면 전략/노드 입력으로 대체되지만, preset 매핑 시 venue·자산군 추론에 사용된다.
+  - `window`: 데이터 통화성/샘플 요구사항과 동기화된다. `warmup_bars`는 Seamless `BackfillConfig.window_bars`로, `min_history`는 world의 data_currency와 일치해야 한다.
+  - `seamless`: SLA/Conformance/backfill 파라미터를 preset 기본값 위에 덮어쓴다. 정의되지 않은 값은 Seamless preset 맵에서 가져온다.
+  - `live`: 라이브 피드 허용 여부 및 지연 한도. 미설정 시 preset 기본값을 따른다.
+
+데이터 preset → Seamless 매핑(표준 세트)
+
+| preset ID | 저장소/백필 | 라이브 피드 | 기본 SLA/Conformance | 용도 |
+|---|---|---|---|---|
+| `ohlcv.binance.spot.1m` | QuestDB `ohlcv_binance_spot_1m` + CCXT(Binance) 백필, `warmup_bars=1800` | Binance WS `kline@1m` (없으면 CCXT 폴백) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=60000` | 크립토 1분 모멘텀/arb |
+| `ohlcv.polygon.us_equity.1d` | QuestDB `ohlcv_us_equity_1d` + Polygon REST 백필, `warmup_bars=120` | 라이브 없음(일봉), compute-only | `sla_preset=tolerant-partial`, `conformance_preset=strict-blocking`, `interval_ms=86400000` | US 주식 EOD 팩터 |
+
+- 계약 테스트 훅 (#1778/#1789)
+  - `tests/e2e/core_loop/worlds/core-loop-demo.yml`에 위 스키마를 따르는 preset을 포함시켜 계약 테스트에서 Seamless 오토와이어링을 검증한다.
+  - 테스트 기대값: world에 선언된 첫 preset이 없으면 실패, 존재하면 Gateway/WorldService 스텁이 preset ID를 반환하고 Runner는 해당 Seamless preset으로 `HistoryProvider`를 구성한다(네트워크 없이도 동작하도록 fixture 사용).
 
 ## 7. 주문 게이트(OrderGate) 설계(경량)
 
