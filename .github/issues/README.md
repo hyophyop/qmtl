@@ -4,6 +4,13 @@ This directory contains prepared GitHub issue templates for improving QMTL's tes
 
 ## Issues Overview
 
+### Core Loop draft/spec work
+
+- Use `.github/issues/core-loop-contract-draft.md` when opening Core Loop 설계/계약/스펙 작업 이슈.  
+  - 목적/범위/배제, 단일 출처 스펙 링크(ko/en), 오픈 질문/결정자, 착수·종료 게이트, 마이그레이션/롤백, 후속 작업 체크리스트가 포함됩니다.  
+  - 스펙 본문은 반드시 문서(예: `docs/ko/design/core_loop_roadmap.md`)에만 두고, 이슈에는 링크와 상태(`draft — subject to change`)만 적으세요.  
+  - 계약 테스트 스켈레톤은 `@pytest.mark.contract + xfail`로 추가 후, 스펙 확정 시 `xfail`을 제거해 강제 실패로 전환합니다.
+
 ### High Priority
 
 1. **test-canonical-nodeid-determinism.md**

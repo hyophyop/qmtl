@@ -2,7 +2,7 @@
 title: "심리스 데이터 프로바이더 v2 아키텍처"
 tags: [architecture, seamless, data]
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-04
 ---
 
 # 심리스 데이터 프로바이더 v2 아키텍처
@@ -48,6 +48,63 @@ graph TD
 ```
 
 요청은 게이트웨이에 들어와 심리스 데이터 프로바이더에서 정규화된 후 적합성 파이프라인을 통과하고, 데이터가 반환되기 전에 각 단계가 명시적인 산출물(플래그, 보고서, 메트릭)을 방출해 하류 시스템이 응답의 완결성을 추론할 수 있도록 합니다.
+
+## world preset → Seamless 매핑 규약
+
+T3 P0‑M1에서 정의한 “world + data preset만으로 Seamless 자동 연결” 계약을 데이터 플레인 관점에서 고정한다. 월드 문서의 `data.presets[]` 스키마는 이 섹션에 정의된 Seamless preset 맵을 SSOT로 참조한다.
+
+### 1) Seamless preset 맵(SSOT)
+
+- 위치: 기본값은 패키지된 `qmtl/examples/seamless/presets.yaml`, 운영 환경에서는 `SeamlessConfig.presets_file`(환경 변수/CLI 구성에서 주입)로 교체 가능하다.
+- 스키마(요약)
+
+```yaml
+version: 1
+data_presets:
+  ohlcv.binance.spot.1m:
+    kind: "ohlcv"
+    interval_ms: 60000
+    storage: "questdb:ohlcv_binance_spot_1m"
+    backfill:
+      source: "ccxt:binance"
+      mode: "background"
+      window_bars: 1800
+    live:
+      feed: "binance.ws.kline.1m"
+      max_lag_seconds: 45
+    conformance_preset: "strict-blocking"
+    sla_preset: "baseline"
+    stabilization_bars: 2
+```
+
+- 필드 해석
+  - `kind`: 데이터셋 유형(ohlcv/trades/orderbook 등)으로 conformance 스키마·노드 타입을 결정한다.
+  - `interval_ms`: 요청 인터벌. world preset이 다른 값을 지정하면 오류로 간주한다.
+  - `storage`/`backfill`/`live`: `SeamlessDataProvider`의 `storage_source`/`backfiller`/`live_feed`에 매핑된다. 소스 식별자는 커넥터 레지스트리에서 해석한다(예: `questdb:<table>`, `ccxt:<exchange>`, `binance.ws.<channel>`).
+  - `conformance_preset`/`sla_preset`: `SeamlessConfig` 기본값을 오버라이드하며, world preset의 `seamless.*`가 있으면 그것이 다시 우선한다.
+  - `stabilization_bars`: 라이브→스토리지 경계에서 버릴 바 수. world preset에 값이 있으면 합류 시 최소값으로 사용한다.
+
+### 2) world → Seamless 바인딩 절차
+
+1. Runner/CLI는 `world.data.presets[]`를 읽어 preset ID를 선택한다(명시하지 않으면 첫 항목).
+2. 선택한 preset ID를 위의 `data_presets` 맵에서 찾는다. 없으면 즉시 실패(서킷).
+3. world 필드와 Seamless preset을 병합해 `SeamlessDataProvider`를 생성한다.
+   - `interval_ms` → `StreamInput.interval_ms` 및 Seamless `compute_missing_ranges` 입력.
+   - `window.warmup_bars` → `BackfillConfig.window_bars`; `backfill_start`가 있으면 `BackfillConfig.start`.
+   - `seamless.sla_preset`/`conformance_preset` → `SeamlessConfig`에 주입.
+   - `live.max_lag` → `SeamlessDataProvider._domain_gate_evaluator` 지연 한도.
+   - `universe`(symbols/tag query/venue/asset_class) → 데이터 소스 선택 및 conformance 스키마 선택에 사용.
+   - `stabilization_bars` → Seamless `stabilization_bars`.
+4. preset에 정의된 소스가 접근 불가하거나 스키마와 불일치하면 `ConformancePipelineError`/`SeamlessSLAExceeded`를 그대로 노출해 Runner가 compute-only로 강등하거나 중단하도록 한다.
+
+### 3) 표준 preset 세트(월드 문서와 동일)
+
+| preset ID | storage/backfill | live feed | default SLA/Conformance | note |
+|---|---|---|---|---|
+| `ohlcv.binance.spot.1m` | QuestDB `ohlcv_binance_spot_1m`, CCXT(Binance) backfill, `window_bars=1800` | Binance WS `kline@1m` (fallback: CCXT) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=60000`, `stabilization_bars=2` | Crypto 1m momentum/arb |
+| `ohlcv.polygon.us_equity.1d` | QuestDB `ohlcv_us_equity_1d`, Polygon REST backfill, `window_bars=120` | none (EOD only) | `sla_preset=tolerant-partial`, `conformance_preset=strict-blocking`, `interval_ms=86400000`, `stabilization_bars=0` | US equity EOD factors |
+
+- 계약 테스트/예제 훅(#1778/#1789): `tests/e2e/core_loop` 스택에서 world fixture가 첫 preset을 포함하고, Gateway/WS 스텁이 해당 preset ID를 반환하도록 구성해 Seamless 오토와이어링을 검증한다. preset 맵이 비어 있으면 테스트는 즉시 실패해야 한다.
 
 ## 적합성 파이프라인
 
