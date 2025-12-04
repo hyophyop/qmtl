@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 from .mode import Mode, mode_to_execution_domain
 from .services import get_global_services
+from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +70,13 @@ class SubmitResult:
     contribution: float | None = None  # Contribution to world returns
     weight: float | None = None  # Portfolio weight
     rank: int | None = None  # Rank within world
-    
+
     # Performance metrics
     metrics: StrategyMetrics = field(default_factory=StrategyMetrics)
+
+    # WS envelopes (shared schema)
+    decision: DecisionEnvelope | None = None
+    activation: ActivationEnvelope | None = None
     
     # Rejection info (if status == "rejected")
     rejection_reason: str | None = None
@@ -82,6 +87,16 @@ class SubmitResult:
     
     # Internal reference to the instantiated strategy (for debugging/tests)
     strategy: "Strategy | None" = None
+
+    def __post_init__(self) -> None:
+        if self.decision:
+            self.world = self.decision.world_id
+
+        if self.activation:
+            self.world = self.activation.world_id
+            self.strategy_id = self.activation.strategy_id
+            if self.weight is None:
+                self.weight = self.activation.weight
 
 
 # Default configuration

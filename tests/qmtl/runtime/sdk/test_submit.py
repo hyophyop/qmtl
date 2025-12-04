@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.runtime.sdk import Mode, SubmitResult, Strategy, StrategyMetrics, Runner
-import pytest
+from qmtl.runtime.sdk import Mode, Runner, Strategy, StrategyMetrics, SubmitResult
+from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 from qmtl.runtime.sdk.submit import submit, submit_async
 
@@ -100,6 +100,38 @@ class TestSubmitResult:
         assert result.status == "rejected"
         assert result.rejection_reason == "Policy threshold not met"
         assert len(result.improvement_hints) == 1
+
+    def test_submit_result_embeds_envelopes(self):
+        decision = DecisionEnvelope(
+            world_id="world-1",
+            policy_version=3,
+            effective_mode="validate",
+            as_of="2024-01-01T00:00:00Z",
+            ttl="300s",
+            etag="etag-1",
+        )
+        activation = ActivationEnvelope(
+            world_id="world-1",
+            strategy_id="strat-1",
+            side="long",
+            active=True,
+            weight=0.15,
+            etag="etag-activation",
+            ts="2024-01-01T00:05:00Z",
+        )
+
+        result = SubmitResult(
+            strategy_id="placeholder",
+            status="active",
+            world="placeholder-world",
+            mode=Mode.LIVE,
+            decision=decision,
+            activation=activation,
+        )
+
+        assert result.world == decision.world_id == activation.world_id
+        assert result.strategy_id == activation.strategy_id
+        assert result.weight == activation.weight
 
 
 class TestSubmitFunction:

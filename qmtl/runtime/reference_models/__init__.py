@@ -7,25 +7,11 @@ schema files and avoids drift by using aliases where appropriate.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
 from typing import Literal, Optional
 
+from pydantic import BaseModel, StrictFloat, StrictInt, StrictStr
 
-class ActivationEnvelope(BaseModel):
-    world_id: StrictStr
-    strategy_id: StrictStr
-    side: Literal["long", "short"]
-    active: bool
-    weight: StrictFloat
-    freeze: Optional[bool] = None
-    drain: Optional[bool] = None
-    effective_mode: Optional[Literal["validate", "compute-only", "paper", "live"]] = None
-    etag: StrictStr
-    run_id: Optional[StrictStr] = None
-    ts: StrictStr
-    state_hash: Optional[StrictStr] = None
-
-
+from qmtl.services.worldservice.shared_schemas import ActivationEnvelope
 class ActivationUpdated(BaseModel):
     type: Literal["ActivationUpdated"] = "ActivationUpdated"
     version: StrictInt
