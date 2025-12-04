@@ -2,7 +2,7 @@
 title: "전략 개발 및 테스트 워크플로"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-11-05
+last_modified: 2025-12-05
 ---
 
 {{ nav_links() }}
@@ -195,6 +195,80 @@ Intent-first 전략은 월드/게이트웨이 리밸런싱 스택과 결합할 �
 봉투(`AlphaMetricsEnvelope`의 `per_world`/`per_strategy` `alpha_performance` 지표)를 처리하세요. `alpha_metrics_required`
 설정을 활성화하면 `schema_version<2` 요청이 계산 전에 거부되어 메트릭을 필요로 하는 클라이언트가 안정적으로 실패하므로,
 이전/동시 배포 경계를 조율하려면 `docs/operations/rebalancing_schema_coordination.md` 체크리스트를 확인하십시오.【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
+## 4b. 평가·활성 결과 읽기(WS SSOT)
+
+`Runner.submit` 및 `qmtl submit --output json`은 WorldService 봉투와 동일한 스키마를 직렬화합니다. WS 결과와 로컬
+ValidationPipeline 출력이 분리된 예시는 다음과 같습니다:
+
+```json
+{
+  "strategy_id": "demo_strategy",
+  "world": "demo_world",
+  "mode": "backtest",
+  "downgraded": true,
+  "downgrade_reason": "missing_as_of",
+  "safe_mode": true,
+  "ws": {
+    "status": "validating",
+    "decision": {
+      "world_id": "demo_world",
+      "effective_mode": "validate",
+      "as_of": "2025-12-05T00:00:00Z",
+      "ttl": "300s",
+      "etag": "w:demo_world:v3:..."
+    },
+    "activation": {
+      "world_id": "demo_world",
+      "strategy_id": "demo_strategy",
+      "side": "long",
+      "active": false,
+      "weight": 0.0,
+      "effective_mode": "backtest",
+      "etag": "w:demo_world:activation:...",
+      "run_id": "apply-123",
+      "ts": "2025-12-05T00:00:05Z"
+    },
+    "metrics": {
+      "sharpe": 1.12,
+      "max_drawdown": 0.18
+    },
+    "downgraded": true,
+    "downgrade_reason": "missing_as_of",
+    "safe_mode": true
+  },
+  "precheck": {
+    "status": "validating",
+    "metrics": {
+      "sharpe": 1.12
+    },
+    "violations": []
+  }
+}
+```
+
+- `ws.decision`/`ws.activation`은 WorldService `DecisionEnvelope`/`ActivationEnvelope` 스키마 그대로이며, CLI 텍스트 출력의
+  `🌐 WorldService decision (SSOT)` 섹션과 동일합니다.
+- `precheck`에는 로컬 ValidationPipeline 결과만 담기며 SSOT가 아닙니다. 계약 스위트(`tests/e2e/core_loop`)가 WS/Precheck 분리와
+  직렬화 스냅샷을 검증합니다.
+- `downgraded/safe_mode`는 default-safe 강등 여부를 최상단에서 한눈에 보여줍니다.
+
+## 4c. 데이터 preset 온램프 (world 기반)
+
+`world.data.presets[]`가 선언된 월드는 Runner/CLI가 Seamless provider를 자동으로 구성합니다. 존재하지 않는 preset ID는 즉시 실패하며,
+생략 시 첫 번째 preset을 사용합니다.
+
+```bash
+uv run qmtl submit strategies.my:MyStrategy \
+  --world demo_world \
+  --data-preset ohlcv-1m \
+  --output json
+```
+
+- preset 맵은 패키지된 `data_presets` 정의를 사용해 `StreamInput.history_provider`에 자동 주입됩니다.
+- demo world를 사용하는 계약 테스트(`tests/e2e/core_loop`)가 preset 자동 연결과 fail-closed 동작을 검증합니다.
+- world/preset ↔ Seamless 매핑 규약은 [world/world.md](../world/world.md)와
+  [architecture/seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)에 요약되어 있습니다.
 
 ## 5. Test Your Implementation
 

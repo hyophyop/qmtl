@@ -2,7 +2,7 @@
 title: "Strategy Development and Testing Workflow"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-11-05
+last_modified: 2025-12-05
 ---
 
 {{ nav_links() }}
@@ -215,6 +215,78 @@ and `per_strategy` `alpha_performance` stats). The `alpha_metrics_required`
 setting rejects `schema_version<2` submissions, so the `docs/operations/rebalancing_schema_coordination.md`
 checklist should be satisfied before flipping the flag to keep Gateway/SDK
 consumers in lockstep.【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
+
+## 4b. Read evaluation/activation results (WS SSOT)
+
+`Runner.submit` and `qmtl submit --output json` serialize the WorldService envelopes verbatim while keeping the local
+ValidationPipeline output separate:
+
+```json
+{
+  "strategy_id": "demo_strategy",
+  "world": "demo_world",
+  "mode": "backtest",
+  "downgraded": true,
+  "downgrade_reason": "missing_as_of",
+  "safe_mode": true,
+  "ws": {
+    "status": "validating",
+    "decision": {
+      "world_id": "demo_world",
+      "effective_mode": "validate",
+      "as_of": "2025-12-05T00:00:00Z",
+      "ttl": "300s",
+      "etag": "w:demo_world:v3:..."
+    },
+    "activation": {
+      "world_id": "demo_world",
+      "strategy_id": "demo_strategy",
+      "side": "long",
+      "active": false,
+      "weight": 0.0,
+      "effective_mode": "backtest",
+      "etag": "w:demo_world:activation:...",
+      "run_id": "apply-123",
+      "ts": "2025-12-05T00:00:05Z"
+    },
+    "metrics": {
+      "sharpe": 1.12,
+      "max_drawdown": 0.18
+    },
+    "downgraded": true,
+    "downgrade_reason": "missing_as_of",
+    "safe_mode": true
+  },
+  "precheck": {
+    "status": "validating",
+    "metrics": {
+      "sharpe": 1.12
+    },
+    "violations": []
+  }
+}
+```
+
+- `ws.decision`/`ws.activation` reuse the WorldService `DecisionEnvelope`/`ActivationEnvelope` schema; the CLI `🌐 WorldService decision (SSOT)`
+  section prints the same fields.
+- `precheck` contains only the local ValidationPipeline output and is non-authoritative; the contract suite (`tests/e2e/core_loop`) snapshots the WS/precheck split.
+- Top-level `downgraded/safe_mode` flags expose default-safe downgrades immediately.
+
+## 4c. Data preset on-ramp (world-driven)
+
+Worlds that declare `data.presets[]` let Runner/CLI auto-wire the Seamless provider. Missing preset IDs fail fast; omission falls back to the first entry.
+
+```bash
+uv run qmtl submit strategies.my:MyStrategy \
+  --world demo_world \
+  --data-preset ohlcv-1m \
+  --output json
+```
+
+- Presets map to the packaged `data_presets` definitions and are injected into `StreamInput.history_provider` automatically.
+- The contract suite (`tests/e2e/core_loop`) uses the demo world to verify preset auto-connection and fail-closed behavior.
+- See [world/world.md](../world/world.md) and [architecture/seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)
+  for the world/preset ↔ Seamless mapping rules.
 
 ## 5. Test Your Implementation
 
