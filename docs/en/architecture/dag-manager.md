@@ -2,7 +2,7 @@
 title: "QMTL DAG Manager - Detailed Design (Extended Edition)"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-04
 spec_version: v1.1
 ---
 
@@ -84,9 +84,37 @@ The following schema objects are idempotent and must be re-applied on boot.
 
 ### 1.3 NodeID Canonicalization
 
-- NodeID = `blake3(node_type || interval || params_canon || schema_hash || code_hash)`
-- `params_canon` sorts dictionary keys recursively and strips insignificant whitespace.
-- `schema_hash` is a canonical BLAKE3 of the I/O schema (protobuf/JSON Schema) with domain separation.
+- NodeID = `blake3:<digest>` over the canonical serialization of `(node_type, interval, period, params(split & canonical), dependencies(sorted by node_id), schema_compat_id, code_hash)`.
+- Non-deterministic fields (timestamps, RNG seeds, environment variables) are excluded. Parameters are split into atomic fields and serialized as deterministic JSON with sorted keys and fixed numeric precision.
+- NodeID MUST NOT include `world_id`. World isolation is handled by the WVG (World View Graph) and queue namespaces (e.g., world `topic_prefix`).
+- Normalization guarantees:
+  - Parameter maps with identical content hash to the same NodeID regardless of insertion or key order.
+  - Dependency identifiers are sorted lexicographically before hashing so upload order cannot influence the digest.
+  - Display-only metadata (`name`, `tags`, `metadata`, etc.) and non-deterministic inputs are removed before hashing.
+  - NodeIDs without the mandatory `blake3:` prefix are rejected at Gateway validation time.
+  - To mitigate collisions, reuse detection applies deterministic re-hashing with domain separation (BLAKE3 XOF) when the digest already exists in `existing_ids`.
+- TagQuery canonicalization:
+  - Do not include the runtime-resolved upstream queue set in `dependencies`.
+  - Instead, capture the query specification in `params_canon` (normalized `query_tags` sorted and deduplicated, `match_mode`, and `interval`).
+  - Dynamic queue discovery/expansion flows through ControlBus events and does not affect NodeID.
+- Use `schema_compat_id` (major-compatibility identifier) instead of `schema_hash`. Minor/patch-compatible schema changes retain the same `schema_compat_id` so NodeID remains stable.
+- Display metadata (human-friendly `name`, classification `tags`) is excluded; only functional parameters belong in `params_canon`.
+- Use BLAKE3. When collision resistance needs to be strengthened, use domain-separated **BLAKE3 XOF** and keep the `blake3:` prefix on every ID.
+- Uniqueness is enforced by the `compute_node_id` constraint. `schema_compat_id` references the Schema Registry major-compat identifier from the node message format.
+- **Schema compatibility:** Minor/patch-level schema changes keep `schema_compat_id` and therefore preserve `node_id`. Byte-level schema changes may be tracked in the optional `schema_hash` to drive buffering/recompute policies.
+
+### 1.3-A NodeID/TagQuery Determinism Invariants and Observability Hooks
+- **Same spec → same NodeID:** `(node_type, interval, period, params_canon, dependencies_sorted, schema_compat_id, code_hash)` must yield a single NodeID regardless of upload order or world/domain.
+- **World/domain exclusion:** `world_id`, `execution_domain`, `as_of`, and `partition` never enter the NodeID input. Execution/cache isolation belongs to `ComputeKey` (Sec.1.4) and `EvalKey`; do not conflate NodeID reuse with domain isolation.
+- **TagQuery rules:** NodeID inputs include only normalized `query_tags` (sorted, deduped), `match_mode`, and `interval`. The runtime-resolved upstream queue set travels via ControlBus → TagQueryManager and must never be hashed into NodeID.
+- **Schema/code boundary:** Only changes to `schema_compat_id` or `code_hash` produce a new NodeID. Minor/patch schema changes keep the same NodeID and are handled via buffering/validation paths.
+- **Input normalization:** Dependencies are sorted by NodeID, and parameters use fixed-precision, deterministic JSON serialization. Drop non-deterministic fields and display-only metadata before hashing.
+
+**Observability and validation patterns (for #1784/#1786 metrics/alerts)**
+- NodeID CRC: Gateway/SDK recompute NodeIDs and cross-check with the `crc32` field. Mismatches return 400 and increment `nodeid_crc_mismatch_total`; sample logs should include `submitted_node_id`, `recomputed_node_id`, and `strategy_id`.
+- Recompute drift: DAG Manager increments `nodeid_drift_total` and emits a ControlBus warning event when the stored `node_id` diverges from a recomputation. Periodically sample healthy cases and expose `nodeid_recalc_latency_ms` as a histogram.
+- TagQuery stability: At execution time, log the normalized query spec hash (`tagquery_spec_hash`) and the resolved upstream cardinality (`resolved_queue_count`). If recomputation from the same spec disagrees with the stored NodeID, raise `tagquery_nodeid_mismatch_total` and force an SDK cache invalidation.
+- Domain isolation: Enforce `cross_context_cache_hit_total` (defined in Sec.1.4) as a shared DAG Manager/SDK metric. When above zero, block cache reuse and escalate to an alert.
 
 ### 1.4 VersionSentinel Layout
 
