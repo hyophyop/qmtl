@@ -78,34 +78,33 @@ python my_strategy.py
 On success, you'll receive results like:
 
 ```python
-SubmitResult(
-    strategy_id="momentum_btc_1m_abc123",
-    status="valid",              # valid | invalid | pending
-    world="quickstart_demo",
-    mode="backtest",
-    downgraded=False,            # True if forced into safe compute-only
-    downgrade_reason=None,       # e.g., "missing_as_of" when backtest inputs are incomplete
-    safe_mode=False,             # True when orders are gated off for safety
-    
-    # Performance metrics
-    metrics={
-        "sharpe": 1.45,
-        "max_drawdown": -0.08,
-        "win_rate": 0.55,
-        "profit_factor": 1.32,
-    },
-    
-    # Position in world (simulation values in backtest)
-    contribution=0.0,            # Not yet activated
-    weight=0.0,
-    rank=None,
-    
-    # Improvement hints
-    improvement_hints=[
-        "Sharpe 1.5 or higher enables paper mode promotion",
-        "Recommend minimum 30-day backtest (current: 7 days)"
-    ]
-)
+{
+  "strategy_id": "momentum_btc_1m_abc123",
+  "status": "valid",              # valid | invalid | pending | rejected
+  "world": "quickstart_demo",
+  "mode": "backtest",
+  "downgraded": false,            # True if forced into safe compute-only
+  "downgrade_reason": null,       # e.g., "missing_as_of" when backtest inputs are incomplete
+  "safe_mode": false,
+  "ws": {                         # WorldService is the SSOT for decisions/activations
+    "decision": { "world_id": "quickstart_demo", "effective_mode": "validate", "etag": "..." },
+    "activation": { "strategy_id": "momentum_btc_1m_abc123", "weight": 0.10, "active": true },
+    "metrics": { "sharpe": 1.45, "max_drawdown": -0.08, "win_rate": 0.55, "profit_factor": 1.32 },
+    "threshold_violations": [],
+    "rejection_reason": null
+  },
+  "precheck": {                   # Local ValidationPipeline reference only
+    "status": "passed",
+    "violations": [],
+    "metrics": { "sharpe": 1.4, "max_drawdown": -0.09 }
+  }
+}
+```
+
+The CLI can emit the same WS/Precheck-separated JSON with:
+
+```bash
+qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --mode backtest --output json
 ```
 
 ---

@@ -161,6 +161,10 @@ class TestSubmitResult:
         assert result.downgrade_reason == "missing_as_of"
         assert result.safe_mode is True
 
+    def test_submit_requires_nonempty_world(self):
+        with pytest.raises(ValueError):
+            submit(SimpleStrategy, world="   ")
+
     def test_ws_eval_overrides_validation_fields_and_preserves_precheck(self):
         class DummyMetrics:
             sharpe = 1.0
@@ -364,6 +368,84 @@ class TestSubmitResult:
         assert payload["weight"] == 0.1
         assert payload["precheck"]["status"] == "passed"
         assert payload["precheck"]["weight"] == 0.02
+        assert "ws" in payload
+        assert payload["ws"]["status"] == "active"
+        assert payload["ws"]["weight"] == 0.1
+        assert payload["ws"]["threshold_violations"] == []
+
+    def test_ws_envelopes_from_eval_propagate_into_result(self):
+        class DummyMetrics:
+            sharpe = 1.0
+            max_drawdown = 0.1
+            win_ratio = 0.6
+            profit_factor = 1.2
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.05
+            num_trades = 10
+            correlation_avg = 0.3
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.1
+                self.rank = 4
+                self.contribution = 0.02
+                self.activated = True
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = []
+                self.correlation_avg = 0.3
+
+        decision = DecisionEnvelope(
+            world_id="world-x",
+            policy_version=1,
+            effective_mode="validate",
+            reason="stub",
+            as_of="2025-01-01T00:00:00Z",
+            ttl="60s",
+            etag="etag-dec",
+        )
+        activation = ActivationEnvelope(
+            world_id="world-x",
+            strategy_id="sid-x",
+            side="long",
+            active=True,
+            weight=0.33,
+            etag="etag-act",
+            run_id="run-x",
+            ts="2025-01-01T00:00:01Z",
+        )
+        ws_eval = WsEvalResult(
+            active=True,
+            weight=0.33,
+            rank=1,
+            contribution=0.12,
+            violations=[],
+            correlation_avg=0.45,
+            decision=decision,
+            activation=activation,
+        )
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-x",
+            resolved_world="world-x",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=ws_eval,
+            gateway_available=True,
+        )
+
+        assert result.decision is decision
+        assert result.activation is activation
+        payload = result.to_dict()
+        assert payload["ws"]["decision"]["world_id"] == "world-x"
+        assert payload["ws"]["activation"]["weight"] == 0.33
 
 
 class TestSubmitFunction:

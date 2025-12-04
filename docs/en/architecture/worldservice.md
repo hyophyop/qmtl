@@ -50,6 +50,10 @@ Non-goals:
 - To‑Be
   - WS evaluation results (active/weight/contribution/violations) are treated as the **single world-level source of truth**, with SDK/Runner exposing them directly; `ValidationPipeline` becomes a hint/local pre-check only.
   - `DecisionEnvelope`/`ActivationEnvelope` schemas and Runner/CLI `SubmitResult` are aligned so that “submit strategy → inspect world decision” reads as a single flow.
+- Contract (aligned)
+  - `/worlds/{id}/evaluate` produces `DecisionEnvelope`/`ActivationEnvelope` that map directly to `SubmitResult.ws.decision/activation`; CLI `--output json` emits the same WS/Precheck-separated structure.
+  - Local `ValidationPipeline` output lives only in `SubmitResult.precheck`; `status/weight/rank/contribution` SSOT is always WS.
+  - `ActivationEnvelope` (`GET/PUT /worlds/{id}/activation`) shares the same schema as `SubmitResult.ws.activation`, exposing `active/weight/etag/run_id/state_hash`.
 
 #### ExecutionDomain / effective_mode
 

@@ -165,12 +165,12 @@ switch to `Runner.submit(strategy_cls, world=...)`. Activation and queue
 updates are delivered via the Gateway's opaque control stream on the `/events/subscribe`
 WebSocket; WS remains the authority for policy and activation.
 
-Execution domains are now surfaced explicitly on envelopes:
+Execution mode/domain rules (WS-first, default-safe):
 
-- WorldService decisions emit `effective_mode` (`validate|compute-only|paper|live`).
-- Gateway/SDKs derive `execution_domain` (`backtest|dryrun|live|shadow`) using the normative mapping `validate → backtest (orders gated OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`.
-- Example: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }}) toggles between `dryrun` and `live` by reading `connectors.execution_domain`. Legacy `trade_mode=paper` values are coerced to `dryrun` for compatibility.
-- Offline runs mirror the `backtest` domain, so a `validate` decision never publishes orders until promotion completes.
+- Only `mode=backtest|paper|live` are accepted; `execution_domain` hints are ignored.
+- WS `effective_mode` is authoritative; missing/ambiguous modes are forced to compute-only (backtest).
+- In `backtest`/`paper`, missing `as_of` or `dataset_fingerprint` triggers safe-mode downgrades (`downgrade_reason=missing_as_of`, orders gated).
+- `ActivationEnvelope`/`DecisionEnvelope` carry `compute_context` and serialize identically across WS/Runner/CLI; CLI `--output json` shows the same structure.
 
 ```bash
 # start with built-in defaults

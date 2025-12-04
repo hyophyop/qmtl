@@ -154,12 +154,12 @@ Manager 구성이 신호/가격 입력을 바인딩하도록 할 수 있습니�
 `Runner.submit(strategy_cls, world=...)`로 전환합니다(Gateway URL은 `QMTL_GATEWAY_URL`). 활성화와 큐 업데이트는
 Gateway의 `/events/subscribe` WebSocket 제어 스트림으로 전달되며, 정책과 활성화의 권한은 WS에 있습니다.
 
-실행 도메인은 이제 봉투(envelope)에 명시적으로 표기됩니다:
+실행 모드/도메인 규칙(WS 우선·default-safe):
 
-- WorldService 결정은 `effective_mode`(`validate|compute-only|paper|live`)를 방출합니다.
-- Gateway/SDK는 규범 매핑(`validate → backtest(주문 게이트 OFF)`, `compute-only → backtest`, `paper → dryrun`, `live → live`)을 사용해 `execution_domain`(`backtest|dryrun|live|shadow`)을 도출합니다.
-- 예시: [`dryrun_live_switch_strategy.py`]({{ code_url('qmtl/examples/strategies/dryrun_live_switch_strategy.py') }})는 `connectors.execution_domain`을 읽어 `dryrun`과 `live`를 전환합니다. 레거시 `trade_mode=paper` 값은 호환성 유지를 위해 `dryrun`으로 변환됩니다.
-- 오프라인 실행은 `backtest` 도메인을 반영하므로, `validate` 결정은 프로모션 완료 전까지 주문을 발행하지 않습니다.
+- 사용자 입력은 `mode=backtest|paper|live`만 인정하며, `execution_domain` 힌트는 무시됩니다.
+- WS `effective_mode`만이 권한을 가지며, 모호/누락 시 compute-only(backtest)로 강등됩니다.
+- `backtest`/`paper`에서 `as_of`나 `dataset_fingerprint`가 없으면 안전모드(`downgrade_reason=missing_as_of`, 주문 게이트 OFF)로 표시됩니다.
+- `ActivationEnvelope`/`DecisionEnvelope`에 담긴 `compute_context`는 WS/Runner/CLI에서 동일 스키마로 직렬화되며, CLI `--output json`으로 그대로 확인할 수 있습니다.
 
 ```bash
 # start with built-in defaults

@@ -82,9 +82,12 @@ def resolve_execution_context(
 
     merge_context(merged, context)
 
+    # Legacy execution_domain hints are ignored to enforce WS-first rules.
+    merged.pop("execution_domain", None)
+
     mode = determine_execution_mode(
         explicit_mode=execution_mode,
-        execution_domain=execution_domain,
+        execution_domain=None,
         merged_context=merged,
         trade_mode=trade_mode,
         offline_requested=offline_requested,

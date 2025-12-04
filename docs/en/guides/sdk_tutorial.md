@@ -192,6 +192,17 @@ workspace/
   - `🌐 WorldService decision (SSOT)` — includes WS `status/weight/rank/contribution` and WS threshold violations.
   - `🧪 Local pre-check (ValidationPipeline)` — local metrics/violations/hints for reference only (not authoritative).
 - `downgraded/safe_mode/downgrade_reason` remain at the top so you can see default-safe downgrades.
+- Use `--output json` to receive WS/Precheck-separated JSON directly from the CLI.
+
+### Execution mode/domain rules (default-safe)
+- Only `backtest | paper | live` are user-facing; legacy execution_domain hints are ignored.
+- WS `effective_mode` takes priority; missing/ambiguous modes are forced to compute-only (backtest).
+- In `backtest/paper`, missing `as_of` or `dataset_fingerprint` triggers safe-mode downgrades (`downgrade_reason=missing_as_of`).
+
+### World-based data preset on-ramp
+- When `world.data.presets[]` is defined, Runner/CLI auto-configures Seamless providers.
+- Pick a world-defined preset with `--data-preset <id>`; if omitted, the first preset is used.
+- You can omit `history_provider` on `StreamInput`; world presets are injected automatically (covered by `tests/e2e/core_loop`).
 
 ## Cache Access
 

@@ -9,7 +9,10 @@ from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.compute_context import DowngradeReason
 from qmtl.services.gateway.caches import ActivationCache, TTLCache
 from qmtl.services.gateway.transport import BreakerRetryTransport
-from qmtl.services.gateway.world_payloads import augment_decision_payload
+from qmtl.services.gateway.world_payloads import (
+    augment_activation_payload,
+    augment_decision_payload,
+)
 
 
 class StubAsyncClient:
@@ -140,6 +143,33 @@ async def test_augment_decision_payload_records_downgrade(reset_gateway_metrics)
     assert augmented["execution_domain"] == "backtest"
     context = augmented["compute_context"]
     assert context["world_id"] == "world-123"
+    assert context["downgraded"] is True
+    assert context["downgrade_reason"] == DowngradeReason.MISSING_AS_OF
+
+    metric_value = (
+        reset_gateway_metrics.worlds_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.MISSING_AS_OF.value
+        )._value.get()
+    )
+    assert metric_value == 1
+
+
+def test_augment_activation_payload_attaches_compute_context(reset_gateway_metrics) -> None:
+    payload = {
+        "world_id": "world-xyz",
+        "strategy_id": "s1",
+        "side": "long",
+        "active": True,
+        "weight": 0.1,
+        "effective_mode": "paper",
+        "etag": "e1",
+        "ts": "now",
+    }
+    augmented = augment_activation_payload(payload)
+
+    assert augmented["execution_domain"] == "backtest"
+    context = augmented["compute_context"]
+    assert context["world_id"] == "world-xyz"
     assert context["downgraded"] is True
     assert context["downgrade_reason"] == DowngradeReason.MISSING_AS_OF
 

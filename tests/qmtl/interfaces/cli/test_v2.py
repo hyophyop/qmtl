@@ -191,6 +191,12 @@ class TestCLIInit:
 class TestSubmitStrategyRoot:
     """Strategy resolution driven by qmtl.yml project section."""
 
+    def test_submit_requires_world(self, capsys):
+        result = cmd_submit(["strategies.demo:DemoStrategy", "--world", "   "])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "world must be provided" in captured.err
+
     def test_submit_uses_project_strategy_root_and_default_world(
         self, tmp_path, monkeypatch
     ):

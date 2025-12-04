@@ -150,7 +150,13 @@ class SubmitResult:
             return model
 
         mode_value = self.mode.value if hasattr(self.mode, "value") else str(self.mode)
-        return {
+        metrics_dump = self.metrics.to_dict()
+        decision_dump = _dump_model(self.decision)
+        activation_dump = _dump_model(self.activation)
+        improvement_hints = list(self.improvement_hints)
+        threshold_violations = list(self.threshold_violations)
+
+        payload = {
             "strategy_id": self.strategy_id,
             "status": self.status,
             "world": self.world,
@@ -161,14 +167,34 @@ class SubmitResult:
             "contribution": self.contribution,
             "weight": self.weight,
             "rank": self.rank,
-            "metrics": self.metrics.to_dict(),
-            "decision": _dump_model(self.decision),
-            "activation": _dump_model(self.activation),
+            "metrics": metrics_dump,
+            "decision": decision_dump,
+            "activation": activation_dump,
             "rejection_reason": self.rejection_reason,
-            "improvement_hints": list(self.improvement_hints),
-            "threshold_violations": list(self.threshold_violations),
+            "improvement_hints": improvement_hints,
+            "threshold_violations": threshold_violations,
             "precheck": self.precheck.to_dict() if self.precheck else None,
         }
+
+        payload["ws"] = {
+            "strategy_id": self.strategy_id,
+            "world": self.world,
+            "status": self.status,
+            "mode": mode_value,
+            "decision": decision_dump,
+            "activation": activation_dump,
+            "contribution": self.contribution,
+            "weight": self.weight,
+            "rank": self.rank,
+            "metrics": metrics_dump,
+            "rejection_reason": self.rejection_reason,
+            "improvement_hints": improvement_hints,
+            "threshold_violations": threshold_violations,
+            "downgraded": self.downgraded,
+            "downgrade_reason": self.downgrade_reason,
+            "safe_mode": self.safe_mode,
+        }
+        return payload
 
     def __post_init__(self) -> None:
         if self.decision:
@@ -210,6 +236,16 @@ def _get_default_world() -> str:
     if config and config.project.default_world:
         return config.project.default_world
     return os.environ.get(ENV_DEFAULT_WORLD, DEFAULT_WORLD)
+
+
+def _normalize_world_id(world: str | None) -> str:
+    """Normalize and validate world identifier."""
+    candidate = (world or "").strip()
+    if not candidate:
+        raise ValueError(
+            "world must be provided; set --world or QMTL_DEFAULT_WORLD / project.default_world"
+        )
+    return candidate
 
 
 def _get_default_preset() -> str:
@@ -393,7 +429,7 @@ async def submit_async(
     ...     print(hint)
     """
     mode = _normalize_mode_value(mode)
-    resolved_world = world or _get_default_world()
+    resolved_world = _normalize_world_id(world or _get_default_world())
     resolved_preset = preset or _get_default_preset()
     gateway_url = _get_gateway_url(resolved_world)
     execution_domain = mode_to_execution_domain(mode)
@@ -947,6 +983,19 @@ async def _run_validation_and_ws_eval(
     )
     if ws_eval.error:
         logger.debug("WorldService evaluation fallback error: %s", ws_eval.error)
+    try:
+        ws_eval.decision = await _fetch_decision_envelope(
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+        )
+        ws_eval.activation = await _fetch_activation_envelope(
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            strategy_id=strategy_id,
+        )
+    except Exception:
+        logger.debug("Failed to fetch WS envelopes after evaluation", exc_info=True)
+
     return validation_result, ws_eval
 
 
@@ -1041,6 +1090,8 @@ def _build_passed_result(
         strategy=strategy,
         improvement_hints=world_notice + validation_result.improvement_hints,
         precheck=precheck,
+        decision=ws_eval.decision if ws_eval else None,
+        activation=ws_eval.activation if ws_eval else None,
     )
 
 
@@ -1071,6 +1122,8 @@ def _ws_rejection_result(
         metrics=_base_metrics_from_validation(validation_result),
         strategy=strategy,
         precheck=_precheck_from_validation(validation_result),
+        decision=ws_eval.decision,
+        activation=ws_eval.activation,
     )
 
 
@@ -1187,6 +1240,8 @@ def _ws_accepts_after_fail(
             "Note: Local validation failed but WorldService accepted with world-aware metrics"
         ] + validation_result.improvement_hints,
         precheck=_precheck_from_validation(validation_result),
+        decision=ws_eval.decision,
+        activation=ws_eval.activation,
     )
 
 
@@ -1230,6 +1285,8 @@ def _pending_after_failed_validation(
         ] + validation_result.improvement_hints,
         threshold_violations=_final_threshold_violations(validation_result, ws_eval),
         precheck=_precheck_from_validation(validation_result),
+        decision=ws_eval.decision if ws_eval else None,
+        activation=ws_eval.activation if ws_eval else None,
     )
 
 
@@ -1262,6 +1319,8 @@ def _reject_after_failed_validation(
         ),
         strategy=strategy,
         precheck=_precheck_from_validation(validation_result),
+        decision=ws_eval.decision if ws_eval else None,
+        activation=ws_eval.activation if ws_eval else None,
     )
 
 
@@ -1496,7 +1555,7 @@ def submit(
     """
     return _run_coroutine_blocking(submit_async(
         strategy_cls,
-        world=world,
+        world=_normalize_world_id(world or _get_default_world()),
         mode=mode,
         preset=preset,
         preset_mode=preset_mode,
@@ -1645,6 +1704,8 @@ class WsEvalResult:
     violations: list[dict[str, object]] | None = None
     correlation_avg: float | None = None
     error: str | None = None
+    decision: DecisionEnvelope | None = None
+    activation: ActivationEnvelope | None = None
 
 
 async def _evaluate_with_worldservice(
@@ -1707,6 +1768,48 @@ async def _evaluate_with_worldservice(
             return _parse_ws_eval_response(data, strategy_id)
     except Exception as exc:  # pragma: no cover - network/JSON issues
         return WsEvalResult(error=str(exc))
+
+
+async def _fetch_decision_envelope(
+    *,
+    gateway_url: str,
+    world_id: str,
+) -> DecisionEnvelope | None:
+    """Fetch the latest DecisionEnvelope from WorldService."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http_client:
+            resp = await http_client.get(f"{gateway_url.rstrip('/')}/worlds/{world_id}/decide")
+            resp.raise_for_status()
+            payload = resp.json()
+            if isinstance(payload, dict):
+                return DecisionEnvelope.model_validate(payload)
+    except Exception:
+        logger.debug("Failed to fetch decision envelope via HTTP", exc_info=True)
+    return None
+
+
+async def _fetch_activation_envelope(
+    *,
+    gateway_url: str,
+    world_id: str,
+    strategy_id: str,
+    side: str = "long",
+) -> ActivationEnvelope | None:
+    """Fetch ActivationEnvelope for the given strategy if available."""
+    params = {"strategy_id": strategy_id, "side": side}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http_client:
+            resp = await http_client.get(
+                f"{gateway_url.rstrip('/')}/worlds/{world_id}/activation",
+                params=params,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            if isinstance(payload, dict):
+                return ActivationEnvelope.model_validate(payload)
+    except Exception:
+        logger.debug("Failed to fetch activation envelope via HTTP", exc_info=True)
+    return None
 
 
 def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalResult:

@@ -93,7 +93,7 @@ async def test_activation_backend_error_no_cache(
     [
         ("validate", "backtest"),
         ("compute-only", "backtest"),
-        ("paper", "dryrun"),
+        ("paper", "backtest"),
         ("live", "live"),
         ("shadow", "shadow"),
     ],
