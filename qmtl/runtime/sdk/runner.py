@@ -101,6 +101,7 @@ class Runner:
         preset_mode: str | None = None,
         preset_version: str | None = None,
         preset_overrides: dict[str, float] | None = None,
+        data_preset: str | None = None,
         returns: list[float] | None = None,
         auto_validate: bool = True,
     ) -> SubmitResult:
@@ -145,6 +146,7 @@ class Runner:
             preset_mode=preset_mode,
             preset_version=preset_version,
             preset_overrides=preset_overrides,
+            data_preset=data_preset,
             returns=returns,
             auto_validate=auto_validate,
         )
@@ -160,6 +162,7 @@ class Runner:
         preset_mode: str | None = None,
         preset_version: str | None = None,
         preset_overrides: dict[str, float] | None = None,
+        data_preset: str | None = None,
         returns: list[float] | None = None,
         auto_validate: bool = True,
     ) -> SubmitResult:
@@ -172,6 +175,7 @@ class Runner:
             preset_mode=preset_mode,
             preset_version=preset_version,
             preset_overrides=preset_overrides,
+            data_preset=data_preset,
             returns=returns,
             auto_validate=auto_validate,
         )

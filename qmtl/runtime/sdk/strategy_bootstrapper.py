@@ -187,6 +187,12 @@ class StrategyBootstrapper:
                 effective_domain = "backtest"
             else:
                 effective_domain = "live" if trade_mode == "live" else "dryrun"
+        effective_domain = resolve_execution_domain(effective_domain) or effective_domain
+
+        if effective_domain:
+            meta_payload = meta_payload or {}
+            meta_payload["execution_domain"] = effective_domain
+
         namespace = build_namespace(world_id, effective_domain)
         if namespace and isinstance(dag_meta, dict):
             dag_meta["topic_namespace"] = {

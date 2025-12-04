@@ -121,7 +121,7 @@ async def test_strategy_bootstrapper_applies_queue_map(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_strategy_bootstrapper_ignores_execution_domain_meta(monkeypatch):
+async def test_strategy_bootstrapper_attaches_effective_execution_domain(monkeypatch):
     strategy = SimpleStrategy()
     strategy.setup()
     ack = StrategyAck(
@@ -148,7 +148,8 @@ async def test_strategy_bootstrapper_ignores_execution_domain_meta(monkeypatch):
     assert client.calls
     sent_meta = client.calls[-1].get("meta")
     assert isinstance(sent_meta, dict)
-    assert "execution_domain" not in sent_meta
+    assert sent_meta.get("execution_domain") == "live"
+    assert sent_meta.get("execution_domain") != "paper"
     assert sent_meta.get("dataset_fingerprint") == "fp-x"
 
 
