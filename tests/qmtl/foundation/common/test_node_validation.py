@@ -57,3 +57,46 @@ def test_enforce_node_identity_detects_mismatched_id() -> None:
         enforce_node_identity([node], checksum)
 
     assert exc.value.code == "E_NODE_ID_MISMATCH"
+
+
+def test_tagquery_requires_interval() -> None:
+    node = {
+        "node_type": "TagQueryNode",
+        "code_hash": "c",
+        "config_hash": "cfg",
+        "schema_hash": "s",
+        "schema_compat_id": "s-compat",
+        "params": {"tags": ["t1"]},
+        "dependencies": [],
+        "node_id": "blake3:stub",
+    }
+
+    checksum = crc32_of_list([node["node_id"]])
+    report = validate_node_identity([node], checksum)
+
+    assert any("interval" in item.missing for item in report.missing_fields)
+    with pytest.raises(NodeValidationError) as exc:
+        report.raise_for_issues()
+    assert exc.value.code == "E_NODE_ID_FIELDS"
+
+
+def test_tagquery_requires_tags() -> None:
+    node = {
+        "node_type": "TagQueryNode",
+        "code_hash": "c",
+        "config_hash": "cfg",
+        "schema_hash": "s",
+        "schema_compat_id": "s-compat",
+        "params": {"tags": []},
+        "interval": 60,
+        "dependencies": [],
+        "node_id": "blake3:stub",
+    }
+
+    checksum = crc32_of_list([node["node_id"]])
+    report = validate_node_identity([node], checksum)
+
+    assert any("tags" in item.missing for item in report.missing_fields)
+    with pytest.raises(NodeValidationError) as exc:
+        report.raise_for_issues()
+    assert exc.value.code == "E_NODE_ID_FIELDS"

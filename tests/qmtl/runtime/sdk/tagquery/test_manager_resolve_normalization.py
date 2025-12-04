@@ -1,6 +1,7 @@
 import pytest
 
 from qmtl.runtime.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
@@ -70,3 +71,47 @@ async def test_resolve_tags_offline_initializes_empty():
     assert node.upstreams == []
     assert not node.execute
 
+
+@pytest.mark.asyncio
+async def test_queue_update_canonicalizes_tags_and_records_metrics():
+    sdk_metrics.reset_metrics()
+    node = TagQueryNode(["t2", "t1"], interval="60s", period=1)
+    mgr = TagQueryManager("http://gw")
+    mgr.register(node)
+
+    await mgr._handle_queue_update(
+        {
+            "tags": ["t1", "t2", "t2"],
+            "interval": "60",
+            "match_mode": "ANY",
+            "queues": [{"queue": "q1", "global": False}],
+        }
+    )
+
+    assert node.upstreams == ["q1"]
+    assert (
+        sdk_metrics.tagquery_update_total.labels(outcome="applied", reason="ok")._value.get() == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_queue_update_missing_interval_is_dropped():
+    sdk_metrics.reset_metrics()
+    node = TagQueryNode(["t"], interval="60s", period=1)
+    mgr = TagQueryManager("http://gw")
+    mgr.register(node)
+
+    await mgr._handle_queue_update(
+        {
+            "tags": ["t"],
+            "queues": [{"queue": "q1"}],
+        }
+    )
+
+    assert node.upstreams == []
+    assert (
+        sdk_metrics.tagquery_update_total.labels(
+            outcome="dropped", reason="missing_interval"
+        )._value.get()
+        == 1
+    )

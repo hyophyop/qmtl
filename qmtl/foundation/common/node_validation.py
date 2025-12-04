@@ -7,6 +7,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from .crc import crc32_of_list
 from .nodeid import compute_node_id
+from .tagquery import canonical_tag_query_params_from_node
 
 # Required node attributes that must be present for ``compute_node_id`` to be
 # deterministic. The order here mirrors the legacy validator implementations to
@@ -123,6 +124,24 @@ class NodeValidationReport:
             raise NodeValidationError.identity_mismatch(self.mismatches)
 
 
+def _missing_tagquery_requirements(node: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return TagQuery-specific required fields that are absent."""
+
+    try:
+        canonical_tag_query_params_from_node(
+            node, require_tags=True, require_interval=True
+        )
+    except ValueError as exc:
+        text = str(exc).lower()
+        missing: list[str] = []
+        if "tag" in text:
+            missing.append("tags")
+        if "interval" in text:
+            missing.append("interval")
+        return tuple(missing)
+    return ()
+
+
 def validate_node_identity(
     nodes: Iterable[Any],
     provided_checksum: int,
@@ -158,6 +177,7 @@ def validate_node_identity(
             continue
 
         node_id = node.get("node_id")
+        node_type = str(node.get("node_type") or "")
         if not isinstance(node_id, str) or not node_id:
             node_ids_for_crc.append(str(node_id or ""))
             missing_fields.append(MissingNodeField(index=index, missing=("node_id",)))
@@ -165,8 +185,12 @@ def validate_node_identity(
 
         node_ids_for_crc.append(node_id)
 
-        missing = tuple(field for field in required_fields if not node.get(field))
-        if missing:
+        missing_list = [field for field in required_fields if not node.get(field)]
+        if node_type == "TagQueryNode":
+            missing_list.extend(_missing_tagquery_requirements(node))
+
+        if missing_list:
+            missing = tuple(dict.fromkeys(missing_list))
             missing_fields.append(
                 MissingNodeField(index=index, node_id=node_id, missing=missing)
             )

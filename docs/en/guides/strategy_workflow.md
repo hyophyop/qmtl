@@ -167,7 +167,9 @@ WebSocket; WS remains the authority for policy and activation.
 
 Execution mode/domain rules (WS-first, default-safe):
 
-- Only `mode=backtest|paper|live` are accepted; `execution_domain` hints are ignored.
+- Prefer `mode=backtest|paper|live`; when missing, a provided `execution_domain` hint
+  is mapped to the canonical mode, and otherwise we downgrade to compute-only
+  (`backtest`) instead of opting into live implicitly.
 - WS `effective_mode` is authoritative; missing/ambiguous modes are forced to compute-only (backtest).
 - In `backtest`/`paper`, missing `as_of` or `dataset_fingerprint` triggers safe-mode downgrades (`downgrade_reason=missing_as_of`, orders gated).
 - `ActivationEnvelope`/`DecisionEnvelope` carry `compute_context` and serialize identically across WS/Runner/CLI; CLI `--output json` shows the same structure.
