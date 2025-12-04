@@ -14,6 +14,8 @@ import pytest
 from qmtl.foundation.common import crc32_of_list
 from .stack import CoreLoopStackHandle
 
+pytestmark = pytest.mark.contract
+
 
 def _http_json(url: str, *, method: str = "GET", data: dict | None = None, timeout: float = 5.0):
     body = None
@@ -42,7 +44,7 @@ def _http_json(url: str, *, method: str = "GET", data: dict | None = None, timeo
             js = {"status": exc.code, "error": raw or str(exc)}
         raise AssertionError({"status": exc.code, "body": js}) from exc
     except Exception as exc:  # noqa: PERF203
-        pytest.skip(f"core loop stack not reachable: {exc}")
+        raise AssertionError(f"core loop stack not reachable: {exc}") from exc
 
 
 def _world_id_candidates(world_id: str) -> set[str]:

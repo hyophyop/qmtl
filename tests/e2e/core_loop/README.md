@@ -23,8 +23,8 @@ Configuration knobs:
 - `CORE_LOOP_ARTIFACT_DIR`: override the artifacts directory (`.artifacts/core_loop` by default).
 
 Contract tests:
-- Marked with `@pytest.mark.contract` and currently `xfail` while the spec is in draft.
-- Include ExecutionDomain default-safe downgrade expectations: running the demo strategy without
-  `as_of` in backtest mode should yield a safe-mode warning and `SubmitResult.downgrade_reason`.
+- Marked with `@pytest.mark.contract`; CI runs them via `CORE_LOOP_STACK_MODE=inproc uv run -m pytest -q tests/e2e/core_loop -q`.
+- Cover ExecutionDomain default-safe downgrade expectations (missing `as_of` downgrades to compute-only)
+  and ComputeContext precedence/downgrade when WorldService decisions are unavailable.
 
 References: docs/ko/design/core_loop_roadmap.md, docs/en/design/core_loop_roadmap_issue_drafts.md.
