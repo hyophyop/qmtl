@@ -625,6 +625,10 @@ points-in-time, and provides a durable audit trail.
 
 Meeting all items marks the QMTL v0.9 "Determinism" milestone.
 
+### Observability & runbook
+- Gateway metrics: `nodeid_checksum_mismatch_total{source="dag"}`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`, `tagquery_nodeid_mismatch_total`.
+- Runbook: follow `docs/en/operations/determinism.md` for NodeID CRC/TagQuery mismatches; if the counters rise, regenerate DAG node_ids and re-run the Core Loop contract suite (`tests/e2e/core_loop`).
+
 ---
 
 ## 8. Additional Guidance

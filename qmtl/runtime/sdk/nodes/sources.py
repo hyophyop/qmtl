@@ -3,13 +3,18 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from qmtl.foundation.common.tagquery import MatchMode, normalize_match_mode
+from qmtl.foundation.common.tagquery import (
+    MatchMode,
+    canonical_tag_query_params,
+    normalize_match_mode,
+)
 
 from .. import hash_utils as default_hash_utils
 from .. import node_validation as default_validator
 from ..event_service import EventRecorderService
 from ..exceptions import InvalidParameterError
 from ..data_io import HistoryBackend, HistoryProvider, EventRecorder
+from ..util import parse_interval
 from .base import Node
 
 
@@ -175,18 +180,44 @@ class TagQueryNode(SourceNode):
         else:
             normalized_mode = normalize_match_mode(match_mode)
 
+        normalized_interval = parse_interval(interval)
+        canonical_params = canonical_tag_query_params(
+            validated_query_tags,
+            interval=normalized_interval,
+            match_mode=normalized_mode,
+            require_tags=True,
+            require_interval=True,
+        )
+        self._tagquery_params = {
+            "query_tags": list(canonical_params["query_tags"]),
+            "match_mode": canonical_params["match_mode"],
+            "interval": canonical_params["interval"],
+        }
+        self.query_tags = list(self._tagquery_params["query_tags"])
+        self.match_mode = normalized_mode
+
         super().__init__(
             input=None,
             compute_fn=compute_fn,
             name=name or "tag_query",
-            interval=interval,
+            interval=normalized_interval,
             period=period,
-            tags=list(validated_query_tags),
+            tags=list(self.query_tags),
+            config=self._tagquery_params,
         )
-        self.query_tags = validated_query_tags
-        self.match_mode = normalized_mode
         self.upstreams: list[str] = []
         self.execute = False
+
+    def _canonical_spec(self):
+        spec = super()._canonical_spec()
+        spec.with_params(self._tagquery_params)
+        spec.update_extras(
+            {
+                "tags": list(self._tagquery_params["query_tags"]),
+                "match_mode": self._tagquery_params["match_mode"],
+            }
+        )
+        return spec
 
     def update_queues(self, queues: list[str]) -> None:
         prev_exec = self.execute

@@ -7,6 +7,11 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from .tagquery import (
+    canonical_tag_query_params,
+    canonical_tag_query_params_from_node,
+)
+
 # NOTE: Architecture spec (§3) requires NodeID inputs to exclude non-deterministic
 # fields such as timestamps, random seeds, and environment payloads to preserve
 # global stability across worlds/domains.
@@ -130,7 +135,10 @@ def _canonical_params_blob_from_value(params_source: Any) -> str:
 
 
 def _canonical_params_blob(node: Mapping[str, Any]) -> str:
-    return _canonical_params_blob_from_value(_params_source_from_node(node))
+    params_source = _params_source_from_node(node)
+    if str(node.get("node_type", "")) == "TagQueryNode":
+        params_source = canonical_tag_query_params_from_node(node)
+    return _canonical_params_blob_from_value(params_source)
 
 
 class CanonicalNodeSpec:
@@ -354,7 +362,24 @@ def serialize_nodespec(node: Mapping[str, Any] | CanonicalNodeSpec) -> bytes:
         deps = list(node.dependencies)
         schema_compat_id = node.schema_compat_id
         code_hash = node.code_hash
-        params_blob = _canonical_params_blob_from_value(node.params_source)
+        params_source = node.params_source
+        if node_type == "TagQueryNode":
+            tags_source = None
+            match_mode_source = None
+            extras = node.extras
+            if isinstance(params_source, Mapping):
+                tags_source = params_source.get("query_tags") or params_source.get("tags")
+                match_mode_source = params_source.get("match_mode")
+            if tags_source is None:
+                tags_source = extras.get("tags") if extras else None
+            if match_mode_source is None:
+                match_mode_source = extras.get("match_mode") if extras else None
+            params_source = canonical_tag_query_params(
+                tags_source if tags_source is not None else params_source,
+                interval=interval,
+                match_mode=match_mode_source,
+            )
+        params_blob = _canonical_params_blob_from_value(params_source)
     else:
         node_type = str(node.get("node_type", ""))
         interval = int(node.get("interval") or 0)

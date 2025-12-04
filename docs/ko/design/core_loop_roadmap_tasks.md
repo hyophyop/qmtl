@@ -29,9 +29,9 @@
 - [x] preset 기반 실행 예제/가이드 작성, CI/계약 테스트에서 실제로 도는 예제 붙이기 (#1778, #1789 연동) — core-loop demo world가 표준 data preset을 포함하고 계약 테스트에서 auto-wiring을 검증.
 
 ## Phase 4 – NodeID/TagQuery + Determinism 마무리 (T4/T5 P0)
-- NodeID/TagQuery 결정성 규칙 구현/검증: 엔진별 적용 (#1783) → 관측/테스트(#1784).
-- Determinism 체크리스트 코드化 (#1785) → 관측 메트릭/대시보드 (#1786) → 런북 보강 (#1787).
-- Core Loop 계약 스위트에 NodeID/TagQuery·Determinism 관련 케이스 확장 (#1789).
+- [x] NodeID/TagQuery 결정성 규칙 구현/검증: 엔진별 적용 (#1783) → 관측/테스트(#1784) — TagQueryNode NodeID가 query spec(정렬·중복 제거된 query_tags + match_mode + interval)에 따라 해시되도록 SDK/Gateway 정규화, queue_map match_mode 전달 및 결정성 테스트 추가.
+- [x] Determinism 체크리스트 코드化 (#1785) → 관측 메트릭/대시보드 (#1786) → 런북 보강 (#1787) — NodeID CRC/필드/불일치·TagQuery 전용 메트릭 추가, `operations/determinism.md` 런북/architecture 링크로 대응 경로 명시.
+- [x] Core Loop 계약 스위트에 NodeID/TagQuery·Determinism 관련 케이스 확장 (#1789) — Gateway determinism 메트릭이 NodeID 불일치 시 증가하는지 검증하는 계약 테스트 추가.
 
 ## Phase 5 – CI 게이트 정착 (T6 P0 마무리)
 - Core Loop 계약 스위트를 CI merge-blocker로 통합 (#1790).

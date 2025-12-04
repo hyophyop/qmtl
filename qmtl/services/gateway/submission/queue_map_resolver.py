@@ -6,6 +6,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator
 
+from qmtl.foundation.common.tagquery import canonical_tag_query_params_from_node
+
 
 @dataclass(frozen=True)
 class _TagQueryNode:
@@ -53,9 +55,15 @@ class QueueMapResolver:
             node_id = node.get("node_id")
             if not isinstance(node_id, str) or not node_id:
                 continue
-            tags = node.get("tags", [])
-            interval = int(node.get("interval", 0))
-            match_mode = node.get("match_mode", "any")
+            try:
+                spec = canonical_tag_query_params_from_node(
+                    node, require_tags=True, require_interval=True
+                )
+            except ValueError:
+                continue
+            tags = spec.get("query_tags", [])
+            interval = int(spec.get("interval") or 0)
+            match_mode = spec.get("match_mode", "any")
             yield _TagQueryNode(
                 node_id=node_id,
                 tags=tags,

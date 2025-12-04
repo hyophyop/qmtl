@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from qmtl.foundation.common import compute_node_id, crc32_of_list
 from qmtl.services.gateway.api import create_app, Database
 from qmtl.services.gateway.models import StrategySubmit
+from qmtl.services.gateway import metrics as gw_metrics
 
 
 class FakeDB(Database):
@@ -68,6 +69,7 @@ def test_compute_node_id_collision():
 
 @pytest.mark.asyncio
 async def test_node_id_mismatch(client_and_redis):
+    gw_metrics.reset_metrics()
     client, _ = client_and_redis
     node = {
         "node_type": "N",
@@ -86,10 +88,12 @@ async def test_node_id_mismatch(client_and_redis):
     assert detail["code"] == "E_NODE_ID_MISMATCH"
     assert detail["node_id_mismatch"][0]["expected"].startswith("blake3:")
     assert "hint" in detail
+    assert gw_metrics.nodeid_mismatch_total.labels(node_type="N")._value.get() == 1
 
 
 @pytest.mark.asyncio
 async def test_missing_node_fields_rejected(client_and_redis):
+    gw_metrics.reset_metrics()
     client, _ = client_and_redis
     node = {
         "node_type": "N",
@@ -110,6 +114,10 @@ async def test_missing_node_fields_rejected(client_and_redis):
     assert "config_hash" in missing_fields
     assert "schema_compat_id" in missing_fields
     assert "hint" in detail
+    assert gw_metrics.nodeid_missing_fields_total.labels(field="config_hash", node_type="N")._value.get() == 1
+    assert (
+        gw_metrics.nodeid_missing_fields_total.labels(field="schema_compat_id", node_type="N")._value.get() == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -139,6 +147,7 @@ async def test_legacy_node_id_rejected(client_and_redis):
 
 @pytest.mark.asyncio
 async def test_tag_query_node_id_mismatch(client_and_redis):
+    gw_metrics.reset_metrics()
     client, _ = client_and_redis
     node = {
         "node_type": "TagQueryNode",
@@ -156,6 +165,10 @@ async def test_tag_query_node_id_mismatch(client_and_redis):
     resp = client.post("/strategies", json=payload.model_dump())
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "E_NODE_ID_MISMATCH"
+    assert (
+        gw_metrics.nodeid_mismatch_total.labels(node_type="TagQueryNode")._value.get() == 1
+    )
+    assert gw_metrics.tagquery_nodeid_mismatch_total._value.get() == 1
 
 
 @pytest.mark.asyncio

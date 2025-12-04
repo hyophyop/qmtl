@@ -53,3 +53,20 @@ def test_tag_query_node_id_whitespace_normalization():
     node_reference = TagQueryNode(["t1", "t2"], interval="60s", period=1)
 
     assert node_from_http.node_id == node_reference.node_id
+
+
+def test_tag_query_node_id_depends_on_match_mode():
+    node_any = TagQueryNode(["t1", "t2"], interval="60s", period=1, match_mode=MatchMode.ANY)
+    node_all = TagQueryNode(["t1", "t2"], interval="60s", period=1, match_mode=MatchMode.ALL)
+
+    assert node_any.node_id != node_all.node_id
+
+
+def test_tag_query_node_serializes_canonical_query_spec():
+    node = TagQueryNode(["b", "a"], interval="60s", period=1, match_mode="all")
+    payload = node.to_dict()
+
+    assert payload["params"]["query_tags"] == ["a", "b"]
+    assert payload["params"]["match_mode"] == "all"
+    assert payload["match_mode"] == "all"
+    assert payload["tags"] == ["a", "b"]

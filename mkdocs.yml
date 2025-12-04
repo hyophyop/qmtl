@@ -82,6 +82,7 @@ nav:
       - Seamless Stack Templates: operations/seamless_stack.md
       - WS Load & Endurance: operations/ws_load_testing.md
       - World Activation Runbook: operations/activation.md
+      - Determinism Runbook: operations/determinism.md
       - Rebalancing Execution: operations/rebalancing_execution.md
       - Rebalancing Schema Coordination: operations/rebalancing_schema_coordination.md
       - Schema Registry Governance: operations/schema_registry_governance.md

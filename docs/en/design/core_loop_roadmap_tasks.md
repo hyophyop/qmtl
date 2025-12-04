@@ -29,9 +29,9 @@ Representative issue numbers are in parentheses. Phase 2 is the current focus.
 - [x] Add preset-driven examples/guides and wire live examples into CI/contract tests (#1778, #1789) — core-loop demo world carries the standard data preset and the contract test asserts auto-wiring.
 
 ## Phase 4 – NodeID/TagQuery + Determinism wrap-up (T4/T5 P0)
-- Implement/verify NodeID/TagQuery determinism per engine (#1783) → observe/test (#1784).
-- Code the Determinism checklist (#1785) → metrics/dashboards (#1786) → runbook hardening (#1787).
-- Expand Core Loop contract suite with NodeID/TagQuery and Determinism cases (#1789).
+- [x] Implement/verify NodeID/TagQuery determinism per engine (#1783) → observe/test (#1784) — TagQueryNode NodeIDs now hash the canonical query spec (sorted/deduped `query_tags` + `match_mode` + interval) with SDK/Gateway normalization plus queue_map match_mode passthrough and determinism tests.
+- [x] Code the Determinism checklist (#1785) → metrics/dashboards (#1786) → runbook hardening (#1787) — Added NodeID CRC/missing-field/mismatch + TagQuery-specific counters and linked the runbook (`operations/determinism.md`) from architecture for response guidance.
+- [x] Expand Core Loop contract suite with NodeID/TagQuery and Determinism cases (#1789) — Contract test ensures Gateway determinism counters increment on NodeID mismatches.
 
 ## Phase 5 – CI gate landing (T6 P0)
 - Integrate the Core Loop contract suite as a CI merge blocker (#1790).
