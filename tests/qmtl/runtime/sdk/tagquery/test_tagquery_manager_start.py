@@ -5,6 +5,13 @@ import pytest
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
+@pytest.fixture
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
 class DummyClient:
     def __init__(self) -> None:
         self.start_calls = 0

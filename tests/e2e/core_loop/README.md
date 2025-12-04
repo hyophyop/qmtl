@@ -24,7 +24,9 @@ Configuration knobs:
 
 Contract tests:
 - Marked with `@pytest.mark.contract`; CI runs them via `CORE_LOOP_STACK_MODE=inproc uv run -m pytest -q tests/e2e/core_loop -q`.
-- Cover ExecutionDomain default-safe downgrade expectations (missing `as_of` downgrades to compute-only)
-  and ComputeContext precedence/downgrade when WorldService decisions are unavailable.
+- Cover ExecutionDomain default-safe downgrade expectations (missing `as_of` downgrades to compute-only),
+  SubmitResult JSON output keeping WS vs precheck separation, and ComputeContext precedence/downgrade
+  when WorldService decisions are unavailable or marked stale.
+- Exercise NodeID/TagQuery determinism counters to keep gateway metrics contract-stable.
 
 References: docs/ko/design/core_loop_roadmap.md, docs/en/design/core_loop_roadmap_issue_drafts.md.

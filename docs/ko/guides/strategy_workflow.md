@@ -2,7 +2,7 @@
 title: "전략 개발 및 테스트 워크플로"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-12-05
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -162,6 +162,15 @@ Gateway의 `/events/subscribe` WebSocket 제어 스트림으로 전달되며, �
 - WS `effective_mode`만이 권한을 가지며, 모호/누락 시 compute-only(backtest)로 강등됩니다.
 - `backtest`/`paper`에서 `as_of`나 `dataset_fingerprint`가 없으면 안전모드(`downgrade_reason=missing_as_of`, 주문 게이트 OFF)로 표시됩니다.
 - `ActivationEnvelope`/`DecisionEnvelope`에 담긴 `compute_context`는 WS/Runner/CLI에서 동일 스키마로 직렬화되며, CLI `--output json`으로 그대로 확인할 수 있습니다.
+- CLI `--mode`는 `backtest|paper|live`만 허용하며, 과거 `offline`/`sandbox`/`compute-only` 값은 모두 `backtest`로 정규화됩니다.
+- CLI/SDK JSON 출력은 WS 봉투(`ws`)와 로컬 `precheck`를 분리해 계약 테스트에서 그대로 검증합니다.
+
+| 입력/표면 | 규칙 |
+| --- | --- |
+| `--mode` (CLI) | `backtest|paper|live`만 사용. 미지정 시 `execution_domain` 힌트가 있으면 매핑, 없으면 compute-only(backtest)로 강등. |
+| `execution_domain` (SDK/meta) | 토큰(`sandbox`/`offline` 등)은 모두 표준 도메인으로 정규화. `as_of` 없음 + backtest/paper이면 safe-mode 강등. |
+| WS `effective_mode` | 단일 권한. WS 응답이 모호/누락/만료되면 Gateway/SDK가 compute-only로 강등하고 계약 테스트로 고착. |
+| SubmitResult JSON | 상위 필드와 `ws` 봉투의 downgrade/safe_mode 플래그가 일치해야 하며, `precheck`는 별도 섹션으로 유지. |
 
 ```bash
 # start with built-in defaults

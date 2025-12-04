@@ -2,7 +2,7 @@
 title: "Strategy Development and Testing Workflow"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-12-05
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -173,6 +173,15 @@ Execution mode/domain rules (WS-first, default-safe):
 - WS `effective_mode` is authoritative; missing/ambiguous modes are forced to compute-only (backtest).
 - In `backtest`/`paper`, missing `as_of` or `dataset_fingerprint` triggers safe-mode downgrades (`downgrade_reason=missing_as_of`, orders gated).
 - `ActivationEnvelope`/`DecisionEnvelope` carry `compute_context` and serialize identically across WS/Runner/CLI; CLI `--output json` shows the same structure.
+- CLI `--mode` only accepts `backtest|paper|live`; legacy `offline`/`sandbox`/`compute-only` tokens normalize to `backtest`.
+- CLI/SDK JSON output keeps the WS envelope (`ws`) separate from any local `precheck`, which the contract tests assert directly.
+
+| Surface | Rule |
+| --- | --- |
+| `--mode` (CLI) | Use `backtest|paper|live` only. If omitted, map any `execution_domain` hint; if absent, force compute-only (backtest). |
+| `execution_domain` (SDK/meta) | Tokens (`sandbox`/`offline` etc.) are normalized to canonical domains. Missing `as_of` in backtest/paper downgrades to safe mode. |
+| WS `effective_mode` | Single authority. Ambiguous/missing/stale WS responses trigger compute-only downgrade in Gateway/SDK and are pinned by contract tests. |
+| SubmitResult JSON | Top-level and `ws` downgrade/safe_mode flags must match; `precheck` stays separate. |
 
 ```bash
 # start with built-in defaults
