@@ -10,7 +10,9 @@ DEFAULT_GATEWAY_URL = "http://localhost:8000"
 
 
 def gateway_url() -> str:
-    return os.environ.get("QMTL_GATEWAY_URL", DEFAULT_GATEWAY_URL).rstrip("/")
+    explicit = os.environ.get("QMTL_GATEWAY_URL")
+    fallback = os.environ.get("GATEWAY_URL")
+    return (explicit or fallback or DEFAULT_GATEWAY_URL).rstrip("/")
 
 
 def _normalize_params(params: dict[str, object] | None) -> httpx_types.QueryParamTypes | None:

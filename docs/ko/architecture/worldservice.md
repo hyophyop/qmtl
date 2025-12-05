@@ -68,11 +68,12 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 
 - As‑Is
   - `/allocations`, `/rebalancing/*`가 world/world‑간 자본 배분 플랜을 계산·기록할 수 있지만, Runner.submit/전략 제출 플로우와는 분리된 **운영자 주도 루프**로 사용됩니다.
-  - Runner.submit/CLI는 제출된 world에 대해 `/allocations`의 최신 스냅샷(월드/전략 총합 비중)을 **조회·표시**하지만, 이는 적용 상태를 알려주는 표면일 뿐 자동 실행을 암시하지 않습니다. 자본 이동/실거래 반영은 여전히 운영자 플로우가 담당합니다.
+  - Runner.submit/CLI는 제출된 world에 대해 `/allocations`의 최신 스냅샷(월드/전략 총합 비중, etag/updated_at, stale 여부)을 **조회·표시**하며,
+    스냅샷이 없거나 오래된 경우 `qmtl world allocations -w <id>`로 새로고침하라는 안내를 함께 출력합니다. 표시는 읽기 전용이며 자본 이동/실거래 반영은 여전히 운영자 플로우가 담당합니다.
   - Alpha metrics(`alpha_metrics`)를 rebalancing 플랜에 포함하는 v2 스키마가 도입되었으나, “전략 평가 → world allocation”을 한 문맥에서 설명하는 문서는 제한적입니다.
 - To‑Be
   - 전략 제출/평가 루프와 world allocation 루프를 “표준 두 단계 루프”로 문서화하고, WS는 두 루프 모두의 SSOT 역할(평가/활성/배분)을 명확히 합니다.
-  - Core Loop 표면(Runner.submit/CLI, 문서)이 `/allocations` 스냅샷과 연결되어, 평가/활성(제안) ↔ 자본 배분(적용) 단계를 명확히 구분한 채 탐색/인지를 쉽게 합니다. 적용·실행은 여전히 승인/감사 가능한 별도 플로우입니다.
+  - Core Loop 표면(Runner.submit/CLI, 문서)이 `/allocations` 스냅샷과 연결되어, 평가/활성(제안) ↔ 자본 배분(적용) 단계를 명확히 구분한 채 탐색/인지를 쉽게 합니다. 적용·실행은 여전히 승인/감사 가능한 별도 플로우이며, `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 apply 경로와 run_id/etag 기반 감사 추적을 기본 규약으로 고정합니다.
 
 ---
 

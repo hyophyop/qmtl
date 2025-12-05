@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import uuid
 from typing import Any, Callable, Dict, List
 
 from qmtl.utils.i18n import _ as _t
@@ -17,8 +18,9 @@ def cmd_world(argv: List[str]) -> int:
 
     Typical Core Loop usage:
       1) Submit strategies with a world using `qmtl submit ... --world <id>`.
-      2) Inspect world-level allocations and build rebalancing plans via:
+      2) Inspect world-level allocations and build/apply plans via:
          - `qmtl world allocations -w <id>`
+         - `qmtl world apply <id> --run-id <id> [--plan-file plan.json]`
          - `qmtl world rebalance-plan ...` / `qmtl world rebalance-apply ...`
     """
     parser = argparse.ArgumentParser(
@@ -27,7 +29,7 @@ def cmd_world(argv: List[str]) -> int:
     )
     parser.add_argument(
         "action",
-        choices=["list", "create", "info", "delete", "allocations", "rebalance-plan", "rebalance-apply"],
+        choices=["list", "create", "info", "delete", "allocations", "apply", "rebalance-plan", "rebalance-apply"],
         help=_t("Action to perform"),
     )
     parser.add_argument(
@@ -63,6 +65,30 @@ def cmd_world(argv: List[str]) -> int:
         dest="world_id",
         default=None,
         help=_t("World identifier for allocation lookups"),
+    )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=None,
+        help=_t("Run identifier for apply requests (default: auto-generate)"),
+    )
+    parser.add_argument(
+        "--plan-file",
+        dest="plan_file",
+        default=None,
+        help=_t("Path to a JSON apply plan (fields like activate/deactivate)"),
+    )
+    parser.add_argument(
+        "--plan",
+        dest="plan_inline",
+        default=None,
+        help=_t("Inline JSON string for apply plan (mutually exclusive with --plan-file)"),
+    )
+    parser.add_argument(
+        "--gating-policy",
+        dest="gating_policy",
+        default=None,
+        help=_t("Optional gating policy JSON for apply requests"),
     )
     parser.add_argument(
         "--target", "-t",
@@ -115,6 +141,7 @@ def cmd_world(argv: List[str]) -> int:
         "info": lambda: _world_info(args),
         "delete": lambda: _world_delete(args),
         "allocations": lambda: _world_allocations(args),
+        "apply": lambda: _world_apply(args),
         "rebalance-plan": lambda: _rebalance(args, apply=False),
         "rebalance-apply": lambda: _rebalance(args, apply=True),
     }
@@ -273,12 +300,14 @@ def _world_allocations(args: argparse.Namespace) -> int:
     if status_code >= 400 or status_code == 0:
         err = payload.get("detail") if isinstance(payload, dict) else status_code
         print(_t("Error fetching allocations: {}").format(err), file=sys.stderr)
+        _print_allocation_apply_hint(world_id)
         return 1
     allocations = payload.get("allocations") if isinstance(payload, dict) else None
     print(_t("🌍 World allocations"))
     print("=" * 40)
     if not allocations:
         print(_t("No allocation records found"))
+        _print_allocation_apply_hint(world_id)
         return 0
     for wid, snapshot in sorted(allocations.items()):
         alloc = snapshot.get("allocation") if isinstance(snapshot, dict) else None
@@ -293,7 +322,73 @@ def _world_allocations(args: argparse.Namespace) -> int:
             print("  strategies:")
             for sid, ratio in sorted(strategy_total.items()):
                 print(f"    - {sid}: {float(ratio):.4f}")
+    _print_allocation_apply_hint(world_id)
     return 0
+
+
+def _world_apply(args: argparse.Namespace) -> int:
+    world_id = args.world_id or args.name
+    if not world_id:
+        print(_t("Error: world id required for apply"), file=sys.stderr)
+        return 1
+
+    plan_payload: Dict[str, Any] | None = None
+    if args.plan_inline and args.plan_file:
+        print(_t("Error: use either --plan or --plan-file, not both"), file=sys.stderr)
+        return 1
+    if args.plan_inline:
+        try:
+            plan_payload = json.loads(args.plan_inline)
+        except Exception as exc:
+            print(_t("Error parsing inline plan JSON: {}").format(exc), file=sys.stderr)
+            return 1
+    if args.plan_file:
+        try:
+            plan_payload = json.loads(Path(args.plan_file).read_text())
+        except Exception as exc:
+            print(_t("Error reading plan file '{}': {}").format(args.plan_file, exc), file=sys.stderr)
+            return 1
+
+    payload: Dict[str, Any] = {"run_id": args.run_id or str(uuid.uuid4())}
+    if plan_payload is not None:
+        payload["plan"] = plan_payload
+
+    if args.gating_policy:
+        try:
+            payload["gating_policy"] = json.loads(args.gating_policy)
+        except Exception as exc:
+            print(_t("Error parsing gating policy JSON: {}").format(exc), file=sys.stderr)
+            return 1
+
+    status_code, resp = http_post(f"/worlds/{world_id}/apply", payload)
+    if status_code >= 400 or status_code == 0:
+        err = resp.get("detail") if isinstance(resp, dict) else status_code
+        print(_t("Apply request failed: {}").format(err), file=sys.stderr)
+        return 1
+
+    print(_t("🚦 Apply request sent"))
+    print(f"World:  {world_id}")
+    print(f"Run ID: {payload['run_id']}")
+    phase = resp.get("phase") if isinstance(resp, dict) else None
+    if phase:
+        print(f"Phase:  {phase}")
+    active = resp.get("active") if isinstance(resp, dict) else None
+    if isinstance(active, list):
+        print(_t("Active strategies:"))
+        for sid in active:
+            print(f"  - {sid}")
+    _print_allocation_apply_hint(world_id)
+    return 0
+
+
+def _print_allocation_apply_hint(world_id: str | None) -> None:
+    wid = world_id or "<world>"
+    alloc_cmd = f"qmtl world allocations -w {wid}"
+    apply_cmd = f"qmtl world apply {wid} --run-id <id> [--plan-file plan.json]"
+    print(_t("Hint: use `{alloc_cmd}` to refresh snapshots or `{apply_cmd}` to request apply/rollback.").format(
+        alloc_cmd=alloc_cmd,
+        apply_cmd=apply_cmd,
+    ))
 
 
 def _render_rebalance_response(payload: Any) -> None:

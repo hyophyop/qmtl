@@ -161,6 +161,12 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 - `docs/ko/operations/activation.md`, `docs/ko/operations/rebalancing_execution.md`  
   - 2‑Phase Apply, 활성 TTL/etag, 리밸런싱 승인 플로우를 Core Loop 기준으로 재정리한다.
 
+### 4.4 제출 → 스냅샷 → apply 운영 흐름
+
+- `Runner.submit ... --world <id>`는 제출된 world의 `/allocations` 스냅샷(etag/updated_at 포함)을 **읽기 전용**으로 노출한다. 스냅샷이 누락/만료되면 CLI가 `qmtl world allocations -w <id>`로 새로고침 힌트를 출력한다.
+- 운영자가 자본 배분을 적용할 때는 명시적으로 `qmtl world apply <id> --run-id <id> [--plan-file plan.json|--plan '{"activate":[...]}']`를 실행한다. 기본값은 적용하지 않는 안전 모드이며, run_id는 감사/롤백을 위해 항상 요구한다.
+- apply/rollback 승인은 운영 단계로 남겨 두고, 모든 배분 변경은 etag/run_id 기반으로 감사 가능해야 한다. 스냅샷 섹션의 가이던스는 submit → allocations 조회 → apply 순서를 그대로 안내해야 한다.
+
 ## 5. T3 — 데이터 플레인/Seamless 트랙
 
 **연결 프로그램**: P-A (데이터 preset), P-C (Data Autopilot)

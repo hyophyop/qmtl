@@ -168,6 +168,31 @@ def test_submit_json_includes_allocation(core_loop_world_id: str, monkeypatch: p
     assert result["code"] in (0, 1)
 
 
+def test_submit_to_apply_flow(core_loop_world_id: str, core_loop_stack: CoreLoopStackHandle, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    env = dict(os.environ)
+    env.setdefault("QMTL_GATEWAY_URL", core_loop_stack.gateway_url)
+    payload, _ = _submit_json(
+        "core_loop_demo_strategy:CoreLoopDemoStrategy",
+        world=core_loop_world_id,
+        mode="backtest",
+    )
+    allocation = payload.get("allocation") or {}
+    assert allocation.get("world_id") in _world_id_candidates(core_loop_world_id)
+
+    apply_run = "core-loop-apply"
+    proc = subprocess.run(
+        ["qmtl", "world", "apply", core_loop_world_id, "--run-id", apply_run],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Apply request sent" in proc.stdout
+    assert apply_run in proc.stdout
+
+
 def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandle, core_loop_world_id: str):
     base = core_loop_stack.worlds_url.rstrip("/")
     wid = urllib.parse.quote(core_loop_world_id)
