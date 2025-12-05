@@ -175,6 +175,17 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
   - `history_provider` 직접 구성 패턴은 가능한 한 폐기하거나 보조 경로로 제한한다.
 - **P1‑T3‑M2 — 스키마 레지스트리 거버넌스 정식화**
   - Seamless v2 문서의 “카나리/스트릭트 검증” 목표 상태를 구현해, 스키마 변경 시 카나리→스트릭트 전환 플로우를 제공한다.
+  - P‑C / T3 P1‑M2 범위는 다음 이슈에 매핑된다.
+    - #1150 — 레지스트리 계약/검증 모드/감사: `SchemaRegistryClient`·`RemoteSchemaRegistryClient`, `validation_mode`/`QMTL_SCHEMA_VALIDATION_MODE`, `QMTL_SCHEMA_REGISTRY_URL`, `seamless_schema_validation_failures_total`, `scripts/schema/audit_log.py`.
+    - #1151 — 관측·거버넌스 런북: `operations/monitoring/seamless_v2.jsonnet`, `alert_rules.yml`(`SeamlessSla99thDegraded`, `SeamlessBackfillStuckLease`, `SeamlessConformanceFlagSpike`), `scripts/seamless_health_check.py`를 포함해 대시보드/경보/헬스체크가 즉시 사용 가능하다.
+    - #1152 — 검증/실패 주입 회귀: Hypothesis 커버리지·실패 주입·관측 스냅샷 테스트(`tests/qmtl/runtime/sdk/test_history_coverage_property.py`, `tests/qmtl/runtime/sdk/test_seamless_provider.py`, `tests/qmtl/foundation/schema/test_registry.py`)를 아래 명령으로 실행하며 CI `test` 잡에서 동일 경로로 실행된다.
+
+      ```
+      uv run -m pytest -W error -n auto \
+        tests/qmtl/runtime/sdk/test_history_coverage_property.py \
+        tests/qmtl/runtime/sdk/test_seamless_provider.py \
+        tests/qmtl/foundation/schema/test_registry.py
+      ```
 - **P2‑T3‑M3 — 멀티 업스트림/Tag 기반 자동 큐 매핑 강화**
   - Tag 기반 멀티 큐·멀티자산 전략에서 데이터 플레인 설정 없이도 적절한 큐를 자동 선택하도록, Gateway/DAG Manager와 Seamless 간의 태그/interval 규약을 강화한다.
 
