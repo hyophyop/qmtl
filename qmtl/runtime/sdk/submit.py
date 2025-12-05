@@ -24,7 +24,7 @@ from decimal import Decimal
 from threading import Thread
 from dataclasses import dataclass, field
 from math import isfinite
-from typing import TYPE_CHECKING, Any, Coroutine, Sequence
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence, SupportsFloat
 
 import httpx
 
@@ -1550,7 +1550,7 @@ def _derive_returns_with_auto(
 
 def _extract_price_series(
     strategy: "Strategy", price_attributes: Sequence[str]
-) -> tuple[list[float], str | None]:
+) -> tuple[list[SupportsFloat], str | None]:
     for attr in price_attributes:
         candidate = getattr(strategy, attr, None)
         if candidate is None or isinstance(candidate, str):
@@ -1565,7 +1565,7 @@ def _extract_price_series(
     return [], None
 
 
-def _pct_change(values: Sequence[numbers.Real]) -> list[float]:
+def _pct_change(values: Sequence[SupportsFloat]) -> list[float]:
     returns: list[float] = []
     for idx in range(1, len(values)):
         prev, curr = values[idx - 1], values[idx]
@@ -1579,7 +1579,7 @@ def _pct_change(values: Sequence[numbers.Real]) -> list[float]:
     return returns
 
 
-def _is_finite_number(value: object) -> bool:
+def _is_finite_number(value: numbers.Real | SupportsFloat) -> bool:
     if isinstance(value, bool):
         return False
     try:

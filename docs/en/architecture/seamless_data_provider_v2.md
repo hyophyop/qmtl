@@ -114,17 +114,47 @@ behaviour are active today.
 
 ## Schema Registry Governance
 
-Schema validation remains best-effort. The runtime exposes utilities for
-callers to supply schema definitions, but no central registry is consulted.
-The desired end state introduces two modes:
+Seamless v2 integrates with the shared QMTL schema registry layer. Schemas used
+for normalisation and rollups are managed via
+`qmtl.foundation.schema.SchemaRegistryClient`, which can operate in in-memory
+or remote modes depending on configuration.
 
-- **Canary** validation mirrors requests and records compatibility diagnostics
-  without blocking.
-- **Strict** validation stops any response whose payload deviates from the
-  approved schema.
+- Registry integration
+  - By default, `SchemaRegistryClient` stores schemas in-process. When
+    `connectors.schema_registry_url` or `QMTL_SCHEMA_REGISTRY_URL` is set,
+    `RemoteSchemaRegistryClient` talks to an external registry.
+  - The conformance pipeline’s schema-rollup stage is designed to evaluate
+    compatibility against these canonical registry-backed schemas.
+- Validation modes
+  - Governance is configured via the `validation_mode` parameter or the
+    `QMTL_SCHEMA_VALIDATION_MODE` env var, supporting `canary` and `strict`
+    modes (`canary` is the default).
+  - **Canary** validation mirrors requests and records compatibility diagnostics
+    without blocking responses.
+  - **Strict** validation rejects incompatible payloads and raises
+    `SchemaValidationError` when approved schemas are violated.
+- Observability & audit
+  - All compatibility failures are recorded in the Prometheus counter
+    `seamless_schema_validation_failures_total{subject,mode}`, which dashboards
+    use to monitor regressions during canary→strict transitions.
+  - Strict-mode promotions are captured via `scripts/schema/audit_log.py`,
+    which persists schema bundle SHAs and validation windows; the full workflow
+    is defined in `docs/en/operations/schema_registry_governance.md`.
 
-As of now, promotion between modes is manual and per-consumer. There is no audit
-trail, registry integration, or automation around schema bundle fingerprinting.
+This closes the original gap where validation was described as “best-effort with
+no central registry or governance hooks”. The Seamless data plane now follows
+the Core Loop roadmap’s **P‑C / T3 P1‑M2 — Schema Registry Governance
+formalization** contract.
+
+### Canary → strict rollout checklist (operations)
+
+1. **Register schema:** publish the new subject/version to the registry and pin the bundle SHA.  
+   `uv run python scripts/schema/audit_log.py --bundle schemas/vX --note "ohlcv 1m vX canary"`
+2. **Canary deploy:** restart Seamless with `validation_mode=canary` (or set `QMTL_SCHEMA_VALIDATION_MODE=canary`). Runner/CLI use the world preset data spec as the subject automatically.
+3. **Monitor:** watch `seamless_schema_validation_failures_total{subject,mode="canary"}` and ConformancePipeline warning logs for 24–48h.
+4. **Promote to strict:** switch to `validation_mode=strict` and re-check metrics/logs. If failures surface, revert to canary immediately and block the offending subject.
+5. **Audit:** append the promotion window and bundle SHA to the audit log and annotate dashboards.
+6. **Rollback path:** from strict, downgrade to canary for failing subjects and tombstone the problematic schema until a fixed version is published.
 
 ## Observability Surfaces
 
@@ -162,7 +192,13 @@ regressions surface before release promotion.
 
 ## Next Steps
 
-Teams can now migrate workloads to the distributed coordinator and wire SLA
-alerts without waiting on additional runtime releases. Track issues
-#1150–#1152 for the remaining schema-governance milestones; the coordinator and
-SLA work described in this document is complete.
+Teams can now migrate workloads to the distributed coordinator, rely on SLA
+enforcement, and adopt the schema registry governance flow described here
+without waiting on additional runtime releases. The schema-governance milestones
+from the original Seamless rollout were tracked via issues #1150–#1152 and are
+now complete; those references remain useful as historical context.
+
+Future adjustments (dashboard polish, runbook refinements, roadmap alignment)
+should be managed through the Core Loop roadmap’s P‑C / T3 track and the
+`docs/en/operations/schema_registry_governance.md` runbook rather than new
+runtime changes.

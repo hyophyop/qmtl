@@ -68,4 +68,12 @@ If a check fails the Gateway responds with HTTP 422 and `E_SHARED_ACCOUNT_POLICY
 - **Audit trail:** the Gateway records an `append_event` entry under `rebalance:<world_id>` summarising order counts and reduce-only ratios for each batch.
 - **Commit log:** submitted batches are written to the commit log as `("gateway.rebalance", timestamp_ms, batch_id, payload)` where `payload` contains the batch scope, orders and metadata (shared-account flag, reduce-only ratio, mode).
 
+## 2‑Phase apply / rollback checkpoints
+
+- Rebalancing applies are tracked with `run_id`/`etag` like world activation; review `/worlds/{id}/apply` logs alongside `rebalance:<world_id>` audit entries.
+- CLI examples  
+  - Plan: `uv run qmtl world rebalance-plan --world-id demo_world --target w1=0.6,w2=0.4 --output json`  
+  - Apply: `uv run qmtl world rebalance-apply --world-id demo_world --target w1=0.6,w2=0.4 --run-id $(uuidgen) --etag <etag> --submit=true`
+- On failure, `rebalance_plan_execution_failures_total` increments and the batch remains in Commit Log/Audit; re-apply with the same `run_id` or rollback via `activation set` before retrying.
+
 {{ nav_links() }}

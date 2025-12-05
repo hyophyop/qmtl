@@ -2,7 +2,7 @@
 title: "심리스 데이터 프로바이더 v2 아키텍처"
 tags: [architecture, seamless, data]
 author: "QMTL Team"
-last_modified: 2025-12-04
+last_modified: 2025-12-06
 ---
 
 # 심리스 데이터 프로바이더 v2 아키텍처
@@ -137,12 +137,38 @@ data_presets:
 
 ## 스키마 레지스트리 거버넌스
 
-스키마 검증은 아직 최선의 노력 수준입니다. 런타임은 호출자가 스키마 정의를 제공할 수 있는 도구를 노출하지만 중앙 레지스트리를 조회하지는 않습니다. 목표 상태는 두 가지 모드를 도입하는 것입니다.
+Seamless v2는 이제 QMTL 공통 스키마 레지스트리 계층과 연동됩니다. 데이터 정규화·롤업에서 사용하는 스키마는
+`qmtl.foundation.schema.SchemaRegistryClient`를 통해 관리되며, 구성에 따라 인메모리/원격 레지스트리를 선택합니다.
 
-- **카나리** 검증은 요청을 미러링하고 호환성 진단을 기록하지만 차단하지 않습니다.
-- **스트릭트** 검증은 승인된 스키마와 다른 페이로드가 반환되는 즉시 응답을 차단합니다.
+- 레지스트리 통합
+  - 기본값은 인메모리 `SchemaRegistryClient`이며, 원격 사용 시 `connectors.schema_registry_url`
+    또는 `QMTL_SCHEMA_REGISTRY_URL` 환경 변수를 통해 `RemoteSchemaRegistryClient`를 활성화합니다.
+  - ConformancePipeline의 스키마 롤업 단계는 이 레지스트리에 저장된 **정규 스키마**를 기준으로 호환성을 판단하도록 설계되었습니다.
+- 검증 모드
+  - 거버넌스는 `validation_mode` 인자나 `QMTL_SCHEMA_VALIDATION_MODE` 환경 변수를 통해
+    `canary` / `strict` 모드를 선택합니다(`canary` 기본, `strict` 강제).
+  - **카나리(canary)** 모드는 요청을 미러링하고 호환성 진단을 기록하지만 응답을 차단하지 않습니다.
+  - **스트릭트(strict)** 모드는 승인된 스키마와 호환되지 않는 페이로드가 감지되는 즉시 응답을 차단하고
+    `SchemaValidationError`를 발생시킵니다.
+- 관측·감사
+  - 모든 호환성 위반은 Prometheus 카운터 `seamless_schema_validation_failures_total{subject,mode}`에 기록되며,
+    대시보드는 이 메트릭을 기반으로 카나리→스트릭트 전환에서 회귀를 감시합니다.
+  - 엄격 롤아웃은 `scripts/schema/audit_log.py`를 사용해 스키마 번들 SHA와 검증 윈도우를 감사 로그에 고정합니다.
+    세부 수동은 `docs/ko/operations/schema_registry_governance.md` 런북에 정의되어 있습니다.
 
-현재는 소비자별로 모드 전환을 수동으로 수행해야 하며 감사 로그, 레지스트리 통합, 스키마 번들 핑거프린팅 자동화가 없습니다.
+이로써 초기 설계에서 남아 있던 “best-effort 수준의 검증, 중앙 레지스트리 미사용, 감사/번들 지표 부재” 공백은 해소되었으며,
+Seamless 데이터 플레인도 Core Loop 로드맵의 **P‑C / T3 P1‑M2 — 스키마 레지스트리 거버넌스 정식화** 기준에 맞춰 운영됩니다.
+
+### 카나리 → 스트릭트 전환 체크리스트 (운영)
+
+1. **스키마 등록**: SchemaRegistry에 새 subject/버전을 올리고 번들 SHA를 기록합니다.  
+   `uv run python scripts/schema/audit_log.py --bundle schemas/vX --note "ohlcv 1m vX canary"`
+2. **카나리 배포**: `validation_mode=canary`(또는 `QMTL_SCHEMA_VALIDATION_MODE=canary`)로 Seamless 인스턴스를 재기동합니다.  
+   Runner/CLI는 world preset에 포함된 데이터 스펙을 subject로 사용하므로 별도 토글이 필요 없습니다.
+3. **모니터링**: `seamless_schema_validation_failures_total{subject,mode="canary"}`와 ConformancePipeline 경고 로그를 24–48h 관찰합니다.
+4. **스트릭트 전환**: `validation_mode=strict`로 승격 후 동일 메트릭/로그를 확인합니다. 실패 시 즉시 카나리로 되돌리고 대상 subject를 차단합니다.
+5. **감사**: 전환 시점의 번들 SHA와 윈도우를 감사 로그에 추가하고 대시보드 메모를 남깁니다.
+6. **롤백 경로**: strict에서 실패하는 subject는 `validation_mode=canary`로 즉시 다운그레이드하고, 문제 스키마를 잠시 tombstone 처리한 뒤 재배포합니다.
 
 ## 관측 지표
 
@@ -168,4 +194,10 @@ uv run -m pytest -W error -n auto \
 
 ## 다음 단계
 
-이제 팀은 분산 코디네이터로 워크로드를 마이그레이션하고 SLA 알림을 연동할 수 있으며 추가 런타임 릴리스를 기다릴 필요가 없습니다. 남은 스키마 거버넌스 이정표는 #1150–#1152 이슈를 추적하면 되고, 본 문서에서 설명한 코디네이터와 SLA 작업은 완료되었습니다.
+이제 팀은 분산 코디네이터, SLA 집행, 스키마 레지스트리 거버넌스를 포함한 Seamless v2 스택을 활용해
+프로덕션 워크로드를 운영할 수 있으며, 추가 런타임 릴리스를 기다릴 필요가 없습니다. 원래 남아 있던
+스키마 거버넌스 이정표는 #1150–#1152 이슈를 통해 마무리되었고, 본 문서에서 설명하는 코디네이터·SLA·레지스트리 경로는
+현재 구현 상태를 반영합니다.
+
+향후 조정 사항(대시보드/런북 다듬기, Core Loop 로드맵와의 정합성 유지)은 Core Loop 로드맵의 P‑C / T3 항목과
+`docs/ko/operations/schema_registry_governance.md` 런북을 기준으로 관리합니다.

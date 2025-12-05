@@ -23,27 +23,30 @@ last_modified: 2025-08-29
 - Local ValidationPipeline output is shown separately as “pre-check” (non-authoritative) for debugging; investigate WS metrics/logs first when there is a mismatch.
 - Downgrade signals (`downgraded/safe_mode/downgrade_reason`) remain at the top-level to expose default-safe paths from CLI/SDK.
 
-## Procedures
+## Procedures (2‑Phase Apply)
 
 1) Freeze/Drain
-- PUT `/worlds/{id}/activation` with override `{ active:false }` (world‑wide) or add a circuit flag
-- Verify orders gated OFF via SDK metrics/logs
+- PUT `/worlds/{id}/activation` with `{active:false}` (use the HTTP API or SDK; activation CLI commands are not available).
+- Verify order gates OFF via SDK/Gateway metrics (`pretrade_attempts_total` drop)
 
-2) Apply (Switch)
-- POST `/worlds/{id}/evaluate` to generate a plan
-- Review plan; POST `/worlds/{id}/apply` with `run_id`
-- Monitor `world_apply_duration_ms` and audit log for completion
+2) Evaluate
+- POST `/worlds/{id}/evaluate`
+- Capture `ttl/etag/run_id` from the response for apply input
 
-3) Unfreeze
-- Remove circuit/override; verify ActivationEnvelope etag advanced
+3) Apply (Switch)
+- POST `/worlds/{id}/apply` with `run_id` (required) and `etag` (optimistic lock)
+- Monitor `world_apply_duration_ms`, `activation_skew_seconds`, and audit log entries (`world:<id>:activation`)
+
+4) Unfreeze
+- Remove overrides and confirm ActivationEnvelope `etag` increments/TTL is valid (via HTTP API/SDK)
 
 ## Rollback
-- If apply fails or regression is detected, restore previous activation snapshot (recorded in audit log)
-- Confirm via `GET /worlds/{id}/activation` and SDK behavior
+- On apply failure or regression, restore the previous activation snapshot from the audit log (`activation set`) and verify via SDK/CLI WS envelopes.
+- Track until `promotion_fail_total` alerts clear.
 
 ## Alerts & Dashboards
-- Alerts: promotion_fail_total, activation_skew_seconds, stale_decision_cache
-- Dashboards: world_decide_latency_ms_p95, event fanout lag, gateway proxy error rates
-- Use world-scoped metrics such as `pretrade_attempts_total{world_id="demo"}` to verify activation state per world.
+- Alerts: `promotion_fail_total`, `activation_skew_seconds`, `stale_decision_cache`
+- Dashboards: `world_decide_latency_ms_p95`, ControlBus fanout lag, Gateway proxy error rates
+- World-scoped metrics (e.g., `pretrade_attempts_total{world_id="demo"}`) cross-check circuit state per world.
 
 {{ nav_links() }}
