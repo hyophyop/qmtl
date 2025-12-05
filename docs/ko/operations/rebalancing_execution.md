@@ -50,7 +50,7 @@ for payload in orders:
 
 모드 선택
 - 요청 바디에 `mode`를 지정하세요(`scaling` 기본).
-- `overlay`/`hybrid`는 현재 미구현이며 호출 시 NotImplementedError가 발생합니다.
+- `overlay`는 `overlay.instrument_by_world` + `overlay.price_by_symbol`이 필요하며 `overlay_deltas`를 반환합니다. `hybrid`는 미구현이며 HTTP 501을 반환합니다.
 
 공유계정 모드가 아닌 경우에는 **월드별** `per_world` 결과만 실행하고, `global_deltas`는 분석용으로만 사용하세요. `shared_account=true` 인 경우 Gateway는 `scope="global"` 배치를 `per_world` 배치와 함께 기록해 다운스트림 소비자가 원하는 집계 레벨을 선택할 수 있습니다.
 

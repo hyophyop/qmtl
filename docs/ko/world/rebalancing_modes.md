@@ -17,8 +17,8 @@ last_modified: 2025-11-04
 QMTL에서의 선택
 - `POST /rebalancing/plan|apply` 요청에 `mode`를 지정합니다.
   - `mode: scaling` (기본): 스케일링 플래너 사용
-  - `mode: overlay`: (현재 미구현 — 호출 시 NotImplementedError)
-  - `mode: hybrid`: (현재 미구현 — 호출 시 NotImplementedError)
+  - `mode: overlay`: 오버레이 대리종목을 사용해 월드 총 노출을 스케일링합니다.
+  - `mode: hybrid`: (현재 미구현 — 호출 시 HTTP 501)
 
 요청 확장(오버레이)
 ```json
@@ -33,13 +33,13 @@ QMTL에서의 선택
 ```
 
 상태
-- 오버레이/하이브리드는 현재 설계 논의가 필요한 단계이며, 호출 시 NotImplementedError가 발생합니다. 스케일링만 지원합니다.
+- 오버레이는 `overlay.instrument_by_world`, `overlay.price_by_symbol`이 함께 전달될 때 동작합니다. 구성값이 없으면 HTTP 422를 반환합니다. 하이브리드는 여전히 미구현이며 HTTP 501을 반환합니다.
 
 게이트웨이 실행
-- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라 동작하지만, `overlay`/`hybrid`는 현재 미구현(NotImplementedError)입니다.
+- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라 동작합니다. 오버레이 플랜에는 월드별 오버레이 주문(`overlay_deltas`)이 포함됩니다. 하이브리드는 미구현이며 HTTP 501을 반환합니다.
 
 모듈 교체(플러그형)
 - 스케일링 엔진은 활성화되어 있습니다(`MultiWorldProportionalRebalancer`).
-- 오버레이/하이브리드는 인터페이스만 정의되었고 비활성(호출 시 NotImplementedError)입니다. 후속 설계 논의 후 활성화됩니다.
+- 오버레이 플래너는 구성값이 있을 때 활성화되며, 하이브리드는 설계가 완료될 때까지 비활성 상태입니다.
 
 {{ nav_links() }}

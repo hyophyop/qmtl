@@ -17,8 +17,8 @@ Differences
 Selecting in QMTL
 - Set `mode` in `POST /rebalancing/plan|apply`.
   - `scaling` (default)
-  - `overlay` (not implemented — raises NotImplementedError)
-  - `hybrid` (not implemented — raises NotImplementedError)
+  - `overlay` (uses overlay instruments to scale world notional; see below)
+  - `hybrid` (not implemented — returns HTTP 501)
 
 Overlay request extension
 ```json
@@ -33,13 +33,13 @@ Overlay request extension
 ```
 
 Status
-- Overlay/Hybrid are currently disabled; calling them raises NotImplementedError. Scaling is supported.
+- Overlay is supported when `overlay.instrument_by_world` and `overlay.price_by_symbol` are provided. Requests missing config return HTTP 422. Hybrid remains disabled and returns HTTP 501.
 
 Gateway execution
-- `POST /rebalancing/execute` honors `mode` and `shared_account`, but `overlay`/`hybrid` are not implemented and raise NotImplementedError.
+- `POST /rebalancing/execute` honors `mode` and `shared_account`. Overlay plans include `overlay_deltas` (per-world overlay trades). Hybrid is not implemented and raises HTTP 501.
 
 Pluggability
 - Scaling engine is active (`MultiWorldProportionalRebalancer`).
-- Overlay/Hybrid have interfaces only and are disabled (raise NotImplementedError) until further design is complete.
+- Overlay planner is active when configured; Hybrid is still disabled until its design is complete.
 
 {{ nav_links() }}

@@ -296,7 +296,7 @@ gating_policy:
 
 ## 5. 할당 & 리밸런싱 API (규범)
 
-WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가지 표면을 노출합니다. 모든 경로는 `mode='scaling'`(기본값)을 중심으로 동작하며, `overlay`/`hybrid`는 아직 미구현이므로 501을 반환합니다.
+WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가지 표면을 노출합니다. 모든 경로는 `mode='scaling'`(기본값)을 중심으로 동작하며, `overlay`는 구성값이 있을 때 지원되고 `hybrid`는 아직 미구현(HTTP 501)입니다.
 
 ### 5‑A. `POST /allocations` — 월드 비중 업서트
 
@@ -310,7 +310,7 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 
 ### 5‑B. `POST /rebalancing/plan`
 
-- 동일한 [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }})를 받아 `MultiWorldProportionalRebalancer`로 플랜을 산출합니다. `mode`가 `overlay`/`hybrid`면 501을 반환하며, 결과는 월드별 스케일·델타와 다중 월드 합산 뷰(`global_deltas`)만 포함합니다.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
+- 동일한 [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }})를 받아 `MultiWorldProportionalRebalancer`로 플랜을 산출합니다. `mode`가 `hybrid`면 501을 반환합니다. `overlay` 요청은 월드별 스케일·델타와 함께 `overlay_deltas` 및 다중 월드 합산 뷰(`global_deltas`)를 제공합니다.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
 - 이 엔드포인트는 상태를 저장하지 않고 감사 로그도 남기지 않습니다. 운영자는 플랜을 사전 검토하거나 시뮬레이션 파이프라인에서 사용합니다.
 
 ### 5‑C. `POST /rebalancing/apply`
