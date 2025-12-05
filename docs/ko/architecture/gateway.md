@@ -335,6 +335,9 @@ POST /events/subscribe
 
 - Gateway는 내부 ControlBus를 구독하고 디스크립터 URL을 통해 SDK로 이벤트를 중계합니다.
 - 순서는 키(월드 또는 태그+인터벌) 단위로 보장됩니다. 컨슈머는 ``etag``/``run_id``로 중복 제거합니다. 각 토픽의 첫 메시지는 전체 스냅샷이거나 `state_hash`를 포함하는 것이 바람직합니다.
+- **공개 범위:** 이 디스크립터는 현재 ActivationManager, TagQueryManager 등 SDK 내부용입니다. 사용자 대상의 범용
+  CLI/SDK 구독 헬퍼는 아직 없으므로, 안정화된 표면이 제공될 때까지 `qmtl status`, `GET /worlds/{id}` 같은
+  Gateway/WorldService 엔드포인트를 폴링하세요.
 
 토큰(JWT) 클레임(위임 WS 또는 향후 용도):
 - `aud`: `controlbus`

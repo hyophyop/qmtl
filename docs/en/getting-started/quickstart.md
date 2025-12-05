@@ -204,6 +204,11 @@ result = Runner.submit(
     # Subscribe to real-time stream in Python
     Runner.subscribe(world="quickstart_demo", on_update=print)
     ```
+
+    _Status:_ The ControlBus stream exists for internal SDK components, but a
+    stable CLI/SDK helper for user-facing subscriptions is not yet shipped.
+    Poll `qmtl status`/`qmtl world info` or REST endpoints for live monitoring
+    until the subscription surface is published.
     
     - Check real-time performance/rank/contribution in dashboard UI
     - Auto-receive promotion/demotion notifications

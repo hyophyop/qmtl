@@ -321,9 +321,11 @@ Automated:
     ```
     
     **Current State:**
-    
+
     - Query via CLI `qmtl status` or `qmtl world info`
-    - Real-time stream subscription not implemented
+    - ControlBus streams exist for internal SDK services (activation/TagQuery),
+      but there is no stable public subscribe helper yet. For now, poll via CLI
+      or REST for world/strategy status.
 
 ---
 
