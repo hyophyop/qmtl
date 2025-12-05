@@ -222,13 +222,18 @@ def _load_positions(path: str | None) -> List[Dict[str, Any]]:
     for idx, entry in enumerate(data):
         if not isinstance(entry, dict):
             raise ValueError(f"Position entry {idx} must be an object")
-        required = {"world_id", "strategy_id", "symbol", "qty", "mark"}
+        required = {"world_id", "strategy_id", "symbol", "qty"}
         missing = sorted(required - set(entry))
         if missing:
             raise ValueError(f"Position entry {idx} missing fields: {', '.join(missing)}")
+        mark = entry.get("mark")
+        if mark is None:
+            raise ValueError(
+                "Position entry {} missing required field: mark".format(idx)
+            )
         try:
             entry = dict(entry)
-            entry["mark"] = float(entry["mark"])
+            entry["mark"] = float(mark)
         except (TypeError, ValueError):
             raise ValueError(f"Position entry {idx} has invalid mark: {entry.get('mark')}")
         positions.append(entry)
@@ -236,7 +241,7 @@ def _load_positions(path: str | None) -> List[Dict[str, Any]]:
 
 
 def _fetch_current_allocations(world_id: str | None) -> Dict[str, float]:
-    params = {"world_id": world_id} if world_id else None
+    params: Dict[str, object] | None = {"world_id": world_id} if world_id else None
     status_code, payload = http_get("/allocations", params)
     if status_code >= 400 or status_code == 0:
         err = payload.get("detail") if isinstance(payload, dict) else status_code
@@ -256,7 +261,7 @@ def _fetch_current_allocations(world_id: str | None) -> Dict[str, float]:
 
 def _world_allocations(args: argparse.Namespace) -> int:
     world_id = args.world_id or args.name
-    params = {"world_id": world_id} if world_id else None
+    params: Dict[str, object] | None = {"world_id": world_id} if world_id else None
     status_code, payload = http_get("/allocations", params)
     if status_code >= 400 or status_code == 0:
         err = payload.get("detail") if isinstance(payload, dict) else status_code
@@ -346,6 +351,14 @@ def _rebalance(args: argparse.Namespace, *, apply: bool) -> int:
             current_alloc = _fetch_current_allocations(args.world_id)
         except RuntimeError as exc:
             print(exc, file=sys.stderr)
+            return 1
+        if not current_alloc:
+            print(
+                _t(
+                    "Error: no allocation snapshot available; provide --current or ensure the world has allocations"
+                ),
+                file=sys.stderr,
+            )
             return 1
 
     payload: Dict[str, Any] = {

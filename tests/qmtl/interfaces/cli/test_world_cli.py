@@ -81,6 +81,47 @@ def test_rebalance_plan_builds_payload(monkeypatch, tmp_path: Path, capsys):
     assert "Rebalance plan" in out
 
 
+def test_rebalance_plan_requires_mark(monkeypatch, tmp_path: Path, capsys):
+    positions_file = tmp_path / "positions.json"
+    positions_file.write_text(
+        json.dumps(
+            [
+                {
+                    "world_id": "w1",
+                    "strategy_id": "s1",
+                    "symbol": "BTC",
+                    "qty": 1,
+                }
+            ]
+        )
+    )
+
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {}
+
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(
+        [
+            "rebalance-plan",
+            "--target",
+            "w1=1.0",
+            "--current",
+            "w1=0.5",
+            "--positions-file",
+            str(positions_file),
+        ]
+    )
+
+    assert exit_code == 1
+    assert posts == []
+    err = capsys.readouterr().err
+    assert "mark" in err
+
+
 def test_rebalance_apply_fetches_current(monkeypatch, capsys):
     gets: list[tuple[str, dict | None]] = []
     posts: list[tuple[str, dict]] = []
@@ -126,3 +167,24 @@ def test_rebalance_apply_fails_when_current_snapshot_unavailable(monkeypatch, ca
     assert posts == []
     err = capsys.readouterr().err
     assert "Error fetching allocations" in err
+
+
+def test_rebalance_apply_requires_snapshot(monkeypatch, capsys):
+    def fake_get(path, params=None):
+        return 200, {"allocations": {}}
+
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"per_world": {}, "global_deltas": []}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(["rebalance-apply", "--target", "w1=0.75", "--world-id", "w1"])
+
+    assert exit_code == 1
+    assert posts == []
+    err = capsys.readouterr().err
+    assert "no allocation snapshot" in err
