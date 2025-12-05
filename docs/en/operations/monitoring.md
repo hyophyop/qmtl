@@ -2,7 +2,7 @@
 title: "Monitoring and Alerting"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-25
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -10,6 +10,8 @@ last_modified: 2025-08-25
 # Monitoring and Alerting
 
 This document outlines sample Prometheus alerts and Grafana dashboards for QMTL services.
+
+Core Loop-wide golden signals, SLOs, and dashboards live in [core_loop_golden_signals.md](core_loop_golden_signals.md). This page focuses on service-level metrics and deployment paths.
 
 ## Alert Rules
 

@@ -197,8 +197,8 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 
 - **P0‑T5‑M1 — Determinism checklist completion**
   - Implement and verify the Determinism checklist items from `architecture.md` (NodeID CRC, NodeCache GC, TagQuery stability, etc.).
-- **P1‑T5‑M2 — Core Loop golden-signal dashboards**
-  - Build dashboards that expose key metrics for each Core Loop step (submission latency, backtest coverage, WS evaluation latency, activation propagation, allocation execution).
+- **P1‑T5‑M2 — Core Loop golden-signal dashboards (complete)**
+  - Build dashboards that expose key metrics for each Core Loop step (submission latency, backtest coverage, WS evaluation latency, activation propagation, allocation execution) and pin the SLOs/dashboards in `operations/core_loop_golden_signals.md`.
 - **P2‑T5‑M3 — Failure playbooks and runbooks**
   - Rework Neo4j/Kafka/Redis/WS failure playbooks in terms of their impact on the Core Loop.
 
@@ -241,6 +241,7 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 - SubmitResult now uses shared WS `DecisionEnvelope`/`ActivationEnvelope` schemas as the SSOT with `precheck` separated; CLI/SDK JSON snapshots align with WS and are exercised in the contract suite.
 - World-based data preset on-ramp is live (`world.data.presets[]` → Seamless auto-wiring, `--data-preset` option) and covered by the core-loop demo world contract test.
 - NodeID/TagQuery determinism and the determinism checklist/metrics/runbook are in place; see `../operations/determinism.md` for response guidance.
+- Core Loop golden-signal SLOs/dashboards are anchored in `../operations/core_loop_golden_signals.md`, with architecture/Seamless docs updated to reflect the realised To-Be (T5 P1‑M2 delivered).
 - The Core Loop contract suite runs as a CI gate in `.github/workflows/ci.yml` (`CORE_LOOP_STACK_MODE=inproc`), mapping failures back to this roadmap and `../architecture/architecture.md`.
 
 ## 10. Operating This Roadmap

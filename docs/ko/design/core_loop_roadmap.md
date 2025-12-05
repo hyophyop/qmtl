@@ -248,8 +248,8 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 
 - **P0‑T5‑M1 — Determinism 체크리스트 마감**
   - `architecture.md`의 Determinism 체크리스트 항목(예: NodeID CRC, NodeCache GC, TagQuery 안정성)을 구현/검증한다.
-- **P1‑T5‑M2 — Core Loop 골든 시그널 대시보드**
-  - Core Loop 단계별 지표(제출 지연, backtest 커버리지, WS 평가 지연, 활성 반영 지연, 자본 배분 실행 상태)를 하나의 대시보드에서 확인할 수 있도록 구성한다.
+- **P1‑T5‑M2 — Core Loop 골든 시그널 대시보드 (완료)**
+  - Core Loop 단계별 지표(제출 지연, backtest 커버리지, WS 평가 지연, 활성 반영 지연, 자본 배분 실행 상태)를 하나의 대시보드에서 확인할 수 있도록 구성하고, SLO/대시보드를 `operations/core_loop_golden_signals.md`에 고정한다.
 - **P2‑T5‑M3 — 실패 플레이북/런북 정비**
   - Neo4j/Kafka/Redis/WorldService 장애 시나리오에 대한 런북을 Core Loop 관점에서 재정리한다.
 
@@ -294,6 +294,7 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 - SubmitResult가 WS `DecisionEnvelope`/`ActivationEnvelope` 공용 스키마를 SSOT로 사용하고 `precheck`를 분리하도록 정리됐으며, CLI/SDK JSON 스냅샷과 계약 스위트에서 검증된다.
 - world 기반 데이터 preset 온램프(`world.data.presets[]` → Seamless 오토 와이어링, `--data-preset` 옵션)는 core-loop demo world 계약 테스트로 커버된다.
 - NodeID/TagQuery 결정성과 Determinism 체크리스트/메트릭/런북이 반영됐으며, 대응은 `../operations/determinism.md`를 따른다.
+- Core Loop 골든 시그널 SLO/대시보드가 `../operations/core_loop_golden_signals.md`에 고정되었고, 아키텍처/Seamless 문서의 To‑Be 항목을 반영해 T5 P1‑M2를 달성했다.
 - Core Loop 계약 스위트는 `.github/workflows/ci.yml`에서 `CORE_LOOP_STACK_MODE=inproc`으로 CI 게이트로 실행되며, 실패 시 본 로드맵과 `../architecture/architecture.md`에서 의도/대응을 확인한다.
 
 ---

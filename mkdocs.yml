@@ -78,6 +78,7 @@ nav:
       - E2E Testing: operations/e2e_testing.md
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
+      - Core Loop Golden Signals: operations/core_loop_golden_signals.md
       - Seamless SLA Dashboards: operations/seamless_sla_dashboards.md
       - Seamless Stack Templates: operations/seamless_stack.md
       - WS Load & Endurance: operations/ws_load_testing.md
@@ -190,6 +191,7 @@ plugins:
             "Multi-Asset Factor Patterns": "멀티자산 팩터 패턴"
             "IO & Integrations": "IO & 통합"
             Operations: 운영
+            "Core Loop Golden Signals": "Core Loop 골든 시그널"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             Reference: 레퍼런스
