@@ -163,6 +163,7 @@ class AllocationState:
     etag: Optional[str] = None
     strategy_alloc_total: Dict[str, float] | None = None
     updated_at: Optional[str] = None
+    stale: bool | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
@@ -177,6 +178,8 @@ class AllocationState:
             data["updated_at"] = self.updated_at
         if self.strategy_alloc_total is not None:
             data["strategy_alloc_total"] = dict(self.strategy_alloc_total)
+        if self.stale is not None:
+            data["stale"] = self.stale
         return data
 
 

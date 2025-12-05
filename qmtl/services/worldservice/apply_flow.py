@@ -15,6 +15,7 @@ from .activation import ActivationEventPublisher
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator
 from .edge_overrides import EdgeOverrideManager, EdgeOverridePlan
+from . import metrics as ws_metrics
 from .policy import GatingPolicy
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import ApplyAck, ApplyRequest
@@ -66,6 +67,7 @@ class ApplyCoordinator:
         plan = self._plan_for(gating)
         context = await self._build_context(world_id, payload, gating, plan)
         state = self._runs.start(world_id, payload.run_id, context.target_active)
+        ws_metrics.record_apply_run_started(world_id, payload.run_id)
         await self._record_requested(context, state)
 
         edge_manager = EdgeOverrideManager(self.store, world_id)
@@ -87,13 +89,18 @@ class ApplyCoordinator:
                 context.payload.run_id,
                 ApplyStage.COMPLETED.value,
             )
+            ws_metrics.record_apply_run_completed(context.world_id, context.payload.run_id)
             return ApplyAck(
                 run_id=payload.run_id,
                 active=list(context.target_active),
                 phase=ApplyStage.COMPLETED.value,
             )
-        except HTTPException:
+        except HTTPException as exc:
             await edge_manager.restore()
+            if exc.status_code >= 500:
+                ws_metrics.record_apply_run_failed(
+                    world_id, payload.run_id, stage=state.stage.value
+                )
             raise
         except Exception as exc:  # pragma: no cover - defensive fallback
             await edge_manager.restore()
@@ -261,6 +268,9 @@ class ApplyCoordinator:
             ApplyStage.ROLLED_BACK,
             completed=False,
             active=context.previous_decisions,
+        )
+        ws_metrics.record_apply_run_failed(
+            context.world_id, context.payload.run_id, stage=state.stage.value
         )
         raise HTTPException(status_code=500, detail="apply failed") from exc
 

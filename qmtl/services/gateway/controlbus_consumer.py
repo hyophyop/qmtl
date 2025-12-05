@@ -339,6 +339,9 @@ class ControlBusConsumer:
 
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
+        if msg.topic == "activation":
+            self._record_apply_ack_metrics(msg)
+
         ws_hub = self.ws_hub
         if ws_hub is None:
             return
@@ -370,6 +373,20 @@ class ControlBusConsumer:
             return
 
         logger.warning("Unhandled ControlBus topic %s", msg.topic)
+
+    def _record_apply_ack_metrics(self, msg: ControlBusMessage) -> None:
+        if not msg.data.get("requires_ack"):
+            return
+        world_id = str(msg.data.get("world_id") or msg.key or "")
+        run_id = str(msg.data.get("run_id") or "")
+        phase = str(msg.data.get("phase") or "unknown")
+        gw_metrics.record_controlbus_apply_ack(
+            world_id=world_id,
+            run_id=run_id,
+            phase=phase,
+            sent_timestamp=msg.data.get("ts"),
+            broker_timestamp_ms=msg.timestamp_ms,
+        )
 
     async def _handle_queue_update(self, msg: ControlBusMessage, ws_hub: WebSocketHub) -> None:
         tags = msg.data.get("tags", [])

@@ -329,6 +329,7 @@ class WorldAllocationSnapshot(BaseModel):
     etag: str | None = None
     strategy_alloc_total: Dict[str, float] | None = None
     updated_at: str | None = None
+    stale: bool | None = None
 
 
 class AllocationSnapshotResponse(BaseModel):

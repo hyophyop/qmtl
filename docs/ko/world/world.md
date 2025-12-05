@@ -265,6 +265,12 @@ world:
 - `promotion_fail_total`, `demotion_fail_total`
 - `world_apply_failure_total`, `world_apply_run_total` (run_id 단위 apply 시도/성공/실패 추적)
 - `world_allocation_snapshot_stale_ratio` (stale 플래그가 켜진 스냅샷 비율; 스냅샷 신선도 관측)
+- `controlbus_apply_ack_latency_ms{phase}` (freeze/unfreeze ACK까지 걸린 시간; ControlBus 인지 지연)
+
+Gateway·WorldService는 위 지표를 런타임에 노출합니다. `world_apply_run_total`/`world_apply_failure_total`은 world_id와 run_id별로
+시작/성공/실패를 기록하고, `world_allocation_snapshot_stale_ratio`는 최신 업데이트 시각이 5분 이상 지난 스냅샷 비율을 world별로 추적합니다.
+Freeze/Unfreeze ControlBus 이벤트에 대해 Gateway는 `controlbus_apply_ack_latency_ms`(ms 단위)와 `controlbus_apply_ack_total`로 수신 지연과 ACK
+카운트를 기록합니다.
 
 추천 알람 규칙(예)
 - `increase(world_apply_failure_total[5m]) > 0` → apply 연속 실패 알림

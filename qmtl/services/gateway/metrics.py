@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import MutableMapping, Sequence
+from datetime import datetime, timezone
 from typing import Any, Deque, Mapping, Sequence as Seq, cast
 import time
 
@@ -333,6 +334,20 @@ controlbus_lag_ms = _gauge(
     ["topic"],
 )
 
+controlbus_apply_ack_total = _counter(
+    "controlbus_apply_ack_total",
+    "ControlBus apply acknowledgement messages processed",
+    ["world_id", "run_id", "phase"],
+)
+
+controlbus_apply_ack_latency_ms = _gauge(
+    "controlbus_apply_ack_latency_ms",
+    "Latency from apply ControlBus publish to Gateway ack in milliseconds",
+    ["world_id", "run_id", "phase"],
+    test_value_attr="_vals",
+    test_value_factory=dict,
+)
+
 event_relay_events_total = _counter(
     "event_relay_events_total",
     "Total number of ControlBus events relayed to clients",
@@ -577,6 +592,28 @@ def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:
         event_relay_skew_ms.labels(topic=topic).set(timestamp_ms - now_ms)
 
 
+def record_controlbus_apply_ack(
+    *,
+    world_id: str,
+    run_id: str,
+    phase: str,
+    sent_timestamp: str | None,
+    broker_timestamp_ms: float | None,
+) -> None:
+    """Record acknowledgement latency for apply-phase ControlBus messages."""
+
+    controlbus_apply_ack_total.labels(
+        world_id=world_id, run_id=run_id, phase=phase
+    ).inc()
+    latency_ms = _compute_apply_latency_ms(sent_timestamp, broker_timestamp_ms)
+    if latency_ms is None:
+        return
+    controlbus_apply_ack_latency_ms.labels(
+        world_id=world_id, run_id=run_id, phase=phase
+    ).set(latency_ms)
+    _metric_store(controlbus_apply_ack_latency_ms)[(world_id, run_id, phase)] = latency_ms
+
+
 def record_event_dropped(topic: str) -> None:
     """Increment drop counter for ControlBus events."""
     event_relay_dropped_total.labels(topic=topic).inc()
@@ -639,6 +676,30 @@ def record_rebalance_plan_execution(world_id: str, *, success: bool) -> None:
         rebalance_plan_execution_failures_total.labels(world_id=world_id).inc()
 
 
+def _parse_iso_timestamp_ms(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.timestamp() * 1000
+
+
+def _compute_apply_latency_ms(
+    sent_timestamp: str | None, broker_timestamp_ms: float | None
+) -> float | None:
+    event_ms = _parse_iso_timestamp_ms(sent_timestamp)
+    now_ms = time.time() * 1000
+    if event_ms is not None:
+        return max(0.0, now_ms - event_ms)
+    if broker_timestamp_ms is not None:
+        return max(0.0, now_ms - broker_timestamp_ms)
+    return None
+
+
 def reset_metrics() -> None:
     """Reset all metric values for tests."""
     reset_registered_metrics(_REGISTERED_METRICS)
@@ -653,6 +714,8 @@ def reset_metrics() -> None:
         rebalance_plan_last_delta_count,
         rebalance_plan_execution_attempts_total,
         rebalance_plan_execution_failures_total,
+        controlbus_apply_ack_latency_ms,
+        controlbus_apply_ack_total,
     ):
         if hasattr(metric, "_metrics"):
             cast(Any, metric)._metrics.clear()

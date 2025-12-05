@@ -141,6 +141,14 @@ Suggested SLOs
 - `world_eval_duration_ms_p95`, `world_apply_duration_ms_p95`
 - `world_activation_skew_seconds`
 - `promotion_fail_total`, `demotion_fail_total`
+- `world_apply_failure_total`, `world_apply_run_total` (track attempts/success/failure by `run_id`)
+- `world_allocation_snapshot_stale_ratio` (share of allocation snapshots marked stale)
+- `controlbus_apply_ack_latency_ms{phase}` (freeze/unfreeze acknowledgement latency)
+
+Gateway and WorldService export these metrics in production. Apply counters are labeled by `world_id` and `run_id` to capture
+starts, successes, and failures. Allocation freshness is summarized via `world_allocation_snapshot_stale_ratio`, which marks
+snapshots stale when `updated_at` is more than 5 minutes old. For apply freeze/unfreeze events, Gateway records
+`controlbus_apply_ack_latency_ms` and `controlbus_apply_ack_total` to surface ControlBus acknowledgement latency and volume.
 
 ## 8. Multi‑world and Resources
 
