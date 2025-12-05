@@ -321,9 +321,11 @@ print(result.metrics.get("correlation_with_portfolio"))
     ```
     
     **현재 상태:**
-    
+
     - CLI `qmtl status` 또는 `qmtl world info`로 조회
-    - 실시간 스트림 구독 미구현
+    - ControlBus 스트림은 활성/TagQuery 등의 SDK 내부 서비스용이며, 아직
+      안정화된 공개 구독 헬퍼는 없습니다. 현재는 CLI나 REST로 월드/전략
+      상태를 폴링하는 방식을 사용하세요.
 
 ---
 

@@ -342,6 +342,9 @@ POST /events/subscribe
 
 - Gateway subscribes to internal ControlBus and relays events to SDK over the descriptor URL.
 - Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot or carry a `state_hash`.
+- **Public availability:** The descriptor currently serves SDK internals (ActivationManager, TagQueryManager). There is no
+  general-purpose CLI/SDK helper for user-facing subscriptions yet; external observers should poll Gateway/WorldService
+  endpoints (e.g., `qmtl status`, `GET /worlds/{id}`) until a stable surface is released.
 
 Token (JWT) claims (delegated WS or future use):
 - `aud`: `controlbus`

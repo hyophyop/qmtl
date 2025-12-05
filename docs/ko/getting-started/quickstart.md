@@ -204,6 +204,11 @@ result = Runner.submit(
     # Python에서 실시간 스트림 구독
     Runner.subscribe(world="quickstart_demo", on_update=print)
     ```
+
+    _현재 상태:_ ControlBus 스트림은 SDK 내부 구성요소용으로 존재하지만,
+    사용자용 안정화된 CLI/SDK 헬퍼는 아직 제공되지 않습니다. 구독 인터페이스가
+    공개될 때까지 `qmtl status`/`qmtl world info` 또는 REST 엔드포인트를
+    주기적으로 조회하세요.
     
     - 대시보드 UI에서 실시간 성과/순위/기여도 확인
     - 승격/강등 알림 자동 수신
