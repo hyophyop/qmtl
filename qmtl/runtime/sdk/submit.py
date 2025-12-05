@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import numbers
 import os
+from decimal import Decimal
 from threading import Thread
 from dataclasses import dataclass, field
 from math import isfinite
@@ -1563,20 +1565,29 @@ def _extract_price_series(
     return [], None
 
 
-def _pct_change(values: Sequence[float]) -> list[float]:
+def _pct_change(values: Sequence[numbers.Real]) -> list[float]:
     returns: list[float] = []
     for idx in range(1, len(values)):
         prev, curr = values[idx - 1], values[idx]
         if not _is_finite_number(prev) or not _is_finite_number(curr):
             raise ValueError("non-finite price encountered while deriving returns")
-        if prev == 0:
+        prev_float = float(prev)
+        curr_float = float(curr)
+        if prev_float == 0:
             raise ValueError("encountered zero price while deriving returns")
-        returns.append((curr - prev) / prev)
+        returns.append((curr_float - prev_float) / prev_float)
     return returns
 
 
 def _is_finite_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and isfinite(value)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (numbers.Real, Decimal)):
+        try:
+            return isfinite(float(value))
+        except (OverflowError, ValueError):
+            return False
+    return False
 
 
 def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:

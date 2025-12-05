@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from qmtl.runtime.sdk import Mode, Runner, Strategy, StrategyMetrics, SubmitResult
@@ -73,6 +75,38 @@ class TestAutoReturns:
 
         assert derived == []
         assert any("auto_returns enabled" in hint for hint in hints)
+
+    def test_accepts_decimal_price_series(self):
+        class DecimalPricesStrategy(Strategy):
+            def setup(self):
+                self.prices = [
+                    Decimal("100.0"),
+                    Decimal("101.0"),
+                    Decimal("99.0"),
+                ]
+
+        strategy = DecimalPricesStrategy()
+        strategy.setup()
+
+        derived, hints = _derive_returns_with_auto(strategy, AutoReturnsConfig())
+
+        assert derived == pytest.approx([0.01, -0.01980198])
+        assert hints == []
+
+    def test_accepts_numpy_price_series(self):
+        np = pytest.importorskip("numpy")
+
+        class NumpyPricesStrategy(Strategy):
+            def setup(self):
+                self.prices = np.array([100.0, 101.5, 103.0], dtype=np.float64)
+
+        strategy = NumpyPricesStrategy()
+        strategy.setup()
+
+        derived, hints = _derive_returns_with_auto(strategy, AutoReturnsConfig())
+
+        assert derived == pytest.approx([0.015, 0.014778325123152707])
+        assert hints == []
 
 
 class TestMode:
