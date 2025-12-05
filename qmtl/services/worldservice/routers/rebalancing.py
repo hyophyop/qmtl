@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from ..rebalancing import (
     MultiWorldProportionalRebalancer,
     MultiWorldRebalanceContext,
+    MultiWorldRebalancePlan,
     PositionSlice,
     SymbolDelta,
 )
@@ -164,14 +165,18 @@ def create_rebalancing_router(
             min_trade_notional=payload.min_trade_notional or 0.0,
             lot_size_by_symbol=payload.lot_size_by_symbol,
         )
-
-        planner = MultiWorldProportionalRebalancer()
-        result = planner.plan(ctx)
+        if mode == "overlay":
+            result = MultiWorldRebalancePlan(per_world={}, global_deltas=[])
+            per_world_scale: dict[str, float] | None = None
+        else:
+            planner = MultiWorldProportionalRebalancer()
+            result = planner.plan(ctx)
+            per_world_scale = {wid: plan.scale_world for wid, plan in result.per_world.items()}
 
         overlay_deltas = _plan_overlay(
             mode=mode,
             payload=payload,
-            per_world_scale={wid: plan.scale_world for wid, plan in result.per_world.items()},
+            per_world_scale=per_world_scale,
             positions=positions,
         )
 
@@ -209,13 +214,18 @@ def create_rebalancing_router(
             min_trade_notional=payload.min_trade_notional or 0.0,
             lot_size_by_symbol=payload.lot_size_by_symbol,
         )
-        planner = MultiWorldProportionalRebalancer()
-        result = planner.plan(ctx)
+        if mode == "overlay":
+            result = MultiWorldRebalancePlan(per_world={}, global_deltas=[])
+            per_world_scale: dict[str, float] | None = None
+        else:
+            planner = MultiWorldProportionalRebalancer()
+            result = planner.plan(ctx)
+            per_world_scale = {wid: plan.scale_world for wid, plan in result.per_world.items()}
 
         overlay_deltas_raw = _plan_overlay(
             mode=mode,
             payload=payload,
-            per_world_scale={wid: plan.scale_world for wid, plan in result.per_world.items()},
+            per_world_scale=per_world_scale,
             positions=positions,
         )
         overlay_deltas: list[SymbolDeltaModel] | None = None
