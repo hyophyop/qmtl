@@ -8,6 +8,7 @@ from typing import Any, Mapping, cast
 
 from qmtl.foundation.common.metrics_factory import (
     get_mapping_store,
+    get_metric_value,
     get_or_create_counter,
     get_or_create_gauge,
     reset_metrics as reset_registered_metrics,
@@ -64,10 +65,12 @@ world_allocation_snapshot_stale_ratio = _gauge(
 
 
 def _update_snapshot_ratio(world_id: str) -> None:
-    total_store = _metric_store(world_allocation_snapshot_total)
-    stale_store = _metric_store(world_allocation_snapshot_stale_total)
-    total = float(total_store.get(world_id, 0))
-    stale = float(stale_store.get(world_id, 0))
+    total = get_metric_value(
+        world_allocation_snapshot_total, {"world_id": world_id}
+    )
+    stale = get_metric_value(
+        world_allocation_snapshot_stale_total, {"world_id": world_id}
+    )
     ratio = stale / total if total else 0.0
     world_allocation_snapshot_stale_ratio.labels(world_id=world_id).set(ratio)
     _metric_store(world_allocation_snapshot_stale_ratio)[world_id] = ratio
