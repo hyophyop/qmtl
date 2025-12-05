@@ -25,7 +25,7 @@ The table below summarizes the major gaps identified in each architecture area.
 | Area | As-Is Status | To-Be Goal | Priority |
 |------|-------------|-----------|----------|
 | **Data Supply Automation** | `history_provider` must be configured directly in strategy | world + preset auto-connects Seamless | P0 |
-| **Performance Auto-Evaluation** | `auto_returns` not implemented, ValidationPipeline and WorldService dualized | Unified submission → auto-backtest → evaluation → activation | P0 |
+| **Performance Auto-Evaluation** | `auto_returns` implemented as opt-in pre-processing; ValidationPipeline and WorldService still dualized | Unified submission → auto-backtest → evaluation → activation | P0 |
 | **Capital Auto-Allocation** | Runner.submit and allocation paths are separated | Document and integrate "submit → evaluate → allocate" standard loop | P1 |
 | **ExecutionDomain Normalization** | Confusion between submission meta hint and WS decision priority | Unify WS `effective_mode` as the sole authoritative source | P0 |
 | **2-Phase Apply** | Design exists, ACK convergence partially implemented | Fully automate Freeze → Switch → Unfreeze | P1 |
@@ -83,10 +83,10 @@ Runner.submit(MyStrategy, world="crypto_mom_1h")
 **Current Status:**
 - `ValidationPipeline` calculates metrics like Sharpe/MDD
 - WorldService `/evaluate` determines active set
-- However, `backtest_returns` must be passed manually by the user
+- `auto_returns` derives `backtest_returns` from price/equity data when enabled; explicit returns are still required if no usable series exists
 
 **Goal:**
-- Implement `auto_returns` so strategies without explicit returns can get default backtest evaluation
+- Harden `auto_returns` coverage and defaults so strategies without explicit returns get consistent backtest evaluation
 - WorldService evaluation results consistently exposed to Runner/CLI
 
 **Work Items:**

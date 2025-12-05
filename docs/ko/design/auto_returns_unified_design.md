@@ -12,8 +12,8 @@ related_issue: "hyophyop/qmtl#1723"
 ## 0. As‑Is / To‑Be 요약
 
 - As‑Is
-  - Runner.submit/ValidationPipeline은 `returns` 인자 또는 `strategy.returns/equity/pnl`에서만 수익률을 추출하며, 이 문서에서 제안하는 `auto_returns` 옵션/`AutoReturnsConfig`/`returns_derive.py`는 아직 런타임에 구현되어 있지 않습니다.
-  - SR 템플릿(`build_expression_strategy`, `build_strategy_from_dag_spec`)으로 생성된 전략은 기본적으로 returns를 만들지 않기 때문에, 현재 Runner.submit + auto‑validate 흐름과는 직접 연결되지 않습니다.
+  - Runner.submit/submit_async는 `auto_returns` 옵션을 통해 price/equity 시계열에서 returns를 파생할 수 있으며, 명시적 `returns`나 `strategy.returns/equity/pnl`이 있으면 우선 사용한다.
+  - SR 템플릿(`build_expression_strategy`, `build_strategy_from_dag_spec`)으로 생성된 전략은 기본적으로 returns를 만들지 않기 때문에, `auto_returns` 구성을 전달하지 않으면 여전히 Runner.submit + auto‑validate 흐름과 직접 연결되지 않는다.
 - To‑Be
   - Runner.submit/submit_async 전처리 단계에 `auto_returns` 옵션을 추가하고,  
     Strategy warm‑up/replay 결과에서 가격 스트림을 찾아 pct_change/log_return 기반 returns를 파생하는 헬퍼(`returns_derive.py`)를 도입합니다.

@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import numbers
 import os
+from decimal import Decimal
 from threading import Thread
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import TYPE_CHECKING, Any, Coroutine, Sequence
 
 import httpx
@@ -43,7 +46,15 @@ from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, Decisi
 logger = logging.getLogger(__name__)
 
 # Re-export Mode for backward compatibility
-__all__ = ["Mode", "SubmitResult", "PrecheckResult", "StrategyMetrics", "submit", "submit_async"]
+__all__ = [
+    "Mode",
+    "SubmitResult",
+    "PrecheckResult",
+    "StrategyMetrics",
+    "AutoReturnsConfig",
+    "submit",
+    "submit_async",
+]
 
 
 @dataclass
@@ -205,6 +216,29 @@ class SubmitResult:
             self.strategy_id = self.activation.strategy_id
             if self.weight is None:
                 self.weight = self.activation.weight
+
+
+@dataclass(frozen=True)
+class AutoReturnsConfig:
+    """Configuration for deriving returns automatically.
+
+    Attributes
+    ----------
+    price_attributes : tuple[str, ...]
+        Ordered list of attribute names to inspect on the strategy for price/equity
+        series suitable for deriving percentage returns.
+    min_length : int
+        Minimum series length required to derive returns (at least two points).
+    """
+
+    price_attributes: tuple[str, ...] = (
+        "prices",
+        "price_series",
+        "price_history",
+        "close_prices",
+        "close",
+    )
+    min_length: int = 2
 
 
 # Default configuration
@@ -372,6 +406,7 @@ async def submit_async(
     preset_overrides: dict[str, float] | None = None,
     data_preset: str | None = None,
     returns: Sequence[float] | None = None,
+    auto_returns: bool | AutoReturnsConfig | None = None,
     auto_validate: bool = True,
 ) -> SubmitResult:
     """Submit a strategy for evaluation and potential activation.
@@ -409,6 +444,10 @@ async def submit_async(
     returns : Sequence[float], optional
         Pre-computed backtest returns for validation. If not provided,
         the system will attempt to extract returns from strategy execution.
+    auto_returns : bool | AutoReturnsConfig | None
+        Opt-in derivation of returns from available price/equity data. When
+        enabled, the SDK will try to compute percentage returns from common
+        price attributes if explicit returns are missing.
     auto_validate : bool
         Whether to run automatic validation pipeline. Default True.
     
@@ -487,11 +526,12 @@ async def submit_async(
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
         )
-        backtest_returns = await _warmup_and_collect_returns(
+        backtest_returns, auto_returns_hints = await _warmup_and_collect_returns(
             services=services,
             strategy=strategy,
             gateway_available=gateway_available,
             returns=returns,
+            auto_returns=auto_returns,
         )
         if not auto_validate:
             return _attach_context_flags(
@@ -513,6 +553,8 @@ async def submit_async(
                 resolved_world=resolved_world,
                 mode=mode,
                 world_notice=world_ctx.world_notice,
+                auto_returns_requested=bool(auto_returns),
+                auto_returns_hints=auto_returns_hints,
                 )
             )
 
@@ -874,7 +916,8 @@ async def _warmup_and_collect_returns(
     strategy: "Strategy",
     gateway_available: bool,
     returns: Sequence[float] | None,
-) -> list[float]:
+    auto_returns: bool | AutoReturnsConfig | None,
+) -> tuple[list[float], list[str]]:
     history_service = services.history_service
     await history_service.warmup_strategy(
         strategy,
@@ -886,8 +929,13 @@ async def _warmup_and_collect_returns(
     strategy.on_finish()
 
     if returns is not None:
-        return list(returns)
-    return _extract_returns_from_strategy(strategy)
+        return list(returns), []
+
+    extracted = _extract_returns_from_strategy(strategy)
+    if extracted:
+        return extracted, []
+
+    return _derive_returns_with_auto(strategy, auto_returns)
 
 
 def _basic_result(
@@ -921,8 +969,21 @@ def _reject_due_to_no_returns(
     resolved_world: str,
     mode: Mode,
     world_notice: list[str],
+    auto_returns_requested: bool,
+    auto_returns_hints: Sequence[str] | None = None,
 ) -> SubmitResult:
     logger.warning("Strategy %s produced no returns; auto-validation cannot proceed", strategy_class_name)
+    improvement_hints = world_notice + [
+        "Ensure your strategy populates returns/equity/pnl during warmup",
+        "Pass pre-computed returns via Runner.submit(..., returns=...)",
+        "Verify history data is available for the selected world/mode",
+    ]
+    if auto_returns_requested:
+        improvement_hints.append(
+            "auto_returns was enabled but derivation failed; expose a price/equity series or supply explicit returns",
+        )
+        if auto_returns_hints:
+            improvement_hints.extend(auto_returns_hints)
     return SubmitResult(
         strategy_id=strategy_id or f"no_returns_{id(strategy)}",
         status="rejected",
@@ -932,11 +993,7 @@ def _reject_due_to_no_returns(
             "No returns produced for validation; provide pre-computed "
             "returns or ensure the strategy populates returns/equity/pnl."
         ),
-        improvement_hints=world_notice + [
-            "Ensure your strategy populates returns/equity/pnl during warmup",
-            "Pass pre-computed returns via Runner.submit(..., returns=...)",
-            "Verify history data is available for the selected world/mode",
-        ],
+        improvement_hints=improvement_hints,
         metrics=StrategyMetrics(),
         strategy=strategy,
     )
@@ -1447,6 +1504,90 @@ def _clone_metrics_with_corr(metrics: StrategyMetrics, correlation_avg: float | 
     )
 
 
+def _normalize_auto_returns_config(
+    auto_returns: bool | AutoReturnsConfig | None,
+) -> AutoReturnsConfig | None:
+    if auto_returns is None or auto_returns is False:
+        return None
+    if auto_returns is True:
+        return AutoReturnsConfig()
+    if isinstance(auto_returns, AutoReturnsConfig):
+        return auto_returns
+    raise TypeError("auto_returns must be a bool, AutoReturnsConfig, or None")
+
+
+def _derive_returns_with_auto(
+    strategy: "Strategy",
+    auto_returns: bool | AutoReturnsConfig | None,
+) -> tuple[list[float], list[str]]:
+    config = _normalize_auto_returns_config(auto_returns)
+    if config is None:
+        return [], []
+
+    prices, source_attr = _extract_price_series(strategy, config.price_attributes)
+    if not prices:
+        searched = ", ".join(config.price_attributes)
+        return [], [
+            (
+                "auto_returns enabled but no price/equity series was found; "
+                f"set one of [{searched}] or provide explicit returns"
+            )
+        ]
+
+    if len(prices) < config.min_length:
+        return [], [
+            (
+                "auto_returns price series too short to derive returns; "
+                f"expected at least {config.min_length} points from `{source_attr}`"
+            )
+        ]
+
+    try:
+        return _pct_change(prices), []
+    except ValueError as exc:  # pragma: no cover - defensive path
+        return [], [f"auto_returns failed using `{source_attr}`: {exc}"]
+
+
+def _extract_price_series(
+    strategy: "Strategy", price_attributes: Sequence[str]
+) -> tuple[list[float], str | None]:
+    for attr in price_attributes:
+        candidate = getattr(strategy, attr, None)
+        if candidate is None or isinstance(candidate, str):
+            continue
+        try:
+            series = list(candidate)
+        except Exception:
+            continue
+        if not series:
+            continue
+        return series, attr
+    return [], None
+
+
+def _pct_change(values: Sequence[numbers.Real]) -> list[float]:
+    returns: list[float] = []
+    for idx in range(1, len(values)):
+        prev, curr = values[idx - 1], values[idx]
+        if not _is_finite_number(prev) or not _is_finite_number(curr):
+            raise ValueError("non-finite price encountered while deriving returns")
+        prev_float = float(prev)
+        curr_float = float(curr)
+        if prev_float == 0:
+            raise ValueError("encountered zero price while deriving returns")
+        returns.append((curr_float - prev_float) / prev_float)
+    return returns
+
+
+def _is_finite_number(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    try:
+        return isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:
     """Extract returns from a strategy instance if available."""
     returns_attr = getattr(strategy, "returns", None)
@@ -1516,6 +1657,7 @@ def submit(
     preset_overrides: dict[str, float] | None = None,
     data_preset: str | None = None,
     returns: Sequence[float] | None = None,
+    auto_returns: bool | AutoReturnsConfig | None = None,
     auto_validate: bool = True,
 ) -> SubmitResult:
     """Synchronous wrapper around submit_async.
@@ -1543,6 +1685,9 @@ def submit(
         Defaults to the first entry declared on the world.
     returns : Sequence[float], optional
         Pre-computed backtest returns.
+    auto_returns : bool | AutoReturnsConfig | None
+        Whether to derive returns from price/equity data when explicit returns
+        are missing.
     auto_validate : bool
         Whether to run automatic validation. Default True.
     
@@ -1563,6 +1708,7 @@ def submit(
         preset_overrides=preset_overrides,
         data_preset=data_preset,
         returns=returns,
+        auto_returns=auto_returns,
         auto_validate=auto_validate,
     ))
 

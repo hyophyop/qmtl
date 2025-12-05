@@ -29,7 +29,7 @@ from .strategy import Strategy
 from .strategy_bootstrapper import StrategyBootstrapper
 from .tag_manager_service import TagManagerService
 from .mode import Mode
-from .submit import SubmitResult, submit, submit_async
+from .submit import AutoReturnsConfig, SubmitResult, submit, submit_async
 
 if TYPE_CHECKING:
     from .activation_manager import ActivationManager
@@ -103,6 +103,7 @@ class Runner:
         preset_overrides: dict[str, float] | None = None,
         data_preset: str | None = None,
         returns: list[float] | None = None,
+        auto_returns: bool | AutoReturnsConfig | None = None,
         auto_validate: bool = True,
     ) -> SubmitResult:
         """Submit a strategy for evaluation and potential activation.
@@ -148,6 +149,7 @@ class Runner:
             preset_overrides=preset_overrides,
             data_preset=data_preset,
             returns=returns,
+            auto_returns=auto_returns,
             auto_validate=auto_validate,
         )
 
@@ -164,6 +166,7 @@ class Runner:
         preset_overrides: dict[str, float] | None = None,
         data_preset: str | None = None,
         returns: list[float] | None = None,
+        auto_returns: bool | AutoReturnsConfig | None = None,
         auto_validate: bool = True,
     ) -> SubmitResult:
         """Async version of submit(). See submit() for details."""
@@ -177,6 +180,7 @@ class Runner:
             preset_overrides=preset_overrides,
             data_preset=data_preset,
             returns=returns,
+            auto_returns=auto_returns,
             auto_validate=auto_validate,
         )
 

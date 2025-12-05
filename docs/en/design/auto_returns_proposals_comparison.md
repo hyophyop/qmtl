@@ -11,7 +11,7 @@ status: draft
 ## 0. As-Is / To-Be Summary
 
 - As-Is
-  - This memo compares multiple auto_returns design drafts. None of the options are fully implemented in the runtime today; the system still assumes manual returns provisioning.
+  - This memo compares multiple auto_returns design drafts. A baseline opt-in implementation now exists in `Runner.submit`, but richer configuration (node/field/method selection, SR wiring) remains open.
 - To-Be
   - The unified design in `auto_returns_unified_design.md` is the forward-looking baseline. This comparison stays as historical/decision context with the As-Is banner kept in place so readers can separate design from implementation status.
 

@@ -11,7 +11,7 @@ status: draft
 ## 0. As‑Is / To‑Be 요약
 
 - As‑Is
-  - 이 문서는 여러 auto_returns 설계 초안을 비교하는 임시 메모이며, 현재 런타임에는 어떤 안도 완전히 구현되어 있지 않습니다. 실제 동작은 “auto_returns 없음 + 수동 returns 제공” 상태입니다.
+  - 이 문서는 여러 auto_returns 설계 초안을 비교하는 임시 메모이며, `Runner.submit`에 기본적인 opt-in 구현이 도입되었지만 노드/필드/계산 방식을 세밀하게 제어하는 확장안은 아직 열려 있습니다.
 - To‑Be
   - `auto_returns_unified_design.md`에 정리된 통합 설계안을 기준으로, 이 비교 문서는 역사적/의사결정 맥락을 보존하는 참고 자료로 유지됩니다.
   - 상단 As‑Is 설명을 통해, 독자가 이 문서를 읽을 때 언제나 설계 vs 구현 상태를 구분할 수 있도록 합니다.
