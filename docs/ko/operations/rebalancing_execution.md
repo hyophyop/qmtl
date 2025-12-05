@@ -73,4 +73,12 @@ Gateway는 공유계정 넷팅을 기본적으로 비활성화합니다. 운영�
 - **감사 로그:** 각 배치는 `rebalance:<world_id>` 키로 `append_event`에 기록되어 주문 수와 reduce-only 비율을 남깁니다.
 - **Commit Log:** 배치는 `("gateway.rebalance", timestamp_ms, batch_id, payload)` 형태로 Commit Log에 기록되며 `payload`에는 scope, 주문 목록, 공유 계정 여부, reduce-only 비율, 모드 등이 포함됩니다.
 
+## 2‑Phase Apply/롤백 체크포인트
+
+- 리밸런싱 적용은 월드 활성화와 동일하게 `run_id`/`etag`로 추적하며, `/worlds/{id}/apply` 로그와 `rebalance:<world_id>` 감사 로그를 함께 확인합니다.
+- CLI 예시
+  - 계획 확인: `uv run qmtl world rebalance-plan --world-id demo_world --target w1=0.6,w2=0.4 --output json`
+  - 적용: `uv run qmtl world rebalance-apply --world-id demo_world --target w1=0.6,w2=0.4 --run-id $(uuidgen) --etag <etag> --submit=true`
+- 실패 시 `rebalance_plan_execution_failures_total` 증가와 함께 Commit Log/Audit에 배치가 남으므로, 동일 `run_id`로 재적용하거나 `activation set`으로 롤백 후 재시도합니다.
+
 {{ nav_links() }}
