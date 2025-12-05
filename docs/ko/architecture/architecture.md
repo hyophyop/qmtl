@@ -67,12 +67,13 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
     - 활성/비활성 결정과 자본 배분(월드 단위)이 자동으로 이어진다.
   - 사용자는 월드 성과/기여도를 보고 전략을 개선하는 루프에 집중한다.
 
-- **As‑Is (v2.0 기준 구현 요약)**  
-  - `Runner.submit`은 히스토리 warm‑up, 백테스트 실행, `ValidationPipeline` 기반 성과 계산까지 자동으로 수행한다.  
-  - WorldService는 `/worlds/{id}/evaluate`·`/apply`·`/activation`·`/allocations` API로  
-    정책 평가, 활성 집합 관리, 리밸런싱 계획을 제공한다.  
-  - 그러나 `auto_returns` 미구현, 평가/활성화/자본 배분의 계층 분리 등으로 인해,
-    "제출만 하면 곧바로 tradable/자본 배분까지" 완전히 자동화된 상태는 아니다.
+- **As‑Is (v2.0 기준 구현 요약)**
+  - `Runner.submit`은 히스토리 warm‑up, 백테스트 실행, `ValidationPipeline` 기반 성과 계산까지 자동으로 수행한다.
+  - WorldService는 `/worlds/{id}/evaluate`·`/apply`·`/activation`·`/allocations` API로
+    정책 평가, 활성 집합 관리, 리밸런싱 계획을 제공한다.
+  - `auto_returns` 옵션을 통해 price/equity 데이터에서 수익률을 파생할 수 있지만,
+    평가/활성화/자본 배분의 계층 분리로 인해 "제출만 하면 곧바로 tradable/자본 배분까지"
+    완전히 자동화된 상태는 아니다.
   - 이 격차와 후속 계획은 각 섹션의 As‑Is/To‑Be 형태로 정리되어 있다.
 
 #### 0.1.1 백테스트 & 시장 replay
@@ -105,9 +106,9 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 
 - As‑Is
   - `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행한다.
-  - WorldService `/evaluate`는 active set을 결정하지만,
-    SDK/Runner는 여전히 `backtest_returns`를 직접 전달해야 하고,
-    `auto_returns`는 설계만 존재하고 구현되지 않았다.
+  - WorldService `/evaluate`는 active set을 결정하며, SDK/Runner는 `auto_returns`를 통해
+    가격/잔고 시계열에서 `backtest_returns`를 파생할 수 있다. 유효한 시계열이 없으면
+    여전히 명시적 returns가 필요하다.
   - Activation(게이트 ON/OFF)은 WorldService/ActivationManager로 연결되어 있지만,
     “submit 한 번으로 바로 활성화+가중치 결정”은 월드/정책/운영 플로우에 따라 다르게 wiring된다.
 - To‑Be

@@ -87,12 +87,13 @@ From the user’s perspective, QMTL’s **Core Loop** is:
     - Drives activation decisions and world‑level capital allocation.  
   - Users focus on the “submit → observe → improve” loop for their worlds.
 
-- **As‑Is (v2.0 implementation snapshot)**  
-  - `Runner.submit` already orchestrates history warm‑up, backtest execution, and metric computation via `ValidationPipeline`.  
+- **As‑Is (v2.0 implementation snapshot)**
+  - `Runner.submit` already orchestrates history warm‑up, backtest execution, and metric computation via `ValidationPipeline`.
   - WorldService exposes `/worlds/{id}/evaluate`, `/apply`, `/activation`, and `/allocations` APIs
-    for policy evaluation, activation management, and rebalancing plans.  
-  - However, missing `auto_returns`, and the separation between evaluation/activation/allocation layers,
-    mean that "submit once and immediately become tradable with capital allocation" is not fully automatic yet.  
+    for policy evaluation, activation management, and rebalancing plans.
+  - `auto_returns` now provides an opt‑in path to derive returns from price/equity data before validation,
+    but the separation between evaluation/activation/allocation layers means "submit once and immediately
+    become tradable with capital allocation" is not fully automatic yet.
   - The gap and follow‑up plans are captured in each section as As‑Is/To‑Be.
 
 #### 0.1.1 Backtest & Market Replay
@@ -125,8 +126,8 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 
 - As‑Is
   - `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks.
-  - WorldService `/evaluate` determines active sets, but SDK/Runner must still supply `backtest_returns`
-    explicitly, and `auto_returns` exists only as a design.
+  - WorldService `/evaluate` determines active sets. SDK/Runner can now derive `backtest_returns` via
+    `auto_returns`, but explicit returns are still required when no usable price/equity series is present.
   - Activation (order gating) is wired through WorldService/ActivationManager, yet
     “submit once → automatically active with weights” depends on how worlds/policies/ops flows are configured.
 - To‑Be

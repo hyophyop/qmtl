@@ -8,9 +8,11 @@ from qmtl.runtime.sdk import Mode, Runner, Strategy, StrategyMetrics, SubmitResu
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 from qmtl.runtime.sdk.submit import (
+    AutoReturnsConfig,
     PrecheckResult,
     WsEvalResult,
     _build_submit_result_from_validation,
+    _derive_returns_with_auto,
     submit,
     submit_async,
 )
@@ -40,6 +42,37 @@ class StrategyWithReturns(Strategy):
     @property
     def returns(self):
         return [0.01, 0.02, -0.005, 0.015, 0.012, 0.008, -0.003, 0.02, 0.01, 0.005]
+
+
+class StrategyWithPrices(Strategy):
+    """Strategy that exposes prices but no returns/equity/pnl."""
+
+    def setup(self):
+        self.prices = [100.0, 101.0, 99.0, 102.0]
+
+
+class TestAutoReturns:
+    def test_derives_from_prices_when_enabled(self):
+        strategy = StrategyWithPrices()
+        strategy.setup()
+
+        derived, hints = _derive_returns_with_auto(strategy, AutoReturnsConfig())
+
+        assert derived == pytest.approx([0.01, -0.01980198, 0.03030303])
+        assert hints == []
+
+    def test_reports_hint_when_prices_missing(self):
+        class NoPricesStrategy(Strategy):
+            def setup(self):
+                pass
+
+        strategy = NoPricesStrategy()
+        strategy.setup()
+
+        derived, hints = _derive_returns_with_auto(strategy, AutoReturnsConfig())
+
+        assert derived == []
+        assert any("auto_returns enabled" in hint for hint in hints)
 
 
 class TestMode:

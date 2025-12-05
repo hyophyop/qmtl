@@ -25,7 +25,7 @@ last_modified: 2025-12-02
 | 영역 | As-Is 현황 | To-Be 목표 | 우선순위 |
 |------|-----------|-----------|---------|
 | **데이터 공급 자동화** | `history_provider`를 전략에서 직접 구성해야 함 | world + preset만으로 Seamless 자동 연결 | P0 |
-| **성과 자동 평가** | `auto_returns` 미구현, ValidationPipeline과 WorldService 이원화 | 제출 시 자동 백테스트 → 평가 → 활성화 일원화 | P0 |
+| **성과 자동 평가** | `auto_returns`가 전처리 옵션으로 구현되었으나 ValidationPipeline·WorldService는 여전히 이원화 | 제출 시 자동 백테스트 → 평가 → 활성화 일원화 | P0 |
 | **자본 자동 배분** | Runner.submit과 allocation 경로가 분리됨 | "제출 → 평가 → 배분" 표준 루프 문서화 및 CLI 통합 | P1 |
 | **ExecutionDomain 정규화** | 제출 메타 힌트와 WS 결정 간 우선순위 혼란 | WS `effective_mode`만 권위 있는 소스로 통일 | P0 |
 | **2-Phase Apply** | 설계 존재, ACK 수렴 부분 구현 중 | Freeze → Switch → Unfreeze 완전 자동화 | P1 |
@@ -83,10 +83,10 @@ Runner.submit(MyStrategy, world="crypto_mom_1h")
 **현황:**
 - `ValidationPipeline`이 Sharpe/MDD 등 지표 계산
 - WorldService `/evaluate`가 활성 집합 결정
-- 하지만 `backtest_returns`를 사용자가 직접 전달해야 함
+- `auto_returns`를 활성화하면 price/equity 데이터에서 `backtest_returns`를 파생할 수 있으며, 유효한 시계열이 없을 때는 여전히 명시적 returns가 필요하다
 
 **목표:**
-- `auto_returns` 구현으로 "returns를 명시하지 않은 전략"도 기본 백테스트 평가 가능
+- `auto_returns` 기본값/커버리지를 강화해 "returns를 명시하지 않은 전략"도 일관된 백테스트 평가를 받도록 함
 - WorldService 평가 결과가 Runner/CLI에 일관되게 노출
 
 **작업 항목:**
