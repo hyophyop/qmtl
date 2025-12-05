@@ -694,7 +694,21 @@ async def test_allocations_snapshot_endpoint():
             assert alloc["allocation"] == pytest.approx(1.0)
             assert alloc["world_id"] == "w1"
             assert alloc["run_id"] == "alloc-run-3"
+            assert alloc["ttl"] == "300s"
+            assert alloc["stale"] is False
             assert alloc.get("strategy_alloc_total") is None
+
+
+@pytest.mark.asyncio
+async def test_allocations_snapshot_missing_world_returns_404():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            resp = await client.get("/allocations", params={"world_id": "absent"})
+            assert resp.status_code == 404
+            detail = resp.json().get("detail")
+            assert "allocation snapshot" in str(detail)
 
 
 @pytest.mark.asyncio

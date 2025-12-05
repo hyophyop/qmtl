@@ -122,6 +122,7 @@ class AllocationSnapshot:
     etag: str | None = None
     strategy_alloc_total: dict[str, float] | None = None
     updated_at: str | None = None
+    ttl: str | None = None
     stale: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -134,6 +135,8 @@ class AllocationSnapshot:
         }
         if self.strategy_alloc_total is not None:
             payload["strategy_alloc_total"] = dict(self.strategy_alloc_total)
+        if self.ttl is not None:
+            payload["ttl"] = self.ttl
         if self.stale is not None:
             payload["stale"] = self.stale
         return payload
@@ -2130,6 +2133,7 @@ def _extract_allocation_snapshot(
         etag=str(snapshot.get("etag")) if snapshot.get("etag") is not None else None,
         strategy_alloc_total=strategy_alloc_total,
         updated_at=str(snapshot.get("updated_at")) if snapshot.get("updated_at") is not None else None,
+        ttl=str(snapshot.get("ttl")) if snapshot.get("ttl") is not None else None,
         stale=stale_flag,
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Dict
 
 from fastapi import APIRouter, HTTPException
@@ -14,6 +15,24 @@ from ..services import WorldService
 
 
 def create_allocations_router(service: WorldService) -> APIRouter:
+    DEFAULT_TTL_SECONDS = 300
+
+    def _compute_staleness(updated_at: str | None) -> tuple[str, bool]:
+        ttl = f"{DEFAULT_TTL_SECONDS}s"
+        if not updated_at:
+            return ttl, False
+        try:
+            normalized_updated_at = (
+                f"{updated_at[:-1]}+00:00" if updated_at.endswith("Z") else updated_at
+            )
+            parsed = datetime.fromisoformat(normalized_updated_at)
+        except ValueError:
+            return ttl, False
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - parsed
+        return ttl, delta > timedelta(seconds=DEFAULT_TTL_SECONDS)
+
     router = APIRouter()
 
     @router.post("/allocations", response_model=AllocationUpsertResponse)
@@ -30,9 +49,13 @@ def create_allocations_router(service: WorldService) -> APIRouter:
             if world_id
             else await service.store.get_world_allocation_states()
         )
-        allocations: Dict[str, WorldAllocationSnapshot] = {
-            wid: WorldAllocationSnapshot(**state.to_dict()) for wid, state in states.items()
-        }
+        if world_id and not states:
+            raise HTTPException(status_code=404, detail="allocation snapshot not found")
+        allocations: Dict[str, WorldAllocationSnapshot] = {}
+        for wid, state in states.items():
+            ttl, stale = _compute_staleness(state.updated_at)
+            payload = {**state.to_dict(), "ttl": ttl, "stale": stale}
+            allocations[wid] = WorldAllocationSnapshot(**payload)
         return AllocationSnapshotResponse(allocations=allocations)
 
     return router
