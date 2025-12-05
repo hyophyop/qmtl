@@ -324,12 +324,16 @@ def _world_allocations(args: argparse.Namespace) -> int:
     for wid, snapshot in sorted(allocations.items()):
         alloc = snapshot.get("allocation") if isinstance(snapshot, dict) else None
         strategy_total = None
+        stale = False
         if isinstance(snapshot, dict):
             strat = snapshot.get("strategy_alloc_total")
             if isinstance(strat, dict):
                 strategy_total = strat
+            stale = bool(snapshot.get("stale"))
         alloc_display = f"{float(alloc):.4f}" if alloc is not None else "n/a"
         print(f"- {wid}: {alloc_display}")
+        if stale:
+            print(_t("  • Snapshot may be stale; refresh with `qmtl world allocations -w {}`").format(wid))
         if strategy_total:
             print("  strategies:")
             for sid, ratio in sorted(strategy_total.items()):

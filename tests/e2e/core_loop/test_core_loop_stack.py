@@ -193,6 +193,35 @@ def test_submit_to_apply_flow(core_loop_world_id: str, core_loop_stack: CoreLoop
     assert apply_run in proc.stdout
 
 
+def test_apply_with_plan_file(core_loop_world_id: str, core_loop_stack: CoreLoopStackHandle, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    env = dict(os.environ)
+    env.setdefault("QMTL_GATEWAY_URL", core_loop_stack.gateway_url)
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps({"plan": {"activate": ["s-demo"]}}))
+
+    proc = subprocess.run(
+        [
+            "qmtl",
+            "world",
+            "apply",
+            core_loop_world_id,
+            "--plan-file",
+            str(plan_file),
+            "--run-id",
+            "plan-run",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "Apply request sent" in proc.stdout
+    assert "plan-run" in proc.stdout
+
+
 def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandle, core_loop_world_id: str):
     base = core_loop_stack.worlds_url.rstrip("/")
     wid = urllib.parse.quote(core_loop_world_id)

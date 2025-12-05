@@ -66,6 +66,7 @@ async def create_world(request: Request) -> Response:
                 "run_id": "alloc-stub",
                 "etag": f"alloc:{wid}:1",
                 "strategy_alloc_total": {"s-demo": 1.0},
+                "stale": False,
             },
         )
         return Response(status_code=201)

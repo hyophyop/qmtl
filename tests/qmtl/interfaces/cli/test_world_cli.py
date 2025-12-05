@@ -190,6 +190,19 @@ def test_rebalance_apply_requires_snapshot(monkeypatch, capsys):
     assert "no allocation snapshot" in err
 
 
+def test_allocations_warns_on_stale_snapshot(monkeypatch, capsys):
+    def fake_get(path, params=None):
+        return 200, {"allocations": {"w1": {"allocation": 0.5, "stale": True}}}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+
+    exit_code = world.cmd_world(["allocations", "--world-id", "w1"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "stale" in out.lower()
+
+
 def test_world_apply_posts_payload(monkeypatch, capsys):
     posts: list[tuple[str, dict]] = []
 
