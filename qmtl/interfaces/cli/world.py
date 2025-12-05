@@ -222,11 +222,16 @@ def _load_positions(path: str | None) -> List[Dict[str, Any]]:
     for idx, entry in enumerate(data):
         if not isinstance(entry, dict):
             raise ValueError(f"Position entry {idx} must be an object")
-        required = {"world_id", "strategy_id", "symbol", "qty"}
+        required = {"world_id", "strategy_id", "symbol", "qty", "mark"}
         missing = sorted(required - set(entry))
         if missing:
             raise ValueError(f"Position entry {idx} missing fields: {', '.join(missing)}")
-        positions.append(dict(entry))
+        try:
+            entry = dict(entry)
+            entry["mark"] = float(entry["mark"])
+        except (TypeError, ValueError):
+            raise ValueError(f"Position entry {idx} has invalid mark: {entry.get('mark')}")
+        positions.append(entry)
     return positions
 
 
@@ -341,7 +346,7 @@ def _rebalance(args: argparse.Namespace, *, apply: bool) -> int:
             current_alloc = _fetch_current_allocations(args.world_id)
         except RuntimeError as exc:
             print(exc, file=sys.stderr)
-            current_alloc = {}
+            return 1
 
     payload: Dict[str, Any] = {
         "total_equity": args.total_equity,

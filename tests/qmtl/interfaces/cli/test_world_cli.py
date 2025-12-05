@@ -40,6 +40,7 @@ def test_rebalance_plan_builds_payload(monkeypatch, tmp_path: Path, capsys):
                     "strategy_id": "s1",
                     "symbol": "BTC",
                     "qty": 1,
+                    "mark": 20000.0,
                 }
             ]
         )
@@ -104,3 +105,24 @@ def test_rebalance_apply_fetches_current(monkeypatch, capsys):
     assert payload["world_alloc_after"] == {"w1": 0.75}
     out = capsys.readouterr().out
     assert "Rebalance plan" in out
+
+
+def test_rebalance_apply_fails_when_current_snapshot_unavailable(monkeypatch, capsys):
+    def fake_get(path, params=None):
+        return 502, {"detail": "gateway unavailable"}
+
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"per_world": {}, "global_deltas": []}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(["rebalance-apply", "--target", "w1=0.75", "--world-id", "w1"])
+
+    assert exit_code == 1
+    assert posts == []
+    err = capsys.readouterr().err
+    assert "Error fetching allocations" in err
