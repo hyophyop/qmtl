@@ -1582,12 +1582,10 @@ def _pct_change(values: Sequence[numbers.Real]) -> list[float]:
 def _is_finite_number(value: object) -> bool:
     if isinstance(value, bool):
         return False
-    if isinstance(value, (numbers.Real, Decimal)):
-        try:
-            return isfinite(float(value))
-        except (OverflowError, ValueError):
-            return False
-    return False
+    try:
+        return isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
 
 
 def _extract_returns_from_strategy(strategy: "Strategy") -> list[float]:

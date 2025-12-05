@@ -108,6 +108,25 @@ class TestAutoReturns:
         assert derived == pytest.approx([0.015, 0.014778325123152707])
         assert hints == []
 
+    def test_accepts_numpy_scalar_prices(self):
+        np = pytest.importorskip("numpy")
+
+        class NumpyScalarPricesStrategy(Strategy):
+            def setup(self):
+                self.prices = [
+                    np.float64(100.0),
+                    np.float64(101.5),
+                    np.float64(103.0),
+                ]
+
+        strategy = NumpyScalarPricesStrategy()
+        strategy.setup()
+
+        derived, hints = _derive_returns_with_auto(strategy, AutoReturnsConfig())
+
+        assert derived == pytest.approx([0.015, 0.014778325123152707])
+        assert hints == []
+
 
 class TestMode:
     """Tests for Mode enum."""
