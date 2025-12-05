@@ -140,6 +140,26 @@ class GatewayClient:
             return None
         return result.payload if isinstance(result.payload, dict) else None
 
+    async def get_allocations(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Fetch world allocation snapshots from Gateway/WorldService.
+
+        Returns a mapping in the WorldService `AllocationSnapshotResponse` shape,
+        or None on error.
+        """
+        url = gateway_url.rstrip("/") + "/allocations"
+        headers = self._build_headers()
+        params: dict[str, str] | None = {"world_id": str(world_id)} if world_id else None
+        result = await self._get(url, headers, params)
+        status = result.status_code or 0
+        if result.error or status >= 400:
+            return None
+        return result.payload if isinstance(result.payload, dict) else None
+
     async def ensure_world_with_policy(
         self,
         *,
@@ -221,14 +241,17 @@ class GatewayClient:
         return result.payload if isinstance(result.payload, dict) else {}
 
     async def _get(
-        self, url: str, headers: dict[str, str]
+        self,
+        url: str,
+        headers: dict[str, str],
+        params: dict[str, str] | None = None,
     ) -> GatewayCallResult:
         """Perform a GET request with circuit breaker protection."""
         client = self._create_client(headers)
         self._attach_headers(client, headers)
         async with client:
             try:
-                resp = await client.get(url)
+                resp = await client.get(url, params=params)
             except Exception as exc:  # pragma: no cover - network errors
                 return GatewayCallResult(status_code=None, error=str(exc))
         return GatewayCallResult(

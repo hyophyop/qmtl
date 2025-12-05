@@ -7,6 +7,7 @@ Endpoints implemented:
 - GET /worlds/{id}/decide
 - GET /worlds/{id}/activation
 - GET /worlds/{id}/{topic}/state_hash
+- GET /allocations
 - POST /worlds/{id}/evaluate
 - POST /worlds/{id}/apply
 
@@ -39,6 +40,7 @@ class WorldRecord:
 
 WORLDS: Dict[str, WorldRecord] = {}
 ETAG_COUNTER: Dict[str, int] = {}
+ALLOCATIONS: Dict[str, Dict[str, Any]] = {}
 
 
 @app.get("/health")
@@ -56,6 +58,16 @@ async def create_world(request: Request) -> Response:
             raise ValueError("missing world.id")
         WORLDS[wid] = WorldRecord(yml=data, version=WORLDS.get(wid, WorldRecord({})).version + 1)
         ETAG_COUNTER.setdefault(wid, 0)
+        ALLOCATIONS.setdefault(
+            wid,
+            {
+                "world_id": wid,
+                "allocation": 1.0,
+                "run_id": "alloc-stub",
+                "etag": f"alloc:{wid}:1",
+                "strategy_alloc_total": {"s-demo": 1.0},
+            },
+        )
         return Response(status_code=201)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -109,6 +121,16 @@ async def activation(wid: str) -> Response:
 async def state_hash(wid: str, topic: str) -> dict:
     return {"state_hash": f"{topic}-hash"}
 
+
+@app.get("/allocations")
+async def allocations(world_id: str | None = None) -> dict:
+    if world_id:
+        snapshot = ALLOCATIONS.get(world_id)
+        allocations = {world_id: snapshot} if snapshot else {}
+    else:
+        allocations = dict(ALLOCATIONS)
+    return {"allocations": allocations}
+
 @app.post("/worlds/{wid}/evaluate")
 async def evaluate(wid: str, req: EvaluateRequest) -> dict:
     # Return a trivial plan
@@ -133,4 +155,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

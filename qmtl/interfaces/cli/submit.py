@@ -181,6 +181,7 @@ def _print_submission_result(result) -> None:
         print(f"Safe mode:   downgraded ({reason})")
 
     _print_ws_section(result)
+    _print_allocation_section(getattr(result, "allocation", None))
     if getattr(result, "precheck", None):
         _print_precheck_section(result.precheck)
 
@@ -227,6 +228,33 @@ def _print_rejected_result(result) -> None:
             print(f"  - {hint}")
     if result.threshold_violations:
         _print_thresholds(result.threshold_violations, label=_t("Threshold violations (WS)"))
+
+
+def _print_allocation_section(allocation) -> None:
+    print(_t("\n🏦 World allocation snapshot (applied)"))
+    if not allocation:
+        print(_t("No allocation snapshot found. After rebalancing, use `qmtl world allocations -w <id>` to inspect."))
+        return
+    print(f"World:       {getattr(allocation, 'world_id', 'n/a')}")
+    alloc_value = getattr(allocation, "allocation", None)
+    if alloc_value is not None:
+        print(f"Allocation:  {float(alloc_value):.4f} (total equity share)")
+    run_id = getattr(allocation, "run_id", None)
+    if run_id:
+        etag = getattr(allocation, "etag", None) or "n/a"
+        print(f"Run:         {run_id} (etag={etag})")
+    updated = getattr(allocation, "updated_at", None)
+    if updated:
+        print(f"Updated at:  {updated}")
+    strategies = getattr(allocation, "strategy_alloc_total", None)
+    if strategies:
+        print(_t("Strategy allocations (total equity):"))
+        for sid, ratio in sorted(strategies.items()):
+            try:
+                ratio_val = float(ratio)
+            except (TypeError, ValueError):
+                continue
+            print(f"  - {sid}: {ratio_val:.4f}")
 
 
 def _print_precheck_section(precheck) -> None:

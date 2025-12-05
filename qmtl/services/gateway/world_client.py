@@ -394,6 +394,19 @@ class WorldServiceClient:
             headers=headers,
         )
 
+    async def get_allocations(
+        self,
+        world_id: str | None = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        params = {"world_id": world_id} if world_id else None
+        return await self._request_json(
+            "GET",
+            "/allocations",
+            headers=headers,
+            params=params,
+        )
+
     async def post_evaluate(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "POST",

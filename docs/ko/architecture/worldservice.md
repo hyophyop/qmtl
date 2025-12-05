@@ -68,10 +68,11 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 
 - As‑Is
   - `/allocations`, `/rebalancing/*`가 world/world‑간 자본 배분 플랜을 계산·기록할 수 있지만, Runner.submit/전략 제출 플로우와는 분리된 **운영자 주도 루프**로 사용됩니다.
+  - Runner.submit/CLI는 제출된 world에 대해 `/allocations`의 최신 스냅샷(월드/전략 총합 비중)을 **조회·표시**하지만, 이는 적용 상태를 알려주는 표면일 뿐 자동 실행을 암시하지 않습니다. 자본 이동/실거래 반영은 여전히 운영자 플로우가 담당합니다.
   - Alpha metrics(`alpha_metrics`)를 rebalancing 플랜에 포함하는 v2 스키마가 도입되었으나, “전략 평가 → world allocation”을 한 문맥에서 설명하는 문서는 제한적입니다.
 - To‑Be
   - 전략 제출/평가 루프와 world allocation 루프를 “표준 두 단계 루프”로 문서화하고, WS는 두 루프 모두의 SSOT 역할(평가/활성/배분)을 명확히 합니다.
-  - `/allocations`가 Runner.submit/CLI 결과와도 자연스럽게 이어지도록, world/strategy allocations에 대한 요약 정보를 Runner/CLI에서도 조회/표시할 수 있게 설계합니다.
+  - Core Loop 표면(Runner.submit/CLI, 문서)이 `/allocations` 스냅샷과 연결되어, 평가/활성(제안) ↔ 자본 배분(적용) 단계를 명확히 구분한 채 탐색/인지를 쉽게 합니다. 적용·실행은 여전히 승인/감사 가능한 별도 플로우입니다.
 
 ---
 
@@ -302,6 +303,7 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 
 - **입력 스키마:** [`AllocationUpsertRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L278') }}). 필수 필드는 `run_id`, `total_equity`, `world_allocations{world_id→ratio}`, 현재 `positions[]`이며, 선택적으로 전략 총합(`strategy_alloc_*`)·최소 체결 노치(`min_trade_notional`)·심볼별 롯(`lot_size_by_symbol`)을 포함합니다.【F:qmtl/services/worldservice/schemas.py†L248-L314】
 - **유효성 검사:** `world_allocations`는 비어 있을 수 없고 값은 [0,1] 범위여야 합니다. 범위를 벗어나면 422, 미지원 모드면 501을 반환합니다.【F:qmtl/services/worldservice/services.py†L184-L207】
+- **Core Loop 노출:** Runner.submit/CLI는 제출된 world에 대해 `GET /allocations?world_id=...` 스냅샷을 조회해 **적용된 월드/전략 비중**을 표시합니다(조회 실패는 무시하며, 실행을 의미하지 않습니다).
 - **run_id 멱등성:** 요청 본문(`run_id`/`execute`/`etag` 제외)을 해시해 `etag`를 생성합니다. 동일한 `run_id`로 상이한 페이로드를 보내면 409가 발생하고, 동일한 페이로드는 저장된 플랜과 실행 상태를 재사용합니다.【F:qmtl/services/worldservice/services.py†L129-L166】【F:qmtl/services/worldservice/services.py†L207-L236】
 - **플랜 계산:** `MultiWorldProportionalRebalancer`가 월드/전략 수준 스케일링을 적용해 `per_world` 및 `global_deltas`를 산출합니다. 요청에 전략 합계가 없으면 현재 포지션 비중을 추론해 `scale-only` 모드로 동작합니다.【F:qmtl/services/worldservice/rebalancing/multi.py†L1-L111】【F:qmtl/services/worldservice/rebalancing/rule_based.py†L1-L74】
 - **저장 & 이벤트:** 성공 시 `PersistentStorage`가 요청/플랜 스냅샷을 기록하고 최신 월드 비중/전략 비중을 영속화합니다. 이후 ControlBus에 `rebalancing_planned` 이벤트(월드별 `scale_world`, `scale_by_strategy`, `deltas`)를 발행해 Gateway가 재분배 작업을 브로드캐스트/측정할 수 있게 합니다.【F:qmtl/services/worldservice/services.py†L237-L311】【F:qmtl/services/worldservice/controlbus_producer.py†L96-L109】

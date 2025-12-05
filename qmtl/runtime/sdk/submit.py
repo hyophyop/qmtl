@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "Mode",
     "SubmitResult",
+    "AllocationSnapshot",
     "PrecheckResult",
     "StrategyMetrics",
     "AutoReturnsConfig",
@@ -112,6 +113,30 @@ class PrecheckResult:
 
 
 @dataclass
+class AllocationSnapshot:
+    """Latest world allocation snapshot for a submitted world."""
+
+    world_id: str
+    allocation: float | None = None
+    run_id: str | None = None
+    etag: str | None = None
+    strategy_alloc_total: dict[str, float] | None = None
+    updated_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "world_id": self.world_id,
+            "allocation": self.allocation,
+            "run_id": self.run_id,
+            "etag": self.etag,
+            "updated_at": self.updated_at,
+        }
+        if self.strategy_alloc_total is not None:
+            payload["strategy_alloc_total"] = dict(self.strategy_alloc_total)
+        return payload
+
+
+@dataclass
 class SubmitResult:
     """Result of strategy submission.
     
@@ -137,6 +162,7 @@ class SubmitResult:
     # WS envelopes (shared schema)
     decision: DecisionEnvelope | None = None
     activation: ActivationEnvelope | None = None
+    allocation: "AllocationSnapshot | None" = None
     
     # Rejection info (if status == "rejected")
     rejection_reason: str | None = None
@@ -164,6 +190,13 @@ class SubmitResult:
         metrics_dump = self.metrics.to_dict()
         decision_dump = _dump_model(self.decision)
         activation_dump = _dump_model(self.activation)
+        if self.allocation is not None:
+            try:
+                allocation_dump = self.allocation.to_dict()
+            except Exception:
+                allocation_dump = None
+        else:
+            allocation_dump = None
         improvement_hints = list(self.improvement_hints)
         threshold_violations = list(self.threshold_violations)
 
@@ -185,6 +218,7 @@ class SubmitResult:
             "improvement_hints": improvement_hints,
             "threshold_violations": threshold_violations,
             "precheck": self.precheck.to_dict() if self.precheck else None,
+            "allocation": allocation_dump,
         }
 
         payload["ws"] = {
@@ -194,6 +228,7 @@ class SubmitResult:
             "mode": mode_value,
             "decision": decision_dump,
             "activation": activation_dump,
+            "allocation": allocation_dump,
             "contribution": self.contribution,
             "weight": self.weight,
             "rank": self.rank,
@@ -280,6 +315,15 @@ def _normalize_world_id(world: str | None) -> str:
             "world must be provided; set --world or QMTL_DEFAULT_WORLD / project.default_world"
         )
     return candidate
+
+
+def _world_id_candidates(world_id: str) -> tuple[str, ...]:
+    variants = [world_id, world_id.replace("_", "-"), world_id.replace("-", "_")]
+    seen: dict[str, str] = {}
+    for val in variants:
+        if val not in seen:
+            seen[val] = val
+    return tuple(seen.keys())
 
 
 def _get_default_preset() -> str:
@@ -475,6 +519,7 @@ async def submit_async(
     services = get_global_services()
     strategy, strategy_class_name = _strategy_from_input(strategy_cls)
     world_ctx: WorldContext | None = None
+    gateway_available = False
 
     from qmtl.foundation.common.compute_key import ComputeContext
     compute_context = ComputeContext(
@@ -491,6 +536,21 @@ async def submit_async(
         "world_id": resolved_world,
         "mode": mode.value,
     })
+
+    async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
+        finalized = _attach_context_flags(result)
+        if gateway_available:
+            try:
+                allocation = await _fetch_allocation_snapshot(
+                    gateway_url=gateway_url,
+                    world_id=resolved_world,
+                    client=services.gateway_client,
+                )
+                if allocation is not None:
+                    finalized.allocation = allocation
+            except Exception:
+                logger.debug("Failed to attach allocation snapshot", exc_info=True)
+        return finalized
 
     try:
         strategy.on_start()
@@ -534,27 +594,27 @@ async def submit_async(
             auto_returns=auto_returns,
         )
         if not auto_validate:
-            return _attach_context_flags(
+            return await _finalize_with_allocation(
                 _basic_result(
-                strategy=strategy,
-                strategy_id=bootstrap_out.strategy_id,
-                resolved_world=resolved_world,
-                mode=mode,
-                gateway_available=gateway_available,
-                world_notice=world_ctx.world_notice,
+                    strategy=strategy,
+                    strategy_id=bootstrap_out.strategy_id,
+                    resolved_world=resolved_world,
+                    mode=mode,
+                    gateway_available=gateway_available,
+                    world_notice=world_ctx.world_notice,
                 )
             )
         if not backtest_returns:
-            return _attach_context_flags(
+            return await _finalize_with_allocation(
                 _reject_due_to_no_returns(
-                strategy=strategy,
-                strategy_class_name=strategy_class_name,
-                strategy_id=bootstrap_out.strategy_id,
-                resolved_world=resolved_world,
-                mode=mode,
-                world_notice=world_ctx.world_notice,
-                auto_returns_requested=bool(auto_returns),
-                auto_returns_hints=auto_returns_hints,
+                    strategy=strategy,
+                    strategy_class_name=strategy_class_name,
+                    strategy_id=bootstrap_out.strategy_id,
+                    resolved_world=resolved_world,
+                    mode=mode,
+                    world_notice=world_ctx.world_notice,
+                    auto_returns_requested=bool(auto_returns),
+                    auto_returns_hints=auto_returns_hints,
                 )
             )
 
@@ -569,17 +629,17 @@ async def submit_async(
             gateway_url=gateway_url,
             gateway_available=gateway_available,
         )
-        return _attach_context_flags(
+        return await _finalize_with_allocation(
             _build_submit_result_from_validation(
-            strategy=strategy,
-            strategy_class_name=strategy_class_name,
-            strategy_id=bootstrap_out.strategy_id,
-            resolved_world=resolved_world,
-            mode=mode,
-            world_notice=world_ctx.world_notice,
-            validation_result=validation_result,
-            ws_eval=ws_eval,
-            gateway_available=gateway_available,
+                strategy=strategy,
+                strategy_class_name=strategy_class_name,
+                strategy_id=bootstrap_out.strategy_id,
+                resolved_world=resolved_world,
+                mode=mode,
+                world_notice=world_ctx.world_notice,
+                validation_result=validation_result,
+                ws_eval=ws_eval,
+                gateway_available=gateway_available,
             )
         )
     except Exception as e:  # pragma: no cover - safety net
@@ -590,15 +650,15 @@ async def submit_async(
 
         fallback_notice = world_ctx.world_notice if world_ctx else []
         fallback_id = _strategy_id_or_fallback(None, strategy, prefix="failed")
-        return _attach_context_flags(
+        return await _finalize_with_allocation(
             SubmitResult(
-            strategy_id=fallback_id,
-            status="rejected",
-            world=resolved_world,
-            mode=mode,
-            rejection_reason=str(e),
-            improvement_hints=fallback_notice + _get_improvement_hints(e),
-            strategy=strategy if "strategy" in locals() else None,
+                strategy_id=fallback_id,
+                status="rejected",
+                world=resolved_world,
+                mode=mode,
+                rejection_reason=str(e),
+                improvement_hints=fallback_notice + _get_improvement_hints(e),
+                strategy=strategy if "strategy" in locals() else None,
             )
         )
 
@@ -1050,6 +1110,11 @@ async def _run_validation_and_ws_eval(
             world_id=resolved_world,
             strategy_id=strategy_id,
         )
+        ws_eval.allocation = await _fetch_allocation_snapshot(
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            client=services.gateway_client,
+        )
     except Exception:
         logger.debug("Failed to fetch WS envelopes after evaluation", exc_info=True)
 
@@ -1149,6 +1214,7 @@ def _build_passed_result(
         precheck=precheck,
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
+        allocation=ws_eval.allocation if ws_eval else None,
     )
 
 
@@ -1181,6 +1247,7 @@ def _ws_rejection_result(
         precheck=_precheck_from_validation(validation_result),
         decision=ws_eval.decision,
         activation=ws_eval.activation,
+        allocation=ws_eval.allocation,
     )
 
 
@@ -1299,6 +1366,7 @@ def _ws_accepts_after_fail(
         precheck=_precheck_from_validation(validation_result),
         decision=ws_eval.decision,
         activation=ws_eval.activation,
+        allocation=ws_eval.allocation,
     )
 
 
@@ -1344,6 +1412,7 @@ def _pending_after_failed_validation(
         precheck=_precheck_from_validation(validation_result),
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
+        allocation=ws_eval.allocation if ws_eval else None,
     )
 
 
@@ -1378,6 +1447,7 @@ def _reject_after_failed_validation(
         precheck=_precheck_from_validation(validation_result),
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
+        allocation=ws_eval.allocation if ws_eval else None,
     )
 
 
@@ -1852,6 +1922,7 @@ class WsEvalResult:
     error: str | None = None
     decision: DecisionEnvelope | None = None
     activation: ActivationEnvelope | None = None
+    allocation: AllocationSnapshot | None = None
 
 
 async def _evaluate_with_worldservice(
@@ -1956,6 +2027,75 @@ async def _fetch_activation_envelope(
     except Exception:
         logger.debug("Failed to fetch activation envelope via HTTP", exc_info=True)
     return None
+
+
+def _extract_allocation_snapshot(
+    payload: dict[str, Any] | None, world_id: str
+) -> AllocationSnapshot | None:
+    if not isinstance(payload, dict):
+        return None
+    allocations = payload.get("allocations")
+    if not isinstance(allocations, dict):
+        return None
+    snapshot: dict[str, Any] | None = None
+    for candidate in _world_id_candidates(world_id):
+        candidate_snapshot = allocations.get(candidate)
+        if isinstance(candidate_snapshot, dict):
+            snapshot = candidate_snapshot
+            break
+    if snapshot is None and len(allocations) == 1:
+        only_entry = next(iter(allocations.values()))
+        snapshot = only_entry if isinstance(only_entry, dict) else None
+    if snapshot is None:
+        return None
+
+    try:
+        alloc_value_raw = snapshot.get("allocation")
+        alloc_value = float(alloc_value_raw) if alloc_value_raw is not None else None
+    except (TypeError, ValueError):
+        alloc_value = None
+
+    strategy_alloc_total: dict[str, float] | None = None
+    raw_strategy_alloc = snapshot.get("strategy_alloc_total")
+    if isinstance(raw_strategy_alloc, dict):
+        strategy_alloc_total = {}
+        for sid, ratio in raw_strategy_alloc.items():
+            try:
+                val = float(ratio)
+            except (TypeError, ValueError):
+                continue
+            if isfinite(val):
+                strategy_alloc_total[str(sid)] = val
+        if not strategy_alloc_total:
+            strategy_alloc_total = None
+
+    return AllocationSnapshot(
+        world_id=str(snapshot.get("world_id") or world_id),
+        allocation=alloc_value,
+        run_id=str(snapshot.get("run_id")) if snapshot.get("run_id") is not None else None,
+        etag=str(snapshot.get("etag")) if snapshot.get("etag") is not None else None,
+        strategy_alloc_total=strategy_alloc_total,
+        updated_at=str(snapshot.get("updated_at")) if snapshot.get("updated_at") is not None else None,
+    )
+
+
+async def _fetch_allocation_snapshot(
+    *,
+    gateway_url: str,
+    world_id: str,
+    client: "GatewayClient | None",
+) -> AllocationSnapshot | None:
+    if client is None:
+        return None
+    try:
+        payload = await client.get_allocations(
+            gateway_url=gateway_url,
+            world_id=world_id,
+        )
+    except Exception:
+        logger.debug("Failed to fetch allocation snapshot", exc_info=True)
+        return None
+    return _extract_allocation_snapshot(payload, world_id)
 
 
 def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalResult:

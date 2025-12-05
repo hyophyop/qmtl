@@ -147,6 +147,7 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
   - Apply 실행/롤백/감사 로그를 WorldAuditLog와 운영 대시보드에서 확인할 수 있도록 한다.
 - **P2‑T2‑M4 — 월드 단위 리밸런싱/자본 배분 플로우 완성**
   - `/allocations` API와 Rebalancing 엔진을 Core Loop의 “배포/자본 배분” 단계와 연결하고, 운영 플로우(승인/실행/롤백)를 문서화한다.
+  - Runner.submit/CLI에서 제출된 world의 `/allocations` 스냅샷(월드/전략 비중)을 노출해 평가/활성(제안)과 배분(적용) 경계를 명확히 하고, apply/execute는 감사 가능한 운영 단계로 남긴다 (#1817).
 
 ### 4.3 구체적인 작업 예시
 
@@ -155,6 +156,8 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
   - ExecutionDomain/effective_mode 파이프라인에서 default‑safe 규약을 강제하는 유닛 테스트를 추가한다.
 - `docs/ko/architecture/worldservice.md`  
   - As‑Is/To‑Be 섹션에 각 P0 마일스톤의 상태/진행도를 업데이트하고, Runner.submit/CLI와의 연결 예시를 구체화한다.
+- Core Loop 계약 테스트  
+  - `tests/e2e/core_loop/test_core_loop_stack.py`에 “submit → allocation summary 노출” 경로를 추가해 `/allocations` 스냅샷 노출 계약을 고정한다 (#1817).
 - `docs/ko/operations/activation.md`, `docs/ko/operations/rebalancing_execution.md`  
   - 2‑Phase Apply, 활성 TTL/etag, 리밸런싱 승인 플로우를 Core Loop 기준으로 재정리한다.
 
