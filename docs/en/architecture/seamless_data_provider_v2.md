@@ -19,8 +19,10 @@
 > **Status:** The Seamless Data Provider v2 architecture is now live in the
 > runtime. The distributed backfill coordinator replaces the in-process stub,
 > `SLAPolicy` budgets are enforced, and the observability surfaces referenced
-> below are emitted by default. Remaining roadmap items focus on schema
-> governance and dashboard polish rather than core service gaps.
+> below are emitted by default. The Core Loop golden-signal set is pinned in
+> `../operations/core_loop_golden_signals.md`; remaining roadmap items focus on
+> schema governance upkeep and incremental dashboard expansion rather than core
+> service gaps.
 
 The Seamless Data Provider (SDP) remains on the path from the prototype described
 in the earlier design document toward a production system that enforces data
@@ -166,9 +168,11 @@ formalization** contract.
 
 Prometheus now exposes the coordinator and SLA metrics described above alongside
 the existing conformance counters. The Jsonnet dashboards referenced in the
-operations guide can be rendered directly from these metrics. Tracing spans will
-gain richer attributes once the schema registry work completes, but no further
-changes are required for the coordinator or SLA instrumentation.
+operations guide can be rendered directly from these metrics. The Core Loop
+golden-signal dashboard reuses this data-plane view and fixes the SLOs in
+`../operations/core_loop_golden_signals.md`. Tracing spans will gain richer
+attributes once the schema registry work completes, but no further changes are
+required for the coordinator or SLA instrumentation.
 
 ## Validation & Failure-Injection Suite
 

@@ -2,7 +2,7 @@
 title: "Seamless SLA Dashboards"
 tags: [operations]
 author: "QMTL Team"
-last_modified: 2025-09-25
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -17,6 +17,8 @@ last_modified: 2025-09-25
 This runbook documents the observability package that accompanies Seamless Data
 Provider v2. Changes below supersede the provisional guidance that pre-dated the
 implementation tracked in issue #1148.
+
+The data-plane view of the Core Loop golden-signal dashboard reuses this Jsonnet bundle. For the full golden-signal set and SLOs, see [core_loop_golden_signals.md](core_loop_golden_signals.md).
 
 ## Dashboard Bundle
 

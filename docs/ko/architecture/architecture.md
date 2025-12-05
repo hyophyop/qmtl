@@ -4,7 +4,7 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -742,8 +742,10 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 6. **Minor‑schema 버퍼링** — `schema_minor_change`는 재사용하되 7일 후 자동
    full‑recompute가 실행된다.
 7. **GSG Canonicalize & SSA DAG Lint** — DAG를 canonical JSON + SSA로 변환해 **NodeID 재계산**이 일치하는지 검증한다(분리 가능한 파라미터 개별 필드화 포함).
-8. **Golden‑Signal Alert** — Prometheus Rule CRD로 `diff_duration_ms_p95`,
-   `nodecache_resident_bytes`, `sentinel_gap_count`에 대한 Alert가 관리된다.
+8. **Golden‑Signal SLO/Alert** — Prometheus Rule CRD로 `diff_duration_ms_p95`,
+   `nodecache_resident_bytes`, `sentinel_gap_count`를 관리하고 Core Loop 골든 시그널
+   대시보드/SLO(`../operations/core_loop_golden_signals.md`)로 submit→activation 경로를
+   상시 모니터링한다(T5 P1‑M2 달성).
 9. **극단 장애 플레이북** — Neo4j 전체 장애, Kafka 메타데이터 손상, Redis AOF
    손실 시나리오별 Runbook과 Grafana 대시보드를 교차 링크한다.
 10. **4‑단계 CI/CD Gate** — Pre‑merge SSA Lint와 빠른 백테스트, 24h 카나리아,
@@ -753,6 +755,7 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 12. **TagQueryNode 안정성 검사** — 신규 큐 발견 전/후에 TagQueryNode의 NodeID가 동일함을 확인한다. `query_tags`/`match_mode`/`interval`이 같다면 런타임 해석 결과(업스트림 증가)에 따라 NodeID가 변하면 안 된다.
 
 위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
+골든 시그널(To‑Be) 항목은 `../operations/core_loop_golden_signals.md`에 정리된 대시보드/SLO로 운영 자산화되었다.
 
 
 ### 관측 · 런북 연결

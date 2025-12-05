@@ -2,6 +2,8 @@
 
 Gateway’s WS bridge relays ControlBus updates to SDKs. This page documents the target rates, bench method, and operational knobs.
 
+The Core Loop golden-signal dashboard uses these metrics to track the WS → Gateway/SDK propagation SLO; see [core_loop_golden_signals.md](core_loop_golden_signals.md) for panel placement.
+
 ## Targets
 
 - Sustained rate: ≥ 10k events/min (≈167 msg/s) without loss on the normal path.

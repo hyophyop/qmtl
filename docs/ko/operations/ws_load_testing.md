@@ -2,6 +2,8 @@
 
 Gateway의 WS 브리지는 ControlBus 업데이트를 SDK로 릴레이합니다. 이 문서는 목표 처리율, 벤치마크 방법, 운영 설정을 정리합니다.
 
+Core Loop 골든 시그널 대시보드에서는 WS→Gateway/SDK 전파 구간의 SLO를 이 지표 세트로 측정합니다. 대시보드 배치는 [core_loop_golden_signals.md](core_loop_golden_signals.md)를 참고하세요.
+
 ## 목표
 
 - 지속 처리율: 정상 경로에서 손실 없이 분당 10,000 이벤트 이상(초당 약 167 메시지)
