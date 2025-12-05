@@ -9,21 +9,18 @@ last_modified: 2025-12-04
 
 본 문서는 과거 초안(world_todo/world_refined)의 아이디어를 통합하여, “월드(World)”라는 알파 정제 단위를 QMTL에 무리 없이 도입하기 위한 단일 사양과 작업 명세를 제시한다. 목표는 기존 QMTL 구성요소(DAG Manager, Gateway, SDK Runner, Metrics)를 최대한 재사용하면서 정책 기반의 자동 평가·승격·강등을 제공하는 것이다. 불필요한 프레임워크 확장을 피하고, 단계적 도입이 가능하도록 설계를 최소화했다.
 
-## 0. Core Loop 관점 As‑Is / To‑Be
+## 0. Core Loop 관점 요약
 
-- As‑Is
-  - World 개념, Policy DSL, 2‑Phase Apply, Activation Table 등 “월드 중심 설계”는 잘 정리되어 있다.
-  - 그러나 Runner.submit / ValidationPipeline / WorldService `/evaluate` / `/allocations` 사이의 흐름이 이 문서 안에서는 간접적으로만 드러나, 사용자가 “전략 제출 → 월드 평가/승격 → 자본 배분”을 한 루프로 읽기 어렵다.
-  - 데이터 핸들러(Seamless)는 기본값으로 명시돼 있으나, world 설정만으로 Seamless provider가 자동으로 선택·주입되는 on‑ramp 계약은 정의되어 있지 않다.
-- To‑Be
-  - 이 문서는 “World = 전략 생애주기 관리 단위”를 Core Loop와 직접 연결하는 상위 사양으로,  
-    아래 네 단계를 명확히 서술해야 한다.
-    1. 전략 제출 → World에 바인딩 (`/worlds/{id}/decisions` / WSB)
-    2. 월드 평가 (`/evaluate`) → DecisionEnvelope (active/violations)
-    3. 활성화/게이팅 (`/activation` + ControlBus) → 주문 경로 제어
-    4. 자본 배분 (`/allocations` + `/rebalancing/*`) → world/strategy allocations  
-  - Runner.submit / CLI와의 연결 지점(입력: returns/metrics, 출력: status/weight/contribution)을 예시 수준으로 포함해,  
-    이 문서 하나만 읽어도 “월드 관점 Core Loop”가 이해되도록 정비한다.
+이 문서는 “World = 전략 생애주기 관리 단위”를 Core Loop와 직접 연결하는 상위 사양으로,
+아래 네 단계를 기준으로 월드 역할을 설명합니다.
+
+1. 전략 제출 → World에 바인딩 (`Runner.submit(..., world=...)` / `/worlds/{id}/decisions` / WSB)
+2. 월드 평가 (`/worlds/{id}/evaluate`) → DecisionEnvelope (active/violations)
+3. 활성화/게이팅 (`/worlds/{id}/activation` + ControlBus) → 주문 경로 제어
+4. 자본 배분 (`/allocations` + `/rebalancing/*`) → world/strategy allocations  
+
+Runner.submit / CLI와의 연결 지점(입력: returns/metrics, 출력: status/weight/contribution)은
+각 섹션에서 예시 수준으로 포함되며, 이 문서 하나만 읽어도 “월드 관점 Core Loop”가 이해되도록 구성되어 있다.
 
 - **용어 안내:** QMTL 전 구간에서 공식 용어는 "World"다. 과거 "Realm"으로의 변경 제안은 채택되지 않았으며, 관련 내용은 참고용 보관 문서에만 남아 있다.
 
@@ -217,6 +214,27 @@ world:
 - 계약 테스트 훅 (#1778/#1789)
   - `tests/e2e/core_loop/worlds/core-loop-demo.yml`에 위 스키마를 따르는 preset을 포함시켜 계약 테스트에서 Seamless 오토와이어링을 검증한다.
   - 테스트 기대값: world에 선언된 첫 preset이 없으면 실패, 존재하면 Gateway/WorldService 스텁이 preset ID를 반환하고 Runner는 해당 Seamless preset으로 `HistoryProvider`를 구성한다(네트워크 없이도 동작하도록 fixture 사용).
+
+### 6.3 Tag/interval ↔ 큐 네임스페이스 규약(T3 P2 대비)
+
+멀티 업스트림/멀티자산 전략에서 TagQueryNode가 “알맞은 큐”를 자동 선택하려면, DAG Manager/Gateway/Seamless가
+태그와 interval, 큐 네임스페이스에 대해 동일한 규약을 공유해야 한다.
+
+- 태그(tag)
+  - ComputeNode/Queue는 자산군, venue, 데이터 패밀리 등을 나타내는 태그 목록을 가진다(예: `["BTC", "price", "binance"]`).
+  - TagQueryNode/TagQueryManager는 이 태그 집합과 interval을 기준으로 Gateway `GET /queues/by_tag`를 호출해 업스트림 큐를 조회한다.
+- interval
+  - `GET /queues/by_tag`의 `interval` 파라미터는 **초 단위** 큐 interval이며, 노드/큐의 설정값과 정확히 일치해야 한다.  
+    world preset의 `interval_ms` 필드는 이 interval과 일관되게 유지해야 한다(예: 60초 바 → `interval_ms=60000`).
+- 네임스페이스
+  - topic namespace 기능이 활성화된 경우 Gateway는 `DagManagerClient.get_queues_by_tag`에서
+    `{world_id}.{execution_domain}.<topic>` 프리픽스를 적용한다.  
+    이렇게 하면 동일 태그/interval이라도 world/domain별로 큐가 격리되며, TagQueryNode는 세계관에 맞는 큐 집합만 보게 된다.
+- Seamless와의 관계
+  - Seamless preset은 주로 “어떤 데이터 소스와 interval로 큐를 채울지”를 결정하고, TagQuery는
+    이미 만들어진 큐 중에서 태그/interval을 기준으로 어떤 큐를 읽을지 결정한다.
+  - 멀티 업스트림/Tag 기반 자동 큐 매핑(T3 P2)에서는 world preset의 `universe`/`interval_ms`와
+    DAG Manager의 태그·interval, Gateway의 `/queues/by_tag` 규약이 일치하도록 유지해야 한다.
 
 ## 7. 주문 게이트(OrderGate) 설계(경량)
 

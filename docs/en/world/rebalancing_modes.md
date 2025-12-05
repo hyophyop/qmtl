@@ -42,4 +42,8 @@ Pluggability
 - Scaling engine is active (`MultiWorldProportionalRebalancer`).
 - Overlay planner is active when configured; Hybrid is still disabled until its design is complete.
 
+!!! note "Core Loop scope"
+    From the Core Loop P0/P1 perspective, **scaling is the paved-road mode**. Overlay/hybrid remain advanced options for world-level rebalancing.  
+    Overlay should only be used in environments that have the necessary configuration and risk model; hybrid is explicitly blocked with HTTP 501 and sits outside the current roadmap scope.
+
 {{ nav_links() }}

@@ -15,6 +15,15 @@ last_modified: 2025-09-23
 - Normalization: Gateway returns an array of descriptor objects:
   - `{"queue": "<id>", "global": <bool>}`. Entries with `global=true` are ignored by the SDK for node execution.
 
+## Tag/Interval & Namespace Contract
+
+- Tags are attached to ComputeNodes/Queues via the DAG Manager (e.g., strategy nodes emitting price bars tagged with asset class, venue, or factor family).
+- The `interval` parameter is the queue interval in **seconds** and must match the node’s configured interval; mismatched intervals yield no results.
+- When `world_id` is provided and topic namespaces are enabled, Gateway uses `{world_id}.{execution_domain}.<topic>` as the namespace prefix (see `DagManagerClient.get_queues_by_tag`).  
+  This ensures TagQueryNode lookups stay isolated per world/domain while still using global tags.
+
+The tag/interval/namespace mapping is the same regardless of whether queues are fed by Seamless presets or other sources; Seamless worlds typically seed queues whose tags/intervals align with the `world.data.presets[].universe` and `interval_ms` fields.
+
 ## Runner Integration
 
 - Boot sequence: `Runner.submit(..., world=..., mode=...)` attaches `TagQueryManager` via the Gateway bootstrap path, applies the `queue_map` to nodes, and calls `resolve_tags()` once before starting live subscriptions.

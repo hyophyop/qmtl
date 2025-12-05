@@ -625,19 +625,16 @@ worlds:
 
 ### Phase 1: 핵심 구현
 
-- [ ] `AutoReturnsConfig` 데이터클래스 정의 (`qmtl/runtime/sdk/__init__.py`)
-- [ ] `qmtl/runtime/sdk/returns_derive.py` 모듈 생성
-  - [ ] `DeriveResult` 데이터클래스
-  - [ ] `derive_returns()` 함수
-  - [ ] `normalize_auto_returns_option()` 함수
-- [ ] `submit.py` 수정
-  - [ ] `submit_async` 시그니처에 `auto_returns` 추가
-  - [ ] returns 결정 로직에 auto_returns fallback 추가
+- [x] `AutoReturnsConfig` 데이터클래스 정의 (`qmtl/runtime/sdk/submit.py`)
+- [x] 파생 헬퍼 구현 (`_normalize_auto_returns_config`, `_derive_returns_with_auto` in `qmtl/runtime/sdk/submit.py`)
+- [x] `submit.py` 수정
+  - [x] `submit_async` 시그니처에 `auto_returns` 추가
+  - [x] returns 결정 로직에 auto_returns fallback 추가
   - [ ] `returns_source` 메타데이터 생성
 - [ ] `SubmitResult`에 `returns_source` 필드 추가
-- [ ] 단위 테스트 작성
-  - [ ] `test_returns_derive.py` — 파생 로직 테스트
-  - [ ] `test_submit_auto_returns.py` — 통합 테스트
+- [x] 단위 테스트 작성
+  - [x] `tests/qmtl/runtime/sdk/test_submit.py` — 파생 로직/힌트 테스트
+  - [ ] 통합 테스트 추가 (auto_returns end-to-end)
 
 ### Phase 2: SR 통합
 

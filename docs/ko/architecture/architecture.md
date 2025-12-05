@@ -130,10 +130,13 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
   - 하지만 Runner.submit/CLI와 자본 배분 경로는 **느슨하게 결합**되어 있어,
     실제 자본 이동에는 별도의 운영/스케줄링 루프가 필요하다.
 - To‑Be
-  - 전략 제출/평가 루프와 월드 자본 배분 루프를 문서/CLI 측면에서
-    “표준 두 단계 루프”로 정의하고,  
-    WorldService가 추천하는 world/strategy allocations를
-    운영자가 수용/수정해 실행하는 플로우가 명시된다.
+  - 전략 제출/평가 루프와 월드 자본 배분 루프를 본 문서, `worldservice.md`,
+    world/운영 가이드 전반에서 **표준 두 단계 루프**로 서술한다.
+    1) `Runner.submit(..., world=...)` → WS 평가/활성화,  
+    2) `/allocations`·`/rebalancing/*` 및 `qmtl world allocations|rebalance-*` CLI를 통한
+       월드 자본 배분/리밸런싱 적용 단계로 이어지는 흐름을 고정한다.
+  - WorldService가 제안하는 world/strategy allocations 요약이 CLI/문서에서도 자연스럽게 노출되어,
+    운영자가 별도 문서 병합 없이 수용·조정·실행 플로우를 따라갈 수 있도록 한다.
 
 ### 기본 원칙: 단순성 > 하위 호환성
 
