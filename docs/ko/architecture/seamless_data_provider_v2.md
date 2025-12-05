@@ -16,7 +16,9 @@ last_modified: 2025-12-04
 
 - As‑Is
   - SDP v2는 이미 런타임에 적용되어, cache→storage→backfill→live 경로와 ConformancePipeline/SLA/metrics를 통해 데이터 품질을 관리합니다.
-  - 그러나 전략/템플릿 수준에서는 여전히 `history_provider`를 직접 구성해야 하고, world 설정만으로 Seamless가 자동으로 붙는 on‑ramp는 정의되어 있지 않습니다.
+  - 전략/템플릿 수준에서는 여전히 대부분의 경우 `history_provider`를 직접 구성해야 하지만,
+    `world.data.presets[]`가 선언된 월드에 대해서는 world/preset 정보를 기반으로 Runner/CLI가 SDP 인스턴스를
+    자동 구성해 `StreamInput`에 주입하는 기본 on‑ramp가 존재합니다.
 - To‑Be
   - world/preset 기반 on‑ramp에서 Runner/CLI가 **Seamless preset + data spec**만으로 적절한 SDP 인스턴스를 자동 구성하고, StreamInput에 주입합니다.
   - 이 문서는 데이터 플레인 관점에서 As‑Is를 규범화하고, `rewrite_architecture_docs.md`와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장됩니다.

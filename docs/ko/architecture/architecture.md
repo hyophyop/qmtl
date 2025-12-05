@@ -81,9 +81,12 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 - As‑Is
   - `HistoryWarmupService`와 `Pipeline`이 `StreamInput` 기반 히스토리 로딩·replay를 담당한다.
   - Seamless/QuestDB/CCXT 등 데이터 소스는 이미 v2 데이터 플레인으로 통합되었지만,
-    **전략이 어떤 StreamInput/데이터셋을 사용할지**는 여전히 사용자가 직접 지정해야 한다.
+    **전략이 어떤 StreamInput/데이터셋을 사용할지**는 대부분 여전히 사용자가 직접 지정한다.
+    Core Loop 데모/표준 월드처럼 `world.data.presets[]`가 정의된 경우에는 Runner/CLI가
+    world·preset 정보를 바탕으로 Seamless provider를 자동으로 붙여 주지만, 그 외 월드는 수동
+    구성에 의존한다.
   - World 설정(`world/world.md`)과 데이터셋(`dataset_id`, `snapshot_version` 등)의 연결은
-    설계 문서를 따라 수동으로 구성해야 한다.
+    world data preset 온램프가 없는 월드에 대해서는 여전히 설계 문서를 따라 수동으로 구성해야 한다.
 - To‑Be
   - 기본 on‑ramp에서는 **world + preset + 간단한 data spec**만으로
     Runner/CLI가 적절한 Seamless provider와 StreamInput을 자동으로 연결한다.
@@ -95,8 +98,9 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 - As‑Is
   - `SeamlessDataProvider v2`는 캐시→스토리지→백필→라이브 경로를 추상화하고,
     SLA/적합성/스키마 검증까지 수행한다.
-  - 그러나 Runner/SDK 수준에서는 “world만 주면 Seamless가 자동 붙는다”는 계약이 없고,
-    SR 템플릿이나 일반 Strategy에서 `history_provider`를 직접 구성해야 한다.
+  - Runner/SDK 수준에서는 여전히 많은 전략이 `history_provider`를 직접 구성하지만,
+    `world.data.presets[]`가 선언된 월드에 대해서는 Runner/CLI가 world/preset 설정을 기반으로
+    Seamless provider를 자동으로 구성해 `StreamInput`에 주입하는 기본 on‑ramp가 존재한다.
 - To‑Be
   - Runner/CLI에서 world를 지정하면, 해당 world 설정/프리셋에 맞는 Seamless provider가
     기본으로 선택되고, StreamInput에도 자동 주입된다.

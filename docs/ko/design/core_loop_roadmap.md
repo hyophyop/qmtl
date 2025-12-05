@@ -2,7 +2,7 @@
 title: "Core Loop 중심 아키텍처 로드맵"
 tags: [architecture, roadmap, core-loop]
 author: "QMTL Team"
-last_modified: 2025-12-04
+last_modified: 2025-12-06
 ---
 
 # Core Loop 중심 아키텍처 로드맵
@@ -267,11 +267,20 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 - `docs/ko/architecture/architecture.md` 및 관련 아키텍처 문서  
   - As‑Is/To‑Be 섹션이 실제 구현 상태와 어긋나지 않도록 주기적으로 점검하고, 변경 시 본 로드맵 문서와 함께 업데이트한다.
 
+## 9. 이행 현황(2025-12)
+
+- `core_loop_roadmap_tasks.md` / `core_loop_roadmap_tasks2.md`에 정의된 Phase 0–5(이슈 #1755–#1790) 클러스터는 2025-12-06 기준 완료 상태다.
+- ExecutionDomain/default-safe 수직 슬라이스(WS 검증/강등, Runner/CLI 힌트 제거, ComputeContext validator)가 반영됐고, `tests/e2e/core_loop` 계약 테스트로 잠금됐다.
+- SubmitResult가 WS `DecisionEnvelope`/`ActivationEnvelope` 공용 스키마를 SSOT로 사용하고 `precheck`를 분리하도록 정리됐으며, CLI/SDK JSON 스냅샷과 계약 스위트에서 검증된다.
+- world 기반 데이터 preset 온램프(`world.data.presets[]` → Seamless 오토 와이어링, `--data-preset` 옵션)는 core-loop demo world 계약 테스트로 커버된다.
+- NodeID/TagQuery 결정성과 Determinism 체크리스트/메트릭/런북이 반영됐으며, 대응은 `../operations/determinism.md`를 따른다.
+- Core Loop 계약 스위트는 `.github/workflows/ci.yml`에서 `CORE_LOOP_STACK_MODE=inproc`으로 CI 게이트로 실행되며, 실패 시 본 로드맵과 `../architecture/architecture.md`에서 의도/대응을 확인한다.
+
 ---
 
-## 9. 로드맵 운용 원칙
+## 10. 로드맵 운용 원칙
 
-### 9.1 이슈/PR 관리
+### 10.1 이슈/PR 관리
 
 - **프로그램 + 트랙/마일스톤 매핑 필수**  
   - 새 기능/리팩터·버그 수정 이슈는 반드시 **P-0/A/B/C 프로그램** 중 하나와, **T1–T6 트랙의 P0–P2 마일스톤** 중 하나 이상에 매핑한다.
@@ -281,13 +290,13 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 - **복잡도/기술 부채 가시화**  
   - 불가피한 예외/waiver는 해당 코드 근처와 PR 본문에서 "왜 Core Loop 방향성과 다르게 선택했는지"를 설명하고, 본 로드맵에서 후속 계획을 참조한다.
 
-### 9.2 CI Gate
+### 10.2 CI Gate
 
 - `tests/e2e/core_loop` 계약 테스트 스위트는 **P-A 완료의 핵심 DOD**이다.
 - 이 테스트가 실패하면 관련 모듈 변경은 merge 불가.
 - 테스트 스켈레톤은 구현 완료 전에도 "이 테스트가 결국 통과해야 한다"는 목표로 먼저 작성한다.
 
-### 9.3 ADR (Architecture Decision Record)
+### 10.3 ADR (Architecture Decision Record)
 
 - 중요한 아키텍처 결정에 한해 ADR을 작성한다.
 - ADR에는 "연결된 프로그램(P-0/A/B/C)과 트랙/마일스톤"을 반드시 명시한다.
@@ -295,7 +304,7 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 
 ---
 
-## 10. 관련 문서
+## 11. 관련 문서
 
 - [architecture_roadmap_redesign.md](architecture_roadmap_redesign.md) — 이 로드맵의 설계 논의 및 합의 과정 아카이브
 - [architecture.md](../architecture/architecture.md) — 전체 아키텍처 개요

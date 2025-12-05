@@ -9,7 +9,9 @@
 
 - As‑Is
   - SDP v2 is live in the runtime: cache→storage→backfill→live flows and ConformancePipeline/SLA/metrics already guard data quality.
-  - At the strategy/template level, authors still construct `history_provider` explicitly; there is no default on‑ramp where worlds alone cause Seamless to be wired automatically.
+  - At the strategy/template level, authors still construct `history_provider` explicitly in most cases; the only
+    default on‑ramp today is for worlds that declare `world.data.presets[]`, where Runner/CLI build an SDP instance
+    from presets and inject it into `StreamInputs` when a world is specified.
 - To‑Be
   - For world/preset-based on‑ramps, Runner/CLI automatically builds an SDP instance from **Seamless presets + data specs** and injects it into StreamInputs when a world is specified.
   - This document becomes the normative data‑plane counterpart to `rewrite_architecture_docs.md`, including the contract for “world-centric data presets → SDP wiring”.

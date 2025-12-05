@@ -101,9 +101,12 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 - As‑Is
   - `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
   - Seamless/QuestDB/CCXT and other sources are already integrated into the v2 data plane, but
-    **which StreamInputs/datasets a strategy uses** is still chosen explicitly by the author.
+    **which StreamInputs/datasets a strategy uses** is still chosen explicitly by the author for most strategies.
+    For Core Loop demo/standard worlds that define `world.data.presets[]`, Runner/CLI can already infer a
+    suitable Seamless provider from the world + preset and attach it automatically; other worlds still rely
+    on manual wiring.
   - World configuration (`world/world.md`) and dataset wiring (`dataset_id`, `snapshot_version`, etc.)
-    are set up manually following the design docs.
+    are still set up manually for worlds that do not participate in the world data preset on‑ramp.
 - To‑Be
   - For the default on‑ramp, **world + preset + a simple data spec** are enough for
     Runner/CLI to auto‑wire a suitable Seamless provider and StreamInputs.
@@ -115,8 +118,9 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 - As‑Is
   - `SeamlessDataProvider v2` abstracts cache→storage→backfill→live and enforces
     SLAs/conformance/schema checks.
-  - At the Runner/SDK level, there is no contract that “Seamless attaches automatically when a world is given”:
-    SR templates and regular strategies still pass `history_provider` explicitly.
+  - At the Runner/SDK level, most strategies still configure `history_provider` explicitly; the only default
+    on‑ramp today is for worlds that declare `world.data.presets[]`, where Runner/CLI build a Seamless provider
+    from presets and inject it into `StreamInputs` when a world is specified.
 - To‑Be
   - When a world is specified, Runner/CLI defaults to a Seamless provider consistent
     with that world’s config/preset and auto‑injects it into StreamInputs.

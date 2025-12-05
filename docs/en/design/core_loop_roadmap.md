@@ -2,7 +2,7 @@
 title: "Core Loop-Centric Architecture Roadmap"
 tags: [architecture, roadmap, core-loop]
 author: "QMTL Team"
-last_modified: 2025-12-02
+last_modified: 2025-12-06
 ---
 
 # Core Loop-Centric Architecture Roadmap
@@ -214,7 +214,16 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 - `docs/en/architecture/architecture.md` / `docs/ko/architecture/architecture.md`  
   - Periodically reconcile As‑Is/To‑Be sections with the actual implementation and update this roadmap alongside.
 
-## 9. Operating This Roadmap
+## 9. Implementation Status (Dec 2025)
+
+- Phases 0–5 in `core_loop_roadmap_tasks.md` / `core_loop_roadmap_tasks2.md` are complete (issues #1755–#1790 closed as of 2025-12-06).
+- ExecutionDomain/default-safe vertical is shipped end-to-end (WS validation/downgrade, Runner/CLI hint removal, ComputeContext validators) and locked by contract cases in `tests/e2e/core_loop`.
+- SubmitResult now uses shared WS `DecisionEnvelope`/`ActivationEnvelope` schemas as the SSOT with `precheck` separated; CLI/SDK JSON snapshots align with WS and are exercised in the contract suite.
+- World-based data preset on-ramp is live (`world.data.presets[]` → Seamless auto-wiring, `--data-preset` option) and covered by the core-loop demo world contract test.
+- NodeID/TagQuery determinism and the determinism checklist/metrics/runbook are in place; see `../operations/determinism.md` for response guidance.
+- The Core Loop contract suite runs as a CI gate in `.github/workflows/ci.yml` (`CORE_LOOP_STACK_MODE=inproc`), mapping failures back to this roadmap and `../architecture/architecture.md`.
+
+## 10. Operating This Roadmap
 
 - **Issue mapping to tracks/milestones**  
   - Tag new features/refactors/bugfixes with at least one of T1–T6 and a P0–P2 milestone.
@@ -224,4 +233,3 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
   - When exceptions/waivers are required, explain why they diverge from the Core Loop direction in code comments and PR descriptions, and reference follow-up items in this roadmap.
 
 This roadmap serves as the Core Loop-centric reference for QMTL’s mid- to long-term direction. When proposing new work, first decide which track/milestone it belongs to and design it accordingly.
-
