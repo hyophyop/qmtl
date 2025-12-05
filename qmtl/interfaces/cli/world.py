@@ -85,6 +85,18 @@ def cmd_world(argv: List[str]) -> int:
         help=_t("Inline JSON string for apply plan (mutually exclusive with --plan-file)"),
     )
     parser.add_argument(
+        "--activate",
+        dest="plan_activate",
+        default=None,
+        help=_t("Comma-separated strategy ids to activate (shortcut to build plan.activate)"),
+    )
+    parser.add_argument(
+        "--deactivate",
+        dest="plan_deactivate",
+        default=None,
+        help=_t("Comma-separated strategy ids to deactivate (shortcut to build plan.deactivate)"),
+    )
+    parser.add_argument(
         "--gating-policy",
         dest="gating_policy",
         default=None,
@@ -344,14 +356,27 @@ def _world_apply(args: argparse.Namespace) -> int:
             return 1
     if args.plan_file:
         try:
-            plan_payload = json.loads(Path(args.plan_file).read_text())
+            file_payload = json.loads(Path(args.plan_file).read_text())
+            if isinstance(file_payload, dict) and "plan" in file_payload:
+                plan_payload = file_payload.get("plan")
+            else:
+                plan_payload = file_payload
         except Exception as exc:
             print(_t("Error reading plan file '{}': {}").format(args.plan_file, exc), file=sys.stderr)
             return 1
 
+    if plan_payload and (args.plan_activate or args.plan_deactivate):
+        print(_t("Error: --activate/--deactivate cannot be combined with --plan/--plan-file"), file=sys.stderr)
+        return 1
+
+    activate_list = _parse_plan_list(args.plan_activate) if args.plan_activate else []
+    deactivate_list = _parse_plan_list(args.plan_deactivate) if args.plan_deactivate else []
+
     payload: Dict[str, Any] = {"run_id": args.run_id or str(uuid.uuid4())}
     if plan_payload is not None:
         payload["plan"] = plan_payload
+    elif activate_list or deactivate_list:
+        payload["plan"] = {"activate": activate_list, "deactivate": deactivate_list}
 
     if args.gating_policy:
         try:
@@ -377,8 +402,15 @@ def _world_apply(args: argparse.Namespace) -> int:
         print(_t("Active strategies:"))
         for sid in active:
             print(f"  - {sid}")
+    if not payload.get("plan") and (args.plan_activate or args.plan_deactivate):
+        print(_t("Plan: built from --activate/--deactivate flags"))
     _print_allocation_apply_hint(world_id)
     return 0
+
+
+def _parse_plan_list(raw: str) -> list[str]:
+    parts = [p.strip() for p in raw.split(",")] if raw else []
+    return [p for p in parts if p]
 
 
 def _print_allocation_apply_hint(world_id: str | None) -> None:

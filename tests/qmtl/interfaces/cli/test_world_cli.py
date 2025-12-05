@@ -220,6 +220,79 @@ def test_world_apply_posts_payload(monkeypatch, capsys):
     assert "run-123" in out
 
 
+def test_world_apply_builds_plan_from_flags(monkeypatch, capsys):
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"phase": "completed", "active": ["s1", "s2"]}
+
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(
+        [
+            "apply",
+            "w-apply",
+            "--activate",
+            "s1,s2",
+            "--deactivate",
+            "s3",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = posts[0][1]
+    assert payload["plan"]["activate"] == ["s1", "s2"]
+    assert payload["plan"]["deactivate"] == ["s3"]
+
+
+def test_world_apply_rejects_conflicting_plan_sources(monkeypatch, capsys):
+    def fake_post(path, payload):
+        return 200, {}
+
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(
+        [
+            "apply",
+            "w-apply",
+            "--plan",
+            '{"plan":{"activate":["s1"]}}',
+            "--activate",
+            "s2",
+        ]
+    )
+
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "cannot be combined" in err
+
+
+def test_world_apply_reads_plan_from_wrapped_file(monkeypatch, tmp_path, capsys):
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps({"plan": {"activate": ["s1"]}}))
+
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {}
+
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(
+        [
+            "apply",
+            "w-apply",
+            "--plan-file",
+            str(plan_file),
+        ]
+    )
+
+    assert exit_code == 0
+    assert posts[0][1]["plan"]["activate"] == ["s1"]
+
+
 def test_world_apply_generates_run_id(monkeypatch, capsys):
     posts: list[tuple[str, dict]] = []
 
