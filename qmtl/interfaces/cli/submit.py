@@ -276,7 +276,7 @@ def _print_allocation_section(allocation, *, world_id: str | None = None, notice
 
 def _print_allocation_guidance(world_id: str) -> None:
     alloc_cmd = f"qmtl world allocations -w {world_id}"
-    apply_cmd = f"qmtl world apply {world_id} --run-id <id> [--plan plan.json]"
+    apply_cmd = f"qmtl world apply {world_id} --run-id <id> [--plan-file plan.json]"
     print(_t("Next steps: {alloc_cmd} to refresh snapshot, {apply_cmd} to request apply/rollback.").format(
         alloc_cmd=alloc_cmd,
         apply_cmd=apply_cmd,

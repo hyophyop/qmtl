@@ -115,3 +115,11 @@ def test_cli_emits_json_with_ws_and_precheck_sections(capsys):
     assert payload["ws"]["activation"]["strategy_id"] == "s-json"
     assert payload["ws"]["threshold_violations"][0]["metric"] == "sharpe"
     assert payload["precheck"]["status"] == "passed"
+
+
+def test_allocation_guidance_uses_plan_file_hint(capsys):
+    cli_submit._print_allocation_guidance("demo-world")
+
+    output = capsys.readouterr().out
+
+    assert "qmtl world apply demo-world --run-id <id> [--plan-file plan.json]" in output
