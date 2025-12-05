@@ -102,8 +102,18 @@ class InProcessCoreLoopStack:
         ws_server.start()
         _wait_http(f"http://127.0.0.1:{ws_port}/health", timeout=15)
 
+        redis_client = None
+        try:
+            import fakeredis.aioredis as fakeredis  # type: ignore
+
+            redis_client = fakeredis.FakeRedis(decode_responses=True)
+        except Exception:
+            # Fall back to real Redis when fakeredis is unavailable
+            redis_client = None
+
         gw_app = create_app(
             ws_hub=WebSocketHub(),
+            redis_client=redis_client,
             worldservice_url=f"http://127.0.0.1:{ws_port}",
             enable_worldservice_proxy=True,
             enable_background=False,

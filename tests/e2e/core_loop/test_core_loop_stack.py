@@ -148,6 +148,26 @@ def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: 
     assert result["code"] in (0, 1)
 
 
+def test_submit_json_includes_allocation(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
+    payload, result = _submit_json(
+        "core_loop_demo_strategy:CoreLoopDemoStrategy",
+        world=core_loop_world_id,
+        mode="backtest",
+    )
+
+    allocation = payload.get("allocation")
+    ws_allocation = payload.get("ws", {}).get("allocation")
+    assert allocation == ws_allocation
+    assert allocation is not None, f"payload={payload}"
+    assert allocation.get("world_id") in _world_id_candidates(core_loop_world_id)
+    assert "allocation" in allocation
+    strategies = allocation.get("strategy_alloc_total")
+    if strategies:
+        assert isinstance(strategies, dict)
+    assert result["code"] in (0, 1)
+
+
 def test_core_loop_world_endpoints_available(core_loop_stack: CoreLoopStackHandle, core_loop_world_id: str):
     base = core_loop_stack.worlds_url.rstrip("/")
     wid = urllib.parse.quote(core_loop_world_id)

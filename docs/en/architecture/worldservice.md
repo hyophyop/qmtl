@@ -68,10 +68,11 @@ Non-goals:
 
 - As‑Is
   - `/allocations` and `/rebalancing/*` can compute and record world and cross-world allocation plans, but they are used as **operator-driven loops** separate from the strategy submission flow.
+  - Runner.submit/CLI now best-effort fetch the latest `/allocations` snapshot for the submitted world so users can see the **applied world/strategy totals**. This is informational only and does not imply auto-apply; capital moves remain an operator flow.
   - v2 rebalancing schemas embed alpha metrics (`alpha_metrics`), yet few docs present “strategy evaluation → world allocation” as one cohesive narrative.
 - To‑Be
   - The strategy submission/evaluation loop and the world allocation loop are documented as a **standard two-step flow**, with WS clearly owning both evaluation/activation and allocation decisions.
-  - `/allocations` aligns naturally with Runner.submit/CLI outputs so that world/strategy allocation summaries can be queried and displayed from the same world-centric perspective.
+  - Core Loop surfaces (Runner.submit/CLI, docs) link to `/allocations` snapshots so users can easily discover the applied allocation state while keeping the proposal (evaluation/activation) vs. applied (allocation) boundary explicit. Apply/rebalancing remains an auditable, operator-led step.
 
 ---
 
@@ -302,6 +303,7 @@ WorldService exposes two surfaces for coordinated world allocation changes. All 
 
 - **Input schema:** [`AllocationUpsertRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L278') }}). Required fields: `run_id`, `total_equity`, `world_allocations{world_id→ratio}`, and current `positions[]`. Optional knobs include per-world strategy totals (`strategy_alloc_*`), `min_trade_notional`, and symbol lot sizes (`lot_size_by_symbol`).【F:qmtl/services/worldservice/schemas.py†L248-L314】
 - **Validation:** `world_allocations` must be non-empty and ratios must remain within [0,1]. Values outside the band raise 422; unsupported modes raise 501.【F:qmtl/services/worldservice/services.py†L184-L207】
+- **Core Loop surface:** Runner.submit/CLI query `GET /allocations?world_id=...` for the submitted world to display the **applied world/strategy totals**. Failures are ignored; this is a discovery surface, not an execution trigger.
 - **run_id idempotency:** The request body (excluding `run_id`/`execute`/`etag`) is hashed to derive a deterministic `etag`. Reusing a `run_id` with a different payload triggers HTTP 409; matching payloads reuse the stored plan and execution state.【F:qmtl/services/worldservice/services.py†L129-L166】【F:qmtl/services/worldservice/services.py†L207-L236】
 - **Plan computation:** `MultiWorldProportionalRebalancer` applies world- and strategy-level scaling to produce `per_world` and `global_deltas`. When strategy totals are omitted, it infers weights from current exposure to operate in “scale-only” mode.【F:qmtl/services/worldservice/rebalancing/multi.py†L1-L111】【F:qmtl/services/worldservice/rebalancing/rule_based.py†L1-L74】
 - **Persistence & events:** Successful upserts persist the request/plan snapshot and update stored world/strategy allocations. WorldService then emits `rebalancing_planned` ControlBus events (per world) containing `scale_world`, `scale_by_strategy`, and `deltas`, allowing Gateway to broadcast and measure the rebalance.【F:qmtl/services/worldservice/services.py†L237-L311】【F:qmtl/services/worldservice/controlbus_producer.py†L96-L109】

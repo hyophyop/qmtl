@@ -268,6 +268,12 @@ def _register_world_route(
 
 WORLD_ROUTES: tuple[WorldRoute, ...] = (
     WorldRoute("post", "/rebalancing/plan", "post_rebalance_plan", include_payload=True),
+    WorldRoute(
+        "get",
+        "/allocations",
+        "get_allocations",
+        query_params=("world_id",),
+    ),
     WorldRoute("post", "/worlds", "create_world", include_payload=True),
     WorldRoute("get", "/worlds", "list_worlds"),
     WorldRoute(

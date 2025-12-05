@@ -104,6 +104,7 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
   - Ensure apply/rollback/audit timelines are visible in WorldAuditLog and dashboards.
 - **P2‑T2‑M4 — World-level rebalancing / allocation flow**
   - Connect `/allocations` and the rebalancing engine to the Core Loop “deploy/allocate capital” step, with an operational approval/execute/rollback flow.
+  - Surface `/allocations` snapshots (world/strategy totals) from Runner.submit/CLI for the submitted world to make the proposal (evaluation/activation) vs applied (allocation) boundary clear while keeping apply/execute as an auditable ops step (#1817).
 
 ### 4.3 Concrete Work Examples
 
@@ -112,6 +113,8 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
   - Add unit tests enforcing default-safe ExecutionDomain/effective_mode behaviour.
 - `docs/en/architecture/worldservice.md` / `docs/ko/architecture/worldservice.md`  
   - Keep As‑Is/To‑Be sections synced with the T2 milestones and enrich examples showing how Runner.submit/CLI consume WS results.
+- Core Loop contract tests  
+  - Extend `tests/e2e/core_loop/test_core_loop_stack.py` with a “submit → allocation summary available” path to lock in the `/allocations` snapshot surface (#1817).
 
 ## 5. T3 — Data Plane / Seamless Track
 
