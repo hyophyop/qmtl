@@ -252,6 +252,10 @@ world:
 - 데이터 통화성(최신성) 게이트: `now - data_end <= max_lag` 충족 전에는 compute-only로 실행(주문 게이트 OFF)
 - 표본 충분성: 지표별 최소 일수/체결 수 충족 전 결과는 참고용
 - 2‑Phase 전환: Freeze/Drain → Switch → Unfreeze, idempotent run_id
+- apply는 항상 명시적 run_id/etag 기반으로 요청하고, 감사 로그(`/worlds/{id}/audit`)에서 run_id 단위로 추적/롤백 가능해야 한다. 기본 흐름:  
+  1) `qmtl world allocations -w <id>`로 스냅샷 신선도/etag 확인  
+  2) `qmtl world apply <id> --run-id <id> [--plan-file plan.json | --activate ... --deactivate ...]`로 적용 요청  
+  3) 실패 시 동일 run_id로 재시도하거나 새 run_id+etag로 롤백 플랜 제출
 - 리스크 컷: 월드 총 드로우다운/VAR/레버리지 상한 위반 시 즉시 게이트 ON(서킷)
 - 알림 규격: 승격/강등/적용 실패/지연/서킷 이벤트를 표준 알림으로 송신
 
@@ -259,6 +263,13 @@ world:
 - `world_eval_duration_ms_p95`, `world_apply_duration_ms_p95`
 - `world_activation_skew_seconds`(게이트 반영 지연)
 - `promotion_fail_total`, `demotion_fail_total`
+- `world_apply_failure_total`, `world_apply_run_total` (run_id 단위 apply 시도/성공/실패 추적)
+- `world_allocation_snapshot_stale_ratio` (stale 플래그가 켜진 스냅샷 비율; 스냅샷 신선도 관측)
+
+추천 알람 규칙(예)
+- `increase(world_apply_failure_total[5m]) > 0` → apply 연속 실패 알림
+- `world_allocation_snapshot_stale_ratio > 0.1` (5m, world별) → 스냅샷 갱신 지연 감지
+- `world_activation_skew_seconds > 5` (p95) → 게이트 반영 지연 경보
 
 ## 9. 멀티‑월드 & 자원
 
@@ -443,6 +454,7 @@ qmtl world policy set-default crypto_mom_1h 2
 qmtl world decide crypto_mom_1h --as-of 2025-08-28T09:00:00Z
 qmtl world eval crypto_mom_1h | jq .
 qmtl world apply crypto_mom_1h --plan plan.json --run-id $(uuidgen)
+qmtl world apply crypto_mom_1h --run-id $(uuidgen) --activate s1,s2 --deactivate s3
 qmtl world activation get crypto_mom_1h --strategy <sid> --side long
 qmtl world activation set crypto_mom_1h --strategy <sid> --side long --active=false --ttl 3600 --reason maintenance
 qmtl world delete crypto_mom_1h --force

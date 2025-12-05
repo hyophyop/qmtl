@@ -122,6 +122,7 @@ class AllocationSnapshot:
     etag: str | None = None
     strategy_alloc_total: dict[str, float] | None = None
     updated_at: str | None = None
+    stale: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -133,7 +134,18 @@ class AllocationSnapshot:
         }
         if self.strategy_alloc_total is not None:
             payload["strategy_alloc_total"] = dict(self.strategy_alloc_total)
+        if self.stale is not None:
+            payload["stale"] = self.stale
         return payload
+
+
+@dataclass
+class AllocationSnapshotResult:
+    """Fetch outcome for an allocation snapshot."""
+
+    snapshot: AllocationSnapshot | None
+    notice: str | None = None
+    stale: bool = False
 
 
 @dataclass
@@ -163,6 +175,8 @@ class SubmitResult:
     decision: DecisionEnvelope | None = None
     activation: ActivationEnvelope | None = None
     allocation: "AllocationSnapshot | None" = None
+    allocation_notice: str | None = None
+    allocation_stale: bool = False
     
     # Rejection info (if status == "rejected")
     rejection_reason: str | None = None
@@ -219,6 +233,8 @@ class SubmitResult:
             "threshold_violations": threshold_violations,
             "precheck": self.precheck.to_dict() if self.precheck else None,
             "allocation": allocation_dump,
+            "allocation_notice": self.allocation_notice,
+            "allocation_stale": self.allocation_stale,
         }
 
         payload["ws"] = {
@@ -539,17 +555,31 @@ async def submit_async(
 
     async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
         finalized = _attach_context_flags(result)
+        allocation_result = AllocationSnapshotResult(snapshot=None)
         if gateway_available:
             try:
-                allocation = await _fetch_allocation_snapshot(
+                allocation_result = await _fetch_allocation_snapshot_with_notice(
                     gateway_url=gateway_url,
                     world_id=resolved_world,
                     client=services.gateway_client,
                 )
-                if allocation is not None:
-                    finalized.allocation = allocation
             except Exception:
                 logger.debug("Failed to attach allocation snapshot", exc_info=True)
+                allocation_result = AllocationSnapshotResult(
+                    snapshot=None,
+                    notice="allocation lookup failed (gateway error)",
+                )
+        else:
+            allocation_result = AllocationSnapshotResult(
+                snapshot=None,
+                notice="gateway unavailable; allocation snapshot not fetched",
+            )
+
+        if allocation_result.snapshot is not None:
+            finalized.allocation = allocation_result.snapshot
+        if allocation_result.notice and not finalized.allocation_notice:
+            finalized.allocation_notice = allocation_result.notice
+        finalized.allocation_stale = bool(finalized.allocation_stale or allocation_result.stale)
         return finalized
 
     try:
@@ -1110,11 +1140,14 @@ async def _run_validation_and_ws_eval(
             world_id=resolved_world,
             strategy_id=strategy_id,
         )
-        ws_eval.allocation = await _fetch_allocation_snapshot(
+        allocation_result = await _fetch_allocation_snapshot_with_notice(
             gateway_url=gateway_url,
             world_id=resolved_world,
             client=services.gateway_client,
         )
+        ws_eval.allocation = allocation_result.snapshot
+        ws_eval.allocation_notice = allocation_result.notice
+        ws_eval.allocation_stale = allocation_result.stale
     except Exception:
         logger.debug("Failed to fetch WS envelopes after evaluation", exc_info=True)
 
@@ -1215,6 +1248,8 @@ def _build_passed_result(
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
         allocation=ws_eval.allocation if ws_eval else None,
+        allocation_notice=ws_eval.allocation_notice if ws_eval else None,
+        allocation_stale=ws_eval.allocation_stale if ws_eval else False,
     )
 
 
@@ -1248,6 +1283,8 @@ def _ws_rejection_result(
         decision=ws_eval.decision,
         activation=ws_eval.activation,
         allocation=ws_eval.allocation,
+        allocation_notice=ws_eval.allocation_notice,
+        allocation_stale=ws_eval.allocation_stale,
     )
 
 
@@ -1367,6 +1404,8 @@ def _ws_accepts_after_fail(
         decision=ws_eval.decision,
         activation=ws_eval.activation,
         allocation=ws_eval.allocation,
+        allocation_notice=ws_eval.allocation_notice,
+        allocation_stale=ws_eval.allocation_stale,
     )
 
 
@@ -1413,6 +1452,8 @@ def _pending_after_failed_validation(
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
         allocation=ws_eval.allocation if ws_eval else None,
+        allocation_notice=ws_eval.allocation_notice if ws_eval else None,
+        allocation_stale=ws_eval.allocation_stale if ws_eval else False,
     )
 
 
@@ -1448,6 +1489,8 @@ def _reject_after_failed_validation(
         decision=ws_eval.decision if ws_eval else None,
         activation=ws_eval.activation if ws_eval else None,
         allocation=ws_eval.allocation if ws_eval else None,
+        allocation_notice=ws_eval.allocation_notice if ws_eval else None,
+        allocation_stale=ws_eval.allocation_stale if ws_eval else False,
     )
 
 
@@ -1923,6 +1966,8 @@ class WsEvalResult:
     decision: DecisionEnvelope | None = None
     activation: ActivationEnvelope | None = None
     allocation: AllocationSnapshot | None = None
+    allocation_notice: str | None = None
+    allocation_stale: bool = False
 
 
 async def _evaluate_with_worldservice(
@@ -2054,6 +2099,15 @@ def _extract_allocation_snapshot(
         alloc_value = float(alloc_value_raw) if alloc_value_raw is not None else None
     except (TypeError, ValueError):
         alloc_value = None
+    stale_raw = snapshot.get("stale")
+    stale_flag = None
+    if isinstance(stale_raw, bool):
+        stale_flag = stale_raw
+    elif stale_raw is not None:
+        try:
+            stale_flag = bool(int(stale_raw))
+        except Exception:
+            stale_flag = None
 
     strategy_alloc_total: dict[str, float] | None = None
     raw_strategy_alloc = snapshot.get("strategy_alloc_total")
@@ -2076,6 +2130,7 @@ def _extract_allocation_snapshot(
         etag=str(snapshot.get("etag")) if snapshot.get("etag") is not None else None,
         strategy_alloc_total=strategy_alloc_total,
         updated_at=str(snapshot.get("updated_at")) if snapshot.get("updated_at") is not None else None,
+        stale=stale_flag,
     )
 
 
@@ -2085,17 +2140,56 @@ async def _fetch_allocation_snapshot(
     world_id: str,
     client: "GatewayClient | None",
 ) -> AllocationSnapshot | None:
+    result = await _fetch_allocation_snapshot_with_notice(
+        gateway_url=gateway_url,
+        world_id=world_id,
+        client=client,
+    )
+    return result.snapshot
+
+
+async def _fetch_allocation_snapshot_with_notice(
+    *,
+    gateway_url: str,
+    world_id: str,
+    client: "GatewayClient | None",
+) -> AllocationSnapshotResult:
     if client is None:
-        return None
+        return AllocationSnapshotResult(
+            snapshot=None,
+            notice="gateway client not configured",
+        )
     try:
         payload = await client.get_allocations(
             gateway_url=gateway_url,
             world_id=world_id,
         )
-    except Exception:
+    except Exception as exc:
         logger.debug("Failed to fetch allocation snapshot", exc_info=True)
-        return None
-    return _extract_allocation_snapshot(payload, world_id)
+        return AllocationSnapshotResult(snapshot=None, notice=str(exc))
+
+    if payload is None:
+        return AllocationSnapshotResult(
+            snapshot=None,
+            notice="gateway returned no allocation payload",
+        )
+
+    snapshot = _extract_allocation_snapshot(payload, world_id)
+    if snapshot is None:
+        return AllocationSnapshotResult(
+            snapshot=None,
+            notice=f"no allocation snapshot found for world '{world_id}'",
+        )
+
+    stale = False
+    if isinstance(payload, dict):
+        payload_stale = payload.get("stale")
+        if isinstance(payload_stale, bool):
+            stale = payload_stale
+    if snapshot.stale is not None:
+        stale = bool(snapshot.stale)
+
+    return AllocationSnapshotResult(snapshot=snapshot, stale=stale)
 
 
 def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalResult:

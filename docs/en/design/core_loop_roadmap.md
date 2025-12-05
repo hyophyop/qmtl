@@ -116,6 +116,12 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 - Core Loop contract tests  
   - Extend `tests/e2e/core_loop/test_core_loop_stack.py` with a “submit → allocation summary available” path to lock in the `/allocations` snapshot surface (#1817).
 
+### 4.4 Submit → snapshot → apply operational flow
+
+- `Runner.submit ... --world <id>` surfaces the submitted world’s `/allocations` snapshot (with etag/updated_at) as **read-only context**. When the snapshot is missing or stale, the CLI should hint at `qmtl world allocations -w <id>` for a refresh.
+- Operators apply capital changes explicitly via `qmtl world apply <id> --run-id <id> [--plan-file plan.json | --plan '{"activate":[...]}']`. The default is safe/read-only; `run_id` is always required for audit/rollback.
+- Apply/rollback approvals stay in the ops lane, and every allocation change should be auditable via etag/run_id. Guidance in the snapshot section must point users through submit → allocations refresh → apply in that order.
+
 ## 5. T3 — Data Plane / Seamless Track
 
 ### 5.1 Direction

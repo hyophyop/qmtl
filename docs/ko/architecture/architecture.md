@@ -127,8 +127,9 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 - As‑Is
   - WorldService는 `/allocations`와 내부 rebalancing 엔진으로
     world/world‑간 자본 배분 계획을 계산할 수 있다.
-  - Runner.submit/CLI는 제출된 world에 대해 `/allocations` 스냅샷(월드/전략 비중)을 조회해 보여주지만,
-    이는 적용 상태를 드러내는 표면일 뿐이며 실제 자본 이동은 여전히 별도의 운영/스케줄링 루프가 필요하다.
+  - Runner.submit/CLI는 제출된 world에 대해 `/allocations` 스냅샷(월드/전략 비중, etag/updated_at, stale 여부)을 조회해 보여주고,
+    스냅샷이 누락/오래됐을 때는 `qmtl world allocations -w <id>`로 새로고침하라는 힌트를 함께 출력한다.
+    표시는 여전히 **읽기 전용**이며, 자본 이동은 별도의 운영/스케줄링 루프가 필요하다.
 - To‑Be
   - 전략 제출/평가 루프와 월드 자본 배분 루프를 본 문서, `worldservice.md`,
     world/운영 가이드 전반에서 **표준 두 단계 루프**로 서술한다.
@@ -136,7 +137,8 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
     2) `/allocations`·`/rebalancing/*` 및 `qmtl world allocations|rebalance-*` CLI를 통한
        월드 자본 배분/리밸런싱 적용 단계로 이어지는 흐름을 고정한다.
   - Core Loop 표면(문서/CLI)이 `/allocations` 스냅샷과 연결되어 평가/활성(제안)과 배분(적용) 단계를 명확히 구분한 채 탐색할 수 있게 하되,
-    적용/실행은 감사 가능한 운영 단계로 남긴다.
+    적용/실행은 감사 가능한 운영 단계로 남긴다. `qmtl world apply <id> --run-id <id> [--plan-file ...]`
+    같은 명시적 apply 경로를 기본으로 안내하고, 모든 적용은 run_id/etag 기반으로 추적 가능해야 한다.
 
 ### 기본 원칙: 단순성 > 하위 호환성
 

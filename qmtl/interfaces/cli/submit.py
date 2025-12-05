@@ -180,8 +180,15 @@ def _print_submission_result(result) -> None:
         reason = getattr(result, "downgrade_reason", None) or "unspecified"
         print(f"Safe mode:   downgraded ({reason})")
 
+    allocation_notice = getattr(result, "allocation_notice", None)
+    allocation_stale = getattr(result, "allocation_stale", False)
     _print_ws_section(result)
-    _print_allocation_section(getattr(result, "allocation", None))
+    _print_allocation_section(
+        getattr(result, "allocation", None),
+        world_id=getattr(result, "world", None),
+        notice=allocation_notice,
+        stale=allocation_stale,
+    )
     if getattr(result, "precheck", None):
         _print_precheck_section(result.precheck)
 
@@ -230,11 +237,20 @@ def _print_rejected_result(result) -> None:
         _print_thresholds(result.threshold_violations, label=_t("Threshold violations (WS)"))
 
 
-def _print_allocation_section(allocation) -> None:
+def _print_allocation_section(allocation, *, world_id: str | None = None, notice: str | None = None, stale: bool | None = None) -> None:
     print(_t("\n🏦 World allocation snapshot (applied)"))
+    target_world = world_id or getattr(allocation, "world_id", None) or "<world>"
     if not allocation:
-        print(_t("No allocation snapshot found. After rebalancing, use `qmtl world allocations -w <id>` to inspect."))
+        if notice:
+            print(_t("Allocation snapshot unavailable: {}").format(notice))
+        else:
+            print(_t("No allocation snapshot found. After rebalancing, use `qmtl world allocations -w <id>` to inspect."))
+        _print_allocation_guidance(target_world)
         return
+    if notice:
+        print(_t("Note: {}").format(notice))
+    if stale:
+        print(_t("⚠️  Snapshot may be stale; refresh with `qmtl world allocations -w {}`").format(target_world))
     print(f"World:       {getattr(allocation, 'world_id', 'n/a')}")
     alloc_value = getattr(allocation, "allocation", None)
     if alloc_value is not None:
@@ -255,6 +271,16 @@ def _print_allocation_section(allocation) -> None:
             except (TypeError, ValueError):
                 continue
             print(f"  - {sid}: {ratio_val:.4f}")
+    _print_allocation_guidance(target_world)
+
+
+def _print_allocation_guidance(world_id: str) -> None:
+    alloc_cmd = f"qmtl world allocations -w {world_id}"
+    apply_cmd = f"qmtl world apply {world_id} --run-id <id> [--plan plan.json]"
+    print(_t("Next steps: {alloc_cmd} to refresh snapshot, {apply_cmd} to request apply/rollback.").format(
+        alloc_cmd=alloc_cmd,
+        apply_cmd=apply_cmd,
+    ))
 
 
 def _print_precheck_section(precheck) -> None:
