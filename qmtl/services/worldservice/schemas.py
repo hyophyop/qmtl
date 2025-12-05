@@ -320,6 +320,23 @@ class AllocationUpsertResponse(MultiWorldRebalanceResponse):
     execution_response: Dict[str, Any] | None = None
 
 
+class WorldAllocationSnapshot(BaseModel):
+    """Latest allocation ratios for a world."""
+
+    world_id: str
+    allocation: float
+    run_id: str | None = None
+    etag: str | None = None
+    strategy_alloc_total: Dict[str, float] | None = None
+    updated_at: str | None = None
+
+
+class AllocationSnapshotResponse(BaseModel):
+    """Collection of world allocation snapshots keyed by world id."""
+
+    allocations: Dict[str, WorldAllocationSnapshot] = Field(default_factory=dict)
+
+
 __all__ = [
     'AlphaMetricsEnvelope',
     'ActivationEnvelope',
@@ -353,4 +370,8 @@ __all__ = [
     'MultiWorldRebalanceRequest',
     'MultiWorldRebalanceResponse',
     'RebalanceIntentModel',
+    'RebalancePlanModel',
+    'SymbolDeltaModel',
+    'WorldAllocationSnapshot',
+    'AllocationSnapshotResponse',
 ]

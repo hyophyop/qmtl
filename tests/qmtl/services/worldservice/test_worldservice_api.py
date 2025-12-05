@@ -630,6 +630,40 @@ async def test_allocations_endpoint_execute_and_idempotency():
 
 
 @pytest.mark.asyncio
+async def test_allocations_snapshot_endpoint():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "w1"})
+            payload = {
+                "run_id": "alloc-run-3",
+                "total_equity": 1000.0,
+                "world_allocations": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                    }
+                ],
+            }
+            await client.post("/allocations", json=payload)
+
+            resp = await client.get("/allocations", params={"world_id": "w1"})
+            assert resp.status_code == 200
+            body = resp.json()
+            alloc = body["allocations"].get("w1")
+            assert alloc is not None
+            assert alloc["allocation"] == pytest.approx(1.0)
+            assert alloc["world_id"] == "w1"
+            assert alloc["run_id"] == "alloc-run-3"
+            assert alloc.get("strategy_alloc_total") is None
+
+
+@pytest.mark.asyncio
 async def test_allocation_lock_prevents_overlap():
     service = WorldService(store=Storage())
 
