@@ -216,8 +216,9 @@ async def test_allocations_missing_snapshot_returns_empty_payload():
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             response = await client.get("/allocations", params={"world_id": "absent"})
 
-    assert response.status_code == 200
-    assert response.json() == {"allocations": {}}
+    assert response.status_code == 404
+    detail = response.json().get("detail")
+    assert "allocation snapshot" in str(detail)
 
 
 @pytest.mark.asyncio
