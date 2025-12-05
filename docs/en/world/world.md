@@ -16,19 +16,19 @@ and demotion.
   `strategies/`.
 - Data handler baseline (#1653): `SeamlessDataProvider` (`qmtl/runtime/sdk/seamless_data_provider.py`) is the default data handler for history/backfill flows. Do not replace the default; extend or wrap it via the seamless presets/plugins described in [Seamless DP v2](../architecture/seamless_data_provider_v2.md) when customization is required.
 
-## 0. Core Loop As-Is / To-Be
+## 0. Core Loop Summary
 
-- As‑Is
-  - World concepts, policy DSL, two‑phase apply, and activation tables are well specified.
-  - The flow between Runner.submit / ValidationPipeline / WorldService `/evaluate` / `/allocations` remains mostly implicit here; readers must cross‑reference other docs to see “submit → world evaluation/promotion → capital allocation” as a single loop.
-  - Seamless is named as the default data handler, but there is no explicit contract that a world configuration alone wires an appropriate Seamless provider into strategies.
-- To‑Be
-  - This spec should explicitly position World as the **strategy lifecycle management unit**, walking through four stages:
-    1. Strategy submission → binding to a World (`/worlds/{id}/decisions` / WSB)
-    2. World evaluation (`/evaluate`) → DecisionEnvelope (active/violations)
-    3. Activation/gating (`/activation` + ControlBus) → order‑path control
-    4. Capital allocation (`/allocations` + `/rebalancing/*`) → world/strategy allocations  
-  - Connection points to Runner.submit / CLI (inputs: returns/metrics; outputs: status/weight/contribution) should be sketched so this single document explains the **world‑first Core Loop** without heavy cross‑navigation.
+This spec positions World as the **strategy lifecycle management unit** and ties
+it directly into the Core Loop in four stages:
+
+1. Strategy submission → binding to a World (`Runner.submit(..., world=...)` / `/worlds/{id}/decisions` / WSB)
+2. World evaluation (`/worlds/{id}/evaluate`) → DecisionEnvelope (active/violations)
+3. Activation/gating (`/worlds/{id}/activation` + ControlBus) → order‑path control
+4. Capital allocation (`/allocations` + `/rebalancing/*`) → world/strategy allocations  
+
+Connection points to Runner.submit / CLI (inputs: returns/metrics; outputs:
+status/weight/contribution) are sketched in the sections below so this single
+document explains the **world‑first Core Loop** without heavy cross‑navigation.
 
 ## 1. Scope and Non‑Goals
 

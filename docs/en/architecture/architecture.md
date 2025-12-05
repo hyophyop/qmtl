@@ -149,8 +149,11 @@ From the user’s perspective, QMTL’s **Core Loop** is:
     capital movements rely on separate operational/scheduling loops.
 - To‑Be
   - The strategy submission/evaluation loop and the world allocation loop are described as
-    a **two‑step standard flow** in docs/CLI:
-    WorldService proposes world/strategy allocations, and operators accept/adjust and execute them.
+    a **two‑step standard flow** across this document, `worldservice.md`, and the world/ops guides:
+    1) `Runner.submit(..., world=...)` → WS evaluation/activation, and  
+    2) world allocation/rebalancing via `/allocations` and `/rebalancing/*` (exposed through the `qmtl world allocations|rebalance-*` CLI).
+  - WorldService’s world/strategy allocation summaries are surfaced in CLI/docs so that operators can
+    accept/adjust/execute them without reconstructing the flow from multiple documents.
 
 ### Core Principle: Simplicity > Backward Compatibility
 
