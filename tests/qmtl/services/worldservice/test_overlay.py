@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from qmtl.services.worldservice.rebalancing.overlay import OverlayPlanner
-from qmtl.services.worldservice.rebalancing.base import PositionSlice
+from qmtl.services.worldservice.rebalancing.base import PositionSlice, SymbolDelta
 from qmtl.services.worldservice.schemas import OverlayConfigModel
 
 
@@ -16,10 +16,13 @@ def test_overlay_planner_world_scale_down():
         price_by_symbol={"BTCUSDT_PERP": 60000.0},
         min_order_notional=0.0,
     )
-    with pytest.raises(NotImplementedError):
-        OverlayPlanner().plan(
-            positions=positions,
-            world_alloc_before={"a": 0.3},
-            world_alloc_after={"a": 0.2},
-            overlay=overlay,
-        )
+    deltas = OverlayPlanner().plan(
+        positions=positions,
+        world_alloc_before={"a": 0.3},
+        world_alloc_after={"a": 0.2},
+        overlay=overlay,
+    )
+
+    assert deltas == [
+        SymbolDelta(symbol="BTCUSDT_PERP", delta_qty=pytest.approx(-1 / 3), venue=None)
+    ]

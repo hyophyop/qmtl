@@ -45,7 +45,7 @@ for payload in orders:
 
 Mode selection
 - Set `mode` in the request body (`scaling` default).
-- `overlay`/`hybrid` are not implemented yet and will raise NotImplementedError.
+- `overlay` requires `overlay.instrument_by_world` + `overlay.price_by_symbol` and returns `overlay_deltas`; `hybrid` is not implemented and returns HTTP 501.
 
 Use `per_world` for execution unless running in a shared-account mode; treat `global_deltas` as an analytical net view otherwise. When `shared_account=true` the Gateway emits a `scope="global"` batch alongside the per-world batches so downstream consumers can decide which aggregation level to honour.
 

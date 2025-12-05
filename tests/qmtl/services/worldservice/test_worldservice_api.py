@@ -522,7 +522,41 @@ async def test_rebalancing_plan_requires_v2_when_alpha_metrics_required():
 
 
 @pytest.mark.asyncio
-async def test_rebalancing_apply_overlay_mode_rejected():
+async def test_rebalancing_apply_overlay_mode_success():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            payload = {
+                "total_equity": 1_000.0,
+                "world_alloc_before": {"w1": 1.0},
+                "world_alloc_after": {"w1": 1.0},
+                "positions": [
+                    {
+                        "world_id": "w1",
+                        "strategy_id": "s1",
+                        "symbol": "BTC",
+                        "qty": 1.0,
+                        "mark": 100.0,
+                        "venue": "spot",
+                    }
+                ],
+                "mode": "overlay",
+                "overlay": {
+                    "instrument_by_world": {"w1": "BTC_PERP"},
+                    "price_by_symbol": {"BTC_PERP": 100.0},
+                    "min_order_notional": 1.0,
+                },
+            }
+
+            resp = await client.post("/rebalancing/apply", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["overlay_deltas"] == []
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_apply_overlay_requires_config():
     app = create_app(storage=Storage())
 
     async with httpx.ASGITransport(app=app) as asgi:
@@ -545,9 +579,9 @@ async def test_rebalancing_apply_overlay_mode_rejected():
             }
 
             resp = await client.post("/rebalancing/apply", json=payload)
-            assert resp.status_code == 501
+            assert resp.status_code == 422
             assert resp.json() == {
-                "detail": "Overlay mode is not implemented yet. Use mode='scaling'."
+                "detail": "overlay config is required when mode='overlay'"
             }
 
 

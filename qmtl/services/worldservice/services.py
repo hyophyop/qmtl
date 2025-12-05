@@ -18,7 +18,8 @@ from .apply_flow import ApplyCoordinator
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator, augment_metrics_with_linearity
 from .policy import GatingPolicy
-from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice
+from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice, SymbolDelta
+from .rebalancing.overlay import OverlayConfigError, OverlayPlanner
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import (
     ActivationEnvelope,
@@ -110,10 +111,16 @@ class WorldService:
                 detail=f"Allocation ratios must be between 0 and 1: {', '.join(sorted(invalid))}",
             )
 
-    def _ensure_scaling_mode(self, payload: AllocationUpsertRequest) -> None:
+    def _ensure_supported_mode(self, payload: AllocationUpsertRequest) -> None:
         requested_mode = (payload.mode or "scaling").lower()
-        if requested_mode in {"overlay", "hybrid"}:
-            raise HTTPException(status_code=501, detail="Overlay mode is not implemented yet")
+        if requested_mode == "hybrid":
+            raise HTTPException(
+                status_code=501, detail="Hybrid mode is not implemented yet. Use mode='scaling' or 'overlay'."
+            )
+        if requested_mode == "overlay" and payload.overlay is None:
+            raise HTTPException(
+                status_code=422, detail="overlay config is required when mode='overlay'"
+            )
 
     async def _build_allocation_context(
         self, payload: AllocationUpsertRequest, world_ids: list[str]
@@ -139,20 +146,33 @@ class WorldService:
         world_alloc_before: Dict[str, float],
         strategy_before: Dict[str, Dict[str, float]],
     ) -> AllocationExecutionPlan:
+        positions = self._convert_positions(payload.positions)
         context = MultiWorldRebalanceContext(
             total_equity=payload.total_equity,
             world_alloc_before=world_alloc_before,
             world_alloc_after=dict(payload.world_allocations),
             strategy_alloc_before_total=strategy_before or None,
             strategy_alloc_after_total=payload.strategy_alloc_after_total,
-            positions=self._convert_positions(payload.positions),
+            positions=positions,
             min_trade_notional=payload.min_trade_notional or 0.0,
             lot_size_by_symbol=payload.lot_size_by_symbol,
         )
         plan_result = self._multi_rebalancer.plan(context)
+        overlay_deltas = self._plan_overlay(
+            payload=payload, context=context, plan_result=plan_result
+        )
         plan_payload = self._serialize_plan(
             plan_result, schema_version=DEFAULT_REBALANCE_SCHEMA_VERSION
         )
+        if overlay_deltas is not None:
+            plan_payload["overlay_deltas"] = [
+                {
+                    "symbol": d.symbol,
+                    "delta_qty": d.delta_qty,
+                    "venue": d.venue,
+                }
+                for d in overlay_deltas
+            ]
         request_snapshot = MultiWorldRebalanceRequest(
             total_equity=payload.total_equity,
             world_alloc_before=world_alloc_before,
@@ -369,6 +389,31 @@ class WorldService:
             payload["rebalance_intent"] = rebalance_intent
         return payload
 
+    def _plan_overlay(
+        self,
+        *,
+        payload: AllocationUpsertRequest,
+        context: MultiWorldRebalanceContext,
+        plan_result,
+    ) -> list[SymbolDelta] | None:
+        mode = (payload.mode or "scaling").lower()
+        if mode != "overlay":
+            return None
+        if payload.overlay is None:
+            raise HTTPException(
+                status_code=422, detail="overlay config is required when mode='overlay'"
+            )
+        try:
+            return OverlayPlanner().plan(
+                positions=context.positions,
+                world_alloc_before=context.world_alloc_before,
+                world_alloc_after=context.world_alloc_after,
+                overlay=payload.overlay,
+                scale_by_world={wid: plan.scale_world for wid, plan in plan_result.per_world.items()},
+            )
+        except OverlayConfigError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
     async def _execute_rebalance(
         self,
         request_payload: Mapping[str, Any],
@@ -384,7 +429,7 @@ class WorldService:
 
     async def upsert_allocations(self, payload: AllocationUpsertRequest) -> AllocationUpsertResponse:
         self._validate_allocation_payload(payload)
-        self._ensure_scaling_mode(payload)
+        self._ensure_supported_mode(payload)
 
         etag = self._hash_allocation_payload(payload)
         existing_run = await self.store.get_allocation_run(payload.run_id)

@@ -7,7 +7,9 @@ from fastapi import APIRouter, HTTPException
 from ..rebalancing import (
     MultiWorldProportionalRebalancer,
     MultiWorldRebalanceContext,
+    MultiWorldRebalancePlan,
     PositionSlice,
+    SymbolDelta,
 )
 from ..alpha_metrics import build_alpha_metrics_envelope
 from ..schemas import (
@@ -20,6 +22,7 @@ from ..schemas import (
     SymbolDeltaModel,
 )
 from ..services import WorldService
+from ..rebalancing.overlay import OverlayPlanner, OverlayConfigError
 
 
 def _convert_positions(models: List[PositionSliceModel]) -> List[PositionSlice]:
@@ -102,10 +105,10 @@ def create_rebalancing_router(
 
     def _ensure_mode(payload: MultiWorldRebalanceRequest) -> None:
         mode = (payload.mode or "scaling").lower()
-        if mode in ("overlay", "hybrid"):
+        if mode == "hybrid":
             raise HTTPException(
                 status_code=501,
-                detail="Overlay mode is not implemented yet. Use mode='scaling'.",
+                detail="Hybrid mode is not implemented yet. Use mode='scaling' or 'overlay'.",
             )
 
     def _ensure_version_requirements(requested_version: int | None) -> None:
@@ -114,6 +117,31 @@ def create_rebalancing_router(
                 status_code=400,
                 detail="schema_version>=2 required when alpha_metrics_required is enabled",
             )
+
+    def _plan_overlay(
+        *,
+        mode: str,
+        payload: MultiWorldRebalanceRequest,
+        per_world_scale: Dict[str, float],
+        positions: List[PositionSlice],
+    ) -> list[SymbolDelta] | None:
+        if mode != "overlay":
+            return None
+        if payload.overlay is None:
+            raise HTTPException(
+                status_code=422,
+                detail="overlay config is required when mode='overlay'",
+            )
+        try:
+            return OverlayPlanner().plan(
+                positions=positions,
+                world_alloc_before=payload.world_alloc_before,
+                world_alloc_after=payload.world_alloc_after,
+                overlay=payload.overlay,
+                scale_by_world=per_world_scale,
+            )
+        except OverlayConfigError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
     @router.post(
         '/rebalancing/plan',
@@ -124,6 +152,8 @@ def create_rebalancing_router(
         _ensure_mode(payload)
         _ensure_version_requirements(payload.schema_version)
         active_version = _negotiate_version(payload.schema_version)
+        mode = (payload.mode or "scaling").lower()
+        positions = _convert_positions(payload.positions)
         # Build context from request
         ctx = MultiWorldRebalanceContext(
             total_equity=payload.total_equity,
@@ -131,19 +161,35 @@ def create_rebalancing_router(
             world_alloc_after=payload.world_alloc_after,
             strategy_alloc_before_total=payload.strategy_alloc_before_total,
             strategy_alloc_after_total=payload.strategy_alloc_after_total,
-            positions=_convert_positions(payload.positions),
+            positions=positions,
             min_trade_notional=payload.min_trade_notional or 0.0,
             lot_size_by_symbol=payload.lot_size_by_symbol,
         )
+        if mode == "overlay":
+            result = MultiWorldRebalancePlan(per_world={}, global_deltas=[])
+            per_world_scale: dict[str, float] | None = None
+        else:
+            planner = MultiWorldProportionalRebalancer()
+            result = planner.plan(ctx)
+            per_world_scale = {wid: plan.scale_world for wid, plan in result.per_world.items()}
 
-        planner = MultiWorldProportionalRebalancer()
-        result = planner.plan(ctx)
+        overlay_deltas = _plan_overlay(
+            mode=mode,
+            payload=payload,
+            per_world_scale=per_world_scale,
+            positions=positions,
+        )
 
         response, _, _, _, _ = _build_response_payload(
             result,
             active_version,
             payload.rebalance_intent,
         )
+        if overlay_deltas is not None:
+            response.overlay_deltas = [
+                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
+                for d in overlay_deltas
+            ]
         return response
 
     @router.post(
@@ -155,6 +201,8 @@ def create_rebalancing_router(
         _ensure_mode(payload)
         _ensure_version_requirements(payload.schema_version)
         active_version = _negotiate_version(payload.schema_version)
+        mode = (payload.mode or "scaling").lower()
+        positions = _convert_positions(payload.positions)
         # Compute plan (same as /plan)
         ctx = MultiWorldRebalanceContext(
             total_equity=payload.total_equity,
@@ -162,12 +210,30 @@ def create_rebalancing_router(
             world_alloc_after=payload.world_alloc_after,
             strategy_alloc_before_total=payload.strategy_alloc_before_total,
             strategy_alloc_after_total=payload.strategy_alloc_after_total,
-            positions=_convert_positions(payload.positions),
+            positions=positions,
             min_trade_notional=payload.min_trade_notional or 0.0,
             lot_size_by_symbol=payload.lot_size_by_symbol,
         )
-        planner = MultiWorldProportionalRebalancer()
-        result = planner.plan(ctx)
+        if mode == "overlay":
+            result = MultiWorldRebalancePlan(per_world={}, global_deltas=[])
+            per_world_scale: dict[str, float] | None = None
+        else:
+            planner = MultiWorldProportionalRebalancer()
+            result = planner.plan(ctx)
+            per_world_scale = {wid: plan.scale_world for wid, plan in result.per_world.items()}
+
+        overlay_deltas_raw = _plan_overlay(
+            mode=mode,
+            payload=payload,
+            per_world_scale=per_world_scale,
+            positions=positions,
+        )
+        overlay_deltas: list[SymbolDeltaModel] | None = None
+        if overlay_deltas_raw is not None:
+            overlay_deltas = [
+                SymbolDeltaModel(symbol=d.symbol, delta_qty=d.delta_qty, venue=d.venue)
+                for d in overlay_deltas_raw
+            ]
 
         (
             response,
@@ -180,7 +246,6 @@ def create_rebalancing_router(
             active_version,
             payload.rebalance_intent,
         )
-        overlay_deltas: list[SymbolDeltaModel] | None = None
 
         # Persist a compact audit entry per world (and a summary)
         plan_payload = service._serialize_plan(

@@ -296,7 +296,7 @@ gating_policy:
 
 ## 5. Allocation & Rebalancing APIs (normative)
 
-WorldService exposes two surfaces for coordinated world allocation changes. All flows operate in `mode='scaling'` by default; `overlay`/`hybrid` modes are unimplemented and return HTTP 501.
+WorldService exposes two surfaces for coordinated world allocation changes. All flows operate in `mode='scaling'` by default; `overlay` is supported with overlay config and `hybrid` remains unimplemented (HTTP 501).
 
 ### 5-A. `POST /allocations` — world allocation upsert
 
@@ -310,7 +310,7 @@ WorldService exposes two surfaces for coordinated world allocation changes. All 
 
 ### 5-B. `POST /rebalancing/plan`
 
-- Accepts the same [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }}) and runs `MultiWorldProportionalRebalancer`. Requests using `overlay`/`hybrid` return 501. The response contains only the per-world scaling/deltas plus aggregated `global_deltas` for analysis.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
+- Accepts the same [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }}) and runs `MultiWorldProportionalRebalancer`. Requests using `hybrid` return 501. Overlay requests emit `overlay_deltas` alongside the per-world scaling/deltas plus aggregated `global_deltas` for analysis.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
 - The endpoint is stateless—no persistence or audit logging—so operators can preview or simulate plans safely.
 
 ### 5-C. `POST /rebalancing/apply`
