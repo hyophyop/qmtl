@@ -2,7 +2,7 @@
 title: "Seamless SLA 대시보드"
 tags: [operations]
 author: "QMTL Team"
-last_modified: 2025-09-25
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -12,6 +12,8 @@ last_modified: 2025-09-25
 > **상태:** 이 런북이 참조하는 대시보드와 경보 규칙은 실시간 메트릭과 연결되어 있습니다. Jsonnet 번들을 배포하고 프로덕션 환경에 경보를 연동하세요. 분산 코디네이터와 SLA 엔진은 QMTL v2에 포함되어 있습니다.
 
 이 런북은 Seamless Data Provider v2와 함께 제공되는 관측 패키지를 설명합니다. 아래 변경 사항은 이슈 #1148 이전의 임시 가이드를 대체합니다.
+
+Core Loop 골든 시그널 대시보드에서 데이터 플레인 뷰는 이 Jsonnet 번들을 그대로 사용합니다. 전체 Core Loop 신호 묶음과 SLO는 [core_loop_golden_signals.md](core_loop_golden_signals.md)를 참고하세요.
 
 ## 대시보드 번들
 

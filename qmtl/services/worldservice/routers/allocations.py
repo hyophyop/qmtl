@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Dict
 
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException
 
 from .. import metrics as ws_metrics
@@ -15,7 +15,8 @@ from ..schemas import (
 from ..services import WorldService
 
 
-_STALE_THRESHOLD = timedelta(minutes=5)
+_DEFAULT_TTL_SECONDS = 300
+_STALE_THRESHOLD = timedelta(seconds=_DEFAULT_TTL_SECONDS)
 
 
 def create_allocations_router(service: WorldService) -> APIRouter:
@@ -36,12 +37,14 @@ def create_allocations_router(service: WorldService) -> APIRouter:
             if world_id
             else await service.store.get_world_allocation_states()
         )
+        if world_id and not states:
+            raise HTTPException(status_code=404, detail="allocation snapshot not found")
         allocations: Dict[str, WorldAllocationSnapshot] = {}
         for wid, state in states.items():
-            stale = _is_stale(state.updated_at, now)
-            state.stale = stale
+            ttl, stale = _compute_ttl_and_staleness(state.updated_at, now)
             ws_metrics.record_allocation_snapshot(wid, stale=stale)
-            allocations[wid] = WorldAllocationSnapshot(**state.to_dict())
+            payload = {**state.to_dict(), "ttl": ttl, "stale": stale}
+            allocations[wid] = WorldAllocationSnapshot(**payload)
         return AllocationSnapshotResponse(allocations=allocations)
 
     return router
@@ -50,13 +53,17 @@ def create_allocations_router(service: WorldService) -> APIRouter:
 __all__ = ["create_allocations_router"]
 
 
-def _is_stale(updated_at: str | None, now: datetime) -> bool:
+def _compute_ttl_and_staleness(updated_at: str | None, now: datetime) -> tuple[str, bool]:
+    ttl = f"{_DEFAULT_TTL_SECONDS}s"
     if not updated_at:
-        return True
+        return ttl, True
     try:
-        ts = datetime.fromisoformat(updated_at)
+        normalized_updated_at = (
+            f"{updated_at[:-1]}+00:00" if updated_at.endswith("Z") else updated_at
+        )
+        parsed = datetime.fromisoformat(normalized_updated_at)
     except ValueError:
-        return True
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return (now - ts) > _STALE_THRESHOLD
+        return ttl, True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return ttl, (now - parsed) > _STALE_THRESHOLD

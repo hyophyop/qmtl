@@ -2,7 +2,7 @@
 title: "모니터링 및 알림"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-08-25
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -10,6 +10,8 @@ last_modified: 2025-08-25
 # 모니터링 및 알림
 
 이 문서는 QMTL 서비스에 대한 Prometheus 경보와 Grafana 대시보드 예시를 설명합니다.
+
+Core Loop 경로 전반의 골든 시그널과 권장 SLO/대시보드는 [core_loop_golden_signals.md](core_loop_golden_signals.md)에서 묶어 관리합니다. 이 문서는 개별 서비스 지표와 배포 방법을 다룹니다.
 
 ## 알림 규칙(Alert Rules)
 

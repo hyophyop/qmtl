@@ -208,6 +208,20 @@ async def test_world_crud_policy_apply_and_events():
 
 
 @pytest.mark.asyncio
+async def test_allocations_missing_snapshot_returns_empty_payload():
+    bus = DummyBus()
+    app = create_app(bus=bus, storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            response = await client.get("/allocations", params={"world_id": "absent"})
+
+    assert response.status_code == 404
+    detail = response.json().get("detail")
+    assert "allocation snapshot" in str(detail)
+
+
+@pytest.mark.asyncio
 async def test_apply_rejects_invalid_gating_policy():
     bus = DummyBus()
     app = create_app(bus=bus, storage=Storage())
@@ -694,7 +708,21 @@ async def test_allocations_snapshot_endpoint():
             assert alloc["allocation"] == pytest.approx(1.0)
             assert alloc["world_id"] == "w1"
             assert alloc["run_id"] == "alloc-run-3"
+            assert alloc["ttl"] == "300s"
+            assert alloc["stale"] is False
             assert alloc.get("strategy_alloc_total") is None
+
+
+@pytest.mark.asyncio
+async def test_allocations_snapshot_missing_world_returns_404():
+    app = create_app(storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            resp = await client.get("/allocations", params={"world_id": "absent"})
+            assert resp.status_code == 404
+            detail = resp.json().get("detail")
+            assert "allocation snapshot" in str(detail)
 
 
 @pytest.mark.asyncio

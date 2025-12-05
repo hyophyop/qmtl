@@ -4,7 +4,7 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2025-12-06
 ---
 
 {{ nav_links() }}
@@ -617,8 +617,10 @@ points-in-time, and provides a durable audit trail.
    full recompute after 7 days.
 7. **GSG canonicalisation & SSA DAG lint** - Convert DAGs to canonical JSON + SSA
    form and verify regenerated NodeIDs.
-8. **Golden-signal alerts** - Maintain Prometheus rules for
-   `diff_duration_ms_p95`, `nodecache_resident_bytes`, and `sentinel_gap_count`.
+8. **Golden-signal SLO/alerts** - Maintain Prometheus rules for
+   `diff_duration_ms_p95`, `nodecache_resident_bytes`, and `sentinel_gap_count`,
+   and track submit→activation SLOs through the Core Loop golden-signal
+   dashboard/SLOs (`../operations/core_loop_golden_signals.md`, T5 P1‑M2 delivered).
 9. **Failure playbooks** - Cross-link runbooks and dashboards for Neo4j failures,
    Kafka metadata corruption, and Redis AOF loss.
 10. **Four-stage CI/CD gate** - Pre-merge SSA lint + fast backtests, 24h canary,
@@ -630,6 +632,7 @@ points-in-time, and provides a durable audit trail.
     discovering additional queues when query specs are identical.
 
 Meeting all items marks the QMTL v0.9 "Determinism" milestone.
+The golden-signal To-Be is materialised in the dashboards/SLOs documented in `../operations/core_loop_golden_signals.md`.
 
 ### Observability & runbook
 - Gateway metrics: `nodeid_checksum_mismatch_total{source="dag"}`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`, `tagquery_nodeid_mismatch_total`.
