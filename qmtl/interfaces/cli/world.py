@@ -13,7 +13,14 @@ from .http_client import http_get, http_post, http_delete
 
 
 def cmd_world(argv: List[str]) -> int:
-    """World management commands."""
+    """World management commands.
+
+    Typical Core Loop usage:
+      1) Submit strategies with a world using `qmtl submit ... --world <id>`.
+      2) Inspect world-level allocations and build rebalancing plans via:
+         - `qmtl world allocations -w <id>`
+         - `qmtl world rebalance-plan ...` / `qmtl world rebalance-apply ...`
+    """
     parser = argparse.ArgumentParser(
         prog="qmtl world",
         description=_t("World management commands"),
