@@ -208,6 +208,19 @@ async def test_world_crud_policy_apply_and_events():
 
 
 @pytest.mark.asyncio
+async def test_allocations_missing_snapshot_returns_empty_payload():
+    bus = DummyBus()
+    app = create_app(bus=bus, storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            response = await client.get("/allocations", params={"world_id": "absent"})
+
+    assert response.status_code == 200
+    assert response.json() == {"allocations": {}}
+
+
+@pytest.mark.asyncio
 async def test_apply_rejects_invalid_gating_policy():
     bus = DummyBus()
     app = create_app(bus=bus, storage=Storage())
