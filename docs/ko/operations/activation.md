@@ -26,22 +26,19 @@ last_modified: 2025-08-29
 ## 2‑Phase Apply 절차 (운영 표준)
 
 1) Freeze/Drain — 회로 차단
-- `PUT /worlds/{id}/activation`에 `{active:false}` 오버라이드 적용 또는 CLI:  
-  `uv run qmtl world activation set <world> --active=false --reason maintenance --etag <etag>`
+- `PUT /worlds/{id}/activation`에 `{active:false}` 오버라이드 적용 (HTTP API나 SDK 사용; 활성화 관련 CLI 서브커맨드는 제공되지 않습니다.)
 - SDK/Gateway 메트릭으로 주문 게이트 OFF(`pretrade_attempts_total` 감소) 확인
 
 2) Evaluate — 계획 생성
-- `POST /worlds/{id}/evaluate` 또는 CLI: `uv run qmtl world eval <world> --output json --as-of ...`
+- `POST /worlds/{id}/evaluate`
 - 결과에 포함된 `ttl/etag/run_id`를 기록해 apply 입력으로 사용
 
 3) Apply (Switch) — 계획 적용
-- `POST /worlds/{id}/apply` with `run_id` (필수) · `etag` (낙관 잠금)  
-  CLI 예: `uv run qmtl world apply <world> --plan plan.json --run-id $(uuidgen) --etag <etag>`
+- `POST /worlds/{id}/apply` with `run_id` (필수) · `etag` (낙관 잠금)
 - 모니터링: `world_apply_duration_ms`, `activation_skew_seconds`, 감사 로그(`world:<id>:activation`)
 
 4) Unfreeze — 회로 해제
-- 오버라이드 제거 후 ActivationEnvelope `etag` 증가/유효 TTL 확인:  
-  `uv run qmtl world activation get <world>`
+- 오버라이드 제거 후 ActivationEnvelope `etag` 증가/유효 TTL을 HTTP API/SDK로 확인합니다.
 
 ## 롤백
 - Apply 실패나 회귀 발견 시 감사 로그에 저장된 직전 활성 스냅샷을 복원(`activation set`).

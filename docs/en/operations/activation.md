@@ -26,21 +26,19 @@ last_modified: 2025-08-29
 ## Procedures (2‑Phase Apply)
 
 1) Freeze/Drain
-- PUT `/worlds/{id}/activation` with `{active:false}` or CLI:  
-  `uv run qmtl world activation set <world> --active=false --reason maintenance --etag <etag>`
+- PUT `/worlds/{id}/activation` with `{active:false}` (use the HTTP API or SDK; activation CLI commands are not available).
 - Verify order gates OFF via SDK/Gateway metrics (`pretrade_attempts_total` drop)
 
 2) Evaluate
-- POST `/worlds/{id}/evaluate` or CLI: `uv run qmtl world eval <world> --output json --as-of ...`
+- POST `/worlds/{id}/evaluate`
 - Capture `ttl/etag/run_id` from the response for apply input
 
 3) Apply (Switch)
-- POST `/worlds/{id}/apply` with `run_id` (required) and `etag` (optimistic lock)  
-  CLI: `uv run qmtl world apply <world> --plan plan.json --run-id $(uuidgen) --etag <etag>`
+- POST `/worlds/{id}/apply` with `run_id` (required) and `etag` (optimistic lock)
 - Monitor `world_apply_duration_ms`, `activation_skew_seconds`, and audit log entries (`world:<id>:activation`)
 
 4) Unfreeze
-- Remove overrides and confirm ActivationEnvelope `etag` increments/TTL is valid via `uv run qmtl world activation get <world>`
+- Remove overrides and confirm ActivationEnvelope `etag` increments/TTL is valid (via HTTP API/SDK)
 
 ## Rollback
 - On apply failure or regression, restore the previous activation snapshot from the audit log (`activation set`) and verify via SDK/CLI WS envelopes.
