@@ -22,7 +22,10 @@ def create_allocations_router(service: WorldService) -> APIRouter:
         if not updated_at:
             return ttl, False
         try:
-            parsed = datetime.fromisoformat(updated_at)
+            normalized_updated_at = (
+                f"{updated_at[:-1]}+00:00" if updated_at.endswith("Z") else updated_at
+            )
+            parsed = datetime.fromisoformat(normalized_updated_at)
         except ValueError:
             return ttl, False
         if parsed.tzinfo is None:
