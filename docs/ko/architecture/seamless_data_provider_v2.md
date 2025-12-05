@@ -170,6 +170,12 @@ Seamless 데이터 플레인도 Core Loop 로드맵의 **P‑C / T3 P1‑M2 — 
 5. **감사**: 전환 시점의 번들 SHA와 윈도우를 감사 로그에 추가하고 대시보드 메모를 남깁니다.
 6. **롤백 경로**: strict에서 실패하는 subject는 `validation_mode=canary`로 즉시 다운그레이드하고, 문제 스키마를 잠시 tombstone 처리한 뒤 재배포합니다.
 
+### 로드맵 매핑 (P‑C / T3 P1‑M2)
+
+- #1150 — 레지스트리 계약·검증 모드·감사: `SchemaRegistryClient` / `RemoteSchemaRegistryClient`, `validation_mode`·`QMTL_SCHEMA_VALIDATION_MODE`, `QMTL_SCHEMA_REGISTRY_URL` 토글, `seamless_schema_validation_failures_total` 메트릭, `scripts/schema/audit_log.py` 워크플로우가 제공하는 범위를 의미합니다.
+- #1151 — 관측·런북 자산: `operations/monitoring/seamless_v2.jsonnet` 대시보드, `alert_rules.yml`(SeamlessSla99thDegraded/SeamlessBackfillStuckLease/SeamlessConformanceFlagSpike), `scripts/seamless_health_check.py` 헬스체크가 함께 배포되어 있습니다. 핵심 메트릭은 `seamless_sla_deadline_seconds`, `backfill_completion_ratio`, `seamless_conformance_flag_total`입니다.
+- #1152 — 검증/실패 주입 회귀: Hypothesis 커버리지·실패 주입·레지스트리 거버넌스 테스트(`tests/qmtl/runtime/sdk/test_history_coverage_property.py`, `tests/qmtl/runtime/sdk/test_seamless_provider.py`, `tests/qmtl/foundation/schema/test_registry.py`)는 아래 명령으로 실행되며 `.github/workflows/ci.yml` `test` 잡에서 동일하게 실행됩니다.
+
 ## 관측 지표
 
 프로메테우스는 위에서 설명한 코디네이터 및 SLA 메트릭과 기존 적합성 카운터를 함께 노출합니다. 운영 가이드에서 언급한 Jsonnet 대시보드는 이 메트릭만으로 바로 렌더링할 수 있습니다. 스키마 레지스트리 작업이 완료되면 트레이싱 스팬 속성이 더욱 풍부해지겠지만, 코디네이터와 SLA 계측을 위해 추가 변경은 필요하지 않습니다.
@@ -187,10 +193,11 @@ Seamless v2는 본 문서의 약속을 뒷받침하는 회귀 스위트를 제�
 ```
 uv run -m pytest -W error -n auto \
   tests/qmtl/runtime/sdk/test_history_coverage_property.py \
-  tests/qmtl/runtime/sdk/test_seamless_provider.py
+  tests/qmtl/runtime/sdk/test_seamless_provider.py \
+  tests/qmtl/foundation/schema/test_registry.py
 ```
 
-위 명령은 새로운 회귀가 배포 전에 드러나도록 CI 심리스 작업에도 연결되어 있습니다.
+위 명령은 `.github/workflows/ci.yml` `test` 잡에서도 동일 경로로 실행됩니다.
 
 ## 다음 단계
 

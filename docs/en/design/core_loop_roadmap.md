@@ -128,6 +128,17 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
   - Deprecate direct `history_provider` configuration in strategy code where feasible.
 - **P1‑T3‑M2 — Schema registry governance**
   - Implement the “canary/strict validation” modes outlined in the Seamless v2 docs and define the rollout flow for schema changes.
+  - P‑C / T3 P1‑M2 maps to the following issues:
+    - #1150 — registry contracts/validation modes/audit: `SchemaRegistryClient` / `RemoteSchemaRegistryClient`, `validation_mode` / `QMTL_SCHEMA_VALIDATION_MODE`, `QMTL_SCHEMA_REGISTRY_URL`, `seamless_schema_validation_failures_total`, `scripts/schema/audit_log.py`.
+    - #1151 — observability/runbook assets: `operations/monitoring/seamless_v2.jsonnet`, `alert_rules.yml` (`SeamlessSla99thDegraded`, `SeamlessBackfillStuckLease`, `SeamlessConformanceFlagSpike`), `scripts/seamless_health_check.py` so dashboards/alerts/health checks are ready to use.
+    - #1152 — validation/failure-injection regressions: Hypothesis coverage, failure-injection, and observability snapshot tests (`tests/qmtl/runtime/sdk/test_history_coverage_property.py`, `tests/qmtl/runtime/sdk/test_seamless_provider.py`, `tests/qmtl/foundation/schema/test_registry.py`) run via the command below and are executed in the CI `test` job.
+
+      ```
+      uv run -m pytest -W error -n auto \
+        tests/qmtl/runtime/sdk/test_history_coverage_property.py \
+        tests/qmtl/runtime/sdk/test_seamless_provider.py \
+        tests/qmtl/foundation/schema/test_registry.py
+      ```
 - **P2‑T3‑M3 — Multi-upstream / tag-based queue mapping**
   - Strengthen tag/interval conventions between Gateway/DAG Manager and Seamless to support multi-queue/multi-asset strategies without manual wiring.
 

@@ -156,6 +156,12 @@ formalization** contract.
 5. **Audit:** append the promotion window and bundle SHA to the audit log and annotate dashboards.
 6. **Rollback path:** from strict, downgrade to canary for failing subjects and tombstone the problematic schema until a fixed version is published.
 
+### Roadmap alignment (P‑C / T3 P1‑M2)
+
+- #1150 — registry contracts/validation modes/audit: `SchemaRegistryClient` / `RemoteSchemaRegistryClient`, `validation_mode` / `QMTL_SCHEMA_VALIDATION_MODE`, `QMTL_SCHEMA_REGISTRY_URL`, the `seamless_schema_validation_failures_total` metric, and the `scripts/schema/audit_log.py` workflow.
+- #1151 — observability/runbook assets: `operations/monitoring/seamless_v2.jsonnet` dashboards, `alert_rules.yml` (SeamlessSla99thDegraded / SeamlessBackfillStuckLease / SeamlessConformanceFlagSpike), `scripts/seamless_health_check.py`; key metrics are `seamless_sla_deadline_seconds`, `backfill_completion_ratio`, and `seamless_conformance_flag_total`.
+- #1152 — validation/failure-injection regressions: Hypothesis coverage, failure-injection, and registry-governance tests (`tests/qmtl/runtime/sdk/test_history_coverage_property.py`, `tests/qmtl/runtime/sdk/test_seamless_provider.py`, `tests/qmtl/foundation/schema/test_registry.py`) run via the command below and in the `.github/workflows/ci.yml` `test` job.
+
 ## Observability Surfaces
 
 Prometheus now exposes the coordinator and SLA metrics described above alongside
@@ -184,11 +190,12 @@ Run the suite locally or in CI with:
 ```
 uv run -m pytest -W error -n auto \
   tests/qmtl/runtime/sdk/test_history_coverage_property.py \
-  tests/qmtl/runtime/sdk/test_seamless_provider.py
+  tests/qmtl/runtime/sdk/test_seamless_provider.py \
+  tests/qmtl/foundation/schema/test_registry.py
 ```
 
-The command above is also the invocation wired into the CI Seamless job so new
-regressions surface before release promotion.
+The command above matches the invocation in `.github/workflows/ci.yml` under the
+`test` job so regressions surface before release promotion.
 
 ## Next Steps
 
