@@ -39,17 +39,12 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 - 전략 인제스트, DAG diff, 큐/태그 디스커버리(각각 Gateway/DAG Manager 소유). 주문 I/O는 여기에서 다루지 않습니다.
 - WorldService/Gateway 없이 Runner/SDK만으로 전체 전략 생애 주기와 최종 평가/게이팅을 처리하는 “순수 로컬 모드”를 정식 운영 모드로 지원하지 않습니다. SDK 레벨의 ValidationPipeline·PnL 헬퍼는 테스트/실험 용도이며, 정책·평가·게이팅의 SSOT는 항상 WorldService입니다.
 
-### 0‑A. As‑Is / To‑Be 요약
+### 0‑A. Core Loop 정렬 요약
 
 #### 평가·활성화 플로우
 
-- As‑Is
-  - WS는 `/worlds/{id}/evaluate`에서 `EvaluateRequest(metrics, series, policy)`를 받아 정책 엔진(`Policy`)으로 **활성 집합(active[])**을 계산합니다.
-  - SDK/Runner는 `ValidationPipeline`으로 로컬 평가를 먼저 수행한 뒤, 필요 시 WS 평가를 **보조 신호**로 조회합니다. 두 레이어가 모두 weight/contribution 개념을 가지고 있어, 어떤 값이 최종 기준인지 혼동 여지가 있습니다.
-  - Activation 상태는 Redis/DB에 저장되고 ControlBus로 브로드캐스트되지만, Runner.submit / CLI와의 연결은 “활성화 결과를 어떻게 보여줄지” 수준에서 일부만 정리되어 있습니다.
-- To‑Be
-  - WS 평가 결과(active/weight/contribution/violations)가 **월드 차원의 단일 출처**로 간주되고, SDK/Runner는 이를 그대로 사용자에게 노출하되 `ValidationPipeline`은 힌트·로컬 사전 검사 역할로 한정됩니다.
-  - `DecisionEnvelope`/`ActivationEnvelope` 스키마와 Runner/CLI `SubmitResult` 구조가 일치하도록 정리해, “전략 제출 → 월드 평가 결과 확인”이 한눈에 이어지도록 합니다.
+- WS 평가 결과(active/weight/contribution/violations)가 **월드 차원의 단일 출처**이며, SDK/Runner는 이를 그대로 사용자에게 노출하고 `ValidationPipeline`은 힌트·로컬 사전 검사 역할로 한정된다.
+- `DecisionEnvelope`/`ActivationEnvelope` 스키마와 Runner/CLI `SubmitResult` 구조가 일치하도록 정리해 “전략 제출 → 월드 평가 결과 확인”이 한눈에 이어진다.
 - 계약 (정렬 상태)
   - `/worlds/{id}/evaluate` → `DecisionEnvelope`/`ActivationEnvelope` 값이 `SubmitResult.ws.decision/activation`에 그대로 매핑됩니다. CLI `--output json`은 WS/Precheck가 분리된 동일 JSON을 출력합니다.
   - 로컬 `ValidationPipeline` 출력은 `SubmitResult.precheck`에만 담기며, `status/weight/rank/contribution`의 SSOT는 WS입니다.
@@ -57,23 +52,13 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 
 #### ExecutionDomain / effective_mode
 
-- As‑Is
-  - WS는 `effective_mode`(`validate | compute-only | paper | live`)를 계산하고, Gateway/SDK는 이를 `execution_domain(backtest/dryrun/live/shadow)`로 매핑합니다.
-  - 일부 경로에서는 `meta.execution_domain` 힌트와 WS 결정이 동시에 존재하지만, 둘의 충돌/우선순위는 문서와 코드에 흩어져 있습니다.
-- To‑Be
-  - ExecutionDomain 결정 권한이 WS `effective_mode`에만 있다고 명시하고, Gateway/SDK는 항상 이 값을 기준으로만 도메인을 계산합니다.
-  - `world/world.md`, `architecture.md`, `gateway.md`, 본 문서가 모두 같은 규범(매핑 테이블·우선순위)을 공유하도록 정리합니다.
+- WS는 `effective_mode`(`validate | compute-only | paper | live`)를 계산하고, Gateway/SDK는 이를 `execution_domain(backtest/dryrun/live/shadow)`로 매핑한다.
+- 제출 메타의 `execution_domain` 값은 참조용 힌트이며 권한 있는 도메인 값은 WS `effective_mode`에서만 파생되고, `world/world.md`, `architecture.md`, `gateway.md`, 본 문서가 동일한 규범(매핑 테이블·우선순위)을 공유한다.
 
 #### 월드 자본 배분 / 리밸런싱
 
-- As‑Is
-  - `/allocations`, `/rebalancing/*`가 world/world‑간 자본 배분 플랜을 계산·기록할 수 있지만, Runner.submit/전략 제출 플로우와는 분리된 **운영자 주도 루프**로 사용됩니다.
-  - Runner.submit/CLI는 제출된 world에 대해 `/allocations`의 최신 스냅샷(월드/전략 총합 비중, etag/updated_at, stale 여부)을 **조회·표시**하며,
-    스냅샷이 없거나 오래된 경우 `qmtl world allocations -w <id>`로 새로고침하라는 안내를 함께 출력합니다. 표시는 읽기 전용이며 자본 이동/실거래 반영은 여전히 운영자 플로우가 담당합니다.
-  - Alpha metrics(`alpha_metrics`)를 rebalancing 플랜에 포함하는 v2 스키마가 도입되었으나, “전략 평가 → world allocation”을 한 문맥에서 설명하는 문서는 제한적입니다.
-- To‑Be
-  - 전략 제출/평가 루프와 world allocation 루프를 “표준 두 단계 루프”로 문서화하고, WS는 두 루프 모두의 SSOT 역할(평가/활성/배분)을 명확히 합니다.
-  - Core Loop 표면(Runner.submit/CLI, 문서)이 `/allocations` 스냅샷과 연결되어, 평가/활성(제안) ↔ 자본 배분(적용) 단계를 명확히 구분한 채 탐색/인지를 쉽게 합니다. 적용·실행은 여전히 승인/감사 가능한 별도 플로우이며, `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 apply 경로와 run_id/etag 기반 감사 추적을 기본 규약으로 고정합니다.
+- `/allocations`, `/rebalancing/*`가 world/world‑간 자본 배분 플랜을 계산·기록하고, Runner.submit/CLI는 제출된 world의 최신 스냅샷(월드/전략 총합 비중, etag/updated_at, stale 여부)을 읽기 전용으로 노출하며, 스냅샷이 없거나 오래되면 `qmtl world allocations -w <id>` 새로고침 안내를 함께 출력한다.
+- 전략 제출/평가 루프와 world allocation 루프는 “표준 두 단계 루프”로 문서화되어 있으며, 적용·실행은 승인/감사 가능한 별도 플로우로 남긴 채 `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 경로와 run_id/etag 기반 감사 추적을 기본 규약으로 사용한다.
 
 ---
 

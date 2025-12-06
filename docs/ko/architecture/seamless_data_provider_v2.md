@@ -12,16 +12,11 @@ last_modified: 2025-12-06
 - 목적: Seamless Data Provider(SDP) v2가 **데이터 정규화·적합성 검증·백필·SLA·관측 가능성**을 어떻게 조합해, 전략/월드에 일관된 히스토리/라이브 데이터를 제공하는지 아키텍처 수준에서 정의합니다.
 - Core Loop 상 위치: Core Loop의 **“데이터 공급 자동화” + “시장 replay 백테스트”** 단계를 뒷받침하는 데이터 플레인 설계입니다. Runner.submit과 WorldService가 기대하는 데이터 품질/커버리지를 보장하는 책임을 집니다.
 
-### 0‑A. As‑Is / To‑Be 요약
+### 0‑A. Core Loop 정렬 요약
 
-- As‑Is
-  - SDP v2는 이미 런타임에 적용되어, cache→storage→backfill→live 경로와 ConformancePipeline/SLA/metrics를 통해 데이터 품질을 관리합니다.
-  - 전략/템플릿 수준에서는 여전히 대부분의 경우 `history_provider`를 직접 구성해야 하지만,
-    `world.data.presets[]`가 선언된 월드에 대해서는 world/preset 정보를 기반으로 Runner/CLI가 SDP 인스턴스를
-    자동 구성해 `StreamInput`에 주입하는 기본 on‑ramp가 존재합니다.
-- To‑Be
-  - world/preset 기반 on‑ramp에서 Runner/CLI가 **Seamless preset + data spec**만으로 적절한 SDP 인스턴스를 자동 구성하고, StreamInput에 주입합니다.
-  - 이 문서는 데이터 플레인 관점에서 As‑Is를 규범화하고, `rewrite_architecture_docs.md`와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장됩니다.
+- SDP v2는 런타임에서 cache→storage→backfill→live 경로와 ConformancePipeline/SLA/metrics를 통해 데이터 품질을 관리한다.
+- `world.data.presets[]`가 선언된 월드는 world/preset 정보를 기반으로 Runner/CLI가 **Seamless preset + data spec**만으로 SDP 인스턴스를 자동 구성해 `StreamInput`에 주입하며, 사용자는 data preset/fingerprint만 의식하면 된다.
+- 본 문서는 데이터 플레인 관점에서 Core Loop 정렬을 규범화하고, `rewrite_architecture_docs.md`와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장한다.
 
 > **상태:** 심리스 데이터 프로바이더 v2 아키텍처는 런타임에 정식 적용되었습니다. 분산 백필 코디네이터가 인프로세스 스텁을 대체했고, `SLAPolicy` 예산이 강제되며, 아래에서 언급하는 관측 지표가 기본으로 방출됩니다. Core Loop 골든 시그널 세트는 `../operations/core_loop_golden_signals.md`에 정리되었으며, 남은 로드맵은 스키마 거버넌스 유지·대시보드 확장 같은 점진 개선에 집중합니다.
 

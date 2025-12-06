@@ -5,16 +5,11 @@
 - Purpose: Describe how the Seamless Data Provider (SDP) v2 combines **normalisation, conformance checks, backfill, SLAs, and observability** to feed strategies/worlds with consistent history and live data.
 - Core Loop position: Backs the Core Loop stages **“data supply automation” + “market replay backtest”** by guaranteeing the data quality and coverage that Runner.submit and WorldService rely on.
 
-### 0-A. As-Is / To-Be Summary
+### 0-A. Core Loop Alignment
 
-- As‑Is
-  - SDP v2 is live in the runtime: cache→storage→backfill→live flows and ConformancePipeline/SLA/metrics already guard data quality.
-  - At the strategy/template level, authors still construct `history_provider` explicitly in most cases; the only
-    default on‑ramp today is for worlds that declare `world.data.presets[]`, where Runner/CLI build an SDP instance
-    from presets and inject it into `StreamInputs` when a world is specified.
-- To‑Be
-  - For world/preset-based on‑ramps, Runner/CLI automatically builds an SDP instance from **Seamless presets + data specs** and injects it into StreamInputs when a world is specified.
-  - This document becomes the normative data‑plane counterpart to `rewrite_architecture_docs.md`, including the contract for “world-centric data presets → SDP wiring”.
+- SDP v2 is live in the runtime: cache→storage→backfill→live flows and ConformancePipeline/SLA/metrics already guard data quality.
+- Worlds that declare `world.data.presets[]` let Runner/CLI auto-build an SDP instance from **Seamless presets + data specs** and inject it into `StreamInputs`, so authors focus on data presets/fingerprints instead of manual wiring.
+- This document is the normative data‑plane counterpart to `rewrite_architecture_docs.md`, including the contract for “world-centric data presets → SDP wiring”.
 
 > **Status:** The Seamless Data Provider v2 architecture is now live in the
 > runtime. The distributed backfill coordinator replaces the in-process stub,

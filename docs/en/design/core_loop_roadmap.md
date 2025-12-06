@@ -122,6 +122,7 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 - Operators apply capital changes explicitly via `qmtl world apply <id> --run-id <id> [--plan-file plan.json | --plan '{"activate":[...]}']`. The default is safe/read-only; `run_id` is always required for audit/rollback.
 - Apply/rollback approvals stay in the ops lane, and every allocation change should be auditable via etag/run_id. Guidance in the snapshot section must point users through submit → allocations refresh → apply in that order.
 
+<a id="t3-seamless-track"></a>
 ## 5. T3 — Data Plane / Seamless Track
 
 ### 5.1 Direction

@@ -58,6 +58,9 @@ class ActivationEnvelope(BaseModel):
     run_id: str | None = None
     ts: str
     state_hash: str | None = None
+    phase: str | None = None
+    requires_ack: bool | None = None
+    sequence: int | None = None
 
 
 __all__ = [

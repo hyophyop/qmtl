@@ -52,93 +52,46 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
     테스트·실험·단위 테스트 용도로 ValidationPipeline이나 PnL 헬퍼를 SDK에서 직접 호출할 수는 있지만,  
     정책·평가·게이팅의 단일 진실 소스(SSOT)는 언제나 WorldService이며, Core Loop 설명도 이를 기준으로 한다.
 
-### 0.1 Core Loop: 전략 생애주기 (As‑Is / To‑Be)
+### 0.1 Core Loop: 전략 생애주기
 
 사용자 관점에서 QMTL이 지향하는 **Core Loop**는 다음과 같다.
 
 > 전략 작성 → 제출 → (시스템이 월드 안에서 백테스트/평가/배포) → 월드 성과 확인 → 전략 개선
 
-- **To‑Be (목표 경험)**  
-  - 전략 코드는 “신호 생성 + 필요한 데이터”만 표현한다.  
-  - 데이터 공급/백필/시장 replay는 Seamless/DataPlane이 책임진다.  
-  - `Runner.submit(..., world=..., mode=...)` 한 번으로:
-    - 히스토리 warm‑up + replay 기반 백테스트,
-    - 성과 지표 계산 및 정책 평가(WorldService),
-    - 활성/비활성 결정과 자본 배분(월드 단위)이 자동으로 이어진다.
-  - 사용자는 월드 성과/기여도를 보고 전략을 개선하는 루프에 집중한다.
-
-- **As‑Is (v2.0 기준 구현 요약)**
-  - `Runner.submit`은 히스토리 warm‑up, 백테스트 실행, `ValidationPipeline` 기반 성과 계산까지 자동으로 수행한다.
-  - WorldService는 `/worlds/{id}/evaluate`·`/apply`·`/activation`·`/allocations` API로
-    정책 평가, 활성 집합 관리, 리밸런싱 계획을 제공한다.
-  - `auto_returns` 옵션을 통해 price/equity 데이터에서 수익률을 파생할 수 있지만,
-    평가/활성화/자본 배분의 계층 분리로 인해 "제출만 하면 곧바로 tradable/자본 배분까지"
-    완전히 자동화된 상태는 아니다.
-  - 이 격차와 후속 계획은 각 섹션의 As‑Is/To‑Be 형태로 정리되어 있다.
+- 전략 코드는 “신호 생성 + 필요한 데이터”만 표현하고, 데이터 공급/백필/시장 replay는 Seamless/DataPlane이 책임진다.
+- `Runner.submit(..., world=..., mode=...)` 한 번으로 히스토리 warm‑up + replay 기반 백테스트, 성과 지표 계산, WorldService 정책 평가, 활성/비활성 결정과 월드 단위 자본 배분 스냅샷 노출까지 이어진다.
+- 사용자는 월드 성과/기여도를 보고 전략을 개선하는 루프에 집중한다.
 
 #### 0.1.1 백테스트 & 시장 replay
 
-- As‑Is
-  - `HistoryWarmupService`와 `Pipeline`이 `StreamInput` 기반 히스토리 로딩·replay를 담당한다.
-  - Seamless/QuestDB/CCXT 등 데이터 소스는 이미 v2 데이터 플레인으로 통합되었지만,
-    **전략이 어떤 StreamInput/데이터셋을 사용할지**는 대부분 여전히 사용자가 직접 지정한다.
-    Core Loop 데모/표준 월드처럼 `world.data.presets[]`가 정의된 경우에는 Runner/CLI가
-    world·preset 정보를 바탕으로 Seamless provider를 자동으로 붙여 주지만, 그 외 월드는 수동
-    구성에 의존한다.
-  - World 설정(`world/world.md`)과 데이터셋(`dataset_id`, `snapshot_version` 등)의 연결은
-    world data preset 온램프가 없는 월드에 대해서는 여전히 설계 문서를 따라 수동으로 구성해야 한다.
-- To‑Be
-  - 기본 on‑ramp에서는 **world + preset + 간단한 data spec**만으로
-    Runner/CLI가 적절한 Seamless provider와 StreamInput을 자동으로 연결한다.
-  - “시장 replay처럼 보이는 백테스트”에 필요한 최소 설정이
-    `world`·`mode`·(선택적) 데이터 preset 정도로 축소된다.
+- `HistoryWarmupService`와 `Pipeline`이 `StreamInput` 기반 히스토리 로딩·replay를 담당한다.
+- Seamless/QuestDB/CCXT 등 데이터 소스는 v2 데이터 플레인으로 통합되어 있으며,
+  `world.data.presets[]`가 정의된 월드는 Runner/CLI가 world·preset 정보를 바탕으로 Seamless provider와
+  StreamInput을 자동 연결한다. 기본 on‑ramp에서는 world·mode·(선택적) 데이터 preset만으로 시장 replay 스타일
+  백테스트를 구성할 수 있고, 온램프가 없는 월드만 설계 문서를 따라 수동 구성한다.
 
 #### 0.1.2 데이터 공급 자동화
 
-- As‑Is
-  - `SeamlessDataProvider v2`는 캐시→스토리지→백필→라이브 경로를 추상화하고,
-    SLA/적합성/스키마 검증까지 수행한다.
-  - Runner/SDK 수준에서는 여전히 많은 전략이 `history_provider`를 직접 구성하지만,
-    `world.data.presets[]`가 선언된 월드에 대해서는 Runner/CLI가 world/preset 설정을 기반으로
-    Seamless provider를 자동으로 구성해 `StreamInput`에 주입하는 기본 on‑ramp가 존재한다.
-- To‑Be
-  - Runner/CLI에서 world를 지정하면, 해당 world 설정/프리셋에 맞는 Seamless provider가
-    기본으로 선택되고, StreamInput에도 자동 주입된다.
-  - 사용자는 데이터 인프라 세부 구현 대신 **data preset / fingerprint**만 의식하면 된다.
+- `SeamlessDataProvider v2`는 캐시→스토리지→백필→라이브 경로를 추상화하고 SLA/적합성/스키마 검증까지 수행한다.
+- Runner/CLI에서 world를 지정하면 world/preset 설정을 기반으로 Seamless provider가 기본 선택되어 `StreamInput`에 자동 주입되며, 사용자는 데이터 인프라 세부 구현 대신 **data preset / fingerprint**만 의식하면 된다.
 
 #### 0.1.3 성과 자동 평가 → tradable 전환
 
-- As‑Is
-  - `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행한다.
-  - WorldService `/evaluate`는 active set을 결정하며, SDK/Runner는 `auto_returns`를 통해
-    가격/잔고 시계열에서 `backtest_returns`를 파생할 수 있다. 유효한 시계열이 없으면
-    여전히 명시적 returns가 필요하다.
-  - Activation(게이트 ON/OFF)은 WorldService/ActivationManager로 연결되어 있지만,
-    “submit 한 번으로 바로 활성화+가중치 결정”은 월드/정책/운영 플로우에 따라 다르게 wiring된다.
-- To‑Be
-  - `auto_returns`가 Runner.submit 전처리 단계에 구현되어,
-    “returns를 명시하지 않은 SR/표현식 전략”도 기본 백테스트 평가가 가능하다.
-  - WorldService 평가 결과(active/weight/contribution)가
-    Runner/CLI 결과와 일관되게 매핑되고,  
-    “validation → activation → capital allocation” 흐름이 한 눈에 보이도록 표준화된다.
+- `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행하고,
+  Runner.submit은 `auto_returns` 전처리로 명시적 returns가 없는 전략도 가능한 한 백테스트 평가를 진행한다.
+- WorldService `/evaluate` 결과(active/weight/contribution)와 `DecisionEnvelope`/`ActivationEnvelope`는
+  Runner/CLI `SubmitResult.ws.*`에 그대로 매핑되고, 로컬 `ValidationPipeline` 출력은 `precheck` 섹션으로 분리되어
+  “validation → activation → capital allocation” 흐름이 한눈에 이어진다.
 
 #### 0.1.4 월드 단위 자본 자동 배분
 
-- As‑Is
-  - WorldService는 `/allocations`와 내부 rebalancing 엔진으로
-    world/world‑간 자본 배분 계획을 계산할 수 있다.
-  - Runner.submit/CLI는 제출된 world에 대해 `/allocations` 스냅샷(월드/전략 비중, etag/updated_at, stale 여부)을 조회해 보여주고,
-    스냅샷이 누락/오래됐을 때는 `qmtl world allocations -w <id>`로 새로고침하라는 힌트를 함께 출력한다.
-    표시는 여전히 **읽기 전용**이며, 자본 이동은 별도의 운영/스케줄링 루프가 필요하다.
-- To‑Be
-  - 전략 제출/평가 루프와 월드 자본 배분 루프를 본 문서, `worldservice.md`,
-    world/운영 가이드 전반에서 **표준 두 단계 루프**로 서술한다.
-    1) `Runner.submit(..., world=...)` → WS 평가/활성화,  
-    2) `/allocations`·`/rebalancing/*` 및 `qmtl world allocations|rebalance-*` CLI를 통한
-       월드 자본 배분/리밸런싱 적용 단계로 이어지는 흐름을 고정한다.
-  - Core Loop 표면(문서/CLI)이 `/allocations` 스냅샷과 연결되어 평가/활성(제안)과 배분(적용) 단계를 명확히 구분한 채 탐색할 수 있게 하되,
-    적용/실행은 감사 가능한 운영 단계로 남긴다. `qmtl world apply <id> --run-id <id> [--plan-file ...]`
-    같은 명시적 apply 경로를 기본으로 안내하고, 모든 적용은 run_id/etag 기반으로 추적 가능해야 한다.
+- WorldService는 `/allocations`와 내부 rebalancing 엔진으로 world/world‑간 자본 배분 계획을 계산하며,
+  Runner.submit/CLI는 제출된 world의 스냅샷(월드/전략 비중, etag/updated_at, stale 여부)을 읽기 전용으로 노출한다.
+  스냅샷이 누락/오래되면 `qmtl world allocations -w <id>`로 새로고침하라는 안내를 함께 출력한다.
+- Core Loop 표면은 평가/활성(제안)과 배분(적용)을 **표준 두 단계 루프**로 고정한다:  
+  1) `Runner.submit(..., world=...)` → WS 평가/활성화,  
+  2) `/allocations`·`/rebalancing/*` 및 `qmtl world allocations|rebalance-*` CLI로 자본 배분/리밸런싱을 적용한다.  
+  적용/실행은 감사 가능한 운영 단계로 남기고, `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 경로와 run_id/etag 기반 추적을 기본 규약으로 사용한다.
 
 ### 기본 원칙: 단순성 > 하위 호환성
 
@@ -755,7 +708,7 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 12. **TagQueryNode 안정성 검사** — 신규 큐 발견 전/후에 TagQueryNode의 NodeID가 동일함을 확인한다. `query_tags`/`match_mode`/`interval`이 같다면 런타임 해석 결과(업스트림 증가)에 따라 NodeID가 변하면 안 된다.
 
 위 목록이 모두 충족된 시점을 QMTL v0.9 “Determinism” 마일스톤으로 삼는다.
-골든 시그널(To‑Be) 항목은 `../operations/core_loop_golden_signals.md`에 정리된 대시보드/SLO로 운영 자산화되었다.
+골든 시그널 항목은 `../operations/core_loop_golden_signals.md`에 정리된 대시보드/SLO로 운영 자산화되었다.
 
 
 ### 관측 · 런북 연결

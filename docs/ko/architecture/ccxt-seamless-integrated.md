@@ -11,7 +11,7 @@ last_modified: 2025-08-21
 
 - 목적: CCXT 기반 거래소 데이터를 Seamless 데이터 플레인으로 통합해, 전략/월드에서 **동일한 히스토리·라이브 데이터**를 재현 가능하게 사용할 수 있도록 하는 아키텍처를 정의합니다.
 - Core Loop 상 위치: Core Loop의 **“데이터 공급 자동화” + “시장 replay 백테스트”** 단계를 담당하며, Runner.submit이 기대하는 히스토리/커버리지를 어떻게 보장하는지 설명합니다.
-- As‑Is/To‑Be: 구현 상태와 후속 계획은 `seamless_data_provider_v2.md` 및 `../design/rewrite_architecture_docs.md`에서 As‑Is/To‑Be 관점으로 정리합니다.
+- 구현 상태와 후속 계획은 `seamless_data_provider_v2.md` 및 `../design/rewrite_architecture_docs.md`에서 Core Loop 정렬 관점으로 추적합니다.
 
 ## 관련 문서
 - [Seamless Data Provider v2](seamless_data_provider_v2.md)
