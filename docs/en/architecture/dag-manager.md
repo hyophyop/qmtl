@@ -25,6 +25,10 @@ Additional references
 !!! note "Deployment profile"
     With `profile: dev`, missing Neo4j/Kafka DSNs fall back to in-memory graph and queue managers. With `profile: prod`, missing `dagmanager.neo4j_dsn` or `dagmanager.kafka_dsn` stops the process before startup.
 
+!!! warning "In-memory mode is for development only"
+    - Under `profile: prod`, the `dagmanager` server exits immediately and `qmtl config validate` reports errors when DSNs are absent.
+    - Only `profile: dev` permits the in-memory fallbacks, and validation surfaces them as `warning`. Populate DSNs and set `profile: prod` before promoting to any pre-production or production environment.
+
 ---
 
 ## 0. Responsibilities & Design Principles

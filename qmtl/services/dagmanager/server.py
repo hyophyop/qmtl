@@ -12,7 +12,11 @@ import uvicorn
 
 from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.tracing import setup_tracing
-from qmtl.foundation.config import find_config_file, load_config
+from qmtl.foundation.config import (
+    DeploymentProfile,
+    find_config_file,
+    load_config,
+)
 from qmtl.utils.i18n import _, set_language
 
 from .config import DagManagerConfig
@@ -410,6 +414,32 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
             await bus.stop()
 
 
+def _enforce_backends(cfg: DagManagerConfig, profile: DeploymentProfile) -> None:
+    missing: list[str] = []
+    if not cfg.neo4j_dsn:
+        missing.append("dagmanager.neo4j_dsn")
+    if not cfg.kafka_dsn:
+        missing.append("dagmanager.kafka_dsn")
+
+    if profile is DeploymentProfile.PROD and missing:
+        logging.error(
+            _(
+                "Prod profile requires persistent graph/queue backends; missing: %s",
+            ),
+            ", ".join(missing),
+        )
+        raise SystemExit(2)
+
+    if missing:
+        for field in missing:
+            logging.warning(
+                _(
+                    "%s not configured; falling back to in-memory backend (dev profile only)",
+                ),
+                field,
+            )
+
+
 def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
     rest: list[str] = []
     lang: str | None = None
@@ -454,6 +484,7 @@ def main(argv: list[str] | None = None) -> None:
     _log_config_source(cfg_path, cli_override=args.config)
 
     cfg = DagManagerConfig()
+    profile = DeploymentProfile.DEV
     telemetry_enabled: bool | None = None
     telemetry_endpoint: str | None = None
     if cfg_path:
@@ -467,6 +498,7 @@ def main(argv: list[str] | None = None) -> None:
             )
             raise SystemExit(2)
         cfg = unified.dagmanager
+        profile = unified.profile
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
         telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
 
@@ -475,6 +507,8 @@ def main(argv: list[str] | None = None) -> None:
         exporter_endpoint=telemetry_endpoint,
         config_path=cfg_path,
     )
+
+    _enforce_backends(cfg, profile)
 
     asyncio.run(_run(cfg, enable_otel=bool(telemetry_enabled)))
 

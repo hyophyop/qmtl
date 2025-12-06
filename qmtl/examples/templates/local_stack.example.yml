@@ -27,7 +27,7 @@ backends:
   controlbus:
     mode: in-process
     notes:
-      - "Leaving kafka_dsn unset activates the in-memory KafkaAdmin for DAG Manager."
+      - "Leaving kafka_dsn unset activates the in-memory KafkaAdmin for DAG Manager (dev profile only)."
       - "Gateway skips ControlBus subscriptions without brokers/topics."
   commitlog:
     mode: disabled

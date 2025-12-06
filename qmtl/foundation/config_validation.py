@@ -350,7 +350,9 @@ async def _validate_dagmanager_neo4j(
     config: "DagManagerConfig", *, offline: bool
 ) -> ValidationIssue:
     if not config.neo4j_dsn:
-        return ValidationIssue("ok", "Neo4j disabled; using memory repository")
+        return ValidationIssue(
+            "warning", "Neo4j disabled; using memory repository (dev-only fallback)"
+        )
     if offline:
         return ValidationIssue(
             "warning", f"Offline mode: skipped Neo4j check for {config.neo4j_dsn}"
@@ -393,7 +395,8 @@ async def _validate_dagmanager_kafka(
 ) -> ValidationIssue:
     if not config.kafka_dsn:
         return ValidationIssue(
-            "ok", "Kafka DSN not configured; using in-memory queue manager"
+            "warning",
+            "Kafka DSN not configured; using in-memory queue manager (dev-only fallback)",
         )
     if offline:
         return ValidationIssue(
