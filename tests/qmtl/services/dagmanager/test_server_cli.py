@@ -1,5 +1,4 @@
 import pytest
-import pytest
 import yaml
 
 from qmtl.services.dagmanager.server import main
@@ -46,3 +45,17 @@ def test_server_config_file(monkeypatch, tmp_path):
     main([])
     assert captured["uri"] == "bolt://test:7687"
     assert captured["enable_otel"] is False
+
+
+def test_server_requires_backends_in_prod(monkeypatch, tmp_path, caplog):
+    config_path = tmp_path / "qmtl.yml"
+    config_path.write_text(yaml.safe_dump({"profile": "prod", "dagmanager": {}}))
+
+    monkeypatch.chdir(tmp_path)
+
+    with caplog.at_level("ERROR"):
+        with pytest.raises(SystemExit) as excinfo:
+            main([])
+
+    assert excinfo.value.code == 2
+    assert "missing" in caplog.text

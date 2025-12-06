@@ -1,4 +1,5 @@
 # Production baseline configuration.
+profile: prod
 worldservice:
   url: https://worldservice.prod.internal
   timeout: 0.4

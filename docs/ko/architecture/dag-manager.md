@@ -25,6 +25,10 @@ spec_version: v1.1
 !!! note "배포 프로필"
     `profile: dev`에서는 Neo4j/Kafka 설정이 비어 있으면 인메모리 그래프/큐 매니저를 사용합니다. `profile: prod`에서는 `dagmanager.neo4j_dsn`과 `dagmanager.kafka_dsn`이 비어 있으면 프로세스가 기동 전에 실패합니다.
 
+!!! warning "인메모리 모드는 개발 전용"
+    - `profile: prod`에서는 `dagmanager` 서버가 즉시 종료되며, 설정 검증(`qmtl config validate`)도 오류를 보고합니다.
+    - `profile: dev`에서만 인메모리 모드를 허용하며, 검증 결과의 심각도는 `warning`으로 표시됩니다. 운영 배포를 준비하려면 DSN을 채우고 프로필을 `prod`로 명시하세요.
+
 ---
 
 ## 0. 역할 요약 & 설계 철학

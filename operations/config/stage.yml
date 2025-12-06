@@ -1,4 +1,5 @@
 # Staging environment configuration with managed services.
+profile: prod
 worldservice:
   url: https://stage-worldservice.internal
   timeout: 0.5

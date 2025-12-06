@@ -42,10 +42,12 @@ async def test_validate_dagmanager_config_offline_skips_services() -> None:
 async def test_validate_dagmanager_config_skips_missing_services() -> None:
     results = await validate_dagmanager_config(DagManagerConfig(), offline=False)
 
-    assert results["neo4j"].severity == "ok"
+    assert results["neo4j"].severity == "warning"
     assert "memory repository" in results["neo4j"].hint
-    assert results["kafka"].severity == "ok"
+    assert "dev-only" in results["neo4j"].hint
+    assert results["kafka"].severity == "warning"
     assert "in-memory queue manager" in results["kafka"].hint
+    assert "dev-only" in results["kafka"].hint
     assert results["controlbus"].severity == "ok"
 
 
