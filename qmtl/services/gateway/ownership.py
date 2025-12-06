@@ -172,8 +172,10 @@ class OwnershipManager:
             except Exception:  # pragma: no cover - defensive logging
                 logger.exception("Kafka ownership release failed")
 
-        if db_owned:
-            self._db_owned.discard(key)
+        if not db_owned:
+            return
+
+        self._db_owned.discard(key)
         assert self._db._pool is not None, "database not connected"
         async with self._db._pool.acquire() as conn:
             await pg_advisory_unlock(conn, key)
