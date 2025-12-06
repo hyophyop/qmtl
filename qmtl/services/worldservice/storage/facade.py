@@ -79,6 +79,7 @@ class Storage:
 
     async def set_default_policy(self, world_id: str, version: int) -> None:
         self._policies.set_default(world_id, version)
+        self._worlds.update(world_id, {"default_policy_version": version})
         await self.invalidate_validation_cache(world_id)
 
     async def get_default_policy(self, world_id: str) -> Optional[Policy]:

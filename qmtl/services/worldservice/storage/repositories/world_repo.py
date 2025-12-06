@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, Mapping, Optional
 
 from .base import AuditLogger, DatabaseDriver
+from ..models import WorldRecord
 
 
 class PersistentWorldRepository:
@@ -16,8 +17,9 @@ class PersistentWorldRepository:
         self._audit = audit
 
     async def create(self, world: Mapping[str, Any]) -> Dict[str, Any]:
-        payload = dict(world)
-        world_id = str(payload["id"])
+        record = WorldRecord.from_payload(world)
+        payload = record.to_dict()
+        world_id = record.id
         await self._driver.execute(
             "INSERT OR REPLACE INTO worlds(id, data) VALUES(?, ?)",
             world_id,
@@ -30,8 +32,8 @@ class PersistentWorldRepository:
         rows = await self._driver.fetchall("SELECT data FROM worlds ORDER BY id")
         result: list[Dict[str, Any]] = []
         for row in rows:
-            data: Dict[str, Any] = json.loads(row[0])
-            result.append(data)
+            raw: Dict[str, Any] = json.loads(row[0])
+            result.append(WorldRecord.from_payload(raw).to_dict())
         return result
 
     async def get(self, world_id: str) -> Optional[Dict[str, Any]]:
@@ -42,13 +44,15 @@ class PersistentWorldRepository:
         if not row:
             return None
         data: Dict[str, Any] = json.loads(row[0])
-        return data
+        return WorldRecord.from_payload(data).to_dict()
 
     async def update(self, world_id: str, data: Mapping[str, Any]) -> Dict[str, Any]:
         current = await self.get(world_id)
         if current is None:
             raise KeyError(world_id)
-        current.update(dict(data))
+        record = WorldRecord.from_payload(current)
+        record.update(dict(data))
+        current = record.to_dict()
         await self._driver.execute(
             "UPDATE worlds SET data = ? WHERE id = ?",
             json.dumps(current),

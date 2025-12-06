@@ -125,7 +125,14 @@ async def test_world_crud_policy_apply_and_events():
             # Create world
             await client.post("/worlds", json={"id": "w1", "name": "World"})
             r = await client.get("/worlds")
-            assert r.json() == [{"id": "w1", "name": "World", "allow_live": False}]
+            worlds = r.json()
+            assert worlds[0]["id"] == "w1"
+            assert worlds[0]["name"] == "World"
+            assert worlds[0]["allow_live"] is False
+            assert worlds[0]["state"] == "ACTIVE"
+            assert worlds[0]["circuit_breaker"] is False
+            assert "created_at" in worlds[0]
+            assert "updated_at" in worlds[0]
 
             overrides_resp = await client.get("/worlds/w1/edges/overrides")
             assert overrides_resp.status_code == 200

@@ -34,9 +34,19 @@ class WorldNodeStatusEnum(StrEnum):
 
 
 class World(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     name: str | None = None
+    description: str | None = None
+    owner: str | None = None
+    labels: List[str] = Field(default_factory=list)
+    state: Literal["ACTIVE", "SUSPENDED", "DELETED"] = "ACTIVE"
     allow_live: bool = False
+    circuit_breaker: bool = False
+    default_policy_version: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class PolicyRequest(BaseModel):

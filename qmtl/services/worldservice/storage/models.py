@@ -4,15 +4,35 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, MutableMapping, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional
+
+
+def _iso_timestamp() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 @dataclass
 class WorldRecord:
-    """Persisted world metadata."""
+    """Persisted world metadata with audit-friendly defaults."""
 
     id: str
-    data: Dict[str, Any] = field(default_factory=dict)
+    name: str | None = None
+    description: str | None = None
+    owner: str | None = None
+    labels: list[str] = field(default_factory=list)
+    state: str = "ACTIVE"
+    allow_live: bool = False
+    circuit_breaker: bool = False
+    default_policy_version: int | None = None
+    created_at: str = field(default_factory=_iso_timestamp)
+    updated_at: str = field(default_factory=_iso_timestamp)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "WorldRecord":
@@ -20,19 +40,162 @@ class WorldRecord:
             raw_id = payload["id"]
         except KeyError as exc:  # pragma: no cover - defensive: API validates id
             raise KeyError("world payload missing 'id'") from exc
-        if not isinstance(raw_id, str) or not raw_id:
+        if not isinstance(raw_id, str) or not raw_id.strip():
             raise ValueError("world id must be a non-empty string")
-        data = dict(payload)
-        data["id"] = raw_id
-        return cls(id=raw_id, data=data)
+        world_id = raw_id.strip()
+
+        metadata = {
+            key: value
+            for key, value in payload.items()
+            if key
+            not in {
+                "id",
+                "name",
+                "description",
+                "owner",
+                "labels",
+                "state",
+                "allow_live",
+                "circuit_breaker",
+                "default_policy_version",
+                "created_at",
+                "updated_at",
+            }
+        }
+
+        labels = cls._normalize_labels(payload.get("labels"))
+        state = cls._normalize_state(payload.get("state", "ACTIVE"))
+        created_at = str(payload.get("created_at") or _iso_timestamp())
+        updated_at = str(payload.get("updated_at") or created_at)
+
+        default_policy_version = payload.get("default_policy_version")
+        if default_policy_version is not None:
+            try:
+                default_policy_version = int(default_policy_version)
+            except (TypeError, ValueError) as exc:  # pragma: no cover - validation
+                raise ValueError("default_policy_version must be an integer") from exc
+
+        return cls(
+            id=world_id,
+            name=cls._normalize_optional_str(payload.get("name")),
+            description=cls._normalize_optional_str(payload.get("description")),
+            owner=cls._normalize_optional_str(payload.get("owner")),
+            labels=labels,
+            state=state,
+            allow_live=bool(payload.get("allow_live", False)),
+            circuit_breaker=bool(payload.get("circuit_breaker", False)),
+            default_policy_version=default_policy_version,
+            created_at=created_at,
+            updated_at=updated_at,
+            metadata=metadata,
+        )
 
     def update(self, updates: Mapping[str, Any]) -> None:
         if "id" in updates and updates["id"] != self.id:
             raise ValueError("world id is immutable")
-        self.data.update(dict(updates))
+
+        name = self._normalize_optional_str(updates.get("name", self.name))
+        description = self._normalize_optional_str(
+            updates.get("description", self.description)
+        )
+        owner = self._normalize_optional_str(updates.get("owner", self.owner))
+        state = self._normalize_state(updates.get("state", self.state))
+        labels = self._normalize_labels(updates.get("labels", self.labels))
+        default_policy_version = updates.get(
+            "default_policy_version", self.default_policy_version
+        )
+        if default_policy_version is not None:
+            try:
+                default_policy_version = int(default_policy_version)
+            except (TypeError, ValueError) as exc:  # pragma: no cover - validation
+                raise ValueError("default_policy_version must be an integer") from exc
+
+        self.name = name
+        self.description = description
+        self.owner = owner
+        self.state = state
+        self.labels = labels
+        self.allow_live = bool(updates.get("allow_live", self.allow_live))
+        self.circuit_breaker = bool(
+            updates.get("circuit_breaker", self.circuit_breaker)
+        )
+        self.default_policy_version = default_policy_version
+        self.metadata.update(
+            {
+                key: value
+                for key, value in updates.items()
+                if key
+                not in {
+                    "id",
+                    "name",
+                    "description",
+                    "owner",
+                    "labels",
+                    "state",
+                    "allow_live",
+                    "circuit_breaker",
+                    "default_policy_version",
+                    "created_at",
+                    "updated_at",
+                }
+            }
+        )
+        if "created_at" in updates and updates["created_at"] != self.created_at:
+            raise ValueError("created_at is immutable")
+        self.updated_at = str(_iso_timestamp())
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(self.data)
+        payload = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "owner": self.owner,
+            "labels": list(self.labels),
+            "state": self.state,
+            "allow_live": self.allow_live,
+            "circuit_breaker": self.circuit_breaker,
+            "default_policy_version": self.default_policy_version,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        payload.update(self.metadata)
+        return payload
+
+    @staticmethod
+    def _normalize_optional_str(value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("expected a string value")
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _normalize_labels(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, Iterable):
+            labels: list[str] = []
+            for item in value:
+                if not isinstance(item, str):
+                    raise ValueError("labels must be strings")
+                stripped = item.strip()
+                if stripped:
+                    labels.append(stripped)
+            return labels
+        raise ValueError("labels must be a list of strings")
+
+    @staticmethod
+    def _normalize_state(value: Any) -> str:
+        if value is None:
+            return "ACTIVE"
+        text = str(value).upper()
+        allowed = {"ACTIVE", "SUSPENDED", "DELETED"}
+        if text not in allowed:
+            raise ValueError("state must be one of ACTIVE, SUSPENDED, DELETED")
+        return text
 
 
 @dataclass
