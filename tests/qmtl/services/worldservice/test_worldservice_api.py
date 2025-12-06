@@ -125,7 +125,7 @@ async def test_world_crud_policy_apply_and_events():
             # Create world
             await client.post("/worlds", json={"id": "w1", "name": "World"})
             r = await client.get("/worlds")
-            assert r.json() == [{"id": "w1", "name": "World"}]
+            assert r.json() == [{"id": "w1", "name": "World", "allow_live": False}]
 
             overrides_resp = await client.get("/worlds/w1/edges/overrides")
             assert overrides_resp.status_code == 200
@@ -176,7 +176,7 @@ async def test_world_crud_policy_apply_and_events():
 
             # Decision envelope
             d = await client.get("/worlds/w1/decide")
-            assert d.json()["ttl"] == "300s"
+            assert d.json()["ttl"] == "60s"
 
             # Read back activation
             r = await client.get("/worlds/w1/activation", params={"strategy_id": "s1", "side": "long"})
