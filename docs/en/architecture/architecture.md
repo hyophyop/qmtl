@@ -30,6 +30,13 @@ Bootstrap workflows and operational validation steps live in
 
 ---
 
+## Deployment profiles
+
+- **dev**: Default for local development. Missing Redis/Kafka/Neo4j/ControlBus DSNs fall back to in-memory stubs to speed up experiments.
+- **prod**: Requires persistent backends across the stack. Missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, or `worldservice.server.redis` causes startup to fail.
+
+`qmtl config validate --target all` reports errors (not warnings) when `profile: prod` omits required DSNs, and the Gateway CLI enforces the same rule to prevent mixed modes (partial in-memory fallbacks).
+
 ### Default-Safe Principle
 
 - When configuration is thin or ambiguous, **downgrade to compute-only (backtest)**. Missing `execution_domain`/`as_of` must never yield live/dryrun promotion.

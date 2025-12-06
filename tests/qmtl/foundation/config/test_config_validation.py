@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from qmtl.foundation.config import UnifiedConfig
+from qmtl.foundation.config import DeploymentProfile
 from qmtl.foundation.config_validation import (
     _type_description,
     _type_matches,
@@ -10,10 +11,12 @@ from qmtl.foundation.config_validation import (
     validate_gateway_config,
     validate_config_structure,
     validate_dagmanager_config,
+    validate_worldservice_config,
 )
 import qmtl.foundation.config_validation as config_validation
 from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.gateway.config import GatewayConfig
+from qmtl.services.worldservice.config import WorldServiceServerConfig
 
 
 @pytest.mark.asyncio
@@ -101,3 +104,38 @@ async def test_validate_gateway_worldservice_formats_probe(monkeypatch) -> None:
     assert "status=503" in ws_issue.hint
     assert "error=boom" in ws_issue.hint
     assert "latency_ms=12.3" in ws_issue.hint
+
+
+@pytest.mark.asyncio
+async def test_validate_gateway_config_requires_persistent_backends_in_prod() -> None:
+    config = GatewayConfig()
+
+    issues = await validate_gateway_config(
+        config, offline=True, profile=DeploymentProfile.PROD
+    )
+
+    assert issues["redis"].severity == "error"
+    assert issues["database"].severity == "error"
+    assert issues["commitlog"].severity == "error"
+    assert issues["controlbus"].severity == "error"
+
+
+@pytest.mark.asyncio
+async def test_validate_dagmanager_config_requires_backends_in_prod() -> None:
+    config = DagManagerConfig()
+
+    issues = await validate_dagmanager_config(
+        config, offline=True, profile=DeploymentProfile.PROD
+    )
+
+    assert issues["neo4j"].severity == "error"
+    assert issues["kafka"].severity == "error"
+
+
+def test_validate_worldservice_config_enforces_redis_in_prod() -> None:
+    issues = validate_worldservice_config(
+        WorldServiceServerConfig(dsn="sqlite:///ws.db"),
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["redis"].severity == "error"

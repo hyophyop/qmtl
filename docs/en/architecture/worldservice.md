@@ -20,6 +20,9 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
 - Events: emits activation/policy updates to the internal ControlBus
 
+!!! note "Deployment profile"
+    With `profile: dev`, WorldService uses an in-memory activation store when Redis is not configured. With `profile: prod`, missing `worldservice.server.redis` fails fast before startup; in-memory mode is not allowed.
+
 !!! warning "Default-safe"
 - Do not default to live when inputs are missing or ambiguous; downgrade to compute-only (backtest) if `execution_domain` is empty or omitted. WS API calls must not persist live by default.
 - With `allow_live=false` (default), activation/domain switches must not move to live even if operators request it. Only promote when policy validation passes (required signals, hysteresis, dataset_fingerprint anchored).

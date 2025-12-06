@@ -1,6 +1,8 @@
 # Example unified configuration for local development.
 # Adjust endpoints and credentials to match your deployment.
 
+profile: dev
+
 worldservice:
   url: http://localhost:8080
   timeout: 0.3

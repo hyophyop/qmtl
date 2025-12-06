@@ -20,6 +20,9 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - 감사 및 RBAC: 각 정책/업데이트/결정/적용 이벤트를 로깅하고 권한을 검사
 - 이벤트: 내부 ControlBus로 활성화/정책 업데이트 발행
 
+!!! note "배포 프로필"
+    `profile: dev`에서는 활성화 캐시 Redis가 비어 있으면 인메모리 저장소를 사용합니다. `profile: prod`에서는 `worldservice.server.redis`가 비어 있으면 프로세스가 기동 전에 실패하며, 인메모리 모드는 지원하지 않습니다.
+
 !!! warning "안전 기본값"
 - 입력이 모호하거나 부족하면 live로 기본 설정하지 않고 compute-only(backtest)로 강등해야 합니다. `execution_domain`을 비우거나 생략한 WS API 호출이 live로 저장되면 안 됩니다.
 - `allow_live=false`(기본)일 때는 운영자가 요청하더라도 활성/도메인이 live로 전환되지 않습니다. 정책 검증(필수 지표, 히스테리시스, dataset_fingerprint 고정)이 통과될 때에만 승격을 허용하세요.

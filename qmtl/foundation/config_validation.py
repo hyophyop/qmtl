@@ -18,7 +18,11 @@ from qmtl.foundation.adapters import (
     open_asyncpg_connection,
 )
 from qmtl.foundation.common.health import probe_http_async
-from qmtl.foundation.config import CONFIG_SECTION_NAMES, UnifiedConfig
+from qmtl.foundation.config import (
+    CONFIG_SECTION_NAMES,
+    DeploymentProfile,
+    UnifiedConfig,
+)
 from qmtl.foundation.config_types import (
     _type_description,
     _type_matches,
@@ -28,6 +32,7 @@ from qmtl.foundation.config_types import (
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from qmtl.services.dagmanager.config import DagManagerConfig
     from qmtl.services.gateway.config import GatewayConfig
+    from qmtl.services.worldservice.config import WorldServiceServerConfig
 
 
 @dataclass(slots=True)
@@ -85,8 +90,15 @@ async def _check_controlbus(
     return ValidationIssue("error", f"ControlBus brokers unreachable ({broker_list})")
 
 
-async def _validate_gateway_redis(dsn: str | None, *, offline: bool) -> ValidationIssue:
+async def _validate_gateway_redis(
+    dsn: str | None, *, offline: bool, profile: DeploymentProfile
+) -> ValidationIssue:
     if not dsn:
+        if profile is DeploymentProfile.PROD:
+            return ValidationIssue(
+                "error",
+                "Prod profile requires gateway.redis_dsn for persistent state",
+            )
         return ValidationIssue(
             "warning", "Redis DSN not configured; falling back to in-memory store"
         )
@@ -108,10 +120,19 @@ async def _validate_gateway_redis(dsn: str | None, *, offline: bool) -> Validati
 
 
 async def _validate_gateway_database(
-    config: "GatewayConfig", *, offline: bool
+    config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
 ) -> ValidationIssue:
     backend = (config.database_backend or "").lower()
+    if profile is DeploymentProfile.PROD and backend != "postgres":
+        return ValidationIssue(
+            "error",
+            "Prod profile requires database_backend='postgres' with a DSN",
+        )
     if backend == "postgres":
+        if profile is DeploymentProfile.PROD and not config.database_dsn:
+            return ValidationIssue(
+                "error", "Prod profile requires gateway.database_dsn"
+            )
         return await _validate_gateway_postgres(config.database_dsn, offline=offline)
     if backend == "sqlite":
         return await _validate_gateway_sqlite(config.database_dsn)
@@ -210,18 +231,90 @@ def _format_worldservice_probe(result: object) -> str:
     return ", ".join(details) if details else "no additional detail"
 
 
-async def validate_gateway_config(
-    config: "GatewayConfig", *, offline: bool = False
+def validate_worldservice_config(
+    server: "WorldServiceServerConfig" | None,
+    *,
+    profile: DeploymentProfile = DeploymentProfile.DEV,
 ) -> Dict[str, ValidationIssue]:
     issues: Dict[str, ValidationIssue] = {}
+    if server is None:
+        issues["server"] = ValidationIssue(
+            "ok", "WorldService inline server not configured"
+        )
+        return issues
 
-    issues["redis"] = await _validate_gateway_redis(config.redis_dsn, offline=offline)
-    issues["database"] = await _validate_gateway_database(config, offline=offline)
-    issues["controlbus"] = await _check_controlbus(
+    if profile is DeploymentProfile.PROD and not server.redis:
+        issues["redis"] = ValidationIssue(
+            "error",
+            "Prod profile requires worldservice.server.redis for activation storage",
+        )
+    else:
+        severity = "ok" if server.redis else "warning"
+        hint = (
+            f"Redis configured at {server.redis}"
+            if server.redis
+            else "Redis not configured; using in-memory activation store"
+        )
+        issues["redis"] = ValidationIssue(severity, hint)
+
+    issues["database"] = ValidationIssue("ok", "WorldService DSN provided")
+    return issues
+
+
+def _validate_gateway_commitlog(
+    config: "GatewayConfig", profile: DeploymentProfile
+) -> ValidationIssue:
+    if not config.commitlog_bootstrap:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires commitlog_bootstrap for ingest durability"
+            if profile is DeploymentProfile.PROD
+            else "Commit-log writer disabled; expected for local dev"
+        )
+        return ValidationIssue(severity, hint)
+    if not config.commitlog_topic:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity,
+            "Commit-log topic missing; set gateway.commitlog_topic to enable",
+        )
+    return ValidationIssue("ok", f"Commit-log configured for {config.commitlog_topic}")
+
+
+async def _validate_gateway_controlbus(
+    config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
+) -> ValidationIssue:
+    if profile is DeploymentProfile.PROD:
+        if not config.controlbus_brokers or not config.controlbus_topics:
+            return ValidationIssue(
+                "error",
+                "Prod profile requires controlbus_brokers and controlbus_topics",
+            )
+    return await _check_controlbus(
         config.controlbus_brokers,
         config.controlbus_topics,
         config.controlbus_group,
         offline=offline,
+    )
+
+
+async def validate_gateway_config(
+    config: "GatewayConfig",
+    *,
+    offline: bool = False,
+    profile: DeploymentProfile = DeploymentProfile.DEV,
+) -> Dict[str, ValidationIssue]:
+    issues: Dict[str, ValidationIssue] = {}
+
+    issues["redis"] = await _validate_gateway_redis(
+        config.redis_dsn, offline=offline, profile=profile
+    )
+    issues["database"] = await _validate_gateway_database(
+        config, offline=offline, profile=profile
+    )
+    issues["commitlog"] = _validate_gateway_commitlog(config, profile)
+    issues["controlbus"] = await _validate_gateway_controlbus(
+        config, offline=offline, profile=profile
     )
     issues["worldservice"] = await _validate_gateway_worldservice(config, offline=offline)
 
@@ -229,13 +322,28 @@ async def validate_gateway_config(
 
 
 async def validate_dagmanager_config(
-    config: "DagManagerConfig", *, offline: bool = False
+    config: "DagManagerConfig",
+    *,
+    offline: bool = False,
+    profile: DeploymentProfile = DeploymentProfile.DEV,
 ) -> Dict[str, ValidationIssue]:
-    return {
-        "neo4j": await _validate_dagmanager_neo4j(config, offline=offline),
-        "kafka": await _validate_dagmanager_kafka(config, offline=offline),
-        "controlbus": await _validate_dagmanager_controlbus(config, offline=offline),
-    }
+    issues: Dict[str, ValidationIssue] = {}
+    if profile is DeploymentProfile.PROD and not config.neo4j_dsn:
+        issues["neo4j"] = ValidationIssue(
+            "error", "Prod profile requires dagmanager.neo4j_dsn"
+        )
+    else:
+        issues["neo4j"] = await _validate_dagmanager_neo4j(config, offline=offline)
+
+    if profile is DeploymentProfile.PROD and not config.kafka_dsn:
+        issues["kafka"] = ValidationIssue(
+            "error", "Prod profile requires dagmanager.kafka_dsn"
+        )
+    else:
+        issues["kafka"] = await _validate_dagmanager_kafka(config, offline=offline)
+
+    issues["controlbus"] = await _validate_dagmanager_controlbus(config, offline=offline)
+    return issues
 
 
 async def _validate_dagmanager_neo4j(
@@ -366,4 +474,5 @@ __all__ = [
     "validate_gateway_config",
     "validate_dagmanager_config",
     "validate_config_structure",
+    "validate_worldservice_config",
 ]

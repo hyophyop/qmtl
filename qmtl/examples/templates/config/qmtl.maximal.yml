@@ -1,6 +1,8 @@
 # Example configuration for production-style deployments.
 # Replace placeholder endpoints and credentials with your infrastructure values.
 
+profile: dev
+
 worldservice:
   url: https://worldservice.example.com
   timeout: 1.5

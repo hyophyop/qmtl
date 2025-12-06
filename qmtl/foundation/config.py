@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Mapping, TYPE_CHECKING
 
@@ -43,6 +44,13 @@ def _worldservice_server_cls():
 GatewayConfig = _gateway_config_cls()
 DagManagerConfig = _dagmanager_config_cls()
 WorldServiceServerConfig = _worldservice_server_cls()
+
+
+class DeploymentProfile(str, Enum):
+    """Deployment posture for the stack."""
+
+    DEV = "dev"
+    PROD = "prod"
 
 
 _WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = (
@@ -348,6 +356,7 @@ ENV_EXPORT_IGNORED_FIELDS: Dict[str, set[str]] = {
 class UnifiedConfig:
     """Configuration aggregating service, runtime, and tooling settings."""
 
+    profile: DeploymentProfile = DeploymentProfile.DEV
     worldservice: WorldServiceConfig = field(default_factory=WorldServiceConfig)
     gateway: "GatewayConfig" = field(default_factory=lambda: _gateway_config_cls()())
     dagmanager: "DagManagerConfig" = field(default_factory=lambda: _dagmanager_config_cls()())
@@ -405,6 +414,18 @@ def _read_config_mapping(path: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("Unified config must be a mapping")
     return data
+
+
+def _parse_profile(raw: Mapping[str, Any]) -> DeploymentProfile:
+    profile = raw.get("profile", DeploymentProfile.DEV)
+    if isinstance(profile, DeploymentProfile):
+        return profile
+    if isinstance(profile, str):
+        try:
+            return DeploymentProfile(profile.lower())
+        except ValueError as exc:
+            raise ValueError("profile must be one of: dev, prod") from exc
+    raise TypeError("profile must be a string (dev|prod)")
 
 
 def _extract_sections(data: Mapping[str, Any]) -> tuple[dict[str, dict[str, Any]], FrozenSet[str]]:
@@ -483,6 +504,7 @@ def _mirror_worldservice_to_gateway(
 def load_config(path: str) -> UnifiedConfig:
     """Parse YAML/JSON and populate :class:`UnifiedConfig`."""
     data = _read_config_mapping(path)
+    profile = _parse_profile(data)
     sections, present_sections = _extract_sections(data)
     GatewayConfig = _gateway_config_cls()
     DagManagerConfig = _dagmanager_config_cls()
@@ -517,6 +539,7 @@ def load_config(path: str) -> UnifiedConfig:
     _mirror_worldservice_to_gateway(world_data, worldservice_cfg, gateway_cfg)
 
     return UnifiedConfig(
+        profile=profile,
         worldservice=worldservice_cfg,
         gateway=gateway_cfg,
         dagmanager=dagmanager_cfg,

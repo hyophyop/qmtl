@@ -22,6 +22,9 @@ Additional references
 - Reference: [Commit-Log Design](../reference/commit_log.md), [TagQuery Specification](../reference/tagquery.md)
 - Operations guides: [Timing Controls](../operations/timing_controls.md)
 
+!!! note "Deployment profile"
+    With `profile: dev`, missing Neo4j/Kafka DSNs fall back to in-memory graph and queue managers. With `profile: prod`, missing `dagmanager.neo4j_dsn` or `dagmanager.kafka_dsn` stops the process before startup.
+
 ---
 
 ## 0. Responsibilities & Design Principles

@@ -13,7 +13,8 @@ from .api import create_app
 from .config import GatewayConfig
 from .ws import WebSocketHub
 from qmtl.foundation.common.tracing import setup_tracing
-from qmtl.foundation.config import find_config_file, load_config
+from qmtl.foundation.config import DeploymentProfile, find_config_file, load_config
+from qmtl.foundation.config_validation import validate_gateway_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
 from .commit_log import CommitLogWriter, create_commit_log_writer
@@ -58,12 +59,26 @@ async def _main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle = _load_gateway_config(
+    cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle, profile = _load_gateway_config(
         parser, args.config
     )
     setup_tracing("gateway", exporter_endpoint=telemetry_endpoint, config_path=cfg_path)
     if namespace_toggle is not None:
         set_topic_namespace_enabled(namespace_toggle)
+
+    validation = await validate_gateway_config(
+        config, offline=True, profile=profile
+    )
+    fatal_hints = [issue.hint for issue in validation.values() if issue.severity == "error"]
+    if fatal_hints:
+        for hint in fatal_hints:
+            logging.error(hint)
+        raise SystemExit(
+            _(
+                "Gateway configuration invalid for %(profile)s profile; run 'qmtl config validate'"
+            )
+            % {"profile": profile.value}
+        )
 
     redis_client = _resolve_redis(config)
     insert_sentinel, enforce_live_guard = _resolve_flags(config, args)
@@ -147,10 +162,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _load_gateway_config(
     parser: argparse.ArgumentParser, cli_path: str | None
-) -> tuple[str | None, GatewayConfig, bool | None, str | None, bool | None]:
+) -> tuple[
+    str | None, GatewayConfig, bool | None, str | None, bool | None, DeploymentProfile
+]:
     cfg_path = cli_path or find_config_file()
     _log_config_source(cfg_path, cli_override=cli_path)
     config = GatewayConfig()
+    profile = DeploymentProfile.DEV
     telemetry_enabled: bool | None = None
     telemetry_endpoint: str | None = None
     namespace_toggle: bool | None = None
@@ -166,7 +184,15 @@ def _load_gateway_config(
         telemetry_enabled = unified.telemetry.enable_fastapi_otel
         telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
         namespace_toggle = unified.dagmanager.enable_topic_namespace
-    return cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle
+        profile = unified.profile
+    return (
+        cfg_path,
+        config,
+        telemetry_enabled,
+        telemetry_endpoint,
+        namespace_toggle,
+        profile,
+    )
 
 
 def _resolve_redis(config: GatewayConfig):
