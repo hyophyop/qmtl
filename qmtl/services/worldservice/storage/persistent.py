@@ -353,6 +353,7 @@ class PersistentStorage:
 
     async def set_default_policy(self, world_id: str, version: int) -> None:
         await self._policy_repo.set_default(world_id, version)
+        await self._world_repo.update(world_id, {"default_policy_version": version})
         await self.invalidate_validation_cache(world_id)
 
     async def get_default_policy(self, world_id: str) -> Optional[Any]:
