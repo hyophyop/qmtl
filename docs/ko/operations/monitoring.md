@@ -35,6 +35,14 @@ Prometheus는 `alert_rules.yml`을 로드해 DAG Manager와 Gateway용 경보를
 - **NodeSlowProcessing** – `node_process_duration_ms` p95가 500ms 초과 시 경고
 - **NodeFailures** – `node_process_failure_total` 증가 시 경고
 - **CrossContextCacheHit** – `cross_context_cache_hit_total` > 0이면 치명(CRIT). 프로모션 재개 전 아래 런북을 따르세요.
+- **WorldApplyFailureDetected/RateHigh** – `world_apply_failure_total`/`world_apply_run_total`로 run_id별 적용 실패 감지
+- **WorldAllocationSnapshotStale** – `world_allocation_snapshot_stale_ratio` 10% 초과 시 스냅샷 갱신 지연 알림(5분 신선도 기준)
+- **ControlBusApplyAckLatencyHigh** – `controlbus_apply_ack_latency_ms{phase="freeze"}` 5초 초과 시 게이트 해제 지연 감지
+
+WorldService는 `world_apply_run_total`/`world_apply_failure_total`을 world_id·run_id별로 기록하고, `world_allocation_snapshot_stale_ratio`
+는 `updated_at`이 5분 이상 지난 스냅샷 비율을 world 단위로 추적합니다. Gateway는 freeze/unfreeze ControlBus 이벤트의 ACK를
+`controlbus_apply_ack_total`과 `controlbus_apply_ack_latency_ms`(ms)로 노출합니다. Grafana 대시보드에 world별 apply 성공률,
+스냅샷 신선도, freeze/unfreeze ACK 지연 패널을 추가해 운영자가 apply 진행 상황을 실시간으로 확인할 수 있도록 구성하세요.
 
 ## Grafana 대시보드
 

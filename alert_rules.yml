@@ -77,6 +77,38 @@ prometheus:
           annotations:
             summary: Cross-context cache hit detected (SLO=0)
             runbook: docs/operations/monitoring.html#runbook-cross-context-cache-hits-slo-0
+        - alert: WorldApplyFailureDetected
+          expr: sum by (world_id) (increase(world_apply_failure_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Apply run failures detected for a world
+        - alert: WorldApplyFailureRateHigh
+          expr: |
+            sum(rate(world_apply_run_total{status="failure"}[5m])) / clamp_min(
+              sum(rate(world_apply_run_total{status!="started"}[5m])),
+              1e-6
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Apply failure rate exceeded 5% over 10m
+        - alert: WorldAllocationSnapshotStale
+          expr: max_over_time(world_allocation_snapshot_stale_ratio[5m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Allocation snapshot stale ratio above 10%
+        - alert: ControlBusApplyAckLatencyHigh
+          expr: max_over_time(controlbus_apply_ack_latency_ms{phase="freeze"}[5m]) > 5000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Apply freeze acknowledgements are slower than 5s
         - alert: SeamlessSla99thDegraded
           expr: histogram_quantile(0.99, sum by (le) (rate(seamless_sla_deadline_seconds_bucket{phase="total"}[5m]))) > 240
           for: 5m

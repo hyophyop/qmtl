@@ -35,6 +35,14 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **NodeSlowProcessing** – triggers when `node_process_duration_ms` p95 exceeds 500 ms for a node.
 - **NodeFailures** – fires when `node_process_failure_total` increases.
 - **CrossContextCacheHit** – CRIT when `cross_context_cache_hit_total` > 0; the metric has an SLO of 0 and signals domain mixing. Follow the runbook below before resuming promotions.
+- **WorldApplyFailureDetected/RateHigh** – detect apply failures by `world_apply_failure_total` and failure rate via `world_apply_run_total`.
+- **WorldAllocationSnapshotStale** – raises when `world_allocation_snapshot_stale_ratio` exceeds 10% (5‑minute freshness window).
+- **ControlBusApplyAckLatencyHigh** – warns when `controlbus_apply_ack_latency_ms{phase="freeze"}` stays above 5s.
+
+WorldService emits `world_apply_run_total`/`world_apply_failure_total` per `world_id`/`run_id`, while `world_allocation_snapshot_stale_ratio`
+tracks the fraction of snapshots whose `updated_at` is older than five minutes. Gateway captures freeze/unfreeze ControlBus
+acknowledgements via `controlbus_apply_ack_total` and `controlbus_apply_ack_latency_ms` (milliseconds). Add Grafana panels for
+apply success rate, allocation freshness, and apply ACK latency to give operators real-time visibility into apply health.
 
 ## Grafana Dashboards
 
