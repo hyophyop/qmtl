@@ -75,9 +75,28 @@ def test_load_unified_config_defaults(tmp_path: Path) -> None:
     config_file.write_text("{}")
     config = load_config(str(config_file))
     assert isinstance(config, UnifiedConfig)
+    assert config.profile.value == "dev"
     assert config.gateway.redis_dsn is None
     assert config.dagmanager.grpc_port == 50051
     assert config.present_sections == frozenset()
+
+
+def test_load_unified_config_profile(tmp_path: Path) -> None:
+    config_file = tmp_path / "profile.yml"
+    config_file.write_text(yaml.safe_dump({"profile": "prod", "gateway": {}}))
+
+    config = load_config(str(config_file))
+
+    assert config.profile is not None
+    assert config.profile.value == "prod"
+
+
+def test_load_unified_config_rejects_unknown_profile(tmp_path: Path) -> None:
+    config_file = tmp_path / "profile.yml"
+    config_file.write_text(yaml.safe_dump({"profile": "qa"}))
+
+    with pytest.raises(ValueError, match="profile must be one of: dev, prod"):
+        load_config(str(config_file))
 
 
 def test_load_unified_config_worldservice_server(tmp_path: Path) -> None:

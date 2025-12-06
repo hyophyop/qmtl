@@ -30,6 +30,9 @@ Additional references
 - Operations: [Risk Management](../operations/risk_management.md), [Timing Controls](../operations/timing_controls.md)
 - Reference: [Brokerage API](../reference/api/brokerage.md), [Commit-Log Design](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
 
+!!! note "Deployment profile"
+    With `profile: dev`, missing Redis/ControlBus/Commit-Log settings fall back to in-memory shims. With `profile: prod`, missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, or `gateway.commitlog_bootstrap`/`commitlog_topic` stops Gateway before it starts.
+
 > This extended edition enlarges the previous document by approx. 75 % and adopts an explicit, graduate-level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
 > Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
 

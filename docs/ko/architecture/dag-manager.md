@@ -22,6 +22,9 @@ spec_version: v1.1
 - 레퍼런스: [Commit‑Log 설계](../reference/commit_log.md), [TagQuery 사양](../reference/tagquery.md)
 - 운영 가이드: [타이밍 컨트롤](../operations/timing_controls.md)
 
+!!! note "배포 프로필"
+    `profile: dev`에서는 Neo4j/Kafka 설정이 비어 있으면 인메모리 그래프/큐 매니저를 사용합니다. `profile: prod`에서는 `dagmanager.neo4j_dsn`과 `dagmanager.kafka_dsn`이 비어 있으면 프로세스가 기동 전에 실패합니다.
+
 ---
 
 ## 0. 역할 요약 & 설계 철학

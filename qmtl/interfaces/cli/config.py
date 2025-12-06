@@ -15,6 +15,7 @@ from qmtl.foundation.config_validation import (
     validate_config_structure,
     validate_dagmanager_config,
     validate_gateway_config,
+    validate_worldservice_config,
 )
 from qmtl.interfaces.config_templates import (
     available_profiles,
@@ -58,7 +59,7 @@ def _build_validate_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["schema", "gateway", "dagmanager", "all"],
+        choices=["schema", "gateway", "dagmanager", "worldservice", "all"],
         default="all",
         help=_("Limit validation to a specific service"),
     )
@@ -164,6 +165,8 @@ def _resolve_targets(target: str) -> List[str]:
         targets.append("gateway")
     if target in {"dagmanager", "all"}:
         targets.append("dagmanager")
+    if target in {"worldservice", "all"}:
+        targets.append("worldservice")
     return targets
 
 
@@ -185,9 +188,17 @@ async def _validate_targets(unified, targets: List[str], offline: bool) -> Dict[
     results: Dict[str, Dict[str, ValidationIssue]] = {}
     results["schema"] = validate_config_structure(unified)
     if "gateway" in targets:
-        results["gateway"] = await validate_gateway_config(unified.gateway, offline=offline)
+        results["gateway"] = await validate_gateway_config(
+            unified.gateway, offline=offline, profile=unified.profile
+        )
     if "dagmanager" in targets:
-        results["dagmanager"] = await validate_dagmanager_config(unified.dagmanager, offline=offline)
+        results["dagmanager"] = await validate_dagmanager_config(
+            unified.dagmanager, offline=offline, profile=unified.profile
+        )
+    if "worldservice" in targets:
+        results["worldservice"] = validate_worldservice_config(
+            unified.worldservice.server, profile=unified.profile
+        )
     return results
 
 

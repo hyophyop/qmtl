@@ -17,6 +17,9 @@ last_modified: 2025-09-23
 
 추가로 [Docker & Compose](docker.md) 의 전체 스택 설명과 [E2E 테스트](e2e_testing.md) 문서를 참고하세요.
 
+!!! tip "배포 프로필 체크"
+    `profile: dev`(기본)에서는 redis/kafka/neo4j/commit-log가 비어 있어도 인메모리 대체 구현으로 기동됩니다. 운영 배포에서는 `profile: prod`를 지정하고, `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`를 모두 채워야 `qmtl config validate`와 서비스 부팅이 성공합니다.
+
 ## 사전 준비
 
 - uv로 관리하는 Python 환경: `uv venv && uv pip install -e .[dev]`

@@ -17,9 +17,11 @@ def reset_validators(monkeypatch):
 
     original_gateway = config_cli.validate_gateway_config
     original_dagmanager = config_cli.validate_dagmanager_config
+    original_worldservice = config_cli.validate_worldservice_config
     yield
     monkeypatch.setattr(config_cli, "validate_gateway_config", original_gateway)
     monkeypatch.setattr(config_cli, "validate_dagmanager_config", original_dagmanager)
+    monkeypatch.setattr(config_cli, "validate_worldservice_config", original_worldservice)
 
 
 def _write_config(path: Path, data: Dict[str, Dict[str, object]]) -> None:
@@ -28,7 +30,9 @@ def _write_config(path: Path, data: Dict[str, Dict[str, object]]) -> None:
 
 def test_validate_requires_requested_sections(tmp_path: Path, monkeypatch, capsys):
     config_path = tmp_path / "config.json"
-    _write_config(config_path, {"gateway": {"host": "0.0.0.0"}})
+    _write_config(
+        config_path, {"gateway": {"host": "0.0.0.0"}, "worldservice": {}}
+    )
 
     async def _fail_gateway(*_args, **_kwargs):  # pragma: no cover - sanity guard
         raise AssertionError("gateway validator should not run when section missing")
@@ -51,7 +55,7 @@ def test_validate_allows_target_subset(tmp_path: Path, monkeypatch, capsys):
     config_path = tmp_path / "config.json"
     _write_config(config_path, {"gateway": {"host": "127.0.0.1"}})
 
-    async def _fake_gateway(_cfg, *, offline: bool = False):
+    async def _fake_gateway(_cfg, *, offline: bool = False, profile=None):
         return {"redis": ValidationIssue("warning", "Redis DSN not configured")}
 
     monkeypatch.setattr(config_cli, "validate_gateway_config", _fake_gateway)
@@ -76,13 +80,14 @@ def test_validate_runs_all_when_sections_present(tmp_path: Path, monkeypatch, ca
         {
             "gateway": {"host": "0.0.0.0"},
             "dagmanager": {"grpc_port": 5100},
+            "worldservice": {},
         },
     )
 
-    async def _fake_gateway(_cfg, *, offline: bool = False):
+    async def _fake_gateway(_cfg, *, offline: bool = False, profile=None):
         return {"redis": ValidationIssue("ok", "Redis reachable")}
 
-    async def _fake_dagmanager(_cfg, *, offline: bool = False):
+    async def _fake_dagmanager(_cfg, *, offline: bool = False, profile=None):
         return {"neo4j": ValidationIssue("error", "Neo4j unavailable")}
 
     monkeypatch.setattr(config_cli, "validate_gateway_config", _fake_gateway)
@@ -147,3 +152,29 @@ def test_validate_missing_config_path(capsys: pytest.CaptureFixture[str]) -> Non
     missing = Path("/nonexistent/qmtl.yml")
     with pytest.raises(SystemExit) as excinfo:
         config_cli.run(["validate", "--config", str(missing)])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "does not exist" in captured.err
+
+
+def test_validate_prod_profile_errors_without_backends(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config_path = tmp_path / "prod.json"
+    _write_config(
+        config_path,
+        {
+            "profile": "prod",
+            "gateway": {},
+            "dagmanager": {},
+            "worldservice": {"dsn": "sqlite:///ws.db"},
+        },
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        config_cli.run(["validate", "--config", str(config_path), "--target", "all"])
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert "Prod profile requires" in captured.out

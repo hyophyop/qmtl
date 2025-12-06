@@ -30,6 +30,13 @@ last_modified: 2025-12-06
 
 ---
 
+## 배포 프로필
+
+- **dev**: 로컬 개발용 기본값이다. Redis/Kafka/Neo4j/ControlBus가 비어 있으면 인메모리 대체 구현을 사용하며, 빠르게 실험하거나 튜닝할 때 적합하다.
+- **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`가 누락되면 부팅 전에 오류를 반환한다.
+
+`qmtl config validate --target all`는 `profile: prod`에서 필수 항목이 빠지면 경고 대신 오류를 보고하며, Gateway CLI 역시 동일한 조건을 강제해 혼합 모드(일부만 인메모리)를 차단한다.
+
 ## 0. 개요: 이론적 동기와 시스템화의 목적
 
 QMTL은 전략 기반 데이터 흐름 처리 시스템으로, 복잡한 계산 DAG(Directed Acyclic Graph)를 효율적으로 실행하고, 반복적 계산을 피하면서 재사용 가능한 컴퓨팅 자원을 최대한 활용하는 것을 주요 목표로 한다. 특히 DAG의 구성요소를 연산 단위로 분해하고 이를 전역적으로 식별·재활용할 수 있도록 함으로써, 유사하거나 동일한 전략 간에 불필요한 계산 자원 낭비를 최소화할 수 있다. 예를 들어 A 전략과 B 전략이 공통적으로 사용하는 가격 신호 처리 노드가 있다면, 해당 노드는 한 번만 실행되고 그 결과는 두 전략에서 모두 참조할 수 있게 된다. 이는 고빈도 실행 환경 또는 다중 전략 포트폴리오 환경에서 시간 복잡도와 메모리 사용량을 획기적으로 줄이는 데 기여한다.
