@@ -72,14 +72,9 @@ A **World** is the portfolio context where strategies operate together.
 - Specify `world="crypto_main"` when submitting
 - Check overall world performance and your strategy's contribution
 
-!!! note "As-Is / To-Be: Auto World Selection"
-    **As-Is (Current):**
-    - Users must explicitly specify `world=` parameter
-    - World must be created first if it doesn't exist
-    
-    **To-Be (Target):**
-    - `Runner.submit(MyStrategy)` one line auto-submits to default world
-    - Default world configurable via environment variable or config file
+**How to pick a world:**
+- Specify `world=` when submitting; worlds should exist beforehand.
+- Set a default via `QMTL_DEFAULT_WORLD` or project config for convenience.
 
 ---
 
@@ -164,14 +159,10 @@ btc_price = StreamInput(tags=["BTC", "price", "binance"], interval="1m", period=
 eth_price = StreamInput(tags=["ETH", "price", "binance"], interval="1m", period=60)
 ```
 
-!!! note "As-Is / To-Be: Data Supply Automation"
-    **As-Is (Current):**
-    - May need to explicitly configure data provider (`history_provider`)
-    - Dataset fingerprint specification required for backtest
-    
-    **To-Be (Target):**
-    - Just specify `world` and data preset connected to that world auto-applies
-    - Data sources/backfill/cache handled completely transparently
+**Data supply today:**
+- Worlds with `data.presets[]` auto-wire Seamless providers into `StreamInput` when you submit with that world.
+- If a world lacks presets, configure the provider manually or add presets to the world definition.
+- Dataset fingerprints and backfill/cache are handled by the data plane once the preset is known.
 
 ### Performance Metrics
 

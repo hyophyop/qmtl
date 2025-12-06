@@ -257,75 +257,27 @@ print(result.metrics.get("correlation_with_portfolio"))
 
 ---
 
-## As-Is / To-Be: Workflow Automation
-
-### Current (As-Is)
+## Workflow Automation
 
 ```
-User tasks:
+User focus:
 1. Write strategy code
-2. Call Runner.submit()
-3. Check results
-4. Read improvement_hints
-5. Modify code
-6. Resubmit
-7. (Repeat)
+2. Call Runner.submit(world=..., mode=...)
+3. Read results and improvement_hints
+4. Improve and resubmit as needed
 ```
 
-### Target (To-Be)
-
-```
-User tasks:
-1. Write strategy code
-2. Call Runner.submit()
-3. Check results (in dashboard)
-
-Automated:
-- Backtest pass → Auto Paper promotion
-- Paper stabilization → Auto Live promotion  
-- Performance drop → Auto demotion
-- Auto notifications/reports
-```
-
-!!! note "Auto Promotion/Demotion (To-Be)"
-    **Target State:**
-    
-    - User doesn't need to worry about mode transitions after submission
-    - World policy automatically decides promotion/demotion
-    - User focuses only on "strategy improvement"
-    
-    **Current State:**
-    
-    - Promotion: User must explicitly resubmit with `mode=Mode.PAPER` etc.
-    - Demotion: Handled automatically by WorldService (implemented)
-    - Notifications: Manual query required
+- Mode transitions are governed by world policies. Submit with the mode you want (`backtest`/`paper`/`live`); WorldService will gate/activate or downgrade to safe compute-only if criteria are not met.
+- Demotion on performance/policy breaches is automatic; promotion to higher modes still requires a submission with that mode.
+- Notifications/streams: ControlBus streams exist for SDK internals; user-facing subscribe helpers are not yet stable—poll via CLI/REST for now.
 
 ---
 
-## Monitoring (To-Be)
+## Monitoring
 
-!!! note "Real-time Dashboard (To-Be)"
-    **Target State:**
-    
-    ```
-    ┌─────────────────────────────────────────────────────────┐
-    │ World: my_portfolio          Total Assets: $125,432    │
-    │ Today's Return: +1.2%        Sharpe: 1.85              │
-    ├─────────────────────────────────────────────────────────┤
-    │ Strategy        │ Status │ Contrib │ Alloc │ Today    │
-    │ ─────────────────────────────────────────────────────── │
-    │ Momentum_v3     │ Live   │ 45%    │ 35%  │ +0.8%     │
-    │ MeanRev_v2      │ Paper  │ 30%    │ 25%  │ +0.3%     │
-    │ Breakout_v1     │ BT     │ 25%    │ 0%   │ (sim)     │
-    └─────────────────────────────────────────────────────────┘
-    ```
-    
-    **Current State:**
-
-    - Query via CLI `qmtl status` or `qmtl world info`
-    - ControlBus streams exist for internal SDK services (activation/TagQuery),
-      but there is no stable public subscribe helper yet. For now, poll via CLI
-      or REST for world/strategy status.
+- Use CLI: `qmtl status --world <id>` or `qmtl world info <id>` to check activation/allocations.
+- REST/SDK: fetch SubmitResult JSON or world endpoints for dashboards/automation.
+- Streaming: ControlBus streams are available for internal SDK components; a public subscription helper will be added later. Until then, poll CLI/REST for world/strategy status.
 
 ---
 

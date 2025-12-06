@@ -69,17 +69,8 @@ class MyStrategy(Strategy):
 - 리스크 관리 (익스포저 상한 등)
 
 **사용자 관점:**
-- 전략을 제출할 때 `world="crypto_main"` 처럼 지정
-- 월드의 전체 성과와 내 전략의 기여도 확인
-
-!!! note "As-Is / To-Be: 월드 자동 선택"
-    **As-Is (현재):**
-    - 사용자가 `world=` 파라미터를 명시적으로 지정해야 함
-    - 월드가 없으면 먼저 생성해야 함
-    
-    **To-Be (목표):**
-    - `Runner.submit(MyStrategy)` 한 줄이면 기본 월드에 자동 제출
-    - 환경변수나 설정 파일로 기본 월드 지정 가능
+- 전략을 제출할 때 `world="crypto_main"`처럼 지정하고, 필요한 월드가 없으면 먼저 생성합니다.
+- 기본 월드를 자주 쓴다면 `QMTL_DEFAULT_WORLD`나 프로젝트 설정으로 기본값을 지정해 반복 입력을 줄일 수 있습니다.
 
 ---
 
@@ -163,14 +154,10 @@ btc_price = StreamInput(tags=["BTC", "price", "binance"], interval="1m", period=
 eth_price = StreamInput(tags=["ETH", "price", "binance"], interval="1m", period=60)
 ```
 
-!!! note "As-Is / To-Be: 데이터 공급 자동화"
-    **As-Is (현재):**
-    - 데이터 제공자(`history_provider`)를 명시적으로 구성해야 하는 경우 있음
-    - 백테스트용 데이터셋 fingerprint 지정 필요
-    
-    **To-Be (목표):**
-    - `world`만 지정하면 해당 월드에 연결된 데이터 프리셋 자동 적용
-    - 데이터 소스/백필/캐시는 완전히 투명하게 처리
+**데이터 공급 (현재):**
+- `world.data.presets[]`가 선언된 월드로 제출하면 Runner/CLI가 해당 프리셋 기반 Seamless provider를 자동 연결해 `StreamInput`에 주입합니다.
+- 프리셋이 없는 월드는 직접 프로바이더를 구성하거나 월드에 프리셋을 추가한 뒤 사용합니다.
+- 프리셋이 정해지면 데이터 플레인이 백필/캐시/데이터 지문 관리를 담당합니다.
 
 ### 성과 지표
 

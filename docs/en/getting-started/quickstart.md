@@ -172,7 +172,7 @@ def compute_signal(view):
 
 ### B. Promote to Paper Mode
 
-When backtest performance meets criteria:
+When backtest performance meets criteria, resubmit with the desired mode:
 
 ```python
 result = Runner.submit(
@@ -182,36 +182,12 @@ result = Runner.submit(
 )
 ```
 
-!!! note "As-Is / To-Be: Auto Promotion"
-    **As-Is (Current):**
-    - User must explicitly resubmit with `mode=Mode.PAPER`
-    
-    **To-Be (Target):**
-    - Auto-promote to Paper mode when backtest passes
-    - User just checks results
+World policies gate activation and may downgrade to compute-only if criteria are not met; demotion on policy breaches is automatic.
 
 ### C. Performance Monitoring
 
-!!! note "As-Is / To-Be: Performance Query"
-    **As-Is (Current):**
-    ```bash
-    # Check status via CLI
-    qmtl status --world quickstart_demo
-    ```
-    
-    **To-Be (Target):**
-    ```python
-    # Subscribe to real-time stream in Python
-    Runner.subscribe(world="quickstart_demo", on_update=print)
-    ```
-
-    _Status:_ The ControlBus stream exists for internal SDK components, but a
-    stable CLI/SDK helper for user-facing subscriptions is not yet shipped.
-    Poll `qmtl status`/`qmtl world info` or REST endpoints for live monitoring
-    until the subscription surface is published.
-    
-    - Check real-time performance/rank/contribution in dashboard UI
-    - Auto-receive promotion/demotion notifications
+- Check status via CLI: `qmtl status --world quickstart_demo` or `qmtl world info quickstart_demo`
+- A public subscription helper is planned; until then, poll via CLI/REST for live monitoring.
 
 ---
 
@@ -237,16 +213,7 @@ qmtl world info quickstart_demo
 qmtl status --strategy momentum_btc_1m_abc123
 ```
 
-!!! note "As-Is / To-Be: CLI Simplification"
-    **As-Is (Current):**
-    ```bash
-    qmtl submit my_strategy.py --world demo --gateway-url http://localhost:8000
-    ```
-    
-    **To-Be (Target):**
-    ```bash
-    qmtl submit my_strategy.py  # Auto-use default world and gateway
-    ```
+Tip: set `QMTL_DEFAULT_WORLD` or project defaults to avoid repeating `--world`, and configure `QMTL_GATEWAY_URL` if the gateway isn’t local.
 
 ---
 
@@ -273,13 +240,7 @@ def compute_signal(view):
     })
 ```
 
-!!! note "As-Is / To-Be: auto_returns"
-    **As-Is (Current):**
-    - User must explicitly compute `returns` column
-    
-    **To-Be (Target):**
-    - Auto-derive from price data with `auto_returns=True` option
-    - Or auto-compute in `StreamInput`
+If explicit returns are hard to add, enable `auto_returns=True` in `Runner.submit(...)` to derive them from price/equity data.
 
 ### Gateway Connection Failed
 

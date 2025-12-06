@@ -172,7 +172,7 @@ def compute_signal(view):
 
 ### B. Paper 모드로 승격
 
-백테스트 성과가 기준을 충족하면:
+백테스트 성과가 기준을 충족하면 원하는 모드로 다시 제출합니다:
 
 ```python
 result = Runner.submit(
@@ -182,36 +182,12 @@ result = Runner.submit(
 )
 ```
 
-!!! note "As-Is / To-Be: 자동 승격"
-    **As-Is (현재):**
-    - 사용자가 명시적으로 `mode=Mode.PAPER`로 재제출해야 함
-    
-    **To-Be (목표):**
-    - 백테스트 통과 시 자동으로 Paper 모드 활성화
-    - 사용자는 결과만 확인하면 됨
+월드 정책이 활성화를 결정하며, 기준 미달 시 안전 모드로 강등할 수 있습니다. 정책 위반 시 강등은 자동입니다.
 
 ### C. 성과 모니터링
 
-!!! note "As-Is / To-Be: 성과 조회"
-    **As-Is (현재):**
-    ```bash
-    # CLI로 상태 확인
-    qmtl status --world quickstart_demo
-    ```
-    
-    **To-Be (목표):**
-    ```python
-    # Python에서 실시간 스트림 구독
-    Runner.subscribe(world="quickstart_demo", on_update=print)
-    ```
-
-    _현재 상태:_ ControlBus 스트림은 SDK 내부 구성요소용으로 존재하지만,
-    사용자용 안정화된 CLI/SDK 헬퍼는 아직 제공되지 않습니다. 구독 인터페이스가
-    공개될 때까지 `qmtl status`/`qmtl world info` 또는 REST 엔드포인트를
-    주기적으로 조회하세요.
-    
-    - 대시보드 UI에서 실시간 성과/순위/기여도 확인
-    - 승격/강등 알림 자동 수신
+- CLI: `qmtl status --world quickstart_demo`, `qmtl world info quickstart_demo`
+- 공개 구독 헬퍼는 추후 제공 예정입니다. 그 전까지는 CLI/REST로 상태를 조회하세요.
 
 ---
 
@@ -237,16 +213,7 @@ qmtl world info quickstart_demo
 qmtl status --strategy momentum_btc_1m_abc123
 ```
 
-!!! note "As-Is / To-Be: CLI 간소화"
-    **As-Is (현재):**
-    ```bash
-    qmtl submit my_strategy.py --world demo --gateway-url http://localhost:8000
-    ```
-    
-    **To-Be (목표):**
-    ```bash
-    qmtl submit my_strategy.py  # 기본 월드, 기본 gateway 자동 사용
-    ```
+팁: `QMTL_DEFAULT_WORLD`나 프로젝트 설정으로 기본 월드를 지정하고, 로컬이 아니라면 `QMTL_GATEWAY_URL`을 설정하세요.
 
 ---
 
@@ -273,13 +240,7 @@ def compute_signal(view):
     })
 ```
 
-!!! note "As-Is / To-Be: auto_returns"
-    **As-Is (현재):**
-    - 사용자가 `returns` 컬럼을 명시적으로 계산해야 함
-    
-    **To-Be (목표):**
-    - `auto_returns=True` 옵션으로 가격 데이터에서 자동 파생
-    - 또는 `StreamInput`에서 자동 계산
+`returns` 컬럼 추가가 어려우면 `Runner.submit(..., auto_returns=True)`로 가격/에쿼티 데이터에서 자동 파생할 수 있습니다.
 
 ### Gateway 연결 실패
 
