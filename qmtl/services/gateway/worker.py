@@ -14,7 +14,7 @@ from .ws import WebSocketHub
 from .fsm import StrategyFSM
 from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
-from .ownership import OwnershipManager
+from .ownership import KafkaOwnership, OwnershipManager
 from ..dagmanager.kafka_admin import partition_key
 
 
@@ -54,6 +54,7 @@ class StrategyWorker:
         alert_manager: Optional[AlertManager] = None,
         grpc_fail_threshold: int = 3,
         manager: Optional[OwnershipManager] = None,
+        kafka_owner: Optional[KafkaOwnership] = None,
     ) -> None:
         self.redis = redis_client
         self.database = database
@@ -66,7 +67,7 @@ class StrategyWorker:
         self.alerts = alert_manager
         self._grpc_fail_thresh = grpc_fail_threshold
         self._grpc_fail_count = 0
-        self.manager = manager or OwnershipManager(database)
+        self.manager = manager or OwnershipManager(database, kafka_owner)
 
     async def healthy(self) -> bool:
         """Return ``True`` if all critical dependencies are reachable."""

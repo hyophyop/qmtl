@@ -4,7 +4,6 @@ from collections import deque
 from types import SimpleNamespace
 from typing import cast
 
-import asyncio
 import pytest
 
 from qmtl.services.gateway import metrics
@@ -97,6 +96,20 @@ class _FakeConsumer:
 
     async def commit(self) -> None:
         self.commit_calls += 1
+
+
+class _KafkaOwner:
+    def __init__(self, result: bool = True) -> None:
+        self.result = result
+        self.acquire_calls: list[int] = []
+        self.release_calls: list[int] = []
+
+    async def acquire(self, key: int) -> bool:
+        self.acquire_calls.append(key)
+        return self.result
+
+    async def release(self, key: int) -> None:
+        self.release_calls.append(key)
 
 
 class FakeDB(Database):
@@ -216,3 +229,40 @@ async def test_worker_takeover_increments_reassign_metric_once(fake_redis) -> No
     result = await worker.run_once()
     assert result == strategy_id
     assert metrics.owner_reassign_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_uses_kafka_ownership_when_available(fake_redis) -> None:
+    conn = FakeConn()
+    lock_db = PostgresDatabase("dsn")
+    lock_db._pool = FakePool(conn)
+    kafka_owner = _KafkaOwner()
+    manager = OwnershipManager(lock_db, kafka_owner)
+
+    queue = RedisTaskQueue(fake_redis, "strategy_queue")
+    db = cast(PostgresDatabase, FakeDB())
+    fsm = StrategyFSM(fake_redis, db)
+
+    strategy_id = "sid"
+    await fsm.create(strategy_id, None)
+    await fake_redis.hset(f"strategy:{strategy_id}", mapping={"dag": "{}"})
+    await queue.push(strategy_id)
+
+    async def diff(sid: str, dag: str, **_kwargs):
+        return SimpleNamespace(queue_map={}, sentinel_id="s")
+
+    dag_client = cast(DagManagerClient, SimpleNamespace(diff=diff))
+    worker = StrategyWorker(
+        fake_redis,
+        db,
+        fsm,
+        queue,
+        dag_client,
+        ws_hub=None,
+        manager=manager,
+    )
+
+    assert await worker.run_once() == strategy_id
+    assert kafka_owner.acquire_calls
+    assert conn.calls == []
+    assert kafka_owner.release_calls == kafka_owner.acquire_calls

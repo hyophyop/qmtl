@@ -15,7 +15,7 @@ from qmtl.foundation.config_validation import (
 )
 import qmtl.foundation.config_validation as config_validation
 from qmtl.services.dagmanager.config import DagManagerConfig
-from qmtl.services.gateway.config import GatewayConfig
+from qmtl.services.gateway.config import GatewayConfig, GatewayOwnershipConfig
 from qmtl.services.worldservice.config import WorldServiceServerConfig
 
 
@@ -117,6 +117,7 @@ async def test_validate_gateway_config_requires_persistent_backends_in_prod() ->
     assert issues["redis"].severity == "error"
     assert issues["database"].severity == "error"
     assert issues["commitlog"].severity == "error"
+    assert issues["ownership"].severity == "ok"
     assert issues["controlbus"].severity == "error"
 
 
@@ -139,3 +140,15 @@ def test_validate_worldservice_config_enforces_redis_in_prod() -> None:
     )
 
     assert issues["redis"].severity == "error"
+
+
+@pytest.mark.asyncio
+async def test_validate_gateway_config_reports_kafka_ownership_missing_bootstrap() -> None:
+    config = GatewayConfig(
+        ownership=GatewayOwnershipConfig(mode="kafka", topic="gateway.ownership"),
+    )
+
+    issues = await validate_gateway_config(config, offline=True)
+
+    assert issues["ownership"].severity == "warning"
+    assert "bootstrap" in issues["ownership"].hint

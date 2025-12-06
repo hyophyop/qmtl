@@ -203,7 +203,7 @@ Authorization: Bearer <jwt>
 
 This section summarizes the once‑and‑only‑once layer required by issue #544.
 
-- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka‑based coordination.
+- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka‑based coordination driven by `gateway.ownership.*` settings (bootstrap/topic/group). The Kafka path grants ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
 - Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is `(node_id, bucket_ts, input_window_hash, payload)`.
 - Message key: The Kafka message key is built as `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"` ensuring compaction on a stable prefix while preserving uniqueness per input window.
 - Deduplication: Downstream consumers deduplicate on the triple `(node_id, bucket_ts, input_window_hash)` and increment `commit_duplicate_total` when duplicates are observed.
@@ -367,6 +367,6 @@ POST /events/subscribe
 - 상태 (2025‑09):
   - 파티션 키는 `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)`에 정의되어 커밋 로그 라이터에서 사용됩니다.
   - 트랜잭셔널 커밋 로그 라이터/컨슈머가 구현되어 있으며(`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`), 중복 제거와 메트릭을 제공합니다.
-  - OwnershipManager는 Postgres 어드바이저리 락을 폴백으로 사용해 Kafka 소유권을 조정하며(`qmtl/services/gateway/ownership.py`), 핸드오프 시 `owner_reassign_total`을 기록합니다.
+  - OwnershipManager는 Postgres 어드바이저리 락을 폴백으로 사용해 Kafka 소유권을 조정하며(`qmtl/services/gateway/ownership.py`). Kafka 파티션 소유권은 `KafkaPartitionOwnership` 구현과 `gateway.ownership` 설정을 통해 연결되며, 핸드오프 시 `owner_reassign_total`을 기록합니다.
   - 큐가 전역 소유인 경우 SDK/Gateway 통합은 로컬 실행을 건너뜁니다(`qmtl/services/gateway/worker.py` 참조).
   - 카오스/소크 스타일의 중복 제거 테스트가 `tests/qmtl/services/gateway/test_commit_log_soak.py`에 존재합니다.
