@@ -68,3 +68,31 @@ def test_world_repository_persists_records_and_audits(monkeypatch) -> None:
     assert [event["event"] for event in entries] == ["world_created", "world_updated"]
     assert entries[0]["world"]["created_at"] == "2025-01-01T00:00:00Z"
     assert entries[1]["world"]["updated_at"] == "2025-01-02T00:00:00Z"
+
+
+def test_world_update_ignores_none_created_at(monkeypatch) -> None:
+    timestamps = cycle([
+        "2025-01-01T00:00:00Z",
+        "2025-01-02T00:00:00Z",
+    ])
+    monkeypatch.setattr(models, "_iso_timestamp", lambda: next(timestamps))
+
+    audit = AuditLogRepository()
+    repo = WorldRepository(audit)
+
+    record = repo.create({
+        "id": "world-2",
+        "name": "Second",
+    })
+
+    repo.update(
+        "world-2",
+        {
+            "created_at": None,
+            "description": "updated",
+        },
+    )
+
+    assert record.created_at == "2025-01-01T00:00:00Z"
+    assert record.updated_at == "2025-01-02T00:00:00Z"
+    assert record.description == "updated"
