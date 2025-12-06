@@ -71,6 +71,24 @@ async def test_fallback_to_db_when_kafka_unavailable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_release_unlocks_db_after_kafka_fallback() -> None:
+    conn = FakeConn()
+    db = PostgresDatabase("dsn")
+    db._pool = cast(Any, FakePool(conn))
+    kafka = FakeKafkaOwner(result=False)
+    manager = OwnershipManager(db, kafka)
+
+    assert await manager.acquire(25)
+    await manager.release(25)
+
+    assert kafka.release_calls == [25]
+    assert conn.calls == [
+        ("SELECT pg_try_advisory_lock($1)", 25),
+        ("SELECT pg_advisory_unlock($1)", 25),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_release_uses_db_when_no_kafka_owner() -> None:
     conn = FakeConn()
     db = PostgresDatabase("dsn")
