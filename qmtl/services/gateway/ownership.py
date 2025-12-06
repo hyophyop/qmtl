@@ -144,6 +144,10 @@ class OwnershipManager:
         # recorded. This enables the metric to be triggered without requiring
         # explicit owner identifiers.
         self._pending: Set[int] = set()
+        # Keys whose ownership currently relies on Postgres advisory locks.
+        # Used to ensure DB locks are released even when Kafka ownership is
+        # configured but unavailable.
+        self._db_owned: Set[int] = set()
 
     async def acquire(self, key: int, owner: Optional[str] = None) -> bool:
         """Attempt to acquire ownership for ``key``."""
@@ -153,6 +157,7 @@ class OwnershipManager:
 
         acquired = await self._try_db_acquire(key, owner)
         if acquired:
+            self._db_owned.add(key)
             return True
         self._pending.add(key)
         return False
@@ -160,13 +165,15 @@ class OwnershipManager:
     async def release(self, key: int) -> None:
         """Release ownership for ``key``."""
 
+        db_owned = key in self._db_owned
         if self._kafka is not None:
             try:
                 await self._kafka.release(key)
-                return
             except Exception:  # pragma: no cover - defensive logging
                 logger.exception("Kafka ownership release failed")
 
+        if db_owned:
+            self._db_owned.discard(key)
         assert self._db._pool is not None, "database not connected"
         async with self._db._pool.acquire() as conn:
             await pg_advisory_unlock(conn, key)
