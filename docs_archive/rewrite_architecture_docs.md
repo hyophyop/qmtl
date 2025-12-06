@@ -23,8 +23,8 @@ status: archived
   - 아키텍처 개요: `docs/ko/architecture/architecture.md`
   - 월드/정책: `docs/ko/world/world.md`
   - 단순화 제안: `./simplification_proposal.md`
-  - Auto Returns: `./auto_returns_unified_design.md` 및 관련 비교/스케치 문서
-  - SR 통합: `./sr_integration_proposal.md`, `./sr_auto_returns_integration_sketch.md`
+  - Auto Returns: `./auto_returns_unified_design.md` (통합안)
+  - SR 통합: `./sr_integration_proposal.md`
 
 이 가이드는 **완전한 구현이 아직 없는 상태에서도**,  
 문서 구조를 “목표 경험을 기준으로” 재정렬할 수 있도록 As‑Is/To‑Be를 함께 드러내는 것을 목표로 한다.
@@ -180,7 +180,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
   - `./auto_returns_unified_design.md`를 업데이트해:
     - Runner.submit 전처리 레이어만 확장하고
     - ValidationPipeline 계약은 그대로 유지한다는 점을 명시
-    - SR 통합 문서(`./sr_auto_returns_integration_sketch.md`)와 연결 관계를 “Core Loop 상에서” 설명
+    - SR 통합 설계(`./sr_integration_proposal.md`)와 auto_returns 연결 지점을 Core Loop 기준으로 설명
 
 ### 3.2 P0 — 평가/활성화/자본 배분의 단일 표면 정의
 
@@ -272,15 +272,12 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
 
 ### 4.4 Auto Returns / SR 관련 설계 문서들
 
-- `./auto_derive_returns_proposal.md`  
-  `./auto_returns_proposals_comparison.md`  
-  `./auto_returns_unified_design.md`  
-  `./sr_integration_proposal.md`  
-  `./sr_auto_returns_integration_sketch.md`
+- `./auto_returns_unified_design.md`  
+  `./sr_integration_proposal.md`
 
 - **As‑Is**
-  - 각각 개별 기능/경로의 설계/비교에 초점을 맞추고 있어,
-    “Core Loop 상에서 어떤 문제를 해결하는지”는 문서 상단에서 바로 드러나지 않는다.
+  - 두 문서 모두 개별 경로의 설계를 다루고 있어,
+    “Core Loop 상에서 어떤 문제를 해결하는지”가 상단에서 바로 드러나지 않는다.
 
 - **To‑Be (공통 템플릿 제안)**
   - 각 문서 상단에 다음과 같은 공통 블록을 추가:
@@ -288,10 +285,8 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
     - `As‑Is:` 현재 구현/사용 경험에서 사용자가 겪는 문제 요약
     - `To‑Be:` 이 설계가 성공했을 때 사용자가 얻게 될 경험(전략 작성/제출/평가 관점) 요약
   - `./auto_returns_unified_design.md`의 경우:
-    - “auto_returns 미구현” 상태를 명시하고,
-    - 이 문서와 실제 구현 사이의 차이를 체크리스트 형태로 노출해  
-      (예: `submit_async` 시그니처 확장, `returns_derive.py` 도입)  
-      구현 진행 상황을 추적 가능하게 한다.
+    - 구현/체크리스트 상태를 상단에서 계속 갱신해  
+      Runner 전처리/returns_source/파생 헬퍼의 정합성을 추적 가능하게 한다.
 
 ---
 
